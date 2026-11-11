@@ -293,7 +293,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     return calls;
   }
 
-  const releaseCheck = tip => ({
+  const releaseCheck = (tip, {evidence = false} = {}) => ({
     owner: 'meta',
     repo: 'astryx',
     workflow_id: 'ci.yml',
@@ -302,6 +302,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       operation: 'release-check',
       'release-branch': 'main',
       'expected-head': tip,
+      ...(evidence ? {evidence: 'true'} : {}),
     },
   });
   // A unit run names the commit it tests (FR21, FR22).
@@ -370,7 +371,11 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
           runs: [at(now, 90)],
           units: [at(now, 20)],
         });
-        expect(calls.dispatch).toEqual([releaseCheck(sha), unitRun]);
+        // It is cut evidence, named Release evidence of <sha>.
+        expect(calls.dispatch).toEqual([
+          releaseCheck(sha, {evidence: true}),
+          unitRun,
+        ]);
         expect(calls.notices).toContain(
           'The pre-cut release-check runs now for aaaaaaa.',
         );
@@ -387,10 +392,41 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       expect(calls.dispatch).toEqual([]);
     });
 
-    it('is not needed when the tip already has a check', async () => {
+    it('runs as cut evidence when the tip has only a monitoring check from before 06:30', async () => {
       const calls = await run({
         now: MONDAY_0637,
         runs: [at(MONDAY_0637, 90, {head_sha: sha})],
+        units: [
+          at(MONDAY_0637, 20, {
+            head_sha: sha,
+            display_title: `Main validation of ${sha}`,
+          }),
+        ],
+      });
+      expect(calls.dispatch).toEqual([releaseCheck(sha, {evidence: true})]);
+    });
+
+    it('sends cut evidence with a windowed check that starts in the pre-cut hour', async () => {
+      const calls = await run({
+        now: MONDAY_0637,
+        runs: [at(MONDAY_0637, 200)],
+        units: [at(MONDAY_0637, 20)],
+      });
+      expect(calls.dispatch).toEqual([
+        releaseCheck(sha, {evidence: true}),
+        unitRun,
+      ]);
+    });
+
+    it('is not needed when the tip already has a check since 06:30', async () => {
+      const calls = await run({
+        now: MONDAY_0637,
+        runs: [
+          at(MONDAY_0637, 5, {
+            head_sha: sha,
+            display_title: `Release evidence of ${sha}`,
+          }),
+        ],
         units: [
           at(MONDAY_0637, 20, {
             head_sha: sha,
@@ -546,20 +582,40 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     ).toEqual([]);
   });
 
-  it("leaves every run name as it was, but main's nightly interaction run's", () => {
-    const name = operation =>
+  it("names main's nightly interaction run, the weekly WebKit run and a cut-evidence release-check, and leaves every other run's name", () => {
+    const name = (operation, evidence = false) =>
       Function(
         'github',
         'inputs',
-        `return (${ci['run-name'].replace(/^\$\{\{\s*|\s*\}\}$/g, '').replace(/format\('Interaction proofs of \{0\}', github\.sha\)/, '`Interaction proofs of ${github.sha}`')});`,
+        `return (${ci['run-name']
+          .replace(/^\$\{\{\s*|\s*\}\}$/g, '')
+          .replace(
+            /format\('([^']*)\{0\}', github\.sha\)/g,
+            '`$1${github.sha}`',
+          )});`,
       )(
         {event_name: operation ? 'workflow_dispatch' : 'pull_request', sha},
-        operation ? {operation} : {},
+        operation ? {operation, evidence} : {},
       );
     // An empty name keeps the event's default name.
     for (const operation of [undefined, 'capture', 'release-check'])
       expect(name(operation), String(operation)).toBe('');
     expect(name('interaction-full')).toBe(`Interaction proofs of ${sha}`);
+    expect(name('webkit-weekly')).toBe(`WebKit weekly of ${sha}`);
+    // A cut-evidence release-check names itself, so a receipt and a person
+    // can tell it from a monitoring check.
+    expect(name('release-check', true)).toBe(`Release evidence of ${sha}`);
+    expect(name('capture', true)).toBe('');
+  });
+
+  it('never counts a weekly full WebKit run on the tip as its release-check', async () => {
+    const calls = await run({
+      runs: [
+        check(30, {head_sha: sha, display_title: `WebKit weekly of ${sha}`}),
+      ],
+      units: [unitAt(30)],
+    });
+    expect(calls.dispatch).toContainEqual(releaseCheck(sha));
   });
 
   it('does not check a tip twice', async () => {

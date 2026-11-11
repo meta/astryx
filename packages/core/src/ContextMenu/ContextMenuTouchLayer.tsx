@@ -4,7 +4,7 @@
 
 /**
  * @file ContextMenuTouchLayer.tsx
- * @input ContextMenu's touch layer (ContextMenuTouch.ts), the gesture
+ * @input ContextMenu's press recognizer (contextMenuPress.ts), the gesture
  *   foundation and the UIKit context-menu constants
  * @output ContextMenuTouchLayer: renders nothing; runs the trigger's press
  *   recognizer and press feedback while ContextMenu is under the touch model
@@ -20,10 +20,8 @@ import {playHaptic} from '../gestures/haptics';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {contextMenu} from '../motion/uikit/contextMenu';
 import {isElement} from '../utils/nodeType';
-import {
-  ContextMenuPressRecognizer,
-  useContextMenuPressFeedback,
-} from './ContextMenuTouch';
+import {ContextMenuPressRecognizer} from './contextMenuPress';
+import {useContextMenuPressFeedback} from './contextMenuPressFeedback';
 
 /** What ContextMenu reaches of a mounted touch layer. */
 export interface ContextMenuTouchHandle {
@@ -105,7 +103,8 @@ export function ContextMenuTouchLayer({
     () => {
       const recognizer = new ContextMenuPressRecognizer();
       // Its target-action listeners never hear `failed`, so a press that ends
-      // with no menu springs back from here.
+      // with no menu springs back, and releases what the commit mounted, from
+      // here.
       recognizer.addTransitionListener((press, _from, to) => {
         if (to === 'failed' || to === 'cancelled') {
           feedbackRef.current.end(press.clockTime);

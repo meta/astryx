@@ -47,7 +47,7 @@ import React, {
 } from 'react';
 import {readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {
   claimPress,
@@ -78,7 +78,7 @@ import {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInternalListFocus} from '../hooks/useListFocus';
-import {useDropdownMenuPress} from '../hooks/useMenuPress';
+import {MENU_PRESS_LONG_PRESS_MS, useMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
@@ -468,10 +468,11 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
    * Surface used to present the actions. Pass a value selected by product
    * policy (for example, a compact-touch media query) when the presentation
    * should adapt. Bottom-sheet presentation is intended for short action sets.
-   * Omitted, the menu is the anchored popover. Under a finger, on every
-   * device, the finger that opened it picks as UIMenu's does, once it has
-   * moved. `'popover'` pins the anchored popover with the pointer behavior on
-   * every device (the opening press follows the settle rule).
+   * Omitted, the menu is the anchored popover. On every device, a finger or
+   * a pen opens it as it presses the trigger, as UIMenu's pull-down button
+   * does. The finger that opened it picks once it has moved. `'popover'`
+   * pins the anchored popover with the pointer behavior on every device. A
+   * finger held for 500 ms opens it, and the settle rule decides its release.
    */
   presentation?: DropdownMenuPresentation;
   items: DropdownMenuOption[];
@@ -480,9 +481,11 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
 
 interface DropdownMenuCompoundProps extends DropdownMenuBaseProps {
   /**
-   * `'popover'` pins the pointer behavior on every device (the opening press
-   * follows the settle rule). Omitted, on every device, the finger
-   * that opened the menu picks as UIMenu's does, once it has moved.
+   * `'popover'` pins the pointer behavior on every device. A finger held for
+   * 500 ms opens the menu, and the settle rule decides its release. Omitted,
+   * on every device, a finger or a pen opens the menu as it presses, as
+   * UIMenu's pull-down button does. The finger that opened it picks once it
+   * has moved.
    */
   presentation?: 'popover';
   items?: undefined;
@@ -1108,10 +1111,12 @@ function DropdownMenuPopover({
         ? button.label
         : undefined;
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     hasLightDismiss: true,
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     hasCloseButton: false,
     hasAutoFocus: false,
     // Without a header or footer the popup's own role="menu" is the exposed
@@ -1472,15 +1477,16 @@ function DropdownMenuPopover({
   // The press model: the row under a release acts, the highlight follows a
   // held pointer. A mouse released outside the menu dismisses it; a finger
   // released outside leaves it open, so the hook never calls onDismiss then.
-  const menuPress = useDropdownMenuPress({
+  const menuPress = useMenuPress({
     menuRef: listRef,
     triggerRef: buttonRef,
     itemSelector: MENU_ITEM_SELECTOR,
     onTriggerPress: handleTriggerPress,
     onDismiss: closeMenu,
-    // Under a finger, on every device, the opening finger picks as UIMenu's
-    // does. `presentation="popover"` pins the pointer model.
-    touchModel: pressTouchModel,
+    // A set delay keeps the released finger wait, which the popover
+    // presentation uses. Unset, a finger opens the menu as UIMenu does.
+    longPressDelayMs:
+      pressTouchModel === 'pointer' ? MENU_PRESS_LONG_PRESS_MS : undefined,
   });
   cancelMenuPressRef.current = menuPress.cancel;
 

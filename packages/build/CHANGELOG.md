@@ -1,5 +1,19 @@
 # @astryxdesign/build
 
+# 0.7.13
+
+#### Fixes
+
+- dependency floors move to current releases: the build package needs autoprefixer 10.6.2, browserslist 4.29.5 and lightningcss 1.33.0; the CLI needs ignore 7.0.14, jscodeshift 17.4.0, linkedom 0.18.15, zod 4.6.7 and @stylexjs/babel-plugin 0.19.1; each theme needs lucide-react 1.66.0. Peer ranges do not change. (#10709)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
 # 0.7.12
 
 #### Fixes

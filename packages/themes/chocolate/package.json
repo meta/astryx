@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/theme-chocolate",
-  "version": "0.7.13",
+  "version": "0.7.14",
   "displayName": "Chocolate Theme",
   "private": false,
   "description": "Warm chocolate theme for Astryx — rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons",
@@ -74,18 +74,17 @@
     "!**/*.bench.*"
   ],
   "scripts": {
-    "api:report": "node ../../../scripts/api-report/cli.mjs --package .",
     "build": "node ../../../scripts/clean-dist.mjs && astryx theme build src/chocolateTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/add-declaration-extensions.mjs && node ../../../scripts/emit-commonjs-declarations.mjs dist/source.d.ts && node ../../../scripts/check-fully-specified.mjs"
   },
   "dependencies": {
-    "lucide-react": "^1.18.0"
+    "lucide-react": "^1.66.0"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.13",
+    "@astryxdesign/core": "0.7.14",
     "react": ">=19"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "0.7.13"
+    "@astryxdesign/cli": "0.7.14"
   },
   "module": "./dist/source.mjs"
 }

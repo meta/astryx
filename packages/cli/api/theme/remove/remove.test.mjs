@@ -92,4 +92,22 @@ describe('themeRemove', () => {
       message: expect.stringContaining(' theme add missing`'),
     });
   });
+
+  it('still refuses to remove the default when its source is gone, and names theme use', async () => {
+    fs.rmSync(path.join(tmpDir, 'node_modules/@acme/themes/themes/ocean'), {
+      recursive: true,
+    });
+    await expect(themeRemove('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message: expect.stringContaining(' theme use <other-slug>`'),
+    });
+  });
+
+  it('removes a non-default theme whose source is gone', async () => {
+    fs.rmSync(path.join(tmpDir, 'node_modules/@acme/themes/themes/reef'), {
+      recursive: true,
+    });
+    const result = await themeRemove('reef', {cwd: tmpDir});
+    expect(result.data.themes.map(theme => theme.slug)).toEqual(['ocean']);
+  });
 });

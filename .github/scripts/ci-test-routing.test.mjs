@@ -527,6 +527,7 @@ describe('ci.yml RTL package sharding', () => {
         'pr-rtl-shard',
         'pr-touched-components',
         'pr-visual',
+        'release-specs-plan',
         'visual-scout',
       ].sort(),
     );
