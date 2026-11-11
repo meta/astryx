@@ -589,8 +589,8 @@ describe('retained focused column', () => {
     act(() => cell?.focus());
     expect(document.activeElement).toBe(cell);
     await viewport.scrollTo(2000);
-    // The range is c18..c26; c1 stays as the one discontiguous column.
-    expect(mountedKeys(container)).toEqual(keys(1, ...range(18, 27)));
+    // A 250px band gives c17..c27; c1 stays as the one discontiguous column.
+    expect(mountedKeys(container)).toEqual(keys(1, ...range(17, 28)));
     expect(document.activeElement).toBe(cell);
     // Three spacers: before c1, between c1 and the range, after the range.
     const header = headerCells(container);
@@ -599,11 +599,11 @@ describe('retained focused column', () => {
       true,
       false,
       true,
-      ...range(18, 27).map(() => false),
+      ...range(17, 28).map(() => false),
       true,
     ]);
     expect(header[0].getAttribute('style') ?? '').toContain('100px');
-    expect(header[2].getAttribute('style') ?? '').toContain('1600px');
+    expect(header[2].getAttribute('style') ?? '').toContain('1500px');
     for (const row of Array.from(container.querySelectorAll('tbody > tr'))) {
       expect(Array.from(row.children).map(isSpacer)).toEqual(
         header.map(isSpacer),
@@ -612,7 +612,7 @@ describe('retained focused column', () => {
     expect(bodyCell(container, 0, 1)).toBe(cell);
     await viewport.scrollTo(0);
     expect(document.activeElement).toBe(cell);
-    expect(mountedKeys(container)).toEqual(keys(...range(0, 7)));
+    expect(mountedKeys(container)).toEqual(keys(...range(0, 8)));
   });
 
   it('releases the column when focus leaves the table', async () => {
@@ -628,7 +628,7 @@ describe('retained focused column', () => {
     await viewport.scrollTo(2000);
     expect(mountedKeys(container)).toContain('c1');
     act(() => screen.getByRole('button', {name: 'Outside'}).focus());
-    expect(mountedKeys(container)).toEqual(keys(...range(18, 27)));
+    expect(mountedKeys(container)).toEqual(keys(...range(17, 28)));
   });
 
   it('transfers retention to the newly focused column', async () => {
@@ -639,9 +639,9 @@ describe('retained focused column', () => {
     await viewport.scrollTo(2000);
     const next = bodyCell(container, 2, 20);
     act(() => next?.focus());
-    expect(mountedKeys(container)).toEqual(keys(...range(18, 27)));
+    expect(mountedKeys(container)).toEqual(keys(...range(17, 28)));
     await viewport.scrollTo(0);
-    expect(mountedKeys(container)).toEqual(keys(...range(0, 7), 20));
+    expect(mountedKeys(container)).toEqual(keys(...range(0, 8), 20));
     expect(document.activeElement).toBe(next);
   });
 
@@ -823,11 +823,11 @@ describe('rows and columns windowing together', () => {
     act(() => cell?.focus());
     await viewport.scrollBoth(2000, 2400);
     const rows = mountedRows(container);
-    // Row 1 stays as the island before the window from row 47.
+    // Row 1 stays as the island before the window from row 44, a 300px band.
     expect(rows[0]).toHaveAttribute('aria-rowindex', '2');
-    expect(rows[1]).toHaveAttribute('aria-rowindex', '48');
+    expect(rows[1]).toHaveAttribute('aria-rowindex', '45');
     expect(rows[0].contains(cell)).toBe(true);
-    expect(mountedKeys(container)).toEqual(keys(1, ...range(18, 27)));
+    expect(mountedKeys(container)).toEqual(keys(1, ...range(17, 28)));
     expect(document.activeElement).toBe(cell);
     expect(rows[1].querySelector('[aria-colindex="2"]')).not.toBeNull();
     await viewport.scrollBoth(0, 0);
