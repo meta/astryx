@@ -117,11 +117,6 @@ export interface CodemodEntry {
     description?: string;
     isOptional?: boolean;
     fileExtensions?: string[];
-    /**
-     * Core codemods only: words a file must say for the transform to change
-     * or report it. A file that says none of them, and parses, is skipped.
-     */
-    mentions?: string[];
     transform: CodemodTransform;
   };
   /** Owning package name. */

@@ -337,6 +337,14 @@ export function runConfigCodemod(
 }
 
 /**
+ * A codemod as `upgrade` runs it. Core codemods may also declare `mentions`,
+ * internal to the CLI and not part of the codemod authoring type: the words a
+ * file must say for the transform to change or report it. A file that says
+ * none of them, holds no backslash, and parses, is skipped.
+ * @typedef {import('../../authoring/codemod/type').CodemodEntry['codemod'] & {mentions?: string[]}} CoreCodemod
+ */
+
+/**
  * Whether a file parses as its codemod's transform would parse it, by parser
  * and file, while its text is the same: each file is parsed once for every
  * codemod that skips it.
@@ -351,7 +359,7 @@ const parsedOnce = new Map();
  * and the file parses, so the transform would neither
  * change it nor report it unparseable. A codemod that declares no words runs
  * on every file.
- * @param {{mentions?: string[]}} codemod
+ * @param {CoreCodemod} codemod
  * @param {string} source
  * @param {string} filePath
  * @param {string} parser
