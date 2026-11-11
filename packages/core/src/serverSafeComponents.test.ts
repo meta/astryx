@@ -756,6 +756,9 @@ function findServerGraphViolations(
         via: chain,
       });
     }
+    for (const use of clientValueUses(file)) {
+      problems.push({reason: use, file: info.rel, via: chain});
+    }
     const targets = [
       ...info.imports.map(imp => imp.target),
       ...info.reExports.map(r => r.target),
@@ -766,6 +769,241 @@ function findServerGraphViolations(
     }
   }
   return problems;
+}
+
+/** Names a module declares and exports itself, re-exports excluded. */
+function ownExports(file: string): Set<string> {
+  const sourceFile = ts.createSourceFile(
+    file,
+    readFileSync(file, 'utf-8'),
+    ts.ScriptTarget.ESNext,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const names = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    const exported = ts.canHaveModifiers(statement)
+      ? ts
+          .getModifiers(statement)
+          ?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)
+      : false;
+    if (exported) {
+      const isDefault = ts
+        .getModifiers(statement as ts.HasModifiers)
+        ?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword);
+      if (isDefault) {
+        names.add('default');
+      }
+      if (ts.isVariableStatement(statement)) {
+        for (const decl of statement.declarationList.declarations) {
+          names.add(decl.name.getText(sourceFile));
+        }
+      } else if (
+        (ts.isFunctionDeclaration(statement) ||
+          ts.isClassDeclaration(statement) ||
+          ts.isEnumDeclaration(statement)) &&
+        statement.name
+      ) {
+        names.add(statement.name.text);
+      }
+    }
+    if (
+      ts.isExportDeclaration(statement) &&
+      !statement.moduleSpecifier &&
+      statement.exportClause &&
+      ts.isNamedExports(statement.exportClause)
+    ) {
+      for (const element of statement.exportClause.elements) {
+        names.add(element.name.text);
+      }
+    }
+    if (ts.isExportAssignment(statement)) {
+      names.add('default');
+    }
+  }
+  return names;
+}
+
+/** The module that defines `name`, following pass-through barrels. */
+function definingModule(
+  target: string,
+  name: string,
+  seen = new Set<string>(),
+): string | null {
+  const key = `${target}|${name}`;
+  if (seen.has(key)) {
+    return null;
+  }
+  seen.add(key);
+  const info = parseModule(target);
+  const named = info.reExports.find(r => r.exportedName === name);
+  if (named) {
+    return definingModule(named.target, named.localName, seen);
+  }
+  if (ownExports(target).has(name)) {
+    return target;
+  }
+  for (const star of info.starReExports) {
+    const found = definingModule(star, name, seen);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+/** A component (PascalCase) or a hook (`useX`) name. */
+const isRenderName = (name: string) => /^([A-Z]|use[A-Z0-9])/.test(name);
+
+/** The name a function is known by: its own, or the variable that holds it. */
+function functionName(fn: ts.SignatureDeclaration): string | undefined {
+  if (
+    (ts.isFunctionDeclaration(fn) || ts.isFunctionExpression(fn)) &&
+    fn.name
+  ) {
+    return fn.name.text;
+  }
+  let holder: ts.Node = fn.parent;
+  // memo() and forwardRef() keep the component's name on the variable.
+  while (
+    ts.isCallExpression(holder) &&
+    /^(React\.)?(memo|forwardRef)$/.test(holder.expression.getText())
+  ) {
+    holder = holder.parent;
+  }
+  if (ts.isVariableDeclaration(holder) && ts.isIdentifier(holder.name)) {
+    return holder.name.text;
+  }
+  return undefined;
+}
+
+/**
+ * True when code at `node` runs while the module evaluates or while a
+ * component or hook renders. Event handlers, observer callbacks and class
+ * methods run later, in the browser.
+ */
+function runsDuringRender(node: ts.Node): boolean {
+  for (let current = node.parent; current; current = current.parent) {
+    if (!ts.isFunctionLike(current)) {
+      continue;
+    }
+    if (
+      ts.isMethodDeclaration(current) ||
+      ts.isConstructorDeclaration(current) ||
+      ts.isGetAccessorDeclaration(current) ||
+      ts.isSetAccessorDeclaration(current)
+    ) {
+      return false;
+    }
+    const name = functionName(current);
+    if (name !== undefined) {
+      return isRenderName(name);
+    }
+    // An unnamed function passed to a call (map, filter) runs where the call
+    // runs; any other unnamed function is a callback.
+    const parent = current.parent;
+    if (
+      ts.isCallExpression(parent) &&
+      parent.arguments.includes(current as ts.Expression)
+    ) {
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Uses, in a server module, of values defined in a `'use client'` module that
+ * fail on the server. There such a value is a client reference: it renders as
+ * a JSX element and passes as a prop, but calling it, constructing it or
+ * reading a property of it during render or module evaluation fails.
+ */
+function clientValueUses(file: string): string[] {
+  const sourceFile = ts.createSourceFile(
+    file,
+    readFileSync(file, 'utf-8'),
+    ts.ScriptTarget.ESNext,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const clientBindings = new Map<string, string>();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !statement.importClause) {
+      continue;
+    }
+    const clause = statement.importClause;
+    if (clause.isTypeOnly) {
+      continue;
+    }
+    const target = resolveSpecifier(
+      (statement.moduleSpecifier as ts.StringLiteral).text,
+      file,
+    );
+    if (!target) {
+      continue;
+    }
+    const bind = (local: string, imported: string) => {
+      const defining = definingModule(target, imported);
+      if (defining && parseModule(defining).hasUseClient) {
+        clientBindings.set(
+          local,
+          `${imported} from ${relative(SRC_DIR, defining)}`,
+        );
+      }
+    };
+    if (clause.name) {
+      bind(clause.name.text, 'default');
+    }
+    const bindings = clause.namedBindings;
+    if (bindings && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        if (!element.isTypeOnly) {
+          bind(element.name.text, (element.propertyName ?? element.name).text);
+        }
+      }
+    } else if (
+      bindings &&
+      ts.isNamespaceImport(bindings) &&
+      parseModule(target).hasUseClient
+    ) {
+      clientBindings.set(
+        bindings.name.text,
+        `* from ${relative(SRC_DIR, target)}`,
+      );
+    }
+  }
+  if (clientBindings.size === 0) {
+    return [];
+  }
+  const uses = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isIdentifier(node) &&
+      clientBindings.has(node.text) &&
+      runsDuringRender(node)
+    ) {
+      const parent = node.parent;
+      const source = clientBindings.get(node.text);
+      if (
+        (ts.isCallExpression(parent) || ts.isNewExpression(parent)) &&
+        parent.expression === node
+      ) {
+        uses.add(`calls ${source}`);
+      } else if (ts.isTaggedTemplateExpression(parent) && parent.tag === node) {
+        uses.add(`calls ${source}`);
+      } else if (
+        (ts.isPropertyAccessExpression(parent) ||
+          ts.isElementAccessExpression(parent)) &&
+        parent.expression === node
+      ) {
+        uses.add(`reads a property of ${source}`);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(sourceFile, visit);
+  return [...uses];
 }
 
 /**
