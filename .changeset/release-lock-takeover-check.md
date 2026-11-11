@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] The release cache's lock takeover checks that the lock it moved aside is still the one it judged stale. A lock another command took in the moment between the check and the move is put back, so two commands never both think they hold it.
+[fix] The release cache's lock takeover checks the owner record of the lock it moved aside. A lock another command took in the moment between the check and the move is put back instead of removed, and the takeover waits for it.
 
 @josephfarina
