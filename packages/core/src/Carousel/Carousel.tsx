@@ -249,17 +249,13 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
+  // The overlay is in the top layer, above the root's focus ring. Each pill
+  // sits inside the ring, by the ring's offset and width, so it never covers it.
   buttonPillStart: {
-    transform: {
-      default: 'translateX(-50%)',
-      ':is([dir="rtl"] *)': 'translateX(50%)',
-    },
+    marginInlineStart: `calc(${focusVars['--focus-outline-offset']} + ${focusVars['--focus-outline-width']})`,
   },
   buttonPillEnd: {
-    transform: {
-      default: 'translateX(50%)',
-      ':is([dir="rtl"] *)': 'translateX(-50%)',
-    },
+    marginInlineEnd: `calc(${focusVars['--focus-outline-offset']} + ${focusVars['--focus-outline-width']})`,
   },
   buttonHidden: {
     opacity: 0,

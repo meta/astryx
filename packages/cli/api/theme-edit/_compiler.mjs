@@ -219,13 +219,18 @@ export function makeCompiler(project, parts) {
     return out;
   }
 
-  /** One line for where a token feeds. @param {ReturnType<typeof feeds>} list */
-  const fmtFeeds = list =>
+  /**
+   * One line for where a token feeds. A part inside `target` (a button in a
+   * toast) is named as inside it, so the line never reads as every button.
+   * @param {ReturnType<typeof feeds>} list
+   * @param {string} [target]
+   */
+  const fmtFeeds = (list, target) =>
     [
       ...new Set(
         list.map(
           f =>
-            `${f.prop}${f.part ? ` on ${f.part}` : ''}${f.when ? ` (when ${f.when})` : ''}`,
+            `${f.prop}${f.part ? ` on ${f.part}${target && f.part !== target ? ` inside ${target}` : ''}` : ''}${f.when ? ` (when ${f.when})` : ''}`,
         ),
       ),
     ]
@@ -270,7 +275,7 @@ export function makeCompiler(project, parts) {
         return null;
       const direct = g === 'text' ? 'color' : 'background-color';
       return {
-        message: `${target} reads ${token} only for ${fmtFeeds(fed)}, not for its ${g}, so this would not change what you expect.`,
+        message: `${target} reads ${token} only for ${fmtFeeds(fed, target)}, not for its ${g}, so this would not change what you expect.`,
         run: [
           `${P} set ${theme} ${direct} ${quote(value)} --on ${target}   # sets its ${g} directly`,
           `${HOW} ${target}`,
