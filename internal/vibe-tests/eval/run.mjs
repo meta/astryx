@@ -208,9 +208,10 @@ async function selfTest(options) {
   } else log('self-test passed');
 }
 
-/** Agent failures that say nothing about the library: no result, or no turn taken. */
-export function agentErrorReason(agent) {
+/** Agent failures that say nothing about the library: wrong model, no result, or no turn taken. */
+export function agentErrorReason(agent, model) {
   if (agent.spawnError) return `agent did not start: ${agent.spawnError}`;
+  if (model && agent.initModel && agent.initModel !== model) return `session started on ${agent.initModel}, not ${model}`;
   if (agent.timedOut) return null;
   if (!agent.result) return 'agent wrote no result';
   if (agent.result.isError && !agent.result.turns) return `agent error before its first turn (${agent.result.subtype})`;
@@ -384,7 +385,7 @@ async function evaluate(options) {
         instructionsFile: agent.instructionsFile,
         ...(agent.result ?? {}),
       };
-      const agentError = agentErrorReason(agent);
+      const agentError = agentErrorReason(agent, options.model);
       if (agentError) {
         record.status = 'agent-error';
         record.error = agentError;

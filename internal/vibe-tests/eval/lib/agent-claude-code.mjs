@@ -10,6 +10,7 @@
 import {spawn} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import {killGroup} from './workspace.mjs';
 
 /**
  * Bare mode loads no user settings, plugins, hooks, MCP servers, or memory
@@ -95,14 +96,6 @@ export function parseResult(lines) {
 /** Process groups of agents that are still running. */
 const liveGroups = new Set();
 
-function killGroup(child) {
-  try {
-    process.kill(-child.pid, 'SIGKILL');
-  } catch {
-    child.kill('SIGKILL');
-  }
-}
-
 /** Kills every running agent and the tools it started. */
 export function killAllAgents() {
   for (const child of liveGroups) killGroup(child);
@@ -134,9 +127,12 @@ export function runClaudeCode({
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', chunk => {
       buffered += chunk;
-      const parts = buffered.split('\n');
-      buffered = parts.pop() ?? '';
-      lines.push(...parts.filter(Boolean));
+      const parts = buffered.split('\n').filter(Boolean);
+      buffered = buffered.endsWith('\n') ? '' : (parts.pop() ?? '');
+      lines.push(...parts);
+      // A session on another model can never count, so stop it before it spends more.
+      const started = parseInitModel(parts);
+      if (started && started !== model) killGroup(child);
     });
     let stderr = '';
     child.stderr.on('data', chunk => {

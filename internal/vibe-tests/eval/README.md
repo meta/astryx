@@ -49,7 +49,9 @@ its folder. The agent is not sandboxed, so the runner audits it instead (below).
   settings, plugins, hooks, MCP servers or memory files. Web tools and
   sub-agents are off.
 - Model: one model for every arm, given with `--model` and recorded in
-  `meta.json`. A run that reports another model fails as `model-mismatch`.
+  `meta.json`. A session that starts on another model is stopped at once and
+  listed as an `agent-error`. A finished run whose usage does not include the
+  pinned model fails as `model-mismatch`.
 - Project instructions: bare mode reads no memory files, so the runner passes
   the arm's root `AGENTS.md` or `CLAUDE.md`, if the arm's own setup wrote one.
   Today only `astryx init` writes one.

@@ -124,6 +124,12 @@ describe('reads the review found unaudited', () => {
     "python3 - <<'EOF'\nprint(open('/repo/secret').read())\nEOF",
     "cat <<'EOF' | python3 -\nprint(open('/repo/x.probe.mjs').read())\nEOF",
     "bash <<'EOF'\ncat /repo/x.probe.mjs\nEOF",
+    'grep -rn getByRole /',
+    'rg expect /repo',
+    "find / -name '*.probe.mjs' -exec cat {} +",
+    'cat $(find / -name x.probe.mjs)',
+    "find /repo -name '*.mjs' | xargs cat",
+    'cd ~ && cat notes',
   ])('fails %j', command => {
     expect(audit(command).violations.length).toBeGreaterThan(0);
   });
@@ -142,6 +148,14 @@ describe('reads the review found unaudited', () => {
     'expr 6 / 2',
   ])('passes %j', command => {
     expect(audit(command).violations).toEqual([]);
+  });
+
+  it('fails a Grep tool call over the repository', () => {
+    expect(auditTranscript([toolUse('Grep', {pattern: 'x', path: '/repo'})], WORKSPACE, SENSITIVE).violations).toHaveLength(1);
+  });
+
+  it('keeps a workspace file whose name starts with two dots inside', () => {
+    expect(auditTranscript([toolUse('Write', {file_path: `${WORKSPACE}/..notes`})], WORKSPACE, SENSITIVE).violations).toEqual([]);
   });
 
   it('blocks the sub-agent tool under its current name', () => {

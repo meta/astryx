@@ -67,6 +67,7 @@ describe('Budget', () => {
 describe('agentErrorReason', () => {
   it('separates agent failures from library failures', () => {
     expect(agentErrorReason({spawnError: 'ENOENT'})).toMatch(/did not start/);
+    expect(agentErrorReason({initModel: 'm-2', result: null}, 'm-1')).toMatch(/started on m-2, not m-1/);
     expect(agentErrorReason({result: null})).toMatch(/no result/);
     expect(agentErrorReason({result: {isError: true, turns: 0, subtype: 'error_during_execution'}})).toMatch(/before its first turn/);
     expect(agentErrorReason({result: {isError: true, turns: 6, subtype: 'error_max_budget_usd'}})).toBeNull();
