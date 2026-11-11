@@ -156,6 +156,9 @@ const LAB_ONLY_NAMES = [
   'useTouchHitArea',
   'touchHitAreaStyles',
   'measureLogicalScrollAxis',
+  'useGroupPressTracking',
+  'GROUP_PRESS_POINTERS',
+  'pressGroupItemProps',
 ];
 
 /** The inputs matching `pattern` that put bytes in `bytes`. */

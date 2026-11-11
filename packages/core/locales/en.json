@@ -2568,8 +2568,8 @@
     "description": "Label of the back button in a lab NavigationStack's bar when the screen it returns to has no title of its own. Returns to the previous screen; keep it short, as on an iOS navigation bar."
   },
   "@astryx.rating.starLabel": {
-    "defaultMessage": "{value, number} of {max, number} stars",
-    "description": "Accessible name of a Rating star or fractional read-only rating. value is the rating and max is the total number of stars."
+    "defaultMessage": "{value, number} of {max, plural, one {# star} other {# stars}}",
+    "description": "Accessible name of a Rating star or fractional read-only rating. value is the rating and max is the total number of stars; max picks the plural form of star."
   },
   "@astryx.rating.readOnlyLabel": {
     "defaultMessage": "{label}: {rating}",

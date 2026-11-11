@@ -341,7 +341,8 @@ those contracts.
   `GROUP_PRESS_POINTERS`, is on that subpath: it is the tracking that
   `family:buttons` groups use, so a Lab Rating's stars press as one group.
   `pressGroupItemProps`, the props of the private group-item attribute that
-  `privateAttributes/pressGroupItem.stylex.ts` owns under INV23, is on that
+  `privateAttributes/pressGroupItem.stylex.ts` owns under
+  `architecture:public-component-api` INV23, is on that
   subpath too: it marks a group's member so press feedback leaves its press to
   the group's tracker.
 - **INV15 — The animator animates a number.** The animator has a value mode:
