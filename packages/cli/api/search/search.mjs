@@ -11,9 +11,11 @@
  * block), and themes. The adapter gathers every candidate (_adapter.mjs),
  * and search's tree (tree.mjs) picks the searcher that answers.
  * `searchCore(query)` is the lexical ranker alone (_lexical.mjs); `build`
- * reads it, so build's output does not move when search's tree does. Only
- * `search` leaves out a doc keyword that is another entry's name
- * (_named-keywords.mjs); `searchCore` reads every keyword as gathered.
+ * reads it, so build's output does not move when search's tree does. A doc
+ * keyword that is another entry's name is not a match (_named-keywords.mjs)
+ * in three places: `search`, `rankSearchIndex` (search-index.mjs), and
+ * `searchCore` with `ownKeywords`. `searchCore` without it, which build
+ * reads, reads every keyword as gathered.
  */
 
 import {
@@ -79,7 +81,7 @@ async function searchRead(query, options) {
                 // A keyword that names another entry is not a match here
                 // (_named-keywords.mjs); searchCore, which build reads,
                 // keeps every keyword.
-                ...searchView(await gatherCandidatesReused(options)),
+                ...(await searchCatalog(options)),
                 data: loadSearchData(),
               },
             )
@@ -87,6 +89,29 @@ async function searchRead(query, options) {
           options.cwd ?? process.cwd(),
         )
       ),
+  );
+}
+
+/**
+ * The other declaring domain, whose names a search for one `type` still reads.
+ * @type {Record<string, string>}
+ */
+const NAMING_DOMAIN = {component: 'hook', hook: 'component'};
+
+/**
+ * The gathered catalog for `options`, with keywords as search reads them
+ * (_named-keywords.mjs). The names come from every component and hook, so a
+ * search for one `type` keeps and drops the keywords an open search does.
+ * @param {{cwd?: string, type?: string}} options
+ */
+async function searchCatalog(options) {
+  const gathered = await gatherCandidatesReused(options);
+  const other = options.type == null ? null : NAMING_DOMAIN[options.type];
+  return searchView(
+    gathered,
+    other == null
+      ? []
+      : [await gatherCandidatesReused({cwd: options.cwd, type: other})],
   );
 }
 
@@ -119,12 +144,13 @@ export async function searchCore(query, options = {}) {
  */
 async function searchCoreRead(query, options) {
   return withListingCache(async () => {
-    const gathered = await gatherCandidatesReused(options);
     return linkSearchResponse(
       rankLexical(
         query,
         options,
-        options.ownKeywords ? searchView(gathered) : gathered,
+        options.ownKeywords
+          ? await searchCatalog(options)
+          : await gatherCandidatesReused(options),
       ),
       options.cwd ?? process.cwd(),
     );

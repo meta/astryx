@@ -8,37 +8,41 @@
  * entry answers the word. Search does not count such a keyword as a match,
  * unless the entry's own description uses the word too, or the other entry is
  * its own family member or its hook/component pair (useHoverCard and
- * HoverCard).
- * @input the gathered catalog
+ * HoverCard). Names are read as the ranker reads them: joined (`joined`,
+ * _words.mjs) and either plural (`pluralOf`, _query.mjs).
+ * @input the gathered catalog, and the catalogs whose components and hooks
+ *   name entries (every component and hook, whatever `type` a search asks for)
  * @output the same catalog with those keywords left out of its component and
  *   hook entries
- * @position api/search; only search() (search.mjs) applies it. searchCore and
- *   build read keywords as gathered, so build's output does not move.
+ * @position api/search; three places apply it: search() (search.mjs),
+ *   rankSearchIndex() (search-index.mjs), and searchCore() (search.mjs) when
+ *   it is passed `ownKeywords`, as search's own comparisons do. searchCore
+ *   without it and build read keywords as gathered, so build's output does
+ *   not move.
  */
 
-/**
- * A name or phrase reduced to its letters and digits, lowercased:
- * `list-item`, `List Item` and `ListItem` all read `listitem`.
- * @param {unknown} text
- * @returns {string}
- */
-export const compact = text =>
-  String(text ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '');
+import {pluralOf} from './_query.mjs';
+import {joined} from './_words.mjs';
 
 /**
- * A compacted word with its plural or singular: `step` and `steps`.
+ * A joined word with its plural or singular, by search's plural rule
+ * (`pluralOf`): `step` and `steps`, `box` and `boxes`.
  * @param {string} word
  * @returns {string[]}
  */
-const forms = word =>
-  word.endsWith('s')
-    ? [word, `${word}s`, word.slice(0, -1)]
-    : [word, `${word}s`];
+function forms(word) {
+  const out = [word];
+  for (const plural of [`${word}s`, `${word}es`]) {
+    if (pluralOf(plural, word)) out.push(plural);
+  }
+  for (const single of [word.slice(0, -1), word.slice(0, -2)]) {
+    if (pluralOf(word, single)) out.push(single);
+  }
+  return out;
+}
 
 /**
- * Whether a compacted word is a run of adjacent words of a text: `tablecell`
+ * Whether a joined word is a run of adjacent words of a text: `tablecell`
  * is in "hundreds of table cell observers", `visuallyhidden` in "a
  * visually-hidden region", and `ton` is not in "button".
  * @param {string[]} words - the text's words, lowercased
@@ -70,8 +74,8 @@ function related(a, b) {
     return true;
   }
   if (b._family === a.name) return true;
-  const x = compact(a.name);
-  const y = compact(b.name);
+  const x = joined(a.name);
+  const y = joined(b.name);
   return x === `use${y}` || y === `use${x}`;
 }
 
@@ -83,15 +87,18 @@ const DECLARING = new Set(['component', 'hook']);
  * another entry left out (see the file comment). Entries with nothing left
  * out are returned as they are.
  * @param {import('./_lexical.mjs').Candidate[]} all
+ * @param {import('./_lexical.mjs').Candidate[]} [named] - the entries whose
+ *   names count: `all` itself, unless the caller holds a wider catalog
+ *   (`all` cut to one `type`)
  * @returns {import('./_lexical.mjs').Candidate[]}
  */
-export function withoutOtherNames(all) {
+export function withoutOtherNames(all, named = all) {
   /** @type {Map<string, import('./_lexical.mjs').Candidate[]>} */
   const byName = new Map();
-  for (const c of all) {
+  for (const c of named) {
     if (!DECLARING.has(c.domain)) continue;
     for (const name of [c.name, ...(c.aliases ?? [])]) {
-      const key = compact(name);
+      const key = joined(name);
       if (!key) continue;
       const list = byName.get(key);
       if (list) list.push(c);
@@ -103,7 +110,7 @@ export function withoutOtherNames(all) {
     /** @type {string[] | null} */
     let described = null;
     const keywords = c.keywords.filter(keyword => {
-      const word = compact(keyword);
+      const word = joined(keyword);
       if (!word) return true;
       const wordForms = forms(word);
       /** @type {import('./_lexical.mjs').Candidate[]} */
@@ -126,26 +133,45 @@ export function withoutOtherNames(all) {
   });
 }
 
-/** @type {WeakMap<object, object>} each gathered catalog's search view */
+/**
+ * Each gathered catalog's search views, one per set of naming catalogs.
+ * @type {WeakMap<object, {others: object[], view: object}[]>}
+ */
 const views = new WeakMap();
 
 /**
  * The gathered catalog as search reads it: its entries with
- * {@link withoutOtherNames} applied. A reused gather gets the same view back.
+ * {@link withoutOtherNames} applied. Names come from the catalog and from
+ * `others`, further gathered catalogs (a search for one `type` passes the
+ * other of components and hooks, so `type` never changes which keywords
+ * count). A reused gather, with the same others, gets the same view back.
  * @template {{all: import('./_lexical.mjs').Candidate[], components: import('./_lexical.mjs').Candidate[]}} T
  * @param {T} catalog
+ * @param {{all: import('./_lexical.mjs').Candidate[]}[]} [others]
  * @returns {T}
  */
-export function searchView(catalog) {
-  const seen = views.get(catalog);
-  if (seen) return /** @type {T} */ (seen);
-  const all = withoutOtherNames(catalog.all);
+export function searchView(catalog, others = []) {
+  const seen = views.get(catalog) ?? [];
+  const hit = seen.find(
+    v =>
+      v.others.length === others.length &&
+      v.others.every((o, i) => o === others[i]),
+  );
+  if (hit) return /** @type {T} */ (hit.view);
+  const all = withoutOtherNames(
+    catalog.all,
+    others.length === 0
+      ? catalog.all
+      : [catalog.all, ...others.map(o => o.all)].flat(),
+  );
   const swap = new Map(catalog.all.map((c, i) => [c, all[i]]));
   const view = {
     ...catalog,
     all,
     components: catalog.components.map(c => swap.get(c) ?? c),
   };
-  views.set(catalog, view);
+  // Only the latest view per catalog is kept: a search reuses one set of
+  // naming catalogs until one of them gathers again.
+  views.set(catalog, [{others, view}]);
   return view;
 }

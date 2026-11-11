@@ -4,7 +4,8 @@
  * @file A doc keyword that is another entry's whole name is not a match in
  * search: the entry's own family members and its hook/component pair still
  * count, as does a word the entry's own description uses. searchCore, which
- * build reads, keeps every keyword. All entries here are made up.
+ * build reads, keeps every keyword. A search for one `type` keeps and drops
+ * the same keywords as an open search. All entries here are made up.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -15,6 +16,10 @@ const require = requireNatively(import.meta.url);
 const {withoutOtherNames, searchView} = require('./_named-keywords.mjs');
 /** @type {typeof import('./_lexical.mjs')} */
 const {rankLexical} = require('./_lexical.mjs');
+/** @type {typeof import('./search-index.mjs')} */
+const {rankSearchIndex} = require('./search-index.mjs');
+/** @type {typeof import('../../foundation/release/run-context.mjs')} */
+const {cliVersion} = require('../../foundation/release/run-context.mjs');
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
@@ -130,5 +135,55 @@ describe('ranking with and without the rule', () => {
   it('the gathered catalog, as searchCore and build read it, still matches', () => {
     const found = names(rankLexical('whirl', {}, catalog));
     expect(found).toContain('Dial');
+  });
+});
+
+describe('a search for one type', () => {
+  const hooks = ALL.filter(c => c.domain === 'hook');
+  const components = ALL.filter(c => c.domain === 'component');
+  /**
+   * @param {Candidate[]} all
+   * @returns {{all: Candidate[], components: Candidate[]}}
+   */
+  const catalog = all => ({
+    all,
+    components: all.filter(c => c.domain === 'component'),
+  });
+  /** @param {{all: Candidate[]}} view */
+  const verdicts = view =>
+    Object.fromEntries(view.all.map(c => [c.name, c.keywords]));
+
+  it("reads the other domain's names, as an open search does", () => {
+    const open = verdicts(searchView(catalog(ALL)));
+    const hookView = searchView(catalog(hooks), [catalog(components)]);
+    const componentView = searchView(catalog(components), [catalog(hooks)]);
+    for (const [name, keywords] of Object.entries(verdicts(hookView))) {
+      expect(keywords).toEqual(open[name]);
+    }
+    for (const [name, keywords] of Object.entries(verdicts(componentView))) {
+      expect(keywords).toEqual(open[name]);
+    }
+    expect(verdicts(hookView).useBeacon).toEqual(['beacon']);
+  });
+
+  it('gives a reused catalog with the same others the same view', () => {
+    const hookCatalog = catalog(hooks);
+    const others = [catalog(components)];
+    const view = searchView(hookCatalog, others);
+    expect(searchView(hookCatalog, others)).toBe(view);
+    expect(searchView(hookCatalog, [catalog(components)])).not.toBe(view);
+  });
+
+  it('ranks a stored index the same with and without `type`', async () => {
+    const index = {version: cliVersion(), candidates: ALL};
+    /** @param {any} response */
+    const found = response =>
+      response.data.results
+        .filter((/** @type {any} */ r) => r.domain === 'hook')
+        .map((/** @type {any} */ r) => r.name);
+    const open = found(await rankSearchIndex('whirl', index));
+    const typed = found(await rankSearchIndex('whirl', index, {type: 'hook'}));
+    expect(open).not.toContain('useBeacon');
+    expect(typed).toEqual(open);
   });
 });

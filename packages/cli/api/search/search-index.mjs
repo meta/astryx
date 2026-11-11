@@ -186,21 +186,24 @@ export async function rankSearchIndex(query, indexes, options = {}) {
     all.push(...index.candidates);
   }
   const {type} = options;
+  // Keywords read as search() reads them (_named-keywords.mjs). The names
+  // come from every stored entry, before the `type` cut.
+  const view = searchView({
+    all,
+    components: all.filter(candidate => candidate.domain === 'component'),
+  }).all;
   const wanted =
-    type == null ? all : all.filter(candidate => candidate.domain === type);
+    type == null ? view : view.filter(candidate => candidate.domain === type);
   const {searchedComponents, coreSkipped} = coreFlags(list, type);
   const response = /** @type {import('./search.type.mjs').SearchResponse} */ (
     await runTree(
       SEARCH_TREE,
       {query, options: {type, limit: options.limit}},
       {
-        // Keywords read as search() reads them (_named-keywords.mjs).
-        ...searchView({
-          all: wanted,
-          components: wanted.filter(
-            candidate => candidate.domain === 'component',
-          ),
-        }),
+        all: wanted,
+        components: wanted.filter(
+          candidate => candidate.domain === 'component',
+        ),
         searchedComponents,
         outside: false,
         coreSkipped,
