@@ -539,18 +539,21 @@ describe('how on real parts, questions and settings', () => {
     expect(r.data.kind).toBe('question');
     expect(r.data.understood.parts).toContain('banner');
     const commands = r.data.results.flatMap(x => x.commands);
-    expect(commands).toContain(
-      'astryx experimental theme editor set <theme> color "#ffffff" --on banner   # direct: always works',
-    );
     expect(
-      r.data.results.some(x => x.text.includes('--when status:<value>')),
+      commands.some(c =>
+        c.endsWith('editor set t color "#ffffff" --on banner'),
+      ),
     ).toBe(true);
+    expect(
+      r.data.results.some(x => x.text.includes('--when status:info')),
+    ).toBe(true);
+    expect(r.data.results[0].text).toContain('--color-on-info-muted');
   });
 
-  it('a question about soft shadows is answered with box-shadow and the shadow tokens', async () => {
+  it('a question about soft shadows is answered with box-shadow on the part', async () => {
     const r = await themeEditHow('card soft shadow', {cwd});
-    expect(r.data.results[0].commands[0]).toContain(
-      'box-shadow "var(--shadow-low)" --on containers',
+    expect(r.data.results[0].commands[0]).toMatch(
+      /editor set t box-shadow "var\(--shadow-low\)" --on card$/,
     );
   });
 
@@ -619,9 +622,9 @@ describe('how on a picture', () => {
     fs.writeFileSync(path.join(cwd, 'p.png'), png());
     const r = await themeEditHow('p.png', {cwd, at: ['0,0;2,0', '3,1']});
     expect(r.data.points).toEqual([
-      {at: '0,0', color: '#ff0000'},
-      {at: '2,0', color: '#0000ff'},
-      {at: '3,1', color: '#000000'},
+      {at: '0,0', color: '#ff0000', alpha: 1},
+      {at: '2,0', color: '#0000ff', alpha: 1},
+      {at: '3,1', color: '#000000', alpha: 1},
     ]);
   });
 

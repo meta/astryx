@@ -188,7 +188,7 @@ describe('colors', () => {
 describe('how', () => {
   /** @param {string} q */
   const ask = async q =>
-    /** @type {any} */ ((await themeEditHow(q, {cwd})).data);
+    /** @type {any} */ ((await themeEditHow(q, {cwd, theme: 's'})).data);
 
   it('lists the kinds of list when none is named', async () => {
     const r = /** @type {any} */ (
@@ -218,18 +218,16 @@ describe('how', () => {
       .flatMap((/** @type {any} */ x) => x.commands)
       .join('\n');
     expect(commands).toContain(
-      'set <theme> border-radius 6px --on button --when size:sm',
+      'set s border-radius 6px --on button --when size:sm',
     );
-    expect(commands).toContain(
-      'set <theme> corners pill --on button --when size:lg',
-    );
+    expect(commands).toContain('set s corners pill --on button --when size:lg');
     expect(r.understood.parts).not.toContain('badge');
   });
 
   it('answers a question about another aspect for that aspect, not as a color question', async () => {
     const text = await ask('make the text red');
     expect(text.understood.aspects).toEqual(['text']);
-    expect(text.results[0].text).toContain('whole-theme tokens for text');
+    expect(text.results[0].text).toContain('--color-text-primary');
     const corners = await ask('override the corner radius');
     expect(corners.understood.aspects).toEqual(['corners']);
     expect(JSON.stringify(corners.results)).not.toContain('--color-');
@@ -241,7 +239,7 @@ describe('how', () => {
     expect((await ask('error red')).understood.aspects).toEqual(['colors']);
     const statusBg = await ask('make the error background red');
     expect(statusBg.understood.aspects).toEqual(['colors']);
-    expect(statusBg.results[0].commands[0]).toContain('set <theme> danger');
+    expect(statusBg.results[0].commands[0]).toContain('set s danger');
   });
 
   it('takes each color from the word it belongs to', async () => {
@@ -408,13 +406,13 @@ describe('round 3', () => {
       (
         await themeEditHow(
           'secondary button with accent colored text and thin border',
-          {cwd},
+          {cwd, theme: 's'},
         )
       ).data
     );
     const b = border.results.map((/** @type {any} */ x) => x.commands).flat();
     expect(b.join('\n')).toContain(
-      'set <theme> border "1px solid <color>" --on button --when variant:secondary',
+      'set s border-width 1px --on button --when variant:secondary',
     );
     expect(b.join('\n')).toContain('color "var(--color-text-accent)"');
     const fill = /** @type {any} */ (
@@ -427,7 +425,7 @@ describe('round 3', () => {
         )
       ).data
     );
-    expect(fill.understood.aspects).toEqual(['text', 'background']);
+    expect([...fill.understood.aspects].sort()).toEqual(['background', 'text']);
     const f = fill.results.map((/** @type {any} */ x) => x.commands).flat();
     expect(f.join('\n')).toContain('background "#e5e7eb" --on button');
     expect(f.join('\n')).toContain('color "#111827" --on button');
@@ -479,15 +477,20 @@ describe('round 4', () => {
 
   it('gives each token a value of its own type, and keeps a named tint', async () => {
     const border = /** @type {any} */ (
-      (await themeEditHow('border color of cards and dividers', {cwd})).data
+      (
+        await themeEditHow('border color of cards and dividers', {
+          cwd,
+          theme: 's',
+        })
+      ).data
     );
     const commands = border.results
       .flatMap((/** @type {any} */ x) => x.commands)
       .join('\n');
     expect(border.understood.aspects).toEqual(['border']);
-    expect(commands).toContain('--color-border "<color>"');
-    expect(commands).toContain('--border-width 1px');
-    expect(commands).not.toMatch(/--(color-border|border-width) "1px solid/);
+    // The text names the token cards read for their border.
+    expect(border.results[0].text).toContain('--color-border');
+    expect(commands).not.toMatch(/<color>|<value>|--color-border "1px solid/);
     const tint = /** @type {any} */ (
       (
         await themeEditHow('secondary button light blue tint with blue text', {
@@ -495,7 +498,7 @@ describe('round 4', () => {
         })
       ).data
     );
-    expect(tint.understood.aspects).toEqual(['text', 'background']);
+    expect([...tint.understood.aspects].sort()).toEqual(['background', 'text']);
   });
 
   it('names the removed setting on undo, never as the value in effect', async () => {
@@ -556,18 +559,15 @@ describe('round 4', () => {
 describe('round 4 follow-ups', () => {
   it('gives token lines a color or width when the resting border reads a token', async () => {
     const r = /** @type {any} */ (
-      (await themeEditHow('thin gray border on inputs', {cwd})).data
+      (await themeEditHow('thin gray border on inputs', {cwd, theme: 's'})).data
     );
     const lines = r.results.flatMap((/** @type {any} */ x) => x.commands);
-    const tokenLines = lines.filter((/** @type {string} */ c) =>
-      c.includes('# via the token'),
-    );
-    expect(tokenLines.length).toBeGreaterThan(0);
-    for (const c of tokenLines) expect(c).not.toContain('solid');
-    expect(tokenLines.join('\n')).toMatch(/--color-border\S* "<color>"/);
+    // The width and the color the question names, with no comment or
+    // placeholder in the command.
     expect(lines.join('\n')).toContain(
-      'set <theme> border "1px solid <color>" --on inputs   # direct',
+      'set s border "1px solid #9ca3af" --on inputs',
     );
+    expect(lines.join('\n')).not.toMatch(/#\s|<color>/);
   });
 
   it('moves the dark fill off an exact color that disappears on the dark page', async () => {
@@ -636,7 +636,10 @@ describe('round 5', () => {
       'colored buttons with a border',
     ]) {
       const r = /** @type {any} */ ((await themeEditHow(q, {cwd})).data);
-      expect(r.understood.aspects, q).toEqual(['border', 'background']);
+      expect([...r.understood.aspects].sort(), q).toEqual([
+        'background',
+        'border',
+      ]);
     }
     const border = /** @type {any} */ (
       (await themeEditHow('a gray border on cards', {cwd})).data

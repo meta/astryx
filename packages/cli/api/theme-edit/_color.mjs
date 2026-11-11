@@ -450,8 +450,11 @@ export const isNumber = (v, name = '') => {
  * @param {string} v
  */
 export function isSafeValue(v) {
+  // A shell comment ("# direct"), as a command run without a shell passes
+  // it, is a comment too.
   // eslint-disable-next-line no-control-regex
-  if (/[<>\u0000-\u001f\u007f]|\/\*|!important/i.test(v)) return false;
+  if (/[<>\u0000-\u001f\u007f]|\/\*|!important|(^|\s)#(\s|$)/i.test(v))
+    return false;
   const outside = v
     .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""')
     .replace(/url\(data:[^\s"'()\\]*\)/gi, 'url()');

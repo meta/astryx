@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Read a PNG in plain Node: decompress with zlib, undo the row
- * filters, and give RGBA pixels. Then the main colors of a picture, or the
- * exact color at given points.
+ * @file Read a PNG in plain Node: check the header and size before taking
+ * memory, decompress with zlib to exactly the size the header names, undo
+ * the row filters, and give RGBA pixels. Then the main colors of a picture,
+ * or the exact color and alpha at given points.
  * @position api/theme-edit — pure helpers for `experimental theme editor how <picture.png>`
  */
 
@@ -11,10 +12,33 @@ import * as zlib from 'node:zlib';
 
 const SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
+/**
+ * The most pixels a picture may have: about a 6K screen. A bigger header is
+ * refused before any memory is taken for it.
+ */
+export const MAX_PIXELS = 40_000_000;
+
+/** The bit depths each PNG color type allows. */
+const DEPTHS = /** @type {Record<number, number[]>} */ ({
+  0: [1, 2, 4, 8, 16],
+  2: [8, 16],
+  3: [1, 2, 4, 8],
+  4: [8, 16],
+  6: [8, 16],
+});
+const CHANNELS = /** @type {Record<number, number>} */ ({
+  0: 1,
+  2: 3,
+  3: 1,
+  4: 2,
+  6: 4,
+});
+
 /** @typedef {{width: number, height: number, rgba: Uint8Array}} Picture */
 
 /**
- * Decode a PNG file's bytes. Interlaced pictures are refused.
+ * Decode a PNG file's bytes. Interlaced pictures are refused, and so is
+ * any file whose header, chunks or pixel data do not match the PNG format.
  * @param {Buffer} bytes
  * @returns {Picture}
  */
@@ -27,6 +51,7 @@ export function decodePng(bytes) {
   let depth = 0;
   let colorType = 0;
   let interlace = 0;
+  let header = false;
   /** @type {Buffer | null} */
   let palette = null;
   /** @type {Buffer | null} */
@@ -36,31 +61,63 @@ export function decodePng(bytes) {
   while (pos + 8 <= bytes.length) {
     const length = bytes.readUInt32BE(pos);
     const type = bytes.toString('latin1', pos + 4, pos + 8);
+    if (pos + 12 + length > bytes.length)
+      throw new Error(`the ${type} chunk is cut off`);
     const body = bytes.subarray(pos + 8, pos + 8 + length);
     pos += 12 + length;
     if (type === 'IHDR') {
+      if (length !== 13) throw new Error('the PNG header is damaged');
       width = body.readUInt32BE(0);
       height = body.readUInt32BE(4);
       depth = body[8];
       colorType = body[9];
       interlace = body[12];
+      header = true;
     } else if (type === 'PLTE') palette = body;
     else if (type === 'tRNS') alpha = body;
     else if (type === 'IDAT') data.push(body);
     else if (type === 'IEND') break;
   }
-  if (!width || !height) throw new Error('the PNG has no header');
+  if (!header || !width || !height) throw new Error('the PNG has no header');
   if (interlace) throw new Error('interlaced PNG files are not supported');
-  const channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[colorType];
-  if (!channels || ![1, 2, 4, 8, 16].includes(depth))
-    throw new Error('unsupported PNG color format');
-  const raw = zlib.inflateSync(Buffer.concat(data));
+  if (!DEPTHS[colorType]?.includes(depth))
+    throw new Error(
+      `color type ${colorType} at bit depth ${depth} is not a valid PNG format`,
+    );
+  if (width * height > MAX_PIXELS)
+    throw new Error(
+      `the picture is ${width}x${height}, more than ${MAX_PIXELS / 1e6} million pixels; crop or scale it down`,
+    );
+  if (colorType === 3 && !palette)
+    throw new Error('the PNG uses a palette but has none');
+  if (!data.length) throw new Error('the PNG has no pixel data');
+  const channels = CHANNELS[colorType];
   const bitsPerPixel = channels * depth;
   const stride = Math.ceil((width * bitsPerPixel) / 8);
+  const expected = (stride + 1) * height;
+  /** @type {Buffer} */
+  let raw;
+  try {
+    raw = zlib.inflateSync(Buffer.concat(data), {maxOutputLength: expected});
+  } catch (e) {
+    // Node reports output past the limit as a RangeError.
+    throw new Error(
+      e instanceof RangeError
+        ? 'the pixel data is longer than the header says'
+        : 'the pixel data is damaged',
+      {cause: e},
+    );
+  }
+  if (raw.length < expected)
+    throw new Error(
+      `the pixel data is cut off: ${raw.length} of ${expected} bytes`,
+    );
   const bpp = Math.max(1, bitsPerPixel >> 3);
   const rows = Buffer.alloc(stride * height);
   for (let y = 0; y < height; y++) {
     const filter = raw[y * (stride + 1)];
+    if (filter > 4)
+      throw new Error(`row ${y} has an unknown filter type ${filter}`);
     const line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
     const out = rows.subarray(y * stride, (y + 1) * stride);
     const prev = y > 0 ? rows.subarray((y - 1) * stride, y * stride) : null;
@@ -94,15 +151,19 @@ export function decodePng(bytes) {
     const v = (byte >> (8 - depth - (bit & 7))) & max;
     return colorType === 3 ? v : Math.round((v * 255) / max);
   };
+  const entries = palette ? Math.floor(palette.length / 3) : 0;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const o = (y * width + x) * 4;
       const s = x * channels;
       if (colorType === 3) {
         const idx = sample(y, s);
-        rgba[o] = palette?.[idx * 3] ?? 0;
-        rgba[o + 1] = palette?.[idx * 3 + 1] ?? 0;
-        rgba[o + 2] = palette?.[idx * 3 + 2] ?? 0;
+        if (idx >= entries)
+          throw new Error(`a pixel names palette entry ${idx} of ${entries}`);
+        const pal = /** @type {Buffer} */ (palette);
+        rgba[o] = pal[idx * 3];
+        rgba[o + 1] = pal[idx * 3 + 1];
+        rgba[o + 2] = pal[idx * 3 + 2];
         rgba[o + 3] = alpha && idx < alpha.length ? alpha[idx] : 255;
       } else if (colorType === 0 || colorType === 4) {
         const g = sample(y, s);
@@ -123,26 +184,28 @@ export function decodePng(bytes) {
 const hx = v => Math.round(v).toString(16).padStart(2, '0');
 
 /**
- * The exact color at each point.
+ * The exact color at each point, with its alpha (0 is fully see-through,
+ * 1 fully opaque). Every point must be inside the picture.
  * @param {Picture} pic
  * @param {Array<{x: number, y: number}>} points
- * @returns {Array<{at: string, color: string | null}>}
+ * @returns {Array<{at: string, color: string, alpha: number}>}
  */
 export function colorsAt(pic, points) {
   return points.map(({x, y}) => {
-    if (x < 0 || y < 0 || x >= pic.width || y >= pic.height)
-      return {at: `${x},${y}`, color: null};
     const i = (y * pic.width + x) * 4;
     return {
       at: `${x},${y}`,
       color: `#${hx(pic.rgba[i])}${hx(pic.rgba[i + 1])}${hx(pic.rgba[i + 2])}`,
+      alpha: Number((pic.rgba[i + 3] / 255).toFixed(2)),
     };
   });
 }
 
 /**
  * The main colors of a picture: every second pixel bucketed to 5 bits per
- * channel, biggest share first, each with where it sits.
+ * channel, biggest share first, each with where it sits. A fully
+ * see-through pixel shows no color, so it is skipped; a partly see-through
+ * one counts as it looks over white.
  * @param {Picture} pic
  * @param {number} count
  * @returns {Array<{color: string, share: number, where: string}>}
@@ -153,9 +216,13 @@ export function mainColors(pic, count) {
   for (let y = 0; y < pic.height; y += 2) {
     for (let x = 0; x < pic.width; x += 2) {
       const i = (y * pic.width + x) * 4;
-      const r = pic.rgba[i];
-      const g = pic.rgba[i + 1];
-      const b = pic.rgba[i + 2];
+      const a = pic.rgba[i + 3] / 255;
+      if (a === 0) continue;
+      const over = (/** @type {number} */ c) =>
+        Math.round(c * a + 255 * (1 - a));
+      const r = over(pic.rgba[i]);
+      const g = over(pic.rgba[i + 1]);
+      const b = over(pic.rgba[i + 2]);
       const k = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
       let e = buckets.get(k);
       if (!e) {

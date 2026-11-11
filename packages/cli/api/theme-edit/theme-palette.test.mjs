@@ -395,22 +395,31 @@ describe('color dials through the palette generator', () => {
         commands: r.data.results.flatMap(x => x.commands).join('\n'),
       };
     };
-    expect((await ask('brand color')).commands).toContain('set <theme> accent');
+    // Commands name the theme in the app, never a placeholder.
+    const theme = /** @type {any} */ (
+      (await themeEditHow('brand color', {cwd})).data
+    ).theme;
+    const brand = await ask('brand color');
+    expect(brand.commands).toContain(`set ${theme} accent`);
+    expect(brand.commands).not.toMatch(/<theme>|set my /);
     const more = await ask('make it more colorful');
-    expect(more.commands).toContain('set <theme> vibrancy more');
-    expect((await ask('less saturated')).commands).toContain(
-      'set <theme> vibrancy less',
+    expect(more.commands).toContain(`set ${theme} vibrancy more`);
+    // A theme whose colors are all grays has no color to take out, and
+    // says so instead of suggesting a change that does nothing.
+    const less = await ask('less saturated');
+    expect(`${less.commands}\n${less.text}`).toMatch(
+      new RegExp(`set ${theme} vibrancy less|is a gray`),
     );
     expect((await ask('dark mode colors')).commands).toContain('--mode dark');
     const status = await ask('status colors');
     for (const d of ['danger', 'success', 'warning', 'info'])
-      expect(status.commands).toContain(`set <theme> ${d}`);
+      expect(status.commands).toContain(`set ${theme} ${d}`);
     expect((await ask('error red')).commands.split('\n')[0]).toContain(
-      'set <theme> danger',
+      `set ${theme} danger`,
     );
     expect((await ask('see all shades')).commands).toContain('preview add');
     const exact = await ask('exact color for one token');
-    expect(exact.commands).toContain('set <theme> --color-accent');
+    expect(exact.commands).toContain(`set ${theme} --color-accent`);
     expect(exact.text).toContain('wins over the generated colors');
     const parts = await themeEditHow('white text in the banner', {cwd});
     expect(/** @type {any} */ (parts.data).understood.parts).toContain(
