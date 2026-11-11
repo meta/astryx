@@ -34,17 +34,25 @@ system_specs: [spec:AST-094, spec:AST-107]
 
 # ContextMenu component contract
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": ["packages/core/src/motion/uikit/contextMenu.ts"]
+}
+```
+
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Public contract         | None changes. ContextMenu takes caller `children` as the Trigger area, data-driven `items` or compound `menuContent`, `label`, `presentation`, `isDisabled`, and `triggerAs`.                                                                                                  |
-| Behavior                | Right-click, Shift+F10 or the Menu key, and a touch long press open a menu at the cursor (or the trigger's bottom-left from the keyboard), or a bottom sheet; rows follow DropdownMenu's rows and press model.                                                                 |
-| End-user impact         | People reach a region's actions by mouse, keyboard, or a held finger; a sub-menu drills in on a phone. A touch-opened menu does not yet grow from the finger or lift its trigger; mouse and keyboard opens keep today's look.                                                  |
-| Builder impact          | Builders wrap any region, including an inline reference in prose (`triggerAs="span"`).                                                                                                                                                                                         |
-| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"`; the released behavior under a finger moves as `spec:AST-094` FR25 lists, with `presentation="popover"` keeping it. The touch grow and trigger lift (FR5) are listed under Current-state impact. |
-| Review checks           | Reject a trigger that gains a role or `aria-haspopup`, a menu that bypasses the shared Escape stack, a `context-menu` target moved off the painted surface, or a second open-state owner.                                                                                      |
-| Governing rules         | `spec:AST-107` FR8; `spec:AST-094` FR26–FR35; `module:DropdownMenu/useMenuPress`; `family:overlay-dismissal`; `architecture:component-theming-surface`; `architecture:layer-runtime`.                                                                                          |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | One default moves: under a coarse primary pointer, an omitted `presentation` means the touch model (`spec:AST-094` FR25), and `presentation="popover"` keeps the released surface. ContextMenu takes caller `children` as the Trigger area, data-driven `items` or compound `menuContent`, `label`, `presentation`, `isDisabled`, and `triggerAs`. |
+| Behavior                | Right-click, Shift+F10 or the Menu key, and a touch long press open a menu at the cursor (or the trigger's bottom-left from the keyboard), or a bottom sheet; rows follow DropdownMenu's rows and press model.                                                                                                                                     |
+| End-user impact         | People reach a region's actions by mouse, keyboard, or a held finger; a sub-menu drills in on a phone. A touch-opened menu does not yet grow from the finger or lift its trigger; mouse and keyboard opens keep today's look.                                                                                                                      |
+| Builder impact          | Builders wrap any region, including an inline reference in prose (`triggerAs="span"`).                                                                                                                                                                                                                                                             |
+| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"`; the released behavior under a finger moves as `spec:AST-094` FR25 lists, with `presentation="popover"` keeping it. The touch grow and trigger lift (FR5) are listed under Current-state impact.                                                                     |
+| Review checks           | Reject a trigger that gains a role or `aria-haspopup`, a menu that bypasses the shared Escape stack, a `context-menu` target moved off the painted surface, or a second open-state owner.                                                                                                                                                          |
+| Governing rules         | `spec:AST-107` FR8; `spec:AST-094` FR26–FR35; `module:DropdownMenu/useMenuPress`; `family:overlay-dismissal`; `architecture:component-theming-surface`; `architecture:layer-runtime`.                                                                                                                                                              |
 
 This table is a review projection; the body below is authoritative.
 
