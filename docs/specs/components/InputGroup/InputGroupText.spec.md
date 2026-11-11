@@ -31,15 +31,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                              |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | None changes. InputGroupText takes `children` and the base props.                                                                                                     |
-| Behavior                | A non-interactive, muted text or icon cell inside InputGroup that joins its neighbours' borders and rounds only the group's outer corners.                            |
-| End-user impact         | People see a fixed prefix or suffix such as `$` or `https://` as part of the field. It is read as plain text, not as a control.                                       |
-| Builder impact          | None.                                                                                                                                                                 |
-| Compatibility/readiness | Records shipped behavior; no API or default change. Plain text with no right-to-left letter sits in an inner `span` with `dir="ltr"`, and the cell isolates its text. |
-| Review checks           | Reject an interactive role or tab stop on the cell, text that wraps or shrinks, or rounded inner corners.                                                             |
-| Governing rules         | `component:InputGroup`; `architecture:component-theming-surface`.                                                                                                     |
+| Area                    | Contract                                                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public contract         | None changes. InputGroupText takes `children` and the base props.                                                                                                                          |
+| Behavior                | A non-interactive, muted text or icon cell inside InputGroup that joins its neighbours' borders and rounds only the group's outer corners.                                                 |
+| End-user impact         | People see a fixed prefix or suffix such as `$` or `https://` as part of the field. It is read as plain text, not as a control.                                                            |
+| Builder impact          | None.                                                                                                                                                                                      |
+| Compatibility/readiness | Records shipped behavior; no API or default change. On a right-to-left page, plain text with no right-to-left letter sits in an inner `span` with `dir="ltr"`; the cell isolates its text. |
+| Review checks           | Reject an interactive role or tab stop on the cell, text that wraps or shrinks, or rounded inner corners.                                                                                  |
+| Governing rules         | `component:InputGroup`; `architecture:component-theming-surface`.                                                                                                                          |
 
 This table is a review projection; the body below is authoritative.
 
@@ -53,8 +53,9 @@ shown before or after the input. Consumer usage lives in
 
 - Released default preserved: `yes`
 - Compatibility class: no public prop, default, or export change. The DOM
-  changes: plain text with no right-to-left letter sits in an inner `span`
-  with `dir="ltr"`, and the cell isolates its text (`unicode-bidi: isolate`)
+  changes: on a right-to-left page, plain text with no right-to-left letter
+  sits in an inner `span` with `dir="ltr"`, and the cell isolates its text
+  (`unicode-bidi: isolate`)
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
@@ -80,12 +81,12 @@ No new public concept. Content is caller text or an icon.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                                                  | Basis                                                    |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
-| FR1 | InputGroupText renders one non-interactive element with no role, holding `children`; plain text with no right-to-left letter sits in an inner `span` with `dir="ltr"` (`design:bidirectionality` DR2). `ref`, `className`, `style`, `xstyle`, and other DOM props reach the outer element. | Current source and tests                                 |
-| FR2 | The cell centers its content vertically with small inline padding, uses body text in the secondary text color on the muted background, never wraps, and never shrinks.                                                                                                                     | Current source                                           |
-| FR3 | The cell draws an emphasized one-border-width border. Every cell after the first overlaps its leading neighbour by one border width. Only the first child's leading corners and the last child's trailing corners are rounded with the element radius.                                     | Current source                                           |
-| FR4 | The cell carries `astryx-input-group-text`.                                                                                                                                                                                                                                                | `architecture:component-theming-surface`; current source |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                           | Basis                                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| FR1 | InputGroupText renders one non-interactive element with no role, holding `children`; on a right-to-left page, plain text with no right-to-left letter sits in an inner `span` with `dir="ltr"` (`design:bidirectionality` DR2). `ref`, `className`, `style`, `xstyle`, and other DOM props reach the outer element. | Current source and tests                                 |
+| FR2 | The cell centers its content vertically with small inline padding, uses body text in the secondary text color on the muted background, never wraps, and never shrinks.                                                                                                                                              | Current source                                           |
+| FR3 | The cell draws an emphasized one-border-width border. Every cell after the first overlaps its leading neighbour by one border width. Only the first child's leading corners and the last child's trailing corners are rounded with the element radius.                                                              | Current source                                           |
+| FR4 | The cell carries `astryx-input-group-text`.                                                                                                                                                                                                                                                                         | `architecture:component-theming-surface`; current source |
 
 ### Allowed variation
 

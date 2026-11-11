@@ -5,6 +5,7 @@ import {createElement, Fragment, type ReactNode} from 'react';
 import {render, screen} from '@testing-library/react';
 import {Badge} from './Badge';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
+import {InternationalizationProvider} from '../i18n';
 
 describe('Badge', () => {
   it('renders with default variant', () => {
@@ -143,5 +144,17 @@ describe('Badge forced colors', () => {
     const css = getForcedColorsRules();
     expect(css).toContain('outline-style: solid;');
     expect(css).toContain('outline-color: canvastext;');
+  });
+
+  it('marks plain left-to-right text only on a right-to-left page', () => {
+    const {unmount} = render(<Badge label="+3" />);
+    expect(screen.getByText('+3')).not.toHaveAttribute('dir');
+    unmount();
+    render(
+      <InternationalizationProvider locale="en" dir="rtl">
+        <Badge label="+3" />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('+3')).toHaveAttribute('dir', 'ltr');
   });
 });

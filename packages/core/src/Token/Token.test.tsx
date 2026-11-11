@@ -14,6 +14,7 @@ import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Token} from './Token';
 import type {TokenColor} from './Token';
+import {InternationalizationProvider} from '../i18n';
 
 describe('Token', () => {
   it('renders with label', () => {
@@ -852,5 +853,17 @@ describe('popup state on a clickable token (FR10)', () => {
     expect(button).toHaveAttribute('aria-haspopup', 'dialog');
     expect(button).toHaveAttribute('aria-expanded', 'false');
     expect(button.parentElement).not.toHaveAttribute('aria-haspopup');
+  });
+
+  it('marks plain left-to-right text only on a right-to-left page', () => {
+    const {unmount} = render(<Token label="+3" />);
+    expect(screen.getByText('+3')).not.toHaveAttribute('dir');
+    unmount();
+    render(
+      <InternationalizationProvider locale="en" dir="rtl">
+        <Token label="+3" />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('+3')).toHaveAttribute('dir', 'ltr');
   });
 });

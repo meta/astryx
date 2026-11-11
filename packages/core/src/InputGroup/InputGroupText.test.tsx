@@ -12,6 +12,7 @@
 import {createRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect} from 'vitest';
+import {InternationalizationProvider} from '../i18n';
 import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {InputGroup} from './InputGroup';
@@ -99,15 +100,29 @@ describe('InputGroupText', () => {
 
   it('puts plain text direction on an inner span, not on the bordered cell (FR3)', () => {
     render(
+      <InternationalizationProvider locale="en" dir="rtl">
+        <InputGroup label="Website">
+          <InputGroupText data-testid="cell">https://</InputGroupText>
+          <TextInput label="URL" isLabelHidden value="" onChange={() => {}} />
+        </InputGroup>
+      </InternationalizationProvider>,
+    );
+    const cell = screen.getByTestId('cell');
+    expect(cell).not.toHaveAttribute('dir');
+    expect(screen.getByText('https://')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('https://').parentElement).toBe(cell);
+  });
+
+  it('adds no direction span on a left-to-right page', () => {
+    render(
       <InputGroup label="Website">
         <InputGroupText data-testid="cell">https://</InputGroupText>
         <TextInput label="URL" isLabelHidden value="" onChange={() => {}} />
       </InputGroup>,
     );
     const cell = screen.getByTestId('cell');
-    expect(cell).not.toHaveAttribute('dir');
-    expect(screen.getByText('https://')).toHaveAttribute('dir', 'ltr');
-    expect(screen.getByText('https://').parentElement).toBe(cell);
+    expect(cell.querySelector('[dir]')).toBeNull();
+    expect(screen.getByText('https://')).toBe(cell);
   });
 
   it('leaves right-to-left and rich text in the cell unwrapped', () => {

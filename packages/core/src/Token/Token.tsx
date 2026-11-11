@@ -43,7 +43,7 @@ import {cancelNestedTouchPress} from '../hooks/useClickableContainer';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {TokenNamingContext} from './TokenNamingContext';
-import {textDirectionProps} from '../utils/textDirection';
+import {useTextDirectionProps} from '../utils/textDirection';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -318,6 +318,7 @@ export function Token({
   ref,
   ...rest
 }: TokenProps) {
+  const labelDirection = useTextDirectionProps(label);
   // Constant marker props; the hook's only effect is installing the shared
   // document controller once, so the token's output stays a pure function
   // of its props.
@@ -353,7 +354,7 @@ export function Token({
     <>
       {icon}
       <span
-        {...textDirectionProps(label)}
+        {...labelDirection}
         {...stylex.props(styles.label, isLabelHidden && styles.labelHidden)}>
         {label}
       </span>
@@ -474,7 +475,7 @@ export function Token({
         {...pressable}
         labelContent={
           <span
-            {...textDirectionProps(label)}
+            {...labelDirection}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,
@@ -567,7 +568,7 @@ export function Token({
           {...(isDisabled ? disabledInteractionProps() : null)}
           {...stylex.props(styles.invisibleButton)}>
           <span
-            {...textDirectionProps(label)}
+            {...labelDirection}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,

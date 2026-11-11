@@ -53,8 +53,9 @@ built-in tones that a theme can extend.
 
 - Released default preserved: `yes`
 - Compatibility class: no public prop or default change. The DOM and styling
-  output change: a plain-text label with no right-to-left letter gets
-  `dir="ltr"`, and the label isolates its text (`unicode-bidi: isolate`)
+  output change: on a right-to-left page, a plain-text label with no
+  right-to-left letter gets `dir="ltr"`, and the label isolates its text
+  (`unicode-bidi: isolate`)
 - Controlled/uncontrolled behavior: not applicable; Badge holds no state
 - Migration decision: none
 

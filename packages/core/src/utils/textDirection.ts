@@ -5,13 +5,18 @@
  * @input A component's text content (a string, a number, or a rich node)
  * @output textDirectionProps: `dir="ltr"` for plain text that holds no
  *   right-to-left letter, otherwise nothing, so the text keeps the page's
- *   direction
+ *   direction. useTextDirectionProps: the same, on a right-to-left page only
  * @position Core-internal helper, not exported from the package. Badge,
  *   Token and InputGroupText put it on the element that holds caller text,
  *   beside `unicode-bidi: isolate`.
+ *
+ * Rule: the direction mark is added only on a right-to-left page (the
+ * direction from `InternationalizationProvider`). A left-to-right page lays
+ * plain text out left to right already, so its markup stays unchanged.
  */
 
 import type {ReactNode} from 'react';
+import {useDirection} from '../i18n/useDirection';
 import {hasStrongRightToLeft} from '../i18n/firstStrongDirection';
 
 /**
@@ -27,4 +32,13 @@ export function textDirectionProps(content: ReactNode): {dir?: 'ltr'} {
     return {};
   }
   return hasStrongRightToLeft(String(content)) ? {} : {dir: 'ltr'};
+}
+
+/**
+ * `textDirectionProps` on a right-to-left page; nothing on a left-to-right
+ * page, where the text already lays out left to right.
+ */
+export function useTextDirectionProps(content: ReactNode): {dir?: 'ltr'} {
+  const isRtl = useDirection() === 'rtl';
+  return isRtl ? textDirectionProps(content) : {};
 }

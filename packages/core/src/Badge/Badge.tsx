@@ -27,7 +27,7 @@ import {
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {isRenderable} from '../utils/isRenderable';
-import {textDirectionProps} from '../utils/textDirection';
+import {useTextDirectionProps} from '../utils/textDirection';
 import type {BadgeVariantMap} from './index';
 
 /**
@@ -230,6 +230,7 @@ export function Badge({
   ref,
   ...props
 }: BadgeProps) {
+  const labelDirection = useTextDirectionProps(label);
   // Clipping a label makes its tail unrecoverable, so the full text has to
   // stay reachable somewhere. `title` is the half of that answer which costs
   // nothing: no measurement, no hook, so `Badge` renders the same on the
@@ -271,7 +272,7 @@ export function Badge({
       title={labelTitle}
       {...props}>
       {icon}
-      <span {...textDirectionProps(label)} {...stylex.props(styles.label)}>
+      <span {...labelDirection} {...stylex.props(styles.label)}>
         {label}
       </span>
     </span>
