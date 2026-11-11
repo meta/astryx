@@ -741,6 +741,124 @@ describe('useMenuPress — release outside and cancellation', () => {
     expect(onDismiss).not.toHaveBeenCalled();
   });
 
+  it('after the window loses focus mid-press, the finger\u2019s later lift acts on nothing: its click is still the gesture\u2019s (FR5, spec:AST-094 FR28)', () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    fireEvent.pointerDown(row('A'), touch(1));
+    fireEvent.pointerMove(row('B'), touch(1));
+    act(() => {
+      window.dispatchEvent(new FocusEvent('blur'));
+    });
+    // The browser kept the touch alive across the blur: it lifts on a row,
+    // and the click it reports for that tap reaches the row.
+    fireEvent.pointerUp(row('B'), touch(1));
+    fireEvent.click(row('B'), {detail: 1});
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('after a blur, a finger whose release the page never sees leaves the next press\u2019s click to act (FR5)', () => {
+    const onOutside = vi.fn();
+    render(<Harness />);
+    const outside = screen.getByTestId('outside');
+    outside.addEventListener('click', onOutside);
+    fireEvent.pointerDown(row('A'), touch(1));
+    fireEvent.pointerMove(row('B'), touch(1));
+    act(() => {
+      window.dispatchEvent(new FocusEvent('blur'));
+    });
+    // The finger lifted where the page could not see it. A mouse, with the
+    // same pointer id, then clicks a control outside the menu.
+    fireEvent.pointerDown(outside, mouse(1));
+    fireEvent.pointerUp(outside, mouse(1));
+    fireEvent.click(outside, {detail: 1});
+    expect(onOutside).toHaveBeenCalledTimes(1);
+  });
+
+  it('a blurred finger\u2019s gesture keeps no document listener past its end: the menu unmounting before the lift takes them all off (module PR1)', () => {
+    // The document's live pointer listeners, as [type, listener] pairs.
+    const live: [string, unknown][] = [];
+    const types = new Set(['pointerup', 'pointercancel', 'pointermove']);
+    const add = vi.spyOn(document, 'addEventListener');
+    const remove = vi.spyOn(document, 'removeEventListener');
+    add.mockImplementation(function (
+      this: Document,
+      type: string,
+      listener: EventListenerOrEventListenerObject | null,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      if (types.has(type)) {
+        live.push([type, listener]);
+      }
+      EventTarget.prototype.addEventListener.call(
+        this,
+        type,
+        listener,
+        options,
+      );
+    });
+    remove.mockImplementation(function (
+      this: Document,
+      type: string,
+      listener: EventListenerOrEventListenerObject | null,
+      options?: boolean | EventListenerOptions,
+    ) {
+      const index = live.findIndex(([t, l]) => t === type && l === listener);
+      if (index >= 0) {
+        live.splice(index, 1);
+      }
+      EventTarget.prototype.removeEventListener.call(
+        this,
+        type,
+        listener,
+        options,
+      );
+    });
+    try {
+      const {unmount} = render(<Harness />);
+      fireEvent.pointerDown(row('A'), touch(1));
+      fireEvent.pointerMove(row('B'), touch(1));
+      act(() => {
+        window.dispatchEvent(new FocusEvent('blur'));
+      });
+      // The menu closes and unmounts before the finger lifts.
+      unmount();
+      expect(live.map(([type]) => type)).toEqual([]);
+    } finally {
+      add.mockRestore();
+      remove.mockRestore();
+    }
+  });
+
+  it('a blurred finger\u2019s release ends its gesture: the next press in the menu acts as usual', () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    fireEvent.pointerDown(row('A'), touch(1));
+    act(() => {
+      window.dispatchEvent(new FocusEvent('blur'));
+    });
+    fireEvent.pointerUp(row('A'), touch(1));
+    fireEvent.click(row('A'), {detail: 1});
+    expect(onSelect).not.toHaveBeenCalled();
+    // A later tap is a gesture of its own.
+    fireEvent.pointerDown(row('B'), touch(2));
+    fireEvent.pointerUp(row('B'), touch(2));
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith('B');
+  });
+
+  it('a mouse press the window\u2019s blur interrupts keeps its click, as before (spec:AST-017 FR59)', () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    fireEvent.pointerDown(row('A'), mouse(1));
+    act(() => {
+      window.dispatchEvent(new FocusEvent('blur'));
+    });
+    fireEvent.pointerUp(row('B'), mouse(1));
+    fireEvent.click(row('B'), {detail: 1});
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith('B');
+  });
+
   it('a pointercancel ends the gesture without acting', () => {
     const onSelect = vi.fn();
     render(<Harness onSelect={onSelect} />);
@@ -749,6 +867,43 @@ describe('useMenuPress — release outside and cancellation', () => {
     fireEvent.pointerCancel(row('A'), touch());
     fireEvent.pointerUp(row('B'), touch());
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('a pointercancel clears the row a finger lit under either touch model (the browser took it for a scroll); a mouse keeps its highlight (spec:AST-094 FR28, spec:AST-017 FR59)', () => {
+    for (const touchModel of ['uikit', 'pointer'] as const) {
+      const onHighlight = vi.fn();
+      const {unmount} = render(
+        <Harness touchModel={touchModel} onHighlight={onHighlight} />,
+      );
+      fireEvent.pointerDown(row('A'), touch());
+      fireEvent.pointerMove(row('B'), touch());
+      expect(onHighlight).toHaveBeenLastCalledWith(row('B'));
+      fireEvent.pointerCancel(row('B'), touch());
+      expect(onHighlight, touchModel).toHaveBeenLastCalledWith(null);
+      unmount();
+    }
+    const onMouseHighlight = vi.fn();
+    render(<Harness onHighlight={onMouseHighlight} />);
+    fireEvent.pointerDown(row('A'), mouse());
+    fireEvent.pointerMove(row('B'), mouse());
+    fireEvent.pointerCancel(row('B'), mouse());
+    expect(onMouseHighlight).toHaveBeenLastCalledWith(row('B'));
+  });
+
+  it('a second finger ends the gesture and clears the row the first one lit, under either touch model (spec:AST-094 FR28, FR43)', () => {
+    for (const touchModel of ['uikit', 'pointer'] as const) {
+      const onHighlight = vi.fn();
+      const {unmount} = render(
+        <Harness touchModel={touchModel} onHighlight={onHighlight} />,
+      );
+      fireEvent.pointerDown(row('A'), touch(1));
+      fireEvent.pointerMove(row('B'), touch(1));
+      expect(onHighlight).toHaveBeenLastCalledWith(row('B'));
+      // A second finger lands, inside the menu or anywhere else.
+      fireEvent.pointerDown(document.body, touch(2));
+      expect(onHighlight, touchModel).toHaveBeenLastCalledWith(null);
+      unmount();
+    }
   });
 
   it('a second pointer ends the gesture and does not start another', () => {

@@ -225,7 +225,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditPreviewListResponse
  * @property {'themeEdit.previewList'} type
- * @property {{folder: string | null, theme: string | null, pages: Array<{id: string, label: string}>}} data
+ * @property {{folder: string | null, theme: string | null, pages: Array<{id: string, label: string}>, notes: string[]}} data - `notes`: what else to know, such as a theme the preview wears that is gone.
  */
 
 /**

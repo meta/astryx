@@ -639,7 +639,7 @@ describe('fix3: links, rollback, locks, paths', () => {
     fs.rmSync(path.join(cwd, 'themes/k3'), {recursive: true, force: true});
   }, 120_000);
 
-  it('a lock folder that cannot be written is refused, naming it', async () => {
+  it('a lock folder that cannot be written is refused, naming it; a read-only command runs without it', async () => {
     const dir = path.join(
       path.dirname(cwd),
       'node_modules/.cache/astryx-theme/locks',
@@ -647,9 +647,12 @@ describe('fix3: links, rollback, locks, paths', () => {
     fs.mkdirSync(dir, {recursive: true});
     fs.chmodSync(dir, 0o555);
     try {
-      const r = await refusal(() => themeEditShow('h', {cwd}));
+      const r = await refusal(() =>
+        themeEditSet('h', 'corners', 'pill', {cwd}),
+      );
       expect(r.code).toBe('ERR_WRITE_FAILED');
       expect(r.message).toContain('astryx-theme');
+      expect((await themeEditShow('h', {cwd})).data.theme).toBe('h');
     } finally {
       fs.chmodSync(dir, 0o755);
     }

@@ -98,7 +98,8 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disabled state; sets aria-disabled on the item.',
+      description:
+        'Disabled state; interactive rows stay keyboard-reachable, expose aria-disabled, and cannot activate.',
       default: 'false',
     },
     {
@@ -245,7 +246,8 @@ export const docsDense = {
     target:
       'Link target attribute, only when href provided. target="_blank" auto-adds noopener noreferrer.',
     rel: 'Link relationship tokens. noopener noreferrer are merged for target="_blank".',
-    isDisabled: 'Disabled state; sets aria-disabled.',
+    isDisabled:
+      'Disabled state; interactive rows stay keyboard-reachable and cannot activate.',
     isSelected: 'Selected state; sets aria-current="true".',
     itemKey: "The row's identity for List animatedLayout and the key a reorderable List's onReorder reports; a row without one changes at once and has no reorder handle.",
   },

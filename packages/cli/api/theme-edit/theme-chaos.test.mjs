@@ -641,11 +641,11 @@ describe('known chaos findings', () => {
     }
   }, 120_000);
 
-  it.fails(
+  it(
     'F14: an option with its value missing is refused with a parse code, not ERR_UNKNOWN',
     async () => {
       const x = await step(['editor', 'set', 'a', 'corners', 'pill', '--on']);
-      expect(x.r.body?.code).not.toBe('ERR_UNKNOWN');
+      expect(x.r.body?.code).toBe('ERR_MISSING_ARGUMENT');
     },
     120_000,
   );

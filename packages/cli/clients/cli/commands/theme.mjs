@@ -361,8 +361,14 @@ function themeNextSteps(run, words = THEME_WORDS) {
  * @param {import('../../../api/theme/theme.type.mjs').ThemeListEntry[]} themes
  * @param {import('../../../api/theme/theme.type.mjs').ThemeUnmigratedCopy[]} [unmigratedCopies]
  * @param {ThemeCommandWords} [words]
+ * @param {Array<{slug: string, path: string, reason: string}>} [skippedThemes]
  */
-function printThemeList(themes, unmigratedCopies = [], words = THEME_WORDS) {
+function printThemeList(
+  themes,
+  unmigratedCopies = [],
+  words = THEME_WORDS,
+  skippedThemes = [],
+) {
   const run = getCliInvocation();
   const more = text(
     `More themes in packages you could add: ${run} discover theme`,
@@ -405,6 +411,18 @@ function printThemeList(themes, unmigratedCopies = [], words = THEME_WORDS) {
         layout: 'stacked',
       }),
       text(`Migrate them: ${unmigratedCopies[0].upgradeCommand}`),
+    );
+  }
+  if (skippedThemes.length > 0) {
+    emit(
+      section(
+        'Skipped local themes',
+        `${skippedThemes.length} broken, not listed`,
+      ),
+      records(skippedThemes, {
+        fields: ['slug', 'path', 'reason'],
+        layout: 'stacked',
+      }),
     );
   }
 }
@@ -454,6 +472,7 @@ function printThemeApp(result) {
       },
     ),
   );
+  for (const note of result.data.notes ?? []) emit(text(`[note] ${note}`));
   if (!change.firstAdd) return;
   const stem = path.basename(modulePath, path.extname(modulePath));
   emit(
@@ -485,9 +504,19 @@ function printThemeEject(result, words = THEME_WORDS) {
         'entry',
         'exportName',
         'files',
+        'missingPackages',
       ],
       layout: 'stacked',
     }),
+    ...(data.missingPackages.length > 0
+      ? [
+          text(
+            data.installCommand
+              ? `The fork imports packages this app lacks. Install them first: ${data.installCommand}`
+              : `The fork imports packages this app lacks: ${data.missingPackages.join(', ')}. Install them first.`,
+          ),
+        ]
+      : []),
     text(
       `This is a local fork. Build it with ${getCliInvocation()} ${words.group} ${words.build} ${path.join(data.outputDir, data.entry)}.`,
     ),
@@ -739,6 +768,19 @@ function registerThemeCommands(theme, program, docs, words) {
         });
       }
 
+      // One file passed twice would build twice and report two themes.
+      const seenFiles = new Set();
+      for (const entry of entries) {
+        const key = fs.realpathSync(entry.filePath);
+        if (seenFiles.has(key)) {
+          return cliError(
+            `${entry.file} is given more than once. Select each theme file once.`,
+            {code: ERROR_CODES.ERR_THEME_INVALID},
+          );
+        }
+        seenFiles.add(key);
+      }
+
       // Family mode is a thin orchestration branch over the existing build API.
       // Its key is required exactly with --family, and options that describe one
       // standalone output or a long-running loop remain intentionally separate.
@@ -843,6 +885,8 @@ function registerThemeCommands(theme, program, docs, words) {
       /** @type {Array<{file: string, receipt: import('../../../api/theme/theme.type.mjs').ThemeBuildResponse | import('../../../api/theme/theme.type.mjs').ThemeBuildCheckResponse | null}>} */
       const results = [];
       let stale = false;
+      /** @type {Map<string, string>} */
+      const claimedOutputs = new Map();
       for (const entry of entries) {
         try {
           const buildOptions = {
@@ -850,6 +894,7 @@ function registerThemeCommands(theme, program, docs, words) {
             check: options.check,
             iconsSpecifier: options.iconsSpecifier,
             __onPrivateVarError: onPrivateVarError,
+            __claimedOutputs: claimedOutputs,
           };
           let result;
           if (report) {
@@ -942,7 +987,7 @@ function registerThemeCommands(theme, program, docs, words) {
     },
   });
 
-  defineCommand(theme, docs.list, {
+  const listCli = defineCommand(theme, docs.list, {
     fn: themeListFn,
     action: async (/** @type {{package?: string}} */ options) => {
       const json = program.opts().json || false;
@@ -969,7 +1014,12 @@ function registerThemeCommands(theme, program, docs, words) {
         return answered;
       }
 
-      printThemeList(result.data, result.meta?.unmigratedCopies, words);
+      printThemeList(
+        result.data,
+        result.meta?.unmigratedCopies,
+        words,
+        result.meta?.skippedThemes,
+      );
       return answered;
     },
   });
@@ -1022,7 +1072,7 @@ function registerThemeCommands(theme, program, docs, words) {
   // Reject the removed target-path argument in Commander's standard parse path.
   themeAddCli.allowExcessArguments(false);
 
-  defineCommand(theme, docs.remove, {
+  const removeCli = defineCommand(theme, docs.remove, {
     fn: themeRemoveFn,
     action: async (/** @type {string} */ slug) => {
       const json = program.opts().json || false;
@@ -1042,7 +1092,7 @@ function registerThemeCommands(theme, program, docs, words) {
     },
   });
 
-  defineCommand(theme, docs.use, {
+  const useCli = defineCommand(theme, docs.use, {
     fn: themeUseFn,
     action: async (/** @type {string} */ slug) => {
       const json = program.opts().json || false;
@@ -1062,7 +1112,7 @@ function registerThemeCommands(theme, program, docs, words) {
     },
   });
 
-  defineCommand(theme, docs.eject, {
+  const ejectCli = defineCommand(theme, docs.eject, {
     fn: themeEjectFn,
     action: async (
       /** @type {string} */ slug,
@@ -1091,7 +1141,7 @@ function registerThemeCommands(theme, program, docs, words) {
     },
   });
 
-  defineCommand(theme, docs.template, {
+  const templateCli = defineCommand(theme, docs.template, {
     fn: themeTemplateFn,
     action: (
       /** @type {string | undefined} */ targetPath,
@@ -1139,7 +1189,7 @@ function registerThemeCommands(theme, program, docs, words) {
     },
   });
 
-  defineCommand(theme, docs.targets, {
+  const targetsCli = defineCommand(theme, docs.targets, {
     fn: themeTargetsFn,
     action: async (/** @type {string | undefined} */ filter) => {
       const json = program.opts().json || false;
@@ -1199,4 +1249,16 @@ function registerThemeCommands(theme, program, docs, words) {
       return answered;
     },
   });
+  // A stray word is refused rather than dropped: `theme use neutral dark`
+  // must not report a success that ignored "dark".
+  for (const cli of [
+    listCli,
+    removeCli,
+    useCli,
+    ejectCli,
+    templateCli,
+    targetsCli,
+  ]) {
+    cli.allowExcessArguments(false);
+  }
 }
