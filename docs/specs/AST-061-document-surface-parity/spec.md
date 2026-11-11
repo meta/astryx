@@ -71,7 +71,9 @@ reflows no line; only editing affordances appear or disappear.
   block's leading margin and the last block's trailing margin are zero.
 - **FR4 — Same measure.** Prose blocks cap at the same content width,
   `680px` by default, and wide blocks (fenced code, tables) span the
-  available width on every surface.
+  available width on every surface. A RichText table whose column widths a
+  writer set keeps those widths in `RichTextEditor` and `RichTextView`
+  (`spec:AST-106/DEC-3`).
 - **FR5 — Same structure.** Paragraph soft line breaks join into one line of
   flowing text; hard breaks break. A blockquote's lines continue one
   paragraph. Ordered and unordered lists nest by CommonMark indentation, show

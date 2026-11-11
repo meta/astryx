@@ -105,7 +105,7 @@ The admitted affordances:
 | Selection format bar | Formats selected text from a bar beside the selection (DEC-1)                                | Nothing                               | No new Markdown form                 |
 | Block move           | Moves a block by dragging its handle or by a keyboard command (DEC-1)                        | The new block order                   | The reordered content                |
 
-The three affordances DEC-1 added also hold these:
+Link cards, the selection format bar, and block moves also hold these:
 
 - **Link card.** The product supplies the preview for a URL (FR8), and the value
   never keeps it (DEC-2). `RichTextView` shows the card when the product
@@ -117,7 +117,8 @@ The three affordances DEC-1 added also hold these:
   content, so `RichTextView` shows nothing for it.
 - **Block move.** A keyboard command moves the focused block up or down, and the
   move is announced to assistive technology; dragging is never the only way
-  (FR7). `RichTextView` shows the blocks in their moved order (FR5).
+  (FR7). The handle, keyboard command, announcement, and drop rules are those of
+  a `spec:AST-103` reorderable collection. `RichTextView` shows the blocks in their moved order (FR5).
 
 ### Platform support
 
