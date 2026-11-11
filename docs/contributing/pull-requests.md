@@ -161,9 +161,9 @@ each finding at its file and line.
   decision; review does not ask you to remove it
   ([`architecture:public-component-api`](../architecture/public-component-api.md#boundaries-and-invariants)
   INV24 and INV25).
-  A public API change, or a new internal module or hook, that no record
-  defines gets REQUEST_CHANGES: it needs an owner API decision, with the delta
-  as usage, why it is needed, and why existing modules are not enough.
+  A new internal module or hook that no record defines gets REQUEST_CHANGES:
+  it needs an owner API decision, with the delta as usage, why it is needed,
+  and why existing modules are not enough.
 - **b. Behavior.** Each observable behavior change in a published package
   cites the current record and clause that settle it. If nothing changes
   behavior, write "No behavior change" in the description. A clause settles
