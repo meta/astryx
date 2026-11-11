@@ -28,15 +28,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                      |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `TopNavMegaMenuItem` with `title`, `description`, `icon`, `href`, `onClick`, and `as`; target `top-nav-mega-menu-item` with a `mode` state.                                   |
-| Behavior                | One destination in a mega menu: a rich tile in the desktop panel and a row in the drawer. A drawer row closes the drawer on activation.                                       |
-| End-user impact         | Users see a title, description, and icon per destination. Keyboard users cannot reach or activate a desktop item that has `onClick` but no `href` (see Current-state impact). |
-| Builder impact          | None.                                                                                                                                                                         |
-| Compatibility/readiness | Records shipped behavior; no public change. Two implementation gaps (see Current-state impact).                                                                               |
-| Review checks           | Reject a drawer item that leaves the drawer open after activation or drops caller props and styling.                                                                          |
-| Governing rules         | `architecture:interaction-modality` INV4; WCAG 2.1.1; `component:TopNav` render modes.                                                                                        |
+| Area                    | Contract                                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `TopNavMegaMenuItem` with `title`, `description`, `icon`, `href`, `onClick`, and `as`; target `top-nav-mega-menu-item` with a `mode` state. |
+| Behavior                | One destination in a mega menu: a rich tile in the desktop panel and a row in the drawer. A drawer row closes the drawer on activation.     |
+| End-user impact         | Users see a title, description, and icon per destination.                                                                                   |
+| Builder impact          | None.                                                                                                                                       |
+| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap (see Current-state impact).                                              |
+| Review checks           | Reject a drawer item that leaves the drawer open after activation or drops caller props and styling.                                        |
+| Governing rules         | `architecture:interaction-modality` INV4; WCAG 2.1.1; `component:TopNav` render modes.                                                      |
 
 This table is a review projection; the body below is authoritative.
 
@@ -57,10 +57,6 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **Desktop action items are not keyboard operable.** In the desktop panel, an
-  item with `onClick` and no `href` renders a `div` with no role and no tab
-  stop, so keyboard users cannot reach or activate it. WCAG 2.1.1 and
-  `architecture:interaction-modality` INV4 require an operable keyboard path.
 - **Color transition under reduced motion.** The desktop tile's background color
   still animates when reduced motion is requested; `design:reduced-motion` DR3
   allows no animated property for a fine pointer.
@@ -86,12 +82,12 @@ No component-local concept beyond the consumer props.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                       | Basis                    |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1 | Outside the drawer the item is the `as` component, else the `LinkProvider` link, else `<a>` when `href` is set, and a `div` otherwise. It shows an icon box, then the title and the description, carries `top-nav-mega-menu-item`, and runs `onClick` on click. | Current source and tests |
-| FR2 | In `drawer` mode the item is a link when `href` is set and a `<button type="button">` otherwise, carries `data-mode="drawer"`, and on activation runs `onClick` and then closes the AppShell drawer.                                                            | Current source and tests |
-| FR3 | Both modes forward the `ref`, `tabIndex`, other DOM props, and event handlers, and merge `className`, `style`, and `xstyle` after component styles.                                                                                                             | Current source and tests |
-| FR4 | Both modes paint the shared focus outline on keyboard focus and use the shared press feedback.                                                                                                                                                                  | Current source and tests |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                       | Basis                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| FR1 | Outside the drawer the item is the `as` component, else the `LinkProvider` link, else `<a>` when `href` is set, a `<button type="button">` when it has `onClick` and no `href`, and a `div` otherwise. It shows an icon box, then the title and the description, carries `top-nav-mega-menu-item`, and runs `onClick` on click. | Current source and tests |
+| FR2 | In `drawer` mode the item is a link when `href` is set and a `<button type="button">` otherwise, carries `data-mode="drawer"`, and on activation runs `onClick` and then closes the AppShell drawer.                                                                                                                            | Current source and tests |
+| FR3 | Both modes forward the `ref`, `tabIndex`, other DOM props, and event handlers, and merge `className`, `style`, and `xstyle` after component styles.                                                                                                                                                                             | Current source and tests |
+| FR4 | Both modes paint the shared focus outline on keyboard focus and use the shared press feedback.                                                                                                                                                                                                                                  | Current source and tests |
 
 ### Allowed variation
 
@@ -137,12 +133,12 @@ anatomy-theming map is recorded.
 
 ## Verification map
 
-| Contract     | Verification                                                                                                     | Representative states           | Mutation or failure expectation                               | Audit section                            |
-| ------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------- | ---------------------------------------- |
-| FR1, FR2     | `TopNavMegaMenu.test.tsx` TopNavMegaMenuItem and drawer-item tests                                               | Desktop; drawer link/button     | Wrong element or lost description fails.                      | `audit:TopNavMegaMenuItem/behavior`      |
-| FR3          | `TopNavMegaMenu.test.tsx` TopNavMegaMenuItem pass-through tests                                                  | Both modes                      | Dropped props or styling fails.                               | `audit:TopNavMegaMenuItem/behavior`      |
-| FR4          | `TopNavMegaMenu.test.tsx` drawer focus-ring test                                                                 | Drawer item                     | Missing shared ring classes fail.                             | `audit:TopNavMegaMenuItem/accessibility` |
-| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNavMenu / Mega menu` (panel opened) | Item icon and text; LTR and RTL | An icon that is not at the inline start of its text fails D2. | `audit:TopNavMegaMenuItem/i18n-rtl`      |
+| Contract     | Verification                                                                                                            | Representative states                                     | Mutation or failure expectation                               | Audit section                            |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------- |
+| FR1, FR2     | `TopNavMegaMenu.test.tsx` TopNavMegaMenuItem (including the desktop `onClick`-only native button) and drawer-item tests | Desktop link, button, and placeholder; drawer link/button | Wrong element or lost description fails.                      | `audit:TopNavMegaMenuItem/behavior`      |
+| FR3          | `TopNavMegaMenu.test.tsx` TopNavMegaMenuItem pass-through tests                                                         | Both modes                                                | Dropped props or styling fails.                               | `audit:TopNavMegaMenuItem/behavior`      |
+| FR4          | `TopNavMegaMenu.test.tsx` drawer focus-ring test                                                                        | Drawer item                                               | Missing shared ring classes fail.                             | `audit:TopNavMegaMenuItem/accessibility` |
+| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNavMenu / Mega menu` (panel opened)        | Item icon and text; LTR and RTL                           | An icon that is not at the inline start of its text fails D2. | `audit:TopNavMegaMenuItem/i18n-rtl`      |
 
 Read from source, with no focused test yet: the drawer button's `type="button"` (FR2); a desktop item's `onClick` and icon box (FR1); press feedback (FR4); the `div` for a desktop item without `href` (FR1); the desktop item's forwarded `tabIndex` (FR3); the forwarded `ref` and the `top-nav-mega-menu-item` target and its `mode` state (FR1–FR3); the `as` and `LinkProvider` precedence (FR1, ORD1); closing the drawer on activation (FR2) and the desktop focus outline (FR4).
 

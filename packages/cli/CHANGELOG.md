@@ -1,5 +1,43 @@
 # @xds/cli
 
+# 0.7.13
+
+#### Experimental APIs
+
+- `astryx discover` lists the experimental TabBarMoreList component from `@astryxdesign/lab`. (#10619)
+- Icon sets: a project picks one main icon set and backup sets in order, and an icon no set has becomes a placeholder in the copied file. Only the experimental icon commands, projects that set `experimental.iconSet`, templates that declare `icons`, and the icon-set guide change. (#10959)
+
+  - **Main set and backups.** `astryx experimental icon use <main> --backup <set>` (repeatable, order kept) writes `experimental.iconSet` as a list, the main set first; with no `--backup` it writes the plain string as before. The receipt adds `backups`, the installed sets the list leaves out (`unlisted`), and the command that adds them (`next`). `experimental icon --list` shows the `order` and each set's `role` and `rank`, and, when two or more sets are installed and none is the main set, the command to run. A CLI before 0.7.12 refuses the list form, and `use` warns when the project's CLI range admits one.
+  - **Copied templates follow the list.** `astryx template` takes each icon from the first set in the list that has its meaning, never mixing sets within one icon, and reports the set used, a missing look (`variant: {asked, used}`), and each set used with its license (`icons.sets`).
+  - **No stray library imports.** An icon no set in the list loses the template's original import. The copied file declares a small `MissingIcon` component once (a dashed square, 1em, in the current text color, hidden from screen readers unless a use gives it a label), and each place the icon was renders it, with a comment naming the meaning. It needs no new package. The output prints a note naming the meaning and both fixes (map it in the main set, or add a backup set), and the JSON lists it in `icons.placeholder`.
+  - **Doctor.** With the opt-in, the `icon-sets` check fails when the list names a set that is not installed, withdrawn, or shipped by two packages, and when more than one set is installed and the list leaves one out. A new `icon-placeholders` check warns while copied code still uses the placeholder, naming each file and meaning; a commented-out or quoted copy does not count. Projects that have not opted in see no change.
+  - **Labeled template icons.** Every icon a bundled template uses now declares its meaning, with 30 new icon definitions. `integration check` notes an icon a template imports but does not declare (`template_icon_undeclared`), in a package whose templates declare `icons`: an import from a module the package declares icons from, which the template renders as an element with no children or passes as a value. Any other import from that module, such as a type, a function it calls, or a provider with children, is listed as not checked. The note fails `--strict --next` and leaves `--strict` as it was. A generic renderer (a bare `Icon`, or one every use gives an icon prop) and an import that matches an icon by its name only are listed as not checked instead.
+
+#### New Features
+
+- The CLI adds a `BaseTypeaheadMenu` block: a BaseTypeahead whose listbox menu shows information around the result list, and whose pick or filter button opens a dialog-role menu on the same layer. (#10625)
+
+#### Fixes
+
+- dependency floors move to current releases: the build package needs autoprefixer 10.6.2, browserslist 4.29.5 and lightningcss 1.33.0; the CLI needs ignore 7.0.14, jscodeshift 17.4.0, linkedom 0.18.15, zod 4.6.7 and @stylexjs/babel-plugin 0.19.1; each theme needs lucide-react 1.66.0. Peer ranges do not change. (#10709)
+
+#### Documentation
+
+- Add hook documentation and interactive sparkline example block for `useDirection`, detailing render-time direction handling and CSS logical properties best practices. (#10547)
+- InternationalizationProvider has a calendar example: the provider's `calendar` prop shows a `Calendar` and a `DateInput` in the Japanese or Buddhist calendar, and the value stays a Gregorian ISO date. Both calendars work without `Temporal`. (#10135)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @josephfarina
+- @nynexman4464
+- @utkarshpatwa393-sys
+- @vjeux
+
+---
+
 # 0.7.12
 
 #### Experimental APIs

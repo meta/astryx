@@ -51,6 +51,10 @@ import {doc as iconAddFn} from '../../../../api/icon/iconAdd.doc.mjs';
 import {doc as iconNewSetFn} from '../../../../api/icon/iconNewSet.doc.mjs';
 import {doc as iconNewDefinitionFn} from '../../../../api/icon/iconNewDefinition.doc.mjs';
 import {NO_RESULT_SET} from '../../../../foundation/debug/index.mjs';
+import {templateMeaningsLine} from '../../../../foundation/text/template-meanings-line.mjs';
+
+/** How many missing icons an `add --all` receipt names in text. */
+const MISSING_SHOWN = 10;
 
 /** @param {unknown} value */
 const defaultVariantText = value =>
@@ -72,6 +76,22 @@ const moduleUpdateLines = data =>
         ),
       ]
     : [];
+
+/**
+ * The receipt's last line when the set leaves template meanings unmapped.
+ * @param {{templateMeanings?: {unmapped: Array<{definition: string, templates: number}>}}} data
+ * @param {string} set the set's name
+ */
+const templateMeaningsLines = (data, set) => {
+  const line = data.templateMeanings
+    ? templateMeaningsLine(
+        data.templateMeanings.unmapped,
+        set,
+        getCliInvocation(),
+      )
+    : null;
+  return line ? [text(`[next] ${line}`)] : [];
+};
 
 /**
  * Register `icon` and its subcommands under the `experimental` group.
@@ -143,19 +163,39 @@ export function registerExperimentalIcon(group, program) {
 
       const run = getCliInvocation();
       if (result.type === 'icon.definitions') {
-        const {definitions} = result.data;
+        const {definitions, set} = result.data;
+        const unmappedUsed = definitions.filter(
+          each => each.mapped === false && each.templates > 0,
+        ).length;
         emit(
           section(
-            `Icon definitions (${definitions.length}, ${definitions.filter(each => each.builtIn).length} built-in)`,
+            `Icon definitions (${definitions.length}, ${definitions.filter(each => each.builtIn).length} built-in)${set ? `, checked against ${set}` : ''}`,
           ),
           list(
-            definitions.map(
-              each =>
-                `${each.name} [${each.builtIn ? 'built-in' : 'optional'}]: ${each.description} Words: ${each.words.join(', ')}.`,
-            ),
+            definitions.map(each => {
+              const marks = [
+                each.builtIn ? 'built-in' : 'optional',
+                ...(each.templates > 0
+                  ? [
+                      `${each.templates} ${each.templates === 1 ? 'template' : 'templates'}`,
+                    ]
+                  : []),
+                ...(each.mapped == null
+                  ? []
+                  : [each.mapped ? 'mapped' : 'not mapped']),
+              ];
+              return `${each.name} [${marks.join(', ')}]: ${each.description} Words: ${each.words.join(', ')}.`;
+            }),
           ),
+          ...(set && unmappedUsed > 0
+            ? [
+                text(
+                  `${set} does not map ${unmappedUsed} ${unmappedUsed === 1 ? 'definition' : 'definitions'} that templates use; a copied template shows a placeholder for each.`,
+                ),
+              ]
+            : []),
           text(
-            `Built-in definitions are the ones every set maps. Map one: ${run} experimental icon map <definition> <icon id> --set <set>`,
+            `Built-in definitions are the ones every set maps; "N templates" counts the bundled templates that use one. Map one: ${run} experimental icon map <definition> <icon id> --set <set>`,
           ),
         );
         return answered;
@@ -423,6 +463,7 @@ export function registerExperimentalIcon(group, program) {
                   ),
                 ),
                 ...moduleUpdateLines(data),
+                ...templateMeaningsLines(data, data.set),
               )
             : emit(
                 // The entry line reads `previous` and `icon`: a write can
@@ -437,6 +478,7 @@ export function registerExperimentalIcon(group, program) {
                       : `[ok] map.${data.definition} is already "${data.icon}".`,
                 ),
                 ...moduleUpdateLines(data),
+                ...templateMeaningsLines(data, data.set),
               ),
       ),
   });
@@ -482,7 +524,7 @@ export function registerExperimentalIcon(group, program) {
               ...(data.missing.length > 0
                 ? [
                     text(
-                      `${data.missing.length} icons have no ${data.variant} export in ${data.from} and keep none: ${data.missing.join(', ')}`,
+                      `${data.missing.length} icons have no ${data.variant} export in ${data.from} and keep none: ${data.missing.slice(0, MISSING_SHOWN).join(', ')}${data.missing.length > MISSING_SHOWN ? `, and ${data.missing.length - MISSING_SHOWN} more (--json lists every one)` : ''}`,
                     ),
                   ]
                 : []),
@@ -543,6 +585,7 @@ export function registerExperimentalIcon(group, program) {
             ...moduleUpdateLines(data),
             ...(data.files.length > 0 ? [list(data.files)] : []),
             ...(data.note ? [text(`[next] ${data.note}`)] : []),
+            ...templateMeaningsLines(data, data.set),
           );
         },
       ),
@@ -576,11 +619,17 @@ export function registerExperimentalIcon(group, program) {
                 : written && files.length > 0
                   ? `${What} updated`
                   : `${What} unchanged`
-              : dryRun
-                ? `New ${what} plan`
-                : written
-                  ? `New ${what} added`
-                  : `New ${what} unchanged`,
+              : what === 'icon set'
+                ? dryRun
+                  ? `${What} plan: it would be created`
+                  : written
+                    ? `${What} created`
+                    : `${What} unchanged`
+                : dryRun
+                  ? `New ${what} plan`
+                  : written
+                    ? `New ${what} added`
+                    : `New ${what} unchanged`,
         ),
         text(`[${state}] ${data.name}`),
         // What the command did (or, in a dry run, would do): never a step
@@ -618,6 +667,9 @@ export function registerExperimentalIcon(group, program) {
               ),
             ]
           : []),
+        // Last, so the author sees which template meanings still show a
+        // placeholder.
+        ...templateMeaningsLines(data, data.name),
       );
     };
 
@@ -625,7 +677,7 @@ export function registerExperimentalIcon(group, program) {
     fn: iconNewSetFn,
     action: (
       /** @type {string} */ name,
-      /** @type {{dryRun?: boolean, from?: string, exclude?: string, variants?: string, defaultVariant?: string, displayName?: string, description?: string}} */ options,
+      /** @type {{dryRun?: boolean, from?: string, exclude?: string, adapter?: string, variants?: string, defaultVariant?: string, displayName?: string, description?: string}} */ options,
     ) =>
       run(
         () =>
@@ -634,6 +686,7 @@ export function registerExperimentalIcon(group, program) {
             dryRun: options.dryRun,
             from: options.from,
             exclude: options.exclude,
+            adapter: options.adapter,
             variants: options.variants,
             defaultVariant: options.defaultVariant,
             displayName: options.displayName,
