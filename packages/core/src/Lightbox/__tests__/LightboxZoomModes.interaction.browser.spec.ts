@@ -40,6 +40,7 @@ import {
   waitForRest,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
+import {UIKIT_TAP} from '../../motion/uikit/gestures';
 import {recordLiftOffset} from './liftOffset';
 
 const storybook = withStorybook(test);
@@ -147,6 +148,12 @@ function doubleTap(at: {x: number; y: number}): TouchScript {
   ];
 }
 
+// A double tap whose second touch reaches the page past UIKit's interval
+// between taps is two taps there: the play fails by name.
+const DOUBLE_TAP = {
+  boundaries: {tapIntervalMs: UIKIT_TAP.maximumIntervalBetweenTaps.value},
+};
+
 test('with a fine pointer (a desktop) the stage fills the viewer, as under a coarse pointer: its gestures take the whole viewer', async ({
   browser,
 }) => {
@@ -174,7 +181,9 @@ test('with a fine pointer (a desktop) the stage fills the viewer, as under a coa
     // caption it fills the stage. A click or a drag beside the photo is the
     // stage's, as a finger's is.
     const layout = await stage.evaluate(el => {
-      const viewport = el.closest('[data-lightbox-viewport]') as HTMLElement;
+      const viewport = el.closest(
+        '[data-lightbox-media] > :first-child',
+      ) as HTMLElement;
       const own = getComputedStyle(viewport);
       const group = getComputedStyle(viewport.parentElement as HTMLElement);
       const v = viewport.getBoundingClientRect();
@@ -234,6 +243,7 @@ test('under Reduce Motion a double tap cross-fades to its zoom instead of travel
   });
   await driver.play(
     doubleTap({x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}),
+    DOUBLE_TAP,
   );
   const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
@@ -581,7 +591,7 @@ test('under Reduce Motion a zoomed flick coasts on and settles at the edge, as o
     x: s.stage.x + s.stage.width / 2,
     y: s.stage.y + s.stage.height / 2,
   };
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForRest(img);
   await frames(page, 2);
   const liftOffset = await recordLiftOffset(img);
@@ -625,7 +635,7 @@ test('under Reduce Motion a zoomed photo pulled past its edge settles back to it
     x: s.stage.x + s.stage.width / 2,
     y: s.stage.y + s.stage.height / 2,
   };
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForRest(img);
   await frames(page, 2);
   // One slow drag right across the stage: the photo, centred and zoomed,

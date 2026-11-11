@@ -18,6 +18,17 @@
       },
       {
         "domain": "component",
+        "name": "DrawerHeader",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Drawer",
+        "command": "astryx component DrawerHeader",
+        "mentions": []
+      },
+      {
+        "domain": "component",
         "name": "BottomSheet",
         "package": "@astryxdesign/core",
         "score": "<text>",
@@ -62,17 +73,6 @@
         "description": "<text>",
         "import": "@astryxdesign/core/Drawer",
         "command": "astryx component Drawer",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "DrawerHeader",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/Drawer",
-        "command": "astryx component DrawerHeader",
         "mentions": []
       },
       {

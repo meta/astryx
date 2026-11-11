@@ -36,7 +36,8 @@ export const doc = {
     {
       name: 'options.set',
       type: 'string',
-      description: 'Search one set, by name or `<package>/<set>`.',
+      description:
+        'Search one set, by name or `<package>/<set>`. With options.definitions: the set to check the definitions against.',
     },
     {
       name: 'options.limit',
@@ -55,7 +56,7 @@ export const doc = {
       name: 'options.definitions',
       type: 'boolean',
       description:
-        'Every Astryx icon definition: name, whether it is built in, description, and words. Takes no query or other option.',
+        "Every Astryx icon definition: name, whether it is built in, how many bundled templates use it, description, and words, and whether a set's `map` names it: options.set, else the project's main set, else the only set of the icon-set package at `cwd`. Takes no query or other option except options.set.",
       default: 'false',
     },
     {
@@ -78,7 +79,7 @@ export const doc = {
     {
       type: 'icon.definitions',
       description:
-        'With definitions: every Astryx icon definition, with whether it is built in, its description, and its words.',
+        "With definitions: every Astryx icon definition, with whether it is built in, its description, its words, how many bundled templates use it (`templates`), and, when `set` names the set checked, whether that set's `map` names it (`mapped`).",
     },
     {
       type: 'icon.setIcons',
@@ -102,7 +103,7 @@ export const doc = {
     },
     {
       code: 'ERR_INVALID_OPTION',
-      when: 'two options are given that the call cannot both honor: `list`, `definitions`, or `allIcons` with any other listing, a query, `set` (not `allIcons`), or `limit`; or a `<set>/<id>` query with `set` or `limit`',
+      when: 'two options are given that the call cannot both honor: `list`, `definitions`, or `allIcons` with any other listing, a query, `set` (not `allIcons` or `definitions`), or `limit`; or a `<set>/<id>` query with `set` or `limit`',
     },
     {
       code: 'ERR_NOT_FOUND',

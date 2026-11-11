@@ -638,6 +638,71 @@ for (const width of [336, 375, 400, 874, 1440]) {
   });
 }
 
+for (const width of [400, 874]) {
+  test(`an open caption puts "less" on a line of its own only where the last line leaves no room, after its text gets shorter and longer (${width}×874)`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const errors: string[] = [];
+      (window as unknown as {__pageErrors: string[]}).__pageErrors = errors;
+      window.addEventListener('error', event => {
+        errors.push(event.message);
+      });
+    });
+    const dialog = await openCaptionGallery(page, {width, height: 874});
+    await dialog.getByRole('button', {name: 'more'}).click();
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    for (const change of ['shorter', 'longer'] as const) {
+      await dialog.evaluate((element, kind) => {
+        const text = element.querySelector(
+          '[data-current] [data-lightbox-caption] .astryx-text',
+        ) as HTMLElement;
+        const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+        let last: Text | null = null;
+        for (
+          let node = walker.nextNode();
+          node != null;
+          node = walker.nextNode()
+        ) {
+          last = node as Text;
+        }
+        if (last == null) {
+          return;
+        }
+        if (kind === 'shorter') {
+          // About half the text, so the caption needs fewer lines.
+          last.data = last.data.slice(0, Math.ceil(last.data.length / 2));
+        } else {
+          last.appendData(
+            ' The trail climbs past the old mill, crosses the river on stepping stones, and winds back through the beeches to the car park.',
+          );
+        }
+      }, change);
+      await expect(async () => {
+        const facts = await readOpenToggle(dialog);
+        const detail = `${change}: ${JSON.stringify(facts)}`;
+        if (facts.isOwnRow) {
+          expect(facts.lastTextEnd, detail).toBeGreaterThan(facts.room + 0.5);
+        } else {
+          expect(facts.lastTextEnd, detail).toBeLessThanOrEqual(
+            facts.toggleLeft + 0.5,
+          );
+        }
+        expect(
+          Math.abs(
+            facts.toggleMiddle - (facts.textBottom - facts.lineHeight / 2),
+          ),
+          detail,
+        ).toBeLessThanOrEqual(1);
+      }).toPass({timeout: 3_000});
+    }
+    const errors = await page.evaluate(
+      () => (window as unknown as {__pageErrors: string[]}).__pageErrors,
+    );
+    expect(errors).toEqual([]);
+  });
+}
+
 test(`an open caption's "less" still ends its last line after the viewport widens (402×874 → 874×402)`, async ({
   page,
 }) => {

@@ -40,9 +40,12 @@ import {
   holdThenDrag,
   markElement,
   openStory,
+  requireFrames,
+  startBusyControl,
   startScreencast,
   toTouchEvents,
   touchDriver,
+  trackControl,
   trackMarker,
   withStorybook,
   writeEvidence,
@@ -725,17 +728,26 @@ async function pitchOf(page: Page): Promise<number> {
  * Films `marked` while a drag of `travel` rows runs, released at once. The
  * page blocks its own main thread for `blockMs` once the row's glide has run
  * 50 ms on its clock. A block in its first frames would hold the start, by
- * design.
+ * design. The compositor's busy control moves through the block too, so the
+ * cast keeps delivering frames while the row stands still. The evidence is
+ * written under `evidence`, and `during` names the glide for a starved run.
  */
 async function busyProof(
   page: Page,
   marked: Locator,
   travel: number,
-  {blockMs, durationMs = 160}: {blockMs: number; durationMs?: number},
+  {
+    blockMs,
+    durationMs = 160,
+    evidence,
+    during,
+  }: {blockMs: number; durationMs?: number; evidence: string; during: string},
 ) {
   const pitch = await pitchOf(page);
   const {at: from} = await handleOf(page, 'Inbox');
   const unmark = await markElement(marked);
+  // Before the glide, so the control is on the compositor first.
+  await startBusyControl(page);
   const cast = await startScreencast(page);
   const driver = await touchDriver(page);
   const blocking = blockMainThread(page, blockMs, {
@@ -756,10 +768,42 @@ async function busyProof(
   const frames = await cast.stop();
   await unmark();
   const tracked = await trackMarker(page, frames);
-  return busyWindowProof(tracked, block, {
-    axis: 'y',
-    settledWithin: 2 * castStep(tracked, 'y'),
+  // The frames on which the compositor presented a new position of the
+  // control, searched for in its own strip. The control moves on every frame
+  // the machine draws, whatever the row does.
+  const control = await trackControl(page, frames);
+  const presented = control.filter((frame, i) => {
+    const before = control[i - 1]?.box;
+    return frame.box != null && before != null && frame.box.x !== before.x;
   });
+  const write = async (record: unknown) =>
+    writeEvidence(
+      `busy-main-thread/${evidence}`,
+      {[`${test.info().project.name}.json`]: JSON.stringify(record, null, 1)},
+      test.info(),
+    );
+  // The evidence is written whether the proof returns or throws.
+  let proof: ReturnType<typeof busyWindowProof>;
+  try {
+    proof = busyWindowProof(tracked, block, {
+      axis: 'y',
+      settledWithin: 2 * castStep(tracked, 'y'),
+    });
+  } catch (error) {
+    await write({block, error: String(error)});
+    throw error;
+  }
+  await write(proof);
+  // The checks count three changes of the row, which need four frames in the
+  // judged part. Fewer frames of the control there mean a starved run, which
+  // fails here by name. A row that stood still while the control moved fails
+  // the checks instead.
+  requireFrames(presented, {
+    min: 4,
+    during,
+    where: frame => frame.t >= proof.judged.from && frame.t <= proof.judged.to,
+  });
+  return proof;
 }
 
 test.describe('the preview, the drop and the handle under a finger', () => {
@@ -837,35 +881,29 @@ test.describe('the preview, the drop and the handle under a finger', () => {
 
   test('the rows the drop moves keep gliding while the main thread is blocked', async ({
     page,
-  }, testInfo) => {
+  }) => {
     // Inbox passes Sent, Drafts and Archive in one move, and the finger lifts
     // below them. On the drop, Sent glides up a row while script cannot run.
     const proof = await busyProof(page, rowOf(page, 'Sent'), 3.2, {
       blockMs: 200,
       durationMs: 16,
+      evidence: 'list-reorder-slide',
+      during: 'Sent glides up a row while the page is blocked',
     });
-    await writeEvidence(
-      'busy-main-thread/list-reorder-slide',
-      {[`${testInfo.project.name}.json`]: JSON.stringify(proof, null, 1)},
-      testInfo,
-    );
     expect(proof.changed, JSON.stringify(proof)).toBeGreaterThanOrEqual(3);
     expect(proof.monotonic, JSON.stringify(proof)).toBe(true);
   });
 
   test('the dropped row keeps gliding while the main thread is blocked', async ({
     page,
-  }, testInfo) => {
+  }) => {
     // Released a row and a half down, Inbox glides from where its preview was
     // into its new place.
     const proof = await busyProof(page, rowOf(page, 'Inbox'), 1.49, {
       blockMs: 150,
+      evidence: 'list-reorder-drop',
+      during: 'the dropped row glides into its place while the page is blocked',
     });
-    await writeEvidence(
-      'busy-main-thread/list-reorder-drop',
-      {[`${testInfo.project.name}.json`]: JSON.stringify(proof, null, 1)},
-      testInfo,
-    );
     expect(proof.changed, JSON.stringify(proof)).toBeGreaterThanOrEqual(3);
     expect(proof.monotonic, JSON.stringify(proof)).toBe(true);
   });

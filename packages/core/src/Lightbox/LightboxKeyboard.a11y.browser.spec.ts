@@ -184,13 +184,9 @@ test('an arrow key pressed on "more" pages, and focus stays in the viewer for th
   await expect(more).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(dialog).toContainText('2 / 4');
-  // Paging took the toggle away; focus moved to a part of the viewer.
-  const isFocusInViewer = await dialog.evaluate(
-    element =>
-      element.ownerDocument.activeElement !== element.ownerDocument.body &&
-      element.contains(element.ownerDocument.activeElement),
-  );
-  expect(isFocusInViewer).toBe(true);
+  // Paging took the toggle away. With zoom, focus moves to the new page's
+  // photo, so the next arrow pages too.
+  await expect(dialog.getByRole('button', {name: 'Zoom'})).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(dialog).toContainText('3 / 4');
 });

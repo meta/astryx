@@ -1632,6 +1632,33 @@ describe('Lightbox', () => {
       expect(screen.queryByText('1 / 1')).toBeNull();
     });
 
+    it("gives a single captioned video a gallery page's box and band, and its caption describes the viewer", () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{
+            src: '/clip.mp4',
+            alt: 'A clip',
+            type: 'video',
+            caption: 'A caption',
+          }}
+        />,
+      );
+      const page = document.querySelector('[data-lightbox-page]')!;
+      expect(page).toHaveAttribute('data-current');
+      const media = page.querySelector('[data-lightbox-page-media]')!;
+      expect(media.querySelector('video')).toHaveAttribute('src', '/clip.mp4');
+      const caption = page.querySelector<HTMLElement>(
+        '[data-lightbox-caption]',
+      )!;
+      expect(caption).toHaveTextContent('A caption');
+      expect(media.nextElementSibling).toContainElement(caption);
+      expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
+        'A caption',
+      );
+    });
+
     it('with no caption has no band, as a gallery with none', () => {
       render(
         <Lightbox
@@ -2480,10 +2507,12 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onOpenChange).not.toHaveBeenCalled();
     // Above the photo, on the stage: its own tap closes the viewer, as on a
-    // gallery's page. The drag leaves nothing in its way.
+    // gallery's page. The drag leaves nothing in its way. The tap is timed as
+    // a browser times it: now.
     const tap: Contact = {id: 7, x: 200, y: 50};
-    touch('touchstart', stage, [tap], [tap], clock + 1000);
-    touch('touchend', stage, [], [tap], clock + 1040);
+    const now = performance.now();
+    touch('touchstart', stage, [tap], [tap], now);
+    touch('touchend', stage, [], [tap], now + 40);
     // A single tap waits out a double tap's interval.
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });

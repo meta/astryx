@@ -47,6 +47,7 @@ import {
   withStorybook,
   writeEvidence,
 } from '@astryxdesign/interaction-harness';
+import {UIKIT_TAP} from '../../motion/uikit/gestures';
 import {slowViewer} from './viewerTempo';
 
 const storybook = withStorybook(test);
@@ -125,7 +126,7 @@ async function openGallery(
   await expect(dialog).toBeVisible();
   // The pager's viewport. In a gallery the keyboard's zoom button is the
   // current page's photo box inside it.
-  const viewport = dialog.locator('[data-lightbox-viewport]');
+  const viewport = dialog.locator('[data-lightbox-media] > :first-child');
   const track = viewport.locator(':scope > div').first();
   await expect
     .poll(async () =>
@@ -180,6 +181,12 @@ function doubleTap(at: {x: number; y: number}): TouchScript {
     {t: 220, fingers: []},
   ];
 }
+
+// A double tap whose second touch reaches the page past UIKit's interval
+// between taps is two taps there: the play fails by name.
+const DOUBLE_TAP = {
+  boundaries: {tapIntervalMs: UIKIT_TAP.maximumIntervalBetweenTaps.value},
+};
 
 /** A slow drag by dx, held still before the lift (no release velocity). */
 function slowDrag(from: {x: number; y: number}, dx: number): TouchScript {
@@ -643,7 +650,7 @@ test('a zoomed photo keeps the drag until its edge; the next drag from the edge 
   const g = await openGallery(page);
   const centre = {x: g.box.x + g.box.width / 2, y: g.box.y + g.box.height / 2};
   const current = g.viewport.locator('[data-current] img');
-  await g.driver.play(doubleTap(centre));
+  await g.driver.play(doubleTap(centre), DOUBLE_TAP);
   await waitForAnimation(current);
   await waitForRest(current);
   const zoomed = await g.photo();
@@ -1199,42 +1206,6 @@ async function pooledSettleProof(
   };
 }
 
-/**
- * How long after each settle starts its block starts. Each run swipes and
- * blocks as `pooledSettleProof` does, with the screencast on, so its block
- * starts as a judged run's does. It reads no frames.
- */
-async function settleBlockLags(
-  page: Page,
-  g: Gallery,
-  toward: ReadonlyArray<'next' | 'previous'>,
-): Promise<number[]> {
-  const trackRuns = await recordTrackRuns(g.track);
-  const lags: number[] = [];
-  for (const direction of toward) {
-    await expect
-      .poll(async () =>
-        g.track.evaluate(el =>
-          el.getAnimations().some(a => a.playState === 'running'),
-        ),
-      )
-      .toBe(false);
-    const cast = await startScreencast(page);
-    const blocking = blockOnceShown(g.track, 600);
-    await g.driver.play(swipeAtRest(g, direction));
-    const block = await blocking;
-    await frames(page, 6);
-    await cast.stop();
-    const settle = (await trackRuns()).at(-1);
-    if (settle == null) {
-      throw new Error('no settle recorded');
-    }
-    lags.push(block.from - settle.from);
-    await waitForRest(g.track);
-  }
-  return lags;
-}
-
 test('the page settle keeps advancing every frame while the main thread is blocked', async ({
   page,
 }, testInfo) => {
@@ -1399,25 +1370,32 @@ for (const late of ['two frames', '450 ms'] as const) {
     const g = await openGallery(page);
     await startBusyControl(page);
     await slowViewer(page, SETTLE_TEMPO);
-    // Three settles first give this machine's numbers: how long after a
-    // settle starts its block starts. The first, judged in full, also gives
-    // the cast's frame interval. One settle can start its block late, such as
-    // the first in a new gallery. A delay read from it would push the motion
-    // past the block. So 450 ms counts from the earliest block, and two frames
-    // from the median one. The delayed settle then stays still for that long,
-    // then for two frames and a little more or for 450 ms. That is past the
-    // one frame the proof skips.
-    const first = await pooledSettleProof(page, g, ['next']);
-    const lags = [
-      first.blocks[0].from - first.settles[0].from,
-      ...(await settleBlockLags(page, g, ['next', 'previous'])),
-    ];
+    // Three settles first give this machine's numbers, judged as one pool.
+    // Their blocks show how long after a settle starts its block starts, and
+    // their casts give the frame interval during a block. One run can hold
+    // too few control frames to judge, in WebKit or on a loaded machine.
+    // Three runs together hold enough. One settle can start its block late,
+    // such as the first in a new gallery. A delay read from it would push the
+    // motion past the block. So 450 ms counts from the earliest block, and two
+    // frames from the median one. The delayed settle then stays still for
+    // that long, then for two frames and a little more or for 450 ms. That is
+    // past the one frame the proof skips.
+    const calibration = await pooledSettleProof(page, g, [
+      'next',
+      'next',
+      'previous',
+    ]);
+    const lags = calibration.blocks.map(
+      (block, i) => block.from - calibration.settles[i].from,
+    );
     const blockAfterMs =
       late === 'two frames' ? median(lags) : Math.min(...lags);
-    // A run the pool left out has no frame interval to measure by.
-    const cadenceMs = first.proof.runs[0]?.cadenceMs;
-    expect(cadenceMs, first.proof.summary).toBeGreaterThan(0);
-    const stillMs = late === 'two frames' ? 2.2 * (cadenceMs ?? 0) : 450;
+    // Only the runs the pool judged give a frame interval.
+    const cadences = calibration.proof.runs.flatMap((run, i) =>
+      run != null && calibration.proof.judged[i] ? [run.cadenceMs] : [],
+    );
+    expect(cadences.length, calibration.proof.summary).toBeGreaterThan(0);
+    const stillMs = late === 'two frames' ? 2.2 * median(cadences) : 450;
     const delayMs = blockAfterMs + stillMs;
     await breakSettle(g, 'delayed', delayMs);
     const {proof, blocks, settles} = await pooledSettleProof(page, g, [
@@ -1564,6 +1542,7 @@ test("two pages on, a rotation keeps a zoomed photo's centre point", async ({
       x: fitted.x + fitted.width * 0.4,
       y: fitted.y + fitted.height / 2,
     }),
+    DOUBLE_TAP,
   );
   await waitForAnimation(img);
   await waitForRest(img);
@@ -1800,7 +1779,9 @@ for (const viewport of [
     const opening = await openReads();
     await dialog.getByRole('button', {name: 'Next'}).click();
     await expect(dialog.getByText('2 / 4')).toBeVisible();
-    await waitForRest(dialog.locator('[data-lightbox-viewport] > div').first());
+    await waitForRest(
+      dialog.locator('[data-lightbox-media] > :first-child > div').first(),
+    );
     await frames(page, 2);
     const backReads = await logCaptionReadsInTask(page, 'keydown');
     await page.keyboard.press('ArrowLeft');
@@ -1877,7 +1858,9 @@ test("the caption toggle's width comes from its own delivery, never from a read 
   await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
   await dialog.getByRole('button', {name: 'Next'}).click();
   await expect(dialog.getByText('2 / 4')).toBeVisible();
-  await waitForRest(dialog.locator('[data-lightbox-viewport] > div').first());
+  await waitForRest(
+    dialog.locator('[data-lightbox-media] > :first-child > div').first(),
+  );
   await frames(page, 2);
   // Back onto the clamped first caption, whose toggle mounts hidden and is
   // shown by the band's delivery.
@@ -2061,7 +2044,9 @@ test('no caption read follows a write in the same resize delivery, from opening 
   await frames(page, 2);
   await dialog.getByRole('button', {name: 'Next'}).click();
   await expect(dialog.getByText('2 / 4')).toBeVisible();
-  await waitForRest(dialog.locator('[data-lightbox-viewport] > div').first());
+  await waitForRest(
+    dialog.locator('[data-lightbox-media] > :first-child > div').first(),
+  );
   await frames(page, 2);
   await page.keyboard.press('ArrowLeft');
   await expect(dialog.getByText('1 / 4')).toBeVisible();

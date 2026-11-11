@@ -35,9 +35,11 @@ import {
   GUIDE_NAMESPACE_PAGES,
   GUIDE_PAGE_NAMESPACES,
   ROOT_PAGE_ALIASES,
+  applySidebarParents,
   movedGuideRedirects,
   mergeFlatTopics,
   namespacePage,
+  rootNamespacePages,
   routeSlug,
   sectionAnchors,
   withCliCommands,
@@ -1854,9 +1856,11 @@ export const templateMetadataCount = ${templateMetadata.length};
  * The docsite pages of the CLI's docs tree, read through the CLI's public docs
  * API. Every root namespace is one full page at its own slug (docs-pages.mjs),
  * so splitting a flat topic into a namespace keeps its URL, sidebar spot and
- * text; the guides under it redirect to their sections on that page. A root
- * namespace in GUIDE_PAGE_NAMESPACES shows the pages GUIDE_NAMESPACE_PAGES
- * lists, the same way one level down, and its other guides keep a page each.
+ * text; the guides under it redirect to their sections on that page. A nested
+ * namespace in NESTED_NAMESPACE_PAGES is a page of its own instead, under its
+ * root's page in the sidebar. A root namespace in GUIDE_PAGE_NAMESPACES shows
+ * the pages GUIDE_NAMESPACE_PAGES lists, the same way one level down, and its
+ * other guides keep a page each.
  */
 async function docsTreePages() {
   const pages = [];
@@ -1882,9 +1886,13 @@ async function docsTreePages() {
       continue;
     }
     routes.push(...(await treeRoutes(root)));
-    const full = await namespacePage(readDocs, root, {
+    const {root: full, nested} = await rootNamespacePages(readDocs, root, {
       aliases: ROOT_PAGE_ALIASES.get(root) ?? [],
     });
+    for (const page of nested) {
+      pages.push(page.page);
+      Object.assign(redirects, page.redirects);
+    }
     if (!full) continue;
     pages.push(full.page);
     Object.assign(
@@ -2022,6 +2030,7 @@ async function generateDocsRegistry() {
     }
     docTopics.push(page);
   }
+  applySidebarParents(docTopics);
   const docsTreeRoutes = [...new Set(tree.routes)].sort();
   const docRedirects = Object.fromEntries(
     Object.entries({...merged.redirects, ...tree.redirects}).sort(([a], [b]) =>
@@ -2095,6 +2104,8 @@ export interface DocTopic {
   description: string;
   /** Navigation category: 'guide' | 'foundations' | null */
   category: string | null;
+  /** Slug of the page the sidebar shows this page under, if any */
+  parent?: string;
   /** Full doc sections with content blocks */
   sections: DocSection[];
 }

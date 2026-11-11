@@ -8,7 +8,7 @@
  *   pointer is fine too. It covers the zoom's touches as on a phone, and a
  *   photo without zoom that leaves touches to the page. It also covers the
  *   double-click's 2× zoom, the keyboard's spring, pen and mouse drags, and a
- *   gallery's Next, arrow keys, dark-area click and counter
+ *   gallery's Next, arrows, dark-area click, counter and caption band
  * @position Cross-browser proof for Lightbox under a fine primary pointer
  */
 
@@ -131,8 +131,9 @@ test("the zoom target's focus ring sits inside the stage, which a clipping group
     return {
       width: parseFloat(style.outlineWidth),
       offset: parseFloat(style.outlineOffset),
-      clips: getComputedStyle(el.closest('[data-lightbox-viewport]') as Element)
-        .overflow,
+      clips: getComputedStyle(
+        el.closest('[data-lightbox-media] > :first-child') as Element,
+      ).overflow,
     };
   });
   expect(ring.clips).toBe('hidden');
@@ -208,6 +209,50 @@ async function openGallery(page: Page) {
     .toBe(PHOTO.width);
   await settled(page);
   return {dialog, current};
+}
+
+/** Opens the "Gallery with captions" story with the mouse and waits for the photo. */
+async function openCaptionGallery(page: Page) {
+  await page.route('https://picsum.photos/**', async route =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(PHOTO.width, PHOTO.height),
+    }),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open gallery with captions'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  const current = dialog.locator('[data-current] img');
+  await expect
+    .poll(async () =>
+      current.evaluate(el => (el as HTMLImageElement).naturalWidth),
+    )
+    .toBe(PHOTO.width);
+  await settled(page);
+  return {dialog, current};
+}
+
+/** The current page's caption band and its caption. */
+async function captionBoxes(
+  dialog: Locator,
+): Promise<{band: Box; caption: Box}> {
+  return dialog.evaluate(viewer => {
+    const caption = viewer.querySelector(
+      '[data-current] [data-lightbox-caption]',
+    );
+    const band = caption?.parentElement;
+    if (caption == null || band == null) {
+      throw new Error('no caption band');
+    }
+    const box = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return {x: r.x, y: r.y, width: r.width, height: r.height};
+    };
+    return {band: box(band), caption: box(caption)};
+  });
 }
 
 /** Clicks `point`, which must be the dark area, and expects the viewer gone. */
@@ -801,6 +846,100 @@ test('without zoom, a mouse click beside the photo leaves the viewer open and on
       y: tall.y / 2,
     }),
   ).toBe(false);
+});
+
+test('a mouse click on a gallery’s caption band leaves the viewer open, beside its caption or on it', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 900, height: 1000});
+  const {dialog} = await openCaptionGallery(page);
+  const {band, caption} = await captionBoxes(dialog);
+  // The caption is narrower than its band, so the band shows beside it.
+  expect(caption.x - band.x).toBeGreaterThan(40);
+  const level = band.y + band.height / 2;
+  expect(await staysOpenAfterClick(page, {x: band.x + 12, y: level})).toBe(
+    true,
+  );
+  expect(
+    await staysOpenAfterClick(page, {
+      x: caption.x + caption.width / 2,
+      y: caption.y + 8,
+    }),
+  ).toBe(true);
+});
+
+test('a mouse click between a gallery photo and its caption band closes the viewer', async ({
+  page,
+}) => {
+  // A window taller than the fitted photo leaves dark area between the photo
+  // and the band.
+  await page.setViewportSize({width: 900, height: 1000});
+  const {dialog, current} = await openCaptionGallery(page);
+  const photo = await boxOf(current);
+  const {band} = await captionBoxes(dialog);
+  const gap = band.y - (photo.y + photo.height);
+  expect(gap).toBeGreaterThan(40);
+  await expectBackdropClickCloses(page, dialog, {
+    x: photo.x + photo.width / 2,
+    y: photo.y + photo.height + gap / 2,
+  });
+});
+
+test('with zoom, a mouse double-click on a single photo’s caption zooms the photo, and the caption stays its description', async ({
+  page,
+}) => {
+  await page.route('https://picsum.photos/**', async route =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(PHOTO.width, PHOTO.height),
+    }),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--zoom-with-caption&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open zoom with caption'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  const img = dialog.getByRole('img', {name: 'Forest path'});
+  await expect
+    .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
+    .toBe(PHOTO.width);
+  await settled(page);
+  const fitted = await boxOf(img);
+  // The middle of the caption's first word.
+  const word = await dialog.evaluate(viewer => {
+    const caption = viewer.querySelector(
+      '[data-lightbox-caption] .astryx-text',
+    );
+    const walker = document.createTreeWalker(
+      caption ?? viewer,
+      NodeFilter.SHOW_TEXT,
+    );
+    let node = walker.nextNode() as Text | null;
+    while (node != null && node.data.trim() === '') {
+      node = walker.nextNode() as Text | null;
+    }
+    if (node == null) {
+      throw new Error('no caption text');
+    }
+    const start = node.data.search(/\S/);
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + 1);
+    const r = range.getBoundingClientRect();
+    return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+  });
+  await page.mouse.dblclick(word.x, word.y);
+  await expect
+    .poll(async () => (await boxOf(img)).width)
+    .toBeGreaterThan(fitted.width * 1.5);
+  expect(await page.evaluate(() => String(window.getSelection()).trim())).toBe(
+    '',
+  );
+  // Screen readers still read the caption: it is the viewer's description.
+  await expect(dialog).toHaveAccessibleDescription(
+    'A winding path through the forest',
+  );
 });
 
 test('in a gallery with zoom, a mouse click beside a small photo closes past its caption’s width and stays open within it, as on main', async ({
