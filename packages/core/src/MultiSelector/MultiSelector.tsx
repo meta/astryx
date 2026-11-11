@@ -32,7 +32,7 @@ import React, {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
-import {useTooltip} from '../Tooltip';
+import {useTooltip, useTooltipInternal} from '../Tooltip/useTooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import type {IconName} from '../Icon';
 import {
@@ -1247,7 +1247,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // The trigger stays focusable via aria-disabled. Trigger guards and the value
   // commit guards below block activation, including from an already-open panel.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    // A disabled reason: while it shows, the control shows no other tooltip.
+    isReason: true,
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
     // the trigger button, so always attach focus listeners.

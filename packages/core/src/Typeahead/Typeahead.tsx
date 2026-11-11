@@ -53,7 +53,7 @@ import {
   inputStatusFocusWithinStyles,
 } from '../Field';
 import {Token} from '../Token';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {Spinner} from '../Spinner';
@@ -484,7 +484,9 @@ export function Typeahead<T extends SearchableItem>({
   // guards (handleWrapperClick, handleEnterEditMode, and BaseTypeahead's own
   // focus/change guards).
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    // A disabled reason: while it shows, the control shows no other tooltip.
+    isReason: true,
     placement: 'above',
     // The wrapper div is not naturally focusable; focusin bubbles up from the
     // input, so always attach focus listeners.

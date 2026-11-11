@@ -43,7 +43,7 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {Field} from '../Field/Field';
-import {useTooltip} from '../Tooltip';
+import {useTooltip, useTooltipInternal} from '../Tooltip/useTooltip';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {InputStatus} from '../Field/types';
 import {mergeProps, rtlStyles} from '../utils';
@@ -859,7 +859,9 @@ export function Slider({ref, ...props}: SliderProps) {
   // controls swallow pointer events, so the thumb stays perceivable via
   // aria-disabled while pointer/keyboard handlers early-return on isDisabled.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    // A disabled reason: while it shows, the control shows no other tooltip.
+    isReason: true,
     placement: 'above',
     // The track container is not naturally focusable; focusin bubbles up from
     // the thumb, so always attach focus listeners.

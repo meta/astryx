@@ -55,7 +55,7 @@ import {
   inputWrapperStyles,
 } from '../Field/inputStyles.stylex';
 import {usePopover} from '../Popover/usePopover';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {
@@ -1416,7 +1416,9 @@ export function PowerSearch({
   // pointer events, so the listeners attach to the field's control box; the
   // trigger stays perceivable through aria-disabled.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    // A disabled reason: while it shows, the control shows no other tooltip.
+    isReason: true,
     placement: 'above',
     focusTrigger: 'always',
     isEnabled: isSheetPresentation && showsDisabledMessage,

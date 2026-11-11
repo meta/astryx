@@ -52,7 +52,7 @@ import {formatLocaleTime} from '../utils/timeFormat';
 import {sizeVars, spacingVars} from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {Wheel, type WheelOption} from '../DateInput/Wheel';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {dateInputTouchGeometry} from '../DateInput/tokens.stylex';
@@ -238,7 +238,9 @@ export function TouchTimeField({
   const isEffectivelyDisabled = isDisabled || isLoading;
 
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    // A disabled reason: while it shows, the control shows no other tooltip.
+    isReason: true,
     placement: 'above',
     focusTrigger: 'always',
     isEnabled: showsDisabledMessage,
