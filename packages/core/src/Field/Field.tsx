@@ -32,6 +32,7 @@ import {Text} from '../Text/Text';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
 import {textDirectionProps} from '../utils/textDirection';
+import {useDirection} from '../i18n/useDirection';
 import type {FieldStatusPlacement} from './fieldStatusPlacement';
 
 const styles = stylex.create({
@@ -239,6 +240,7 @@ export function Field({
   ...props
 }: FieldProps) {
   const {direction} = use(FormLayoutContext);
+  const isRtl = useDirection() === 'rtl';
   const isHorizontalLabels = direction === 'horizontal-labels';
 
   const resolvedDescriptionID =
@@ -321,7 +323,7 @@ export function Field({
                 id={resolvedDescriptionID}>
                 {/* As in FieldLabel: plain left-to-right text keeps its
                     written order on a right-to-left page. */}
-                {textDirectionProps(description).dir == null ? (
+                {!isRtl || textDirectionProps(description).dir == null ? (
                   description
                 ) : (
                   <span dir="ltr">{description}</span>

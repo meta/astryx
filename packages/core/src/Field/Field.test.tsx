@@ -15,6 +15,7 @@ import * as stylex from '@stylexjs/stylex';
 import {Field} from './Field';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {InternationalizationProvider} from '../i18n';
 
 const testStyles = stylex.create({
   root: {
@@ -807,7 +808,7 @@ describe('Field caller text under a right-to-left page', () => {
 
   const renderField = (text: string) =>
     render(
-      <div dir="rtl">
+      <InternationalizationProvider locale="en" dir="rtl">
         <Field
           label={text}
           description={text}
@@ -816,7 +817,7 @@ describe('Field caller text under a right-to-left page', () => {
           statusVariant="detached">
           <input id="mixed" aria-describedby="mixed-desc" />
         </Field>
-      </div>,
+      </InternationalizationProvider>,
     );
 
   it('lays out a label, description and status with no right-to-left letter left to right', () => {
@@ -834,6 +835,19 @@ describe('Field caller text under a right-to-left page', () => {
     expect(
       document.getElementById('mixed-status')?.querySelector('span[dir="ltr"]'),
     ).toHaveTextContent('Prefix https://');
+  });
+
+  it('adds no span on a left-to-right page', () => {
+    render(
+      <Field
+        label="Prefix https://"
+        description="Prefix https://"
+        inputID="plain">
+        <input id="plain" />
+      </Field>,
+    );
+    expect(document.querySelector('label[for="plain"] [dir]')).toBeNull();
+    expect(document.querySelector('#plain-desc [dir]')).toBeNull();
   });
 
   it('keeps the page direction for text with a right-to-left letter', () => {
