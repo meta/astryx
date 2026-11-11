@@ -264,6 +264,45 @@ describe('controlled active state', () => {
     expect(onActivate).not.toHaveBeenCalled();
   });
 
+  it('treats aria-current="false" as no current state and stays active', () => {
+    const onActivate = vi.fn();
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: '1',
+        onActivate,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin, falseOwner: falseOwnerPlugin()}}
+        />
+      );
+    }
+    function falseOwnerPlugin(): TablePlugin<Member> {
+      return {
+        rowModel: 'flat',
+        transformBodyRow: props => ({
+          ...props,
+          htmlProps: {
+            ...props.htmlProps,
+            'aria-current': 'false' as const,
+          },
+        }),
+      };
+    }
+    render(<Harness />);
+    const rows = bodyRows();
+    // "false" states no current state, so activation still owns the row:
+    // the module overwrites the value with its own exposure.
+    expect(rows[0].getAttribute('data-active')).toBe('true');
+    expect(rows[0].getAttribute('aria-current')).toBe('true');
+    expect(rows[0].getAttribute('tabindex')).toBe('0');
+    fireEvent.click(rows[0]);
+    expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+
   it('removes only the current exposure the module wrote', () => {
     function Harness() {
       const plugin = useTableActivation<Member>({
@@ -283,7 +322,7 @@ describe('controlled active state', () => {
     const rows = bodyRows();
     // The module marked the row it exposed.
     expect(rows[0].getAttribute('aria-current')).toBe('true');
-    expect(rows[0].hasAttribute('data-activation-current')).toBe(true);
+    expect(rows[0].getAttribute('data-active')).toBe('true');
     unmount();
     expect(rows[0].getAttribute('aria-current')).toBeNull();
   });
@@ -1329,7 +1368,10 @@ describe('paint ownership and cleanup', () => {
     rerender(<Harness withActivation={false} />);
     for (const row of bodyRows()) {
       expect(row.hasAttribute('data-active')).toBe(false);
-      expect(row.querySelector('[data-activation-bar]')).toBeNull();
+      expect(row.cells[0].style.boxShadow).toBe('');
+      expect(
+        row.cells[0].style.getPropertyValue('--_table-row-overlay-inset'),
+      ).toBe('');
     }
   });
 });
@@ -1446,7 +1488,7 @@ describe('review follow-ups', () => {
       <Harness getIsItemActivatable={item => item.id !== '2'} />,
     );
     const rows = bodyRows();
-    // The cursor hook rides every row; only the eligibility attribute
+    // The cursor hook rides every row; only the live cursor variable
     // paints the pointer, so a className rewrite from stale transform
     // props can neither strand nor steal it.
     const cursorClasses = getClickableRowClassNames();
@@ -1456,13 +1498,21 @@ describe('review follow-ups', () => {
         expect(row.classList.contains(cls)).toBe(true);
       }
     }
-    expect(rows[0].getAttribute('data-activation-eligible')).toBe('true');
-    expect(rows[1].hasAttribute('data-activation-eligible')).toBe(false);
-    expect(rows[2].getAttribute('data-activation-eligible')).toBe('true');
+    expect(rows[0].style.getPropertyValue('--_table-activation-cursor')).toBe(
+      'pointer',
+    );
+    expect(rows[1].style.getPropertyValue('--_table-activation-cursor')).toBe(
+      '',
+    );
+    expect(rows[2].style.getPropertyValue('--_table-activation-cursor')).toBe(
+      'pointer',
+    );
     // A later flip converges through the same live update as the tab stop.
     rerender(<Harness getIsItemActivatable={() => true} />);
     const flipped = bodyRows();
-    expect(flipped[1].getAttribute('data-activation-eligible')).toBe('true');
+    expect(
+      flipped[1].style.getPropertyValue('--_table-activation-cursor'),
+    ).toBe('pointer');
     expect(flipped[1].getAttribute('tabindex')).toBe('0');
   });
 
@@ -1771,8 +1821,8 @@ describe('review follow-ups, round three', () => {
         onActivate,
       });
       // A rest-argument wrapper reports zero declared parameters, so an
-      // arity gate would leave every row inert; the plugin-level opt-in
-      // survives the wrap.
+      // arity gate would leave every row inert; the whole-row ownership
+      // claim survives the spread and still publishes canonical identity.
       const wrapped = useMemo<TablePlugin<Member>>(() => {
         const inner = activation.transformBodyRow;
         type FourArgTransform = (
@@ -1966,7 +2016,9 @@ describe('review follow-ups, round four', () => {
     expect(rows[0].getAttribute('tabindex')).toBe('-1');
     expect(rows[0].getAttribute('aria-keyshortcuts')).toContain('Alt+A');
     expect(rows[0].getAttribute('aria-keyshortcuts')).toContain('Enter');
-    expect(rows[0].getAttribute('data-activation-eligible')).toBe('true');
+    expect(rows[0].style.getPropertyValue('--_table-activation-cursor')).toBe(
+      'pointer',
+    );
     fireEvent.click(rows[0]);
     expect(onActivate).toHaveBeenCalledTimes(1);
     // Excluded after a flip: the later owner's values come back, with no
@@ -1974,7 +2026,9 @@ describe('review follow-ups, round four', () => {
     rerender(<Harness allowAll={false} />);
     expect(rows[0].getAttribute('tabindex')).toBe('-1');
     expect(rows[0].getAttribute('aria-keyshortcuts')).toBe('Alt+A');
-    expect(rows[0].hasAttribute('data-activation-eligible')).toBe(false);
+    expect(rows[0].style.getPropertyValue('--_table-activation-cursor')).toBe(
+      '',
+    );
     fireEvent.click(rows[0]);
     expect(onActivate).toHaveBeenCalledTimes(1);
   });
@@ -2058,7 +2112,9 @@ describe('review follow-ups, round four', () => {
       // stop, no active paint, and presses never reach the hook.
       expect(rows[0].hasAttribute('tabindex')).toBe(false);
       expect(rows[0].hasAttribute('data-active')).toBe(false);
-      expect(rows[0].hasAttribute('data-activation-eligible')).toBe(false);
+      expect(rows[0].style.getPropertyValue('--_table-activation-cursor')).toBe(
+        '',
+      );
       fireEvent.click(rows[0]);
       expect(onActivate).not.toHaveBeenCalled();
       expect(
@@ -2153,7 +2209,9 @@ describe('review follow-ups, round five', () => {
       // paint, and presses reach neither hook.
       for (const row of rows) {
         expect(row.hasAttribute('tabindex')).toBe(false);
-        expect(row.hasAttribute('data-activation-eligible')).toBe(false);
+        expect(row.style.getPropertyValue('--_table-activation-cursor')).toBe(
+          '',
+        );
         expect(row.hasAttribute('data-active')).toBe(false);
       }
       fireEvent.click(rows[0]);
@@ -2188,26 +2246,24 @@ describe('review follow-ups, round five', () => {
     const rows = bodyRows();
     // The bar cell reserves its edge so the pinned overlay starts past the
     // marker instead of covering it; other cells carry no reservation.
-    const barCell = rows[1].querySelector(
-      '[data-activation-bar="true"]',
-    ) as HTMLTableCellElement;
+    const barCell = rows[1].cells[0] as HTMLTableCellElement;
     expect(barCell).not.toBeNull();
-    expect(barCell.style.getPropertyValue('--table-row-overlay-inset')).toBe(
+    expect(barCell.style.getPropertyValue('--_table-row-overlay-inset')).toBe(
       '3px',
     );
     for (const cell of Array.from(rows[1].cells)) {
       if (cell !== barCell) {
-        expect(cell.style.getPropertyValue('--table-row-overlay-inset')).toBe(
+        expect(cell.style.getPropertyValue('--_table-row-overlay-inset')).toBe(
           '',
         );
       }
     }
     // Moving activation away clears the reservation with the bar.
     rerender(<Harness activeKey={null} />);
-    expect(barCell.style.getPropertyValue('--table-row-overlay-inset')).toBe(
+    expect(barCell.style.getPropertyValue('--_table-row-overlay-inset')).toBe(
       '',
     );
-    expect(rows[1].querySelector('[data-activation-bar]')).toBeNull();
+    expect(barCell.style.boxShadow).toBe('');
   });
 
   it('yields to a declared navigation owner in either plugin order', () => {
@@ -2262,7 +2318,9 @@ describe('review follow-ups, round five', () => {
         // nothing and its presses never fire.
         expect(rows[0].getAttribute('data-navigation-owner')).toBe('true');
         expect(rows[0].hasAttribute('tabindex')).toBe(false);
-        expect(rows[0].hasAttribute('data-activation-eligible')).toBe(false);
+        expect(
+          rows[0].style.getPropertyValue('--_table-activation-cursor'),
+        ).toBe('');
         expect(rows[0].hasAttribute('data-active')).toBe(false);
         fireEvent.click(rows[0]);
         expect(onNavigate).toHaveBeenCalled();
