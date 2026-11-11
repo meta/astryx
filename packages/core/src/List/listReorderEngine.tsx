@@ -938,6 +938,10 @@ export class ListReorderController implements ListReorderSession {
 
   /** This list's handle in `row`, if it has one: a nested list's are its own. */
   private handleIn(row: HTMLElement): Element | null {
+    // An attached item may be its own handle.
+    if (this.keys.has(row)) {
+      return row;
+    }
     for (const handle of reorderHandlesIn(row)) {
       if (this.keys.has(handle)) {
         return handle;
@@ -2073,10 +2077,6 @@ export class ListReorderController implements ListReorderSession {
   }
 
   /**
-   * Announces a move once it commits; if the consumer keeps the order by the
-   * end of the task, announces that the row stayed instead.
-   */
-  /**
    * Whether the announced move is in `rows`: its row, or a row rendered
    * again with its key, at its new place.
    */
@@ -2099,6 +2099,10 @@ export class ListReorderController implements ListReorderSession {
    */
   protected beforeFallback(): void {}
 
+  /**
+   * Announces a move once it commits; if the consumer keeps the order by the
+   * end of the task, announces that the row stayed instead.
+   */
   private announceWhenCommitted(announcement: PendingAnnouncement): void {
     this.announcement = announcement;
     if (this.announcementFallback != null) {

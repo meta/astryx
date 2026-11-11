@@ -27,13 +27,6 @@ import {listReorderEngine} from '../List/listReorderEngine';
 import {
   attachReorderable,
   type ReorderableAttachOptions,
-  type ReorderableAttachment,
-} from './attachReorderable';
-
-export type {
-  ReorderableAttachOptions,
-  ReorderableAttachment,
-  ReorderableItem,
 } from './attachReorderable';
 
 /** A committed move: the item that moved and where it went. */
@@ -109,8 +102,18 @@ export interface Reorderable<
    */
   attach(
     container: HTMLElement,
-    options: ReorderableAttachOptions<TKey>,
-  ): ReorderableAttachment;
+    options: {
+      /** The container's items, in order: each one's key, element and handle. */
+      items: () => ReadonlyArray<{
+        readonly key: TKey;
+        readonly element: HTMLElement;
+        readonly handle: HTMLElement;
+      }>;
+    },
+  ): {
+    /** Ends any reorder mode and removes everything `attach` added. */
+    detach(): void;
+  };
 }
 
 /**

@@ -2,13 +2,23 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, screen, waitFor} from '@testing-library/react';
-import {announceMessage} from '../hooks/useAnnounce';
+import {
+  announceInModal,
+  announceMessage,
+  enclosingModalDialog,
+} from '../hooks/useAnnounce';
 import {createReorderable} from './createReorderable';
-import type {ReorderableAttachment, ReorderMove} from './createReorderable';
+import type {ReorderMove} from './createReorderable';
+
+type ReorderableAttachment = ReturnType<
+  ReturnType<typeof createReorderable>['attach']
+>;
 
 vi.mock('../hooks/useAnnounce', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
   announceMessage: vi.fn(() => null),
+  announceInModal: vi.fn(() => null),
+  enclosingModalDialog: vi.fn(() => null),
 }));
 
 const announced = () =>
@@ -326,7 +336,7 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
 
   it.each(['flex', 'grid'])(
     "leaves a %s parent's children as they were, and puts its own elements in the theme scope",
-    display => {
+    async display => {
       const scope = document.createElement('div');
       scope.setAttribute('data-astryx-theme', 'neutral');
       const parent = document.createElement('div');
@@ -360,11 +370,172 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
         ).toBe(true);
       }
       act(() => attachment.detach());
+      // The hint's host goes once the detaching task's work is done.
+      await act(async () => {
+        await Promise.resolve();
+      });
       expect(Array.from(scope.children)).toEqual([parent]);
     },
   );
 
-  it('detach ends reorder mode without a word and restores the container', () => {
+  it('moves an item that is its own handle', async () => {
+    const container = document.createElement('ul');
+    document.body.append(container);
+    for (const name of ['Milk', 'Eggs']) {
+      const row = document.createElement('li');
+      row.textContent = name;
+      row.dataset.key = name.toLowerCase();
+      container.append(row);
+    }
+    const rows = () => Array.from(container.querySelectorAll('li'));
+    const reorderable = createReorderable({
+      onReorder: ({key, to}) => {
+        const row = rows().find(element => element.dataset.key === key);
+        const rest = rows().filter(element => element !== row);
+        if (row != null) {
+          container.insertBefore(row, rest[to] ?? null);
+        }
+      },
+    });
+    attachments.push(
+      reorderable.attach(container, {
+        items: () =>
+          rows().map(row => ({
+            key: row.dataset.key ?? '',
+            element: row,
+            handle: row,
+          })),
+      }),
+    );
+    const milk = rows()[0];
+    act(() => milk.focus());
+    fireEvent.keyDown(milk, {key: 'Enter'});
+    fireEvent.keyDown(milk, {key: 'ArrowDown'});
+    await settle();
+    expect(rows().map(row => row.textContent)).toEqual(['Eggs', 'Milk']);
+  });
+
+  it('wires no handle for a keyless item', () => {
+    const container = document.createElement('div');
+    const row = document.createElement('div');
+    row.textContent = 'Milk';
+    const grip = document.createElement('button');
+    row.append(grip);
+    container.append(row);
+    document.body.append(container);
+    attachments.push(
+      createReorderable({onReorder: () => {}}).attach(container, {
+        items: () => [
+          {key: undefined as unknown as string, element: row, handle: grip},
+        ],
+      }),
+    );
+    expect(grip).not.toHaveAttribute('aria-pressed');
+    expect(grip).not.toHaveAttribute('aria-label');
+  });
+
+  it('names an item with no accessible name or text by its place, and warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const container = document.createElement('div');
+    const row = document.createElement('div');
+    const grip = document.createElement('button');
+    row.append(grip);
+    container.append(row);
+    document.body.append(container);
+    attachments.push(
+      createReorderable({onReorder: () => {}}).attach(container, {
+        items: () => [{key: 'a', element: row, handle: grip}],
+      }),
+    );
+    expect(grip).toHaveAccessibleName('Reorder item 1');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('has no accessible name or text'),
+    );
+    warn.mockRestore();
+  });
+
+  it('announces inside the modal dialog that encloses the container', async () => {
+    const dialog = document.createElement('dialog');
+    document.body.append(dialog);
+    vi.mocked(enclosingModalDialog).mockReturnValue(dialog);
+    try {
+      const {handle} = track(renderPlainList(['Milk', 'Eggs']));
+      act(() => handle('Milk').click());
+      fireEvent.keyDown(handle('Milk'), {key: 'ArrowDown'});
+      await settle();
+      expect(announceInModal).toHaveBeenCalledWith(
+        dialog,
+        'Milk, position 2 of 2, after Eggs, at the end',
+        'polite',
+      );
+      expect(announced()).toEqual([]);
+    } finally {
+      vi.mocked(enclosingModalDialog).mockReturnValue(null);
+      vi.mocked(announceInModal).mockClear();
+    }
+  });
+
+  it('reorders two containers attached to one object each on its own, and start reaches the one attached last, with a warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const moves: ReorderMove[] = [];
+    const reorderable = createReorderable({
+      onReorder: move => moves.push(move),
+    });
+    const make = (names: string[]) => {
+      const container = document.createElement('ul');
+      for (const name of names) {
+        const row = document.createElement('li');
+        row.dataset.key = name.toLowerCase();
+        row.innerHTML = `<span>${name}</span><button type="button" class="grip"></button>`;
+        container.append(row);
+      }
+      document.body.append(container);
+      attachments.push(
+        reorderable.attach(container, {
+          items: () =>
+            Array.from(container.querySelectorAll('li')).map(row => ({
+              key: row.dataset.key ?? '',
+              element: row,
+              handle: row.querySelector<HTMLElement>('.grip') as HTMLElement,
+            })),
+        }),
+      );
+      return container;
+    };
+    const first = make(['Milk', 'Eggs']);
+    const second = make(['Tea', 'Coffee']);
+    act(() => reorderable.start('coffee'));
+    expect(second.querySelectorAll('[aria-pressed="true"]').length).toBe(1);
+    expect(first.querySelectorAll('[aria-pressed="true"]').length).toBe(0);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('more than one'));
+    const milkGrip = first.querySelector<HTMLElement>('.grip') as HTMLElement;
+    act(() => milkGrip.click());
+    fireEvent.keyDown(milkGrip, {key: 'ArrowDown'});
+    expect(moves).toEqual([{key: 'milk', to: 1}]);
+    warn.mockRestore();
+  });
+
+  it('detach removes only the class tokens attach added', () => {
+    const {container, handle, attachment} = renderPlainList(['Milk', 'Eggs']);
+    container.className = 'app-list';
+    act(() => handle('Milk').click());
+    container.classList.add('app-added-later');
+    act(() => attachment.detach());
+    expect(container.className).toBe('app-list app-added-later');
+  });
+
+  it('detach in a React commit leaves the hint root to unmount after it', async () => {
+    const {handle, attachment} = renderPlainList(['Milk', 'Eggs']);
+    act(() => handle('Milk').click());
+    const before = document.body.children.length;
+    attachment.detach();
+    // The hint host is hidden at once, and removed once the task's
+    // synchronous work is done.
+    await Promise.resolve();
+    expect(document.body.children.length).toBeLessThan(before);
+  });
+
+  it('detach ends reorder mode without a word and restores the container', async () => {
     const {container, handle, attachment} = renderPlainList(['Milk', 'Eggs']);
     const className = container.className;
     act(() => handle('Milk').click());
@@ -374,6 +545,9 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
     expect(container.className).toBe(className);
     expect(container.style.position).toBe('');
     expect(container.children.length).toBe(2);
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(document.body.children.length).toBe(1);
   });
 });

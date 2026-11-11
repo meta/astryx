@@ -326,12 +326,14 @@ export function attachReorderable(
   let hintHost: HTMLElement | null = null;
   const prepareMode = () => {
     if (restoreContainer == null) {
-      const restoreClass = snapshot(container, ['class']);
+      // Only the tokens this adds come off again: the app may change the
+      // container's classes while it is attached.
       const {className} = stylex.props(controller.listStyle);
-      if (className) {
-        container.classList.add(...className.split(/\s+/).filter(Boolean));
-      }
-      restoreContainer = restoreClass;
+      const added = (className ?? '')
+        .split(/\s+/)
+        .filter(token => token !== '' && !container.classList.contains(token));
+      container.classList.add(...added);
+      restoreContainer = () => container.classList.remove(...added);
     }
     if (hintRoot == null) {
       hintHost = doc.createElement('div');
@@ -447,8 +449,13 @@ export function attachReorderable(
       const host = hintHost;
       hintRoot = null;
       hintHost = null;
-      root?.unmount();
-      host?.remove();
+      // A React app may detach while it renders (a ref callback's cleanup),
+      // and a root cannot unmount synchronously then.
+      host?.setAttribute('hidden', '');
+      queueMicrotask(() => {
+        root?.unmount();
+        host?.remove();
+      });
       instructions.remove();
       restoreContainer?.();
       restoreContainer = null;
