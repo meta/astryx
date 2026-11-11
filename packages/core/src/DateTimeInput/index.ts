@@ -8,6 +8,7 @@
  */
 
 export {DateTimeInput} from './DateTimeInput';
+export {createISODateTimeString} from './createISODateTimeString';
 export type {
   DateTimeInputProps,
   DateTimeInputSize,
