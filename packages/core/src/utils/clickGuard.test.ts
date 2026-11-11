@@ -306,7 +306,7 @@ describe('clickGuard', () => {
     expect(isClickGuardArmed(document)).toBe(false);
   });
 
-  it('armed with an identifier, takes a touchend that names no touches as that touch’s own', () => {
+  it('armed with an identifier, takes a touchend without changedTouches as that touch’s own', () => {
     const target = button();
     armClickGuard(document, {cancelsTouchEnd: true, touchIdentifier: 7});
     expect(touchEnd(target).defaultPrevented).toBe(true);
