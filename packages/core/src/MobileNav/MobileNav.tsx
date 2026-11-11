@@ -551,30 +551,25 @@ export function MobileNav({
   // open/close effect below, so it measures the scrollbar gutter before
   // showModal() can hide the scrollbar.
   useScrollLock(isOpen);
-  // Resolved side — computed from trigger position when side='auto'
-  // The `side='auto'` edge, resolved while rendering the closed-to-open
-  // transition so the first open frame already has the right edge. An Effect
-  // would commit the default `end` first and the drawer would slide in from
-  // the wrong edge before jumping. An explicit `side` is used directly.
+  // For side='auto', the edge is resolved while rendering the closed-to-open
+  // transition. An Effect would commit the default `end` first, so the drawer
+  // would slide in from the wrong edge. An explicit `side` is used directly.
   const [autoSide, setAutoSide] = useState<'start' | 'end'>('end');
   const [wasOpen, setWasOpen] = useState(false);
-  // A drawer open on the server reads no focus or layout while it hydrates. It
-  // resolves in the render after hydration.
+  // Hydration must not read focus or layout; resolve after it.
   const canReadDom = !useIsHydrating();
   if (canReadDom && isOpen !== wasOpen) {
     setWasOpen(isOpen);
     if (isOpen && side === 'auto') {
-      // The opener is the focused element. A tap does not focus a button in
-      // some mobile browsers. Then the opener is the element whose
-      // `aria-controls` names this dialog. A caller `id` replaces the dialog's
-      // own id.
+      // The opener is the focused element. If a tap left no focus, fall back to
+      // the element whose `aria-controls` names this dialog.
       const active = document.activeElement as HTMLElement | null;
       const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
       const trigger =
         active && active !== document.body
           ? active
           : Array.from(
-              // eslint-disable-next-line @eslint-react/purity -- runs only on the closed-to-open render, never on the server or while hydrating; an Effect would commit the default edge first
+              // eslint-disable-next-line @eslint-react/purity -- runs only on the closed-to-open render. Never on the server or while hydrating.
               document.querySelectorAll<HTMLElement>('[aria-controls]'),
             ).find(el =>
               (el.getAttribute('aria-controls') ?? '')
