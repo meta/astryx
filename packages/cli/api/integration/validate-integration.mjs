@@ -920,7 +920,9 @@ export async function validateIntegration(pkg, options = {}) {
           each.notes.map(note => ({...note, next: true})),
         ),
         ...(examples?.notes ?? []).map(note => ({...note, next: true})),
-        ...(listing?.notes ?? []).map(note => ({...note, next: true})),
+        // What a catalog needs to list the package is information only:
+        // these notes fail no check, under any flag.
+        ...(listing?.notes ?? []),
       ]
     : [];
   // The doc-syntax findings in the package's topics, as `next` notes with

@@ -216,7 +216,7 @@ describe('packageListingCheck', () => {
     expect(codes(await check(dir))).toEqual([]);
   });
 
-  it('reaches `integration check` as a `next` note', async () => {
+  it('reaches `integration check` as a note that fails nothing', async () => {
     const dir = makePackage({
       'package.json': packageJson({}),
       'astryx.integration.mjs': manifest("docs: './docs'"),
@@ -224,9 +224,12 @@ describe('packageListingCheck', () => {
         "export const docs = {type: 'generic', name: 'widgets', title: 'Widgets', description: 'Widgets.', sections: [{title: 'Use', content: [{type: 'prose', text: 'Use them.'}]}]};\n",
     });
     const result = await validateIntegration(undefined, {cwd: dir});
-    expect(result.data.notes).toContainEqual(
-      expect.objectContaining({code: 'package_without_logo', next: true}),
+    const note = result.data.notes.find(
+      (/** @type {{code: string}} */ each) =>
+        each.code === 'package_without_logo',
     );
+    expect(note).toBeDefined();
+    expect(note).not.toHaveProperty('next');
   });
 
   it('draws no listing note for a package of icon sets alone', async () => {
