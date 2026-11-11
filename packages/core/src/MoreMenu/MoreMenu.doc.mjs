@@ -104,7 +104,7 @@ export const docs = {
     {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
-      description: 'Presentation policy forwarded to DropdownMenu. `adaptive` keeps the anchored popover on pointer-based layouts and uses a BottomSheet on a compact touch screen: a coarse primary pointer, and a viewport narrower than the theme `md` breakpoint (768px by default) or shorter than 500px. Omitted, the menu is the anchored popover, and under a finger, on every device, the finger that opened it picks a row only after moving 10 px. Pass \'popover\' to keep the pointer behavior on every device, the settle rule included.',
+      description: 'Presentation policy forwarded to DropdownMenu. `adaptive` keeps the anchored popover on pointer-based layouts and uses a BottomSheet on a compact touch screen: a coarse primary pointer, and a viewport narrower than the theme `md` breakpoint (768px by default) or shorter than 500px. Omitted, the menu is the anchored popover, and under a finger or a pen, on every device, its trigger opens as it is pressed (inside a scroll view, after the 150 ms content-touch delay), and the opening finger picks after moving 10 px. Pass \'popover\' to keep the pointer behavior on every device, a 500 ms hold included.',
     },
     {
       name: 'onOpenChange',
@@ -203,7 +203,7 @@ export const docsZh = {
     {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
-      description: '菜单呈现策略。`adaptive` 在指针布局中使用锚定浮层，在主指针为粗略指针且视口宽度小于主题的 `md` 断点（默认 768px）或高度小于 500px 时使用 BottomSheet。省略时，菜单为锚定浮层；在任何设备上用手指操作时，打开菜单的手指移动 10 px 后才会选择菜单项。传入 \'popover\' 可在所有设备上保持指针行为，包括稳定规则。',
+      description: '菜单呈现策略。`adaptive` 在指针布局中使用锚定浮层，在主指针为粗略指针且视口宽度小于主题的 `md` 断点（默认 768px）或高度小于 500px 时使用 BottomSheet。省略时，菜单为锚定浮层；在任何设备上用手指或触控笔操作时，触发器在按下时打开（在滚动视图中，等待 150 ms 内容触摸延迟之后），打开菜单的手指移动 10 px 后才会选择菜单项。传入 \'popover\' 可在所有设备上保持指针行为，包括 500 ms 长按。',
     },
     {
       name: 'xstyle',

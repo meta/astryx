@@ -4,7 +4,7 @@
 
 /**
  * @file usePopover.tsx
- * @input Uses useLayer, useFocusTrap, React hooks
+ * @input Uses useLayer, useFocusTrap, React hooks, and Layer's outside-pan watch (outsidePanClaim)
  * @output Exports the public usePopover hook with derived focus and guarded opening.
  *   For Popover.tsx (internal), exports usePopoverInternal and
  *   FALLBACK_CLOSE_SELECTOR.
@@ -20,6 +20,7 @@
 import React, {useCallback, useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLayerInternal, type ContextRenderProps} from '../Layer/useLayer';
+import {watchOutsidePans} from '../Layer/outsidePanClaim';
 import {useFocusTrapInternal} from '../hooks/useFocusTrap';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import type {StyleXStyles} from '@stylexjs/stylex';
@@ -368,12 +369,38 @@ export interface UsePopoverReturn {
  * Options a core component may pass through `usePopoverInternal`; not part
  * of the public `usePopover` options.
  */
-interface InternalPopoverOptions extends UsePopoverOptions {
+export interface InternalPopoverOptions extends UsePopoverOptions {
   /**
    * Runs as the popover starts to close, while the browser still shows it.
    * A close that plays out after the popover is hidden starts here.
    */
   onCloseStart?: () => void;
+  /**
+   * Where focus returns on close when the element focused at open is gone.
+   */
+  getRestoreFallback?: () => HTMLElement | null;
+  /**
+   * Moves focus to the element the close restores to, in place of
+   * `element.focus()` (useFocusTrap's `restoreFocusTo`).
+   */
+  restoreFocusTo?: (element: HTMLElement) => void;
+  /**
+   * The opener focus returns to, read when `show` runs. Null or absent: the
+   * element focused then. For a caller whose open runs after the event that
+   * asked for it, when focus may already have moved.
+   */
+  getOpener?: () => HTMLElement | null;
+  /**
+   * The owner decides what a touch outside that pans does to the popover.
+   * Otherwise a light-dismiss popover keeps such a pan from dismissing it
+   * (useLayer's `watchesOutsidePans`).
+   */
+  ownsOutsidePan?: boolean;
+  /**
+   * The component writes the entrance's side itself, after the commit that
+   * moves the popover (`useLayerInternal`'s `writesEntranceSide`).
+   */
+  writesEntranceSide?: boolean;
 }
 
 /**
@@ -423,6 +450,7 @@ function usePopoverImplementation(
     onShow,
     onHide,
     onCloseStart,
+    writesEntranceSide,
     xstyle,
     className,
     style,
@@ -437,6 +465,10 @@ function usePopoverImplementation(
     dialogLabel,
     role = 'dialog',
     isModal = true,
+    getRestoreFallback,
+    restoreFocusTo,
+    getOpener,
+    ownsOutsidePan = false,
   } = options;
 
   const t = useComponentTranslator();
@@ -466,6 +498,9 @@ function usePopoverImplementation(
     onShow: handleLayerShow,
     onHide,
     onCloseStart,
+    watchesOutsidePans:
+      hasLightDismiss && !ownsOutsidePan ? watchOutsidePans : undefined,
+    writesEntranceSide,
   });
 
   // Focus trap for the popover content. Escape stays registered while light
@@ -474,12 +509,16 @@ function usePopoverImplementation(
   // The element focused when `show` ran: initial focus may move inside before
   // the trap activates, so the trap restores focus here instead.
   const openerRef = useRef<HTMLElement | null>(null);
+  const getOpenerRef = useRef(getOpener);
+  getOpenerRef.current = getOpener;
   const getRestoreTarget = useCallback(() => openerRef.current, []);
   const {containerRef: contentRef, focusFirst} =
     useFocusTrapInternal<HTMLDivElement>({
       isActive: layer.isOpen,
       onEscape: hasEscapeDismiss || hasLightDismiss ? layer.hide : undefined,
       getRestoreTarget,
+      getRestoreFallback,
+      restoreFocusTo,
     });
 
   const focusInitialTarget = useCallback(() => {
@@ -551,10 +590,9 @@ function usePopoverImplementation(
       const activeElement = (
         triggerElementRef.current?.ownerDocument ?? document
       ).activeElement as HTMLElement | null;
+      const opener = getOpenerRef.current?.() ?? activeElement;
       openerRef.current =
-        activeElement != null && !contentRef.current?.contains(activeElement)
-          ? activeElement
-          : null;
+        opener != null && !contentRef.current?.contains(opener) ? opener : null;
       layer.show();
       // When the content is already mounted, the layer shows it within this
       // call, so initial focus lands within the event that opened it: iOS
