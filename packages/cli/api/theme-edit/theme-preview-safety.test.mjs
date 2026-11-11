@@ -22,6 +22,7 @@ import {
   themeEditPreviewRemove,
   themeEditShow,
 } from './theme-edit.mjs';
+import {stopPreviewCommitAt} from './_preview-app.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
@@ -1178,5 +1179,83 @@ describe('pass 4', () => {
       "astryx experimental theme preview add --path 'src/app/(marketing)/theme-preview'",
       "astryx experimental theme preview add --path 'src/app/(shop)/theme-preview'",
     ]);
+  }, 120_000);
+});
+
+describe('a change stopped part way', () => {
+  /** Files under the route folder, relative, temp files included. */
+  const listing = () =>
+    /** @type {string[]} */ (
+      fs.readdirSync(path.join(cwd, ROUTE), {recursive: true})
+    )
+      .map(f => f.split(path.sep).join('/'))
+      .sort();
+  /** Stop at the `n`th rename of the next change, as a kill would. @param {number} n */
+  const stopAfter = n => {
+    let renames = 0;
+    stopPreviewCommitAt(step => step === 'rename' && ++renames === n);
+  };
+  const olderPreview = () => {
+    for (const id of ['overview', 'components'])
+      write(
+        `${ROUTE}/pages/${id}.tsx`,
+        `export default function P() { return '${id}'; }\n`,
+      );
+    write(`${ROUTE}/page.tsx`, '// older route\n');
+    write(
+      `${ROUTE}/theme-preview.json`,
+      JSON.stringify({
+        version: 1,
+        theme: null,
+        pages: [
+          {id: 'overview', label: 'Overview', file: 'pages/overview'},
+          {id: 'components', label: 'Components', file: 'pages/components'},
+        ],
+        files: [
+          'pages/overview.tsx',
+          'pages/components.tsx',
+          'page.tsx',
+          'theme-preview.json',
+        ],
+      }),
+    );
+  };
+
+  it('finishes a page move stopped after the first rename on the next add', async () => {
+    olderPreview();
+    stopAfter(1);
+    try {
+      await expect(
+        themeEditPreviewAdd(undefined, {cwd, template: 'blank'}),
+      ).rejects.toBeTypeOf('symbol');
+    } finally {
+      stopPreviewCommitAt(null);
+    }
+    expect(listing()).toContain('.theme-preview.pending.json');
+    const r = await themeEditPreviewAdd(undefined, {cwd, template: 'blank'});
+    expect(r.data.notes.join(' ')).toContain('finished a preview change');
+    expect(r.data.pages).toEqual(['overview', 'components', 'blank']);
+    expect(listing().filter(f => /\.tmp$|pending|^pages/.test(f))).toEqual([]);
+    const data = JSON.parse(read(`${ROUTE}/theme-preview.json`));
+    expect(data.pages.map((/** @type {any} */ p) => p.file)).toEqual([
+      '_pages/overview',
+      '_pages/components',
+      '_pages/blank',
+    ]);
+  }, 120_000);
+
+  it('removes the whole preview after a change stopped before its record was written', async () => {
+    await themeEditPreviewAdd(undefined, {cwd, theme: 'sea'});
+    stopAfter(2);
+    try {
+      await expect(
+        themeEditPreviewAdd(undefined, {cwd, template: 'blank'}),
+      ).rejects.toBeTypeOf('symbol');
+    } finally {
+      stopPreviewCommitAt(null);
+    }
+    const r = await themeEditPreviewRemove(undefined, {cwd});
+    expect(r.data.kept).toEqual([]);
+    expect(exists(ROUTE)).toBe(false);
   }, 120_000);
 });

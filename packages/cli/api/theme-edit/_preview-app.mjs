@@ -1207,16 +1207,53 @@ function commitPreview(cwd, dir, data, writes, deletes, again) {
   };
   let current = dir;
   let step = 'written';
+  const pendingFile = path.join(dir, PENDING);
+  /** The record as it is before this call. @type {any} */
+  let old;
   try {
+    old = JSON.parse(String(before(path.join(dir, PREVIEW_DATA)) ?? 'null'));
+  } catch {
+    old = null;
+  }
+  try {
+    const hashes = {...data.hashes};
+    for (const w of writes)
+      if (!w.keepHash || !hashes[w.rel]) hashes[w.rel] = contentHash(w.text);
+    for (const rel of deletes) delete hashes[rel];
+    for (const rel of Object.keys(hashes))
+      if (!data.files.includes(rel)) delete hashes[rel];
+    data.hashes = hashes;
+    if (!data.files.includes(PREVIEW_DATA)) data.files.push(PREVIEW_DATA);
     for (const w of writes) {
       current = confined(path.join(dir, w.rel), dir, 'a preview file');
       mkdir(path.dirname(current));
       stage(current, w.text);
     }
+    // The record this call ends with, the one it starts from and the temp
+    // files and deletes between them, written before the first rename: a
+    // command stopped part way (a kill) leaves it, and the next preview
+    // command finishes the step from it ({@link recoverPreview}).
+    current = pendingFile;
+    writeWhole(
+      pendingFile,
+      `${JSON.stringify(
+        {
+          version: 1,
+          record: data,
+          old,
+          temps: [...temps.values()].map(t => path.relative(dir, t)),
+          deletes,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    commitStep('pending');
     for (const w of writes) {
       current = path.join(dir, w.rel);
       touched.push({file: current, before: before(current)});
       fs.renameSync(tmp(current), current);
+      commitStep('rename');
     }
     staged.length = 0;
     step = 'removed';
@@ -1228,19 +1265,15 @@ function commitPreview(cwd, dir, data, writes, deletes, again) {
       fs.rmSync(current);
     }
     step = 'written';
-    const hashes = {...data.hashes};
-    for (const w of writes)
-      if (!w.keepHash || !hashes[w.rel]) hashes[w.rel] = contentHash(w.text);
-    for (const rel of deletes) delete hashes[rel];
-    for (const rel of Object.keys(hashes))
-      if (!data.files.includes(rel)) delete hashes[rel];
-    data.hashes = hashes;
-    if (!data.files.includes(PREVIEW_DATA)) data.files.push(PREVIEW_DATA);
     current = path.join(dir, PREVIEW_DATA);
     touched.push({file: current, before: before(current)});
     stage(current, `${JSON.stringify(data, null, 2)}\n`);
     fs.renameSync(tmp(current), current);
+    fs.rmSync(pendingFile, {force: true});
   } catch (e) {
+    // A stop injected by a test stands for a kill: nothing is put back.
+    if (e === STOPPED) throw e;
+    fs.rmSync(pendingFile, {force: true});
     for (const t of staged) fs.rmSync(t, {force: true});
     for (const t of touched.reverse())
       try {
@@ -1262,6 +1295,125 @@ function commitPreview(cwd, dir, data, writes, deletes, again) {
       {run: [`${again}  # once the cause is fixed`]},
     );
   }
+}
+
+/** The step record a preview change leaves while it runs. */
+const PENDING = '.theme-preview.pending.json';
+
+/** What a test throws to stop a change part way, as a kill would. */
+const STOPPED = Symbol('stopped');
+
+/** @type {((step: string) => boolean) | null} */
+let stopAt = null;
+
+/**
+ * For tests: stop the next preview changes at the step where `when`
+ * returns true, as a kill would, with nothing put back. Null clears it.
+ * @param {((step: string) => boolean) | null} when
+ */
+export function stopPreviewCommitAt(when) {
+  stopAt = when;
+}
+
+/** @param {string} step */
+function commitStep(step) {
+  if (stopAt?.(step)) throw STOPPED;
+}
+
+/**
+ * Finish a preview change that was stopped part way (a kill), from the
+ * step record it left: its leftover temp files go; each file it was writing
+ * keeps the hash of what is on disk when that is the new or the old text,
+ * and no hash otherwise (so it is never deleted on the record's word); a
+ * page whose new file never landed keeps its old file; an old file it was
+ * removing goes only when the preview wrote it and its new file is there.
+ * The record is then written and the step record removed. Nothing happens
+ * when there is no step record.
+ * @param {string} cwd
+ * @param {string} dir
+ * @returns {string | null} a note for the result, when a change was finished
+ */
+function recoverPreview(cwd, dir) {
+  const pendingFile = path.join(dir, PENDING);
+  /** @type {any} */
+  let p;
+  try {
+    p = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+  } catch (e) {
+    if (/** @type {any} */ (e)?.code === 'ENOENT') return null;
+    // Unreadable: the change is treated as never started.
+    fs.rmSync(pendingFile, {force: true});
+    return `removed ${shown(cwd, pendingFile)}, a damaged step record of a preview change that was stopped`;
+  }
+  const inside = (/** @type {string} */ rel) =>
+    confined(path.join(dir, rel), dir, PENDING);
+  for (const t of Array.isArray(p?.temps) ? p.temps : [])
+    if (typeof t === 'string' && /\.astryx-[^/]*\.tmp$/.test(t))
+      fs.rmSync(inside(t), {force: true});
+  const record = p?.record;
+  if (previewProblem(record)) {
+    fs.rmSync(pendingFile, {force: true});
+    return null;
+  }
+  const old = p.old && !previewProblem(p.old) ? p.old : null;
+  /** @param {string} rel */
+  const onDisk = rel => {
+    try {
+      return fs.readFileSync(inside(rel));
+    } catch {
+      return null;
+    }
+  };
+  /** @param {Buffer} text @param {string | undefined} h */
+  const matches = (text, h) =>
+    !!h &&
+    (h.startsWith('v2:')
+      ? contentHash(text) === h
+      : oldContentHash(text) === h || digest(text) === h);
+  const hashes = {...record.hashes};
+  for (const rel of Object.keys(hashes)) {
+    const text = onDisk(rel);
+    if (!text) continue;
+    if (matches(text, hashes[rel])) continue;
+    if (old?.hashes?.[rel] && matches(text, old.hashes[rel]))
+      hashes[rel] = old.hashes[rel];
+    else delete hashes[rel];
+  }
+  // A page whose new file never landed keeps its old file.
+  for (const page of record.pages) {
+    const rel = `${page.file}.tsx`;
+    if (onDisk(rel)) continue;
+    const was = old?.pages.find((/** @type {any} */ x) => x.id === page.id);
+    const oldRel = was && `${was.file}.tsx`;
+    if (oldRel && oldRel !== rel && onDisk(oldRel)) {
+      page.file = was.file;
+      record.files = record.files.map((/** @type {string} */ f) =>
+        f === rel ? oldRel : f,
+      );
+      delete hashes[rel];
+      if (old.hashes?.[oldRel]) hashes[oldRel] = old.hashes[oldRel];
+    }
+  }
+  // An old file being removed goes when the preview wrote it, unchanged,
+  // and no page of the record uses it now.
+  for (const rel of Array.isArray(p.deletes) ? p.deletes : []) {
+    if (typeof rel !== 'string' || record.files.includes(rel)) continue;
+    const text = onDisk(rel);
+    if (!text) continue;
+    // A page moved from pages/ to _pages/: the old copy goes once the new
+    // one holds the same text.
+    const moved = /^pages\/([a-z0-9][a-z0-9-]*)\.tsx$/.exec(rel);
+    const copy = moved && onDisk(`${PAGES_DIR}/${moved[1]}.tsx`);
+    if (matches(text, old?.hashes?.[rel]) || (copy && copy.equals(text)))
+      fs.rmSync(inside(rel));
+  }
+  record.hashes = hashes;
+  writeWhole(
+    path.join(dir, PREVIEW_DATA),
+    `${JSON.stringify(record, null, 2)}\n`,
+  );
+  fs.rmSync(pendingFile, {force: true});
+  return `finished a preview change that was stopped part way (${shown(cwd, dir) || '.'}/${PENDING})`;
 }
 
 /**
@@ -1545,7 +1697,13 @@ export async function refreshPreviewRoute(cwd, slug) {
     } catch {
       continue;
     }
-    if (!data || data.theme !== slug || !data.files.includes('page.tsx'))
+    // A change stopped part way is finished by the next preview command.
+    if (
+      !data ||
+      data.theme !== slug ||
+      !data.files.includes('page.tsx') ||
+      fs.existsSync(path.join(dir, PENDING))
+    )
       continue;
     const writes = (
       await routeWrites(cwd, dir, data, await routeTheme(cwd, dir, data))
@@ -2224,6 +2382,8 @@ export async function themeEditPreviewAdd(description, options = {}) {
   const retry = (/** @type {string | null} */ p) =>
     `${PREVIEW} add${said ? ` ${shq(said)}` : ''}${named != null ? ` --template ${shq(named)}` : ''}${tf}${p == null ? '' : ` --path ${shq(p)}`}`;
   const at = previewDir(cwd, options.path, {write: true, retry});
+  const recovered = recoverPreview(cwd, at.dir);
+  if (recovered) notes.push(recovered);
   const existing = readPreview(cwd, at.dir, pf);
   /** @type {PreviewData} */
   const data = existing ?? {version: 1, theme: null, pages: [], files: []};
@@ -2748,6 +2908,7 @@ export async function themeEditPreviewRemove(page, options = {}) {
   const retry = (/** @type {string | null} */ p) =>
     `${PREVIEW} remove${page != null ? ` ${shq(page)}` : ''}${p == null ? '' : ` --path ${shq(p)}`}`;
   const at = previewDir(cwd, options.path, {retry});
+  const recovered = recoverPreview(cwd, at.dir);
   const data = readPreview(cwd, at.dir, pf);
   if (!data)
     refuse(
@@ -2763,7 +2924,7 @@ export async function themeEditPreviewRemove(page, options = {}) {
   for (const rel of data.files) inside(rel);
   for (const p of data.pages) inside(`${p.file}.tsx`);
   /** @type {string[]} */
-  const notes = [];
+  const notes = recovered ? [recovered] : [];
   /** @type {string[]} */
   const kept = [];
   /** @type {string[]} */
