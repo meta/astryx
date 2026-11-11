@@ -743,6 +743,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-weighted-svg-icon",
+      "path": "components/lab/weighted-svg-icon",
+      "aliases": []
+    },
+    {
       "name": "component-layer-provider",
       "path": "components/layer-provider",
       "aliases": []

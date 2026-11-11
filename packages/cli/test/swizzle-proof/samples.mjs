@@ -266,6 +266,20 @@ export const samples = {
       {data: [], xKey: 't', yKeys: ['v'], xDomain: [0, 10], yDomain: [0, 1]},
       React.createElement(C, {color: '#0064E0'}),
     ),
+  lab__WeightedSVGIcon: ({C, React}) =>
+    React.createElement(C, {
+      icon: {
+        name: 'swizzle-proof-dot',
+        layers: [
+          {
+            from: 300,
+            to: 700,
+            paths: [{d: 'M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16z'}],
+          },
+        ],
+      },
+      'aria-label': 'Dot',
+    }),
   lab__ChatReactionBar: ({C, React}) =>
     React.createElement(C, {
       reactions: [

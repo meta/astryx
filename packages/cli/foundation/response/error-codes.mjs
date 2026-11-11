@@ -108,6 +108,7 @@
  *   | 'ERR_THEME_UNKNOWN_TOKEN'
  *   | 'ERR_THEME_NO_EFFECT'
  *   | 'ERR_THEME_NOT_CHECKED'
+ *   | 'ERR_THEME_BUSY'
  *   | 'ERR_THEME_UNKNOWN_THING'
  *   | 'ERR_THEME_NOT_SET'
  *   | 'ERR_THEME_NOTHING_TO_UNDO'
@@ -364,11 +365,15 @@ export const ERROR_CODES = Object.freeze({
    */
   ERR_THEME_NOT_CHECKED: 'ERR_THEME_NOT_CHECKED',
   /**
+   * Another command is changing the same theme (or preview) and did not finish in time. Nothing was changed; run the command again. Raised only by `experimental theme`.
+   */
+  ERR_THEME_BUSY: 'ERR_THEME_BUSY',
+  /**
    * The thing to change is not a dial, a design token, or a CSS property. Nothing was changed. Raised only by `experimental theme`.
    */
   ERR_THEME_UNKNOWN_THING: 'ERR_THEME_UNKNOWN_THING',
   /**
-   * `reset` names a setting the theme does not have (with those `--on`, `--when`, `--state` and `--mode`). Nothing was changed. Raised only by `experimental theme`.
+   * `editor undo <theme> <thing>` names a setting the theme does not have (with those `--on`, `--when`, `--state` and `--mode`). Nothing was changed. Raised only by `experimental theme`.
    */
   ERR_THEME_NOT_SET: 'ERR_THEME_NOT_SET',
   /**
