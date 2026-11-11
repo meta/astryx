@@ -76,6 +76,7 @@
  * @property {string} theme
  * @property {'set' | 'undo'} action
  * @property {ThemeEditSetting} setting - The setting written, or for `undo` the one removed.
+ * @property {string} [now] - On `undo`: what applies instead of the setting removed: a whole-theme setting of the same thing, or the base theme's value.
  * @property {ThemeEditSetting} [removed] - On `undo`: the setting removed (the same as `setting`); the value now in effect is the base theme's, and `changedTokens` lists it.
  * @property {ThemeEditSetting | null} replaced - The setting this one replaced.
  * @property {string | null} was - For `base` and `mode`: the value before.
@@ -193,7 +194,6 @@
  * @typedef {object} ThemeEditPreviewAppOptions
  * @property {string} [cwd] - The folder the app folder is inside (default: process.cwd()).
  * @property {string} [theme] - A theme made by `experimental theme editor` here: it is copied into the app, and the preview pages wear it (default: the app's own neutral theme).
- * @property {boolean} [overwrite] - Write into a folder that is not empty. A protected file there is never replaced, and the folder's own package.json and .gitignore are kept.
  */
 
 /**

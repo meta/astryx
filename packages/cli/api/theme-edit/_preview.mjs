@@ -968,21 +968,24 @@ export function colorsPageSource({slug, module, seeds, uses}) {
  * preview page, a top bar with the theme name and, with a theme, a
  * light/dark/system switch, and the selected page in the content area. It is a normal page of
  * the app, so it keeps the app's layout, global CSS and providers.
- * @param {{pages: Array<{id: string, label: string, file: string}>, theme: {name: string, module: string, css: string[]} | null}} spec
- *   `file` relative to the route folder, without extension; no theme: the app's own theme
+ * @param {{pages: Array<{id: string, label: string, file: string}>, theme: {name: string, module: string, css: string[], mode?: 'system' | 'light' | 'dark'} | null}} spec
+ *   `file` relative to the route folder, without extension; no theme: the
+ *   app's own theme. A theme with one mode starts in it, with no switch.
  * @returns {string}
  */
 export function previewRouteSource({pages, theme}) {
   const name = theme?.name ?? 'app theme';
-  const mode = theme
-    ? [
-        '          <SegmentedControl label="Color mode" size="sm" value={mode} onChange={v => setMode(v as Mode)}>',
-        '            <SegmentedControlItem value="light" label="Light" />',
-        '            <SegmentedControlItem value="dark" label="Dark" />',
-        '            <SegmentedControlItem value="system" label="System" />',
-        '          </SegmentedControl>',
-      ]
-    : [];
+  const oneMode = theme?.mode && theme.mode !== 'system' ? theme.mode : null;
+  const mode =
+    theme && !oneMode
+      ? [
+          '          <SegmentedControl label="Color mode" size="sm" value={mode} onChange={v => setMode(v as Mode)}>',
+          '            <SegmentedControlItem value="light" label="Light" />',
+          '            <SegmentedControlItem value="dark" label="Dark" />',
+          '            <SegmentedControlItem value="system" label="System" />',
+          '          </SegmentedControl>',
+        ]
+      : [];
   // The frame fills the viewport with the theme's own page background, so
   // no root-layout background shows at the edges or on overscroll.
   const shell = [
@@ -1046,7 +1049,11 @@ export function previewRouteSource({pages, theme}) {
     'export default function ThemePreviewPage() {',
     '  const [page, setPage] = React.useState(PAGES[0]?.id);',
     ...(theme
-      ? ["  const [mode, setMode] = React.useState<Mode>('system');"]
+      ? [
+          oneMode
+            ? `  const mode: Mode = ${JSON.stringify(oneMode)};`
+            : "  const [mode, setMode] = React.useState<Mode>('system');",
+        ]
       : []),
     '  const current = PAGES.find(p => p.id === page) ?? PAGES[0];',
     '  return (',
