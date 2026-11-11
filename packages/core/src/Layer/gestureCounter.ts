@@ -187,11 +187,15 @@ export interface PressMark {
 }
 
 /**
- * The pointer press in flight, down or being released, or null when the
- * gesture in flight is not a pointer press (a keystroke).
+ * The pointer press in flight, down or being released, or null when no
+ * pointer press is in flight (after its release was handled, or for a
+ * keystroke).
  */
 export function currentPressMark(): PressMark | null {
   listen();
+  if (state.pressPointerId === null && !isReleaseInFlight()) {
+    return null;
+  }
   for (const [pointerId, gesture] of state.pointerGestures) {
     if (gesture === state.gesture) {
       return {gesture, pointerId};

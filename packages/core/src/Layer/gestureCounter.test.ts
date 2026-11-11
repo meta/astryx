@@ -507,6 +507,19 @@ describe('press marks', () => {
     expect(isFromPress(mark, pointerEvent('click', 6))).toBe(false);
   });
 
+  it('is null once the press and its release are over', () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    button.dispatchEvent(pointerEvent('pointerdown', 8));
+    button.dispatchEvent(pointerEvent('pointerup', 8));
+    expect(currentPressMark()).not.toBeNull();
+    button.click();
+    // A layer opened now, with no press in flight, keeps no mark, so its
+    // next click is not taken for the old press's.
+    expect(currentPressMark()).toBeNull();
+  });
+
   it('is null for a keystroke', () => {
     currentGesture();
     document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter'}));
