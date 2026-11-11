@@ -10,8 +10,7 @@
  *   ToggleButton / Divider / Popover / TextInput / Layout primitives.
  * @output Exports RichTextEditorToolbar (a compact formatting toolbar with a
  *   RichText-owned 4px control gutter, a horizontally scrollable action row,
- *   a link popover anchored to its Link button, and the link card LinkCard
- *   draws for the link at the caret or under the pointer) and
+ *   and a link popover anchored to its Link button) and
  *   RichTextEditorToolbarProps.
  * @position @astryxdesign/richtext. Drop into RichTextEditor's `toolbar` slot to
  *   add a flush top formatting toolbar. Themed via Astryx Toolbar, Selector,
@@ -21,7 +20,6 @@
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/index.ts (exports)
- * - /packages/richtext/src/LinkCard.tsx (the link card it renders)
  * - /packages/richtext/src/RichTextEditor.doc.mjs (usage notes)
  * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
  * - /apps/storybook/stories/RichTextEditor.stories.tsx (WithToolbar story)
@@ -74,11 +72,10 @@ import {Selector, type SelectorOptionType} from '@astryxdesign/core/Selector';
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Popover} from '@astryxdesign/core/Popover';
-import {TextInput} from '@astryxdesign/core/TextInput';
-import {HStack, StackItem} from '@astryxdesign/core/Layout';
-import {Icon, getExtendedIcon} from '@astryxdesign/core/Icon';
+import {HStack} from '@astryxdesign/core/Layout';
+import {getExtendedIcon} from '@astryxdesign/core/Icon';
 import {useThemeName} from '@astryxdesign/core/theme';
-import {isImeKeyEvent, isRenderable, rtlStyles} from '@astryxdesign/core/utils';
+import {isRenderable, rtlStyles} from '@astryxdesign/core/utils';
 import {
   fontWeightVars,
   spacingVars,
@@ -105,8 +102,8 @@ import {
   $createTextNode,
   type RangeSelection,
 } from 'lexical';
-import {sanitizeUrl} from './linkUtils';
-import {LinkCard} from './LinkCard';
+import {toLinkHref} from './linkEditing';
+import {LinkForm} from './linkForm';
 import {$selectedExtensionNodesOnly} from './markdownExtensionNode';
 
 /** Block types exposed by the toolbar's format selector. */
@@ -209,11 +206,6 @@ export const RICHTEXT_ICON_KEYS = {
   number: 'richtext:number',
   undo: 'richtext:undo',
   redo: 'richtext:redo',
-  applyLink: 'richtext:applyLink',
-  removeLink: 'richtext:removeLink',
-  cancel: 'richtext:cancel',
-  openLink: 'richtext:openLink',
-  editLink: 'richtext:editLink',
 } as const;
 
 const INLINE_FORMAT_ACTIONS = [
@@ -417,85 +409,6 @@ const defaultToolbarIcons: Record<string, ReactNode> = {
       />
     </svg>
   ),
-  applyLink: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M5 12.5l4.5 4.5L19 7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-  removeLink: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M18 13l2-2a5 5 0 0 0-7-7l-2 2M6 11l-2 2a5 5 0 0 0 7 7l2-2M8 2v3M2 8h3M16 22v-3M22 16h-3"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-  cancel: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M6 6l12 12M18 6L6 18"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  ),
-  openLink: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-  editLink: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16zM13.5 6.5l4 4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
 };
 
 /** Renders a short text label as a toolbar glyph (for heading buttons). */
@@ -536,150 +449,8 @@ function DirectionalGlyph({children}: {children: ReactNode}) {
   );
 }
 
-/**
- * Remove's glyph. No shared icon name means "unlink", so it is fixed
- * component artwork until component icon slots exist.
- */
-const REMOVE_LINK_GLYPH = (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    aria-hidden="true">
-    <path
-      d="M18 13l2-2a5 5 0 0 0-7-7l-2 2M6 11l-2 2a5 5 0 0 0 7 7l2-2M8 2v3M2 8h3M16 22v-3M22 16h-3"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 /** Room for a typical address beside the link form's icon buttons. */
 const LINK_POPOVER_WIDTH = 320;
-
-interface ToolbarLinkFormProps {
-  /** The field's value: the address being entered. */
-  url: string;
-  /** The message for an address the toolbar refused, or empty. */
-  error: string;
-  /** Whether the selection is in a link, which Remove then unlinks. */
-  isEditing: boolean;
-  /** The toolbar's size, so the form's controls match its buttons. */
-  size: 'sm' | 'md' | 'lg';
-  onUrlChange: (url: string) => void;
-  /** Applies the field's address; false when it was refused. */
-  onApply: () => boolean;
-  onRemove: () => void;
-  onCancel: () => void;
-}
-
-/**
- * The link popover's content: one URL field, then Apply, Remove (only when
- * the selection is in a link), and Cancel as icon buttons. Enter in the field
- * applies, and Escape anywhere in the form cancels. A refused address shows
- * the field's error status and keeps focus in the field.
- */
-function ToolbarLinkForm({
-  url,
-  error,
-  isEditing,
-  size,
-  onUrlChange,
-  onApply,
-  onRemove,
-  onCancel,
-}: ToolbarLinkFormProps) {
-  const t = useTranslator();
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  // The field takes focus as the form opens, a frame later so the popover is
-  // shown by then.
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, []);
-  const apply = () => {
-    if (!onApply()) {
-      inputRef.current?.focus();
-    }
-  };
-  const applyLabel = isEditing
-    ? t('@astryx.richTextEditor.link.update')
-    : t('@astryx.richTextEditor.link.add');
-  const removeLabel = t('@astryx.richTextEditor.link.remove');
-  const cancelLabel = t('@astryx.richTextEditor.link.cancel');
-  return (
-    <HStack
-      gap={1}
-      vAlign="start"
-      onKeyDown={event => {
-        // Escape that ends an IME composition is the input method's.
-        if (event.key === 'Escape' && !isImeKeyEvent(event.nativeEvent)) {
-          // Claimed here, so the popover's own Escape handling leaves it to
-          // Cancel, which also gives the editor back its selection.
-          event.preventDefault();
-          onCancel();
-        }
-      }}>
-      <StackItem size="fill">
-        <TextInput
-          ref={inputRef}
-          label={t('@astryx.richTextEditor.link.url')}
-          isLabelHidden
-          value={url}
-          size={size}
-          width="100%"
-          autoComplete="url"
-          // A URL keyboard on touch screens and no spelling marks under an
-          // address. The field stays plain text, so a bare domain reaches
-          // the toolbar's own check, which makes it an https link.
-          inputMode="url"
-          hasSpellCheck={false}
-          placeholder={t('@astryx.richTextEditor.link.urlPlaceholder')}
-          status={error ? {type: 'error', message: error} : undefined}
-          statusVariant="detached"
-          onChange={onUrlChange}
-          onEnter={apply}
-          onKeyDown={event => {
-            // Applying hands focus to the editor, which must not receive the
-            // rest of this Enter as a new line over the linked words.
-            if (event.key === 'Enter' && !isImeKeyEvent(event.nativeEvent)) {
-              event.preventDefault();
-            }
-          }}
-        />
-      </StackItem>
-      <IconButton
-        label={applyLabel}
-        icon={<Icon icon="check" />}
-        variant="ghost"
-        size={size}
-        tooltip={applyLabel}
-        onClick={apply}
-      />
-      {isEditing && (
-        <IconButton
-          label={removeLabel}
-          icon={REMOVE_LINK_GLYPH}
-          variant="ghost"
-          size={size}
-          tooltip={removeLabel}
-          onClick={onRemove}
-        />
-      )}
-      <IconButton
-        label={cancelLabel}
-        icon={<Icon icon="close" />}
-        variant="ghost"
-        size={size}
-        tooltip={cancelLabel}
-        onClick={onCancel}
-      />
-    </HStack>
-  );
-}
 
 export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
   /**
@@ -716,12 +487,6 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
    * applying inserts the entered URL as link text at the caret; with a
    * non-empty selection it links the selected text.
    *
-   * While the editor is editable, a card also shows for the link holding the
-   * caret, or the one the pointer rests on: its address (which opens it in a
-   * new tab), Open in new tab, Edit (its text and address, also Cmd/Ctrl+K
-   * with the caret in the link), and Remove. Cmd-click (Ctrl-click off Apple
-   * platforms) follows a link. `promptForUrl` replaces the card too.
-   *
    * Requires `LinkNode` to be registered (it is, by default) — no extra setup.
    * The entered URL is sanitized (see `sanitizeUrl`) so only
    * http/https/mailto/tel links are written.
@@ -732,7 +497,7 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
    * Called to obtain a URL when the link button is pressed on a non-link
    * selection. Return the URL string to link, or `null`/`''` to cancel.
    * Receives the currently selected text as a hint. When omitted, the built-in
-   * link popover and link card are used. This synchronous override is retained
+   * link popover is used. This synchronous override is retained
    * for consumers that already provide their own URL UI.
    */
   promptForUrl?: (selectedText: string) => string | null | undefined;
@@ -927,8 +692,8 @@ export function RichTextEditorToolbar({
   const applyLinkValue = useCallback(
     (entered: string): boolean => {
       const trimmed = entered.trim();
-      const url = sanitizeUrl(trimmed);
-      if (url === 'about:blank') {
+      const url = toLinkHref(trimmed);
+      if (url == null) {
         return false;
       }
 
@@ -1295,7 +1060,7 @@ export function RichTextEditorToolbar({
           padding={2}
           content={
             isLinkPopoverOpen ? (
-              <ToolbarLinkForm
+              <LinkForm
                 url={linkUrl}
                 error={linkError}
                 isEditing={isEditingLink}
@@ -1310,22 +1075,6 @@ export function RichTextEditorToolbar({
               />
             ) : null
           }
-        />
-      )}
-      {/* The card renders into the editor's own positioned element, beside
-          the editable text, while the editor is editable. */}
-      {hasLink && promptForUrl == null && isEditable && (
-        <LinkCard
-          size={size}
-          isHidden={isLinkPopoverOpen}
-          icons={{
-            link: icon('link'),
-            openLink: icon('openLink'),
-            editLink: icon('editLink'),
-            removeLink: icon('removeLink'),
-            applyLink: icon('applyLink'),
-            cancel: icon('cancel'),
-          }}
         />
       )}
     </>

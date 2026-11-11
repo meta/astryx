@@ -6,14 +6,14 @@
  * @output Exports `sanitizeUrl`, `validateUrl`, `isOpenableUrl`, and the
  *   URL/email matcher regexes used by the AutoLink wiring.
  * @position @astryxdesign/richtext helper shared by RichTextEditorToolbar (link
- *   button), its LinkCard (which opens links), and the AutoLink matchers in
+ *   button), linkEditing (which opens links), and the AutoLink matchers in
  *   RichTextEditor. Kept dependency-free so all of them can import it without
  *   pulling in extra `@lexical/*` surface. `isOpenableUrl` is internal: the
  *   package entry does not export it.
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/RichTextEditorToolbar.tsx (link button)
- * - /packages/richtext/src/LinkCard.tsx (opening links)
+ * - /packages/richtext/src/linkEditing.ts (opening links)
  * - /packages/richtext/src/RichTextEditor.tsx (AutoLink matchers)
  * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
  * - /packages/richtext/src/RichTextEditor.doc.mjs (link docs)

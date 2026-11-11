@@ -1,16 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file LinkCard.test.tsx
+ * @file RichTextEditorLinkPopoverPlugin.test.tsx
  * @input Uses vitest, @testing-library/react, Lexical, RichTextEditor,
- *   RichTextEditorToolbar, and LinkCard's placement geometry
- * @output Tests for the card RichTextEditorToolbar shows for a link in an
- *   editable editor: when it opens (caret, pointer) and closes, what it shows
- *   and opens, its Edit form (Text and Link, one undo step, refusals),
- *   Remove, Cmd/Ctrl+K, Escape, Cmd/Ctrl-click and the follow modifier, where
- *   it renders and sits, and the read-only and disabled editors it leaves
- *   alone.
- * @position Testing; validates LinkCard.tsx through RichTextEditorToolbar
+ *   RichTextEditorToolbar, and RichTextEditorLinkPopoverPlugin
+ * @output Tests for the opt-in link popover plugin: nothing without it, when
+ *   it shows (caret only) and closes, what it shows and opens, its Edit form
+ *   (the shared link form, one undo step, refusals), Remove, Cmd/Ctrl+K,
+ *   Escape through the layer stack, a link deleted while its form is open,
+ *   where it renders and sits, and read-only and disabled editors
+ * @position Testing; validates RichTextEditorLinkPopoverPlugin.tsx
  */
 
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
@@ -19,12 +18,10 @@ import {useEffect, type ReactElement} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {$createLinkNode, $isLinkNode} from '@lexical/link';
 import {
-  $createLineBreakNode,
   $createParagraphNode,
   $createTextNode,
   $getRoot,
   $isElementNode,
-  $isTextNode,
   UNDO_COMMAND,
   type LexicalEditor,
   type LexicalNode,
@@ -32,11 +29,11 @@ import {
 } from 'lexical';
 import {RichTextEditor, type RichTextEditorProps} from './RichTextEditor';
 import {RichTextEditorToolbar} from './RichTextEditorToolbar';
-import {$createRichTextExtensionNode} from './markdownExtensionNode';
-import {linkCardPlacement} from './LinkCard';
+import {
+  RichTextEditorLinkPopoverPlugin,
+  linkPopoverPlacement,
+} from './RichTextEditorLinkPopoverPlugin';
 
-// The toolbar popover's surface is a native popover jsdom does not draw open.
-const h = {hidden: true} as const;
 const URL = 'https://example.com/docs/';
 
 beforeAll(() => {
@@ -65,15 +62,28 @@ function CaptureEditor({onReady}: {onReady: (editor: LexicalEditor) => void}) {
 
 async function renderEditor({
   toolbar = <RichTextEditorToolbar />,
+  hasPlugin = true,
+  hasNewTabLinks,
   ...props
-}: Partial<RichTextEditorProps> & {toolbar?: ReactElement} = {}) {
+}: Partial<RichTextEditorProps> & {
+  toolbar?: ReactElement;
+  hasPlugin?: boolean;
+  hasNewTabLinks?: boolean;
+} = {}) {
   let captured: LexicalEditor | null = null;
   render(
     <RichTextEditor
       label="Notes"
       {...props}
       toolbar={toolbar}
-      plugins={<CaptureEditor onReady={editor => (captured = editor)} />}
+      plugins={
+        <>
+          <CaptureEditor onReady={editor => (captured = editor)} />
+          {hasPlugin && (
+            <RichTextEditorLinkPopoverPlugin hasNewTabLinks={hasNewTabLinks} />
+          )}
+        </>
+      }
     />,
   );
   await waitFor(() => expect(captured).not.toBeNull());
@@ -149,15 +159,27 @@ function linksIn(editor: LexicalEditor) {
 const textOf = (editor: LexicalEditor) =>
   editor.getEditorState().read(() => $getRoot().getTextContent());
 
-const card = () => screen.queryByRole('group', {name: 'Link'});
+const popover = () => screen.queryByRole('group', {name: 'Link'});
 
-/** The tooltip text an element is described by. */
+/**
+ * The tooltip text an element shows. A tooltip that repeats the element's
+ * name is not its description, so the layer's own text is read then.
+ */
 function tooltipOf(element: HTMLElement): string {
-  return (element.getAttribute('aria-describedby') ?? '')
+  const described = (element.getAttribute('aria-describedby') ?? '')
     .split(' ')
     .map(id => document.getElementById(id)?.textContent ?? '')
     .join(' ')
     .trim();
+  if (described !== '') {
+    return described;
+  }
+  const name = element.getAttribute('aria-label') ?? '';
+  return (
+    screen
+      .queryAllByRole('tooltip', {hidden: true})
+      .find(tooltip => tooltip.textContent === name)?.textContent ?? ''
+  );
 }
 
 function linkElement(editor: LexicalEditor): HTMLAnchorElement {
@@ -168,7 +190,18 @@ function linkElement(editor: LexicalEditor): HTMLAnchorElement {
   return anchor;
 }
 
-describe('the link card', () => {
+describe('the link popover plugin', () => {
+  it('shows nothing and follows no Cmd/Ctrl-click without the plugin', async () => {
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+    const editor = await renderEditor({hasPlugin: false});
+    await seedLink(editor);
+    await act(async () => {});
+
+    expect(popover()).toBeNull();
+    fireEvent.click(linkElement(editor), {ctrlKey: true});
+    expect(opened).not.toHaveBeenCalled();
+  });
+
   it('shows for the caret in a link while the editor has focus, beside the editable text', async () => {
     const editor = await renderEditor();
     await seedLink(editor);
@@ -193,70 +226,85 @@ describe('the link card', () => {
       expect(shown).toContainElement(button);
       expect(tooltipOf(button)).toBe(name);
     }
-    // jsdom is not an Apple platform.
-    expect(shown).toHaveTextContent('Ctrl-click to open');
 
-    // Focus leaving the editor takes the card with it.
+    // Focus leaving the editor takes the popover with it.
     act(() => root.blur());
-    await waitFor(() => expect(card()).toBeNull());
+    await waitFor(() => expect(popover()).toBeNull());
+  });
+
+  it('shows when the caret arrives in a link without a click, as arrowing into it does', async () => {
+    const editor = await renderEditor();
+    await seedLink(editor, {caret: false});
+    expect(popover()).toBeNull();
+
+    // The caret steps from "See " into the link's words.
+    act(() => {
+      editor.update(() => $getRoot().getAllTextNodes()[1].select(1, 1), {
+        discrete: true,
+      });
+    });
+    expect(
+      await screen.findByRole('group', {name: 'Link'}),
+    ).toBeInTheDocument();
+  });
+
+  it('opens a link in a new tab on Cmd/Ctrl-click, and not on a plain click', async () => {
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+    const editor = await renderEditor();
+    await seedLink(editor, {caret: false});
+    const anchor = linkElement(editor);
+
+    fireEvent.click(anchor);
+    expect(opened).not.toHaveBeenCalled();
+    // jsdom is not an Apple platform, so the modifier is Ctrl.
+    fireEvent.click(anchor, {metaKey: true});
+    expect(opened).not.toHaveBeenCalled();
+    expect(fireEvent.click(anchor, {ctrlKey: true})).toBe(false);
+    expect(opened.mock.calls).toEqual([[URL, '_blank', 'noopener,noreferrer']]);
+  });
+
+  it('writes no new-tab attributes on an edited link when hasNewTabLinks is false', async () => {
+    const editor = await renderEditor({hasNewTabLinks: false});
+    await seedLink(editor);
+    await screen.findByRole('group', {name: 'Link'});
+    fireEvent.click(screen.getByRole('button', {name: 'Edit link'}));
+    const address = screen.getByRole('textbox', {name: 'URL'});
+    fireEvent.change(address, {target: {value: 'example.org'}});
+    fireEvent.keyDown(address, {key: 'Enter'});
+
+    await waitFor(() =>
+      expect(linkElement(editor)).toHaveAttribute(
+        'href',
+        'https://example.org/',
+      ),
+    );
+    expect(linkElement(editor)).not.toHaveAttribute('target');
+    expect(linkElement(editor)).not.toHaveAttribute('rel');
   });
 
   it('stays away while the caret is outside a link or the selection is a range', async () => {
     const editor = await renderEditor();
     await seedLink(editor, {caret: false});
-    expect(card()).toBeNull();
+    expect(popover()).toBeNull();
 
     act(() => {
-      editor.update(
-        () => {
-          const words = $getRoot().getAllTextNodes()[1];
-          words.select(0, 3);
-        },
-        {discrete: true},
-      );
+      editor.update(() => $getRoot().getAllTextNodes()[1].select(0, 3), {
+        discrete: true,
+      });
     });
     await act(async () => {});
-    expect(card()).toBeNull();
+    expect(popover()).toBeNull();
   });
 
-  it('opens when the pointer rests on a link for 300 ms, and stays 250 ms after it leaves', async () => {
+  it('does not open for a pointer resting on a link', async () => {
     const editor = await renderEditor();
     await seedLink(editor, {caret: false});
     act(() => editor.getRootElement()?.blur());
     vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
-    const anchor = linkElement(editor);
 
-    fireEvent.mouseOver(anchor);
-    act(() => vi.advanceTimersByTime(299));
-    expect(card()).toBeNull();
-    act(() => vi.advanceTimersByTime(1));
-    expect(card()).not.toBeNull();
-
-    fireEvent.mouseOut(anchor, {relatedTarget: document.body});
-    act(() => vi.advanceTimersByTime(249));
-    expect(card()).not.toBeNull();
-    act(() => vi.advanceTimersByTime(1));
-    expect(card()).toBeNull();
-  });
-
-  it('stays open while the pointer is over the card', async () => {
-    const editor = await renderEditor();
-    await seedLink(editor, {caret: false});
-    act(() => editor.getRootElement()?.blur());
-    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
-    const anchor = linkElement(editor);
-
-    fireEvent.mouseOver(anchor);
-    act(() => vi.advanceTimersByTime(300));
-    const shown = card() as HTMLElement;
-    fireEvent.mouseOut(anchor, {relatedTarget: shown});
-    fireEvent.mouseEnter(shown);
+    fireEvent.mouseOver(linkElement(editor));
     act(() => vi.advanceTimersByTime(1000));
-    expect(card()).not.toBeNull();
-
-    fireEvent.mouseLeave(shown);
-    act(() => vi.advanceTimersByTime(250));
-    expect(card()).toBeNull();
+    expect(popover()).toBeNull();
   });
 
   it('opens the link in a new tab from its address and from Open in new tab', async () => {
@@ -276,7 +324,6 @@ describe('the link card', () => {
   it.each(['javascript:alert(1)', '/docs'])(
     'shows %s as text, with nothing to open it',
     async url => {
-      const opened = vi.spyOn(window, 'open').mockReturnValue(null);
       const editor = await renderEditor();
       await seedLink(editor, {url});
       const shown = await screen.findByRole('group', {name: 'Link'});
@@ -286,44 +333,35 @@ describe('the link card', () => {
       expect(
         screen.queryByRole('button', {name: 'Open in new tab'}),
       ).toBeNull();
-      expect(shown).not.toHaveTextContent('click to open');
-      fireEvent.click(linkElement(editor), {ctrlKey: true});
-      expect(opened).not.toHaveBeenCalled();
     },
   );
 
-  it('edits the text and address together, keeping the format, as one undo step', async () => {
+  it('edits the address in the shared link form, as one undo step', async () => {
     const editor = await renderEditor();
     await seedLink(editor, {bold: true});
     await screen.findByRole('group', {name: 'Link'});
 
     fireEvent.click(screen.getByRole('button', {name: 'Edit link'}));
-    const text = screen.getByRole('textbox', {name: 'Text'});
-    const address = screen.getByRole('textbox', {name: 'Link'});
-    await waitFor(() => expect(text).toHaveFocus());
-    expect(text).toHaveValue('the docs');
+    const address = screen.getByRole('textbox', {name: 'URL'});
+    await waitFor(() => expect(address).toHaveFocus());
     expect(address).toHaveValue(URL);
     expect(address).toHaveAttribute('inputmode', 'url');
-    expect(address).toHaveAttribute('autocomplete', 'url');
-    expect(address).toHaveAttribute('spellcheck', 'false');
     expect(address).toHaveAttribute('placeholder', 'example.com');
-    for (const name of ['Update link', 'Cancel']) {
+    for (const name of ['Update link', 'Remove link', 'Cancel']) {
       expect(tooltipOf(screen.getByRole('button', {name}))).toBe(name);
     }
 
-    fireEvent.change(text, {target: {value: 'the guide'}});
     fireEvent.change(address, {target: {value: 'example.org/guide'}});
     // The Enter is claimed, so it cannot type a new line into the editor.
     expect(fireEvent.keyDown(address, {key: 'Enter'})).toBe(false);
 
     await waitFor(() =>
       expect(linksIn(editor)).toEqual([
-        {url: 'https://example.org/guide', text: 'the guide', bold: true},
+        {url: 'https://example.org/guide', text: 'the docs', bold: true},
       ]),
     );
-    expect(textOf(editor)).toBe('See the guide today.');
     await waitFor(() =>
-      expect(screen.queryByRole('textbox', {name: 'Link'})).toBeNull(),
+      expect(screen.queryByRole('textbox', {name: 'URL'})).toBeNull(),
     );
     expect(editor.getRootElement()).toHaveFocus();
 
@@ -343,7 +381,7 @@ describe('the link card', () => {
     await screen.findByRole('group', {name: 'Link'});
     fireEvent.click(screen.getByRole('button', {name: 'Edit link'}));
 
-    fireEvent.change(screen.getByRole('textbox', {name: 'Link'}), {
+    fireEvent.change(screen.getByRole('textbox', {name: 'URL'}), {
       target: {value: '  '},
     });
     fireEvent.click(screen.getByRole('button', {name: 'Update link'}));
@@ -352,105 +390,23 @@ describe('the link card', () => {
     expect(textOf(editor)).toBe('See the docs today.');
   });
 
-  it('refuses an address the toolbar refuses, keeping focus in the Link field', async () => {
+  it('refuses an address the link rules refuse, keeping focus in the field', async () => {
     const editor = await renderEditor();
     await seedLink(editor);
     await screen.findByRole('group', {name: 'Link'});
     fireEvent.click(screen.getByRole('button', {name: 'Edit link'}));
-    await waitFor(() =>
-      expect(screen.getByRole('textbox', {name: 'Text'})).toHaveFocus(),
-    );
-    const address = screen.getByRole('textbox', {name: 'Link'});
-    const message = 'Enter a valid http, https, mailto, or tel URL.';
+    const address = screen.getByRole('textbox', {name: 'URL'});
+    await waitFor(() => expect(address).toHaveFocus());
 
     fireEvent.change(address, {target: {value: 'javascript:alert(1)'}});
     fireEvent.keyDown(address, {key: 'Enter'});
 
-    await screen.findByText(message);
+    await screen.findByText('Enter a valid http, https, mailto, or tel URL.');
     expect(address).toHaveAttribute('aria-invalid', 'true');
     expect(address).toHaveFocus();
     expect(linksIn(editor)).toEqual([
       {url: URL, text: 'the docs', bold: false},
     ]);
-  });
-
-  it('rewords a link whose first child is a line break', async () => {
-    const editor = await renderEditor();
-    await seedLink(editor);
-    act(() => {
-      editor.update(
-        () => {
-          const link = $getRoot().getAllTextNodes()[1].getParentOrThrow();
-          const words = link.getFirstChildOrThrow();
-          words.insertBefore($createLineBreakNode());
-          if ($isTextNode(words)) {
-            words.select(2, 2);
-          }
-        },
-        {discrete: true},
-      );
-    });
-    await screen.findByRole('group', {name: 'Link'});
-    fireEvent.click(screen.getByRole('button', {name: 'Edit link'}));
-
-    fireEvent.change(screen.getByRole('textbox', {name: 'Text'}), {
-      target: {value: 'the guide'},
-    });
-    fireEvent.keyDown(screen.getByRole('textbox', {name: 'Text'}), {
-      key: 'Enter',
-    });
-
-    await waitFor(() =>
-      expect(linksIn(editor)).toEqual([
-        {url: URL, text: 'the guide', bold: false},
-      ]),
-    );
-    expect(textOf(editor)).toBe('See the guide today.');
-  });
-
-  it('refuses new words for a link that holds more than text, but still changes its address', async () => {
-    const editor = await renderEditor();
-    await seedLink(editor);
-    act(() => {
-      editor.update(
-        () => {
-          const words = $getRoot().getAllTextNodes()[1];
-          words.insertAfter(
-            $createRichTextExtensionNode({
-              plugin: 'mentions',
-              apiVersion: 1,
-              name: 'mention',
-              display: 'inline',
-              data: {label: 'ada'},
-              source: '@{ada}',
-            }),
-          );
-          words.select(2, 2);
-        },
-        {discrete: true},
-      );
-    });
-    await screen.findByRole('group', {name: 'Link'});
-    fireEvent.click(screen.getByRole('button', {name: 'Edit link'}));
-    const text = screen.getByRole('textbox', {name: 'Text'});
-    const address = screen.getByRole('textbox', {name: 'Link'});
-    await waitFor(() => expect(text).toHaveFocus());
-    const before = editor.getEditorState().toJSON();
-
-    fireEvent.change(text, {target: {value: 'the guide'}});
-    fireEvent.change(address, {target: {value: 'example.org'}});
-    fireEvent.keyDown(address, {key: 'Enter'});
-
-    await waitFor(() => expect(text).toHaveAttribute('aria-invalid', 'true'));
-    expect(text).toHaveFocus();
-    expect(editor.getEditorState().toJSON()).toEqual(before);
-
-    // Its address alone still changes.
-    fireEvent.change(text, {target: {value: textOf(editor).slice(4, -7)}});
-    fireEvent.keyDown(address, {key: 'Enter'});
-    await waitFor(() =>
-      expect(linksIn(editor)[0]?.url).toBe('https://example.org/'),
-    );
   });
 
   it('Remove unlinks the words and keeps them', async () => {
@@ -462,7 +418,7 @@ describe('the link card', () => {
 
     await waitFor(() => expect(linksIn(editor)).toEqual([]));
     expect(textOf(editor)).toBe('See the docs today.');
-    expect(card()).toBeNull();
+    expect(popover()).toBeNull();
   });
 
   it('opens Edit on Cmd/Ctrl+K with the caret in a link, and the toolbar popover elsewhere', async () => {
@@ -473,8 +429,8 @@ describe('the link card', () => {
 
     // jsdom is not an Apple platform, so the primary modifier is Ctrl.
     fireEvent.keyDown(root, {key: 'k', code: 'KeyK', ctrlKey: true});
-    const text = await screen.findByRole('textbox', {name: 'Text'});
-    await waitFor(() => expect(text).toHaveFocus());
+    const address = await screen.findByRole('textbox', {name: 'URL'});
+    expect(popover()).toContainElement(address);
     expect(screen.getByRole('button', {name: 'Link'})).toHaveAttribute(
       'aria-expanded',
       'false',
@@ -488,13 +444,15 @@ describe('the link card', () => {
       });
     });
     fireEvent.keyDown(root, {key: 'k', code: 'KeyK', ctrlKey: true});
-    expect(
-      await screen.findByRole('textbox', {name: 'URL', ...h}),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('textbox', {name: 'Text'})).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'Link'})).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      ),
+    );
   });
 
-  it('Escape in the card returns focus to the editor and keeps the card away until a link is targeted again', async () => {
+  it('Escape closes it through the layer stack and keeps it away until the caret is in another link', async () => {
     const editor = await renderEditor();
     await seedLink(editor);
     await screen.findByRole('group', {name: 'Link'});
@@ -504,13 +462,12 @@ describe('the link card', () => {
 
     fireEvent.keyDown(address, {key: 'Escape'});
 
-    await waitFor(() => expect(card()).toBeNull());
+    await waitFor(() => expect(popover()).toBeNull());
     expect(root).toHaveFocus();
-    // The caret stays in the link, and the card stays away.
     await act(async () => {});
-    expect(card()).toBeNull();
+    expect(popover()).toBeNull();
 
-    // The caret leaves the link and comes back: it is targeted again.
+    // The caret leaves the link and comes back: it shows again.
     act(() => {
       editor.update(() => $getRoot().getAllTextNodes()[0].select(1, 1), {
         discrete: true,
@@ -526,135 +483,90 @@ describe('the link card', () => {
     ).toBeInTheDocument();
   });
 
-  it('opens a link on Cmd/Ctrl-click in the editor, and not on a plain click', async () => {
-    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+  it('closes the form when its link is deleted, and shows for the next link the caret is in', async () => {
     const editor = await renderEditor();
-    await seedLink(editor, {caret: false});
-    const anchor = linkElement(editor);
+    await seedLink(editor);
+    await screen.findByRole('group', {name: 'Link'});
+    fireEvent.click(screen.getByRole('button', {name: 'Edit link'}));
+    await screen.findByRole('textbox', {name: 'URL'});
 
-    fireEvent.click(anchor);
-    expect(opened).not.toHaveBeenCalled();
-    fireEvent.click(anchor, {ctrlKey: true});
-    expect(opened).toHaveBeenCalledWith(URL, '_blank', 'noopener,noreferrer');
-  });
-
-  it('marks only the link under the pointer while the modifier is held, never the root', async () => {
-    const editor = await renderEditor();
     act(() => {
       editor.update(
         () => {
+          const second = $createLinkNode('https://example.net/');
+          const words = $createTextNode('other');
           $getRoot()
             .clear()
-            .append(
-              $createParagraphNode().append(
-                $createTextNode('See '),
-                $createLinkNode('https://one.example/').append(
-                  $createTextNode('one'),
-                ),
-                $createTextNode(' and '),
-                $createLinkNode('https://two.example/').append(
-                  $createTextNode('two'),
-                ),
-              ),
-            );
+            .append($createParagraphNode().append(second.append(words)));
+          words.select(2, 2);
         },
         {discrete: true},
       );
     });
-    await act(async () => {});
-    const root = editor.getRootElement() as HTMLElement;
-    const links = [...root.querySelectorAll('a')];
-    expect(links).toHaveLength(2);
-    // Links here follow on Ctrl-click, so they read as text until then.
-    expect(root).toHaveAttribute('data-richtext-follow-links');
-    const marks = () =>
-      links.map(link => link.hasAttribute('data-richtext-link-follow'));
+    act(() => editor.getRootElement()?.focus());
 
-    fireEvent.mouseMove(links[0]);
-    act(() => {
-      fireEvent.keyDown(window, {key: 'Control', ctrlKey: true});
-    });
-    expect(root).not.toHaveAttribute('data-richtext-link-follow');
-    expect(marks()).toEqual([true, false]);
-
-    fireEvent.mouseOver(links[1]);
-    expect(marks()).toEqual([false, true]);
-
-    act(() => {
-      fireEvent.keyUp(window, {key: 'Control', ctrlKey: false});
-    });
-    expect(marks()).toEqual([false, false]);
+    await waitFor(() =>
+      expect(screen.queryByRole('textbox', {name: 'URL'})).toBeNull(),
+    );
+    expect(
+      await screen.findByRole('link', {name: 'example.net'}),
+    ).toBeInTheDocument();
   });
 
   it.each([
     ['read-only', {isReadOnly: true}],
     ['disabled', {isDisabled: true}],
   ] as const)(
-    'leaves a %s editor its links as they were',
+    'shows nothing and follows no Cmd/Ctrl-click in a %s editor',
     async (_state, props) => {
       const opened = vi.spyOn(window, 'open').mockReturnValue(null);
       const editor = await renderEditor(props);
       await seedLink(editor);
-      const root = editor.getRootElement() as HTMLElement;
-      const anchor = linkElement(editor);
-
-      fireEvent.mouseOver(anchor, {ctrlKey: true});
-      fireEvent.click(anchor, {ctrlKey: true});
       await act(async () => {});
-
-      expect(card()).toBeNull();
-      expect(root).not.toHaveAttribute('data-richtext-follow-links');
+      expect(popover()).toBeNull();
+      fireEvent.click(linkElement(editor), {ctrlKey: true});
       expect(opened).not.toHaveBeenCalled();
     },
   );
-
-  it('stays out when promptForUrl replaces the built-in link UI', async () => {
-    const editor = await renderEditor({
-      toolbar: <RichTextEditorToolbar promptForUrl={() => null} />,
-    });
-    await seedLink(editor);
-    await act(async () => {});
-    expect(card()).toBeNull();
-  });
 });
 
-describe('linkCardPlacement', () => {
+describe('linkPopoverPlacement', () => {
   // The link's line spans 100–220px in a 400px-wide editor at x = 50.
   const container = new DOMRect(50, 10, 400, 300);
   const line = new DOMRect(150, 40, 120, 20);
 
   it('sits under the line, start-aligned with it', () => {
     expect(
-      linkCardPlacement({line, container, cardWidth: 200, isRtl: false}),
+      linkPopoverPlacement({line, container, width: 200, isRtl: false}),
     ).toEqual({top: 50, left: 100});
   });
 
   it('aligns with the line end in right-to-left text', () => {
     expect(
-      linkCardPlacement({line, container, cardWidth: 200, isRtl: true}),
+      linkPopoverPlacement({line, container, width: 200, isRtl: true}),
     ).toEqual({top: 50, left: 20});
   });
 
   it('stays inside the editor at either edge', () => {
     expect(
-      linkCardPlacement({
+      linkPopoverPlacement({
         line: new DOMRect(400, 40, 40, 20),
         container,
-        cardWidth: 200,
+        width: 200,
         isRtl: false,
       }).left,
     ).toBe(200);
     expect(
-      linkCardPlacement({
+      linkPopoverPlacement({
         line: new DOMRect(60, 40, 40, 20),
         container,
-        cardWidth: 200,
+        width: 200,
         isRtl: true,
       }).left,
     ).toBe(0);
-    // A card wider than the editor starts at its start edge.
+    // A popover wider than the editor starts at its start edge.
     expect(
-      linkCardPlacement({line, container, cardWidth: 500, isRtl: false}).left,
+      linkPopoverPlacement({line, container, width: 500, isRtl: false}).left,
     ).toBe(0);
   });
 });
