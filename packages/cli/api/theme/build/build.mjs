@@ -3699,7 +3699,9 @@ async function themeBuildInternal(
   }
 
   // Source path relative to cwd — used in @generated headers
-  const sourceRelative = path.relative(cwd, filePath);
+  // Joined with `/`, so the generated header's `Source:` line, which
+  // `--check` compares, is the same whichever platform built the outputs.
+  const sourceRelative = path.relative(cwd, filePath).split(path.sep).join('/');
   const buildCommand = `astryx theme build ${sourceRelative}${options.out ? ' --out ' + path.relative(cwd, path.resolve(cwd, options.out)) : ''}`;
   // Stable provenance recorded in @generated headers — versions, not a
   // timestamp, so identical inputs produce byte-identical output.
@@ -3798,7 +3800,7 @@ async function themeBuildInternal(
   if (options.__prepareFamily) {
     return {
       filePath,
-      sourceRelative: sourceRelative.split(path.sep).join('/'),
+      sourceRelative,
       theme: displayTheme,
       sourceTheme: themeDef,
       sourceParent,
