@@ -11,7 +11,9 @@
  * block), and themes. The adapter gathers every candidate (_adapter.mjs),
  * and search's tree (tree.mjs) picks the searcher that answers.
  * `searchCore(query)` is the lexical ranker alone (_lexical.mjs); `build`
- * reads it, so build's output does not move when search's tree does.
+ * reads it, so build's output does not move when search's tree does. Only
+ * `search` leaves out a doc keyword that is another entry's name
+ * (_named-keywords.mjs); `searchCore` reads every keyword as gathered.
  */
 
 import {
@@ -21,6 +23,7 @@ import {
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {gatherCandidatesReused, loadSearchData} from './_adapter.mjs';
 import {rankLexical} from './_lexical.mjs';
+import {searchView} from './_named-keywords.mjs';
 import {checkSearchArgs} from './_result.mjs';
 import {runTree} from '../../foundation/route/route.mjs';
 import {SEARCH_TREE} from './tree.mjs';
@@ -73,7 +76,10 @@ async function searchRead(query, options) {
               SEARCH_TREE,
               {query, options},
               {
-                ...(await gatherCandidatesReused(options)),
+                // A keyword that names another entry is not a match here
+                // (_named-keywords.mjs); searchCore, which build reads,
+                // keeps every keyword.
+                ...searchView(await gatherCandidatesReused(options)),
                 data: loadSearchData(),
               },
             )
@@ -90,8 +96,12 @@ async function searchRead(query, options) {
  * same way. A later query in the same folder, for the same `type`, gathers
  * again only when an input changed.
  *
+ * `ownKeywords` ranks as `search` reads keywords: a doc keyword that is
+ * another entry's name is not a match (_named-keywords.mjs). Only search's own
+ * comparisons set it; build never does, so build reads every keyword.
+ *
  * @param {string} query
- * @param {{cwd?: string, type?: 'component'|'hook'|'doc'|'template'|'theme', limit?: number}} [options]
+ * @param {{cwd?: string, type?: 'component'|'hook'|'doc'|'template'|'theme', limit?: number, ownKeywords?: boolean}} [options]
  * @returns {Promise<import('./search.type.mjs').SearchResponse>}
  */
 export async function searchCore(query, options = {}) {
@@ -108,10 +118,15 @@ export async function searchCore(query, options = {}) {
  * @param {any} options
  */
 async function searchCoreRead(query, options) {
-  return withListingCache(async () =>
-    linkSearchResponse(
-      rankLexical(query, options, await gatherCandidatesReused(options)),
+  return withListingCache(async () => {
+    const gathered = await gatherCandidatesReused(options);
+    return linkSearchResponse(
+      rankLexical(
+        query,
+        options,
+        options.ownKeywords ? searchView(gathered) : gathered,
+      ),
       options.cwd ?? process.cwd(),
-    ),
-  );
+    );
+  });
 }

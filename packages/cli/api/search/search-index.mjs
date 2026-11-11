@@ -28,6 +28,7 @@ import {
 } from './_adapter.mjs';
 import {checkSearchArgs} from './_result.mjs';
 import {SEARCH_TREE} from './tree.mjs';
+import {searchView} from './_named-keywords.mjs';
 
 /**
  * Fields a gathered candidate holds that point into the folder it was read
@@ -193,10 +194,13 @@ export async function rankSearchIndex(query, indexes, options = {}) {
       SEARCH_TREE,
       {query, options: {type, limit: options.limit}},
       {
-        all: wanted,
-        components: wanted.filter(
-          candidate => candidate.domain === 'component',
-        ),
+        // Keywords read as search() reads them (_named-keywords.mjs).
+        ...searchView({
+          all: wanted,
+          components: wanted.filter(
+            candidate => candidate.domain === 'component',
+          ),
+        }),
         searchedComponents,
         outside: false,
         coreSkipped,
