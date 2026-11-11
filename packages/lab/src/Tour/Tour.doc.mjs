@@ -62,7 +62,7 @@ export const docs = {
           name: 'targetRef',
           type: 'RefObject<HTMLElement>',
           description:
-            'Ref to the element this step points at: any element, such as a button, a card, a table cell or a chart region. The callout sits beside it. The target keeps its own behavior: without a backdrop, pressing it does not end the tour, and keyboard focus can reach it while the step shows. Under the Tour's backdrop, a press on the target ends the tour with "backdrop".',
+            'Ref to the element this step points at: any element, such as a button, a card, a table cell or a chart region. The callout sits beside it. The target keeps its own behavior: without a backdrop, pressing it does not end the tour, and keyboard focus can reach it while the step shows. Under the backdrop of the Tour, a press on the target ends the tour with "backdrop".',
           required: true,
         },
         {
