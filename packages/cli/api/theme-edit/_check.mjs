@@ -30,6 +30,8 @@ import {
   familyOf,
 } from './_tables.mjs';
 import {
+  COLOR_NAMES,
+  colorProblem,
   isColorValue,
   isNumber,
   isSafeValue,
@@ -55,6 +57,45 @@ import {
 } from './_settings.mjs';
 
 const E = ERROR_CODES;
+
+/**
+ * The other words for each color dial and vibrancy (gray, brand, error,
+ * saturation), from the dial tables, without words that name a part, a CSS
+ * property or a plain color.
+ */
+const COLOR_DIAL_WORDS = (() => {
+  const generic = new Set([
+    'color',
+    'colour',
+    'text',
+    'background',
+    'border',
+    'surface',
+    'surfaces',
+    'main',
+    'key',
+    'link',
+    'selection',
+    'seed',
+    'status',
+    'tint',
+    'highlight',
+    'muted',
+    'red',
+    'green',
+    'blue',
+    'yellow',
+    'orange',
+  ]);
+  /** @type {Map<string, string[]>} */
+  const out = new Map();
+  for (const d of [...PALETTE_DIALS, 'vibrancy'])
+    for (const w of String(DIALS[d]?.words ?? '').split(/\s+/)) {
+      if (!w || w === d || generic.has(w)) continue;
+      out.set(w, [...(out.get(w) ?? []), d]);
+    }
+  return out;
+})();
 
 /**
  * @typedef {object} SetFlags
@@ -479,14 +520,36 @@ export function checkSetting(
     };
     if (PALETTE_DIALS.includes(thing) && (s.on || s.mode)) {
       const token = paletteToken(thing);
+      const value = q(v || '#7c3aed');
+      /** @type {string[]} */
+      let run = [
+        `${P} set ${slug} ${token} ${value}${onFlag}${s.mode ? ` --mode ${s.mode}` : ''}`,
+      ];
+      // The token is suggested only where the part reads it; otherwise the
+      // part's own route, as a token set on the part would be refused.
+      if (s.on && !ctx.unchecked) {
+        /** @param {string} t */
+        const works = t => {
+          try {
+            checkSetting(ctx, slug, data, t, v || '#7c3aed', {
+              on: s.on,
+              when: s.when,
+              state: s.state,
+            });
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        const direct = `${P} set ${slug} background-color ${value}${onFlag}`;
+        // The neutral color is a surface: on a part, that is its background.
+        if (thing === 'neutral') run = [direct, ...run];
+        else if (!works(token) && works('background-color')) run = [direct];
+      }
       refuse(
         E.ERR_THEME_BAD_VALUE,
-        `${thing} generates the colors of the whole theme, light and dark from one color; drop ${s.on ? '--on' : '--mode'}. For an exact color on one part or in one mode, set the token itself.`,
-        {
-          run: [
-            `${P} set ${slug} ${token} ${q(v || '#7c3aed')}${onFlag}${s.mode ? ` --mode ${s.mode}` : ''}`,
-          ],
-        },
+        `${thing} generates the colors of the whole theme, light and dark from one color; drop ${s.on ? '--on' : '--mode'}. For an exact color on one part or in one mode, set ${thing === 'neutral' && s.on ? "the part's background, or " : ''}the token itself.`,
+        {run},
       );
     }
     if (s.mode)
@@ -546,18 +609,33 @@ export function checkSetting(
         refuse(E.ERR_THEME_BAD_VALUE, `${thing} takes a color, not a step.`, {
           run: [`${P} set ${slug} ${thing} "#7c3aed"`],
         });
-      if (!isColorValue(v))
-        refuse(E.ERR_THEME_BAD_VALUE, `"${v}" is not a CSS color.`, {
-          fix: 'give one like "#7c3aed"',
-        });
-      if (!seedOf(v))
+      const problem = colorProblem(v);
+      if (problem) {
+        // What the value most likely meant: without quotes, a trailing `;`
+        // or `!important`, a bare hex with its #, the opaque color, or the
+        // nearest color name.
+        const cleaned = v
+          .replace(/^(["'])(.*)\1$/, '$2')
+          .replace(/\s*!important\s*$/i, '')
+          .replace(/;+\s*$/, '')
+          .trim()
+          .replace(/^([0-9a-f]{3}|[0-9a-f]{6})$/i, '#$1');
+        const near =
+          problem.kind === 'unknown'
+            ? nearest(v.toLowerCase(), COLOR_NAMES)
+            : [];
+        const better =
+          problem.opaque ??
+          (cleaned !== v && !colorProblem(cleaned) ? cleaned : near[0]);
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `"${v}" has no fixed color, so no shades can be generated from it.`,
+          `"${v}" ${problem.message}.${problem.kind === 'unknown' || problem.kind === 'malformed' ? ' Give a hex, a color name, or an rgb(), hsl(), hwb(), lab(), lch(), oklab(), oklch() or color() color.' : ''}`,
           {
-            fix: 'give a hex, a color name, or an rgb(), hsl(), hwb(), lab(), lch(), oklab() or oklch() color',
+            didYouMean: better ? [better] : near,
+            run: [`${P} set ${slug} ${thing} ${q(better ?? '#7c3aed')}`],
           },
         );
+      }
     } else if (thing === 'vibrancy') {
       if (s.on)
         refuse(
@@ -570,16 +648,33 @@ export function checkSetting(
           [...data.settings].reverse().find(x => x.thing === 'vibrancy')
             ?.value ?? VIBRANCY_DEFAULT,
         );
-        s.value = String(
-          Math.max(0, Math.min(100, cur + (v === 'more' ? 10 : -10))),
+        const next = Math.max(
+          0,
+          Math.min(100, cur + (v === 'more' ? 10 : -10)),
         );
-      } else if (!/^\d{1,3}$/.test(v) || Number(v) > 100)
+        if (next === cur)
+          refuse(
+            E.ERR_THEME_NO_EFFECT,
+            `vibrancy is already ${cur}, the ${cur >= 100 ? 'most vivid' : 'grayest'}, so ${v} changes nothing.`,
+            {
+              run: [
+                `${P} set ${slug} vibrancy ${v === 'more' ? 'less' : 'more'}`,
+              ],
+            },
+          );
+        s.value = String(next);
+      } else if (!/^\d{1,3}$/.test(v) || Number(v) > 100) {
+        // A number out of range suggests the nearest one in range.
+        const n = Number(v);
+        const near = /^[+-]?(\d+\.?\d*|\.\d+)$/.test(v)
+          ? Math.max(0, Math.min(100, Math.round(n)))
+          : 60;
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `vibrancy takes a whole number from 0 (gray) to 100 (most vivid), or more or less, not "${v}".`,
-          {run: [`${P} set ${slug} vibrancy 60`]},
+          {run: [`${P} set ${slug} vibrancy ${near}`]},
         );
-      else s.value = String(Number(v));
+      } else s.value = String(Number(v));
       const colors = data.settings.filter(
         x => x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
       );
@@ -860,6 +955,22 @@ export function checkSetting(
   const hint =
     /** @type {((v: string, on: string | undefined) => string[]) | undefined} */ (
       THING_HINTS[thing.toLowerCase()]
+    );
+  // A dial by another name or case: Accent, gray, saturation, error.
+  const lower = thing.toLowerCase();
+  const aliases = DIALS[lower] ? [lower] : (COLOR_DIAL_WORDS.get(lower) ?? []);
+  if (!hint && aliases.length)
+    return refuse(
+      E.ERR_THEME_UNKNOWN_THING,
+      `"${thing}" is not a dial, a token, or a CSS property. ${aliases.length > 1 ? `The dials ${aliases.join(' and ')} mean that` : `The dial for that is ${aliases[0]}`}.`,
+      {
+        didYouMean: aliases,
+        run: aliases.map(d =>
+          unset
+            ? `${P} undo ${slug} ${d}${onFlag}`
+            : `${P} set ${slug} ${d} ${q(v)}${onFlag}`,
+        ),
+      },
     );
   return refuse(
     E.ERR_THEME_UNKNOWN_THING,

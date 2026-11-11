@@ -584,12 +584,18 @@ describe('round 4 follow-ups', () => {
     ).not.toBe('#1e3a8a');
   }, 120_000);
 
-  it('marks an exact dark fill under the light shade on the Colors page', async () => {
+  it('marks an exact dark fill on its own dark shade on the Colors page', async () => {
     await themeEditSet('s', 'accent', '#5e6ad2', {cwd});
     await themeEditPreviewAdd(undefined, {cwd, theme: 's', path: 'src/app/r4'});
-    expect(read('src/app/r4/_pages/colors.tsx')).toContain(
-      '"--color-accent (dark mode too)"',
+    const page = read('src/app/r4/_pages/colors.tsx');
+    const dark = JSON.parse(read('themes/s/palette.config.json'))
+      .families.find((/** @type {any} */ f) => f.id === 'accent')
+      .anchors.find((/** @type {any} */ a) => a.mode === 'dark');
+    const uses = JSON.parse(
+      /** @type {string} */ (/const USES: [^=]+= (\{.*\});/.exec(page)?.[1]),
     );
+    expect(uses.accent.dark[dark.stop]).toContain('--color-accent');
+    expect(page).not.toContain('mode too');
     await themeEditUndo('s', {cwd, thing: 'accent'});
   }, 240_000);
 
@@ -666,10 +672,10 @@ describe('round 5', () => {
     fs.rmSync(path.join(cwd, 'themes/dk'), {recursive: true, force: true});
   }, 240_000);
 
-  it('moves a dark fill to the nearest shade that passes both checks', async () => {
+  it('starts a dark fill that cannot keep the exact color at shade 70, as the theme guide does', async () => {
     const r = await themeEditSet('s', 'accent', '#7c3aed', {cwd});
     expect(r.data.notes.join(' ')).toContain(
-      'in dark, --color-accent is shade 50',
+      'in dark, --color-accent is shade 70',
     );
     await themeEditUndo('s', {cwd, thing: 'accent'});
   }, 120_000);

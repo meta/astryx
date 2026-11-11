@@ -646,7 +646,7 @@ function colorsAnswer(env, dialCommands) {
     checked(env, [steps]).commands;
   return [
     {
-      text: `Each color you set (${PALETTE_DIALS.join(', ')}) is one seed: the editor generates its shades from it, light and dark, with the same generator as \`theme palette generate\`, and points the color tokens at those shades. A token moves to a nearby shade when it must read: text at 4.5:1, the focus ring and secondary icons at 3:1, a fill until the text on it reads. It never mixes a new color. The generated files are ${f.palette}, made from ${f.config}, and the theme imports them, so every change moves the theme with it.`,
+      text: `Each color you set (${PALETTE_DIALS.join(', ')}) is one seed: the editor generates its shades from it, light and dark, with the same generator as \`theme palette generate\`, and points the color tokens at those shades. The exact color you gave sits at its own shade, in dark too when it reads there. A token moves to a nearby shade when it must read: text at 4.5:1, the focus ring and secondary icons at 3:1. A fill never moves: the text on it changes instead. It never mixes a new color. The generated files are ${f.palette}, made from ${f.config}; the theme imports only the shades it uses, from ${f.refs}, so every change moves the theme with it. Hand edits to ${f.config} that no color setting owns are kept; a hand edit to ${f.palette} is never overwritten.`,
       commands: [
         ...one([{verb: 'set', thing: 'accent', value: '#7c3aed'}]),
         ...one([{verb: 'set', thing: 'neutral', value: '#64748b'}]),

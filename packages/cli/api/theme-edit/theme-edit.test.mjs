@@ -504,7 +504,7 @@ describe('settings round trip', () => {
       set.data.changedTokens.some(c => c.startsWith('--color-accent (light)')),
     ).toBe(true);
     expect(set.data.notes.join(' ')).toMatch(
-      /--color-accent uses accent shade \d+ \(#[0-9a-f]{6}\) in light/,
+      /--color-accent uses your exact color \(#7c3aed, accent shade \d+\) in light/,
     );
     expect(JSON.parse(settingsOf('t')).settings).toEqual([
       {thing: 'accent', value: '#7c3aed', source: 'dial'},

@@ -656,23 +656,19 @@ describe('known chaos findings', () => {
     expect(x.changed.filter(k => k.endsWith('/km.css'))).not.toEqual([]);
   }, 120_000);
 
-  it.fails(
-    'F9: undo after a color restores the palette files exactly',
-    async () => {
-      await run(['editor', 'new', 'kp', '--accent', '#e11d48']);
-      const before = snapshot();
-      await run(['editor', 'set', 'kp', 'warning', '#FFF']);
-      await run(['editor', 'undo', 'kp']);
-      expect(
-        changes(
-          before,
-          snapshot(),
-          k => k.includes('/themes/kp/') && !k.endsWith('.history.json'),
-        ),
-      ).toEqual([]);
-    },
-    120_000,
-  );
+  it('F9: undo after a color restores the palette files exactly', async () => {
+    await run(['editor', 'new', 'kp', '--accent', '#e11d48']);
+    const before = snapshot();
+    await run(['editor', 'set', 'kp', 'warning', '#FFF']);
+    await run(['editor', 'undo', 'kp']);
+    expect(
+      changes(
+        before,
+        snapshot(),
+        k => k.includes('/themes/kp/') && !k.endsWith('.history.json'),
+      ),
+    ).toEqual([]);
+  }, 120_000);
 
   it('F10: vibrancy is refused when the only color is a gray', async () => {
     await run(['editor', 'new', 'kv', '--accent', 'black']);

@@ -80,7 +80,7 @@
  * @property {string} [now] - On `undo`: what applies instead of the setting removed: a dial that still writes the token (such as the generated accent color), a whole-theme setting of the same thing, or the base theme's value.
  * @property {ThemeEditSetting} [removed] - On `undo`: the setting removed (the same as `setting`); the value now in effect is the base theme's, and `changedTokens` lists it.
  * @property {ThemeEditSetting | null} replaced - The setting this one replaced.
- * @property {string | null} was - For `base` and `mode`: the value before.
+ * @property {string | null} was - For `base`, `mode` and a whole-theme dial: the value before.
  * @property {string[]} parts - The parts it styles (a group's members when it spread).
  * @property {{name: string, members: string[], onlyHint: boolean} | null} group - The group it spread to; `onlyHint` when `--only` would style one member.
  * @property {string[]} changedTokens - Resolved token changes, `name (mode): before -> after`.
@@ -119,7 +119,7 @@
  * @property {string[]} data.partValues - Each corners or spacing setting on a part or group, with what its parts get and the whole-theme value beside it.
  * @property {number | null} data.vibrancy - How saturated the generated colors are (0 to 100); null when the theme sets no color.
  * @property {ThemeEditColor[]} data.colors - Each color the theme sets, with the shade each token uses.
- * @property {string[]} data.colorNotes - Tokens that use another shade than usual so they read, and any that still do not.
+ * @property {string[]} data.colorNotes - What the color config keeps or replaced of a hand edit, tokens that use another shade than usual so they read, and any that still do not.
  * @property {string[]} data.problems
  * @property {string[]} data.notes
  * @property {string} data.preview

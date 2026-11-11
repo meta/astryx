@@ -1051,16 +1051,23 @@ async function colorsPage(cwd, dir, slug) {
   );
   /** @type {Record<string, Record<'light' | 'dark', Record<string, string[]>>>} */
   const uses = {};
+  // Only the theme's own modes have shades; text on a fill is marked on
+  // the neutral shade it uses, and pure black or white on no shade.
+  const modes = /** @type {Array<'light' | 'dark'>} */ (
+    data.mode === 'light-only'
+      ? ['light']
+      : data.mode === 'dark-only'
+        ? ['dark']
+        : ['light', 'dark']
+  );
   for (const [token, v] of Object.entries(pal.tokens)) {
     if (exact.has(token)) continue;
-    const byMode = (uses[v.family] ??= {light: {}, dark: {}});
-    for (const m of /** @type {const} */ (['light', 'dark'])) {
+    for (const m of modes) {
       const r = v[m];
-      // A dark fill that keeps the exact color uses the light ramp's shade:
-      // it is marked there, for dark mode.
-      const ramp = r.from ?? m;
-      (byMode[ramp][r.stop] ??= []).push(
-        `${token}${r.alpha ? ` (opacity ${r.alpha})` : ''}${ramp !== m ? ` (${m} mode too)` : ''}`,
+      if (r.family === 'black' || r.family === 'white') continue;
+      const byMode = (uses[r.family ?? v.family] ??= {light: {}, dark: {}});
+      (byMode[m][r.stop] ??= []).push(
+        `${token}${r.alpha ? ` (opacity ${r.alpha})` : ''}`,
       );
     }
   }
