@@ -69,9 +69,9 @@ callout. Consumer usage lives in `Tour.doc.mjs`.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                                                                                                           | Basis |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| FR1 | Without a backdrop, a press on the page or on the step's target MUST NOT end the tour. With a backdrop, a press anywhere outside the callout, the target included, MUST end the tour with `'backdrop'`. This holds for every pointer. Implementation gap: a press on the page or on the target ends a tour without a backdrop, reporting `'close'`. | DEC-1 |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                       | Basis |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| FR1 | Without a backdrop, a press on the page or on the step's target MUST NOT end the tour. With a backdrop, a press anywhere outside the callout, the target included, MUST end the tour with `'backdrop'`. This holds for every pointer. Implementation gap: a press on the page or on the target ends the tour reporting `'close'`, with or without a backdrop; the dim overlay catches no press. | DEC-1 |
 
 ## Accessibility contract
 
@@ -91,10 +91,10 @@ The component implements design requirements without copying their rationale.
 
 ## Verification map
 
-| Contract | Verification                                                                                    | Representative states | Mutation or failure expectation     | Audit section |
-| -------- | ----------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------- | ------------- |
-| FR1      | "dismisses with \"backdrop\" when the backdrop is clicked"; the no-backdrop half is the FR1 gap | Backdrop              | A dimmed tour left running fails it | None          |
-| AR1      | Pending: the AR1 gap                                                                            | No backdrop           | Focus kept in the callout fails it  | None          |
+| Contract | Verification                                                                                                                                                             | Representative states | Mutation or failure expectation     | Audit section |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- | ----------------------------------- | ------------- |
+| FR1      | "dismisses with \"backdrop\" when the backdrop is clicked"; it clicks the overlay element directly in jsdom, so neither half is verified in a real browser (the FR1 gap) | Backdrop              | A dimmed tour left running fails it | None          |
+| AR1      | Pending: the AR1 gap                                                                                                                                                     | No backdrop           | Focus kept in the callout fails it  | None          |
 
 ## Decision log
 
