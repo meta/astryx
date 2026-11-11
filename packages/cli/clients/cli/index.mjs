@@ -403,6 +403,36 @@ export function commandsForArgs(program, argv) {
 }
 
 /**
+ * Make `help <group> <command> ...` print the help of the deepest command the
+ * words name. Commander's help command reads only the first word, so
+ * `help theme build` printed the help of `theme`. Commander has no public hook
+ * for this; the override wraps its help dispatch and falls back to it.
+ * @param {import('commander').Command} program
+ */
+export function resolveDeepHelp(program) {
+  const root = /** @type {any} */ (program);
+  // A Commander release without this method keeps its own help dispatch.
+  if (typeof root._dispatchHelpCommand !== 'function') return;
+  const dispatch = root._dispatchHelpCommand.bind(root);
+  root._dispatchHelpCommand = (/** @type {string | undefined} */ name) => {
+    const words = (root.args ?? [])
+      .slice(1)
+      .filter((/** @type {string} */ word) => !word.startsWith('-'));
+    /** @type {any} */
+    let target = root;
+    for (const word of words) {
+      const next = target._findCommand(word);
+      if (!next) break;
+      target = next;
+    }
+    if (words.length > 1 && target !== root && !target._executableHandler) {
+      target.help();
+    }
+    return dispatch(name);
+  };
+}
+
+/**
  * Where the root help's command list is stored: each command's name, and the
  * term and description the root help prints for it, as the fully loaded
  * program gives them. `prepack` writes it (scripts/generate-command-list.mjs),
@@ -655,6 +685,7 @@ export async function createProgram({argv} = {}) {
       program.help();
     });
   markReportsResult(program);
+  resolveDeepHelp(program);
 
   /**
    * Pre-action hook: gate --json BEFORE any command body runs.

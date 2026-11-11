@@ -34,6 +34,10 @@ export const PREPACK_FILES = [
     script: 'scripts/generate-template-components.mjs',
   },
   {
+    file: 'assets/docs.generated.json',
+    script: 'scripts/generate-stored-docs.mjs',
+  },
+  {
     file: 'clients/cli/commands.generated.json',
     script: 'scripts/generate-command-list.mjs',
   },
