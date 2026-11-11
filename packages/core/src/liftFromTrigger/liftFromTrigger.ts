@@ -547,7 +547,11 @@ function placeholderStyle(
   };
 }
 
-/** The properties the browser's popover style sets, kept as laid out. */
+/**
+ * The properties the browser's popover style sets, and the corner radii, kept
+ * as laid out. The placeholder after the source ends a `:last-child` match,
+ * which can round a row's corners.
+ */
 const KEPT_PROPERTIES = [
   'border-top-width',
   'border-right-width',
@@ -561,6 +565,10 @@ const KEPT_PROPERTIES = [
   'border-right-color',
   'border-bottom-color',
   'border-left-color',
+  'border-top-left-radius',
+  'border-top-right-radius',
+  'border-bottom-right-radius',
+  'border-bottom-left-radius',
   'padding-top',
   'padding-right',
   'padding-bottom',
