@@ -474,6 +474,8 @@ function editorThemeOf(root, word) {
  * @returns {AstryxError | null}
  */
 export function editorThemeRefusal(err, cwd) {
+  // A refused compile ends here: its theme locks go now, not at exit.
+  void releaseCompileHold?.();
   if (
     err.code !== ERROR_CODES.ERR_UNKNOWN_THEME &&
     !/unknown theme|is not added|not a theme package/i.test(err.message)
@@ -537,9 +539,12 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
       // written. A plain compile builds the theme source, which reads the
       // generated settings: when those no longer match the settings, it
       // would report ok without them.
-      const why = await withLock(root, lockName(slug), () =>
-        edit.editorStale(root, slug),
-      );
+      // `compile` holds the lock already while it runs (editorThemeHold).
+      const why = COMPILE_HELD.has(`${root}\0${slug}`)
+        ? await edit.editorStale(root, slug)
+        : await withLock(root, lockName(slug), () =>
+            edit.editorStale(root, slug),
+          );
       if (why && !check)
         return new AstryxError(
           `${slug}'s generated settings do not match its settings (${why}), so compile would build the old ones. The editor builds it from its settings.`,
@@ -565,4 +570,68 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
     }
   }
   return null;
+}
+
+/** The editor themes a running `compile` holds the lock of, by project and name. */
+const COMPILE_HELD = new Set();
+
+/** @type {(() => Promise<void>) | null} The release of the running compile's hold. */
+let releaseCompileHold = null;
+
+/**
+ * Hold the theme lock of every editor theme among the files while
+ * `compile` builds or checks them, so it never reads a change half
+ * written. Resolves to the release.
+ * @param {string[]} files
+ * @param {{cwd: string}} options
+ * @returns {Promise<() => Promise<void>>}
+ */
+export async function editorThemeHold(files, {cwd}) {
+  // Two compiles of one theme in one process: the second waits for the
+  // lock like any other command.
+  const root = projectRoot(cwd);
+  const slugs = [
+    ...new Set(
+      files.map(f => editorThemeOf(root, path.resolve(cwd, f))).filter(Boolean),
+    ),
+  ].sort();
+  /** @type {Array<() => Promise<void>>} */
+  const releases = [];
+  const releaseAll = async () => {
+    if (releaseCompileHold === releaseAll) releaseCompileHold = null;
+    for (const r of releases.splice(0).reverse()) await r();
+  };
+  releaseCompileHold = releaseAll;
+  for (const slug of /** @type {string[]} */ (slugs)) {
+    /** @type {() => void} */
+    let release = () => {};
+    const held = new Promise(r => {
+      release = () => r(undefined);
+    });
+    /** @type {(e?: unknown) => void} */
+    let ready = () => {};
+    const got = new Promise(r => {
+      ready = r;
+    });
+    const key = `${root}\0${slug}`;
+    const done = withLock(root, lockName(slug), async () => {
+      COMPILE_HELD.add(key);
+      ready();
+      try {
+        await held;
+      } finally {
+        COMPILE_HELD.delete(key);
+      }
+    }).catch(e => ready(e));
+    const err = await got;
+    if (err) {
+      await releaseAll();
+      throw err;
+    }
+    releases.push(async () => {
+      release();
+      await done;
+    });
+  }
+  return releaseAll;
 }

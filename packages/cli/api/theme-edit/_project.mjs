@@ -65,9 +65,18 @@ const DOCS_VERSION = 2;
  */
 export function themeCacheRoot(dir) {
   const core = findProjectCoreDir(dir);
-  return core
-    ? path.join(path.dirname(path.dirname(core)), '.cache', 'astryx-theme')
-    : null;
+  if (!core) return null;
+  // Core read from source (a fork of the design system, packages/core) is
+  // in no node_modules: the cache goes in the project's own node_modules,
+  // never in a source folder.
+  const modules = path.dirname(path.dirname(core));
+  if (
+    path.basename(path.dirname(core)) === '@astryxdesign' &&
+    path.basename(modules) === 'node_modules'
+  )
+    return path.join(modules, '.cache', 'astryx-theme');
+  const own = nodeModulesRoot(dir);
+  return own ? path.join(own, 'node_modules', '.cache', 'astryx-theme') : null;
 }
 
 /**

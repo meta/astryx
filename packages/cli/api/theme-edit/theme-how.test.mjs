@@ -483,7 +483,7 @@ const QUESTIONS = [
     'less rounded cards',
     {
       top: /^set q corners less --on card$/,
-      adds: /card\.base\.borderRadius=8px/,
+      adds: /card\.base\.borderRadius=12px/,
     },
   ],
   [

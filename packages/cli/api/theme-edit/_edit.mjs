@@ -48,6 +48,7 @@ import {
   themeFiles,
   buildTheme,
   staleBuild,
+  EDITOR_SUFFIXES,
   themeSource,
   themeSourceProblem,
 } from './_settings.mjs';
@@ -103,16 +104,7 @@ function editorLeftovers(dir, slug) {
   const files = [];
   const named = (/** @type {string} */ n) =>
     n === NEW_MARKER ||
-    [
-      'settings.ts',
-      'settings.json',
-      'css',
-      'css.d.ts',
-      'js',
-      'd.ts',
-      'variants.d.ts',
-      'history.json',
-    ].some(x => n === `${slug}.${x}`) ||
+    EDITOR_SUFFIXES.some(x => n === `${slug}.${x}`) ||
     /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config\.json)$/.test(
       n,
     ) ||
@@ -452,11 +444,15 @@ function refuseStoredTokens(ctx, slug, data, skip) {
   if (bad)
     refuse(
       E.ERR_THEME_INVALID,
-      `themes/${slug}/${slug}.settings.json: ${describe(bad.setting)} holds a value the editor no longer accepts (${bad.why}).`,
+      `themes/${slug}/${slug}.settings.json: ${describe(bad.setting)} ${bad.scope ? 'applies where the editor does not accept it' : 'holds a value the editor no longer accepts'} (${bad.why}).`,
       {
         run: [
           `${P} undo ${slug} ${undoArgs(bad.setting)}`,
-          `${P} set ${slug} ${bad.setting.thing} ${quoteCommandArgument(exampleOf(ctx.C.typeOf(bad.setting.thing), bad.setting.thing))}`,
+          ...(bad.scope
+            ? []
+            : [
+                `${P} set ${slug} ${bad.setting.thing} ${quoteCommandArgument(exampleOf(ctx.C.typeOf(bad.setting.thing), bad.setting.thing))}`,
+              ]),
         ],
       },
     );
@@ -504,6 +500,23 @@ async function change(sub, slug, thing, value, options) {
     mode: options.mode,
   });
   const data = loadTheme(cwd, slug, target);
+  /** @type {string[]} */
+  const fieldNotes = [];
+  if (sub === 'set' && (thing === 'base' || thing === 'mode')) {
+    // The other field, when it is damaged too, goes back to its default,
+    // so the theme loads again.
+    if (
+      thing !== 'mode' &&
+      !['both', 'light-only', 'dark-only'].includes(data.mode)
+    ) {
+      data.mode = 'both';
+      fieldNotes.push('mode was missing or damaged, so it is both again');
+    }
+    if (thing !== 'base' && data.like != null && !LIKE.includes(data.like)) {
+      delete data.like;
+      fieldNotes.push('base was not a built-in theme, so it is none again');
+    }
+  }
   const ctx = await context(cwd);
   refuseStoredTokens(ctx, slug, data, thing);
   const flags = {
@@ -611,6 +624,7 @@ async function change(sub, slug, thing, value, options) {
           ...(r.unchanged
             ? [`no change: ${s.thing} is already ${s.value}`]
             : []),
+          ...fieldNotes,
           ...r.notes,
           `your ${data.settings.length} settings are kept`,
           ...otherModeNotes(data),
@@ -747,6 +761,23 @@ async function change(sub, slug, thing, value, options) {
     sub === 'set' && s.source === 'dial' && !s.on
       ? data.settings.filter(x => x.thing === s.thing && x.on).map(describe)
       : [];
+  // The exact property a dial on a part competes with there.
+  const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
+    corners: /radius$/,
+    spacing: /^(padding|gap)(-|$)/,
+  });
+  const exactOver =
+    sub === 'set' && s.source === 'dial' && s.on && DIAL_PROPERTY[s.thing]
+      ? (data.settings.find(
+          x =>
+            x.source === 'property' &&
+            DIAL_PROPERTY[s.thing].test(x.thing) &&
+            x.on &&
+            partsOf(ctx, x).some(t => partsOf(ctx, s).includes(t)) &&
+            (x.when ?? '') === (s.when ?? '') &&
+            (x.state ?? '') === (s.state ?? ''),
+        ) ?? null)
+      : null;
   /** @type {string[]} */
   const notes = [
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
@@ -769,8 +800,17 @@ async function change(sub, slug, thing, value, options) {
     ...(sub === 'set' && ['text-size', 'type'].includes(s.thing)
       ? extremeSteps(r.res.light)
       : []),
+    // An exact property on the same part wins over a dial there.
+    ...(exactOver
+      ? [
+          `${describe(exactOver)} is an exact property and wins over ${s.thing} there, so this shows only after \`${P} undo ${slug} ${undoArgs(exactOver)}\``,
+        ]
+      : []),
     // An accepted change that the theme already showed says so.
     ...(sub === 'set' &&
+    !exactOver &&
+    // With the last build unreadable, nothing was compared.
+    !r.notes.some(n => n.includes('could not be read')) &&
     !r.unchanged &&
     !r.changed.length &&
     !styled.length &&
@@ -897,7 +937,8 @@ async function change(sub, slug, thing, value, options) {
         : {}),
       // A plain value that replaced per-mode ones names the first of them;
       // the notes name them all.
-      replaced: sub === 'set' ? (prev ?? covered[0] ?? null) : null,
+      replaced:
+        sub === 'set' ? (prev ?? covered[0] ?? longhands[0] ?? null) : null,
       // A whole-theme dial names the value it replaced, as base and mode do.
       was:
         sub === 'set' && prev && prev.source === 'dial' && !prev.on
@@ -1474,6 +1515,9 @@ export async function themeEditUndo(theme, options = {}) {
       undone,
       settings: prev.settings.length,
       stepsLeft: history.length,
+      // What the step back changed, as a change reports it.
+      changedTokens: committed.changed,
+      problems: committed.problems,
       ...p,
     },
   };

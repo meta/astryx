@@ -17,6 +17,44 @@ import * as path from 'node:path';
 import {tryLock} from './cache.mjs';
 import {LEASE_RENEW_MS, renewLock} from './lock-lease.mjs';
 
+/** How long a held lock's record may stand unrenewed before it is taken over. */
+export const SILENT_MS = 3 * LEASE_RENEW_MS;
+
+/** @param {string} file @returns {string} */
+const recordText = file => {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+};
+
+/**
+ * Move a silent lock aside and remove it; another run that moved it first
+ * wins, and this one tries again.
+ * @param {string} lockDir
+ * @param {string} judged the record seen silent
+ */
+function takeOver(lockDir, judged) {
+  const aside = `${lockDir}.silent-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    fs.renameSync(lockDir, aside);
+  } catch {
+    return;
+  }
+  // The lock moved aside must hold the record judged silent: a lock taken
+  // or renewed in between is put back.
+  if (recordText(path.join(aside, 'owner.json')) !== judged) {
+    try {
+      fs.renameSync(aside, lockDir);
+    } catch {
+      // Its place is taken again.
+    }
+    return;
+  }
+  fs.rmSync(aside, {recursive: true, force: true});
+}
+
 /** The lock folders this process holds now. */
 const HELD = new Set();
 
@@ -54,7 +92,22 @@ export async function withFolderLock(lockDir, fn, {waitMs = 30_000, onBusy}) {
     }
   };
   let holder = JSON.stringify(readOwner(ownerFile)?.pid ?? null);
+  // A holder renews its record every LEASE_RENEW_MS. One whose record has
+  // not changed for three of those, as this run sees it, has stopped,
+  // whatever computer or process id it names (pid 1 in a container, a
+  // computer whose processes this run cannot check).
+  let record = recordText(ownerFile);
+  let since = Date.now();
   for (let waited = 0; !tryLock(lockDir); waited += 50) {
+    const text = recordText(ownerFile);
+    if (text !== record) {
+      record = text;
+      since = Date.now();
+    } else if (Date.now() - since >= SILENT_MS) {
+      takeOver(lockDir, record);
+      since = Date.now();
+      continue;
+    }
     const now = JSON.stringify(readOwner(ownerFile)?.pid ?? null);
     if (now !== holder) {
       holder = now;

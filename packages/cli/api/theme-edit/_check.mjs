@@ -132,10 +132,44 @@ const COLOR_DIAL_WORDS = (() => {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {string} [skip]
- * @returns {{setting: import('./_settings.mjs').Setting, why: string} | null}
+ * @returns {{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean} | null}
  */
 export function storedTokenProblem(ctx, slug, data, skip = '') {
   const TOKENS = ctx.project.core.tokenDefaults;
+  // Where each saved setting applies names a real part, group, state and
+  // variant of this Core, as `set` checks them.
+  const WHOLE_ONLY = [
+    'surfaces',
+    'buttons',
+    'base',
+    'mode',
+    'vibrancy',
+    'text-size',
+    'headings',
+    'type',
+    ...PALETTE_DIALS,
+  ];
+  for (const s of data.settings) {
+    if (s.thing === skip) continue;
+    /** @param {string} why */
+    const scope = why => ({setting: s, why, scope: true});
+    const t = s.on ? ctx.project.target.get(s.on) : null;
+    if (s.on && !t && !FAMILIES[s.on])
+      return scope(`there is no part or group "${s.on}"`);
+    if (s.source === 'dial' && s.on && WHOLE_ONLY.includes(s.thing))
+      return scope(`${s.thing} applies to the whole theme, not to ${s.on}`);
+    if (s.mode && s.source === 'dial' && !PALETTE_DIALS.includes(s.thing))
+      return scope(`${s.thing} is the same in light and dark`);
+    if (t && s.state && ![...t.states, ...COMMON_STATES].includes(s.state))
+      return scope(`"${s.state}" is not a state of ${s.on}`);
+    if (t && s.when) {
+      const [prop, value] = String(s.when).split(':');
+      const values = ctx.C.variantValues(/** @type {string} */ (s.on));
+      if (!(prop in values)) return scope(`${s.on} has no prop "${prop}"`);
+      if (values[prop].length && !values[prop].includes(value))
+        return scope(`${s.on} has no ${prop} "${value}"`);
+    }
+  }
   for (const s of data.settings) {
     if (s.source !== 'token' || s.thing === skip || !(s.thing in TOKENS))
       continue;
@@ -991,15 +1025,16 @@ export function checkSetting(
       // whole-theme one, else the starting point.
       // Same target: the part, and the same variant and state.
       const own = (/** @type {string} */ on) =>
-        [...data.settings]
-          .reverse()
-          .find(
-            x =>
-              x.thing === thing &&
-              (x.on ?? '') === on &&
-              (x.when ?? '') === (on ? (s.when ?? '') : '') &&
-              (x.state ?? '') === (on ? (s.state ?? '') : ''),
-          )?.value;
+        [...data.settings].reverse().find(
+          x =>
+            x.thing === thing &&
+            (x.on ?? '') === on &&
+            (x.when ?? '') === (on ? (s.when ?? '') : '') &&
+            (x.state ?? '') === (on ? (s.state ?? '') : '') &&
+            // A member set alone (--only) is not the member as the group
+            // spreads it.
+            Boolean(x.only) === (on === s.on ? Boolean(s.only) : false),
+        )?.value;
       // A member of a group set on the group steps from the group's value.
       const fam = s.on ? familyOf(s.on) : null;
       const cur =
@@ -1100,18 +1135,71 @@ export function checkSetting(
               : partBase
             : (wholePx ?? baseEl);
         s.value = ladder(CORNERS, px ?? 'medium');
-      } else if (!CORNERS.some(([n]) => n === v) && !/^\d+(\.\d+)?px$/.test(v))
+      } else {
+        // A rung in any case, a size in px written any way: the plain form.
+        const lower = v.toLowerCase();
+        const px = /^(\d+(?:\.\d+)?|\.\d+)px$/.exec(lower);
+        if (CORNERS.some(([n]) => n === lower)) s.value = lower;
+        else if (px) s.value = `${Number(px[1])}px`;
+        else if (lower === '0') s.value = 'square';
+        else {
+          // What it most likely means, as a value corners takes.
+          const len = lengthPx(lower);
+          const pct = /^(\d+(?:\.\d+)?)%$/.exec(lower);
+          const meant =
+            len != null
+              ? `${len}px`
+              : pct
+                ? Number(pct[1]) >= 50
+                  ? 'pill'
+                  : null
+                : (nearest(
+                    lower,
+                    CORNERS.map(([n]) => n),
+                  )[0] ?? null);
+          refuse(
+            E.ERR_THEME_BAD_VALUE,
+            `corners takes ${DIALS.corners.values}, not "${v}".`,
+            {
+              ...(meant ? {didYouMean: [meant]} : {}),
+              run: [
+                `${P} set ${slug} corners ${meant ?? 'medium'}${onFlag}${s.when ? ` --when ${s.when}` : ''}`,
+              ],
+            },
+          );
+        }
+      }
+    } else if (thing === 'spacing') {
+      // Spacing scales the space tokens a part reads; a state does not
+      // change them, and a part that reads none shows nothing.
+      if (s.state)
         refuse(
-          E.ERR_THEME_BAD_VALUE,
-          `corners takes ${DIALS.corners.values}, not "${v}".`,
+          E.ERR_THEME_NO_EFFECT,
+          `spacing does not change in a state; drop --state.`,
           {
-            didYouMean: nearest(
-              v,
-              CORNERS.map(([n]) => n),
-            ),
+            run: [
+              `${P} set ${slug} spacing ${quoteCommandArgument(v || 'roomy')}${onFlag}`,
+            ],
           },
         );
-    } else if (thing === 'spacing') {
+      if (s.on && !ctx.unchecked) {
+        // The tokens reach the parts inside it too.
+        const reads = (/** @type {string} */ t) =>
+          Object.values(ctx.C.MAP[t]?.own ?? {}).some(p =>
+            Object.keys(p.tokens ?? {}).some(x =>
+              /^--(spacing-|size-element-)/.test(x),
+            ),
+          );
+        const spaced = partsOf(ctx, s).filter(
+          t => reads(t) || (ctx.C.MAP[t]?.contains ?? []).some(reads),
+        );
+        if (!spaced.length)
+          refuse(
+            E.ERR_THEME_NO_EFFECT,
+            `${s.on} reads no spacing or control size, so spacing changes nothing you see there. For space around it, set margin or padding on it.`,
+            {run: [`${P} set ${slug} padding 8px${onFlag}`]},
+          );
+      }
       if (step) s.value = ladder(SPACING, 'medium');
       else if (!SPACING.some(([n]) => n === v))
         refuse(
@@ -1570,19 +1658,32 @@ export function checkSetting(
         const reads = g
           ? C.partReads(t, g).filter(r => r.props.includes(prop))
           : [];
-        const variants = [
+        const variantsOf = (
+          /** @type {(w: string) => string | undefined} */ pick,
+        ) => [
           ...new Set(
             reads
               .flatMap(r => r.when)
-              .map(w => /(?:^|,)variant=([\w-]+)/.exec(w)?.[1])
+              .map(pick)
               .filter(Boolean),
           ),
         ];
-        if (
-          reads.length &&
-          variants.length &&
-          (s.state || !reads.some(r => r.when.includes('')))
-        )
+        // Resting reads keyed by the variant alone, and reads in the state.
+        const rest = variantsOf(w => /^variant=([\w-]+)$/.exec(w)?.[1]);
+        const inState = s.state
+          ? variantsOf(w =>
+              w.includes(`:${s.state}`)
+                ? /(?:^|,)variant=([\w-]+)/.exec(w)?.[1]
+                : undefined,
+            )
+          : [];
+        // A state that does not change this property shows each variant's
+        // resting value, so that is what the other mode must keep.
+        const variants = inState.length ? inState : rest;
+        const perVariant = inState.length
+          ? true
+          : rest.length > 0 && !reads.some(r => r.when.includes(''));
+        if (reads.length && variants.length && perVariant)
           refuse(
             E.ERR_THEME_NO_MODE,
             `Each variant of ${t} has its own ${prop}${s.state ? ` when ${s.state}` : ''}, so one mode cannot be set for all of them at once: the other mode would take one variant's color for every variant. Name the variant.`,
@@ -1660,10 +1761,13 @@ export function checkSetting(
         },
       );
     }
-    // The other mode keeps the part's own value there; with none to keep,
-    // the setting would change that mode too.
+    // In a state, the other mode keeps the state's own value there (or a
+    // value set for both modes); with none to keep, the setting would
+    // change that mode too. Without a state, the other mode keeps the
+    // part's plain color.
     if (
       s.mode &&
+      s.state &&
       !partsOf(ctx, s).every(t =>
         partDefault(ctx, t, camel(prop), s.when, s.state),
       ) &&
@@ -1673,7 +1777,6 @@ export function checkSetting(
           x.on === s.on &&
           x.when === s.when &&
           x.state === s.state &&
-          x.mode &&
           x.mode !== s.mode,
       )
     )

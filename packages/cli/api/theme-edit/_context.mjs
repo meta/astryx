@@ -203,7 +203,7 @@ export function fontNotes(ctx, data) {
     const family = fontOf(s.value).family.replace(/["']/g, '').toLowerCase();
     const near = CLOSEST_OPEN_FONT[family];
     notes.push(
-      `"${fontOf(s.value).family.replace(/["']/g, '')}" is not a system font and no package loads it: the app must load it, or it falls back.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
+      `"${fontOf(s.value).family.replace(/^["']|["']$/g, '')}" is not a system font and no package loads it: the app must load it, or it falls back.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
     );
   }
   return notes;
@@ -227,13 +227,31 @@ export function styledChanges(before, after) {
     ])) {
       const x = a[target]?.[key] ?? {};
       const y = b[target]?.[key] ?? {};
+      /** @param {string} p */
+      const cssName = p =>
+        p.startsWith('--')
+          ? p
+          : p.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
       for (const prop of new Set([...Object.keys(x), ...Object.keys(y)])) {
         if (JSON.stringify(x[prop]) === JSON.stringify(y[prop])) continue;
-        const name = prop.startsWith('--')
-          ? prop
-          : prop.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+        const where = `${target}${key === 'base' ? '' : ` ${key}`}`;
+        // A state block (`:hover`) lists each property it changes.
+        if (
+          prop.startsWith(':') &&
+          ((y[prop] && typeof y[prop] === 'object') ||
+            (x[prop] && typeof x[prop] === 'object'))
+        ) {
+          const xs = x[prop] ?? {};
+          const ys = y[prop] ?? {};
+          for (const p of new Set([...Object.keys(xs), ...Object.keys(ys)]))
+            if (JSON.stringify(xs[p]) !== JSON.stringify(ys[p]))
+              out.push(
+                `${where} ${prop}: ${cssName(p)} ${ys[p] === undefined ? '(removed)' : String(ys[p])}`,
+              );
+          continue;
+        }
         out.push(
-          `${target}${key === 'base' ? '' : ` ${key}`}: ${name} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
+          `${where}: ${cssName(prop)} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
         );
       }
     }

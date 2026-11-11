@@ -389,10 +389,18 @@ export function loadTheme(
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
+  // A bad mode or base is fixed by setting it.
+  const fieldFix = /^(it has no mode|mode ")/.test(problem ?? '')
+    ? `${P} set ${slug} mode both`
+    : /^base "/.test(problem ?? '')
+      ? `${P} set ${slug} base none`
+      : null;
   if (problem)
     throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json: ${problem}. Fix it by hand${recover.text}. Nothing was changed.`,
-      recover.run,
+      `themes/${slug}/${slug}.settings.json: ${problem}. ${fieldFix ? 'Set it again' : `Fix it by hand${recover.text}`}. Nothing was changed.`,
+      fieldFix
+        ? [{name: fieldFix, reason: 'do this instead'}, ...recover.run]
+        : recover.run,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   return data;
@@ -413,9 +421,14 @@ export function settingsProblem(
 ) {
   if (!data || typeof data !== 'object' || Array.isArray(data))
     return 'the file is not a settings object';
-  if (!['both', 'light-only', 'dark-only'].includes(data.mode))
-    return `mode "${data.mode}" is not both, light-only or dark-only`;
-  if (data.like != null && !LIKE.includes(data.like))
+  // `set <theme> mode` and `set <theme> base` fix their own field.
+  const fixing = typeof skip === 'string' ? skip : skip?.thing;
+  const field = fixing === 'mode' || fixing === 'base';
+  if (!field && !['both', 'light-only', 'dark-only'].includes(data.mode))
+    return data.mode == null
+      ? 'it has no mode'
+      : `mode "${data.mode}" is not both, light-only or dark-only`;
+  if (!field && data.like != null && !LIKE.includes(data.like))
     return `base "${data.like}" is not a built-in theme (${LIKE.join(', ')})`;
   if (!Array.isArray(data.settings)) return 'settings is not a list';
   const keys = new Set();
@@ -795,10 +808,14 @@ export function compileTheme(ctx, data, base) {
     const b = block(s, target);
     if (s.mode && !modeOnly) {
       const prev = b[prop];
-      // The other mode keeps exactly what it had; the check refuses a mode
-      // setting that has nothing to keep there.
+      // The other mode keeps exactly what it had: the value set for it, the
+      // part's own, else what the property shows unset (light-dark() takes
+      // colors only, so never inherit).
       const other =
-        prev ?? partDefault(ctx, target, prop, s.when, s.state) ?? 'inherit';
+        prev ??
+        partDefault(ctx, target, prop, s.when, s.state) ??
+        partDefault(ctx, target, prop, s.when) ??
+        (/^background/.test(kebab(prop)) ? 'transparent' : 'currentcolor');
       const split = (/** @type {string} */ x, /** @type {1 | 2} */ side) =>
         x.replace(/^light-dark\((.*),\s*(.*)\)$/, `$${side}`);
       b[prop] =
@@ -861,54 +878,65 @@ export function compileTheme(ctx, data, base) {
     const parts = partsOf(ctx, s);
     if (s.source === 'dial') {
       if (s.thing === 'corners') {
-        const px = cornerPx(s.value);
-        const val = (/** @type {number} */ x) =>
-          px >= 9999 ? '9999px' : `${x}px`;
-        if (parts.length)
-          for (const t of parts)
-            putComp({...s, mode: undefined}, t, 'borderRadius', val(px));
-        else {
-          putTok('--radius-element', val(px));
-          // The derived radii keep the base theme's own proportions to the
-          // element radius (matcha's page is 3.5 times it), so a bigger
-          // element radius never makes them smaller.
-          /** @param {string | undefined} v */
-          const basePx = v => {
-            const m = /^\s*(\d*\.?\d+)(px|rem|em)?\s*$/.exec(String(v ?? ''));
-            return m ? Number(m[1]) * (m[2] === 'px' || !m[2] ? 1 : 16) : null;
-          };
-          const el = basePx(base.light['--radius-element']);
-          /** @param {string} token @param {number} fallback */
-          const ratio = (token, fallback) => {
-            const v = basePx(base.light[token]);
-            return el && v != null ? v / el : fallback;
-          };
-          // A checkbox stays a rounded square next to a round radio.
-          putTok(
-            '--radius-inner',
-            px >= 9999
+        // Past 1000px a radius is fully round: the pill tokens apply.
+        const px = cornerPx(s.value) >= 1000 ? 9999 : cornerPx(s.value);
+        const pill = px >= 9999;
+        const rung = CORNERS.some(([n]) => n === s.value);
+        // The derived radii keep the base theme's own proportions to the
+        // element radius (matcha's page is 3.5 times it), so a bigger
+        // element radius never makes them smaller.
+        /** @param {string | undefined} v */
+        const basePx = v => {
+          const m = /^\s*(\d*\.?\d+)(px|rem|em)?\s*$/.exec(String(v ?? ''));
+          return m ? Number(m[1]) * (m[2] === 'px' || !m[2] ? 1 : 16) : null;
+        };
+        const el = basePx(base.light['--radius-element']);
+        /** @param {string} token @param {number} fallback */
+        const ratio = (token, fallback) => {
+          const v = basePx(base.light[token]);
+          return el && v != null ? v / el : fallback;
+        };
+        const roundPx = CORNERS.find(([n]) => n === 'round')?.[1] ?? 16;
+        /**
+         * The radius a rung gives each radius token, the same on a part as
+         * on the whole theme: a checkbox stays a rounded square, and a
+         * container or page is at least as round as `round`'s.
+         * @param {string} token
+         */
+        const derived = token =>
+          token === '--radius-inner'
+            ? pill
               ? '6px'
-              : val(Math.round(px * Math.min(1, ratio('--radius-inner', 0.6)))),
-          );
-          // Pill containers and pages are at least as round as `round`'s.
-          const roundPx = CORNERS.find(([n]) => n === 'round')?.[1] ?? 16;
-          putTok(
+              : `${Math.round(px * Math.min(1, ratio('--radius-inner', 0.6)))}px`
+            : token === '--radius-container'
+              ? `${Math.round(pill ? Math.max(24, roundPx * ratio(token, 1.25)) : px * ratio(token, 1.25))}px`
+              : token === '--radius-page'
+                ? `${Math.round(pill ? Math.max(32, roundPx * ratio(token, 2.5)) : px * ratio(token, 2.5))}px`
+                : pill
+                  ? '9999px'
+                  : `${px}px`;
+        if (parts.length)
+          for (const t of parts) {
+            // A rung on a part gives what the whole-theme rung gives the
+            // radius token the part reads; an exact size is as given.
+            const token = /^var\((--radius-[\w-]+)\)$/.exec(
+              partDefault(ctx, t, 'borderRadius', s.when) ?? '',
+            )?.[1];
+            putComp(
+              {...s, mode: undefined},
+              t,
+              'borderRadius',
+              rung || pill ? derived(token ?? '--radius-element') : `${px}px`,
+            );
+          }
+        else
+          for (const token of [
+            '--radius-element',
+            '--radius-inner',
             '--radius-container',
-            `${Math.round(
-              px >= 9999
-                ? Math.max(24, roundPx * ratio('--radius-container', 1.25))
-                : px * ratio('--radius-container', 1.25),
-            )}px`,
-          );
-          putTok(
             '--radius-page',
-            `${Math.round(
-              px >= 9999
-                ? Math.max(32, roundPx * ratio('--radius-page', 2.5))
-                : px * ratio('--radius-page', 2.5),
-            )}px`,
-          );
-        }
+          ])
+            putTok(token, derived(token));
       } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
         // The palette mapping above sets these tokens.
       } else if (s.thing === 'font') {
@@ -994,8 +1022,10 @@ export function compileTheme(ctx, data, base) {
           let nv = null;
           if (/^--spacing-/.test(k) && /rem$/.test(v))
             nv = `${Number((parseFloat(v) * f).toFixed(3))}rem`;
+          // A control never gets smaller than 24px, the smallest target a
+          // pointer can use comfortably.
           if (/^--size-element-/.test(k) && /px$/.test(v))
-            nv = `${Math.round(parseFloat(v) * f)}px`;
+            nv = `${Math.max(Math.min(24, parseFloat(v)), Math.round(parseFloat(v) * f))}px`;
           if (nv === null) continue;
           if (parts.length) for (const t of parts) block(s, t)[k] = nv;
           else putTok(k, nv);
@@ -1008,6 +1038,15 @@ export function compileTheme(ctx, data, base) {
       for (const t of parts) putComp(s, t, camel(s.thing), s.value);
     }
   }
+  // A one-mode theme looks the same whatever the system asks for: every
+  // color the theme does not set takes its mode's value from the base (or
+  // Core) on both sides.
+  if (modeOnly)
+    for (const k of Object.keys(/** @type {Record<string, string>} */ (TOKENS)))
+      if (MODAL.has(ctx.C.typeOf(k)) && !tok[k]) {
+        const v = base[modeOnly]?.[k];
+        if (v && !/var\(/.test(v)) putTok(k, v);
+      }
   // A scale steeper than the standard one enlarges the headings; the steps
   // below the base text size keep the standard ratio, so small text stays
   // readable. An exact token setting still wins.
@@ -1593,8 +1632,8 @@ export async function resolvedTokens(ctx, slug) {
  */
 export async function contrastProblems(ctx, data, res) {
   const base = await baseResolved(ctx.project, data.like);
-  /** @param {PaintSide} side @param {'fg' | 'bg'} which @param {string} m */
-  const override = (side, which, m) => {
+  /** @param {PaintSide} side @param {'fg' | 'bg'} which @param {string} m @param {string} [when] */
+  const override = (side, which, m, when) => {
     if (!side.target) return null;
     const props =
       which === 'fg' ? ['color'] : ['background', 'background-color'];
@@ -1603,7 +1642,7 @@ export async function contrastProblems(ctx, data, res) {
       .find(
         x =>
           partsOf(ctx, x).includes(/** @type {string} */ (side.target)) &&
-          !x.when &&
+          (!x.when || x.when === when) &&
           !x.state &&
           (!x.mode || x.mode === m) &&
           ((x.source === 'property' && props.includes(x.thing)) ||
@@ -1631,7 +1670,7 @@ export async function contrastProblems(ctx, data, res) {
   const value = (p, side, m) => {
     const s = p[side];
     return (
-      override(s, side, m) ??
+      override(s, side, m, /** @type {any} */ (p).when) ??
       (side === 'fg' ? onTint(p, m) : null) ??
       (s.tokens.length
         ? res[/** @type {'light' | 'dark'} */ (m)][s.tokens[0]]
@@ -1648,6 +1687,42 @@ export async function contrastProblems(ctx, data, res) {
       ? base[/** @type {'light' | 'dark'} */ (m)][s.tokens[0]]
       : s.raw;
   };
+  // The census renders each part once, with its default props: text on a
+  // part whose variants each have their own colors (a destructive button)
+  // is measured per variant too, from what each variant reads.
+  /** @type {TextPair[]} */
+  const variantPairs = [];
+  for (const p of /** @type {any} */ (ctx).parts.pairs) {
+    const t = p.fg.target;
+    if (!t || t !== p.bg.target) continue;
+    const fgReads = ctx.C.partReads(t, 'text');
+    const bgReads = ctx.C.partReads(t, 'background');
+    const variants = [
+      ...new Set(
+        bgReads
+          .flatMap(r => r.when)
+          .map(w => /^variant=([\w-]+)$/.exec(w)?.[1])
+          .filter(Boolean),
+      ),
+    ];
+    for (const v of /** @type {string[]} */ (variants)) {
+      const bgTok = bgReads.find(r => r.when.includes(`variant=${v}`))?.token;
+      const fgTok =
+        fgReads.find(r => r.when.includes(`variant=${v}`))?.token ??
+        p.fg.tokens[0];
+      if (!bgTok || !fgTok) continue;
+      if (bgTok === p.bg.tokens[0] && fgTok === p.fg.tokens[0]) continue;
+      variantPairs.push(
+        /** @type {any} */ ({
+          ...p,
+          text: `${p.text} (variant ${v})`,
+          when: `variant:${v}`,
+          fg: {...p.fg, tokens: [fgTok]},
+          bg: {...p.bg, tokens: [bgTok]},
+        }),
+      );
+    }
+  }
   const {problems, more, unchecked} = ctx.C.contrast(
     value,
     baseValue,
@@ -1660,6 +1735,7 @@ export async function contrastProblems(ctx, data, res) {
       page: m =>
         res[/** @type {'light' | 'dark'} */ (m)]['--color-background-body'],
     },
+    variantPairs,
   );
   return [
     ...problems.map(
@@ -1674,7 +1750,8 @@ export async function contrastProblems(ctx, data, res) {
       const scoped = data.settings.filter(
         x =>
           (x.on &&
-            (x.when || x.state) &&
+            // A variant's own colors are measured with the variant pairs.
+            (x.state || (x.when && !/^variant:/.test(x.when))) &&
             (/^(color|background|background-color)$/.test(x.thing) ||
               /^--color-/.test(x.thing))) ||
           // The button style recolors the primary button only.
@@ -1728,6 +1805,22 @@ function hashDir(dir) {
 }
 
 /**
+ * The files the editor writes for a theme, after `<slug>.`: the only ones a
+ * change reads, hashes or puts back, and the only ones a stopped `new`
+ * leaves (a designer's `<slug>.design.psd` beside them is never touched).
+ */
+export const EDITOR_SUFFIXES = [
+  'settings.ts',
+  'settings.json',
+  'css',
+  'css.d.ts',
+  'js',
+  'd.ts',
+  'variants.d.ts',
+  'history.json',
+];
+
+/**
  * The files in a theme folder that the editor writes, by name: the
  * theme's generated files, its settings, history and pages, and its color
  * files. Anything else there (notes, a designer's source file, the
@@ -1741,11 +1834,10 @@ function ownFiles(dir) {
   if (!fs.lstatSync(dir, {throwIfNoEntry: false})?.isDirectory()) return [];
   const slug = path.basename(dir);
   const mine = (/** @type {string} */ n) =>
-    n !== `${slug}.theme.ts` &&
-    (n.startsWith(`${slug}.`) ||
-      /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config(\.damaged(-\d+)?)?\.json)$/.test(
-        n,
-      ));
+    EDITOR_SUFFIXES.some(x => n === `${slug}.${x}`) ||
+    /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config(\.damaged(-\d+)?)?\.json)$/.test(
+      n,
+    );
   /** @type {string[]} */
   const out = [];
   for (const e of fs.readdirSync(dir, {withFileTypes: true}))

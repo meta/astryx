@@ -403,9 +403,26 @@ function readConfig(file) {
     return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
   } catch {
     // A file that does not parse holds nothing the editor can keep: it is
-    // made again from the settings, and the damaged text is kept beside it
-    // (palette.config.damaged.json, then -2, -3 …), every damaged copy,
-    // for any hand edit worth copying back; the result names it.
+    // read as no config. Only a command that writes the theme keeps its
+    // text aside (keepDamaged), so a read writes nothing.
+    damagedConfigs.add(file);
+    return null;
+  }
+}
+
+/** Damaged configs read in this run, kept aside when a change is written. */
+const damagedConfigs = new Set();
+
+/**
+ * Keep a damaged config's text beside it (palette.config.damaged.json,
+ * then -2, -3 …; the same text once) before the editor writes the config
+ * again, and say where.
+ * @param {string} file
+ */
+function keepDamaged(file) {
+  if (!damagedConfigs.has(file) || !fs.existsSync(file)) return;
+  damagedConfigs.delete(file);
+  {
     const text = fs.readFileSync(file);
     let n = 1;
     const name = (/** @type {number} */ k) =>
@@ -418,7 +435,6 @@ function readConfig(file) {
     keptDamaged.push(
       `palette.config.json was damaged, so it was made again from the settings; its text is kept in ${name(n)}`,
     );
-    return null;
   }
 }
 
@@ -954,7 +970,13 @@ function planPalette(cwd, slug, data, base) {
     };
     if (!kind) delete out.kind;
     if (!out.anchors.length) delete out.anchors;
-    return {family: out, stop};
+    // The keys always in one order, so a change and its undo write the
+    // same bytes.
+    /** @type {Record<string, unknown>} */
+    const ordered = {};
+    for (const k of FAMILY_KEYS) if (k in out) ordered[k] = out[k];
+    for (const k of Object.keys(out)) if (!(k in ordered)) ordered[k] = out[k];
+    return {family: /** @type {typeof out} */ (ordered), stop};
   };
 
   /** @type {PalettePlan['fills']} */
@@ -1087,6 +1109,11 @@ const sha256 = text => createHash('sha256').update(text).digest('hex');
  */
 export function syncPalette(cwd, slug, data, base) {
   keptDamaged.length = 0;
+  // The config is read first, so a damaged one is kept aside before the
+  // sync writes it again.
+  const config = path.join(cwd, paletteFiles(slug).config);
+  readConfig(config);
+  keepDamaged(config);
   const notes = syncPaletteFiles(cwd, slug, data, base);
   return [...keptDamaged.splice(0), ...notes];
 }
