@@ -160,7 +160,7 @@ describe('experimental theme editor how --list', () => {
     expect(
       fs
         .readdirSync(path.join(cwd, 'themes', 'brand'))
-        .filter(f => f.includes('.load.')),
+        .filter(f => /\.load[-.]/.test(f)),
     ).toEqual([]);
   }, 120_000);
 });

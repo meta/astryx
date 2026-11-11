@@ -294,6 +294,8 @@ function EditLink({
       error={error}
       isEditing
       size={SIZE}
+      // The popover is no Popover, so the field focuses itself as Edit opens.
+      hasAutoFocus
       onUrlChange={next => {
         setUrl(next);
         setError('');

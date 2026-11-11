@@ -4945,13 +4945,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # The release specs a pull request runs in `release-specs (changed)`, by
-  # FR32's release-file and import triggers (spec:AST-030 FR32): each
-  # `*.release.*.spec.ts` file it adds or changes, and each one that imports a
-  # module it changes. Specs tagged `@pr-a11y release-only`, visited
-  # components and Lab-only pull requests are not triggers yet. When the imports
-  # cannot be followed, every release spec runs. The plan runs on a slim
-  # runner, so a pull request that triggers nothing never starts the
+  # The release specs a pull request runs (spec:AST-030 FR32): each
+  # `*.release.*.spec.ts` file or spec tagged `@pr-a11y release-only` that it
+  # adds or changes, that imports a module it changes, or that visits a
+  # component whose rendered source it changes. A spec visits the component a
+  # story id names; `a11y-*` ids and fixture pages name one through
+  # .github/release-spec-visits.json, and a spec's `@visits` line adds more. An
+  # unresolved visit runs the spec; imports that cannot be followed run every
+  # release spec. A Lab-only pull request plans too (FR26). The plan splits
+  # the specs into shards of at most twelve minutes by recorded time. It runs
+  # on a slim runner, so a pull request that triggers nothing never starts the
   # release check's runner.
   release-specs-plan:
     needs: [room, admission, heavy-ci]
@@ -4964,6 +4967,7 @@ jobs:
     outputs:
       has_specs: ${{ steps.plan.outputs.has_specs }}
       specs: ${{ steps.plan.outputs.specs }}
+      shards: ${{ steps.plan.outputs.shards }}
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
@@ -4984,11 +4988,14 @@ jobs:
           outside-pull-request: skip
           # Lists the changed files, so the plan reads them.
           component-audit: 'true'
+          # A Lab-only change plans too: every changed file is this job's work,
+          # listed in lab_specs_path.
+          lab-only-specs: '.'
 
       # A diff GitHub truncates lists no changed files, and a re-run cannot
       # list them; the pull request must be split (spec:AST-030 FR12).
       - name: Require a complete changed-file list
-        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.lab_specs_path == ''
         env:
           TRUNCATED: ${{ steps.scope.outputs.truncated }}
         run: |
@@ -4999,16 +5006,18 @@ jobs:
           fi
           exit 1
 
-      # The merge commit's package and harness sources, for the import graph.
+      # The merge commit's package and harness sources for the import graph,
+      # its stories for the visits, and the visit map and recorded times.
       - name: Check out the merge commit's sources
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7
         with:
           sparse-checkout: |
-            .github/scripts
+            .github
             scripts/lib
             packages
             internal
+            apps/storybook/stories
           path: .plan
           persist-credentials: false
 
@@ -5016,7 +5025,7 @@ jobs:
         id: plan
         if: steps.scope.outputs.applies == 'true'
         env:
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path || steps.scope.outputs.lab_specs_path }}
         run: |
           # A planner failure fails the step, never reads as "nothing to run".
           set -o pipefail
@@ -5025,20 +5034,25 @@ jobs:
             --listed "$RUNNER_TEMP/listed.txt" --changed "$FILES_PATH" \
             --root .plan --out "$RUNNER_TEMP/release-specs-plan.json" | tee -a "$GITHUB_STEP_SUMMARY"
 
-  # Each release spec the plan names runs here in full and alone
-  # (`--workers=1`), on the runner of the gating release check, with that
-  # check's Playwright config and timing gate (spec:AST-030 FR32, DEC-29). It
-  # has no time budget and no automatic retry: a timing-budget miss is a
-  # failure. merge-guard waits for it by name when a pull request triggers it.
-  # The job starts only when the plan names a spec.
+  # Each release spec the plan names runs in full and alone (`--workers=1`),
+  # in the one shard the plan gives it, on the runner of the gating release
+  # check, with that check's Playwright config and timing gate (spec:AST-030
+  # FR32, DEC-29). A shard plans at most twelve minutes of recorded time
+  # inside its fifteen-minute limit. There is no automatic retry: a
+  # timing-budget miss is a failure. The shards start only when the plan
+  # names a spec; `release-specs (changed)` joins them.
   release-specs:
-    name: release-specs (changed)
+    name: release-specs (shard ${{ matrix.shard }}/${{ matrix.of }})
     needs: [room, admission, heavy-ci, build-storybook, release-specs-plan]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true' && needs.release-specs-plan.outputs.has_specs == 'true')) }}
     # The gating release check runs its contracts on four cores; timing
     # budgets hold only on that runner.
     runs-on: 4-core-ubuntu
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.release-specs-plan.outputs.shards) }}
     permissions:
       contents: read
     steps:
@@ -5099,7 +5113,7 @@ jobs:
       - name: Run the planned release specs
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          SPECS: ${{ needs.release-specs-plan.outputs.specs }}
+          SPECS: ${{ toJSON(matrix.specs) }}
           # The Table release proof reads it: timing budgets gate on the
           # release check's runner, so they gate here too.
           ASTRYX_TABLE_TIMING_GATE: '1'
@@ -5130,6 +5144,25 @@ jobs:
           # One worker: a release spec judges timing alone, as the release
           # check gives an isolated timing proof a contract leg of its own.
           pnpm exec playwright test "${RUN[@]}" --config playwright.config.ts --project chromium --workers=1
+
+  # The check merge-guard waits for when a pull request triggers it: it
+  # passes only when every release-spec shard passed.
+  release-specs-changed:
+    name: release-specs (changed)
+    needs: [room, admission, heavy-ci, release-specs-plan, release-specs]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true' && needs.release-specs-plan.outputs.has_specs == 'true')) }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require every release-spec shard
+        env:
+          SHARDS: ${{ needs.release-specs.result }}
+        run: |
+          if [ "$SHARDS" != success ]; then
+            echo "The release-spec shards did not all succeed: $SHARDS"
+            exit 1
+          fi
 
   # Dependent audits (spec:AST-030 FR12): a change to a component's source runs
   # that component's own `audit` specs, and a change to a shared primitive that

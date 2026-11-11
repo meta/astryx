@@ -37,6 +37,21 @@ const E = ERROR_CODES;
  */
 export function requireProject(cwd) {
   if (!isOutsideProject(cwd)) return;
+  const pkg = path.join(cwd, 'package.json');
+  // Yarn Plug'n'Play has no node_modules for the editor to read Core from.
+  if (fs.existsSync(path.join(cwd, '.pnp.cjs')))
+    throw new AstryxError(
+      "This app uses Yarn Plug'n'Play, which astryx experimental theme does not support: it reads the installed Core from node_modules. Set `nodeLinker: node-modules` in .yarnrc.yml and run yarn install. Nothing was written.",
+      [],
+      E.ERR_PROJECT_REQUIRED,
+    );
+  // A package.json with no Core: an app (or a workspace root) that needs it.
+  if (fs.existsSync(pkg))
+    throw new AstryxError(
+      `@astryxdesign/core is not installed in this app (package.json here does not use it). astryx experimental theme checks every change against the installed Core: install it, or run the command from the package that uses it. Nothing was written.`,
+      [{name: 'npm install @astryxdesign/core', reason: 'do this first'}],
+      E.ERR_PROJECT_REQUIRED,
+    );
   throw new AstryxError(
     'No package.json found. astryx experimental theme works inside an app project, which it writes the theme into and whose installed Core it checks every change against. Nothing was written.',
     [],
@@ -280,12 +295,29 @@ export async function previewAfter(ctx, slug, data, png) {
   };
 }
 
-/** @param {string | undefined} section a section of the sheet */
-export function checkSection(section) {
-  if (section != null && !SHOWCASE_GROUPS.includes(section))
+/**
+ * The section of the sheet, in lower case, or undefined; a refusal for one
+ * that is not a section.
+ * @param {string | undefined} section
+ * @param {string} [theme] the theme the suggestions name
+ * @returns {string | undefined}
+ */
+export function checkSection(section, theme = 'my') {
+  if (section === '')
+    refuse(E.ERR_MISSING_ARGUMENT, '--section was given no value.', {
+      run: [`${P} show ${theme} --section ${SHOWCASE_GROUPS[0]}`],
+    });
+  const s = section?.toLowerCase();
+  if (s != null && !SHOWCASE_GROUPS.includes(s))
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `--section takes ${SHOWCASE_GROUPS.join(', ')}, not "${section}".`,
-      {didYouMean: nearest(section, SHOWCASE_GROUPS)},
+      {
+        didYouMean: nearest(s, SHOWCASE_GROUPS),
+        run: [
+          `${P} show ${theme} --section ${nearest(s, SHOWCASE_GROUPS)[0] ?? SHOWCASE_GROUPS[0]}`,
+        ],
+      },
     );
+  return s;
 }
