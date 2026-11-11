@@ -46,6 +46,7 @@ import {
   useInteractionModalityTracking,
 } from '@astryxdesign/core/internal/touch';
 import {Text} from '@astryxdesign/core/Text';
+import {focusOutlineStyles} from '@astryxdesign/core/utils';
 import {Heading} from '@astryxdesign/core/Heading';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {
@@ -81,7 +82,6 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-container'],
     boxShadow: shadowVars['--shadow-low'],
     padding: spacingVars['--spacing-3'],
-    outline: 'none',
   },
   content: {
     display: 'flex',
@@ -387,9 +387,9 @@ export function TourStep({
       if (isTourRunningRef.current) {
         return;
       }
-      // When the tour ends and the callout's removal lost focus, focus goes
-      // to the target if it is in the tab order, else to the element that
-      // had focus when the tour started.
+      // Focus returns only when the callout's removal lost it. It goes to
+      // the target when the target is in the tab order. Otherwise it goes to
+      // the element that had focus when the tour started.
       returnFocusOnRemovalRef.current?.(
         target != null && target.tabIndex >= 0
           ? target
@@ -428,7 +428,7 @@ export function TourStep({
       ref={setRegion}
       aria-labelledby={headingId}
       tabIndex={-1}
-      {...stylex.props(styles.surface)}
+      {...stylex.props(styles.surface, focusOutlineStyles.focusVisible)}
       data-testid={testId}>
       <div {...stylex.props(styles.content)}>
         <VStack gap={1}>

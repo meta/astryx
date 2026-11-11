@@ -5,7 +5,8 @@
  * @input The built Lab Tour "Card Target" story (a step on a card, then a
  *   step on a Refresh button) and the dimmed "Showcase" story. Real browser
  *   input drives them.
- * @output Proofs that the callout anchors next to a card, that Tab leaves the
+ * @output Proofs that the callout anchors next to a card, that a step started
+ *   from the keyboard shows the focus ring on its region, that Tab leaves the
  *   callout for the page, that pressing the introduced control keeps the
  *   tour, that a held press on a scaling target leaves the callout in place,
  *   that Escape ends it, that a press on a dimmed page ends a backdrop tour,
@@ -44,6 +45,22 @@ test('the callout anchors next to a card target', async ({page}, testInfo) => {
     body: await page.screenshot(),
     contentType: 'image/png',
   });
+});
+
+test('a step started from the keyboard shows the focus ring on its region', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), STORY);
+  await page.getByRole('button', {name: 'Start tour'}).focus();
+  await page.keyboard.press('Enter');
+  const region = page.getByRole('region', {name: 'Your revenue'});
+  await expect(region).toBeFocused();
+  const outline = await region.evaluate(element => {
+    const style = getComputedStyle(element);
+    return {style: style.outlineStyle, width: parseFloat(style.outlineWidth)};
+  });
+  expect(outline.style).not.toBe('none');
+  expect(outline.width).toBeGreaterThan(0);
 });
 
 test('Tab leaves the callout for the page', async ({page}) => {
