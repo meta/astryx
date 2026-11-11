@@ -87,12 +87,12 @@ function heldPointerOf(
  * recognizer claims the finger. The page stops scrolling under it, and its
  * lift sends no click and no compatibility mouse events. The menu opens where
  * the finger landed: at `menuDisplayMs` if it is still down, or at the lift.
- * A finger still down goes on into the menu. A lift before the commit, a
- * second finger or a scroll gets no menu. So does
- * a drift past the tolerance before the menu shows. The press feedback grows
- * the trigger's visual from the onset, 150 ms after the finger lands, while
- * the recognizer follows the finger. It springs back when the recognizer ends the
- * press with no menu, and it holds while that menu is up.
+ * A finger still down goes on into the menu. Before the commit, a lift, a
+ * second finger or a scroll gets no menu. So does a drift past the tolerance
+ * before the menu shows. The press feedback grows the trigger's visual from
+ * the onset, 150 ms after the finger lands, while the recognizer follows the
+ * finger. It springs back when the recognizer ends the press with no menu, and
+ * it holds while that menu is up.
  */
 export function ContextMenuTouchLayer({
   triggerRef,

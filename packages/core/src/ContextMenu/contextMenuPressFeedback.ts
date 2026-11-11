@@ -15,16 +15,7 @@
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenu.tsx
  */
 
-// The growth starts in the first frame at or after the onset, 150 ms after a
-// finger lands, while the recognizer follows that finger. It plays its whole
-// spring from rest, from that frame, as Core Animation starts an animation at
-// its commit. The recognizer reports the landing; a pointer-only pen's press
-// waits for the press machine's "on". Only the recognizer's failure or cancel
-// returns it. A long press is a gesture, so the
-// growth plays UIKit's lift spring and each return its dismissal spring. The
-// compositor plays them, so a busy main thread does not stall them. Once the
-// menu opens, the trigger holds its size until the menu closes. Then it returns
-// on the dismissal spring. An inline trigger and Reduce Motion show no growth.
+// Only the recognizer's failure or cancel returns the growth.
 
 import {useCallback, useRef, type RefObject} from 'react';
 import {useAttachment} from '../hooks/useAttachment';
@@ -75,28 +66,38 @@ const NO_LANDING: RefObject<() => number | null> = {current: () => null};
 const NO_FINGER: RefObject<() => boolean> = {current: () => false};
 
 /**
- * Calls `onDue` in the first animation frame that runs at or after `dueAt`, on
- * the event clock, with the time its callback runs. `onWait` runs in each frame
- * before it. It reads only the clock. A frame comes on time where a timer does
- * not: Chromium holds the page's timers for about 100 ms after it handles a
- * touchstart. Returns the function that stops it.
+ * The window that shows `element`. A trigger in a same-origin iframe or a
+ * Picture-in-Picture window gets its touches, frames and timeline from that
+ * window, whose clock starts later than the page's.
+ */
+function windowOf(element: Element): Window {
+  return element.ownerDocument.defaultView ?? window;
+}
+
+/**
+ * Calls `onDue` in the first animation frame of `view` that runs at or after
+ * `dueAt`, on that window's clock, with the time its callback runs. `onWait`
+ * runs in each frame before it. It reads only the clock. A frame comes on time
+ * where a timer does not: Chromium holds the page's timers for about 100 ms
+ * after it handles a touchstart. Returns the function that stops it.
  */
 function watchFramesFrom(
+  view: Window,
   dueAt: number,
   onWait: () => void,
   onDue: (time: number) => void,
 ): () => void {
-  let frame = requestAnimationFrame(function look() {
-    const time = performance.now();
+  let frame = view.requestAnimationFrame(function look() {
+    const time = view.performance.now();
     if (time >= dueAt) {
       onDue(time);
       return;
     }
     onWait();
-    frame = requestAnimationFrame(look);
+    frame = view.requestAnimationFrame(look);
   });
   return () => {
-    cancelAnimationFrame(frame);
+    view.cancelAnimationFrame(frame);
   };
 }
 
@@ -132,7 +133,6 @@ export function useContextMenuPressFeedback(
   const fingerOnsetRef = useRef<
     ((landedAt: number, target: Element | null) => void) | null
   >(null);
-  // Stops the frame watch of a growth still to come.
   const stopOnsetRef = useRef<(() => void) | null>(null);
   const stopOnset = useCallback(() => {
     stopOnsetRef.current?.();
@@ -160,7 +160,19 @@ export function useContextMenuPressFeedback(
     if (element == null) {
       return null;
     }
-    animatorRef.current ??= createMotionEngine(element);
+    // Another window's timeline runs on its own clock and frames.
+    const view = windowOf(element);
+    animatorRef.current ??= createMotionEngine(
+      element,
+      view === window
+        ? {}
+        : {
+            now: () => view.performance.now(),
+            requestFrame: callback => {
+              view.requestAnimationFrame(frame => callback(frame));
+            },
+          },
+    );
     return animatorRef.current;
   }, [visualRef]);
 
@@ -281,6 +293,7 @@ export function useContextMenuPressFeedback(
       const startAt = (onsetAt: number) => {
         stopOnset();
         stopOnsetRef.current = watchFramesFrom(
+          windowOf(element),
           onsetAt,
           // The engine is built in a frame, not in the handler of the touch,
           // so the frame that starts the growth only creates its animation.
@@ -322,7 +335,7 @@ export function useContextMenuPressFeedback(
             if (next) {
               if (!followsFinger.current()) {
                 stopOnset();
-                markedAt = performance.now();
+                markedAt = windowOf(element).performance.now();
                 growAtMark();
               }
             } else if (!isFollowed.current()) {
