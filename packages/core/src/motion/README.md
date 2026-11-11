@@ -48,6 +48,7 @@ roles through `resolveMotion`.
 | `progress.ts`                                    | A spring's progress, one curve mapped from another (companions, clamped ranges), the velocity that continues a motion.                                               |
 | `presentation.ts`                                | Where each moving element is drawn relative to where the engine hit-tests it, reported by the animator while translate runs; read by the gesture host at touch-down. |
 | `reducedMotionPlan.ts`                           | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once.                                           |
+| `opacityFloor.ts`                                | The lowest opacity a compositor entrance fades in from: Chromium skips drawing a layer at exactly 0 as its animation starts.                                         |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
 
 Component-specific values (a sheet's detents, a switch's geometry, a context
@@ -168,8 +169,7 @@ await handle.finished; // true if it ran to the end, false if interrupted
   `{crossfadeAs: 'entrance'}` or `'exit'` gives a slide that changes no
   opacity its direction. No option or theme value lengthens the fade or keeps
   travel. For motion the animator does not drive, `reducedMotionFade()`
-  answers the same policy, `reducesMotion()` answers whether motion is
-  reduced at all, and `reducedMotion.stylex.ts` holds its CSS
+  answers the same policy, and `reducedMotion.stylex.ts` holds its CSS
   constants and the two media queries a StyleX transition spells.
   A decay's momentum keeps its motion under Reduce Motion: momentum that
   continues a throw is direct movement (DR2, DEC-2). A curve marked

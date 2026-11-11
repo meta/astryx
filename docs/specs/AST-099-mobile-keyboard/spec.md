@@ -197,23 +197,29 @@ app to turn on.
     by its nearest scroller, the document included, from the frame the
     keyboard's size is reported. A show's first report always places the field.
     A later report that comes while a finger is down, after a touch has begun
-    since the field's last placement, moves nothing. On iOS, that report comes as the keyboard
-    starts to slide, and the field rises on the browser's own smooth scroll
-    beside the slide, settling within 0.15 s after the keyboard settles. Under Reduce
-    Motion, in a theme that reduces motion for everyone, and in other browsers,
-    it moves in that frame. Where a browser carries out the document's
-    scroll by moving the visual viewport, that offset is this reveal, not a pan.
-    When that scroller cannot scroll far enough, it gains the missing scroll
-    range at its end while the keyboard shows and loses it when the keyboard
-    hides. Nothing else moves. When the keyboard closes, each scroller that
-    revealed the field scrolls back to where it was before the reveal, on the
-    browser's own smooth scroll from the report that the keyboard has gone; a
+    since the field's last placement, moves nothing. On iOS, that report comes
+    as the keyboard starts to slide, and the field rises on the browser's own
+    smooth scroll beside the slide, settling within 0.15 s after the keyboard
+    settles. Under Reduce Motion, in a theme that reduces motion for everyone,
+    and in other browsers, it moves in that frame. Where a browser carries out
+    the document's scroll by moving the visual viewport, that offset is this
+    reveal, not a pan. When that scroller cannot scroll far enough, it gains the
+    missing scroll range at its end while the keyboard shows and loses it when
+    the keyboard hides. Nothing else moves. When the keyboard closes, each
+    scroller that revealed the field scrolls back to where it was before the
+    reveal, on the browser's own smooth scroll. In Safari on iOS, the scroll
+    back starts at the blur that closes the keyboard, beside its slide. The
+    report that the keyboard has gone comes later and only confirms it. A finger
+    on the screen at that blur leaves the scroll back to the report. Elsewhere,
+    the scroll back starts at that report. Under Reduce Motion, and in a theme
+    that reduces motion for everyone, it lands at once at that report. A
     scroller the person scrolled while the keyboard showed keeps the person's
-    scroll. At the hide report, Firefox for Android can still show the document
-    where it was before the reveal. It turns the reveal back into a document
-    scroll only after that report, and the scroll back follows that scroll. A
-    change of the viewport's width while the keyboard shows, as when the phone
-    turns, keeps the page where that change left it.
+    scroll. A field that gains focus again during the slide stops the scroll
+    back where the page is. At the hide report, Firefox for Android can still
+    show the document where it was before the reveal. It turns the reveal back
+    into a document scroll only after that report, and the scroll back follows
+    that scroll. A change of the viewport's width while the keyboard shows, as
+    when the phone turns, keeps the page where that change left it.
   - **Docked containers.** A field docked at the bottom of the viewport, in a
     bottom bar, a fixed toolbar, or a sheet, rides the keyboard: its docked
     container moves up as the keyboard opens and back down as it closes, on
@@ -340,12 +346,23 @@ app to turn on.
   loses behavior and no breaking change applies; `BottomSheet.doc.mjs` states
   each platform's behavior. Firefox for Android gets FR2–FR5.
 - No public API exposes the keyboard height, and FR3 keeps it that way.
+- The keyboard module reads the input stream's touch counts, which
+  `packages/core/src/utils/inputStream.ts` exports as `isTouchOnScreen` and
+  `getTouchStartCount`. A finger in a native pan has no press in
+  `getDownPresses`, and reading a count adds no listener.
+- `keyboardHeight.ts` exports `isFingerOnScreen`, which forgets a finger held at
+  the keyboard's last hide. It also exports `panVisualViewportTo`, which pans
+  the visual viewport to a field the document cannot scroll to.
+  `keyboardTarget.ts` uses both.
+- `keyboardTarget.ts` exports `FIELD_CLEARANCE_AT_REPORT`, the 4 CSS px that a
+  field's reveal and BottomSheet's hook both set at Chrome's first report.
 - The consumer documentation gains the Android viewport setting (FR8).
 
 ### Implementation gaps
 
 TextInput, TextArea, and NumberInput meet FR9 apart from the missing scroll
-range (Gap 11). Each other gap below is open.
+range (Gap 11) and a modal BottomSheet shorter than `tall` (Gap 19). Each other
+gap below is open.
 
 - **Gap 1 — The keyboard module.** Partly met: the keyboard module
   (`packages/core/src/keyboard/`) measures the keyboard, keeps focus from
@@ -356,8 +373,9 @@ range (Gap 11). Each other gap below is open.
   yet (Gaps 3–8).
 - **Gap 2 — TextInput, TextArea, and NumberInput.** Met: each passes its input
   to the keyboard module, which keeps the focused field above the keyboard as
-  FR9 describes, apart from the missing scroll range (Gap 11) and the rise in
-  Chrome on Android (Gap 13).
+  FR9 describes, apart from the missing scroll range (Gap 11), the rise in
+  Chrome on Android (Gap 13), and a modal BottomSheet shorter than `tall`
+  (Gap 19).
 - **Gap 3 — The typed fields of DateInput, DateTimeInput, and TimeInput.** No
   keyboard handling. Their touch picker fields are read-only with no
   input mode and bring up no keyboard, so they are outside FR9.
@@ -431,6 +449,10 @@ range (Gap 11). Each other gap below is open.
   happens when a field without Core's handling, such as a plain input, opens the
   keyboard before any Core field has measured the page. A field revealed there
   ends on the keyboard's top edge, not 10 CSS px clear.
+- **Gap 19 — A field in a modal BottomSheet shorter than `tall`:** the sheet's
+  full-viewport dialog has no scroller, and BottomSheet's keyboard path runs
+  only for `height="tall"`, so the field keeps the browser's own reveal; Chrome
+  on Android then pans the page (336 px, field 64 px clear).
 
 ### Follow-up
 
@@ -467,7 +489,7 @@ that sets its own `translate`, to the app.
 | FR9      | Chrome on Android in the emulator with Gboard, top-level document                                            | TextInput in the page and in an app's docked toolbar, at normal speed, with animations removed, and on a slow profile; TextInput at a short page's end, in a scroll area under the keyboard, in a floating panel, and in a sheet of a set height                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Chrome adds a visual-viewport pan after Core places the field, or a field Core pans ends other than 10 CSS px above the keyboard                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FR9      | TBD (Gap 11): a ride test per covered field, plus physical-device evidence under DEC-3                       | each covered field in a fixed bottom bar, a sheet, an app-owned bar whose layout box sits at the viewport's bottom edge; an app bar the app lifts to the keyboard's top on the same visual-viewport resize, with its listener running before and after Core's; an app bar the app lifts part of the way with its own transform; an app bar the app lifts behind a CSS transition or animation still running when Core measures; an app bar the app lifts from script with its own `translate`; a keyboard that changes height while focus stays in a docked bar; an app bar centred with its own `translate`; an app bar floating above the bottom edge; an app-owned fixed container that fills the viewport, with and without a scroller holding the field; a full-height side drawer with a scroller holding the field; a tall pane below a fixed header with no scroller and a field near its top; the same pane with a field near its bottom; keyboard show and hide; the field blurs; the field unmounts; reduced motion on | The docked container stays put, lags or jumps after the keyboard settles, a Core host or content field less than 10 CSS px above the keyboard, an app bar left under the keyboard or above its top edge once the keyboard settles, a move left on an app element after the keyboard hides once focus has left the field, or after the field unmounts, any other change on an app element, a bar the app lifts moved a second time, a bar the app is moving with CSS motion moved by Core, a bar with its own `translate` moved, a docked bar not updated when the keyboard changes height, a floating bar moved, the app's transform replaced, a bar with its own `translate` moved or its `translate` changed, the page is panned or translated, a fixed container that fills the viewport, or whose layout box is not at the bottom edge, moves, or a Core host that already rides is moved twice; a too-tall docked container moved when a scroller holds the field or when the field already clears the keyboard, moved more than the field needs to clear it, or a field near its bottom left under the keyboard; a field that a scroller holds inside a container FR9 leaves to the app, left under the keyboard. A container FR9 leaves to the app (floating above the bottom edge, with its own `translate`, or full-viewport) left under the keyboard, or a page pan from the browser's own reveal for a field with no scroller between it and that container, is not a failure |
 | FR9      | Safari on iOS in the Simulator, top-level document                                                           | A TextInput in the middle of a page that scrolls the document: tap it and read every drawn frame until the keyboard settles                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | The field reaches its place in one frame with no position between, or settles more than 0.15 s after the keyboard settles                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| FR9      | Safari on iOS in the Simulator, top-level document                                                           | A TextInput in the middle of a page that scrolls the document: focus it, then close the keyboard with Done; again after a scroll of the page while the keyboard shows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | The page ends other than where it was before the reveal (to 0.5 CSS px), or a scroll the person made while the keyboard showed is undone                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| FR9      | Safari on iOS in the Simulator, top-level document                                                           | A TextInput in the middle of a page that scrolls the document: focus it, then close the keyboard with Done and read every drawn frame until the page rests; again after a scroll of the page while the keyboard shows; again with the field tapped 80 ms and 150 ms after Done                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | The page ends other than where it was before the reveal (to 0.5 CSS px); a scroll the person made while the keyboard showed is undone; the page starts back only after the keyboard has gone, or moves at the report that it has gone; or a field tapped again during the slide ends under the keyboard                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ## Decision log
 

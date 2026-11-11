@@ -4,10 +4,12 @@
 
 /**
  * @file listReorderContext.ts
- * @input Nothing at run time but a symbol
+ * @input React's hooks and a registered key (utils/sharedRealm.ts)
  * @output `REORDER_ENGINE`, the key a reorderable object carries its
  *   machinery under. Also the internal types between List, ListItem and that
- *   machinery: what a List hands its rows through ListContext's `reorder`
+ *   machinery: what a List hands its rows through ListContext's `reorder`.
+ *   `useReorderSession` and `useReorderCommit` run the object's session for a
+ *   List and for List/ListReorderScope.tsx
  * @position Internal to List. List imports only this module and the
  *   reorderable object's type, and ListItem only types. So a List without
  *   `reorderable` loads no reorder code. The machinery
@@ -20,15 +22,26 @@
  */
 
 import type {ItemAlign} from '../Item/Item';
-import type {ComponentType, Key, ReactNode, RefObject} from 'react';
+import {
+  useMemo,
+  useRef,
+  type ComponentType,
+  type Key,
+  type ReactNode,
+  type RefObject,
+} from 'react';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {sharedKey} from '../utils/sharedRealm';
+import type {Reorderable} from '../reorderable/createReorderable';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {reorderListStyle} from './ListReorderHandle';
 
 /**
- * The key a reorderable object carries its machinery under. No description:
- * it would ship in every List.
+ * The key a reorderable object carries its machinery under. `sharedKey`
+ * registers it, so a swizzled List reads a package object, and the package
+ * List reads an object a copy adapted.
  */
-export const REORDER_ENGINE: unique symbol = Symbol();
+export const REORDER_ENGINE = sharedKey('list/reorder-engine', 1);
 
 /** What a List's reorder reports and asks, as createReorderable took them. */
 export interface ListReorderOptions {
@@ -36,6 +49,12 @@ export interface ListReorderOptions {
   readonly onReorder: (move: {key: Key; to: number}) => void;
   /** Whether the item with `key` moves; every item does without it. */
   readonly isReorderable?: (key: Key) => boolean;
+  /**
+   * An adapted object's (internal/reorder `adaptReorderable`): the owner's
+   * options, which the owner's `start` finds this list by, while the moves go
+   * through these.
+   */
+  readonly startedBy?: ListReorderOptions;
 }
 
 /** The handle a reorderable row ends with (List/ListReorderHandle.tsx). */
@@ -134,4 +153,44 @@ export interface ReorderableInternals {
 export interface ListReorderContextValue {
   readonly session: ListReorderSession;
   readonly options: ListReorderOptions;
+}
+
+/** A reorder session and the options of the object that runs it. */
+export interface ReorderSessionOf {
+  readonly session: ListReorderSession | null;
+  readonly options: ListReorderOptions | null;
+}
+
+/**
+ * The reorder session over the children of the element `getList` returns,
+ * run by `reorderable`'s engine. Both fields are null without an object.
+ * `hintId` names the handles' instructions. The object may be made on every
+ * render: the session lasts as long as its engine and reads the object's
+ * latest callbacks.
+ */
+export function useReorderSession(
+  reorderable: Reorderable | undefined,
+  getList: () => HTMLElement | null,
+  hintId: string,
+): ReorderSessionOf {
+  const reorder = reorderable as ReorderableInternals | undefined;
+  const engine = reorder?.[REORDER_ENGINE];
+  const getListRef = useRef(getList);
+  getListRef.current = getList;
+  const session = useMemo(
+    () => engine?.createSession(() => getListRef.current(), hintId) ?? null,
+    [engine, hintId],
+  );
+  return {session, options: reorder?.options ?? null};
+}
+
+/**
+ * Applies a drop's new order after each commit. A caller with layout updates
+ * calls it after them, so a drop's commit is the reorder's.
+ */
+export function useReorderCommit(session: ListReorderSession | null): void {
+  // Syncs the reorder session, which lives outside React, after each commit.
+  useIsomorphicLayoutEffect(() => {
+    session?.commit();
+  });
 }

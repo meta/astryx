@@ -1272,7 +1272,7 @@ describe('List and swipe actions', () => {
     expect(row.tagName).toBe('LI');
     expect(row.parentElement).toBe(screen.getByRole('list'));
     // The panel arrives with the lazily loaded swipe layer.
-    await swipeLayerLoaded();
+    await swipeLayerLoaded(row);
     const panel = row.querySelector('[data-swipe-panel="trailing"]');
     expect(panel).not.toBeNull();
     // Commit: presentational.

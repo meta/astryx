@@ -930,25 +930,33 @@ describe('keepFieldAboveKeyboard', () => {
   }
 
   it("scrolls the page back to its place before the reveal once the keyboard has gone, on the browser's smooth scroll", () => {
-    pageScrollRange(window.innerHeight * 2);
-    const fieldTop = window.innerHeight - 100;
-    const {input, page, scrollTo} = pageField(fieldTop, window.innerHeight);
-    page.scrollY = 40;
-    track(keepFieldAboveKeyboard(input));
-    focusOn(input);
-    keyboard(300);
-    expect(page.scrollY).toBe(
-      fieldTop + 40 + FIELD_OFFSET - (window.innerHeight - 300),
-    );
-    // Nothing scrolls while the keyboard slides down: Safari would show it
-    // only at the slide's end.
-    act(() => input.blur());
-    expect(scrollTo).not.toHaveBeenCalled();
-    keyboard(0);
-    expect(scrollTo).toHaveBeenCalledTimes(1);
-    expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'smooth'});
-    expect(page.scrollY).toBe(40);
-    Reflect.deleteProperty(window, 'scrollY');
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    try {
+      pageScrollRange(window.innerHeight * 2);
+      const fieldTop = window.innerHeight - 100;
+      const {input, page, scrollTo} = pageField(fieldTop, window.innerHeight);
+      page.scrollY = 40;
+      track(keepFieldAboveKeyboard(input));
+      focusOn(input);
+      keyboard(300);
+      expect(page.scrollY).toBe(
+        fieldTop + 40 + FIELD_OFFSET - (window.innerHeight - 300),
+      );
+      // Outside Safari on iOS, the report that the keyboard has gone comes as
+      // it slides down, and the blur moves nothing.
+      act(() => input.blur());
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(scrollTo).not.toHaveBeenCalled();
+      keyboard(0);
+      expect(scrollTo).toHaveBeenCalledTimes(1);
+      expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'smooth'});
+      expect(page.scrollY).toBe(40);
+    } finally {
+      vi.useRealTimers();
+      Reflect.deleteProperty(window, 'scrollY');
+    }
   });
 
   it('scrolls back at once under Reduce Motion', () => {
@@ -1546,6 +1554,176 @@ describe('keepFieldAboveKeyboard', () => {
         behavior: 'smooth',
       });
       expect(pageScrollBy).not.toHaveBeenCalled();
+    });
+
+    describe('at the blur that closes the keyboard, before the report that it has gone', () => {
+      beforeEach(() => {
+        vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+        Reflect.deleteProperty(window, 'scrollY');
+      });
+
+      /** A field in the page, raised over a 300 px keyboard from scroll 40. */
+      function raisedField() {
+        pageScrollRange(window.innerHeight * 2);
+        const fieldTop = window.innerHeight - 100;
+        const parts = pageField(fieldTop, window.innerHeight);
+        parts.page.scrollY = 40;
+        track(keepFieldAboveKeyboard(parts.input));
+        focusOn(parts.input);
+        keyboard(300);
+        return parts;
+      }
+
+      /** Ends the blur's focus change: focus lands after the event. */
+      function settle() {
+        act(() => {
+          vi.advanceTimersByTime(0);
+        });
+      }
+
+      it('scrolls the page back at once, beside the slide, and the report moves nothing more', () => {
+        const {input, page, scrollTo} = raisedField();
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).toHaveBeenCalledTimes(1);
+        expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'smooth'});
+        expect(page.scrollY).toBe(40);
+        keyboard(0);
+        expect(scrollTo).toHaveBeenCalledTimes(1);
+      });
+
+      it('keeps the page when focus moves on to another field, and the keyboard stays', () => {
+        const {input, scrollTo} = raisedField();
+        const next = element('input', {top: 200, height: 40});
+        document.body.append(next);
+        act(() => next.focus());
+        settle();
+        expect(document.activeElement).toBe(next);
+        expect(scrollTo).not.toHaveBeenCalled();
+        input.remove();
+      });
+
+      it('waits for the report while a finger is on the screen at the blur, as when the field is tapped again at once', () => {
+        const {input, scrollTo} = raisedField();
+        act(() => {
+          document.body.dispatchEvent(touchEvent('touchstart', 1));
+        });
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).not.toHaveBeenCalled();
+        act(() => {
+          document.body.dispatchEvent(touchEvent('touchend', 0));
+        });
+        keyboard(0);
+        expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'smooth'});
+      });
+
+      it('keeps the page when focus moves into a frame, whose field keeps the keyboard up', () => {
+        const {scrollTo} = raisedField();
+        const frame = document.createElement('iframe');
+        document.body.append(frame);
+        act(() => frame.focus());
+        settle();
+        expect(document.activeElement).toBe(frame);
+        expect(scrollTo).not.toHaveBeenCalled();
+        frame.remove();
+      });
+
+      it('leaves a page the person scrolled while the keyboard showed', () => {
+        const {input, page, scrollTo} = raisedField();
+        page.scrollY += 87;
+        act(() => input.blur());
+        settle();
+        keyboard(0);
+        expect(scrollTo).not.toHaveBeenCalled();
+      });
+
+      it('waits for the report under Reduce Motion, then lands at once', () => {
+        vi.stubGlobal(
+          'matchMedia',
+          vi.fn((query: string) => ({
+            matches:
+              query.includes('pointer: coarse') || query.includes('reduce'),
+            media: query,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+          })),
+        );
+        const {input, scrollTo} = raisedField();
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).not.toHaveBeenCalled();
+        keyboard(0);
+        expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'instant'});
+      });
+
+      it('stops the scroll back where the page is when the field gains focus again during the slide, raises it from there in one scroll, and the next close goes back to the first place', () => {
+        const {input, page, scrollBy, scrollTo} = raisedField();
+        const raised = page.scrollY;
+        // The browser draws the scroll back over the next frames.
+        scrollTo.mockImplementation(() => {});
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'smooth'});
+        page.scrollY = raised - 60;
+        scrollBy.mockClear();
+        // A tap focuses the field again before Safari reports the keyboard gone.
+        focusOn(input);
+        expect(scrollTo).toHaveBeenLastCalledWith({
+          top: raised - 60,
+          behavior: 'instant',
+        });
+        expect(scrollBy).toHaveBeenCalledTimes(1);
+        expect(scrollBy).toHaveBeenCalledWith({top: 60, behavior: 'smooth'});
+        expect(page.scrollY).toBe(raised);
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).toHaveBeenCalledTimes(3);
+        expect(scrollTo).toHaveBeenLastCalledWith({
+          top: 40,
+          behavior: 'smooth',
+        });
+      });
+
+      it('keeps the page where a touch stopped the scroll back, when the field gains focus again with nothing left to raise, and the next close still goes back', () => {
+        const {input, page, scrollBy, scrollTo} = raisedField();
+        const raised = page.scrollY;
+        // The tap's touch stops the browser's scroll back before it moves.
+        scrollTo.mockImplementation(() => {});
+        act(() => input.blur());
+        settle();
+        scrollBy.mockClear();
+        focusOn(input);
+        expect(scrollBy).not.toHaveBeenCalled();
+        expect(page.scrollY).toBe(raised);
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).toHaveBeenLastCalledWith({
+          top: 40,
+          behavior: 'smooth',
+        });
+      });
+
+      it('scrolls back at the report once more after such a focus, when the keyboard then goes with the field still focused', () => {
+        const {input, page, scrollTo} = raisedField();
+        const raised = page.scrollY;
+        scrollTo.mockImplementation(() => {});
+        act(() => input.blur());
+        settle();
+        page.scrollY = raised - 60;
+        focusOn(input);
+        expect(page.scrollY).toBe(raised);
+        keyboard(0);
+        expect(scrollTo).toHaveBeenCalledTimes(3);
+        expect(scrollTo).toHaveBeenLastCalledWith({
+          top: 40,
+          behavior: 'smooth',
+        });
+      });
     });
   });
 

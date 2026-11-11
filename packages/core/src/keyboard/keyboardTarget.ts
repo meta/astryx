@@ -6,18 +6,24 @@
  *   rideKeyboard and the shared animator
  * @output The keyboard targets: their registry, followKeyboard for a docked
  *   or scrolling target, and keepFieldAboveKeyboard, a covered field's path.
- *   Also followsKeyboard, the touch gate, and deliverTap, a tap's delivery
+ *   Also followsKeyboard, the touch gate, and deliverTap, a tap's delivery.
+ *   Each scroll a reveal makes goes back when the keyboard goes
  * @position Keyboard module, internal to core. useMobileKeyboard calls it.
  *
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
  */
 
 import {animatorFor, type Animator} from '../motion/animator';
-import {reducesMotion} from '../motion/reducedMotion';
+import {reducedMotionFade} from '../motion/reducedMotion';
 import {isCoarsePointer} from '../utils/coarsePointer';
-import {getTouchStartCount, subscribeInput} from '../utils/inputStream';
+import {
+  getTouchStartCount,
+  isTouchOnScreen,
+  subscribeInput,
+} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {nearestScroller, scrollingAncestor} from '../utils/scrollingAncestor';
+import {sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
 import {isIosWebKit} from '../utils/touchQueries';
 import {
   KEYBOARD_EPSILON,
@@ -25,23 +31,23 @@ import {
   findTextEntryControl,
   focusAtPoint,
   getKeyboardHeight,
+  getResizedRoom,
+  getResizedRoomWidth,
   isFingerOnScreen,
   isKeyboardMeasurable,
   isTextEntryControl,
   panVisualViewportTo,
   refuseFocusReveal,
   subscribeKeyboardHeight,
-  getResizedRoom,
   watchRevealPan,
 } from './keyboardHeight';
-import {getKeyboardLayoutGuide, keyboardProfileOf} from './keyboardLayoutGuide';
-import type {KeyboardTransition} from './keyboardModel';
 import {
-  claimKeyboardScrollBack,
-  keyboardScrollTarget,
-  noteKeyboardScroll,
-  scrollTopOf,
-} from './keyboardScrollBack';
+  bringsUpKeyboard,
+  getKeyboardLayoutGuide,
+  hidesField,
+  keyboardProfileOf,
+} from './keyboardLayoutGuide';
+import type {KeyboardTransition} from './keyboardModel';
 import {distanceIntoBand} from './revealBand';
 import {rideKeyboard} from './rideKeyboard';
 
@@ -67,7 +73,7 @@ export const FIELD_CLEARANCE_AT_REPORT = 4;
 
 // Targets that keep their own fields above the keyboard. A field inside one
 // moves nothing itself, so nothing moves twice.
-const targets = new WeakSet<Element>();
+const targets = sharedWeakSet<Element>('keyboard/keyboard-target/targets', 1);
 
 /** Registers `element` as a keyboard target until the returned call. */
 export function registerKeyboardTarget(element: Element): () => void {
@@ -178,7 +184,10 @@ function dockOf(
 
 // The animator each ridden target moves with. A translate it draws is the
 // ride's, not the app's.
-const riddenAnimators = new WeakMap<HTMLElement, Animator>();
+const riddenAnimators = sharedWeakMap<HTMLElement, Animator>(
+  'keyboard/keyboard-target/ridden-animators',
+  1,
+);
 
 // Whether the app positions `node` with its own `translate`, such as `-50% 0`
 // to centre it. A translate the ride draws is not the app's.
@@ -377,7 +386,10 @@ function scrollRangeOf(scroller: Element, win: Window): number {
 // scroll would leave it covered. There, and under Reduce Motion, the field
 // moves at once.
 function risesSmoothly(field: Element): boolean {
-  return isIosWebKit(field.ownerDocument.defaultView) && !reducesMotion(field);
+  return (
+    isIosWebKit(field.ownerDocument.defaultView) &&
+    reducedMotionFade(field) == null
+  );
 }
 
 // The band a field must be in. It is inside its scroller's box and the
@@ -781,14 +793,14 @@ function revealWithKeyboard(
     isPlaced = panIntoView(focused, offset, win, pans);
   };
   const pans = watchPans(win, focused => focused === field() && isPlaced);
-  // A report within a pixel of the last height comes from a pan, a scroll or
-  // a zoom's rounding. The field stays where the person put it. After the
-  // show's first reveal, it also stays while a press that started after the
-  // last reveal is down. Firefox's toolbar hides in a drag, while the person
-  // moves the page. Under `interactive-widget=resizes-content` the height stays
-  // 0 and the layout viewport shrinks instead. The field then takes its place
-  // above the new bottom in the report's own frame, so the browser's own focus
-  // scroll finds it in view.
+  // A report within a pixel of the last height is a pan, a scroll or a
+  // zoom's rounding, so the field stays. After the show's first reveal, a
+  // report during a press that began after that reveal moves nothing, as
+  // when Firefox's toolbar hides in a drag. Under
+  // `interactive-widget=resizes-content` the height stays 0 and the layout
+  // viewport shrinks instead. The field then takes its place above the new
+  // bottom in the report's own frame, so the browser's own focus scroll finds
+  // it in view.
   let lastHeight = getKeyboardHeight(win);
   let lastRoom = resizedRoom();
   const isLaterPressDown = () =>
@@ -809,7 +821,10 @@ function revealWithKeyboard(
       pans.report(event.height);
     }
   });
-  const onFocusIn = () => revealNow(getKeyboardHeight(win));
+  const onFocusIn = () => {
+    stopKeyboardScrollBack(win);
+    revealNow(getKeyboardHeight(win));
+  };
   region.addEventListener('focusin', onFocusIn);
   revealNow(getKeyboardHeight(win));
   return () => {
@@ -897,7 +912,10 @@ function clearanceAtReport(
 // The ride that moves each target. A new ride on the same target takes over,
 // whether the old one still rides or waits for the keyboard to go. So two never
 // move one target, and the one taken over never moves it again.
-const currentRides = new WeakMap<HTMLElement, () => void>();
+const currentRides = sharedWeakMap<HTMLElement, () => void>(
+  'keyboard/keyboard-target/current-rides',
+  1,
+);
 
 // Rides `target` with the keyboard until the returned call (see liftFor).
 // `isHostOwned` is true for a Core host's own element, and false for an app's
@@ -1188,6 +1206,7 @@ export function keepFieldAboveKeyboard(
     if (placement == null) {
       return;
     }
+    stopKeyboardScrollBack(win);
     stopSession =
       'ride' in placement
         ? rideWithKeyboard(placement.ride, offset, win, false)
@@ -1208,6 +1227,11 @@ export function keepFieldAboveKeyboard(
   };
   field.addEventListener('focus', onFocus);
   field.addEventListener('blur', onBlur);
+  // A field that has focus before this path attaches, as with `hasAutoFocus`,
+  // gets no later focus event. Its session starts here.
+  if (doc.activeElement === field) {
+    onFocus();
+  }
   return () => {
     field.removeEventListener('focus', onFocus);
     field.removeEventListener('blur', onBlur);
@@ -1219,4 +1243,311 @@ export function keepFieldAboveKeyboard(
     stopClaim();
     stopScrollBack();
   };
+}
+
+// The scroll back: each scroll Core makes for the keyboard goes back when the
+// keyboard goes.
+
+interface AddedScroll {
+  /** Where the scroller was before Core's first scroll. */
+  from: number;
+  /** Where Core left it, or null once anyone else scrolled it. */
+  at: number | null;
+  /** Whether the scroll back runs from the blur, so the report moves nothing. */
+  isBack: boolean;
+}
+
+// Every copy of Core shares these stores, so one scroll back runs per page.
+const addedScrolls = sharedWeakMap<Window, Map<Element, AddedScroll>>(
+  'keyboard/keyboard-target/scroll-back-added-scrolls',
+  1,
+);
+const stopsOf = sharedWeakMap<Window, () => void>(
+  'keyboard/keyboard-target/scroll-back-stops',
+  1,
+);
+const foldWaitsOf = sharedWeakMap<Window, () => void>(
+  'keyboard/keyboard-target/scroll-back-fold-waits',
+  1,
+);
+const claimants = sharedWeakMap<Window, number>(
+  'keyboard/keyboard-target/scroll-back-claimants',
+  1,
+);
+
+/**
+ * Counts a field that keeps itself above `win`'s keyboard until the returned
+ * call. Once no such field is left, nothing is put back: its page is gone.
+ */
+function claimKeyboardScrollBack(win: Window): () => void {
+  claimants.set(win, (claimants.get(win) ?? 0) + 1);
+  let isClaimed = true;
+  return () => {
+    if (!isClaimed) {
+      return;
+    }
+    isClaimed = false;
+    const left = (claimants.get(win) ?? 1) - 1;
+    claimants.set(win, left);
+    if (left === 0) {
+      stopsOf.get(win)?.();
+      foldWaitsOf.get(win)?.();
+    }
+  };
+}
+
+function isRoot(scroller: Element): boolean {
+  const doc = scroller.ownerDocument;
+  return scroller === (doc.scrollingElement ?? doc.documentElement);
+}
+
+/** How far `scroller` is scrolled; for the root, the document's scroll. */
+function scrollTopOf(scroller: Element, win: Window): number {
+  return isRoot(scroller) ? win.scrollY : scroller.scrollTop;
+}
+
+function scrollTopTo(
+  scroller: Element,
+  top: number,
+  behavior: ScrollBehavior,
+  win: Window,
+): void {
+  if (isRoot(scroller)) {
+    win.scrollTo({top, behavior});
+  } else if (typeof scroller.scrollTo === 'function') {
+    scroller.scrollTo({top, behavior});
+  } else {
+    scroller.scrollTop = top;
+  }
+}
+
+/**
+ * Records that Core scrolled `scroller` from `before` to `after`, to keep a
+ * field above the keyboard. `after` is where a smooth scroll is headed, and
+ * where the scroller is now for any other. When the keyboard goes, the
+ * scroller goes back to where it was before Core's first scroll. A scroller
+ * anyone else scrolls meanwhile keeps that scroll.
+ */
+function noteKeyboardScroll(
+  scroller: Element,
+  before: number,
+  win: Window,
+  after = scrollTopOf(scroller, win),
+): void {
+  const now = after;
+  const added = addedScrolls.get(win)?.get(scroller);
+  if (added == null) {
+    if (Math.abs(now - before) >= 0.5) {
+      const scrolls = addedScrolls.get(win) ?? watchKeyboardGo(win);
+      scrolls.set(scroller, {from: before, at: now, isBack: false});
+    }
+  } else if (
+    added.at != null &&
+    Math.abs(before - added.at) <= KEYBOARD_EPSILON
+  ) {
+    added.at = now;
+  } else {
+    added.at = null;
+  }
+}
+
+/**
+ * Where Core's own scroll of `scroller` is headed, while the scroller lies on
+ * its way there, as during a smooth rise. Null for a scroller Core did not
+ * scroll, or one moved off that way.
+ */
+function keyboardScrollTarget(scroller: Element, win: Window): number | null {
+  const added = addedScrolls.get(win)?.get(scroller);
+  if (added?.at == null) {
+    return null;
+  }
+  const now = scrollTopOf(scroller, win);
+  const low = Math.min(added.from, added.at) - KEYBOARD_EPSILON;
+  const high = Math.max(added.from, added.at) + KEYBOARD_EPSILON;
+  return now >= low && now <= high ? added.at : null;
+}
+
+// The scroll back starts at the keyboard's report that it has gone, with no
+// room left from a page the browser shrank for it. Safari on iOS sends that
+// report about half a second after the blur that closes the keyboard, once
+// the keyboard is down. There the scroll back starts at that blur, beside the
+// keyboard's slide, and the report ends the watch. A change of the viewport's
+// width, as when the phone turns, ends the watch. Nothing goes back: a scroll
+// recorded at one width does not apply at another.
+function watchKeyboardGo(win: Window): Map<Element, AddedScroll> {
+  const scrolls = new Map<Element, AddedScroll>();
+  const width = getResizedRoomWidth(win);
+  const stopReports = subscribeKeyboardHeight(win, event => {
+    if (event.type !== 'viewport') {
+      return;
+    }
+    if (getResizedRoomWidth(win) !== width) {
+      scrolls.clear();
+      end();
+    } else if (
+      event.height <= KEYBOARD_EPSILON &&
+      getResizedRoom(win) <= KEYBOARD_EPSILON
+    ) {
+      end();
+      scrollBack(win, scrolls);
+    }
+  });
+  let settle: number | null = null;
+  const stopBlurs = isIosWebKit(win.document.defaultView) ? watchBlurs() : [];
+  function watchBlurs(): (() => void)[] {
+    return [
+      // Heard so the stream counts the fingers on the screen.
+      subscribeInput(win, 'touchstart', () => {}),
+      subscribeInput(win, 'touchend', () => {}),
+      subscribeInput(win, 'touchcancel', () => {}),
+      subscribeInput(win, 'focusout', () => {
+        if (settle != null) {
+          win.clearTimeout(settle);
+        }
+        // Focus lands after the event. A field, or a frame or a shadow root
+        // that may hold one, then keeps the keyboard up. A finger on the
+        // screen can be a tap that brings it back, so the report decides.
+        settle = win.setTimeout(() => {
+          settle = null;
+          const active = win.document.activeElement;
+          if (
+            !isTouchOnScreen(win) &&
+            (active == null ||
+              (!bringsUpKeyboard(active) && !hidesField(active)))
+          ) {
+            scrollBackAtBlur(win, scrolls);
+          }
+        }, 0);
+      }),
+    ];
+  }
+  function end() {
+    stopReports();
+    for (const stop of stopBlurs) {
+      stop();
+    }
+    if (settle != null) {
+      win.clearTimeout(settle);
+      settle = null;
+    }
+    addedScrolls.delete(win);
+    stopsOf.delete(win);
+  }
+  addedScrolls.set(win, scrolls);
+  stopsOf.set(win, end);
+  return scrolls;
+}
+
+// Each scroller Core left where it put it heads back now, on the browser's
+// own smooth scroll. A focus that brings the keyboard back stops it first
+// (stopKeyboardScrollBack). Under Reduce Motion, the scroll waits for the
+// report and lands at once.
+function scrollBackAtBlur(
+  win: Window,
+  scrolls: Map<Element, AddedScroll>,
+): void {
+  for (const [scroller, added] of scrolls) {
+    if (
+      added.at == null ||
+      reducedMotionFade(scroller) != null ||
+      Math.abs(scrollTopOf(scroller, win) - added.at) > KEYBOARD_EPSILON
+    ) {
+      continue;
+    }
+    added.at = added.from;
+    added.isBack = true;
+    scrollTopTo(scroller, added.from, 'smooth', win);
+  }
+}
+
+/**
+ * Stops a scroll back that runs from the blur, where each scroller is now. A
+ * field that gains focus during the keyboard's slide calls it before its
+ * reveal, so the reveal goes on from there as Core's own scroll. The instant
+ * scroll also ends a scroll back that a touch held, which Safari would run
+ * after the field is placed.
+ */
+function stopKeyboardScrollBack(win: Window): void {
+  for (const [scroller, added] of addedScrolls.get(win) ?? []) {
+    if (!added.isBack) {
+      continue;
+    }
+    const top = scrollTopOf(scroller, win);
+    scrollTopTo(scroller, top, 'instant', win);
+    added.at = top;
+    added.isBack = false;
+  }
+}
+
+// The browser's own smooth scroll carries the scroll back. iOS Safari applies
+// a scripted scroll a frame late, so a scroll set each frame jitters there. A
+// touch stops that scroll, so a person's scroll stands. Under Reduce Motion, or
+// in a theme that reduces motion for everyone, the scroll lands at once.
+function scrollBack(win: Window, scrolls: Map<Element, AddedScroll>): void {
+  for (const [scroller, {from, at, isBack}] of scrolls) {
+    if (at == null || isBack || !scroller.isConnected) {
+      continue;
+    }
+    const top = scrollTopOf(scroller, win);
+    if (Math.abs(top - at) <= KEYBOARD_EPSILON) {
+      scrollTopTo(scroller, from, scrollBackBehavior(scroller), win);
+    } else if (isRoot(scroller) && Math.abs(top - from) <= KEYBOARD_EPSILON) {
+      awaitFoldedReveal(win, scroller, from, at);
+    }
+  }
+  scrolls.clear();
+}
+
+function scrollBackBehavior(scroller: Element): ScrollBehavior {
+  return reducedMotionFade(scroller) == null ? 'smooth' : 'instant';
+}
+
+// Firefox for Android can carry the reveal's document scroll as a visual-
+// viewport offset. It then shows the document where it was before the
+// reveal, and turns the offset back into a document scroll after the hide
+// report. The scroll back waits for that one document scroll.
+const FOLD_WAIT_MS = 1000;
+
+// The first document scroll decides: one that lands where Core left the
+// document is the browser's own, and the scroll back follows it. A touch, a
+// keyboard that comes back, the field's page going, or the wait's end puts
+// nothing back.
+function awaitFoldedReveal(
+  win: Window,
+  scroller: Element,
+  from: number,
+  at: number,
+): void {
+  const doc = win.document;
+  const stopScroll = subscribeInput(win, 'scroll', event => {
+    if (event.target !== doc && event.target !== win) {
+      return;
+    }
+    stop();
+    if (Math.abs(scrollTopOf(scroller, win) - at) <= KEYBOARD_EPSILON) {
+      scrollTopTo(scroller, from, scrollBackBehavior(scroller), win);
+    }
+  });
+  const stopTouch = subscribeInput(win, 'touchstart', () => stop());
+  const stopKeyboard = subscribeKeyboardHeight(win, event => {
+    if (
+      event.type === 'viewport' &&
+      (event.height > KEYBOARD_EPSILON ||
+        getResizedRoom(win) > KEYBOARD_EPSILON)
+    ) {
+      stop();
+    }
+  });
+  const timer = win.setTimeout(stop, FOLD_WAIT_MS);
+  foldWaitsOf.get(win)?.();
+  foldWaitsOf.set(win, stop);
+  function stop() {
+    win.clearTimeout(timer);
+    stopScroll();
+    stopTouch();
+    stopKeyboard();
+    if (foldWaitsOf.get(win) === stop) {
+      foldWaitsOf.delete(win);
+    }
+  }
 }

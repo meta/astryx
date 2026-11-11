@@ -119,10 +119,16 @@ that times motion with it. Everything here is internal to
   that places the field rises on the browser's smooth scroll, beside the
   keyboard's slide (`risesSmoothly`); the scroll back records where it is
   headed. Chrome checks the field in the resize's own commit, so there, and
-  where motion is reduced (`reducesMotion`), the reveal moves at once. Each
+  where motion is reduced (`reducedMotionFade`), the reveal moves at once. Each
   reveal's scroll is recorded (`noteKeyboardScroll`). Once the keyboard reports
-  it has gone, `keyboardScrollBack.ts` scrolls each scroller back to where it
+  it has gone, `keyboardTarget.ts` scrolls each scroller back to where it
   was, on the browser's smooth scroll, unless the person scrolled it meanwhile.
+  Safari on iOS reports that about half a second after the blur that closes
+  the keyboard, so there the scroll back starts at that blur, beside the
+  keyboard's slide, and the report only confirms it. A finger on the screen
+  at the blur, which can be a tap that brings the keyboard back, leaves it to
+  the report. A field that gains focus during the slide stops it where the
+  page is (`stopKeyboardScrollBack`).
   Firefox for Android can carry the reveal as a visual-viewport offset and show
   the document where it was before the reveal at that report. The scroll back
   then waits up to a second for the browser's own document scroll that turns the
@@ -323,9 +329,8 @@ keyboard module measures them from the visual viewport, as in every browser
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | `keyboardHeight.ts`      | The keyboard module: the height, its listeners, the focus routes.                                                     |
 | `useMobileKeyboard.ts`   | Keeps a focused field in a target above the keyboard: the inset, the reveal, the ride and the dismiss.                |
-| `keyboardTarget.ts`      | The targets: their registry, a docked or scrolling target, and a field's own path.                                    |
+| `keyboardTarget.ts`      | The targets: their registry, a docked or scrolling target, a field's own path, and the scroll back.                   |
 | `revealBand.ts`          | `distanceIntoBand`: the scroll that brings a box inside a band, shared by the field's and the sheet's reveals.        |
-| `keyboardScrollBack.ts`  | Records each scroll a reveal makes and scrolls it back when the keyboard goes.                                        |
 | `keyboardModel.ts`       | The clock-free core of the guide: transitions from keyboard reports and focus changes.                                |
 | `keyboardLayoutGuide.ts` | One guide per window, fed by the keyboard module: the verification timer, the focus handoff.                          |
 | `rideKeyboard.ts`        | Moves an element with the keyboard on the curve its transition publishes, or at once (tests: `rideKeyboard.test.ts`). |
