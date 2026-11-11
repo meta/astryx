@@ -2138,10 +2138,6 @@
   "packages/core/src/theme/expandRadiusScale.ts": ["#2072"],
   "packages/core/src/theme/generateThemeRules.ts": [
     "INV16",
-    "INV16",
-    "INV17",
-    "INV17",
-    "INV17",
     "INV17",
     "INV17",
     "INV17",
