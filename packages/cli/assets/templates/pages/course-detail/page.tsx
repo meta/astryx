@@ -44,6 +44,7 @@ import {useClipboard, useMediaQuery} from '@astryxdesign/core/hooks';
 import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {Selector} from '@astryxdesign/core/Selector';
+import {Carousel} from '@astryxdesign/core/Carousel';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {
   ArrowRightIcon,
@@ -151,6 +152,20 @@ const headlineStyle: CSSProperties = {
   width: '100%',
   textAlign: 'center',
 };
+/** The design's heading ladder, at its three steps: 30px, 36 from sm,
+ *  48 from lg, tightened for its face, max-w-xl widening to max-w-3xl at lg
+ *  (components/ui/section-heading.tsx). */
+const sectionHeadingStyle = (sm: boolean, lg: boolean): CSSProperties => ({
+  fontSize: lg ? 48 : sm ? 36 : 30,
+  fontWeight: 525,
+  letterSpacing: '-0.05em',
+  lineHeight: 1.08,
+  fontFamily: 'var(--font-family-heading)',
+  maxWidth: lg ? 768 : 576,
+  width: '100%',
+});
+
+// ─── Poster / cover art (no Image primitive; the design's ink, ────
 //     tint, and paper treatment) ─────────────────────────────────────────────
 const inkArt: CSSProperties = {
   width: '100%',
@@ -264,6 +279,12 @@ const hoverStyles = `
 .cr7-cols2{display:grid;grid-template-columns:minmax(0,1fr);gap:40px;}
 @media(min-width:640px){.cr7-cols2{grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;}}
 @media(min-width:1024px) and (max-width:1279px){.cr7-cols2{grid-template-columns:minmax(0,1fr);gap:40px;}}
+.cr7-card{position:relative;display:flex;flex-direction:column;height:100%;border-radius:var(--radius-container);background:var(--color-background-card);box-shadow:var(--shadow-low);padding:8px;transition:box-shadow 200ms cubic-bezier(0,0,0.2,1);}
+.cr7-card:hover{box-shadow:var(--shadow-med);}
+.cr7-cardlink{position:absolute;inset:0;z-index:1;border-radius:inherit;background:transparent;border:none;padding:0;cursor:pointer;}
+.cr7-cardlink:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:4px;}
+.cr7-photo{transition:transform 500ms cubic-bezier(0,0,0.2,1);width:100%;height:100%;object-fit:cover;display:block;}
+.cr7-card:hover .cr7-photo{transform:scale(1.04);}
 /* ── Polish ───────────────────────────────────────────────────────────────
    The poster (poster frame): the art leans in under the pointer and
    the dim doubles; the play disc steps up a size and its shadow lifts. */
@@ -468,6 +489,7 @@ dialog.cr12-sheet::backdrop{
     animation-iteration-count:1 !important;
     transition-duration:0.01ms !important;
   }
+  .cr7-card:hover .cr7-photo,
   .cr6-row:hover .cr6-photo,
   .cr9-poster:hover .cr9-poster-art,
   .cr9-poster:hover .cr9-poster-disc{transform:none;}
@@ -894,6 +916,106 @@ const COURSE = {
       helpful: 38,
       finished: true,
       text: 'I started without knowing what a CSV was. Maya never assumed I knew anything, never made me feel slow for asking, and answered every question I posted, even the ones I was embarrassed to ask. By week six I was using what I learned at work, and my manager has since moved me onto the reporting team, where I build the weekly figures for every ward.',
+    },
+  ],
+  // Where to go after this one: the same subject first, then the skills it
+  // shares — the design's relatedTo order, as sample data. Photographs
+  // are shipped fixture images; the teachers' portraits are
+  // the design's own placeholder casts.
+  related: [
+    {
+      topic: 'Data & AI',
+      level: 'Advanced',
+      title: 'Evaluation Engineering, End to End',
+      teacher: 'Dr. Maya Chen',
+      portrait: '/template-assets/DATA-Gabriela-Fernandez.png',
+      school: 'Harbor School of Data',
+      credential: 'Specialization',
+      learners: 15800,
+      reviews: 2140,
+      rating: 4.9,
+      price: 99,
+      saves: 1580,
+      image: '/template-assets/light-working-horizontal-2.png',
+    },
+    {
+      topic: 'Engineering',
+      level: 'Advanced',
+      title: 'HTTP, and what a framework hides',
+      teacher: 'Tomás Oliveira',
+      portrait: '/template-assets/DATA-Pablo-Morales.png',
+      school: 'Rowan Engineering',
+      credential: 'Course',
+      learners: 12300,
+      reviews: 1180,
+      rating: 4.5,
+      price: 79,
+      saves: 990,
+      image: '/template-assets/colorful-working-horizontal-1.png',
+    },
+    {
+      topic: 'Design',
+      level: 'Advanced',
+      title: 'Design systems in practice',
+      teacher: 'Mara Lindqvist',
+      portrait: '/template-assets/DATA-Margot-Schroder.png',
+      school: 'Meridian Lab',
+      credential: 'Specialization',
+      learners: 11050,
+      reviews: 1020,
+      rating: 4.6,
+      price: 139,
+      saves: 1180,
+      badge: 'New',
+      image: '/template-assets/light-working-horizontal-3.png',
+    },
+    {
+      topic: 'Data & AI',
+      level: 'Beginner',
+      title: 'Statistics without the proofs',
+      teacher: 'Ibrahim Salah',
+      portrait: '/template-assets/DATA-Nam-Tran.png',
+      school: 'Harbor School of Data',
+      credential: 'Course',
+      learners: 18900,
+      reviews: 2310,
+      rating: 4.6,
+      price: 49,
+      saves: 1440,
+      badge: 'Bestseller',
+      image: '/template-assets/moody-scene-horizontal-1.png',
+    },
+    {
+      topic: 'Business',
+      level: 'Beginner',
+      title: 'Pricing what you build',
+      teacher: 'Priya Raman',
+      portrait: '/template-assets/DATA-Ana-Thomas.png',
+      school: 'Northline Institute',
+      credential: 'Guided Project',
+      learners: 6720,
+      reviews: 412,
+      rating: 4.3,
+      price: 0,
+      saves: 510,
+      badge: 'Free preview',
+      image: '/template-assets/moody-working-horizontal-3.png',
+    },
+    {
+      topic: 'Engineering',
+      level: 'Intermediate',
+      title: 'Python beyond scripts',
+      teacher: 'Tomás Oliveira',
+      portrait: '/template-assets/DATA-Pablo-Morales.png',
+      school: 'Rowan Engineering',
+      credential: 'Specialization',
+      learners: 63700,
+      reviews: 8940,
+      rating: 4.9,
+      price: 129,
+      saves: 5210,
+      badge: 'Bestseller',
+      image: '/template-assets/colorful-working-horizontal-2.png',
     },
   ],
 };
@@ -3802,6 +3924,278 @@ function Body({text, query}: {text: string; query: string}) {
 }
 
 // ─── Related courses ─────────────────────────────────────────────────────────
+/** Where to go after this course, on the design's rail: the 48px
+ *  heading with the marker swoosh, the two paging arrows, and the photo
+ *  course cards the home shelf carries. */
+function RelatedRail() {
+  const [favs, setFavs] = useState<Record<string, boolean>>({});
+  // The design's heading ladder steps: 36 from sm, 48 from lg.
+  const sm = !useIsMobile(639);
+  const lg = !useIsMobile(1023);
+
+  return (
+    <section style={{width: '100%'}}>
+      <HStack vAlign="end" justify="between" gap={6} style={{width: '100%'}}>
+        <Text as="h2" style={sectionHeadingStyle(sm, lg)}>
+          Where to go <Highlight>after this one</Highlight>
+        </Text>
+      </HStack>
+
+      {/* The core Carousel owns the paging: its buttons, its snap stops
+          and its ends need no layout reads and mirror under RTL. */}
+      <Carousel
+        aria-label="Courses to take next"
+        gap={4}
+        hasSnap
+        hasEdgeFade={false}
+        padding={6}>
+        {COURSE.related.map(c => (
+          <div key={c.title} style={{width: 272, display: 'flex'}}>
+            <CourseCard
+              course={c}
+              saved={!!favs[c.title]}
+              onToggle={() => setFavs(f => ({...f, [c.title]: !f[c.title]}))}
+            />
+          </div>
+        ))}
+      </Carousel>
+    </section>
+  );
+}
+
+/** One course card, as the design's CourseCard draws it: the photograph
+ *  with the badge and the teacher chip on it, the topic chip and level
+ *  under, the title, then the school line and the two ruled figure rows —
+ *  learners and the rating over the price and Save. One press opens the
+ *  course (an overlay the size of the card, labelled by the title alone);
+ *  Save and the teacher chip stand above it. */
+function CourseCard({
+  course: c,
+  saved,
+  onToggle,
+}: {
+  course: (typeof COURSE.related)[number];
+  saved: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <article className="cr7-card" style={{width: '100%', isolation: 'isolate'}}>
+      {/* one press opens the course; labelled by the title alone, so a
+          screen reader hears the course's name rather than every line */}
+      <button
+        type="button"
+        className="cr7-cardlink"
+        aria-label={`Open the course ${c.title}`}
+        onClick={() => {}}
+      />
+
+      {/* the photograph, inset in the card at the card's radius less the
+          8px between them. It leans in while the card is pointed at. */}
+      <div
+        style={{
+          position: 'relative',
+          aspectRatio: '4 / 3',
+          overflow: 'hidden',
+          borderRadius: 'calc(var(--radius-container) - 8px)',
+          background: 'var(--color-background-muted)',
+        }}>
+        <img src={c.image} alt="" className="cr7-photo" loading="lazy" />
+        {/* The badge is the brand's pale chip, mixed into white so nothing
+            in the frame shows through behind its ink. */}
+        {c.badge && (
+          <span
+            style={{
+              position: 'absolute',
+              insetInlineStart: 12,
+              top: 12,
+              zIndex: 2,
+              borderRadius: 'var(--radius-element)',
+              background:
+                'light-dark(color-mix(in oklab, var(--color-accent) 30%, var(--color-background-card)), color-mix(in oklab, var(--color-accent) 12%, var(--color-background-card)))',
+              paddingInline: 10,
+              paddingTop: 4,
+              paddingBottom: 4,
+              fontSize: 12,
+              fontWeight: 500,
+              color: 'var(--color-text-accent)',
+              boxShadow: 'var(--shadow-low)',
+            }}>
+            {c.badge}
+          </span>
+        )}
+        {/* The teacher, on the photograph's foot: a way to their profile
+            from every card. */}
+        <button
+          type="button"
+          aria-label={`Open ${c.teacher}'s profile`}
+          onClick={() => {}}
+          style={{
+            position: 'absolute',
+            insetInlineStart: 12,
+            bottom: 12,
+            zIndex: 2,
+            display: 'flex',
+            width: 'fit-content',
+            maxWidth: 'calc(100% - 24px)',
+            alignItems: 'center',
+            gap: 8,
+            borderRadius: 'var(--radius-element)',
+            background: 'var(--color-background-card)',
+            paddingBlock: 4,
+            paddingInlineStart: 4,
+            paddingInlineEnd: 12,
+            fontSize: 12,
+            fontWeight: 500,
+            boxShadow: 'var(--shadow-low)',
+            border: 'none',
+            cursor: 'pointer',
+            transition:
+              'background-color var(--duration-fast) var(--ease-standard)',
+          }}>
+          {c.portrait && (
+            <img
+              src={c.portrait}
+              alt=""
+              width={24}
+              height={24}
+              style={{
+                width: 24,
+                height: 24,
+                flexShrink: 0,
+                borderRadius: 999,
+                objectFit: 'cover',
+              }}
+            />
+          )}
+          <span
+            style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+            {c.teacher}
+          </span>
+        </button>
+      </div>
+
+      {/* The topic chip and the level answer one another across the row. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          paddingInline: 12,
+          paddingTop: 16,
+        }}>
+        <TopicChip topic={c.topic} />
+        <span
+          style={{
+            display: 'flex',
+            flexShrink: 0,
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+            color: 'var(--color-text-secondary)',
+          }}>
+          <LevelDots level={c.level} />
+          {c.level}
+        </span>
+      </div>
+      <h3
+        style={{
+          margin: '12px 12px 0',
+          fontSize: 18,
+          fontWeight: 500,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontFamily: 'var(--font-family-heading)',
+        }}>
+        {c.title}
+      </h3>
+
+      <div
+        style={{
+          display: 'flex',
+          flex: '1 1 auto',
+          flexDirection: 'column',
+          paddingInline: 12,
+          paddingBottom: 12,
+        }}>
+        {/* The school and the credential on one line, so every card keeps
+            the same stack under its title. */}
+        <p
+          style={{
+            margin: '4px 12px 16px',
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>
+          {c.school}
+          <span style={{whiteSpace: 'nowrap'}}>&nbsp;· {c.credential}</span>
+        </p>
+
+        {/* The rating reports, so it is a row of figures; Save acts, so it
+            is a button in the footer, and the two never share a row. */}
+        <p
+          style={{
+            margin: 'auto 0 0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 20,
+            borderTop: '1px solid var(--color-border)',
+            paddingTop: 16,
+            fontSize: 14,
+          }}>
+          <span>
+            <span style={{fontVariantNumeric: 'tabular-nums'}}>
+              {figure(c.learners)}
+            </span>{' '}
+            <span style={{color: 'var(--color-text-secondary)'}}>learners</span>
+          </span>
+          <StarFig value={c.rating} size={14} />
+        </p>
+
+        <div
+          style={{
+            marginTop: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            borderTop: '1px solid var(--color-border)',
+            paddingTop: 16,
+          }}>
+          {/* The price is the footer's figure, so it is set in the heading
+              face, as the page's other prices are. */}
+          <span
+            style={{
+              fontFamily: 'var(--font-family-heading)',
+              fontSize: 20,
+              letterSpacing: '-0.025em',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+            {priceLabel(c.price)}
+          </span>
+          <span style={{position: 'relative', zIndex: 2}}>
+            <SaveButton
+              saved={saved}
+              onToggle={onToggle}
+              count={c.saves}
+              ariaLabel={`Save ${c.title}`}
+            />
+          </span>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// ─── Enroll panel (the design's EnrolPanel: sticky beside the syllabus ────
 //     + the phone's reach-bar) ────────────────────────────────────────────────
 function EnrollPanel() {
   const isMobile = useIsMobile();
@@ -4107,6 +4501,7 @@ export default function CourseDetailTemplate() {
                   <EnrollPanel />
                 </VStack>
               </Grid>
+              <RelatedRail />
               <ReachBar />
             </EnrollmentProvider>
           </LayoutContent>
