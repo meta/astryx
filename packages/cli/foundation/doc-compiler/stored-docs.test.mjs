@@ -23,7 +23,9 @@ vi.mock('node:fs', async importOriginal => {
   const readFileSync = /** @type {any} */ (
     (/** @type {any} */ file, /** @type {any[]} */ ...rest) =>
       memory.file && file === memory.file
-        ? memory.text
+        ? rest[0]
+          ? memory.text
+          : Buffer.from(memory.text)
         : actual.readFileSync(file, ...rest)
   );
   return {...actual, default: {...actual, readFileSync}, readFileSync};
@@ -33,7 +35,17 @@ let stored = {};
 beforeAll(async () => {
   memory.text = await storedDocsText();
   memory.file = STORED_DOCS_FILE;
-  stored = JSON.parse(memory.text);
+  const bytes = Buffer.from(memory.text);
+  const end = bytes.indexOf(0x0a);
+  const data = bytes.subarray(end + 1);
+  /** @type {Record<string, [number, number]>} */
+  const ranges = JSON.parse(bytes.toString('utf-8', 0, end));
+  stored = Object.fromEntries(
+    Object.entries(ranges).map(([key, [from, length]]) => [
+      key,
+      JSON.parse(data.toString('utf-8', from, from + length)),
+    ]),
+  );
 });
 const GUIDE = path.join(
   CLI_ROOT,
@@ -56,18 +68,27 @@ describe('stored doc exports', () => {
     const docFiles = dir =>
       fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry => {
         const file = path.join(dir, entry.name);
-        if (entry.isDirectory()) return docFiles(file);
+        if (entry.isDirectory()) {
+          return entry.name === 'node_modules' ||
+            entry.name === '__tests__' ||
+            entry.name.startsWith('.')
+            ? []
+            : docFiles(file);
+        }
         return entry.name.endsWith('.doc.mjs') ? [file] : [];
       });
     let checked = 0;
-    for (const file of docFiles(path.join(CLI_ROOT, 'assets'))) {
+    for (const file of [
+      ...docFiles(CLI_ROOT),
+      ...docFiles(path.join(CLI_ROOT, '..', 'core', 'src')),
+    ]) {
       const exports = stored[storedKey(fs.readFileSync(file, 'utf-8'))];
       if (!exports) continue;
       const native = await import(`${pathToFileURL(file).href}?native`);
       expect(exports, file).toEqual({...native});
       checked++;
     }
-    expect(checked).toBeGreaterThan(1000);
+    expect(checked).toBeGreaterThan(1500);
   });
 
   it('give a shipped doc the module an import of it gives', async () => {
@@ -90,7 +111,8 @@ describe('stored doc exports', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stored-docs-'));
     tmpDirs.push(dir);
     const file = path.join(dir, 'outside.doc.mjs');
-    fs.copyFileSync(GUIDE, file);
+    // Text no shipped doc has: an edited copy.
+    fs.writeFileSync(file, `${fs.readFileSync(GUIDE, 'utf-8')}// edited\n`);
     const read = await importDocModule(file);
     expect(util.types.isModuleNamespaceObject(read)).toBe(true);
     expect(Object.prototype.toString.call(read)).toBe('[object Module]');

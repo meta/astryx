@@ -18,7 +18,6 @@
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -852,13 +851,13 @@ function planPalette(cwd, slug, data, base) {
       if (seedColored(a) && a.stop === editorStop) continue;
       if (!modes.includes(a?.mode)) {
         notes.push(
-          `${file}: the ${f.id} ${a?.mode} anchor at shade ${a?.stop} is dropped: the theme has no ${a?.mode} mode`,
+          `${file}: the ${f.id} ${a?.mode} anchor at shade ${shade(a?.stop)} is dropped: the theme has no ${a?.mode} mode`,
         );
         continue;
       }
       if (mine.some(x => x.mode === a.mode && x.stop === a.stop)) {
         notes.push(
-          `${file}: your ${a.mode} anchor at shade ${a.stop} of ${f.id} is replaced by your exact ${f.id} color`,
+          `${file}: your ${a.mode} anchor at shade ${shade(a.stop)} of ${f.id} is replaced by your exact ${f.id} color`,
         );
         continue;
       }
@@ -952,7 +951,7 @@ function planPalette(cwd, slug, data, base) {
         );
         if (others.length < (f.anchors ?? []).length)
           notes.push(
-            `${file}: your dark anchor at shade ${anchor.stop} of ${id} is replaced by your exact ${id} color`,
+            `${file}: your dark anchor at shade ${shade(anchor.stop)} of ${id} is replaced by your exact ${id} color`,
           );
         return {
           ...f,
@@ -1035,12 +1034,33 @@ export function syncPalette(cwd, slug, data, base) {
     const mine = hash != null && (data.palette === hash || saved === hash);
     delete data.palette;
     if (!mine) return [];
-    for (const p of [f.config, f.palette, f.receipt, f.refs])
-      fs.rmSync(abs(p), {force: true});
+    // A file edited by hand is never deleted: it stays, and the result
+    // names it. Its config and receipt go, so the next color change asks
+    // whether to keep or discard it.
+    const editedPalette = paletteEdited(cwd, slug);
+    const shipped = fs.existsSync(abs(f.palette))
+      ? paletteData(fs.readFileSync(abs(f.palette), 'utf8'))?.palette
+      : null;
+    const editedRefs =
+      fs.existsSync(abs(f.refs)) && refsDiffer(cwd, slug, shipped) !== false;
+    /** @type {string[]} */
+    const notes = [];
+    for (const p of [f.config, f.receipt]) fs.rmSync(abs(p), {force: true});
+    if (editedPalette)
+      notes.push(
+        `${f.palette} was edited by hand, so it stays: the theme no longer reads it. Move it out of tokens/ to keep it as your own, or delete it`,
+      );
+    else fs.rmSync(abs(f.palette), {force: true});
+    if (editedRefs) {
+      KEPT_REFS.add(abs(f.refs));
+      notes.push(
+        `${f.refs} was edited by hand, so it stays: the theme no longer reads it. Move it out of tokens/ to keep it as your own, or delete it`,
+      );
+    } else fs.rmSync(abs(f.refs), {force: true});
     const tokensDir = path.dirname(abs(f.palette));
     if (fs.existsSync(tokensDir) && !fs.readdirSync(tokensDir).length)
       fs.rmdirSync(tokensDir);
-    return [];
+    return notes;
   }
   const text = `${JSON.stringify(plan.config, null, 2)}\n`;
   /** @type {any} */
@@ -1064,7 +1084,12 @@ export function syncPalette(cwd, slug, data, base) {
   if (paletteEdited(cwd, slug)) {
     throw new AstryxError(
       `${f.palette} was edited by hand, so the editor will not write over it. To keep your edits, move the file out of tokens/ (it is then yours: import it in ${slug}.theme.ts); to discard them, delete it. Then run the command again, and the editor writes the generated shades back. Only color changes wait for this; other changes still work. Nothing was changed.`,
-      [],
+      [
+        {
+          name: `${P} show ${slug}`,
+          reason: `do this next: after you move ${f.palette} out of tokens/ (keeps your edits) or delete it (discards them), run your command again; show lists the theme as it is now`,
+        },
+      ],
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
@@ -1076,41 +1101,123 @@ export function syncPalette(cwd, slug, data, base) {
 }
 
 /**
- * Text with the differences a formatter or a checkout makes taken out:
- * line endings, white space at line ends and at the end, and quote style.
+ * The value of the object literal that starts at the first `{` from
+ * `from`, read as data: string and numeric keys, string values, nested
+ * objects; quotes, commas, comments and white space as any formatter writes
+ * them. Null when it is not such a literal.
  * @param {string} text
+ * @param {number} from
+ * @returns {any}
  */
-const normalized = text =>
-  text
-    .replace(/\r\n?/g, '\n')
-    .replace(/[ \t]+$/gm, '')
-    .replace(/'/g, '"')
-    .trimEnd();
-
-/**
- * The palette file the generator writes for a config, or null when it
- * cannot be generated.
- * @param {any} config
- * @returns {string | null}
- */
-function renderPalette(config) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-palette-check-'));
+function objectLiteral(text, from) {
+  const open = text.indexOf('{', from);
+  if (open < 0) return null;
+  /** @type {string[]} */
+  const json = [];
+  let depth = 0;
+  let i = open;
+  while (i < text.length) {
+    const c = text[i];
+    if (c === '/' && text[i + 1] === '/') {
+      i = text.indexOf('\n', i);
+      if (i < 0) return null;
+      continue;
+    }
+    if (c === '/' && text[i + 1] === '*') {
+      i = text.indexOf('*/', i + 2);
+      if (i < 0) return null;
+      i += 2;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      let v = '';
+      while (j < text.length && text[j] !== c) {
+        if (text[j] === '\\') j++;
+        v += text[j++];
+      }
+      json.push(JSON.stringify(v));
+      i = j + 1;
+      continue;
+    }
+    if (/[\s]/.test(c)) {
+      i++;
+      continue;
+    }
+    if (c === '{' || c === '[') depth++;
+    if (c === '}' || c === ']') {
+      // A trailing comma before a closing bracket.
+      if (json.at(-1) === ',') json.pop();
+      depth--;
+    }
+    if ('{}[]:,'.includes(c)) {
+      json.push(c);
+      i++;
+      if (depth === 0) break;
+      continue;
+    }
+    const word = /^[\w.$+-]+/.exec(text.slice(i))?.[0];
+    if (!word) return null;
+    json.push(JSON.stringify(word));
+    i += word.length;
+  }
   try {
-    fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(config));
-    themePaletteGenerate('config.json', {out: 'palette.ts'}, {cwd: dir});
-    return fs.readFileSync(path.join(dir, 'palette.ts'), 'utf8');
+    return JSON.parse(json.join(''));
   } catch {
     return null;
-  } finally {
-    fs.rmSync(dir, {recursive: true, force: true});
   }
 }
 
 /**
- * Whether a theme's palette file was edited by hand: its bytes match no
- * receipt, and, formatting aside, it is not what the generator writes for
- * the request it came from (the receipt's, else the config's). False when
- * there is no palette file.
+ * The colors a palette module holds, read as data so formatting never
+ * counts: `palette` (family, mode, stop, color) and `black`/`white`. Null
+ * when the file does not read as one.
+ * @param {string} text
+ * @returns {{palette: any, black: string | null, white: string | null} | null}
+ */
+function paletteData(text) {
+  const t = text.replace(/^\uFEFF/, '');
+  const at = /\bconst\s+palette\s*=/.exec(t);
+  const palette = at ? objectLiteral(t, at.index) : null;
+  if (!palette || typeof palette !== 'object') return null;
+  /** @param {string} name */
+  const end = name =>
+    new RegExp(`\\bconst\\s+${name}\\s*=\\s*["'](#[0-9a-fA-F]{6})["']`)
+      .exec(t)?.[1]
+      ?.toLowerCase() ?? null;
+  return {palette, black: end('black'), white: end('white')};
+}
+
+/**
+ * Whether two palettes hold the same colors at the same stops.
+ * @param {any} a @param {any} b
+ */
+function samePalette(a, b) {
+  /** @param {any} p */
+  const flat = p => {
+    /** @type {string[]} */
+    const out = [];
+    for (const [fam, f] of Object.entries(p ?? {}))
+      for (const m of /** @type {Mode[]} */ (['light', 'dark']))
+        for (const [stop, color] of Object.entries(
+          /** @type {any} */ (f)?.[m] ?? {},
+        ))
+          out.push(
+            `${fam}.${m}.${Number(stop)}=${String(color).toLowerCase()}`,
+          );
+    return out.sort().join('|');
+  };
+  return flat(a) === flat(b);
+}
+
+/**
+ * Whether a theme's palette file was edited by hand. Its bytes match its
+ * receipt, or its colors (read as data, so formatting, a BOM or semicolons
+ * never count) are the ones the generator gives for the request it came
+ * from: the receipt's, else the config the editor wrote. Without a receipt
+ * and with a config edited by hand since, the request is unknown; then the
+ * file counts as the editor's when it holds every shade the theme ships
+ * (the selected-stops file) unchanged. False when there is no palette file.
  * @param {string} cwd
  * @param {string} slug
  */
@@ -1118,7 +1225,7 @@ export function paletteEdited(cwd, slug) {
   const f = paletteFiles(slug);
   const file = path.join(cwd, f.palette);
   if (!fs.existsSync(file)) return false;
-  const palette = fs.readFileSync(file, 'utf8');
+  const text = fs.readFileSync(file, 'utf8');
   /** @type {any} */
   let receipt;
   try {
@@ -1126,18 +1233,71 @@ export function paletteEdited(cwd, slug) {
   } catch {
     receipt = null;
   }
-  if (receipt?.candidateSha256 === sha256(palette)) return false;
+  if (receipt?.candidateSha256 === sha256(text)) return false;
+  const data = paletteData(text);
+  if (!data) return true;
   /** @type {any} */
   let request = receipt?.request ?? null;
+  let configMine = false;
   if (!request)
     try {
-      request = JSON.parse(fs.readFileSync(path.join(cwd, f.config), 'utf8'));
+      const configText = fs.readFileSync(path.join(cwd, f.config), 'utf8');
+      const saved = JSON.parse(
+        fs.readFileSync(
+          path.join(cwd, 'themes', slug, `${slug}.settings.json`),
+          'utf8',
+        ),
+      )?.palette;
+      configMine = saved == null || saved === sha256(configText);
+      request = JSON.parse(configText.replace(/^\uFEFF/, ''));
     } catch {
       request = null;
     }
-  const expected = request ? renderPalette(request) : null;
-  return expected == null || normalized(expected) !== normalized(palette);
+  if (request && (receipt?.request || configMine))
+    try {
+      const candidate = generateTonalPalette(request);
+      return !(
+        samePalette(candidate.palette, data.palette) &&
+        (data.black == null || data.black === candidate.black) &&
+        (data.white == null || data.white === candidate.white)
+      );
+    } catch {
+      return true;
+    }
+  return refsDiffer(cwd, slug, data.palette) !== false;
 }
+
+/**
+ * Whether the selected-stops file holds a shade that differs from the
+ * palette's: true when one differs, false when every one matches, null
+ * when there is no such file to compare.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {any} palette the palette file's colors
+ * @returns {boolean | null}
+ */
+function refsDiffer(cwd, slug, palette) {
+  const file = path.join(cwd, paletteFiles(slug).refs);
+  if (!fs.existsSync(file)) return null;
+  const refs = objectLiteral(fs.readFileSync(file, 'utf8'), 0);
+  if (!refs || typeof refs !== 'object') return true;
+  for (const [fam, f] of Object.entries(refs)) {
+    if (typeof f !== 'object' || !f) continue;
+    for (const [m, ramp] of Object.entries(/** @type {any} */ (f)))
+      for (const [stop, color] of Object.entries(/** @type {any} */ (ramp))) {
+        const mine = palette?.[fam]?.[m];
+        const at = mine
+          ? Object.entries(mine).find(([k]) => Number(k) === Number(stop))?.[1]
+          : undefined;
+        if (String(at ?? '').toLowerCase() !== String(color).toLowerCase())
+          return true;
+      }
+  }
+  return false;
+}
+
+/** Selected-stops files an undo keeps because they were edited by hand. */
+const KEPT_REFS = new Set();
 
 /**
  * The stops a source reads: `palette.<family>.<mode>[<stop>]`, any number
@@ -1241,6 +1401,7 @@ export function syncPaletteRefs(cwd, slug, source, pal) {
   const file = path.join(cwd, paletteFiles(slug).refs);
   const text = pal ? paletteRefsSource(slug, pal.candidate, source) : null;
   if (text == null) {
+    if (KEPT_REFS.delete(file)) return;
     fs.rmSync(file, {force: true});
     return;
   }
@@ -1303,6 +1464,9 @@ function over(name, r, under) {
 
 /** @param {number} r */
 const round = r => Math.round(r * 100) / 100;
+
+/** A stop as text: a layout may hold 16.666666666666668. @param {number} s */
+const shade = s => String(round(s));
 
 /**
  * The colors and token mapping of a theme's palette, or null when it sets no
@@ -1520,7 +1684,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           ratio: plain.ratio,
           needs: TEXT,
           pass: true,
-          note: `in dark, ${names.fill} is shade ${found}, not your exact color: ${plain.why}${found === start ? '' : `; shade ${start} does not pass either, so it is the nearest shade that does`}`,
+          note: `in dark, ${names.fill} is shade ${shade(found)}, not your exact color: ${plain.why}${found === start ? '' : `; shade ${shade(start)} does not pass either, so it is the nearest shade that does`}`,
         });
     }
     put(names.fill, f.id, fill);
@@ -1533,7 +1697,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       const o = t.onFor(fillWord, m, used);
       const what = exactFill[m]
         ? `your exact ${names.fill} (${used})`
-        : `${names.fill} (shade ${fill[m]?.stop})`;
+        : `${names.fill} (shade ${shade(Number(fill[m]?.stop))})`;
       const moved = o.on !== o.first;
       if (reports(names.on))
         checks.push({
@@ -1591,16 +1755,16 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       const i = m === 'light' ? 0 : 1;
       const spec = word ? STATUS_MUTED[i] : ACCENT_MUTED[i];
       const [s, alpha] = Array.isArray(spec) ? spec : [spec, undefined];
-      const start = at(s);
-      // Nearest first, both ways: lighter first in light, darker in dark.
+      // Nearest the official stop first, both ways; on a tie (a layout
+      // without that stop) lighter first in light, darker in dark.
       const usual = m === 'light' ? 1 : -1;
-      const away = [...stops]
-        .filter(x => x !== fill[m]?.stop)
-        .sort(
-          (a, b) =>
-            Math.abs(a - start) - Math.abs(b - start) ||
-            (Math.sign(b - a) === usual ? 1 : -1),
-        );
+      const order = [...stops].sort(
+        (a, b) =>
+          Math.abs(a - s) - Math.abs(b - s) ||
+          (Math.sign(b - a) === usual ? 1 : -1),
+      );
+      const start = order[0];
+      const away = order.filter(x => x !== fill[m]?.stop);
       const secondary = word ? null : textSecondary(m);
       if (!secondary) return ref(f.id, m, away[0] ?? start, alpha);
       const scored = away.map(x => ({
@@ -1629,8 +1793,8 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           needs: round(needs),
           pass,
           note: pass
-            ? `${names.muted} uses shade ${b.stop} in ${m}, not ${start}, so citation text (--color-text-secondary) reads at ${round(b.r)}:1 on it${needs < TEXT ? `, as well as in the official neutral theme (${round(needs)}:1)` : ''}`
-            : `citation text (--color-text-secondary) reads at only ${round(b.r)}:1 in ${m} on ${names.muted} even at shade ${b.stop}, the most contrasting one (needs ${round(needs)}:1): pick another ${f.id}, or set ${names.muted} exactly`,
+            ? `${names.muted} uses shade ${shade(b.stop)} in ${m}, not ${shade(start)}, so citation text (--color-text-secondary) reads at ${round(b.r)}:1 on it${needs < TEXT ? `, as well as in the official neutral theme (${round(needs)}:1)` : ''}`
+            : `citation text (--color-text-secondary) reads at only ${round(b.r)}:1 in ${m} on ${names.muted} even at shade ${shade(b.stop)}, the most contrasting one (needs ${round(needs)}:1): pick another ${f.id}, or set ${names.muted} exactly`,
         });
       return ref(f.id, m, b.stop, alpha);
     });
@@ -1718,6 +1882,20 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         : []),
     ],
   };
+}
+
+/**
+ * The color dial whose generated colors a token belongs to, or null: an
+ * exact setting of it changes what that dial's mapping picks around it.
+ * @param {string} token
+ * @returns {string | null}
+ */
+export function paletteDialOf(token) {
+  if (!PALETTE_TOKENS.has(token)) return null;
+  if (/accent|^--focus-outline-color$/.test(token)) return 'accent';
+  for (const [dial, word] of Object.entries(STATUS_TOKEN))
+    if (new RegExp(`-${word}(-muted)?$`).test(token)) return dial;
+  return 'neutral';
 }
 
 /** Every token a color dial can point at a generated shade. */
@@ -1826,8 +2004,8 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
       main[m].exact
         ? m === 'dark' && modes.length > 1
           ? 'the same exact color in dark'
-          : `your exact color (${main[m].color}, ${dial} shade ${main[m].stop}) in ${m}`
-        : `${dial} shade ${main[m].stop} (${main[m].color}) in ${m}`;
+          : `your exact color (${main[m].color}, ${dial} shade ${shade(main[m].stop)}) in ${m}`
+        : `${dial} shade ${shade(main[m].stop)} (${main[m].color}) in ${m}`;
     notes.push(`${token} uses ${modes.map(part).join(' and ')}`);
   }
   const given = pal.families.find(x => x.dial === dial);
@@ -1842,11 +2020,11 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
     if (c.note) notes.push(c.note);
     else if (!c.pass)
       notes.push(
-        `${c.token} reads at only ${c.ratio}:1 in ${c.mode} on ${c.against} (needs ${c.needs}:1) even at shade ${c.stop}, the most contrasting one: pick a lighter or darker ${dial}, or set ${c.token} exactly`,
+        `${c.token} reads at only ${c.ratio}:1 in ${c.mode} on ${c.against} (needs ${c.needs}:1) even at shade ${shade(c.stop)}, the most contrasting one: pick a lighter or darker ${dial}, or set ${c.token} exactly`,
       );
     else if (c.stop !== c.preferred)
       notes.push(
-        `${c.token} uses shade ${c.stop} in ${c.mode}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`,
+        `${c.token} uses shade ${shade(c.stop)} in ${c.mode}, not ${shade(c.preferred)}, so it reads at ${c.ratio}:1 on ${c.against}`,
       );
   }
   notes.push(

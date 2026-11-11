@@ -56,7 +56,7 @@ import {
   syncPaletteRefs,
   writeWhole,
 } from './_palette.mjs';
-import {MODAL} from './_compiler.mjs';
+import {MODAL, isColorToken} from './_compiler.mjs';
 import {baseResolved, baseThemeFile} from './_project.mjs';
 
 /**
@@ -270,7 +270,7 @@ export function loadTheme(cwd, slug, skip = '') {
     // A value it takes, for a dial; a color for a color token.
     const example = DIALS[bad.thing]
       ? DIALS[bad.thing].values.split('|').find(w => !w.startsWith('<'))
-      : bad.thing.startsWith('--color-')
+      : isColorToken(bad.thing)
         ? '#1f2937'
         : null;
     throw new AstryxError(
@@ -387,7 +387,7 @@ function valueProblem(s) {
     const bad = `${s.thing} "${s.value}"`;
     if (!isSafeValue(s.value)) return `${bad} cannot be a CSS value`;
     if (s.source === 'token') {
-      if (s.mode && !s.thing.startsWith('--color-'))
+      if (s.mode && !isColorToken(s.thing))
         return `${s.thing} is set for ${s.mode} only, but only colors differ by mode`;
       if (new RegExp(`var\\(\\s*${s.thing}\\s*[,)]`, 'i').test(s.value))
         return `${bad} reads itself`;
@@ -493,20 +493,29 @@ export function fontOf(value) {
         f.family.replace(/"/g, '').toLowerCase() ===
         family.replace(/["']/g, '').toLowerCase(),
     )?.pkg ?? null;
+  /** Fallbacks without the family itself, so `system-ui` never repeats. @param {string} family @param {string[]} list */
+  const without = (family, list) =>
+    list
+      .filter(x => unquote(x).toLowerCase() !== family.toLowerCase())
+      .join(', ');
   if (v.includes(',')) {
     const parts = v
       .split(',')
       .map(x => x.trim())
       .filter(Boolean);
+    const family = unquote(parts[0]);
     return {
-      family: unquote(parts[0]),
-      fallbacks: parts.slice(1).join(', ') || 'system-ui, sans-serif',
+      family,
+      fallbacks:
+        parts.length > 1
+          ? without(family, parts.slice(1))
+          : without(family, ['system-ui', 'sans-serif']),
       pkg: pkgOf(parts[0]),
     };
   }
   return {
     family: unquote(v),
-    fallbacks: 'system-ui, sans-serif',
+    fallbacks: without(unquote(v), ['system-ui', 'sans-serif']),
     pkg: pkgOf(v),
   };
 }
