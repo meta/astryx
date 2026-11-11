@@ -2,32 +2,33 @@
 
 /**
  * @file Shows a decorative grid of page-template previews on a feature card.
- * @input Uses the tile rows and pre-generated light and dark preview images.
- * @output Renders lazy-loaded preview images; `?template-previews=live` renders the live templates instead.
- * @position Landing and community feature cards; the live mode is the source for the capture script.
+ * @input Uses the tile rows and the static preview pages that scripts/generate-landing-template-previews.mjs renders at build time.
+ * @output Renders each preview page in a lazy-loaded frame, scaled to its tile, in the site's color mode.
+ * @position Landing and community feature cards.
  */
 
 'use client';
 
-import {useSyncExternalStore} from 'react';
+import {useCallback, useEffect, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   spacingVars,
   radiusVars,
   shadowVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {TemplateThumbnail} from '../../../components/TemplateThumbnail';
 import {useThemeMode} from '../../providers';
-import {
-  LANDING_PREVIEW_SIZE,
-  LANDING_TEMPLATE_ROWS,
-  landingPreviewSrc,
-} from './landingTemplatePreviews';
+import templateRows from './landingTemplateRows.json';
 
-// A live render of seven templates costs seconds of main-thread work and
-// megabytes of template images. The card is decorative, so it shows
-// screenshots of those renders. Run `pnpm capture:landing-previews` in the
-// docsite after a change to one of these templates.
+// A representative set of the real page templates (storefront, IDE, payment,
+// login, settings, AI chat, product detail). Grouped into rows; the middle row
+// holds three so the centered (login) template sits in the middle.
+//
+// A live render of seven templates costs seconds of main-thread work on a
+// slow device. The card is decorative, so each tile shows a static page that
+// the build renders from the same template: markup and styles, no script.
+const TEMPLATE_ROWS: string[][] = templateRows;
+
+const PREVIEW_DIRECTORY = '/landing/template-previews';
 
 // On small screens the rows flow into a single 3-column grid; 7 templates would
 // leave a lone 7th tile, so this one is dropped there to keep a clean 3 + 3.
@@ -41,6 +42,7 @@ const RENDER_WIDTH = 1100;
 // grid, the same width). Slightly taller than 16/10 to show a bit more of each
 // page.
 const TILE_RATIO = '16/11.5';
+const RENDER_HEIGHT = (RENDER_WIDTH * 11.5) / 16;
 
 // The bento column is narrow even on wide screens (3-column desktop grid), so
 // the 50%-wider, staggered, bleeding 2-per-row layout only makes sense there.
@@ -48,20 +50,6 @@ const TILE_RATIO = '16/11.5';
 // rows dissolve into a single 3-per-line grid so the tiles aren't huge and use
 // the width better. Keyed to the CARD width via a container query, not viewport.
 const WIDE_CARD = '@container templatesPreview (min-width: 400px)';
-
-const LIVE_PREVIEWS_QUERY = 'template-previews=live';
-
-function subscribeToNothing() {
-  return () => {};
-}
-
-function useLivePreviews(): boolean {
-  return useSyncExternalStore(
-    subscribeToNothing,
-    () => window.location.search.includes(LIVE_PREVIEWS_QUERY),
-    () => false,
-  );
-}
 
 const styles = stylex.create({
   // Query container — a plain wrapper whose width the layout below responds to.
@@ -71,7 +59,7 @@ const styles = stylex.create({
     containerType: 'inline-size',
     containerName: 'templatesPreview',
     width: '100%',
-    // Decorative — never interactive (TemplateThumbnail is already inert).
+    // Decorative — never interactive.
     pointerEvents: 'none',
   },
   // Narrow card: a flex-column stack of 2-per-row groups (each row offset/bled).
@@ -128,17 +116,29 @@ const styles = stylex.create({
     backgroundColor: 'var(--color-background-surface)',
     boxShadow: shadowVars['--shadow-med'],
   },
+  // The size container that the frame's scale reads.
+  frameBox: {
+    containerType: 'inline-size',
+    aspectRatio: TILE_RATIO,
+    overflow: 'hidden',
+  },
+  // The frame lays its page out at the render width, then shrinks to the
+  // tile. tan(atan2(a, b)) divides two lengths, which calc() cannot do in
+  // every browser yet. The fixed scale is for a browser without it.
+  frame: {
+    display: 'block',
+    width: `${RENDER_WIDTH}px`,
+    height: `${RENDER_HEIGHT}px`,
+    borderWidth: 0,
+    transformOrigin: 'top left',
+    transform: stylex.firstThatWorks(
+      `scale(tan(atan2(100cqw, ${RENDER_WIDTH}px)))`,
+      'scale(0.25)',
+    ),
+  },
   // Hidden on a wide card (small screens): with 7 templates the dissolved
   // 3-column grid would leave a lone 7th tile (3 + 3 + 1), so one tile drops out
   // to keep a clean 3 + 3. It still shows in the narrow-card desktop layout.
-  previewImage: {
-    display: 'block',
-    width: '100%',
-    height: 'auto',
-    aspectRatio: TILE_RATIO,
-    objectFit: 'cover',
-    objectPosition: 'top left',
-  },
   hideOnWide: {
     display: {
       default: 'block',
@@ -146,37 +146,6 @@ const styles = stylex.create({
     },
   },
 });
-
-function TemplatePreviewImage({slug}: {slug: string}) {
-  const {themeMode} = useThemeMode();
-  const light = landingPreviewSrc(slug, 'light');
-  const dark = landingPreviewSrc(slug, 'dark');
-  if (!light || !dark) {
-    return null;
-  }
-  const image = (
-    <img
-      src={themeMode === 'dark' ? dark : light}
-      alt=""
-      width={LANDING_PREVIEW_SIZE.width}
-      height={LANDING_PREVIEW_SIZE.height}
-      loading="lazy"
-      decoding="async"
-      {...stylex.props(styles.previewImage)}
-    />
-  );
-  // Before the site resolves its color mode, the OS preference selects the
-  // image, as it selects the site colors.
-  if (themeMode !== 'system') {
-    return image;
-  }
-  return (
-    <picture>
-      <source srcSet={dark} media="(prefers-color-scheme: dark)" />
-      {image}
-    </picture>
-  );
-}
 
 export function TemplatesPreview({
   maxRows,
@@ -187,13 +156,39 @@ export function TemplatesPreview({
    */
   maxRows?: number;
 }) {
-  const isLive = useLivePreviews();
+  const {themeMode} = useThemeMode();
+  const containerRef = useRef<HTMLDivElement>(null);
   const rows =
-    maxRows != null
-      ? LANDING_TEMPLATE_ROWS.slice(0, maxRows)
-      : LANDING_TEMPLATE_ROWS;
+    maxRows != null ? TEMPLATE_ROWS.slice(0, maxRows) : TEMPLATE_ROWS;
+
+  // A preview page follows the OS color scheme on its own. This gives it the
+  // site's color mode, which a visitor can set by hand.
+  const applyColorMode = useCallback(
+    (frame: HTMLIFrameElement) => {
+      const page = frame.contentDocument;
+      if (!page) {
+        return;
+      }
+      const scheme = themeMode === 'system' ? '' : themeMode;
+      const themed = page.querySelector<HTMLElement>('[data-astryx-theme]');
+      for (const element of [page.documentElement, themed]) {
+        element?.style.setProperty('color-scheme', scheme);
+      }
+    },
+    [themeMode],
+  );
+
+  // Syncs the preview frames that are already loaded with the site's color
+  // mode. A frame that loads later gets it from its load handler.
+  useEffect(() => {
+    const frames = containerRef.current?.querySelectorAll('iframe') ?? [];
+    for (const frame of frames) {
+      applyColorMode(frame);
+    }
+  }, [applyColorMode]);
+
   return (
-    <div {...stylex.props(styles.container)} inert>
+    <div ref={containerRef} {...stylex.props(styles.container)} inert>
       <div {...stylex.props(styles.root)}>
         {rows.map((row, rowIndex) => (
           <div
@@ -205,25 +200,23 @@ export function TemplatesPreview({
             {row.map(slug => (
               <div
                 key={slug}
-                data-template-slug={slug}
                 {...stylex.props(
                   styles.tile,
                   slug === HIDE_ON_SMALL && styles.hideOnWide,
                 )}>
-                {isLive || !landingPreviewSrc(slug, 'light') ? (
-                  // borderRadius="0" so the thumbnail fills the tile's rounded
-                  // corners flush — the tile already rounds + clips, so the
-                  // thumbnail's own --radius-container would otherwise nest a
-                  // second, mismatched radius.
-                  <TemplateThumbnail
-                    slug={slug}
-                    aspectRatio={TILE_RATIO}
-                    renderWidth={RENDER_WIDTH}
-                    borderRadius="0"
+                <div {...stylex.props(styles.frameBox)}>
+                  <iframe
+                    src={`${PREVIEW_DIRECTORY}/${slug}.html`}
+                    title={`${slug} template preview`}
+                    loading="lazy"
+                    // The page has no script. Same-origin access lets this
+                    // component set the page's color scheme.
+                    sandbox="allow-same-origin"
+                    tabIndex={-1}
+                    onLoad={event => applyColorMode(event.currentTarget)}
+                    {...stylex.props(styles.frame)}
                   />
-                ) : (
-                  <TemplatePreviewImage slug={slug} />
-                )}
+                </div>
               </div>
             ))}
           </div>

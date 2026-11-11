@@ -134,14 +134,6 @@ const nextConfig = {
   async headers() {
     return [
       {
-        // Capture file names carry a content hash, so a changed image always
-        // gets a new URL.
-        source: '/landing/template-previews/:file([^/]+\\.webp)',
-        headers: [
-          {key: 'Cache-Control', value: 'public, max-age=31536000, immutable'},
-        ],
-      },
-      {
         // The playground page itself also refuses embedding: today the
         // nested preview's own frame-ancestors already breaks any embedding
         // chain, but that protection shouldn't hinge on a child frame's
