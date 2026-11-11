@@ -469,13 +469,20 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       if (/** @type {{r: number}} */ (best).r >= TEXT) break;
     }
     const b = /** @type {{fill: number, on: number, r: number}} */ (best);
+    // The other text shade's ratio on the same fill, so a switch between
+    // white and near-black text says why.
+    const other = ON_FILL[m].find(on => on !== b.on);
+    const otherR =
+      other == null
+        ? null
+        : round(contrast(ref(id, m, other).color, ref(id, m, b.fill).color));
     if (has(onToken))
       checks.push({
         token: onToken,
         mode: m,
         stop: b.on,
         preferred: ON_FILL[m][0],
-        against: `${fillToken} (shade ${b.fill})`,
+        against: `${fillToken} (shade ${b.fill})${otherR == null ? '' : `, where ${other === 100 ? 'white' : other === 0 || other === 5 ? 'near-black' : `shade ${other}`} text reads at only ${otherR}:1`}`,
         ratio: round(b.r),
         needs: TEXT,
         pass: b.r >= TEXT,
@@ -765,20 +772,27 @@ export function mappingRows(dial) {
  * @param {PaletteMapping | null} pal
  * @param {string} dial
  * @param {string} slug
+ * @param {Mode[]} [modes] the modes the theme has
  * @returns {string[]}
  */
-export function paletteNotes(pal, dial, slug) {
+export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
   if (!pal) return [];
   const f = paletteFiles(slug);
   const main = pal.tokens[paletteToken(dial)];
   /** @type {string[]} */
   const notes = [];
+  const lightPart = `${dial} shade ${main?.light.stop} (${main?.light.color}) in light`;
+  const darkPart = main?.dark.from
+    ? 'the same exact color in dark'
+    : `shade ${main?.dark.stop} (${main?.dark.color}) in dark`;
   if (main)
     notes.push(
-      `${paletteToken(dial)} uses ${dial} shade ${main.light.stop} (${main.light.color}) in light and ${main.dark.from ? 'the same exact color in dark' : `shade ${main.dark.stop} (${main.dark.color}) in dark`}`,
+      `${paletteToken(dial)} uses ${modes.length > 1 ? `${lightPart} and ${darkPart}` : modes[0] === 'light' ? lightPart : darkPart.replace(/^shade/, `${dial} shade`).replace(/^the same exact color/, 'your exact color')}`,
     );
   for (const c of pal.contrast) {
     if (pal.tokens[c.token]?.family !== dial) continue;
+    // A theme with one mode never shows the other one's shades.
+    if (!modes.includes(c.mode)) continue;
     if (c.against.startsWith('the text on it'))
       notes.push(
         `in dark, ${c.token} is shade ${c.stop}, not your exact color: ${c.against.slice('the text on it: '.length)}, and needs ${c.needs}:1`,

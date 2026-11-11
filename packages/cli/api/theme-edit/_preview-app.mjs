@@ -623,20 +623,80 @@ async function rankedPages(words, cwd, notes, flags) {
       `left out ${skippedFrames.join(', ')}: app frames, not pages (add one with --template <id>)`,
     );
   const closest = start && start.basis === 'closest';
+  const text = words.toLowerCase();
+  // An app the description names (an app screenshot, an issue tracker, a
+  // board) shows its theme better than a hero, so a page for it goes first.
+  const exists = (/** @type {string} */ id) =>
+    listed.some(t => t.id === id) && !frames.has(id);
+  const app = APP_PAGES.find(([re, ids]) => re.test(text) && ids.some(exists));
+  // A hero described as left-aligned or split takes the side layout.
+  const side =
+    /\bleft[- ]aligned\b|\bsplit\b|\bside[- ]by[- ]side\b|\basymmetric/.test(
+      text,
+    ) &&
+    pages[0] !== 'side-gallery' &&
+    /hero|landing/.test(text);
+  /** @type {Map<string, string>} */
+  const reasons = new Map();
+  if (app) {
+    const id = /** @type {string} */ (app[1].find(exists));
+    if (pages.includes(id)) pages.splice(pages.indexOf(id), 1);
+    pages.unshift(id);
+    reasons.set(
+      id,
+      `the description names ${/** @type {RegExpExecArray} */ (app[0].exec(text))[0]}, and an app page shows a theme better than a hero`,
+    );
+  } else if (side && listed.some(t => t.id === 'side-gallery')) {
+    if (pages.includes('side-gallery'))
+      pages.splice(pages.indexOf('side-gallery'), 1);
+    pages.unshift('side-gallery');
+    reasons.set(
+      'side-gallery',
+      'the description asks for a left-aligned or split hero, and this hero puts the copy beside the picture',
+    );
+  }
+  if (/\btop[- ]?nav|\bnav ?bar|\bnavigation bar|\bheader nav/.test(text))
+    notes.push(
+      'no page has a top nav of its own: the preview frame has one, and your app keeps its own',
+    );
   return pages.map((name, i) => {
     const words = matchedWords.get(name);
     const doc = listed.find(t => t.id === name)?.description ?? '';
     const shape = doc.split(/(?<=\.)\s/)[0];
+    const reason = reasons.get(name);
     return {
       name,
       displayName: label(name),
-      why:
-        i === 0 && closest
+      why: reason
+        ? `${reason}${words ? `; it covers ${words}` : ''}. ${shape}`
+        : i === 0 && closest
           ? `the closest page, not exactly the one described${words ? `: it covers ${words}` : ''}; the rest of the description is not on it. ${shape}`
           : `${i === 0 ? 'the best match' : 'the next match'}${words ? `: it covers ${words}` : ''}. ${shape}`,
     };
   });
 }
+
+/**
+ * App pages for the apps a description can name, best first.
+ * @type {Array<[RegExp, string[]]>}
+ */
+const APP_PAGES = [
+  [
+    /\b(issue[- ]?tracker|issues|tickets?|bug tracker|backlog)\b/,
+    ['table-grouped', 'work-item-detail', 'table'],
+  ],
+  [/\b(kanban|task board|boards?)\b/, ['kanban-board']],
+  [/\b(dashboard|analytics|metrics|charts?)\b/, ['dashboard']],
+  [/\b(inbox|email|messages)\b/, ['table-inbox']],
+  [/\b(chat|assistant|ai)\b/, ['ai-chat', 'ai-chat-landing']],
+  [/\b(settings|preferences)\b/, ['settings']],
+  [/\b(docs|documentation)\b/, ['documentation']],
+  [/\b(data ?table|table|spreadsheet|data grid)\b/, ['table']],
+  [
+    /\b(app|product) (screenshot|window|preview|ui)\b/,
+    ['table-grouped', 'dashboard', 'table'],
+  ],
+];
 
 /**
  * The page templates this project has, with their display names.
@@ -802,6 +862,8 @@ export async function themeEditPreviewAdd(description, options = {}) {
 
   /** @type {string[]} */
   const added = [];
+  /** Pages that were there already and are written again. @type {string[]} */
+  const refreshed = [];
   for (const page of add) {
     const file = `pages/${page.id}`;
     if (page.template != null) {
@@ -821,9 +883,13 @@ export async function themeEditPreviewAdd(description, options = {}) {
         `${file}.tsx`,
         /** @type {string} */ (page.source),
       );
-    if (!data.pages.some(x => x.id === page.id)) {
+    const had = data.pages.find(x => x.id === page.id);
+    if (!had) {
       data.pages.push({id: page.id, label: page.label, file});
       added.push(page.id);
+    } else {
+      had.label = page.label;
+      refreshed.push(page.id);
     }
   }
   await writeRoute(cwd, at.dir, data, theme);
@@ -834,6 +900,7 @@ export async function themeEditPreviewAdd(description, options = {}) {
       folder: shown(cwd, at.dir),
       theme: data.theme,
       added,
+      refreshed,
       matched,
       skipped,
       notes,
