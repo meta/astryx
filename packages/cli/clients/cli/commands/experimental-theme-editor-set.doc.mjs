@@ -12,7 +12,7 @@ export const doc = {
   summary:
     'Change one thing in a theme: checked against what the components read, built, previewed',
   description:
-    "Changes one thing. The thing is a dial (corners, spacing, accent, neutral, success, warning, danger, info, font, headings, surfaces, buttons, type, text-size, base, mode: big moves with named rungs; `more`/`less` step a rung), a design token by name (--color-background-body; `how --list tokens`), or a CSS property on a part (background --on card; needs --on). Every change is CHECKED first against the installed Core: the part, the --when variant and value, the --state, the token's type (color, size, number, font, shadow; only colors and shadows may differ by mode), and whether the part, or a part inside it, actually reads the token for what you mean. A change that cannot take effect is REFUSED: exit 1, an error code, nothing written, and the suggestions lead with the command that works (the token the part really reads, or the property that sets it directly). Families: --on <family> styles every member; styling one member of an always-alike family (inputs, checks) styles the whole family unless --only. A setting on a part beats a whole-theme dial, and a dial never overwrites one. After building, a plain part setting that a more specific base-theme rule would beat (such as a heading level) is repeated on those variant keys, and the result says so. The result lists resolved token changes, part styles written, contrast problems this theme caused versus its base (text below 4.5:1), notes (the palette stops a color dial feeds and any stop contrast moved, and font loading: the exact install line when the font package is missing), and writes themes/<theme>/preview.html. Values with spaces go in quotes: gradients, several shadows, font stacks. Dials: corners square|small|medium|large|round|pill|more|less|<size>; spacing tight|compact|medium|roomy|spacious|more|less; accent, neutral, success, warning, danger, info <color> (a color dial: it seeds that family of the theme palette, themes/<theme>/palette.config.json, grown by the same generator as `theme palette generate` into tokens/<theme>.palette.ts and its receipt; the color tokens point at palette stops, light and dark from the one color, and a token moves to a nearer stop of the same family when it must read: text at 4.5:1, the focus ring at 3:1; the whole theme only, no --on or --mode; `how palette` lists the stops); font <preset, open font, family or stack>; headings light|regular|medium|semibold|bold|heavy or tight|tighter|normal|wide; surfaces flat|outlined|raised|glass; buttons solid|outline|soft|caps; type compact|standard|editorial|display; text-size small|medium|large|larger|more|less|<number>; base <built-in theme>|none; mode both|light-only|dark-only. `astryx experimental theme editor how --list dials` explains each. An exact token always wins over the palette: `set <theme> --color-accent <color>` (with --on or --mode if you need them) is the escape hatch, whatever order the settings were made in. Experimental: it may change or be removed in a patch release.",
+    "Changes one thing. The thing is a dial (corners, spacing, accent, neutral, success, warning, danger, info, vibrancy, font, headings, surfaces, buttons, type, text-size, base, mode: big moves with named rungs; `more`/`less` step a rung), a design token by name (--color-background-body; `how --list tokens`), or a CSS property on a part (background --on card; needs --on). Every change is CHECKED first against the installed Core: the part, the --when variant and value, the --state, the token's type (color, size, number, font, shadow; only colors and shadows may differ by mode), and whether the part, or a part inside it, actually reads the token for what you mean. A change that cannot take effect is REFUSED: exit 1, an error code, nothing written, and the suggestions lead with the command that works (the token the part really reads, or the property that sets it directly). Groups: --on <group> (inputs, checks, containers, menus) styles every member; styling one member of an always-alike group (inputs, checks) styles the whole group unless --only. A setting on a part beats a whole-theme dial, and a dial never overwrites one. After building, a plain part setting that a more specific base-theme rule would beat (such as a heading level) is repeated on those variant keys, and the result says so. The result lists resolved token changes, part styles written, contrast problems this theme caused versus its base (text below 4.5:1), notes (the shade a color's main token uses, any shade moved so text reads, and the generated color files; font loading: the exact install line when the font package is missing), and writes themes/<theme>/preview.html. Values with spaces go in quotes: gradients, several shadows, font stacks. Dials: corners square|small|medium|large|round|pill|more|less|<size>; spacing tight|compact|medium|roomy|spacious|more|less; accent, neutral, success, warning, danger, info <color> (a color: the editor generates its light and dark shades from the one color, with the same generator as `theme palette generate`, and points the color tokens at them; a token moves to a nearby shade when it must read: text at 4.5:1, the focus ring at 3:1; the whole theme only, no --on or --mode; `how colors` explains it and the Colors preview page shows every shade); vibrancy 0-100|more|less (how saturated the generated colors are; 50 is the default; needs a color); font <preset, open font, family or stack>; headings light|regular|medium|semibold|bold|heavy or tight|tighter|normal|wide; surfaces flat|outlined|raised|glass; buttons solid|outline|soft|caps; type compact|standard|editorial|display; text-size small|medium|large|larger|more|less|<number>; base <built-in theme>|none; mode both|light-only|dark-only. `astryx experimental theme editor how --list dials` explains each. An exact token always wins over the generated colors: `set <theme> --color-accent <color>` (with --on or --mode if you need them) is the escape hatch, whatever order the settings were made in. Experimental: it may change or be removed in a patch release.",
   fn: 'themeEditSet',
   args: [
     {
@@ -37,7 +37,7 @@ export const doc = {
       flag: '--on <where>',
       param: 'options.on',
       description:
-        'Where it applies (default: the whole theme): a part (button, card, app-shell-header; how --list parts), a family (inputs, containers, checks, menus; how --list families), or for font a role (body, heading, code)',
+        'Where it applies (default: the whole theme): a part (button, card, app-shell-header; how --list parts), a group (inputs, containers, checks, menus; how --list groups), or for font a role (body, heading, code)',
     },
     {
       flag: '--when <prop:value>',
@@ -61,7 +61,7 @@ export const doc = {
       flag: '--only',
       param: 'options.only',
       description:
-        'With one member of an always-alike family (inputs, checks), style just that part instead of the whole family',
+        'With one member of an always-alike group (inputs, checks), style just that part instead of the whole group',
     },
     {
       flag: '--png',
@@ -80,15 +80,19 @@ export const doc = {
       cli: 'astryx experimental theme editor set brand spacing more',
     },
     {
-      label: 'The brand color, through the palette',
+      label: 'The brand color: its shades are generated, light and dark',
       cli: 'astryx experimental theme editor set brand accent "#7c3aed"',
     },
     {
-      label: 'The gray of surfaces and text, through the palette',
+      label: 'The gray of surfaces and text',
       cli: 'astryx experimental theme editor set brand neutral "#64748b"',
     },
     {
-      label: 'An exact accent that wins over the palette',
+      label: 'How saturated the generated colors are',
+      cli: 'astryx experimental theme editor set brand vibrancy 70',
+    },
+    {
+      label: 'An exact accent that wins over the generated colors',
       cli: 'astryx experimental theme editor set brand --color-accent "#7c3aed"',
     },
     {
@@ -118,7 +122,7 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'the change is written, built and previewed (notes and contrast problems included)',
+      when: 'the change is written, built and previewed (notes and contrast problems included); or written but not checked, when the components could not be rendered: the output starts with [warn] saved, not checked (ERR_THEME_NOT_CHECKED) and the cause, such as two copies of React',
     },
     {
       code: 1,
@@ -126,4 +130,5 @@ export const doc = {
     },
   ],
   related: ['experimental theme editor', 'experimental theme compile'],
+  replaces: ['theme palette generate'],
 };

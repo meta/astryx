@@ -471,8 +471,8 @@ function printThemeEject(result, words = THEME_WORDS) {
 /**
  * The CommandDocs one copy of the theme subcommands is built from.
  * @typedef {object} ThemeCommandDocs
- * @property {import('@astryxdesign/cli/authoring').CommandDoc} palette
- * @property {import('@astryxdesign/cli/authoring').CommandDoc} paletteGenerate
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} [palette] - With `paletteGenerate`; a copy without them has no palette commands.
+ * @property {import('@astryxdesign/cli/authoring').CommandDoc} [paletteGenerate]
  * @property {import('@astryxdesign/cli/authoring').CommandDoc} build
  * @property {import('@astryxdesign/cli/authoring').CommandDoc} list
  * @property {import('@astryxdesign/cli/authoring').CommandDoc} add
@@ -544,8 +544,8 @@ export function registerTheme(program) {
 }
 
 /**
- * Register the theme subcommands under a group: palette (generate), build,
- * list, add, remove, use, eject, template and targets. `astryx theme` and the
+ * Register the theme subcommands under a group: palette (generate) when its
+ * docs are given, build, list, add, remove, use, eject, template and targets. `astryx theme` and the
  * copies under `astryx experimental theme` share these actions and their API
  * calls; `docs` and `words` give each copy its own names.
  * @param {import('commander').Command} theme the group to register under
@@ -554,7 +554,33 @@ export function registerTheme(program) {
  * @param {ThemeCommandWords} words
  */
 export function registerThemeSubcommands(theme, program, docs, words) {
-  const palette = defineCommand(theme, docs.palette, {
+  if (docs.palette && docs.paletteGenerate)
+    registerPaletteCommands(
+      theme,
+      program,
+      docs.palette,
+      docs.paletteGenerate,
+      words,
+    );
+  registerThemeCommands(theme, program, docs, words);
+}
+
+/**
+ * Register `palette` and `palette generate` under a theme group.
+ * @param {import('commander').Command} theme
+ * @param {import('commander').Command} program
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} paletteDoc
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} generateDoc
+ * @param {ThemeCommandWords} words
+ */
+function registerPaletteCommands(
+  theme,
+  program,
+  paletteDoc,
+  generateDoc,
+  words,
+) {
+  const palette = defineCommand(theme, paletteDoc, {
     action: (
       /** @type {unknown} */ options,
       /** @type {import('commander').Command} */ cmd,
@@ -578,7 +604,7 @@ export function registerThemeSubcommands(theme, program, docs, words) {
     },
   });
 
-  defineCommand(palette, docs.paletteGenerate, {
+  defineCommand(palette, generateDoc, {
     fn: themePaletteGenerateFn,
     action: (
       /** @type {string} */ configPath,
@@ -642,7 +668,16 @@ export function registerThemeSubcommands(theme, program, docs, words) {
       return NO_RESULT_SET;
     },
   });
+}
 
+/**
+ * Register build, list, add, remove, use, eject, template and targets.
+ * @param {import('commander').Command} theme
+ * @param {import('commander').Command} program
+ * @param {ThemeCommandDocs} docs
+ * @param {ThemeCommandWords} words
+ */
+function registerThemeCommands(theme, program, docs, words) {
   defineCommand(theme, docs.build, {
     fn: themeBuildFn,
     action: async (

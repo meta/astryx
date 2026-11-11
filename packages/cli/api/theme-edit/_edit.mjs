@@ -13,10 +13,12 @@ import * as fs from 'node:fs';
 import {AstryxError} from '../error.mjs';
 import {
   AUTO_SPREAD,
+  DIALS,
   FAMILIES,
   KEY_TOKENS,
   LIKE,
   P,
+  TYPE_STYLES,
   familyOf,
 } from './_tables.mjs';
 import {
@@ -26,6 +28,7 @@ import {
   describe,
   keyOf,
   loadTheme,
+  maskedSettings,
   modesOf,
   nearest,
   partsOf,
@@ -39,10 +42,10 @@ import {
 import {checkSetting} from './_check.mjs';
 import {
   PALETTE_DIALS,
+  VIBRANCY_DEFAULT,
   paletteFiles,
   paletteMapping,
   paletteNotes,
-  paletteToken,
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
 import {refreshPreviewRoute} from './_preview-app.mjs';
@@ -54,7 +57,7 @@ import {
   fontNotes,
   styledChanges,
   previewAfter,
-  checkGroup,
+  checkSection,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
@@ -64,14 +67,16 @@ const E = ERROR_CODES;
  * @typedef {import('./theme-edit.type.mjs').ThemeEditChangeOptions} ChangeOptions
  */
 /**
- * Start a theme in themes/<name>/, optionally on a built-in theme.
+ * Start a theme in themes/<name>/, optionally on a built-in theme, with any
+ * dial settings applied in the same build. Each setting is checked as `set`
+ * checks it, before anything is written.
  * @experimental
  * @param {string} name
  * @param {import('./theme-edit.type.mjs').ThemeEditNewOptions} [options]
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditNewResponse>}
  */
 export async function themeEditNew(name, options = {}) {
-  const {cwd = process.cwd(), like, png = false} = options;
+  const {cwd = process.cwd(), like, png = false, settings = {}} = options;
   requireProject(cwd);
   if (!slugOk(name))
     refuse(
@@ -99,8 +104,13 @@ export async function themeEditNew(name, options = {}) {
   const ctx = await context(cwd);
   /** @type {import('./_settings.mjs').ThemeData} */
   const data = {name, ...(like ? {like} : {}), mode: 'both', settings: []};
+  applyNewSettings(ctx, name, data, settings);
   const r = await commitTheme(ctx, name, data, {history: false});
   const p = await previewAndRoute(ctx, name, data, png);
+  /** @type {string[]} */
+  const notes = data.settings.some(s => s.thing === 'font')
+    ? fontNotes(ctx, data)
+    : [];
   return {
     type: 'themeEdit.new',
     data: {
@@ -112,10 +122,49 @@ export async function themeEditNew(name, options = {}) {
         css: shown(cwd, f.css),
         module: shown(cwd, f.js),
       },
+      settings: data.settings.map(describe),
+      notes,
       problems: r.problems,
       ...p,
     },
   };
+}
+
+/**
+ * The dial settings of `new`, checked one at a time in dial order (mode
+ * first; a color before vibrancy, which needs one) into `data`.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {Record<string, string | undefined>} settings
+ */
+function applyNewSettings(ctx, slug, data, settings) {
+  const given = Object.entries(settings).filter(([, v]) => v != null);
+  for (const [thing] of given)
+    if (!DIALS[thing] || thing === 'base')
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        thing === 'base'
+          ? 'new takes the base theme as --like.'
+          : `"${thing}" is not a setting new takes; it takes ${Object.keys(
+              DIALS,
+            )
+              .filter(d => d !== 'base')
+              .join(', ')}.`,
+        {
+          didYouMean: nearest(thing, Object.keys(DIALS)),
+          run: [`${P} new ${slug} --help`],
+        },
+      );
+  const order = ['mode', ...Object.keys(DIALS).filter(d => d !== 'mode')];
+  for (const thing of order) {
+    const value = settings[thing];
+    if (value == null) continue;
+    const s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
+    if (thing === 'mode')
+      data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (s.value);
+    else data.settings.push(s);
+  }
 }
 
 /**
@@ -202,7 +251,7 @@ async function change(sub, slug, thing, value, options) {
         replaced: null,
         was: before,
         parts: [],
-        family: null,
+        group: null,
         changedTokens: r.changed,
         styled: [],
         kept: [],
@@ -243,7 +292,7 @@ async function change(sub, slug, thing, value, options) {
       : [];
   /** @type {string[]} */
   const notes = [];
-  const fam = s.on
+  const group = s.on
     ? FAMILIES[s.on]
       ? s.on
       : parts.length > 1
@@ -261,10 +310,23 @@ async function change(sub, slug, thing, value, options) {
     );
   if (PALETTE_DIALS.includes(s.thing) && sub === 'undo')
     notes.push(
-      `the ${s.thing} family and the tokens it fed are removed from the palette; they go back to the base theme's values`,
+      `the ${s.thing} color is no longer generated, and the tokens it fed go back to the base theme's values`,
+    );
+  if (s.thing === 'vibrancy')
+    notes.push(
+      sub === 'set'
+        ? `every generated color is made again at vibrancy ${s.value} (0 is gray, 100 the most vivid, ${VIBRANCY_DEFAULT} the default)`
+        : `every generated color is made again at the default vibrancy, ${VIBRANCY_DEFAULT}`,
     );
   if (s.thing === 'font' && sub === 'set')
-    notes.push(...fontNotes(ctx, {...data, settings: [s]}));
+    notes.unshift(...fontNotes(ctx, {...data, settings: [s]}));
+  if (s.thing === 'type' || s.thing === 'headings')
+    for (const [m, why] of maskedSettings(data))
+      notes.push(`${describe(m)} is partly hidden: ${why}`);
+  if (s.thing === 'type' && sub === 'set' && TYPE_STYLES[s.value].ratio > 1.2)
+    notes.push(
+      'text below the base size keeps its standard sizes, so small text stays readable',
+    );
   const p = await previewAndRoute(ctx, slug, data, png);
   return {
     type: sub === 'set' ? 'themeEdit.set' : 'themeEdit.undo',
@@ -279,11 +341,11 @@ async function change(sub, slug, thing, value, options) {
       was: null,
       notes,
       parts,
-      family: fam
+      group: group
         ? {
-            name: fam,
+            name: group,
             members: parts,
-            onlyHint: !FAMILIES[s.on ?? ''] && AUTO_SPREAD.includes(fam),
+            onlyHint: !FAMILIES[s.on ?? ''] && AUTO_SPREAD.includes(group),
           }
         : null,
       changedTokens: r.changed,
@@ -306,9 +368,9 @@ async function change(sub, slug, thing, value, options) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditShowResponse>}
  */
 export async function themeEditShow(theme, options = {}) {
-  const {cwd = process.cwd(), png = false, group} = options;
+  const {cwd = process.cwd(), png = false, section} = options;
   requireProject(cwd);
-  checkGroup(group);
+  checkSection(section);
   const data = loadTheme(cwd, theme);
   const ctx = await context(cwd);
   const f = themeFiles(cwd, theme);
@@ -324,7 +386,7 @@ export async function themeEditShow(theme, options = {}) {
   );
   const preview = await renderPreview(ctx, theme, data);
   await keepPreviewRoute(ctx, theme);
-  const sheet = await renderSheet(ctx, theme, data, {group});
+  const sheet = await renderSheet(ctx, theme, data, {group: section});
   const modes = modesOf(data);
   const shots = png
     ? await pictures(
@@ -342,7 +404,10 @@ export async function themeEditShow(theme, options = {}) {
       theme,
       like: data.like ?? null,
       mode: data.mode,
-      settings: data.settings.map(s => ({...s, parts: partsOf(ctx, s)})),
+      settings: data.settings.map(s => {
+        const masked = maskedSettings(data).get(s);
+        return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
+      }),
       notes: fontNotes(ctx, data),
       resolved: Object.fromEntries(
         KEY_TOKENS.map(k => [
@@ -350,7 +415,7 @@ export async function themeEditShow(theme, options = {}) {
           Object.fromEntries(modes.map(m => [m, res[m][k] ?? null])),
         ]),
       ),
-      palette: pal && paletteReport(pal, data, theme),
+      ...colorsReport(pal, data),
       problems,
       preview,
       sheet: sheet.file,
@@ -358,51 +423,58 @@ export async function themeEditShow(theme, options = {}) {
       skipped: sheet.skipped,
       pictures: shots.files,
       pictureProblem: shots.problem,
+      colorFiles: pal ? colorFiles(theme) : null,
     },
   };
 }
 
 /**
- * The palette part of `show`: its files, each family with its seed and the
- * stops that feed each token, the contrast behind each stop choice, and the
- * tokens an exact token setting overrides.
- * @param {import('./_palette.mjs').PaletteMapping} pal
+ * The colors part of `show`: the vibrancy, each color with its seed and the
+ * shade each token uses in light and dark (an exact token setting wins and
+ * says so), and the contrast moves behind the shade choices.
+ * @param {import('./_palette.mjs').PaletteMapping | null} pal
  * @param {import('./_settings.mjs').ThemeData} data
- * @param {string} slug
- * @returns {import('./theme-edit.type.mjs').ThemeEditPaletteReport}
+ * @returns {{vibrancy: number | null, colors: import('./theme-edit.type.mjs').ThemeEditColor[], colorNotes: string[]}}
  */
-function paletteReport(pal, data, slug) {
+function colorsReport(pal, data) {
+  if (!pal) return {vibrancy: null, colors: [], colorNotes: []};
   const exact = new Set(
     data.settings.filter(s => s.source === 'token' && !s.on).map(s => s.thing),
   );
-  const f = paletteFiles(slug);
+  /** @param {import('./_palette.mjs').StopRef} r */
+  const shade = r =>
+    `${r.stop}${r.alpha ? ` at opacity ${r.alpha}` : ''} ${r.color}`;
   return {
-    config: f.config,
-    file: f.palette,
-    receipt: f.receipt,
-    families: pal.families.map(fam => ({
-      family: fam.id,
+    vibrancy: pal.vibrancy,
+    colors: pal.families.map(fam => ({
+      color: fam.id,
       seed: fam.seed,
-      value: fam.value,
-      exactToken: paletteToken(fam.id),
       tokens: Object.fromEntries(
         Object.entries(pal.tokens)
           .filter(([, v]) => v.family === fam.id)
           .map(([k, v]) => [
             k,
-            {
-              light: `stop ${v.light.stop}${v.light.alpha ? ` at opacity ${v.light.alpha}` : ''} ${v.light.color}`,
-              dark: `stop ${v.dark.stop}${v.dark.alpha ? ` at opacity ${v.dark.alpha}` : ''} ${v.dark.color}`,
-            },
+            `light ${shade(v.light)}, dark ${shade(v.dark)}${exact.has(k) ? ' (your exact setting wins)' : ''}`,
           ]),
       ),
     })),
-    contrast: pal.contrast.map(
-      c =>
-        `${c.token} ${c.mode}: stop ${c.stop}${c.stop !== c.preferred ? ` (from ${c.preferred})` : ''} is ${c.ratio}:1 on ${c.against}, needs ${c.needs}:1: ${c.pass ? 'pass' : 'FAIL'}`,
-    ),
-    overridden: Object.keys(pal.tokens).filter(k => exact.has(k)),
+    colorNotes: pal.contrast
+      .filter(c => !c.pass || c.stop !== c.preferred)
+      .map(c =>
+        c.pass
+          ? `${c.token} ${c.mode}: shade ${c.stop}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`
+          : `${c.token} ${c.mode}: only ${c.ratio}:1 on ${c.against} at shade ${c.stop} (needs ${c.needs}:1)`,
+      ),
   };
+}
+
+/**
+ * The generated color files of a theme, for the end of `show`.
+ * @param {string} slug
+ */
+function colorFiles(slug) {
+  const f = paletteFiles(slug);
+  return {config: f.config, module: f.palette, receipt: f.receipt};
 }
 
 /**

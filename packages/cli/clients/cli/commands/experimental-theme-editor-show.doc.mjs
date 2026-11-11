@@ -12,7 +12,7 @@ export const doc = {
   summary:
     'Every setting, key values, problems the theme caused, and the theme-building page with every component',
   description:
-    'Lists every setting with where it applies and its source (dial, token or property), the resolved value of key tokens in each mode, the palette (its files, the family and seed of each color dial, the stop that feeds each token in light and dark, the contrast check behind each stop choice, and the tokens an exact token setting overrides), contrast problems this theme caused versus its base, and font notes. Writes two self-contained HTML files: preview.html (the sample app page) and sheet.html (the theme-building page: every component grouped, each variant side by side, overlays open, and real template pages, with an auto/light/dark switch; the same page `preview` makes). --group limits the sheet to one group. Experimental: it may change or be removed in a patch release.',
+    'Lists every setting with where it applies and its source (dial, token or property), the resolved value of key tokens in each mode, the colors (the vibrancy; each color with its seed and the shade each token uses in light and dark, marked when an exact token setting wins; any shade moved so text reads), contrast problems this theme caused versus its base, font notes, and last the generated color files. Writes two self-contained HTML files: preview.html (the sample app page) and sheet.html (the theme-building page: every component grouped, each variant side by side, overlays open, and real template pages, with an auto/light/dark switch; the same page `preview` makes). --section limits the sheet to one section. Experimental: it may change or be removed in a patch release.',
   fn: 'themeEditShow',
   args: [
     {
@@ -23,10 +23,10 @@ export const doc = {
   ],
   options: [
     {
-      flag: '--group <name>',
-      param: 'options.group',
+      flag: '--section <name>',
+      param: 'options.section',
       description:
-        'Only one group on the sheet: actions, inputs, selection, navigation, feedback, data, containers, overlays, or pages',
+        'Only one section of the sheet: actions, inputs, selection, navigation, feedback, data, containers, overlays, or pages',
     },
     {
       flag: '--png',
@@ -59,7 +59,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'the theme does not exist, an unknown --group, or a page that does not render',
+      when: 'the theme does not exist, an unknown --section, or a page that does not render',
     },
   ],
   related: ['experimental theme editor', 'experimental theme compile'],
