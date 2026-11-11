@@ -453,6 +453,22 @@ describe('solveAnimatedPageScroll: setContentOffset(_:animated:)', () => {
     expect((retarget.at(h) - retarget.at(0)) / h).toBeCloseTo(1000, -1);
   });
 
+  it('a 0 ms move is on its target at once, at rest', () => {
+    for (const velocity of [undefined, 900]) {
+      const move = solveAnimatedPageScroll({
+        from: 100,
+        to: 804,
+        durationMs: 0,
+        velocity,
+      });
+      expect(move.duration).toBe(0);
+      for (const t of [-0.01, 0, 0.01]) {
+        expect(move.at(t), `${t} s`).toBe(804);
+        expect(move.velocity(t), `${t} s`).toBe(0);
+      }
+    }
+  });
+
   it('peaks at π/2 times the average speed halfway (the sinusoid, to 0.2 %)', () => {
     const curve = solveAnimatedPageScroll({from: 0, to: 402});
     expect(curve.velocity(0.15) / ((Math.PI / 2) * (402 / 0.3))).toBeCloseTo(
