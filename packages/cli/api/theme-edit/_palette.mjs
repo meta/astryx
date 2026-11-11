@@ -193,6 +193,9 @@ const GRAY_CHROMA = 0.02;
 /** @param {string} seed */
 const isGray = seed => hexToOklch(seed).C < GRAY_CHROMA;
 
+/** Whether a seed (or no seed) has no color to saturate. @param {string | null} seed */
+export const isGraySeed = seed => !seed || isGray(seed);
+
 /**
  * The color dial settings of a theme, in dial order.
  * @param {import('./_settings.mjs').ThemeData} data

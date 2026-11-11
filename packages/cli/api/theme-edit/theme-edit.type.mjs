@@ -29,7 +29,7 @@
  * @property {string} [cwd] - The app folder (default: process.cwd()).
  * @property {string} [like] - A built-in theme to build on: neutral, stone, matcha, y2k, gothic, chocolate, or butter.
  * @property {boolean} [png] - Also take PNG pictures of the preview with a Playwright or Chrome found on the machine.
- * @property {Record<string, string | undefined>} [settings] - Dial settings to start with, by dial name (`{accent: '#7c3aed', corners: 'round', vibrancy: '60'}`), each checked as `set` checks it; every dial but `base` (use `like`).
+ * @property {Record<string, string | string[] | undefined>} [settings] - Dial settings to start with, by dial name (`{accent: '#7c3aed', corners: 'round', vibrancy: '60'}`), each checked as `set` checks it; every dial but `base` (use `like`). `headings` takes a list for a weight and a tracking.
  */
 
 /**
@@ -76,7 +76,7 @@
  * @property {string} theme
  * @property {'set' | 'undo'} action
  * @property {ThemeEditSetting} setting - The setting written, or for `undo` the one removed.
- * @property {string} [now] - On `undo`: what applies instead of the setting removed: a whole-theme setting of the same thing, or the base theme's value.
+ * @property {string} [now] - On `undo`: what applies instead of the setting removed: a dial that still writes the token (such as the generated accent color), a whole-theme setting of the same thing, or the base theme's value.
  * @property {ThemeEditSetting} [removed] - On `undo`: the setting removed (the same as `setting`); the value now in effect is the base theme's, and `changedTokens` lists it.
  * @property {ThemeEditSetting | null} replaced - The setting this one replaced.
  * @property {string | null} was - For `base` and `mode`: the value before.
@@ -142,7 +142,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoOptions
  * @property {string} [cwd] - The app folder (default: process.cwd()).
- * @property {string} [thing] - Remove this one setting (a dial, a token, or a CSS property) instead of stepping back one change; it goes back to the base theme's value.
+ * @property {string} [thing] - Remove this one setting (a dial, a token, or a CSS property) instead of stepping back one change; the result's `now` says what applies instead.
  * @property {string} [value] - With `thing` `headings`: which half to remove, `weight` or `tracking`.
  * @property {string} [on] - With `thing`: the part, group or role it was set on.
  * @property {string} [when] - With `thing`: the variant it was set for.

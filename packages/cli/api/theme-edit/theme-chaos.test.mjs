@@ -427,7 +427,7 @@ beforeAll(async () => {
     for (const k of after.keys()) {
       if (!k.startsWith('project/') && !before.has(k) && k !== 'project/')
         flag('4 a file outside the project', i, args, k);
-      if (/\.astryx-render|\.load\.|\.tmp$/.test(k))
+      if (/\.astryx-render|\.load[-.]|\.tmp$/.test(k))
         flag('4 a temporary file left', i, args, k);
     }
 
@@ -451,13 +451,16 @@ beforeAll(async () => {
       }
       continue;
     }
-    undoStack
-      .get(t)
-      ?.push(
-        new Map(
-          [...before].filter(([k]) => k.startsWith(`project/themes/${t}/`)),
-        ),
-      );
+    // A change that changes nothing adds no undo step.
+    const noChange = String(data.notes?.[0] ?? '').startsWith('no change');
+    if (!noChange)
+      undoStack
+        .get(t)
+        ?.push(
+          new Map(
+            [...before].filter(([k]) => k.startsWith(`project/themes/${t}/`)),
+          ),
+        );
     // Invariant 2: a reported token change is in the built CSS or module.
     const css = readMaybe(`themes/${t}/${t}.css`);
     const a = declarations(cssBefore);
@@ -571,18 +574,14 @@ describe('known chaos findings', () => {
       x.r.body?.code in ERROR_CODES &&
       x.changed.length === 0);
 
-  it.fails(
-    'F1: a refused undo keeps the theme folder',
-    async () => {
-      await run(['editor', 'new', 'kd']);
-      await run(['editor', 'set', 'kd', 'corners', 'pill']);
-      fs.appendFileSync(path.join(cwd, 'themes/kd/kd.theme.ts'), 'oops(\n');
-      fs.writeFileSync(path.join(cwd, 'themes/kd/kd.settings.json'), '');
-      await run(['editor', 'undo', 'kd']);
-      expect(fs.existsSync(path.join(cwd, 'themes/kd/kd.theme.ts'))).toBe(true);
-    },
-    120_000,
-  );
+  it('F1: a refused undo keeps the theme folder', async () => {
+    await run(['editor', 'new', 'kd']);
+    await run(['editor', 'set', 'kd', 'corners', 'pill']);
+    fs.appendFileSync(path.join(cwd, 'themes/kd/kd.theme.ts'), 'oops(\n');
+    fs.writeFileSync(path.join(cwd, 'themes/kd/kd.settings.json'), '');
+    await run(['editor', 'undo', 'kd']);
+    expect(fs.existsSync(path.join(cwd, 'themes/kd/kd.theme.ts'))).toBe(true);
+  }, 120_000);
 
   it.fails(
     'F5: a preview page with an empty template name is refused',
@@ -600,57 +599,35 @@ describe('known chaos findings', () => {
     120_000,
   );
 
-  it.fails(
-    'F3: a theme name with a dash before a digit is made (b-2)',
-    async () => {
-      const x = await step(['editor', 'new', 'k-2']);
-      expect(x.r.body?.error ?? null).toBeNull();
-    },
-    120_000,
-  );
+  it('F3: a theme name with a dash before a digit is made (b-2)', async () => {
+    const x = await step(['editor', 'new', 'k-2']);
+    expect(x.r.body?.error ?? null).toBeNull();
+  }, 120_000);
 
-  it.fails(
-    'F4: a damaged history file is refused cleanly by set',
-    async () => {
-      await run(['editor', 'new', 'kh']);
-      await run(['editor', 'set', 'kh', 'corners', 'pill']);
-      fs.writeFileSync(
-        path.join(cwd, 'themes/kh/kh.history.json'),
-        '{not json',
-      );
-      expect(
-        clean(await step(['editor', 'set', 'kh', 'spacing', 'roomy'])),
-      ).toBe(true);
-    },
-    120_000,
-  );
+  it('F4: a damaged history file is refused cleanly by set', async () => {
+    await run(['editor', 'new', 'kh']);
+    await run(['editor', 'set', 'kh', 'corners', 'pill']);
+    fs.writeFileSync(path.join(cwd, 'themes/kh/kh.history.json'), '{not json');
+    expect(clean(await step(['editor', 'set', 'kh', 'spacing', 'roomy']))).toBe(
+      true,
+    );
+  }, 120_000);
 
-  it.fails(
-    'F4: a damaged history file is refused cleanly by undo',
-    async () => {
-      await run(['editor', 'new', 'ku']);
-      await run(['editor', 'set', 'ku', 'corners', 'pill']);
-      fs.writeFileSync(
-        path.join(cwd, 'themes/ku/ku.history.json'),
-        '["{\\"name',
-      );
-      expect(clean(await step(['editor', 'undo', 'ku']))).toBe(true);
-    },
-    120_000,
-  );
+  it('F4: a damaged history file is refused cleanly by undo', async () => {
+    await run(['editor', 'new', 'ku']);
+    await run(['editor', 'set', 'ku', 'corners', 'pill']);
+    fs.writeFileSync(path.join(cwd, 'themes/ku/ku.history.json'), '["{\\"name');
+    expect(clean(await step(['editor', 'undo', 'ku']))).toBe(true);
+  }, 120_000);
 
-  it.fails(
-    'F8: a settings file of the wrong shape is refused with a theme code',
-    async () => {
-      await run(['editor', 'new', 'ks']);
-      fs.writeFileSync(
-        path.join(cwd, 'themes/ks/ks.settings.json'),
-        '{"settings": 5}',
-      );
-      expect(clean(await step(['editor', 'show', 'ks']))).toBe(true);
-    },
-    120_000,
-  );
+  it('F8: a settings file of the wrong shape is refused with a theme code', async () => {
+    await run(['editor', 'new', 'ks']);
+    fs.writeFileSync(
+      path.join(cwd, 'themes/ks/ks.settings.json'),
+      '{"settings": 5}',
+    );
+    expect(clean(await step(['editor', 'show', 'ks']))).toBe(true);
+  }, 120_000);
 
   it.fails(
     'F8: a preview data file of the wrong shape is refused with a code',
@@ -681,15 +658,11 @@ describe('known chaos findings', () => {
     120_000,
   );
 
-  it.fails(
-    'F6: mode dark-only changes the built theme',
-    async () => {
-      await run(['editor', 'new', 'km', '--accent', '#e11d48']);
-      const x = await step(['editor', 'set', 'km', 'mode', 'dark-only']);
-      expect(x.changed.filter(k => k.endsWith('/km.css'))).not.toEqual([]);
-    },
-    120_000,
-  );
+  it('F6: mode dark-only changes the built theme', async () => {
+    await run(['editor', 'new', 'km', '--accent', '#e11d48']);
+    const x = await step(['editor', 'set', 'km', 'mode', 'dark-only']);
+    expect(x.changed.filter(k => k.endsWith('/km.css'))).not.toEqual([]);
+  }, 120_000);
 
   it.fails(
     'F9: undo after a color restores the palette files exactly',
@@ -709,30 +682,22 @@ describe('known chaos findings', () => {
     120_000,
   );
 
-  it.fails(
-    'F10: vibrancy is refused when the only color is a gray',
-    async () => {
-      await run(['editor', 'new', 'kv', '--accent', 'black']);
-      const x = await step(['editor', 'set', 'kv', 'vibrancy', '75']);
-      expect(
-        x.r.status === 1 || x.changed.some(k => k.endsWith('/kv.css')),
-      ).toBe(true);
-    },
-    120_000,
-  );
+  it('F10: vibrancy is refused when the only color is a gray', async () => {
+    await run(['editor', 'new', 'kv', '--accent', 'black']);
+    const x = await step(['editor', 'set', 'kv', 'vibrancy', '75']);
+    expect(x.r.status === 1 || x.changed.some(k => k.endsWith('/kv.css'))).toBe(
+      true,
+    );
+  }, 120_000);
 
-  it.fails(
-    'F7: a color change refused by a failed build leaves the palette files as they were',
-    async () => {
-      await run(['editor', 'new', 'kr', '--accent', 'red']);
-      fs.writeFileSync(
-        path.join(cwd, 'themes/kr/kr.theme.ts'),
-        'export const broken = ;\n',
-      );
-      const x = await step(['editor', 'set', 'kr', 'danger', 'white']);
-      expect(x.r.status).toBe(1);
-      expect(x.changed).toEqual([]);
-    },
-    120_000,
-  );
+  it('F7: a color change refused by a failed build leaves the palette files as they were', async () => {
+    await run(['editor', 'new', 'kr', '--accent', 'red']);
+    fs.writeFileSync(
+      path.join(cwd, 'themes/kr/kr.theme.ts'),
+      'export const broken = ;\n',
+    );
+    const x = await step(['editor', 'set', 'kr', 'danger', 'white']);
+    expect(x.r.status).toBe(1);
+    expect(x.changed).toEqual([]);
+  }, 120_000);
 });

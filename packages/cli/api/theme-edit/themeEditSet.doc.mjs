@@ -146,6 +146,10 @@ export const doc = {
       when: '@astryxdesign/core is not installed in the folder',
     },
     {
+      code: 'ERR_THEME_BUSY',
+      when: 'another command is changing the same theme and did not finish within 30 seconds; nothing was changed',
+    },
+    {
       code: 'ERR_THEME_INVALID',
       when: 'the theme does not build (the change is undone)',
     },

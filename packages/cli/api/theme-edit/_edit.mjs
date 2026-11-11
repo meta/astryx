@@ -35,8 +35,10 @@ import {
   nearest,
   partDefault,
   partsOf,
+  q,
   readHistory,
   refuse,
+  settingsProblem,
   resolvedTokens,
   shown,
   slugOk,
@@ -83,13 +85,37 @@ const E = ERROR_CODES;
 export async function themeEditNew(name, options = {}) {
   const {cwd = process.cwd(), like, png = false, settings = {}} = options;
   requireProject(cwd);
-  if (!slugOk(name))
+  if (!slugOk(name)) {
+    const fixed =
+      String(name ?? '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^[^a-z]+/, '')
+        .replace(/-+$/, '')
+        .slice(0, 64) || 'my-theme';
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `"${name ?? ''}" is not a theme name (lowercase letters, digits, dashes, starting with a letter).`,
-      {run: [`${P} new my-theme`]},
+      `"${String(name ?? '').slice(0, 80)}" is not a theme name (lowercase letters, digits and dashes, starting with a letter, 64 characters at most).`,
+      {run: [`${P} new ${fixed}`]},
     );
+  }
   const f = themeFiles(cwd, name);
+  // A link or a file where the theme goes is never written through or
+  // replaced.
+  for (const [p, what] of /** @type {const} */ ([
+    [f.root, 'themes/'],
+    [f.dir, `themes/${name}`],
+  ])) {
+    const st = fs.lstatSync(p, {throwIfNoEntry: false});
+    if (st && (st.isSymbolicLink() || !st.isDirectory()))
+      refuse(
+        E.ERR_FILE_EXISTS,
+        `${what} is ${st.isSymbolicLink() ? 'a link' : 'a file'}, so a theme is not made there.`,
+        {run: [`${P} new ${name}-copy`]},
+      );
+  }
   if (fs.existsSync(f.settings))
     refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.`, {
       run: [`${P} show ${name}`, `${P} set ${name} base <theme>`],
@@ -98,13 +124,16 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `themes/${name}/ already holds files this command did not make; choose another name.`,
-      {run: [`${P} new ${name}-2`]},
+      {run: [`${P} new ${name}-copy`]},
     );
-  if (like && !LIKE.includes(like))
+  if (like != null && !LIKE.includes(like))
     refuse(
       E.ERR_THEME_BAD_VALUE,
-      `--like takes ${LIKE.join(', ')}, not "${like}".`,
-      {didYouMean: nearest(like, LIKE)},
+      `--like takes a built-in theme (${LIKE.join(', ')}), not "${like}"${fs.existsSync(themeFiles(cwd, String(like)).settings) ? `; ${like} is a theme made here, and a new theme builds only on a built-in one` : ''}.`,
+      {
+        didYouMean: nearest(String(like).toLowerCase(), LIKE),
+        run: [`${P} new ${name}`],
+      },
     );
   const ctx = await context(cwd);
   /** @type {import('./_settings.mjs').ThemeData} */
@@ -145,7 +174,7 @@ export async function themeEditNew(name, options = {}) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @param {Record<string, string | undefined>} settings
+ * @param {Record<string, string | string[] | undefined>} settings
  */
 function applyNewSettings(ctx, slug, data, settings) {
   const given = Object.entries(settings).filter(([, v]) => v != null);
@@ -167,13 +196,63 @@ function applyNewSettings(ctx, slug, data, settings) {
       );
   const order = ['mode', ...Object.keys(DIALS).filter(d => d !== 'mode')];
   for (const thing of order) {
-    const value = settings[thing];
-    if (value == null) continue;
-    const s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
-    if (thing === 'mode')
-      data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (s.value);
-    else data.settings.push(s);
+    const given = settings[thing];
+    if (given == null) continue;
+    // `headings` takes a weight and a tracking: one value per axis.
+    for (const value of Array.isArray(given) ? given : [given]) {
+      /** @type {import('./_settings.mjs').Setting} */
+      let s;
+      try {
+        s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
+      } catch (e) {
+        throw asNewRefusal(e, slug, settings);
+      }
+      if (thing === 'mode')
+        data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (
+          s.value
+        );
+      else {
+        const same = data.settings.findIndex(x => keyOf(x) === keyOf(s));
+        if (same >= 0)
+          refuse(
+            E.ERR_INVALID_ARGUMENT,
+            `--${thing} was given two values for the same thing (${data.settings[same].value}, ${s.value}); give one.`,
+            {run: [`${P} new ${slug} --${thing} ${q(s.value)}`]},
+          );
+        data.settings.push(s);
+      }
+    }
   }
+}
+
+/**
+ * A refusal from a setting `new` was given, with its suggestions turned
+ * into `new` commands: the theme does not exist yet, so a `set` would fail.
+ * @param {unknown} e
+ * @param {string} slug
+ * @param {Record<string, string | string[] | undefined>} settings
+ */
+function asNewRefusal(e, slug, settings) {
+  if (!(e instanceof AstryxError)) return e;
+  const flags = Object.entries(settings)
+    .filter(([, v]) => v != null)
+    .flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map(x => [k, x]))
+    .map(([k, v]) => `--${k} ${q(v)}`);
+  const setPrefix = `${P} set ${slug} `;
+  e.suggestions = (e.suggestions ?? []).map(s => {
+    if (s.name === `${P} set --help`) return {...s, name: `${P} new --help`};
+    if (!s.name.startsWith(setPrefix)) return s;
+    const [thing, ...rest] = s.name.slice(setPrefix.length).split(' ');
+    if (thing.startsWith('--') || !DIALS[thing]) return s;
+    const keep = flags.filter(f => !f.startsWith(`--${thing} `));
+    return {
+      ...s,
+      name: [`${P} new ${slug}`, ...keep, `--${thing} ${rest.join(' ')}`].join(
+        ' ',
+      ),
+    };
+  });
+  return e;
 }
 
 /**
@@ -380,7 +459,7 @@ async function change(sub, slug, thing, value, options) {
           : /** @type {import('./_settings.mjs').Setting} */ (prev),
       // On undo, the setting above is the one removed, named as such.
       ...(sub === 'undo' && prev
-        ? {removed: prev, now: nowApplies(data, prev)}
+        ? {removed: prev, now: nowApplies(ctx, data, prev, base)}
         : {}),
       replaced: sub === 'set' ? prev : null,
       was: null,
@@ -507,12 +586,33 @@ export async function themeEditShow(theme, options = {}) {
 
 /**
  * What applies once `removed` is gone: a whole-theme setting of the same
- * thing for a part setting, or the base theme's value.
+ * thing for a part setting, a dial that still writes the token, or the
+ * base theme's value.
+ * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {import('./_settings.mjs').Setting} removed
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
  * @returns {string}
  */
-function nowApplies(data, removed) {
+function nowApplies(ctx, data, removed, base) {
+  // A token a dial still writes (an accent color feeds --color-accent):
+  // name that dial.
+  if (removed.source === 'token' && !removed.on) {
+    const value = (/** @type {import('./_settings.mjs').ThemeData} */ d) =>
+      JSON.stringify(
+        compileTheme(ctx, d, base).tokens?.[removed.thing] ?? null,
+      );
+    const now = value(data);
+    if (now !== 'null')
+      for (const d of [...data.settings].reverse()) {
+        if (d.source !== 'dial' || d.on) continue;
+        const without = {...data, settings: data.settings.filter(x => x !== d)};
+        if (value(without) !== now)
+          return PALETTE_DIALS.includes(d.thing)
+            ? `the generated ${d.thing} color (${describe(d)})`
+            : describe(d);
+      }
+  }
   const whole =
     removed.on || removed.when || removed.state || removed.mode
       ? [...data.settings]
@@ -718,6 +818,17 @@ export async function themeEditUndo(theme, options = {}) {
   const prev = /** @type {import('./_settings.mjs').ThemeData} */ (
     JSON.parse(prevText)
   );
+  // The step it goes back to is checked like the settings file itself.
+  const bad = settingsProblem(prev);
+  if (bad)
+    refuse(
+      E.ERR_THEME_INVALID,
+      `The settings before the last change, in ${theme}.history.json, are damaged: ${bad}.`,
+      {
+        fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
+        run: [`${P} show ${theme}`],
+      },
+    );
   await commitTheme(ctx, theme, prev, {history: false});
   fs.writeFileSync(f.history, JSON.stringify(history));
   /** @type {string[]} */

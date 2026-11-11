@@ -21,10 +21,12 @@ import {themeBuildForReport} from '../theme/build/build.mjs';
 import {
   AUTO_SPREAD,
   CORNERS,
+  DIALS,
   FAMILIES,
   FONTS,
   HEADING_TRACKING,
   HEADING_WEIGHTS,
+  LIKE,
   OPEN_FONTS,
   P,
   SPACING,
@@ -34,7 +36,15 @@ import {
   TYPE_STYLES,
   familyOf,
 } from './_tables.mjs';
-import {alphaOf, compositeOver, parseColor, ratio} from './_color.mjs';
+import {
+  alphaOf,
+  compositeOver,
+  isColorValue,
+  isSafeValue,
+  isSize,
+  parseColor,
+  ratio,
+} from './_color.mjs';
 import {
   PALETTE_DIALS,
   paletteFiles,
@@ -71,13 +81,19 @@ import {baseResolved, baseThemeFile} from './_project.mjs';
 
 /** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null}} Ctx */
 
-/** @param {string} s */
-export const slugOk = s => /^[a-z][a-z0-9-]*$/.test(s ?? '');
+/** A theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most. @param {string} s */
+export const slugOk = s =>
+  typeof s === 'string' && s.length <= 64 && /^[a-z][a-z0-9-]*$/.test(s);
 /** @param {string} s */
 export const kebab = s =>
   s.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
-/** @param {string} s */
-export const camel = s => s.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+/**
+ * A theme name as an identifier: each dash goes, and the letter after it is
+ * capitalized (`brand-2` → `brand2`, `x--y` → `xY`).
+ * @param {string} s
+ */
+export const camel = s =>
+  s.replace(/-+([a-z0-9])?/g, (_, c) => (c ? c.toUpperCase() : ''));
 /** Quote a value for a suggested command. @param {unknown} v */
 export const q = v =>
   /[\s"#(]/.test(String(v)) ? `"${String(v).replace(/"/g, '\\"')}"` : String(v);
@@ -189,15 +205,77 @@ export function loadTheme(cwd, slug) {
       {didYouMean: nearest(slug, have), run: [`${P} new ${slug}`]},
     );
   }
+  /** @type {any} */
+  let data;
   try {
-    return JSON.parse(fs.readFileSync(f.settings, 'utf8'));
+    data = JSON.parse(fs.readFileSync(f.settings, 'utf8'));
   } catch (e) {
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json is not valid JSON (${e instanceof Error ? e.message : String(e)}). Fix it by hand, or run ${P} undo ${slug}.`,
-      [],
+      [{name: `${P} undo ${slug}`, reason: 'do this instead'}],
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
+  const problem = settingsProblem(data);
+  if (problem)
+    throw new AstryxError(
+      `themes/${slug}/${slug}.settings.json: ${problem}. Fix it by hand, or step back to the settings before the last change with ${P} undo ${slug}. Nothing was changed.`,
+      [{name: `${P} undo ${slug}`, reason: 'do this instead'}],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  return data;
+}
+
+/**
+ * What is wrong with settings data, or null: its shape, and each value with
+ * the same rules `set` checks it by (without the installed Core), so a value
+ * edited by hand never reaches the build.
+ * @param {any} data
+ * @returns {string | null}
+ */
+export function settingsProblem(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data))
+    return 'the file is not a settings object';
+  if (!['both', 'light-only', 'dark-only'].includes(data.mode))
+    return `mode "${data.mode}" is not both, light-only or dark-only`;
+  if (data.like != null && !LIKE.includes(data.like))
+    return `base "${data.like}" is not a built-in theme (${LIKE.join(', ')})`;
+  if (!Array.isArray(data.settings)) return 'settings is not a list';
+  for (const s of data.settings) {
+    if (!s || typeof s.thing !== 'string' || typeof s.value !== 'string')
+      return 'a setting has no thing or value';
+    if (!['dial', 'token', 'property'].includes(s.source))
+      return `${s.thing} has no source (dial, token or property)`;
+    for (const k of ['on', 'when', 'state'])
+      if (s[k] != null && typeof s[k] !== 'string')
+        return `${s.thing} has a ${k} that is not a word`;
+    if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
+      return `${s.thing} has mode "${s.mode}"`;
+    const bad = `${s.thing} "${s.value}"`;
+    if (!isSafeValue(s.value)) return `${bad} cannot be a CSS value`;
+    if (s.source !== 'dial') continue;
+    const d = DIALS[s.thing];
+    if (!d) return `${s.thing} is not a dial`;
+    const words = d.values.split('|').filter(w => !w.startsWith('<'));
+    const ok =
+      s.thing === 'corners'
+        ? words.includes(s.value) || isSize(s.value, '--radius')
+        : s.thing === 'text-size'
+          ? words.includes(s.value) ||
+            (/^\d+(\.\d+)?$/.test(s.value) &&
+              Number(s.value) >= 10 &&
+              Number(s.value) <= 32)
+          : s.thing === 'vibrancy'
+            ? /^\d{1,3}$/.test(s.value) && Number(s.value) <= 100
+            : PALETTE_DIALS.includes(s.thing)
+              ? isColorValue(s.value)
+              : s.thing === 'font'
+                ? s.value.trim() !== ''
+                : words.includes(s.value);
+    if (!ok || s.value === 'more' || s.value === 'less')
+      return `${bad} is not a value ${s.thing} takes (${d.values})`;
+  }
+  return null;
 }
 
 /** The identity of a setting: a new one with the same identity replaces it. @param {Setting} s */
@@ -328,6 +406,17 @@ function partDefault(ctx, target, prop, when) {
  */
 export function compileTheme(ctx, data, base) {
   const TOKENS = ctx.project.core.tokenDefaults;
+  // The base theme's type scale, read back from its sizes: base text, and
+  // the ratio (2xl is three steps above base).
+  const rem = (/** @type {string | undefined} */ v) =>
+    /^[\d.]+rem$/.test(v ?? '') ? Number.parseFloat(String(v)) : null;
+  const [b0, b3] = [
+    rem(base.light['--font-size-base']),
+    rem(base.light['--font-size-2xl']),
+  ];
+  const baseSize = b0 ? Math.round(b0 * 16) : 14;
+  const baseRatio =
+    b0 && b3 ? Math.round((b3 / b0) ** (1 / 3) * 100) / 100 : 1.2;
   /** @type {any} */
   const theme = {name: data.name, tokens: {}, components: {}};
   const modeOnly =
@@ -472,7 +561,7 @@ export function compileTheme(ctx, data, base) {
         theme.typography.scale = {
           base: size
             ? textPx(size.value)
-            : (theme.typography.scale?.base ?? 14),
+            : (theme.typography.scale?.base ?? baseSize),
           ratio: T.ratio,
         };
         if (T.weight && !headingsAxis('weight'))
@@ -496,7 +585,7 @@ export function compileTheme(ctx, data, base) {
           base: textPx(s.value),
           ratio: type
             ? TYPE_STYLES[type.value].ratio
-            : (theme.typography.scale?.ratio ?? 1.2),
+            : (theme.typography.scale?.ratio ?? baseRatio),
         };
       } else if (s.thing === 'spacing') {
         const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
@@ -535,6 +624,35 @@ export function compileTheme(ctx, data, base) {
     const d = dark ?? base.dark[k] ?? TOKENS[k];
     theme.tokens[k] = l === d ? l : [l, d];
   }
+  // A scale written here replaces the base theme's: its heading weights
+  // stay as the base theme set them, unless a dial or token sets them.
+  if (theme.typography?.scale)
+    for (const k of headingWeightTokens)
+      if (!tok[k] && base.light[k] != null) putTok(k, base.light[k]);
+  // Base themes set the type tokens again for phones (a coarse pointer
+  // below the lg width); an exact type token is written there too, so it
+  // applies on every screen.
+  const phone = Object.fromEntries(
+    data.settings
+      .filter(
+        x =>
+          x.source === 'token' &&
+          !x.on &&
+          !x.mode &&
+          /^--(font-family|font-size|text-)/.test(x.thing) &&
+          !(modeOnly && x.mode && x.mode !== modeOnly),
+      )
+      .map(x => [x.thing, x.value]),
+  );
+  if (Object.keys(phone).length)
+    theme.adaptations = {
+      rules: [
+        {
+          when: {pointer: 'coarse', width: {below: 'lg'}},
+          value: {tokens: phone},
+        },
+      ],
+    };
   if (!Object.keys(theme.tokens).length) delete theme.tokens;
   if (!Object.keys(theme.components).length) delete theme.components;
   return theme;
@@ -813,7 +931,9 @@ export async function resolvedTokens(ctx, slug) {
   // read-only cache folder falls back to the theme folder.
   const name = `.${slug}.load-${process.pid}-${Math.random().toString(36).slice(2, 8)}.mjs`;
   let copy = path.join(f.dir, name);
-  if (!/\bfrom\s+['"]\.\.?\//.test(source))
+  // A real relative import (not the usage example in the doc comment).
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  if (!/^\s*(import|export)\b[^;]*\bfrom\s+['"]\.\.?\//m.test(code))
     try {
       fs.mkdirSync(ctx.project.cacheDir, {recursive: true});
       fs.writeFileSync(path.join(ctx.project.cacheDir, name), source);
@@ -934,6 +1054,66 @@ function parseSettings(text) {
 }
 
 /**
+ * Every file under `dir` and its bytes; empty when there is no folder.
+ * @param {string} dir
+ * @returns {Map<string, Buffer>}
+ */
+function snapshotDir(dir) {
+  /** @type {Map<string, Buffer>} */
+  const out = new Map();
+  if (!fs.existsSync(dir) || !fs.lstatSync(dir).isDirectory()) return out;
+  /** @param {string} d */
+  const walk = d => {
+    for (const e of fs.readdirSync(d, {withFileTypes: true})) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile()) out.set(p, fs.readFileSync(p));
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+/**
+ * Put `dir` back as `was` holds it: files written since go, and every file
+ * that was there gets its bytes back.
+ * @param {string} dir
+ * @param {Map<string, Buffer>} was
+ */
+function restoreDir(dir, was) {
+  for (const p of snapshotDir(dir).keys())
+    if (!was.has(p)) fs.rmSync(p, {force: true});
+  for (const [p, bytes] of was) {
+    fs.mkdirSync(path.dirname(p), {recursive: true});
+    fs.writeFileSync(p, bytes);
+  }
+  /** @param {string} d */
+  const prune = d => {
+    if (!fs.existsSync(d)) return;
+    for (const e of fs.readdirSync(d, {withFileTypes: true}))
+      if (e.isDirectory()) {
+        prune(path.join(d, e.name));
+        if (
+          ![...was.keys()].some(p =>
+            p.startsWith(path.join(d, e.name) + path.sep),
+          )
+        )
+          removeIfEmpty(path.join(d, e.name));
+      }
+  };
+  prune(dir);
+}
+
+/** @param {string} dir */
+function removeIfEmpty(dir) {
+  try {
+    fs.rmdirSync(dir);
+  } catch {
+    // Not empty, or gone already.
+  }
+}
+
+/**
  * A theme's undo history: the settings text before each change, oldest
  * first. Empty when there is none; null when the file is damaged.
  * @param {string} file
@@ -1001,22 +1181,38 @@ export async function commitTheme(ctx, slug, data, {history}) {
       : null;
   const before = parseSettings(snapBefore);
   const liftedBefore = new Set(before?.lifted ?? []);
+  // Every file of the theme as it was, so a failed build puts back exactly
+  // that: nothing it did not create is ever removed.
+  const rootMade = !fs.existsSync(f.root);
+  const dirMade = !fs.existsSync(f.dir);
+  const was = snapshotDir(f.dir);
   fs.mkdirSync(f.dir, {recursive: true});
   /** @type {{warnings: string[], lifted: string[]}} */
   let built;
   try {
     built = await buildTheme(ctx, slug, data);
   } catch (e) {
-    if (snapBefore) {
-      fs.writeFileSync(f.settings, snapBefore);
-      if (before) await buildTheme(ctx, slug, before).catch(() => null);
-    } else fs.rmSync(f.dir, {recursive: true, force: true});
+    restoreDir(f.dir, was);
+    if (dirMade) removeIfEmpty(f.dir);
+    if (rootMade) removeIfEmpty(f.root);
     if (e instanceof AstryxError && e.code === ERROR_CODES.ERR_UNKNOWN_THEME)
       throw e;
-    const why = e instanceof Error ? e.message : String(e);
+    const why = (e instanceof Error ? e.message : String(e))
+      .split(`${cwd}${path.sep}`)
+      .join('')
+      .replace(/\s*Make sure all imports[^|]*$/s, '')
+      .split('\n')
+      .slice(0, 3)
+      .join(' | ');
+    const own = why.includes(path.basename(f.ts));
     throw new AstryxError(
-      `The theme did not build, so the change was undone: ${why.split('\n').slice(0, 5).join(' | ')}`,
-      [],
+      `The theme did not build, so the change was undone: ${why}${own ? ` (${shown(cwd, f.ts)} is your own file: fix it, then run the command again)` : ''}`,
+      [
+        {
+          name: `${P} show ${slug}`,
+          reason: 'do this instead: see the settings as they are',
+        },
+      ],
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }

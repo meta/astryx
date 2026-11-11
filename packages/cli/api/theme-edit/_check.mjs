@@ -34,12 +34,18 @@ import {
   THING_HINTS,
   familyOf,
 } from './_tables.mjs';
-import {isColorValue, isNumber, isSize} from './_color.mjs';
-import {MODAL} from './_compiler.mjs';
+import {
+  isColorValue,
+  isNumber,
+  isSafeValue,
+  isSize,
+  parseColor,
+} from './_color.mjs';
 import {
   PALETTE_DIALS,
   PALETTE_TOKENS,
   VIBRANCY_DEFAULT,
+  isGraySeed,
   paletteToken,
   seedOf,
 } from './_palette.mjs';
@@ -67,25 +73,149 @@ const E = ERROR_CODES;
 /**
  * Refuse a value that does not parse as the token's type.
  * @param {string} type @param {string} value @param {string} name
+ * @param {Record<string, unknown>} TOKENS
+ * @param {(token: string) => string} typeOf
+ * @param {string} slug
  */
-function checkTypedValue(type, value, name) {
-  if (type === 'color' && !isColorValue(value))
+function checkTypedValue(type, value, name, TOKENS, typeOf, slug) {
+  /** @param {string} what @param {string} example */
+  const bad = (what, example) =>
     refuse(
       E.ERR_THEME_BAD_VALUE,
-      `${name} is a color; "${value}" is not a CSS color.`,
-      {fix: 'give one like "#1f2937", "rgb(31 41 55)" or "oklch(0.5 0.1 250)"'},
+      `${name} is ${what}; "${value}" is not one.`,
+      {run: [`${P} set ${slug} ${name} ${q(example)}`]},
     );
-  if (type === 'size' && !isSize(value))
+  if (!isSafeValue(value))
     refuse(
       E.ERR_THEME_BAD_VALUE,
-      `${name} is a size; "${value}" is not a CSS size.`,
-      {fix: 'give one like 6px, 0.75rem or 0'},
+      `"${value}" cannot be a CSS value: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote.`,
+      {run: [`${P} set ${slug} ${name} <value>`]},
     );
-  if (type === 'number' && !isNumber(value))
+  // A var() naming a design token must name one of the same kind; the
+  // app's own variables are its business.
+  const ref = /^var\((--[a-z0-9-]+)\)$/i.exec(value.trim());
+  if (ref) {
+    if (ref[1] in TOKENS && typeOf(ref[1]) !== type && type !== 'other')
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${name} is a ${type}; ${ref[1]} is a ${typeOf(ref[1])}.`,
+        {
+          run: [
+            `${HOW} --list tokens ${name.replace(/^--/, '').split('-')[0]}`,
+          ],
+        },
+      );
+    return;
+  }
+  if (type === 'color' && !isFixedColor(value)) bad('a color', '#1f2937');
+  if (type === 'size' && !isSize(value, name)) bad('a size', '6px');
+  if (type === 'number' && !isNumber(value, name))
+    bad('a number', /weight/.test(name) ? '600' : '1.4');
+  if (type === 'time' && !/^\d*\.?\d+(ms|s)$/.test(value.trim()))
+    bad('a time', '150ms');
+  if (
+    type === 'easing' &&
+    !/^(linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$|^(cubic-bezier|steps|linear)\([^()]*\)$/.test(
+      value.trim(),
+    )
+  )
+    bad('an easing', 'cubic-bezier(0.2, 0, 0, 1)');
+  if (type === 'font' && !/^[^,]+(,[^,]+)*$/.test(value.trim()))
+    bad('a font family list', 'Inter, sans-serif');
+  if (type === 'shadow' && !isShadow(value))
+    bad('a shadow', '0 2px 4px rgb(0 0 0 / 0.2)');
+  if (
+    /^--focus-outline-style$/.test(name) &&
+    !/^(none|solid|dashed|dotted|double|groove|ridge|inset|outset|auto)$/.test(
+      value.trim(),
+    )
+  )
+    bad('an outline style', 'solid');
+}
+
+/**
+ * Whether a value is a color that works on its own and inside
+ * `light-dark()`: a color this editor can read, or one of the color
+ * functions and keywords it cannot read but CSS can; never a CSS-wide
+ * keyword or a function with broken insides.
+ * @param {string} value
+ */
+function isFixedColor(value) {
+  const v = value.trim().toLowerCase();
+  if (['inherit', 'initial', 'unset', 'revert', 'revert-layer'].includes(v))
+    return false;
+  if (!isColorValue(v)) return false;
+  if (/^(rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\(/.test(v))
+    return parseColor(v) != null;
+  return true;
+}
+
+/**
+ * Whether a value is a shadow list: each layer is `inset`, two to four
+ * lengths, and a color, in any order; or `none`.
+ * @param {string} value
+ */
+function isShadow(value) {
+  const v = value.trim();
+  if (v === 'none') return true;
+  if (/^light-dark\(/i.test(v)) return false;
+  const layers = v.split(/,(?![^(]*\))/);
+  return layers.every(layer => {
+    const words = layer.trim().split(/\s+(?![^(]*\))/);
+    const lengths = words.filter(w =>
+      /^-?\d*\.?\d+(px|rem|em)?$|^0$|^var\(--[a-z0-9-]+\)$|^calc\(/.test(w),
+    );
+    const rest = words.filter(w => !lengths.includes(w) && w !== 'inset');
+    return (
+      lengths.length >= 2 &&
+      lengths.length <= 4 &&
+      rest.length <= 1 &&
+      rest.every(w => isColorValue(w))
+    );
+  });
+}
+
+/**
+ * Refuse a value that would read the token itself, through other tokens.
+ * @param {string} thing
+ * @param {string} value
+ * @param {Record<string, unknown>} TOKENS
+ * @param {import('./_settings.mjs').ThemeData} data
+ */
+function checkCycle(thing, value, TOKENS, data) {
+  /** @param {string} t */
+  const valueOf = t =>
+    String(
+      [...data.settings]
+        .reverse()
+        .find(s => s.source === 'token' && s.thing === t && !s.on)?.value ??
+        TOKENS[t] ??
+        '',
+    );
+  const refs = (/** @type {string} */ v) =>
+    [...v.matchAll(/var\((--[a-z0-9-]+)/gi)].map(m => m[1]);
+  /** @type {string[]} */
+  const path = [];
+  const seen = new Set();
+  /** @param {string} t @returns {boolean} */
+  const reaches = t => {
+    if (t === thing) return true;
+    if (seen.has(t)) return false;
+    seen.add(t);
+    path.push(t);
+    if (refs(valueOf(t)).some(reaches)) return true;
+    path.pop();
+    return false;
+  };
+  if (refs(value).some(reaches))
     refuse(
       E.ERR_THEME_BAD_VALUE,
-      `${name} is a number; "${value}" is not one.`,
-      {fix: 'give one like 600 or 1.4'},
+      `${thing} would read itself${path.length ? ` through ${path.join(', ')}` : ''}, so it would have no value at all.`,
+      {
+        run: [
+          `${P} set ${data.name} ${thing} <a value that does not read ${thing}>`,
+        ],
+      },
     );
 }
 
@@ -116,11 +246,38 @@ export function checkSetting(
     refuse(E.ERR_MISSING_ARGUMENT, 'Name the thing to change.', {
       run: [`${P} ${unset ? 'undo' : 'set'} --help`],
     });
-  if (!unset && (value === undefined || value === ''))
+  // `--token=value` is one word to the shell: say how to write it.
+  if (thing.startsWith('--') && thing.includes('=')) {
+    const [name, ...rest] = thing.split('=');
+    refuse(
+      E.ERR_MISSING_ARGUMENT,
+      `Give the token and its value as two words: ${name} ${rest.join('=')}.`,
+      {
+        run: [
+          `${P} ${unset ? 'undo' : 'set'} ${slug} ${name}${unset ? '' : ` ${q(rest.join('='))}`}`,
+        ],
+      },
+    );
+  }
+  if (!unset && (value === undefined || value.trim() === ''))
     refuse(E.ERR_MISSING_ARGUMENT, `Give a value for ${thing}.`, {
       run: [`${P} set --help`],
     });
-  const v = value ?? '';
+  // An empty flag is never read as no flag: --state '' would reach every
+  // state.
+  for (const k of /** @type {const} */ (['on', 'when', 'state', 'mode']))
+    if (flags[k] === '')
+      refuse(E.ERR_MISSING_ARGUMENT, `--${k} was given no value.`, {
+        run: [`${P} ${unset ? 'undo' : 'set'} --help`],
+      });
+  const v = (value ?? '').trim();
+  // A placeholder copied from a suggestion is not a value.
+  if (!unset && /<[a-z][\w -]*>/i.test(v))
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `"${v}" is a placeholder: put a real value in place of ${/<[a-z][\w -]*>/i.exec(v)?.[0]}.`,
+      {run: [`${HOW} ${thing.replace(/^--/, '')}`]},
+    );
   /** @type {import('./_settings.mjs').Setting} */
   const s = {thing, value: v, source: 'dial'};
   if (flags.on) s.on = flags.on;
@@ -128,12 +285,14 @@ export function checkSetting(
   if (flags.state) s.state = flags.state;
   if (flags.only) s.only = true;
   if (flags.mode) {
-    if (flags.mode !== 'light' && flags.mode !== 'dark')
+    const mode = flags.mode.toLowerCase();
+    if (mode !== 'light' && mode !== 'dark')
       refuse(
         E.ERR_THEME_BAD_VALUE,
         `--mode takes light or dark, not "${flags.mode}".`,
+        {didYouMean: nearest(mode, ['light', 'dark'])},
       );
-    s.mode = flags.mode;
+    s.mode = mode;
   }
   const onFlag = s.on ? ` --on ${s.on}` : '';
   if (s.mode && data.mode !== 'both')
@@ -351,11 +510,17 @@ export function checkSetting(
           {run: [`${P} set ${slug} font-size 13px --on ${s.on}`]},
         );
       if (step) s.value = ladder(TEXT_SIZE, 'medium');
-      else if (!TEXT_SIZE.some(([n]) => n === v) && !Number.isFinite(Number(v)))
+      else if (
+        !TEXT_SIZE.some(([n]) => n === v) &&
+        !(/^\d+(\.\d+)?$/.test(v.trim()) && Number(v) >= 10 && Number(v) <= 32)
+      )
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `text-size takes ${DIALS['text-size'].values}, not "${v}".`,
+          `text-size takes ${DIALS['text-size'].values} (a number is the body size in pixels, 10 to 32), not "${v}".`,
+          {run: [`${P} set ${slug} text-size 16`]},
         );
+      else if (!TEXT_SIZE.some(([n]) => n === v))
+        s.value = String(Number(v.trim()));
     } else if (PALETTE_DIALS.includes(thing)) {
       if (step)
         refuse(E.ERR_THEME_BAD_VALUE, `${thing} takes a color, not a step.`, {
@@ -395,14 +560,16 @@ export function checkSetting(
           {run: [`${P} set ${slug} vibrancy 60`]},
         );
       else s.value = String(Number(v));
-      if (
-        !data.settings.some(
-          x => x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
-        )
-      )
+      const colors = data.settings.filter(
+        x => x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
+      );
+      // A gray has no color to saturate, so vibrancy changes nothing.
+      if (!colors.some(x => !isGraySeed(seedOf(x.value))))
         refuse(
           E.ERR_THEME_NO_EFFECT,
-          'vibrancy sets how saturated the generated colors are, and this theme sets no color yet. Set one first.',
+          colors.length
+            ? 'vibrancy sets how saturated the generated colors are, and every color this theme sets is a gray, so it would change nothing. Set a color first.'
+            : 'vibrancy sets how saturated the generated colors are, and this theme sets no color yet. Set one first.',
           {run: [`${P} set ${slug} accent "#7c3aed"`]},
         );
     } else if (thing === 'font') {
@@ -417,6 +584,20 @@ export function checkSetting(
           E.ERR_THEME_BAD_VALUE,
           'font takes a preset or a family name, not a step.',
           {fix: `the values are ${DIALS.font.values}`},
+        );
+      // A family list: names, quoted or not, split by commas; nothing that
+      // could end the CSS declaration or the preview's style block.
+      s.value = v.trim();
+      if (
+        !s.value ||
+        /[;{}<>\\\n]/.test(s.value) ||
+        (s.value.match(/"/g) ?? []).length % 2 ||
+        (s.value.match(/'/g) ?? []).length % 2
+      )
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${v}" is not a font: give a preset (${DIALS.font.values}) or a family list such as "Inter, sans-serif".`,
+          {run: [`${P} set ${slug} font inter`]},
         );
     } else if (thing === 'base') {
       if (s.on)
@@ -458,16 +639,27 @@ export function checkSetting(
       refuse(E.ERR_THEME_UNKNOWN_TOKEN, `"${thing}" is not a design token.`, {
         didYouMean: nearest(thing, Object.keys(TOKENS)),
         run: [
-          `${HOW} ${thing.replace(/^--(color-)?/, '').split('-')[0]} --list tokens`,
+          `${HOW} --list tokens ${thing
+            .replace(/^-+(color-)?/, '')
+            .split('-')[0]
+            .trim()}`.trim(),
         ],
       });
     }
     const type = C.typeOf(thing);
-    if (s.mode && !MODAL.has(type))
+    // Only colors differ by mode: a shadow list cannot sit inside
+    // light-dark(), so a shadow per mode would remove it in both.
+    if (s.mode && type !== 'color')
       refuse(
         E.ERR_THEME_NO_MODE,
-        `${thing} is a ${type}, so it is the same in light and dark; drop --mode. Only colors and shadows differ by mode.`,
-        {run: [`${P} set ${slug} ${thing} ${q(v)}${onFlag}`]},
+        `${thing} is ${/^[aeiou]/.test(type) ? 'an' : 'a'} ${type === 'other' ? 'value of its own kind' : type}, so it is the same in light and dark; drop --mode. Only colors differ by mode.`,
+        {
+          run: [
+            unset
+              ? `${P} undo ${slug} ${thing}${onFlag}`
+              : `${P} set ${slug} ${thing} ${q(v)}${onFlag}`,
+          ],
+        },
       );
     s.source = 'token';
     if (unset) return s;
@@ -476,7 +668,8 @@ export function checkSetting(
         E.ERR_THEME_BAD_VALUE,
         `"more"/"less" work only on dials (${Object.keys(DIALS).join(', ')}). Give ${thing} a ${type} value.`,
       );
-    checkTypedValue(type, v, thing);
+    checkTypedValue(type, v, thing, TOKENS, C.typeOf, slug);
+    checkCycle(thing, v, TOKENS, data);
     // With no part data, what reads the token is unknown: save, unchecked.
     if (ctx.unchecked) return s;
     const parts = partsOf(ctx, s);
@@ -586,6 +779,12 @@ export function checkSetting(
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
+    if (!isSafeValue(v))
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `"${v}" cannot be a CSS value: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote.`,
+        {run: [`${HOW} ${prop}`]},
+      );
     if (/radius$/.test(prop)) refuseInvisibleCorners(ctx, slug, s);
     if (step)
       refuse(
