@@ -174,13 +174,9 @@ interface OverlayParts {
 
 /**
  * Open the Pre Selected story's list and wait for the selected row to sit
- * over the trigger. `prepare` runs once the story is mounted, before the
- * click. Returns the locators the cases read.
+ * over the trigger. Returns the locators the cases read.
  */
-async function openPreSelected(
-  page: Page,
-  prepare?: () => Promise<void>,
-): Promise<OverlayParts> {
+async function openPreSelected(page: Page): Promise<OverlayParts> {
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-selector--pre-selected&viewMode=story`,
     {waitUntil: 'load'},
@@ -189,7 +185,6 @@ async function openPreSelected(
   // The story mounts after load and replaces the root's content, so a
   // change to the page waits for the trigger.
   await expect(trigger).toBeVisible();
-  await prepare?.();
   await trigger.click();
   const listbox = page.getByRole('listbox');
   await expect(listbox).toBeVisible();
@@ -276,8 +271,6 @@ async function expectAligned(
   }).toPass({timeout: 5_000});
   await expectUsableRows(page, viewportHeight);
 }
-
-/** The viewport gutter an anchored layer keeps: the spacing-4 step. */
 
 /**
  * Rows in full view: inside the list's own box and inside the viewport above
