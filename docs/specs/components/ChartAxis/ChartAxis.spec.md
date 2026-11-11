@@ -38,7 +38,7 @@ system_specs: [spec:AST-002, spec:AST-029, spec:AST-115]
 | End-user impact         | Chart readers keep complete tick-label characters, and equally short Unicode labels are no longer thinned more aggressively than ASCII labels.                                                                                         |
 | Builder impact          | A callsite passes a `ChartValueFormat` as `formatTick`, the name `spec:AST-115` DEC-8 gives the tick format.                                                                                                                           |
 | Compatibility/readiness | `spec:AST-115` owns the tick-format prop and default tick text; the charts package is private (`spec:AST-017` FR2). This record is draft observational evidence; rendered and accessibility-tree evidence remains incomplete.          |
-| Review checks           | Reject a changed public shape/default, an axis using the wrong Chart scale, broken physical-edge placement, split grapheme labels, or hidden line/tick precedence.                                                                     |
+| Review checks           | Reject a public shape or default change other than `spec:AST-115`'s tick format, an axis using the wrong Chart scale, broken physical-edge placement, split grapheme labels, or hidden line/tick precedence.                           |
 | Governing rules         | `spec:AST-115/FR13`, `spec:AST-115/FR15`, `spec:AST-029/FR3–FR7`, `architecture:component-test-sufficiency/INV1–INV9`, and [Unicode Text Segmentation](https://www.unicode.org/reports/tr29/).                                         |
 
 This table is a review projection; the body below is authoritative.

@@ -336,10 +336,10 @@ Rejected: locale-aware defaults, because they group years as `2,025`.
 **Reference:** `spec:AST-115/DEC-7`
 **Decider:** `cixzhang`, `2026-11-11`
 
-The WebGL marks draw on a canvas and find values differently from the SVG
-marks: a scatter point or a heatmap cell is found under the pointer, not by
-the nearest x, `dotGLInteractive` draws its own hover card, and a stream's
-values live outside the chart data. A format on them would govern text on
+The WebGL marks draw on a canvas and show values differently from the SVG
+marks: `dotGLInteractive` picks a point under the pointer and shows it in its
+own hover card, a heatmap cell's value sets its color rather than a y
+position, and a stream's values live outside the chart data. A format on them would govern text on
 surfaces that no record defines, so they take no `formatValue`, and FR14 keeps
 a series without a value key out of the tooltip and the table. A record that
 defines the WebGL marks' value surfaces gives them the same `formatValue`
