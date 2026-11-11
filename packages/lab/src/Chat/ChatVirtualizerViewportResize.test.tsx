@@ -150,6 +150,42 @@ describe('ChatVirtualizer on the page scroller: window resize', () => {
     expect(passes).toBe(1);
   });
 
+  it('runs one correction pass in each frame of a height-only, width, then height-only sequence', async () => {
+    await mounted();
+    const counts: number[] = [];
+
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    await nextFrame();
+    await nextFrame();
+    counts.push(passes);
+    passes = 0;
+
+    width = 900;
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    await nextFrame();
+    deliverScrollerEntry();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await nextFrame();
+    await nextFrame();
+    counts.push(passes);
+    passes = 0;
+
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    await nextFrame();
+    await nextFrame();
+    counts.push(passes);
+
+    expect(counts).toEqual([1, 1, 1]);
+  });
+
   it('runs one correction pass, one frame late, when a width change gives the scroller no entry', async () => {
     await mounted();
     width = 900;
