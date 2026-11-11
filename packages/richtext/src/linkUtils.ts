@@ -43,7 +43,7 @@ export const URL_MATCHER =
 
 /** Matches a bare email address for AutoLink (rendered as a `mailto:` link). */
 export const EMAIL_MATCHER =
-  /(?=[^@\r\n]{1,64}@)(([^<>()[\]\\.,;:\s@"]{1,64}(\.[^<>()[\]\\.,;:\s@"]{1,64})*)|("[^"\r\n]{1,62}"))@(?=[^\s]{1,253}(?:\s|$))((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]{1,63}\.){1,125}[a-zA-Z]{2,63}))/;
+  /(?=[^@\r\n]{1,64}@)(([^<>()[\]\\.,;:\s@"]{1,64}(\.[^<>()[\]\\.,;:\s@"]{1,64})*)|("[^"\r\n]{1,62}"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]{1,63}\.){1,125}[a-zA-Z]{2,63}))/;
 
 /** Prepend a default `https://` scheme to a bare host so it parses as absolute. */
 function withDefaultScheme(url: string): string {

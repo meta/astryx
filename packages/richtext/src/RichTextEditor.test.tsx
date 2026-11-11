@@ -2034,6 +2034,13 @@ describe('RichTextEditorAutoLinkPlugin', () => {
     expect(emailMatch?.attributes).toEqual(NEW_TAB_LINK_ATTRIBUTES);
   });
 
+  it('matches an email before a long unspaced suffix', () => {
+    const suffix = '你'.repeat(1_000);
+    const emailMatch = DEFAULT_LINK_MATCHERS[1](`a@b.com${suffix}`);
+
+    expect(emailMatch?.url).toBe('mailto:a@b.com');
+  });
+
   it('does not backtrack across a long token with no email address', () => {
     const text = 'a'.repeat(100_000);
     const startedAt = performance.now();

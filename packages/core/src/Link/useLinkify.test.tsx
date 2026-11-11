@@ -26,9 +26,7 @@ describe('useLinkify', () => {
   });
 
   it('renders URLs as Link elements', () => {
-    const {result} = renderHook(() =>
-      useLinkify('Visit https://example.com'),
-    );
+    const {result} = renderHook(() => useLinkify('Visit https://example.com'));
     const {container} = render(<p>{result.current}</p>);
     const link = container.querySelector('a');
     expect(link?.getAttribute('href')).toBe('https://example.com');
@@ -44,12 +42,23 @@ describe('useLinkify', () => {
   });
 
   it('renders email links with mailto:', () => {
-    const {result} = renderHook(() =>
-      useLinkify('Email hi@example.com'),
-    );
+    const {result} = renderHook(() => useLinkify('Email hi@example.com'));
     const {container} = render(<p>{result.current}</p>);
     const link = container.querySelector('a');
     expect(link?.getAttribute('href')).toBe('mailto:hi@example.com');
+  });
+
+  it('links an email before a long unspaced suffix', () => {
+    const suffix = '你'.repeat(1_000);
+    const {result} = renderHook(() =>
+      useLinkify(`Email hi@example.com${suffix}`),
+    );
+    const {container} = render(<p>{result.current}</p>);
+
+    expect(container.querySelector('a')?.getAttribute('href')).toBe(
+      'mailto:hi@example.com',
+    );
+    expect(container.textContent).toBe(`Email hi@example.com${suffix}`);
   });
 
   it('does not backtrack across a long token with no email address', () => {
@@ -78,7 +87,7 @@ describe('useLinkify', () => {
         patterns: [
           {
             pattern: /\bT(\d+)\b/g,
-            href: (m) => `https://tasks.example.com/${m[1]}`,
+            href: m => `https://tasks.example.com/${m[1]}`,
           },
         ],
       }),
@@ -100,8 +109,8 @@ describe('useLinkify', () => {
         patterns: [
           {
             pattern: /https:\/\/example\.com\/T(\d+)/g,
-            href: (m) => `https://tasks.example.com/${m[1]}`,
-            label: (m) => `T${m[1]}`,
+            href: m => `https://tasks.example.com/${m[1]}`,
+            label: m => `T${m[1]}`,
           },
         ],
       }),
@@ -118,8 +127,8 @@ describe('useLinkify', () => {
         patterns: [
           {
             pattern: /\bD(\d+)\b/g,
-            href: (m) => `https://phabricator.example.com/${m[0]}`,
-            label: (m) => `Diff ${m[1]}`,
+            href: m => `https://phabricator.example.com/${m[0]}`,
+            label: m => `Diff ${m[1]}`,
           },
         ],
       }),
@@ -147,9 +156,7 @@ describe('useLinkify', () => {
   });
 
   it('handles text that ends with a link', () => {
-    const {result} = renderHook(() =>
-      useLinkify('Visit https://example.com'),
-    );
+    const {result} = renderHook(() => useLinkify('Visit https://example.com'));
     expect(result.current).toHaveLength(2);
     expect(result.current[0]).toBe('Visit ');
   });
