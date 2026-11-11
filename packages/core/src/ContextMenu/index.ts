@@ -1,6 +1,4 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-'use client';
-
 /**
  * @file index.ts
  * @output Exports ContextMenu, ContextMenuItem and related types

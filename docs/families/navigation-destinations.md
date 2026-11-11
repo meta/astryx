@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/utils/safeUrl.test.ts,
     packages/core/src/Markdown/parser.test.ts,
+    packages/core/src/Markdown/urlSchemes.test.ts,
     packages/core/src/Markdown/Markdown.test.tsx,
     packages/core/src/Markdown/Markdown.renderBoundary.test.tsx,
     packages/core/src/Link/useLinkComponent.test.tsx,
@@ -51,7 +52,7 @@ members:
   ]
 architecture: [architecture:public-component-api]
 contributing: []
-deciding_specs: [spec:AST-005/DEC-1, spec:AST-005/DEC-2]
+deciding_specs: [spec:AST-005/DEC-1, spec:AST-005/DEC-2, spec:AST-005/DEC-3]
 ---
 
 # Navigation destinations contract
@@ -99,8 +100,10 @@ control.
   parser/render boundary.
 - **Excluded:** Outline's Astryx-generated `#id` links; AppShell's fixed
   skip-to-content fragment; arbitrary links supplied as children; Markdown
-  plugin output; image/media/resource URLs; and components that only compose a
-  member without accepting or deriving its destination.
+  plugin output; image/media/resource URLs, except Markdown image URLs, which
+  Markdown's parser decides with its link rule (`spec:AST-005/DEC-3`); and
+  components that only compose a member without accepting or deriving its
+  destination.
 
 Membership is open-ended. A newly shipped Core component that meets the rule
 must be added here even when it delegates to an existing member or shared hook.
@@ -117,8 +120,10 @@ must be added here even when it delegates to an existing member or shared hook.
   including same-tab, new-tab, modifier-click, middle-click, and delegated
   activation. Every activation preserves the same accept/block result.
 - Markdown owns parsing untrusted source into a destination and preserving the
-  same navigation decision through rendering. Its image/resource policy remains
-  separate.
+  same navigation decision through rendering. Markdown's parser owns that
+  decision for links and images with one rule: the shared navigation rule plus
+  every `data:` URL. The renderer renders only parsed nodes
+  (`spec:AST-005/DEC-3`).
 - Native anchors follow the full shared navigation rule. React DOM's own
   sanitization is not an exception to any blocked scheme.
 
@@ -144,12 +149,16 @@ must be added here even when it delegates to an existing member or shared hook.
   same accept/block decision.
 - **FR4 — Blocked schemes cannot execute.** After browser-compatible scheme
   normalization, `javascript:`, `vbscript:`, and `data:text/html` do not become
-  navigation, including through native anchors.
+  navigation, including through native anchors. The parser owns Markdown link
+  and image URL safety: it also blocks every `data:` URL, of any media type, in
+  links and images. The renderer keeps a check only at a real bypass path, if
+  one exists.
 - **FR5 — Accepted destinations retain browser behavior.** Relative paths,
   fragments, protocol-relative destinations, HTTP(S), mailto, tel, and safe custom
   schemes retain native and router navigation, targets, downloads, and browser
   affordances. Accepted structured router destinations retain their fields and
-  object identity.
+  object identity. For Markdown, the parser owns which link and image URLs are
+  accepted; a `data:` URL is not one.
 - **FR6 — Both custom-router props are sinks.** A supplied `href` and explicit
   `to` are checked independently, including the scheme-bearing fields of
   supported structured forms (`href`, `pathname`, and `protocol`) and the
@@ -164,7 +173,8 @@ must be added here even when it delegates to an existing member or shared hook.
   CSS URLs, fetch targets, and downloaded content use their own sink-specific
   contracts. An accepted link's existing download behavior is preserved. A member
   that handles both navigation and resources applies this family only to its
-  navigation path.
+  navigation path. Markdown is the exception: its parser applies its link rule
+  to image URLs too (`spec:AST-005/DEC-3`).
 
 ## Allowed component variation
 
@@ -183,9 +193,10 @@ must be added here even when it delegates to an existing member or shared hook.
 - **AV4 — Target and relationship.** Members retain their existing `target`,
   `rel`, referrer, download, and external-link presentation behavior after a
   destination is accepted.
-- **AV5 — Embedded resources.** Markdown and Citation may separately own image
-  or resource policy; those decisions do not alter this family's navigation
-  matrix.
+- **AV5 — Embedded resources.** Citation may separately own image or resource
+  policy. Markdown's image URLs follow its parser's link rule
+  (`spec:AST-005/DEC-3`). Neither alters this family's navigation matrix for
+  other members.
 
 ## Representative matrix
 
@@ -195,19 +206,19 @@ must be added here even when it delegates to an existing member or shared hook.
 | `component:Link` / custom provider or `as`          | either rejected `href`/`to` prevents router invocation    | router owns accepted client-side navigation and receives unchanged objects |
 | `component:ClickableCard` / plain or modified click | every imperative or delegated exit uses the same decision | visible Card structure and nested-interactive handling remain local        |
 | `component:Token` / link with remove action         | surface activation and hidden link agree                  | remove action remains an independent sibling control                       |
-| `component:Markdown` / parsed link                  | blocked source does not become navigation                 | rejected source may render as text; resource policy remains separate       |
+| `component:Markdown` / parsed link                  | blocked source does not become navigation                 | rejected source may render as text; the parser decides link and image URLs |
 | navigation aggregate / member item                  | item destination uses the shared owner                    | tree, tab, breadcrumb, side-nav, top-nav, and menu semantics remain local  |
 | `component:Citation` / linked source                | blocked URL does not execute                              | native-anchor path and citation presentation remain local                  |
 
 ## Adoption and exceptions
 
-| Components or surface                             | Required adoption                                                                                                                   |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Markdown parsed and rendered links                | Parsing and rendering preserve the shared navigation decision; image/resource policy remains separate (AV5).                        |
-| Native React anchors, including Citation          | The full blocked-scheme rule holds; React DOM's `javascript:` protection alone is not sufficient.                                   |
-| `useLinkComponent` custom provider and `as` paths | Both supplied destinations and supported structured forms, including `protocol`, obey the rule; rejection never invokes the router. |
-| `useClickableContainer` imperative paths          | Same-tab, new-tab, modifier, middle-click, and delegated activation agree; non-navigation consumer callbacks remain available.      |
-| Components composing the two shared hooks         | Both delegated destinations and any separately rendered native anchor meet the full rule.                                           |
+| Components or surface                             | Required adoption                                                                                                                                                          |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Markdown parsed and rendered links                | The parser applies the shared navigation decision and also blocks every `data:` URL; the renderer renders only parsed nodes. Image URLs follow the same parser rule (AV5). |
+| Native React anchors, including Citation          | The full blocked-scheme rule holds; React DOM's `javascript:` protection alone is not sufficient.                                                                          |
+| `useLinkComponent` custom provider and `as` paths | Both supplied destinations and supported structured forms, including `protocol`, obey the rule; rejection never invokes the router.                                        |
+| `useClickableContainer` imperative paths          | Same-tab, new-tab, modifier, middle-click, and delegated activation agree; non-navigation consumer callbacks remain available.                                             |
+| Components composing the two shared hooks         | Both delegated destinations and any separately rendered native anchor meet the full rule.                                                                                  |
 
 These are required outcomes, not a claim of completed verification. Adoption is
 complete only after exact-head evidence covers every applicable row. Neither a
@@ -216,19 +227,21 @@ router with an undefined rejected destination is an approved exception.
 
 ## Verification map
 
-| Contract           | Verification                                                                         | Representative members and states                                                                                                                                       | Mutation or failure expectation                                                                                                                                               |
-| ------------------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR4, FR5           | `safeUrl.test.ts`                                                                    | string and structured destinations; mixed case; controls; relative, fragment, protocol-relative, ordinary, safe custom schemes, and `data:image/*`; separate `protocol` | The shared rule accepts a blocked destination or rejects an ordinary one, including when a protocol is separate from its pathname.                                            |
-| FR1, FR2, FR6      | `useLinkComponent.test.tsx` and `apps/docsite/src/__tests__/link-navigation.test.ts` | native Link, Button, navigation members; provider and `as`; safe/rejected `href` and `to` in either combination; structured destinations and object identity            | A rejected destination invokes the router (including with `undefined` or fallback), an accepted object loses identity, or a real router throws while rendering inert content. |
-| FR1, FR3, FR4, FR5 | `useClickableContainer.test.tsx` and real Chromium navigation coverage               | ClickableCard and Token shapes; native Link; plain, `_blank`, Cmd/Ctrl-click, middle-click, delegated activation; accepted downloads                                    | A rejected destination remains activatable, a blocked native, imperative, or delegated navigation occurs, or an accepted destination loses an activation mode.                |
-| FR4, FR5           | `parser.test.ts`, `Markdown.test.tsx`, and `Markdown.renderBoundary.test.tsx`        | parsed, reference, autolink, and transformed built-in links; mixed case; controls; ordinary schemes; `data:image/*` links versus images                                 | Markdown accepts a blocked scheme, rejects an ordinary navigation destination, applies resource policy to a link, or renders a rejected node as navigation.                   |
-| FR1, IR3           | source/member audit required by `spec:AST-005`                                       | every caller-controlled Core navigation destination                                                                                                                     | A new sink or destination-bearing component ships outside this member snapshot                                                                                                |
-| FR7, FR8           | member-focused behavior and resource suites                                          | disabled link modes; Markdown links versus images; Citation link versus image                                                                                           | Destination rejection changes disabled semantics or navigation policy silently becomes resource policy                                                                        |
+| Contract           | Verification                                                                                        | Representative members and states                                                                                                                                       | Mutation or failure expectation                                                                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR4, FR5           | `safeUrl.test.ts`                                                                                   | string and structured destinations; mixed case; controls; relative, fragment, protocol-relative, ordinary, safe custom schemes, and `data:image/*`; separate `protocol` | The shared rule accepts a blocked destination or rejects an ordinary one, including when a protocol is separate from its pathname.                                            |
+| FR1, FR2, FR6      | `useLinkComponent.test.tsx` and `apps/docsite/src/__tests__/link-navigation.test.ts`                | native Link, Button, navigation members; provider and `as`; safe/rejected `href` and `to` in either combination; structured destinations and object identity            | A rejected destination invokes the router (including with `undefined` or fallback), an accepted object loses identity, or a real router throws while rendering inert content. |
+| FR1, FR3, FR4, FR5 | `useClickableContainer.test.tsx` and real Chromium navigation coverage                              | ClickableCard and Token shapes; native Link; plain, `_blank`, Cmd/Ctrl-click, middle-click, delegated activation; accepted downloads                                    | A rejected destination remains activatable, a blocked native, imperative, or delegated navigation occurs, or an accepted destination loses an activation mode.                |
+| FR4, FR5           | `parser.test.ts`, `urlSchemes.test.ts`, `Markdown.test.tsx`, and `Markdown.renderBoundary.test.tsx` | parsed, reference, autolink, and transformed built-in links; mixed case; controls; ordinary schemes; every `data:` URL in links and images                              | Markdown accepts a blocked scheme or any `data:` URL in a link, rejects an ordinary navigation destination, or renders a rejected node as navigation.                         |
+| FR1, IR3           | source/member audit required by `spec:AST-005`                                                      | every caller-controlled Core navigation destination                                                                                                                     | A new sink or destination-bearing component ships outside this member snapshot                                                                                                |
+| FR7, FR8           | member-focused behavior and resource suites                                                         | disabled link modes; Markdown links and images under one parser rule; Citation link versus image                                                                        | Destination rejection changes disabled semantics or navigation policy silently becomes resource policy                                                                        |
 
 ## Decision links
 
 - `spec:AST-005/DEC-1` — destination safety follows every navigation sink.
 - `spec:AST-005/DEC-2` — embedded resources remain a separate policy.
+- `spec:AST-005/DEC-3` — Markdown's parser owns its URL safety and blocks every
+  `data:` URL.
 
 ## Open questions
 

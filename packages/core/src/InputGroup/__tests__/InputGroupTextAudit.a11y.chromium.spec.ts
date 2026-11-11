@@ -25,6 +25,26 @@ const WIDE = {width: 640, height: 400};
 const TALL = {width: 640, height: 960};
 const NARROW = {width: 320, height: 400};
 
+/**
+ * Counts the lines a cell's text sits on. Only text counts: an element inside
+ * the flex cell (such as the `dir` span) is blockified, so its box spans the
+ * line height and its top differs from the glyphs' top on the same line.
+ */
+const TEXT_LINE_COUNT = `(cell) => {
+  const tops = new Set();
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!node.textContent.trim()) continue;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    for (const rect of range.getClientRects()) {
+      if (rect.width > 0 && rect.height > 0) tops.add(Math.round(rect.top));
+    }
+  }
+  return tops.size;
+}`;
+const INSTALL_TEXT_LINE_COUNT = `window.__astryxTextLineCount = ${TEXT_LINE_COUNT};`;
+
 type Mode = 'light' | 'dark';
 type Theme = 'neutral' | 'butter';
 type Direction = 'ltr' | 'rtl';
@@ -242,9 +262,11 @@ async function observe(page: Page) {
         const range = document.createRange();
         range.selectNodeContents(cell);
         const contentRect = range.getBoundingClientRect();
-        const lineTops = new Set(
-          Array.from(range.getClientRects()).map(rect => Math.round(rect.top)),
-        );
+        const lineCount = (
+          window as unknown as {
+            __astryxTextLineCount: (cell: Element) => number;
+          }
+        ).__astryxTextLineCount(cell);
         const cellRect = cell.getBoundingClientRect();
         return {
           text: cell.textContent?.trim() ?? '',
@@ -266,7 +288,7 @@ async function observe(page: Page) {
           previousBox: previous ? box(previous.getBoundingClientRect()) : null,
           nextBox: next ? box(next.getBoundingClientRect()) : null,
           contentBox: box(contentRect),
-          lines: lineTops.size,
+          lines: lineCount,
           clipped: cell.scrollWidth > cell.clientWidth,
           paint: {
             background: style.backgroundColor,
@@ -344,6 +366,7 @@ for (const item of cases) {
       colorScheme: item.mode,
       reducedMotion: 'reduce',
     });
+    await context.addInitScript(INSTALL_TEXT_LINE_COUNT);
     const page = await context.newPage();
     const pageErrors: string[] = [];
     page.on('pageerror', error => pageErrors.push(String(error)));
@@ -577,6 +600,28 @@ for (const item of cases) {
     expect(failures).toEqual([]);
   });
 }
+
+test('the line count counts wrapped text, and not the box of a flex item', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({viewport: WIDE});
+  const page = await context.newPage();
+  await page.setContent(`
+    <div id="wrapped" style="display: flex; align-items: center; width: 60px; font: 16px/24px sans-serif; white-space: normal">
+      <span dir="ltr">text forced to wrap</span>
+    </div>
+    <div id="single" style="display: flex; align-items: center; font: 16px/40px sans-serif; white-space: nowrap">
+      <span dir="ltr">https://</span>
+    </div>
+  `);
+  const counts = await page.evaluate(
+    `[(${TEXT_LINE_COUNT})(document.getElementById('wrapped')), (${TEXT_LINE_COUNT})(document.getElementById('single'))]`,
+  );
+  await context.close();
+  const [wrapped, single] = counts as [number, number];
+  expect(wrapped).toBeGreaterThan(1);
+  expect(single).toBe(1);
+});
 
 test('manifest is complete', async () => {
   const receiptFiles = fs

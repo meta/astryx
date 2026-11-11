@@ -6,11 +6,12 @@
  *   (Chromium CDP / WebKit's input command) and the interaction harness
  * @output Interaction and animation proofs for dragging the sheet to a detent.
  *   The drag follows the finger, and a slow release settles on the nearest
- *   detent. A flick dismisses. A softer flick lands on the half detent, also
- *   when one early move arrives late. The settle lands on the detent, its
- *   sampled curve recorded. It keeps advancing every frame through a blocked
- *   main thread, and does no Layout or Paint per frame. A storyboard shows the
- *   drag and the settle.
+ *   detent. A flick dismisses. Under Reduce Motion a drag that dismisses
+ *   fades the sheet out where the finger left it. A softer flick lands on the
+ *   half detent, also when one early move arrives late. The settle lands on
+ *   the detent, its sampled curve recorded. It keeps advancing every frame
+ *   through a blocked main thread, and does no Layout or Paint per frame. A
+ *   storyboard shows the drag and the settle.
  * @position The exemplar for `*.interaction.browser.spec.ts`: component lanes
  *   copy this shape. Each test names the instrument it uses from
  *   @astryxdesign/interaction-harness, so the evidence layer is explicit.
@@ -52,6 +53,7 @@ import {
   releaseAnimations,
   releaseVelocity,
   sampleCurve,
+  sampleRects,
   startBusyControl,
   startScreencast,
   thawPage,
@@ -311,6 +313,83 @@ test('a downward flick dismisses the sheet', async ({page}) => {
     releaseTolerance: DISMISS_FLICK_TOLERANCE,
   });
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeHidden();
+});
+
+// How far a frame may move the sheet while a reduced-motion close fades it
+// out, CSS px: layout rounding, not motion.
+const IN_PLACE_PX = 2;
+
+test('under Reduce Motion a drag that dismisses fades the sheet out where the finger left it', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const {driver, sheet, tallTop, screenHeight, handle} = await openSheet(page);
+  // Past the dismiss point, halfway from half to closed. The finger rests
+  // before the lift, so the release projects nothing and closes the sheet.
+  const script = slowDragTo(handle, Math.round(screenHeight * 0.85 - handle.y));
+  // Long enough to cover the play and the fade on a slow runner.
+  const sampled = sampleRects(sheet, 4_000);
+  const played = await driver.play(script);
+  const samples = await sampled;
+  await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeHidden();
+  const lift = played.find(event => event.type === 'touchEnd');
+  if (lift == null) {
+    throw new Error('the play has no lift');
+  }
+  // The frames from the lift on while the sheet still shows. WebKit's input
+  // command returns late, so the lift's dispatch bounds them. A frame before
+  // the lift can trail the last move, so the first of them is the release.
+  const closing = samples.filter(
+    s => s.t > lift.dispatchedAt && s.box != null && s.box.height > 0,
+  );
+  const released = closing[0]?.box;
+  if (released == null) {
+    throw new Error('no frame from the lift on');
+  }
+  expect(
+    released.y,
+    `the first frame from the lift shows the sheet ${Math.round(released.y - tallTop)} px below rest; the close did not hold it where the finger left it`,
+  ).toBeGreaterThan(tallTop + 100);
+  expect(
+    closing.some(s => s.opacity < 1),
+    'the close ran no fade under Reduce Motion',
+  ).toBe(true);
+  const moved = Math.max(
+    ...closing.map(s => Math.abs((s.box?.y ?? released.y) - released.y)),
+  );
+  const trace = closing.map(s => Math.round(s.box?.y ?? NaN)).join(' ');
+  expect(
+    moved,
+    `under Reduce Motion the close moved the sheet ${Math.round(moved)} px from where the finger left it (top ${Math.round(released.y)} px, rest ${Math.round(tallTop)} px) as it faded; it fades out in place (tops: ${trace})`,
+  ).toBeLessThanOrEqual(IN_PLACE_PX);
+  // A reopen paints the sheet at rest from its first frame: the close leaves
+  // no offset behind. A CSS locator reaches the sheet while it is hidden.
+  const trigger = page.getByRole('button', {name: 'Open nearby places'});
+  const box = await trigger.boundingBox();
+  if (box == null) {
+    throw new Error('no trigger');
+  }
+  const reopening = sampleRects(
+    page
+      .locator('dialog[aria-label="Nearby places"] .astryx-bottom-sheet')
+      .first(),
+    1_500,
+  );
+  await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+  const shown = (await reopening).filter(
+    s => s.box != null && s.box.height > 0,
+  );
+  expect(shown.length, 'the reopen showed no frame').toBeGreaterThan(0);
+  const strayed = Math.max(
+    ...shown.map(s => Math.abs((s.box?.y ?? tallTop) - tallTop)),
+  );
+  const reopenTrace = shown.map(s => Math.round(s.box?.y ?? NaN)).join(' ');
+  expect(
+    strayed,
+    `the reopen painted the sheet ${Math.round(strayed)} px from its rest (top ${Math.round(tallTop)} px); the close left its offset behind (tops: ${reopenTrace})`,
+  ).toBeLessThanOrEqual(IN_PLACE_PX);
+  await waitForRest(sheet);
+  expect(await sheetTop(sheet)).toBeCloseTo(tallTop, 0);
 });
 
 test('a softer downward flick from the tall detent lands on the half detent', async ({
