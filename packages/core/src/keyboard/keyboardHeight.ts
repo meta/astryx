@@ -9,7 +9,7 @@
  *   box
  * @output The on-screen keyboard module: measureKeyboardHeight,
  *   isKeyboardMeasurable, hasVirtualKeyboard, subscribeKeyboardHeight,
- *   getKeyboardHeight, getResizedRoom, getResizedRoomWidth,
+ *   getKeyboardHeight, getResizedRoom,
  *   isTextEntryControl, findTextEntryControl, refuseFocusReveal,
  *   watchRevealPan and panVisualViewportTo
  * @position Core's one source for the on-screen keyboard. It is internal to
@@ -363,6 +363,14 @@ export function isFingerOnScreen(win: Window): boolean {
   );
 }
 
+/** The room a browser makes for the keyboard, and the width it is read at. */
+export interface ResizedRoom {
+  /** The room, CSS px. */
+  readonly room: number;
+  /** The root's box width the room is measured at, CSS px. */
+  readonly width: number;
+}
+
 /**
  * The room the browser makes for the keyboard by shrinking the layout
  * viewport, CSS px. Chrome on Android does so under
@@ -376,34 +384,24 @@ export function isFingerOnScreen(win: Window): boolean {
  * that keyboard goes. That happens after a turn of the phone, or for a
  * window's first reader.
  *
- * @example
- * ```
- * const isKeyboardUp =
- *   getKeyboardHeight(window) > 0 || getResizedRoom(window) > 0;
- * ```
- */
-export function getResizedRoom(win: Window): number {
-  const store = storeOf(win);
-  return store.detach != null
-    ? store.room
-    : measureResizedRoom(win, store, measureKeyboardHeight(win));
-}
-
-/**
- * The root's box width that getResizedRoom measures the room at, CSS px.
- * While the module listens, it is the width read with the room at the last
- * report, so it adds no layout read.
+ * It comes with the root's box width it is measured at. While the module
+ * listens, that width is the one read with the room at the last report, so
+ * it adds no layout read.
  *
  * @example
  * ```
- * const hasTurned = getResizedRoomWidth(window) !== widthAtReveal;
+ * const isKeyboardUp =
+ *   getKeyboardHeight(window) > 0 || getResizedRoom(window).room > 0;
+ * const hasTurned = getResizedRoom(window).width !== widthAtReveal;
  * ```
  */
-export function getResizedRoomWidth(win: Window): number {
+export function getResizedRoom(win: Window): ResizedRoom {
   const store = storeOf(win);
-  return store.detach != null
-    ? store.rootWidth
-    : win.document.documentElement.clientWidth;
+  if (store.detach != null) {
+    return {room: store.room, width: store.rootWidth};
+  }
+  const room = measureResizedRoom(win, store, measureKeyboardHeight(win));
+  return {room, width: win.document.documentElement.clientWidth};
 }
 
 /**

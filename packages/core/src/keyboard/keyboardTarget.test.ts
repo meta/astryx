@@ -557,12 +557,12 @@ describe('keepFieldAboveKeyboard', () => {
     const input = element('input', {top: 600, height: 40});
     document.body.append(input);
     track(keepFieldAboveKeyboard(input));
-    expect(getResizedRoom(window)).toBe(0);
+    expect(getResizedRoom(window).room).toBe(0);
     // Split screen in portrait: the window is 300 px shorter at the same
     // width, and no field has focus.
     resizeForKeyboard(300);
     runFrames();
-    expect(getResizedRoom(window)).toBe(0);
+    expect(getResizedRoom(window).room).toBe(0);
     expect(scrollBy).not.toHaveBeenCalled();
   });
 

@@ -34,9 +34,8 @@ that times motion with it. Everything here is internal to
   control has focus: a shorter window with nothing focused, as in Android's
   split screen, makes none. A width Core has not measured with the
   keyboard closed, as after a turn of the phone, reads no room until the keyboard
-  closes (`spec:AST-099` Gap 15).
-  `getResizedRoomWidth(window)` reads the width from that same read, so the
-  scroll back tells a turn without a layout read of its own.
+  closes (`spec:AST-099` Gap 15). It also returns the width from that same
+  read, so the scroll back tells a turn without a layout read of its own.
 - **One set of listeners (FR1, INV11):** `subscribeKeyboardHeight(window, fn)`
   delivers every report (the visual viewport's resize and scroll, the window's
   resize, and with `{focus: true}` focus moves, whose input-stream

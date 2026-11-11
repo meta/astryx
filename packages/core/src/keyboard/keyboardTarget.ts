@@ -28,7 +28,6 @@ import {
   focusAtPoint,
   getKeyboardHeight,
   getResizedRoom,
-  getResizedRoomWidth,
   isFingerOnScreen,
   isKeyboardMeasurable,
   isTextEntryControl,
@@ -1174,7 +1173,7 @@ export function keepFieldAboveKeyboard(
   const stopScrollBack = claimKeyboardScrollBack(win);
   // The module keeps the tallest root box per window, so a later shrink reads
   // as room.
-  const resizedRoom = () => getResizedRoom(win);
+  const resizedRoom = () => getResizedRoom(win).room;
   const stopClaim = refuseFocusReveal(doc, {
     claim: destination =>
       destination === field && placementOf(field, offset, win) != null
@@ -1372,17 +1371,18 @@ function keyboardScrollTarget(scroller: Element, win: Window): number | null {
 // recorded at one width does not apply at another.
 function watchKeyboardGo(win: Window): Map<Element, AddedScroll> {
   const scrolls = new Map<Element, AddedScroll>();
-  const width = getResizedRoomWidth(win);
+  const {width} = getResizedRoom(win);
   const stopReports = subscribeKeyboardHeight(win, event => {
     if (event.type !== 'viewport') {
       return;
     }
-    if (getResizedRoomWidth(win) !== width) {
+    const resized = getResizedRoom(win);
+    if (resized.width !== width) {
       scrolls.clear();
       end();
     } else if (
       event.height <= KEYBOARD_EPSILON &&
-      getResizedRoom(win) <= KEYBOARD_EPSILON
+      resized.room <= KEYBOARD_EPSILON
     ) {
       end();
       scrollBack(win, scrolls);
@@ -1529,7 +1529,7 @@ function awaitFoldedReveal(
     if (
       event.type === 'viewport' &&
       (event.height > KEYBOARD_EPSILON ||
-        getResizedRoom(win) > KEYBOARD_EPSILON)
+        getResizedRoom(win).room > KEYBOARD_EPSILON)
     ) {
       stop();
     }
