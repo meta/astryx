@@ -38,8 +38,6 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
   // Whether a pointerup is being dispatched now: from the window's capture
   // phase to its bubble phase.
   isDispatchingRelease: false,
-  // Each pointer's latest press, so a mark survives another pointer's press.
-  pointerGestures: new Map<number, number>(),
   claimedPress: null as {
     layer: HTMLElement;
     pointerId: number;
@@ -54,9 +52,6 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
  * without, so a page with both copies does not throw.
  */
 function ensureFields(): void {
-  if (!(state.pointerGestures instanceof Map)) {
-    state.pointerGestures = new Map();
-  }
   if (state.releasingGesture === undefined) {
     state.releasingGesture = null;
   }
@@ -64,9 +59,6 @@ function ensureFields(): void {
     state.isDispatchingRelease = false;
   }
 }
-
-/** How many pointers' latest presses the counter remembers. */
-const MAX_TRACKED_POINTERS = 8;
 
 function advance() {
   state.gesture += 1;
@@ -79,15 +71,6 @@ function startPress(event: PointerEvent) {
   state.isDispatchingRelease = false;
   advance();
   state.pressPointerId = event.pointerId;
-  state.pointerGestures.delete(event.pointerId);
-  state.pointerGestures.set(event.pointerId, state.gesture);
-  // A touch gets a new pointer id each press: keep the latest few.
-  for (const pointerId of state.pointerGestures.keys()) {
-    if (state.pointerGestures.size <= MAX_TRACKED_POINTERS) {
-      break;
-    }
-    state.pointerGestures.delete(pointerId);
-  }
   const view = event.view ?? document.defaultView;
   if (state.unsubscribePress != null || view == null) {
     return;
@@ -222,50 +205,6 @@ export function afterRelease(doc: Document, callback: () => void): () => void {
     clearTimeout(timer);
   }
   return cancel;
-}
-
-/** The pointer press a layer opened during, from `currentPressMark`. */
-export interface PressMark {
-  readonly gesture: number;
-  readonly pointerId: number;
-}
-
-/**
- * The pointer press in flight, down or being released, or null when no
- * pointer press is in flight (after its release was handled, or for a
- * keystroke).
- */
-export function currentPressMark(): PressMark | null {
-  listen();
-  if (state.pressPointerId === null && !isReleaseInFlight()) {
-    return null;
-  }
-  for (const [pointerId, gesture] of state.pointerGestures) {
-    if (gesture === state.gesture) {
-      return {gesture, pointerId};
-    }
-  }
-  return null;
-}
-
-/**
- * Whether input now belongs to the press `mark` names: the same gesture, or,
- * after another pointer pressed, an event from the mark's pointer while that
- * pointer's latest press is still the mark's.
- */
-export function isFromPress(mark: PressMark | null, event?: Event): boolean {
-  listen();
-  if (mark == null) {
-    return false;
-  }
-  if (state.gesture === mark.gesture) {
-    return true;
-  }
-  const pointerId = (event as PointerEvent | undefined)?.pointerId;
-  return (
-    pointerId === mark.pointerId &&
-    state.pointerGestures.get(pointerId) === mark.gesture
-  );
 }
 
 /** Whether a press is down, its release not yet seen by the page. */

@@ -10,8 +10,8 @@
  *   opening a nested Popover, under a mouse and a finger (whose touchend
  *   the menu cancels, so no click comes). The layer's next outside press
  *   and Escape still close it
- * @position Verification for Layer/useLayer.tsx's show during a release,
- *   Layer/gestureCounter.ts, and BottomSheet's scrim
+ * @position Verification for Layer/useLayer.tsx's show during a release
+ *   and Layer/gestureCounter.ts
  */
 
 import {
@@ -89,7 +89,7 @@ for (const pointer of ['mouse', 'finger'] as const) {
       await expect(dialog(page, 'Item popover')).toBeHidden();
     });
 
-    test("a menu row that opens a BottomSheet leaves it open: the press's click on the scrim is not a dismissal", async ({
+    test('a menu row that opens a BottomSheet leaves it open', async ({
       page,
     }) => {
       await openStory(page, storybook(), STORY);

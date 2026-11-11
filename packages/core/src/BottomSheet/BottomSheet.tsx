@@ -130,11 +130,6 @@ export type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
-import {
-  currentPressMark,
-  isFromPress,
-  type PressMark,
-} from '../Layer/gestureCounter';
 
 const styles = stylex.create({
   dialog: {
@@ -459,9 +454,6 @@ function StandaloneBottomSheet({
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
-  // The pointer press the sheet opened during, if any: that press's click
-  // on the fresh scrim is not a dismissal.
-  const openingPressRef = useRef<PressMark | null>(null);
   // Whether focus was inside this sheet when its close began. A non-modal
   // sheet leaves the page interactive, so it returns focus to its opener
   // only if the person was still in the sheet; a modal sheet always does.
@@ -636,7 +628,6 @@ function StandaloneBottomSheet({
           if (triggerRef.current == null) {
             triggerRef.current = document.activeElement as HTMLElement | null;
           }
-          openingPressRef.current = currentPressMark();
           if (!hasScrim) {
             showSheetHostNonModal(dialog, panelRef.current);
             return;
@@ -925,11 +916,7 @@ function StandaloneBottomSheet({
   );
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLDialogElement>) => {
-      if (
-        hasScrim &&
-        event.target === event.currentTarget &&
-        !isFromPress(openingPressRef.current, event.nativeEvent)
-      ) {
+      if (hasScrim && event.target === event.currentTarget) {
         dismissOnLightInteraction();
       }
     },

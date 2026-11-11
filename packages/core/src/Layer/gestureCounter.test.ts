@@ -25,8 +25,6 @@ import {
   claimContextMenuPress,
   claimPress,
   currentGesture,
-  currentPressMark,
-  isFromPress,
   isPressInFlight,
   isReleaseInFlight,
 } from './gestureCounter';
@@ -503,55 +501,5 @@ describe('the release in flight and afterRelease', () => {
     browserClick(button);
     vi.runOnlyPendingTimers();
     expect(callback).not.toHaveBeenCalled();
-  });
-});
-
-describe('press marks', () => {
-  afterEach(() => {
-    document.body.replaceChildren();
-  });
-
-  it("names the pointer press in flight, and that press's click is from it", () => {
-    const button = document.createElement('button');
-    document.body.append(button);
-    currentGesture();
-    button.dispatchEvent(pointerEvent('pointerdown', 4));
-    const mark = currentPressMark();
-    expect(mark).toEqual({gesture: currentGesture(), pointerId: 4});
-    button.dispatchEvent(pointerEvent('pointerup', 4));
-    expect(isFromPress(mark, new MouseEvent('click'))).toBe(true);
-    button.dispatchEvent(pointerEvent('pointerdown', 4));
-    expect(isFromPress(mark, pointerEvent('click', 4))).toBe(false);
-  });
-
-  it("keeps its pointer's input after another pointer presses", () => {
-    const button = document.createElement('button');
-    document.body.append(button);
-    currentGesture();
-    button.dispatchEvent(pointerEvent('pointerdown', 5));
-    const mark = currentPressMark();
-    button.dispatchEvent(pointerEvent('pointerdown', 6));
-    expect(isFromPress(mark, pointerEvent('click', 5))).toBe(true);
-    expect(isFromPress(mark, pointerEvent('click', 6))).toBe(false);
-  });
-
-  it('is null once the press and its release are over', () => {
-    const button = document.createElement('button');
-    document.body.append(button);
-    currentGesture();
-    button.dispatchEvent(pointerEvent('pointerdown', 8));
-    button.dispatchEvent(pointerEvent('pointerup', 8));
-    expect(currentPressMark()).not.toBeNull();
-    browserClick(button);
-    // A layer opened now, with no press in flight, keeps no mark, so its
-    // next click is not taken for the old press's.
-    expect(currentPressMark()).toBeNull();
-  });
-
-  it('is null for a keystroke', () => {
-    currentGesture();
-    document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter'}));
-    expect(currentPressMark()).toBeNull();
-    expect(isFromPress(null)).toBe(false);
   });
 });
