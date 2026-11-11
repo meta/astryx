@@ -112,7 +112,7 @@ export const docs = {
       name: 'onLinkClick',
       type: '(href: string, event: MouseEvent) => void | false',
       description:
-        'Handler for link clicks. Return false to prevent the default navigation behavior. Link destinations in the markdown follow the shared navigation rule described on the Link `href` prop: a blocked destination renders as plain text and never reaches this handler or a custom link renderer. Image URLs use a separate, stricter policy (every data: URL is rejected).',
+        'Handler for link clicks. Return false to prevent the default navigation behavior. Link destinations in the markdown follow the shared navigation rule described on the Link `href` prop, and Markdown also rejects every data: URL in a link or an image: a rejected destination renders as plain text and never reaches this handler or a custom link renderer.',
     },
     {
       name: 'sources',
@@ -993,7 +993,7 @@ export const docsDense = {
     isStreaming:
       'Incremental parse + fade-in for streamed chunks. Default: false.',
     onLinkClick:
-      '(href, event) => void|false. Return false prevents navigation. Link destinations follow the shared navigation rule (see Link href); blocked ones render as text. Image URLs: separate stricter policy.',
+      '(href, event) => void|false. Return false prevents navigation. Link destinations follow the shared navigation rule (see Link href), and every data: link or image URL is also dropped; rejected ones render as text.',
     sources:
       'Record<string, MarkdownSource>. Citation sources by ID. [id]/【id】 markers render as chips.',
     citationStyle:

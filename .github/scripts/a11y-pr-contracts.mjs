@@ -409,7 +409,8 @@ const NOT_RENDERED =
   /(?:^|\/)__tests__\/|\.(?:test|stories|doc)\.[^/]+$|\.spec\.[^/]+$|\.d\.ts$/;
 const STATEMENT =
   /(?:^|[\n;])\s*(import|export)\s+(type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
-const RESOLVE_SUFFIXES = [
+/** The suffixes an import specifier resolves through, in order. */
+export const RESOLVE_SUFFIXES = [
   '',
   '.ts',
   '.tsx',
@@ -422,10 +423,39 @@ const RESOLVE_SUFFIXES = [
   '/index.js',
 ];
 
-const componentFolderOf = file => {
-  const match = /^packages\/([^/]+)\/src\/([A-Z][^/]*)\//.exec(file);
+const COMPONENT_FOLDER = /^packages\/([^/]+)\/src\/([A-Z][^/]*)\//;
+
+/**
+ * The component folder that holds a file, as `<package>/<Folder>`.
+ * @param {string} file
+ */
+export const componentFolderOf = file => {
+  const match = COMPONENT_FOLDER.exec(file);
   return match ? `${match[1]}/${match[2]}` : null;
 };
+
+/**
+ * The folder path of the component a file belongs to: its component folder
+ * (`packages/core/src/Button/`), else its package's source folder, as for a
+ * package with no component folders (`packages/richtext/src/`).
+ * @param {string} file
+ * @returns {string | null}
+ */
+export const componentPathOf = file => {
+  const match = COMPONENT_FOLDER.exec(file);
+  if (match) return `packages/${match[1]}/src/${match[2]}/`;
+  const source = /^packages\/([^/]+)\/src\//.exec(file);
+  return source ? `packages/${source[1]}/src/` : null;
+};
+
+/**
+ * Whether a file is source the import graph follows: code that can put
+ * something on a page, never a test, story, doc or type declaration.
+ * @param {string} file
+ */
+export function isRenderedSource(file) {
+  return SOURCE.test(file) && !NOT_RENDERED.test(file);
+}
 
 function sourceFiles(root, dir) {
   const out = [];
@@ -436,7 +466,7 @@ function sourceFiles(root, dir) {
     if (entry.isDirectory()) {
       if (entry.name !== 'node_modules' && entry.name !== 'dist')
         out.push(...sourceFiles(root, file));
-    } else if (SOURCE.test(entry.name) && !NOT_RENDERED.test(file)) {
+    } else if (isRenderedSource(file)) {
       out.push(file);
     }
   }
@@ -623,6 +653,96 @@ export function renderingFolders(importers, touched) {
   return [...folders]
     .map(([folder, d]) => ({folder, depth: d}))
     .sort((a, b) => a.depth - b.depth || a.folder.localeCompare(b.folder));
+}
+
+/**
+ * The listed file an import target names, through `RESOLVE_SUFFIXES`, or
+ * null.
+ * @param {Set<string>} known every listed file
+ * @param {string} target a repository path without its suffix
+ */
+export function resolveModule(known, target) {
+  for (const suffix of RESOLVE_SUFFIXES)
+    if (known.has(`${target}${suffix}`)) return `${target}${suffix}`;
+  return null;
+}
+
+/**
+ * The files each proof page loads through value imports, followed file by
+ * file: relative specifiers and `@astryxdesign/<package>` roots and paths.
+ * The roots are the interaction specs and what their pages render: the
+ * Storybook stories, Storybook's preview, and each fixture a spec bundles
+ * (a quoted path in the spec that names a listed file). A unit test, doc,
+ * record or
+ * accessibility spec in a component folder puts nothing on a proof's page
+ * and selects no proof, unless a root loads it; this map finds that case
+ * (spec:AST-030 FR31). It throws when a root or a file it loads cannot be
+ * read, so a caller runs every proof instead. `read` reads a file; by
+ * default from `root`, and a sparse checkout passes one that falls back to
+ * the commit.
+ * @param {{root: string, listed: string[], isProof: (file: string) => boolean, read?: (file: string) => string}} options
+ * @returns {Map<string, Set<string>>} each loaded file, to the roots that load it
+ */
+export function proofImporters({
+  root,
+  listed,
+  isProof,
+  read = file => fs.readFileSync(path.join(root, file), 'utf8'),
+}) {
+  const known = new Set(listed);
+  const resolve = target => resolveModule(known, target);
+  const targetOf = (file, specifier) => {
+    if (specifier.startsWith('.'))
+      return resolve(
+        path.posix.normalize(`${path.posix.dirname(file)}/${specifier}`),
+      );
+    const match = /^@astryxdesign\/([^/]+)(?:\/(.+))?$/.exec(specifier);
+    return match
+      ? resolve(`packages/${match[1]}/src/${match[2] ?? 'index'}`)
+      : null;
+  };
+  // A spec bundles a fixture by path (`new URL('./fixture.ts', …)`,
+  // `bundleOf('fixture.ts')`): every quoted path beside it that names a
+  // listed source file counts as an import.
+  const QUOTED_PATH = /['"`]((?:\.{1,2}\/)?[\w./-]+\.[cm]?[jt]sx?)['"`]/g;
+  const bundledBy = (file, text) =>
+    [...text.matchAll(QUOTED_PATH)]
+      .map(match =>
+        resolve(
+          path.posix.normalize(
+            `${path.posix.dirname(file)}/${match[1].replace(/^(?!\.)/, './')}`,
+          ),
+        ),
+      )
+      .filter(Boolean);
+  const imports = new Map();
+  const importsOf = file => {
+    if (!imports.has(file)) {
+      const text = read(file);
+      imports.set(file, [
+        ...valueImports(text)
+          .map(({specifier}) => targetOf(file, specifier))
+          .filter(Boolean),
+        ...(isProof(file) ? bundledBy(file, text) : []),
+      ]);
+    }
+    return imports.get(file);
+  };
+  const importers = new Map();
+  for (const proof of listed.filter(isProof)) {
+    const seen = new Set([proof]);
+    const queue = [proof];
+    while (queue.length > 0) {
+      for (const target of importsOf(queue.pop())) {
+        if (seen.has(target)) continue;
+        seen.add(target);
+        queue.push(target);
+        if (!importers.has(target)) importers.set(target, new Set());
+        importers.get(target).add(proof);
+      }
+    }
+  }
+  return importers;
 }
 
 /**
@@ -1159,7 +1279,9 @@ function main() {
   })();
   const notRun = budgeted.notRun;
   // The opt-in run splits into legs by recorded time. The count step plans
-  // them before the Storybook download and the Chromium install; each leg
+  // them after the Storybook download, whose story index a changed
+  // multi-component folder's components resolve through, and before the
+  // Chromium install; each leg
   // then runs only its share.
   const scopeKnown = changedPaths != null;
   // Every leg counts on its own runner. A leg that cannot tell this pull

@@ -16,6 +16,7 @@ import {
 } from '../../foundation/fs/read-record.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {coreDirOrThrow} from '../error.mjs';
+import {loadBlockPicker} from '../build/_adapter.mjs';
 import {CORELESS_DOMAINS} from './_query.mjs';
 import {gatherComponents} from './_gather-components.mjs';
 import {gatherHooks} from './_gather-hooks.mjs';
@@ -43,10 +44,50 @@ export function requireSearchCoreDir(cwd) {
  * in the CLI's searches. A caller that runs its own operation shares it.
  *
  * @param {{cwd?: string, type?: string}} options
- * @returns {Promise<{all: Candidate[], components: Candidate[], searchedComponents: boolean, outside: boolean, coreSkipped: string | null}>}
+ * @returns {Promise<{all: Candidate[], components: Candidate[], searchedComponents: boolean, outside: boolean, coreSkipped: string | null, coreSkippedCode: string | null}>}
  */
 export function gatherCandidates(options) {
   return withListingCache(() => gatherDomains(options));
+}
+
+/**
+ * The Core a search of `type` reads, and the domains it gathers. `astryx docs`
+ * reads docs without @astryxdesign/core, and `astryx theme list` reads themes
+ * without it, so a docs or themes search never looks for Core. Every other
+ * domain reads Core: the project's, else the answering release's own,
+ * installed into the per-user cache on first need (spec AST-081 FR3). A Core
+ * domain asked for by name throws the lookup's coded error. An open search
+ * without Core gathers the docs and themes alone and records why in
+ * `coreSkipped`; it never fails silently.
+ * @param {string | undefined} type
+ * @param {(cwd: string) => string} lookup finds the Core folder, or throws
+ * @param {string} cwd
+ * @returns {{coreDir: string | null, coreSkipped: string | null, coreSkippedCode: string | null, wants: (domain: string) => boolean}}
+ */
+export function resolveSearchCore(type, lookup, cwd) {
+  const needsCore = !type || !CORELESS_DOMAINS.includes(type);
+  /** @type {string | null} */
+  let coreDir = null;
+  /** @type {string | null} */
+  let coreSkipped = null;
+  /** @type {string | null} */
+  let coreSkippedCode = null;
+  if (needsCore && type) {
+    coreDir = coreDirOrThrow(lookup, cwd);
+  } else if (needsCore) {
+    try {
+      coreDir = lookup(cwd);
+    } catch (error) {
+      coreSkipped = /** @type {Error} */ (error).message;
+      const code = /** @type {any} */ (error)?.code;
+      coreSkippedCode = typeof code === 'string' ? code : null;
+    }
+  }
+  /** @param {string} domain */
+  const wants = domain =>
+    (!type && (coreDir != null || CORELESS_DOMAINS.includes(domain))) ||
+    type === domain;
+  return {coreDir, coreSkipped, coreSkippedCode, wants};
 }
 
 /**
@@ -54,35 +95,11 @@ export function gatherCandidates(options) {
  */
 async function gatherDomains(options) {
   const {cwd = process.cwd(), type} = options;
-  // `astryx docs` reads docs without @astryxdesign/core, and `astryx theme
-  // list` reads themes without it (bundled themes need no project), so a
-  // search of either must too. Every other domain reads core: asked for by
-  // name, it is an error without core; an open search then covers the docs
-  // and themes alone.
-  const needsCore = !type || !CORELESS_DOMAINS.includes(type);
-  // A domain that reads Core gets it as `component` does: the project's, else
-  // the answering release's own, installed into the per-user cache on first
-  // need (spec AST-081 FR3). Asked for by name, a Core that cannot be had is
-  // the error; an open search answers from the rest and says what it skipped
-  // and why, never silently.
-  /** @type {string | null} */
-  let coreDir = null;
-  /** @type {string | null} */
-  let coreSkipped = null;
-  if (needsCore && type) {
-    coreDir = coreDirOrThrow(requireSearchCoreDir, cwd);
-  } else if (needsCore) {
-    try {
-      coreDir = requireSearchCoreDir(cwd);
-    } catch (error) {
-      coreSkipped = /** @type {Error} */ (error).message;
-    }
-  }
-
-  // Gather candidates from each requested domain in parallel.
-  /** @param {string} d */
-  const wants = d =>
-    (!type && (coreDir != null || CORELESS_DOMAINS.includes(d))) || type === d;
+  const {coreDir, coreSkipped, coreSkippedCode, wants} = resolveSearchCore(
+    type,
+    requireSearchCoreDir,
+    cwd,
+  );
   const [components, hooks, docTopics, templates, themes] = await Promise.all([
     wants('component')
       ? gatherComponents(/** @type {string} */ (coreDir), cwd)
@@ -103,6 +120,7 @@ async function gatherDomains(options) {
     searchedComponents: wants('component'),
     outside,
     coreSkipped,
+    coreSkippedCode,
   };
 }
 
@@ -150,6 +168,10 @@ export function gatherCandidatesReused(options) {
  * @property {SearcherWeights} main The main searcher's weights.
  * @property {SearcherWeights} doc The doc searcher's weights.
  * @property {SearcherWeights} template The template searcher's weights.
+ * @property {import('../build/blocks/blocks.mjs').BlockPickerWeights | null} picker
+ *   Build's block-picker weights, which the fit pass (_fit-order.mjs) reads;
+ *   null when build's loader finds the file absent, unreadable, or the wrong
+ *   shape.
  * @typedef {Awaited<ReturnType<typeof gatherCandidates>> & {data: SearchData}} SearchCatalog
  */
 
@@ -157,8 +179,10 @@ export function gatherCandidatesReused(options) {
 let searchData = null;
 
 /**
- * The search tree's static data, read once: the entry cards and each node's
- * weights file.
+ * The search tree's static data, read once: the entry cards, each node's
+ * weights file, and build's block-picker weights for the fit pass. Build's
+ * loader (loadBlockPicker) reads and checks the picker weights, only when the
+ * pass first needs them.
  *
  * These files are static, reviewed data that only order matches inside a score
  * band; ORDERING.md beside them says what each holds and how
@@ -176,6 +200,10 @@ export function loadSearchData() {
       main: read('./_main-searcher.weights.json'),
       doc: read('./_doc-searcher.weights.json'),
       template: read('./_template-searcher.weights.json'),
+      // Read on first use: most searches never reach the fit pass.
+      get picker() {
+        return loadBlockPicker();
+      },
     };
   }
   return searchData;

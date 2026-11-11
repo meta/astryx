@@ -43,13 +43,18 @@ describe('useTruncation', () => {
       vi.unstubAllGlobals();
     });
 
-    // Measuring inside React's commit forces a style and layout pass per text
-    // on a page that mounts many; after the commit, every text reads together.
-    it('measures after the commit, not inside it', async () => {
+    // Measuring inside React's commit, or in a microtask after it, forces a
+    // layout pass on a page that mounts many texts. A newly observed element
+    // waits for the observer's first notification, sent after layout.
+    it("takes a new text's first measurement from the observer's first notification", async () => {
       const observed: Element[] = [];
+      let notify: ResizeObserverCallback | null = null;
       vi.stubGlobal(
         'ResizeObserver',
         class {
+          constructor(callback: ResizeObserverCallback) {
+            notify = callback;
+          }
           observe(target: Element) {
             observed.push(target);
           }
@@ -60,12 +65,17 @@ describe('useTruncation', () => {
 
       const {unmount} = render(<Probe text="a status line" />);
 
-      // Observed, but not measured during the commit.
+      // Observed, but measured neither in the commit nor in a microtask.
       expect(observed).toHaveLength(1);
+      await act(async () => {});
       expect(screen.getByTestId('full-text')).toHaveTextContent('');
 
-      await act(async () => {});
-
+      act(() => {
+        notify?.(
+          [{target: observed[0]} as ResizeObserverEntry],
+          {} as ResizeObserver,
+        );
+      });
       expect(screen.getByTestId('full-text')).toHaveTextContent(
         'a status line',
       );
@@ -94,11 +104,24 @@ describe('useTruncation', () => {
         configurable: true,
         get: () => 100,
       });
+      const {observeResize} = await import('../utils/sharedResizeObserver');
       function Unclamping({maxLines}: {maxLines: number}) {
         const truncation = useTruncation({maxLines});
+        const {ref} = truncation;
+        // Another subscriber watches the span first, so the hook's first
+        // measurement takes the microtask path, which the guard decides.
+        const attach = useCallback(
+          (element: HTMLElement | null) => {
+            if (element) {
+              observeResize(element, () => {});
+            }
+            ref(element);
+          },
+          [ref],
+        );
         return (
           <>
-            <span ref={truncation.ref}>overflowing text</span>
+            <span ref={attach}>overflowing text</span>
             <output data-testid="state">
               {String(truncation.isTruncated)}|{truncation.fullText}
             </output>

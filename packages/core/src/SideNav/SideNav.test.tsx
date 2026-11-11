@@ -200,6 +200,51 @@ describe('SideNav', () => {
     expect(nav.children).toHaveLength(1);
   });
 
+  it('does not render an empty footer row when only footer is set', () => {
+    render(
+      <SideNav footer={<span data-testid="footer">Footer</span>}>
+        Content
+      </SideNav>,
+    );
+
+    // The sticky bottom spaces its children with a gap, so an empty row adds
+    // space below the footer. The footer must be its only child.
+    const stickyBottom = screen.getByTestId('footer').parentElement;
+    expect(stickyBottom?.children).toHaveLength(1);
+    expect(document.querySelector('[class*="footerRow"]')).toBeNull();
+  });
+
+  it('keeps the footer row for footerIcons beside a footer', () => {
+    render(
+      <SideNav
+        footer={<span data-testid="footer">Footer</span>}
+        footerIcons={<span data-testid="icons">Icons</span>}>
+        Content
+      </SideNav>,
+    );
+
+    const footerRow = document.querySelector('[class*="footerRow"]');
+    expect(footerRow).toContainElement(screen.getByTestId('icons'));
+    expect(screen.getByTestId('footer').parentElement?.children).toHaveLength(
+      2,
+    );
+  });
+
+  it('keeps the footer row for the built-in collapse button beside a footer', () => {
+    render(
+      <SideNav
+        collapsible={{}}
+        footer={<span data-testid="footer">Footer</span>}>
+        Content
+      </SideNav>,
+    );
+
+    const footerRow = document.querySelector('[class*="footerRow"]');
+    expect(footerRow).toContainElement(
+      screen.getByRole('button', {name: 'Collapse sidebar'}),
+    );
+  });
+
   it('centers footer content when collapsed, matching children alignment', () => {
     render(
       <SideNav

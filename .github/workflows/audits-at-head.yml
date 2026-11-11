@@ -1,0 +1,555 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Runs every accessibility audit a pull request owes at its exact head, and
+# with `include-contracts` its scoped accessibility contract specs, without
+# moving the head. merge-guard accepts this run's record for that head: the
+# newest successful run titled for the pull request and head, whose record
+# names both.
+#
+# The head may come from a fork, so it is untrusted code. Every job reads
+# only: no write permission, no secret, no saved cache, no persisted
+# credentials. The planner, the record and the decisions come from main.
+name: Audits at head
+run-name: 'audits-at-head #${{ inputs.pr }} ${{ inputs.head }}'
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Pull request number'
+        type: string
+        required: true
+      head:
+        description: "The pull request's exact full head SHA"
+        type: string
+        required: true
+      include-contracts:
+        description: "Also run the pull request's scoped accessibility contract specs at the head"
+        type: boolean
+        default: false
+
+permissions: {}
+
+# One run per pull request at a time; a second dispatch waits.
+concurrency:
+  group: audits-at-head-${{ inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  # The pull request must be open at exactly this head. Its changed files
+  # come from GitHub's list, which stops at 3,000 files.
+  gate:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      base: ${{ steps.pr.outputs.base }}
+      title: ${{ steps.pr.outputs.title }}
+    steps:
+      - name: Require a dispatch from main for one exact head
+        env:
+          PR: ${{ inputs.pr }}
+          HEAD_SHA: ${{ inputs.head }}
+        run: |
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Dispatch this workflow from main, not $GITHUB_REF."
+            exit 1
+          fi
+          [[ "$PR" =~ ^[0-9]+$ ]] || { echo "::error::pr must be a pull request number."; exit 1; }
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::head must be a full 40-character SHA."; exit 1; }
+
+      - name: Read the pull request at this head
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          HEAD_SHA: ${{ inputs.head }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" > "$RUNNER_TEMP/pr.json"
+          state=$(node -p "require('$RUNNER_TEMP/pr.json').state")
+          head=$(node -p "require('$RUNNER_TEMP/pr.json').head.sha")
+          if [ "$state" != open ] || [ "$head" != "$HEAD_SHA" ]; then
+            echo "::error::Pull request $PR is $state at $head, not open at $HEAD_SHA. Dispatch again for its current head."
+            exit 1
+          fi
+          echo "base=$(node -p "require('$RUNNER_TEMP/pr.json').base.sha")" >> "$GITHUB_OUTPUT"
+          {
+            echo 'title<<ASTRYX_TITLE_END'
+            node -p "require('$RUNNER_TEMP/pr.json').title"
+            echo 'ASTRYX_TITLE_END'
+          } >> "$GITHUB_OUTPUT"
+
+      # A rename lists both its old and its new path.
+      - name: List the changed files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files?per_page=100" \
+            --jq '.[] | .filename, (.previous_filename // empty)' | sort -u > "$RUNNER_TEMP/changed-files.txt"
+          count=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .changed_files)
+          if [ "$count" -ge 3000 ]; then
+            echo "::error::diff too large to scope (>3,000 files); split the PR"
+            exit 1
+          fi
+          echo "$(wc -l < "$RUNNER_TEMP/changed-files.txt") changed paths."
+
+      - name: Upload the changed files
+        uses: actions/upload-artifact@v7
+        with:
+          name: audits-at-head-changed-files
+          path: ${{ runner.temp }}/changed-files.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  # The run waits under the same CI ceiling as pull-request and main runs.
+  # The admission counter counts this workflow's live jobs.
+  room:
+    needs: [gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out the admission action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/ci-admission
+          path: .ci-admission
+          persist-credentials: false
+
+      - name: Wait for room under the CI ceiling
+        id: room
+        uses: ./.ci-admission/.github/actions/ci-admission
+        continue-on-error: true
+        timeout-minutes: 65
+        with:
+          phase: whole
+          peak: 10
+          main: false
+          max-wait-minutes: 60
+          max-looks: 12
+
+      # A dispatch starts after its longest wait; only a failed wait stops it.
+      - name: Stop when the wait failed
+        if: steps.room.outcome != 'success'
+        run: |
+          echo "::error::The wait for room under the CI ceiling failed. Dispatch again later."
+          exit 1
+
+  # main's planner, run as a later run at a head: every owed audit, in up to
+  # six legs, so one run can complete the record.
+  plan:
+    needs: [gate, room]
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      count: ${{ steps.plan.outputs.count || '0' }}
+      shares: ${{ steps.plan.outputs.shares || '[]' }}
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The planner's code comes from main, so the head cannot change what it
+      # owes or what the record says.
+      - name: Keep main's planner
+        run: |
+          mkdir -p "$RUNNER_TEMP/planner/.github" "$RUNNER_TEMP/planner/scripts"
+          cp -R .github/scripts "$RUNNER_TEMP/planner/.github/"
+          cp -R scripts/lib "$RUNNER_TEMP/planner/scripts/"
+
+      # The planner reads the tree a pull request's own run plans from: the
+      # head merged into main, with the audit specs and imports the head adds.
+      - name: Merge the head into main
+        env:
+          PR: ${{ inputs.pr }}
+          HEAD_SHA: ${{ inputs.head }}
+        run: |
+          git fetch --quiet --no-tags origin "refs/pull/$PR/head"
+          test "$(git rev-parse FETCH_HEAD)" = "$HEAD_SHA"
+          if ! git -c user.name=audits-at-head -c user.email=audits-at-head@users.noreply.github.com merge --quiet --no-ff --no-edit "$HEAD_SHA"; then
+            echo "::error::The head conflicts with main, so its owed audits are unknown. Update the branch."
+            exit 1
+          fi
+
+      - name: Download the changed files
+        uses: actions/download-artifact@v8
+        with:
+          name: audits-at-head-changed-files
+          path: ${{ runner.temp }}/changed
+
+      - name: Plan every owed audit
+        id: plan
+        env:
+          ASTRYX_HEAD_SHA: ${{ inputs.head }}
+        run: node "$RUNNER_TEMP/planner/.github/scripts/a11y-dependent-audits.mjs" --changed "$RUNNER_TEMP/changed/changed-files.txt" --attempt 2 --out "$RUNNER_TEMP/plan.json"
+
+      - name: Upload the plan
+        uses: actions/upload-artifact@v7
+        with:
+          name: audits-at-head-plan
+          path: ${{ runner.temp }}/plan.json
+          if-no-files-found: error
+          retention-days: 7
+
+  # Untrusted head code: read-only, no cache.
+  build-storybook:
+    needs: [gate, room, plan]
+    if: needs.plan.outputs.count != '0' || inputs.include-contracts
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.head }}
+          fetch-depth: 50
+          persist-credentials: false
+
+      - name: Require the exact head
+        env:
+          HEAD_SHA: ${{ inputs.head }}
+        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+
+      - name: Build packages and Storybook
+        run: node .github/scripts/build-packages-and-storybook.mjs
+
+      - name: Stamp Storybook source revision
+        run: git rev-parse HEAD > apps/storybook/dist/astryx-build-sha.txt
+
+      # Contract specs a component token selects read the changed components
+      # from this analysis, as a pull request's labelled run does.
+      - name: Analyze components
+        if: inputs.include-contracts
+        env:
+          BASE_SHA: ${{ needs.gate.outputs.base }}
+        run: |
+          git fetch --quiet --no-tags --depth=50 origin "$BASE_SHA"
+          node .github/scripts/analyze-pr.js --base "$BASE_SHA" --head HEAD --output analysis.json
+
+      - name: Upload Storybook
+        uses: actions/upload-artifact@v7
+        with:
+          name: audits-at-head-storybook
+          path: apps/storybook/dist/
+          retention-days: 7
+
+      - name: Upload the analysis
+        if: inputs.include-contracts
+        uses: actions/upload-artifact@v7
+        with:
+          name: audits-at-head-analysis
+          path: analysis.json
+          if-no-files-found: error
+          retention-days: 7
+
+  # Each leg runs its share of the plan at the head, as a pull request's
+  # dependent-audit legs do. A leg without a share only says so.
+  audits:
+    name: Audits at head (${{ matrix.leg }}/${{ strategy.job-total }})
+    needs: [plan, build-storybook]
+    if: always() && needs.plan.result == 'success'
+    runs-on: ${{ needs.plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [1, 2, 3, 4, 5, 6]
+    permissions:
+      contents: read
+    steps:
+      - name: Decide this leg
+        id: leg
+        env:
+          COUNT: ${{ needs.plan.outputs.count }}
+          LEG: ${{ matrix.leg }}
+        run: |
+          if [ "$LEG" -le "$COUNT" ]; then
+            echo 'runs=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'runs=false' >> "$GITHUB_OUTPUT"
+            echo "This leg runs no audit ($COUNT leg(s) planned)."
+          fi
+
+      - name: Require the head's Storybook build
+        if: steps.leg.outputs.runs == 'true' && needs.build-storybook.result != 'success'
+        run: |
+          echo "The audits read the head's Storybook build, which did not succeed."
+          exit 1
+
+      - name: Check out the head
+        if: steps.leg.outputs.runs == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.head }}
+          persist-credentials: false
+
+      - name: Setup Node and pnpm
+        if: steps.leg.outputs.runs == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook
+        if: steps.leg.outputs.runs == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: audits-at-head-storybook
+          path: apps/storybook/dist
+
+      - name: Install Playwright
+        if: steps.leg.outputs.runs == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      # A planned spec file that the head does not have is left out.
+      - name: Run this leg's audits
+        id: run
+        if: steps.leg.outputs.runs == 'true'
+        env:
+          SHARES: ${{ needs.plan.outputs.shares }}
+          LEG: ${{ matrix.leg }}
+        run: |
+          node -e 'for (const f of JSON.parse(process.env.SHARES)[Number(process.env.LEG) - 1] ?? []) console.log(f)' > "$RUNNER_TEMP/audits.txt"
+          FILES=()
+          while IFS= read -r file; do
+            [ -f "$file" ] && FILES+=("$file")
+          done < "$RUNNER_TEMP/audits.txt"
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "The head has none of this leg's audit spec files."
+            exit 0
+          fi
+          printf 'Audits in this leg:\n'; printf '  %s\n' "${FILES[@]}"
+          pnpm exec playwright test "${FILES[@]}" --config playwright.config.ts --project chromium --reporter list,github --output audits-at-head-output
+
+      - name: Upload audit evidence
+        if: always() && (steps.run.outcome == 'success' || steps.run.outcome == 'failure')
+        uses: actions/upload-artifact@v7
+        with:
+          name: audits-at-head-evidence-${{ matrix.leg }}
+          path: |
+            audits-at-head-output/
+            test-results/
+            *-audit-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The pull request's scoped accessibility contract specs at the head, split
+  # into three legs by recorded time, with main's runner and routing lines,
+  # as a labelled pull-request run selects them.
+  contracts:
+    name: Contracts at head (${{ matrix.leg }}/${{ strategy.job-total }})
+    needs: [gate, build-storybook]
+    if: always() && inputs.include-contracts && needs.gate.result == 'success'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [1, 2, 3]
+    permissions:
+      contents: read
+    steps:
+      - name: Require the head's Storybook build
+        if: needs.build-storybook.result != 'success'
+        run: |
+          echo "The contract specs read the head's Storybook build, which did not succeed."
+          exit 1
+
+      - name: Check out the head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.head }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The specs run at the head, but their routing lines, the recorded times
+      # and the axe config come from the head merged into main, as in a
+      # labelled pull-request run's merge commit. The merge is built as an
+      # object only; the checkout stays at the head.
+      - name: Build the head merged into main
+        id: merge
+        env:
+          MAIN_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ inputs.head }}
+        run: |
+          git fetch --quiet --no-tags origin "$MAIN_SHA"
+          tree=$(git merge-tree --write-tree "$MAIN_SHA" "$HEAD_SHA") || {
+            echo "::error::The head conflicts with main, so its contract routing is unknown. Update the branch."
+            exit 1
+          }
+          merge=$(git -c user.name=audits-at-head -c user.email=audits-at-head@users.noreply.github.com commit-tree "$tree" -p "$MAIN_SHA" -p "$HEAD_SHA" -m "audits-at-head merge")
+          echo "sha=$merge" >> "$GITHUB_OUTPUT"
+
+      # Listing the specs needs the workspace's dependencies.
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+
+      - name: Download Storybook
+        uses: actions/download-artifact@v8
+        with:
+          name: audits-at-head-storybook
+          path: apps/storybook/dist
+
+      - name: Download the analysis
+        uses: actions/download-artifact@v8
+        with:
+          name: audits-at-head-analysis
+
+      - name: Count this leg's contract specs
+        id: legs
+        env:
+          ASTRYX_HEAD_SHA: ${{ inputs.head }}
+          BASE_SHA: ${{ needs.gate.outputs.base }}
+          PR_TITLE: ${{ needs.gate.outputs.title }}
+          MAIN_SHA: ${{ github.sha }}
+          WORKFLOW_SHA: ${{ steps.merge.outputs.sha }}
+        run: |
+          # main's runner; the merge's routing lines, times and axe config.
+          runner="$RUNNER_TEMP/a11y/.github/scripts/a11y-pr-contracts.mjs"
+          mkdir -p "$RUNNER_TEMP/a11y/.github/scripts" "$RUNNER_TEMP/a11y/scripts/lib"
+          git show "$MAIN_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
+          git show "$MAIN_SHA:scripts/lib/duration-split.mjs" > "$RUNNER_TEMP/a11y/scripts/lib/duration-split.mjs"
+          # The runner selects for a pull request when the event says so.
+          GITHUB_EVENT_NAME=pull_request node "$runner" --count-legs ${{ strategy.job-total }} --leg ${{ matrix.leg }} --share-out "$RUNNER_TEMP/contract-share.json"
+          mkdir -p contract-share
+          cp "$RUNNER_TEMP/contract-share.json" "contract-share/leg-${{ matrix.leg }}.json"
+
+      - name: Install Chromium
+        if: steps.legs.outputs.runs == 'true'
+        run: npx playwright install chromium
+
+      - name: Run this leg's contract specs
+        id: run
+        if: steps.legs.outputs.runs == 'true'
+        env:
+          ASTRYX_HEAD_SHA: ${{ inputs.head }}
+          BASE_SHA: ${{ needs.gate.outputs.base }}
+          PR_TITLE: ${{ needs.gate.outputs.title }}
+          WORKFLOW_SHA: ${{ steps.merge.outputs.sha }}
+        run: |
+          runner="$RUNNER_TEMP/a11y/.github/scripts/a11y-pr-contracts.mjs"
+          GITHUB_EVENT_NAME=pull_request node "$runner" --share "$RUNNER_TEMP/contract-share.json" --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }}
+
+      - name: Upload this leg's share
+        uses: actions/upload-artifact@v7
+        with:
+          name: audits-at-head-contract-share-${{ matrix.leg }}
+          path: contract-share/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload contract evidence
+        if: always() && (steps.run.outcome == 'success' || steps.run.outcome == 'failure')
+        uses: actions/upload-artifact@v7
+        with:
+          name: audits-at-head-contract-evidence-${{ matrix.leg }}
+          path: |
+            pr-a11y-evidence/
+            pr-a11y-output/
+            test-results/
+            *-audit-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The record merge-guard reads, written by main's code from the plan and the
+  # jobs' results. The run fails unless every audit, and every contract leg
+  # when included, passed.
+  record:
+    needs: [gate, plan, audits, contracts]
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Download the plan
+        uses: actions/download-artifact@v8
+        with:
+          name: audits-at-head-plan
+          path: ${{ runner.temp }}
+
+      - name: Download the contract shares
+        if: inputs.include-contracts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: audits-at-head-contract-share-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/contract-share
+
+      - name: Write the record
+        env:
+          PR: ${{ inputs.pr }}
+          HEAD_SHA: ${{ inputs.head }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          AUDITS: ${{ needs.audits.result }}
+          CONTRACTS: ${{ needs.contracts.result }}
+          INCLUDE_CONTRACTS: ${{ inputs.include-contracts }}
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import path from "node:path";
+            const temp = process.env.RUNNER_TEMP;
+            const plan = JSON.parse(fs.readFileSync(path.join(temp, "plan.json"), "utf8"));
+            const audited = process.env.AUDITS === "success";
+            const record = {
+              head: process.env.HEAD_SHA,
+              attempt: Number(process.env.RUN_ATTEMPT),
+              owed: plan.owed,
+              ran: audited ? plan.ran : [],
+              deferred: plan.deferred,
+              complete: audited && plan.complete && plan.head === process.env.HEAD_SHA,
+              pr: Number(process.env.PR),
+              source: "audits-at-head",
+            };
+            if (process.env.INCLUDE_CONTRACTS === "true") {
+              const dir = path.join(temp, "contract-share");
+              const selected = fs.existsSync(dir)
+                ? fs.readdirSync(dir).flatMap(file => JSON.parse(fs.readFileSync(path.join(dir, file), "utf8")).run.map(spec => spec.file))
+                : [];
+              const passed = process.env.CONTRACTS === "success";
+              record.contracts = {
+                selected: [...new Set(selected)].sort(),
+                ran: passed ? [...new Set(selected)].sort() : [],
+                complete: passed && fs.existsSync(dir) && fs.readdirSync(dir).length === 3,
+              };
+            }
+            fs.writeFileSync(path.join(temp, "a11y-dependent-audits.json"), JSON.stringify(record, null, 2) + "\n");
+            console.log(JSON.stringify(record, null, 2));
+          '
+
+      - name: Upload the record
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: a11y-dependent-audits-record-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/a11y-dependent-audits.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Require every audit and contract leg to pass
+        env:
+          AUDITS: ${{ needs.audits.result }}
+          CONTRACTS: ${{ needs.contracts.result }}
+          INCLUDE_CONTRACTS: ${{ inputs.include-contracts }}
+        run: |
+          if [ "$AUDITS" != success ]; then
+            echo "::error::The audits at this head did not all pass ($AUDITS)."
+            exit 1
+          fi
+          if [ "$INCLUDE_CONTRACTS" = true ] && [ "$CONTRACTS" != success ]; then
+            echo "::error::The contract specs at this head did not all pass ($CONTRACTS)."
+            exit 1
+          fi

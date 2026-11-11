@@ -227,7 +227,8 @@ const sevenOrders = manyOrders.slice(0, 7);
  * fourth order's row itself (`tr`), which glides with the row too; `edgeBorder`
  * sets one on the tbody's bottom (`tbody`) or as the top of the fifth order's
  * cells (`top`), each of which wins the collapse and glides with its row;
- * `wideBorder` sets a theme's 2 px green divider on every row.
+ * `wideBorder` sets a theme's 2 px green divider on every row; `muted` sets
+ * `panelVariant="muted"`, whose wash slides in with the panel's content.
  */
 export const GlidingRows: StoryObj<{
   themed?: boolean;
@@ -235,6 +236,7 @@ export const GlidingRows: StoryObj<{
   wideBorder?: boolean;
   edgeBorder?: 'none' | 'tbody' | 'top';
   dividers?: 'rows' | 'columns' | 'grid';
+  muted?: boolean;
 }> = {
   args: {
     themed: false,
@@ -242,8 +244,9 @@ export const GlidingRows: StoryObj<{
     wideBorder: false,
     edgeBorder: 'none',
     dividers: 'rows',
+    muted: false,
   },
-  render: ({themed, rowBorder, wideBorder, edgeBorder, dividers}) => {
+  render: ({themed, rowBorder, wideBorder, edgeBorder, dividers, muted}) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const animatedLayout = useAnimatedLayout({containerRef});
     const [expandedKeys, setExpandedKeys] = useState<Set<string>>(
@@ -255,6 +258,7 @@ export const GlidingRows: StoryObj<{
       getRowKey: item => item.id,
       renderExpanded: item => <OrderItems order={item} />,
       animatedLayout,
+      panelVariant: muted === true ? 'muted' : 'transparent',
     });
     const sticky = useTableStickyColumns<Order>({startKeys: ['customer']});
     const wideColumns = useMemo(

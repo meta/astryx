@@ -44,16 +44,21 @@ export const AT_LIMIT_SLACK_MS = 30_000;
 // One line per workflow: ci-admission.test.mjs reads each estimate from it.
 // prettier-ignore
 const ESTIMATE = {
-  '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 39 : 16),
+  '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 39 : 17),
   '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 14),
   '.github/workflows/review-signal.yml': () => 2,
+  '.github/workflows/audits-at-head.yml': () => 10,
 };
 export const estimate = run => (ESTIMATE[run.path] ?? (() => 1))(run);
 // Jobs always counted for small, unadmitted workflows: they peaked at twenty
 // at once in a day's runs and rose by fourteen within two minutes in
 // ninety-nine looks of a hundred (spec:AST-030 DEC-16).
 export const SMALL_MOST = 18;
-const ADMITTED = ['.github/workflows/ci.yml', '.github/workflows/deploy.yml'];
+const ADMITTED = [
+  '.github/workflows/ci.yml',
+  '.github/workflows/deploy.yml',
+  '.github/workflows/audits-at-head.yml',
+];
 const admitted = run => ADMITTED.includes(run.path);
 const LIVE = ['in_progress', 'queued', 'waiting', 'pending'];
 // A run's jobs appear within seconds of its admission; until then it counts at

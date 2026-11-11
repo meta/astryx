@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Timestamp.stories.tsx
+ * @input Uses Timestamp, Text, and the Storybook theme decorator
+ * @output Stories for timestamp formats, sequential keyboard access and lazy details
+ * @position Storybook examples for Timestamp
+ */
+
 import type {Meta, StoryObj} from '@storybook/react';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
@@ -81,7 +88,7 @@ const meta: Meta<typeof Timestamp> = {
     },
     hasTooltip: {
       control: 'boolean',
-      description: 'Show copyable hover card on hover',
+      description: 'Show copyable details on hover or keyboard focus',
     },
     isTimezoneShown: {
       control: 'boolean',
@@ -100,6 +107,14 @@ export const Default: Story = {
 };
 
 export const RelativeFormat: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Tab to a timestamp to reveal its details dialog. The focused time exposes the popup relationship. Tab into the copy button; Escape dismisses its tooltip, then the card, returning focus to the timestamp.',
+      },
+    },
+  },
   render: () => (
     <div
       style={{

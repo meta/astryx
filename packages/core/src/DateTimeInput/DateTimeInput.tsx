@@ -804,9 +804,13 @@ function PointerDateTimeField({
   const [nativeTimeDraft, setNativeTimeDraft] = useState<
     ISOTimeString | undefined
   >(undefined);
-  const previousNativeValueRef = useRef(optimisticValue);
-  if (optimisticValue !== previousNativeValueRef.current) {
-    previousNativeValueRef.current = optimisticValue;
+  // The value the draft was held against. It is state: a ref written here
+  // would keep a value from a render React discards, and drop the draft on
+  // the next render.
+  const [previousNativeValue, setPreviousNativeValue] =
+    useState(optimisticValue);
+  if (optimisticValue !== previousNativeValue) {
+    setPreviousNativeValue(optimisticValue);
     if (nativeTimeDraft !== undefined) {
       setNativeTimeDraft(undefined);
     }
@@ -1712,6 +1716,7 @@ function PointerDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.dateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
@@ -1866,6 +1871,7 @@ function PointerDateTimeField({
             }),
             stylex.props(
               inputWrapperStyles.base,
+              inputWrapperStyles.textField,
               sizeStyles[size],
               styles.timeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,

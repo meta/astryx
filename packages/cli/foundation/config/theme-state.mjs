@@ -62,7 +62,26 @@ export function findThemeProject(cwd) {
  * @param {string} owner
  */
 export function isLocalThemeOwner(owner) {
-  return owner.startsWith('./') || owner.startsWith('../') || path.isAbsolute(owner);
+  return (
+    owner.startsWith('./') || owner.startsWith('../') || path.isAbsolute(owner)
+  );
+}
+
+/**
+ * The theme editor's record for the theme in `dir`, when the editor made it:
+ * the folder `<slug>/` holds `<slug>.settings.json`. The editor owns every
+ * theme file in that folder and regenerates it from the record, so eject and
+ * template never write there. Another `*.settings.json` is not the editor's.
+ * @param {string} dir
+ * @returns {string | null} the record's file name
+ */
+export function editorThemeRecord(dir) {
+  const record = `${path.basename(path.resolve(dir))}.settings.json`;
+  try {
+    return fs.statSync(path.join(dir, record)).isFile() ? record : null;
+  } catch {
+    return null;
+  }
 }
 
 /** @param {string} projectDir */
