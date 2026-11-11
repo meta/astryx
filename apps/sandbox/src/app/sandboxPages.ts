@@ -182,6 +182,12 @@ export const categories: SandboxCategory[] = [
         description:
           'Every built-in Text type at the default size, on a bare page that scrolls',
       },
+      {
+        name: 'Month and Year Toggle',
+        href: '/pages/month-year-toggle/',
+        description:
+          'The DateInput and DateTimeInput sheets, whose month title opens the month and year wheels, on a page that scrolls with the document',
+      },
     ],
   },
   {
