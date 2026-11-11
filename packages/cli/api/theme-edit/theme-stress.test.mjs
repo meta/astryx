@@ -8,8 +8,10 @@
  * Overview and Components pages.
  */
 
+import {execFile} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {promisify} from 'node:util';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {
   themeEditHow,
@@ -663,5 +665,183 @@ describe('round 5', () => {
       'in dark, --color-accent is shade 50',
     );
     await themeEditUndo('s', {cwd, thing: 'accent'});
+  }, 120_000);
+});
+
+describe('review fixes', () => {
+  const bin = path.resolve(
+    import.meta.dirname,
+    '../../clients/cli/bin/astryx.mjs',
+  );
+  /** @param {string[]} args */
+  const cli = args =>
+    promisify(execFile)(process.execPath, [bin, '--json', ...args], {
+      cwd,
+    }).then(
+      r => ({code: 0, out: JSON.parse(r.stdout)}),
+      e => ({code: e.code, out: JSON.parse(e.stdout || '{}')}),
+    );
+
+  it('checks translucent text over what is under it', async () => {
+    for (const v of ['rgba(0,0,0,0.15)', '#11111122']) {
+      const r = await themeEditSet('s', '--color-text-primary', v, {
+        cwd,
+        mode: 'light',
+      });
+      expect(r.data.problems.join(' '), v).toMatch(/is 1\.\d+:1 in light/);
+      await themeEditUndo('s', {
+        cwd,
+        thing: '--color-text-primary',
+        mode: 'light',
+      });
+    }
+  }, 240_000);
+
+  it('lets two commands run at once, and a saved change never exits 1', async () => {
+    await themeEditNew('cc', {cwd, like: 'neutral'});
+    const [a, b] = await Promise.all([
+      cli(['experimental', 'theme', 'editor', 'show', 's']),
+      cli(['experimental', 'theme', 'editor', 'set', 'cc', 'corners', 'small']),
+    ]);
+    expect([a.code, b.code]).toEqual([0, 0]);
+    expect(
+      fs
+        .readdirSync(path.join(cwd, 'themes'))
+        .filter(f => f.startsWith('.astryx-render')),
+    ).toEqual([]);
+    fs.rmSync(path.join(cwd, 'themes/cc'), {recursive: true, force: true});
+  }, 240_000);
+
+  it("a one-mode theme leaves the other mode's settings out and names them", async () => {
+    await themeEditNew('om', {
+      cwd,
+      like: 'neutral',
+      settings: {accent: '#7c3aed'},
+    });
+    await themeEditSet('om', '--color-text-primary', '#bbbbbb', {
+      cwd,
+      mode: 'light',
+    });
+    const r = await themeEditSet('om', 'mode', 'dark-only', {cwd});
+    expect(r.data.notes.join(' ')).toContain(
+      'not applied in a dark-only theme',
+    );
+    expect(r.data.changedTokens.join(' ')).not.toContain('#bbbbbb');
+    expect(read('themes/om/om.settings.ts')).toMatch(
+      /"--color-accent": palette\.accent\.dark\[\d+\],/,
+    );
+    const show = await themeEditShow('om', {cwd});
+    expect(
+      show.data.settings.find(x => x.thing === '--color-text-primary')?.masked,
+    ).toContain('does not apply');
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'om',
+      path: 'src/app/om',
+    });
+    const route = read('src/app/om/page.tsx');
+    expect(route).toContain('const mode: Mode = "dark";');
+    expect(route).not.toContain('SegmentedControlItem value="light"');
+    fs.rmSync(path.join(cwd, 'themes/om'), {recursive: true, force: true});
+    fs.rmSync(path.join(cwd, 'src/app/om'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('starts a new history when it is damaged, and undo says how to fix it', async () => {
+    await themeEditNew('hi', {cwd, like: 'neutral'});
+    fs.writeFileSync(path.join(cwd, 'themes/hi/hi.history.json'), '{');
+    const before = read('themes/hi/hi.settings.json');
+    const u = await refusal(() => themeEditUndo('hi', {cwd}));
+    expect(u.code).toBe('ERR_THEME_INVALID');
+    expect(u.message).toContain('delete themes/hi/hi.history.json');
+    expect(read('themes/hi/hi.settings.json')).toBe(before);
+    const r = await themeEditSet('hi', 'spacing', 'roomy', {cwd});
+    expect(r.data.notes.join(' ')).toContain('a new undo history starts');
+    expect(JSON.parse(read('themes/hi/hi.history.json'))).toHaveLength(1);
+    fs.rmSync(path.join(cwd, 'themes/hi'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('a change that changes nothing builds nothing and adds no undo step', async () => {
+    await themeEditNew('nc', {cwd, like: 'neutral'});
+    await themeEditSet('nc', 'corners', 'pill', {cwd});
+    const steps = JSON.parse(read('themes/nc/nc.history.json')).length;
+    const again = await themeEditSet('nc', 'corners', 'pill', {cwd});
+    expect(again.data.notes[0]).toContain('no change');
+    expect(JSON.parse(read('themes/nc/nc.history.json'))).toHaveLength(steps);
+    fs.rmSync(path.join(cwd, 'themes/nc'), {recursive: true, force: true});
+  }, 240_000);
+
+  it("picks shades against the theme's own exact page color", async () => {
+    await themeEditNew('pg', {
+      cwd,
+      like: 'neutral',
+      settings: {accent: '#7c3aed'},
+    });
+    await themeEditSet('pg', '--color-background-body', '#7a5fd0', {
+      cwd,
+      mode: 'light',
+    });
+    const show = await themeEditShow('pg', {cwd});
+    const note = show.data.colorNotes.find(n =>
+      n.startsWith('--color-text-accent light'),
+    );
+    expect(note).toBeDefined();
+    expect(note).not.toContain('4.64:1');
+    fs.rmSync(path.join(cwd, 'themes/pg'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('says what applies once a part setting is removed', async () => {
+    await themeEditNew('ua', {cwd, like: 'neutral'});
+    await themeEditSet('ua', 'corners', 'large', {cwd});
+    await themeEditSet('ua', 'corners', '12px', {cwd, on: 'button'});
+    const r = await themeEditUndo('ua', {cwd, thing: 'corners', on: 'button'});
+    expect(r.data.now).toBe('corners = large (whole theme)');
+    fs.rmSync(path.join(cwd, 'themes/ua'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('answers border-only questions without a fill', async () => {
+    for (const q of [
+      'a light gray border on cards',
+      'change the color of the border on cards',
+      'make the card border thicker in dark mode',
+    ]) {
+      const r = /** @type {any} */ ((await themeEditHow(q, {cwd})).data);
+      expect(r.understood.aspects, q).toEqual(['border']);
+    }
+  });
+
+  it('gives an article or blog page for a story or a blog post, never a record page', async () => {
+    const news = await themeEditPreviewAdd(
+      'a news story page with a headline, byline, hero image and related stories',
+      {cwd, theme: 's', path: 'src/app/rv'},
+    );
+    expect(news.data.added).not.toContain('detail-page');
+    const blog = await themeEditPreviewAdd('a blog post page', {
+      cwd,
+      theme: 's',
+      path: 'src/app/rv',
+    });
+    expect(blog.data.added.length + blog.data.refreshed.length).toBe(1);
+    fs.rmSync(path.join(cwd, 'src/app/rv'), {recursive: true, force: true});
+  }, 300_000);
+
+  it('names the radius token each part reads, or says it is unknown', async () => {
+    await themeEditSet('s', 'corners', 'large', {cwd, on: 'checks'});
+    const show = await themeEditShow('s', {cwd});
+    const line = show.data.partValues.find(x =>
+      x.startsWith('corners = large on checks'),
+    );
+    expect(line).toContain('--radius-inner');
+    expect(line).toContain('unknown for radio-indicator');
+    await themeEditUndo('s', {cwd, thing: 'corners', on: 'checks'});
+  }, 120_000);
+
+  it('says a preview outside the routes folder is not served', async () => {
+    const r = await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 's',
+      path: 'elsewhere',
+    });
+    expect(r.data.open).toContain("outside the app's routes folder");
+    fs.rmSync(path.join(cwd, 'elsewhere'), {recursive: true, force: true});
   }, 120_000);
 });
