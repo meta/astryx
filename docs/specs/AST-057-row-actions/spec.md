@@ -327,8 +327,8 @@ constants.
 - `ListItem` passes `swipe` to its `Item`, and the released `swipeActions`
   and `swipeBehavior`, deprecated by DEP-0017, through the same passthrough.
 - The drag uses FR2's single travel property, and the release settles on the
-  compositor as main does today.
-- Implementation gap: `Item` loads the deprecated swipe layer through
+  compositor.
+- Implementation gap (FR10): `Item` loads the deprecated swipe layer through
   `import()` for the deprecated `swipeActions` and `swipeBehavior` props; the
   gap closes when those props are removed.
 - `architecture:react-component-runtime` INV13 gains the constructor route

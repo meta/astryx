@@ -1302,8 +1302,9 @@ export function useSwipeAction({
         // The drag moves the row: text selection and the touch callout stay
         // off for the press it holds.
         selectionLock: lockSelection,
-        // The host offers each touch here once, with its target, as it lands.
-        // A press on the outermost entry of a row open on that side is noted.
+        // The host offers each touch here once, as it lands. This notes a press
+        // on the outermost entry of a row open on that side, so that press can
+        // confirm a full swipe.
         shouldReceiveTouch: (_pan, touch) => {
           const current = stateRef.current;
           const {target} = touch;

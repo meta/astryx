@@ -33,8 +33,8 @@ export const swipeActions = {
    * Sideways travel at which the row claims the touch from the browser, NOT a
    * UIKit value. On the web a scrolling ancestor takes the touch at about 10
    * px, unless the page cancels `touchmove` before that. So the row claims at 8
-   * px, and its swipe still begins at `hysteresis`. In between, the touch moves
-   * neither the row nor the page.
+   * px. From there a finger's row is at the finger's travel since touch-down.
+   * Before it, the touch moves neither the row nor the page.
    * @source measured: Mobile Safari, iOS 26.2 simulator, iPhone 17 Pro, the
    *   touch stream against WebKit's scroll commit on a scrollable element
    *   (the last cancelable `touchmove` at 10 px; cancelling every `touchmove`
@@ -42,9 +42,9 @@ export const swipeActions = {
    */
   claim: 8,
   /**
-   * Finger travel before the swipe begins. The travel up to that point is
-   * not part of the swipe: the row starts from where it was, it never jumps
-   * by the threshold.
+   * UIKit's finger travel before its swipe begins. A finger's row follows
+   * from `claim`. This value sets where UIKit's measure of the swipe counts
+   * from, and the confirm point is judged on that measure.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, `_UISwipeActionPanGestureRecognizer` `_hysteresis` ivar
    *   read (25) and a 1 pt step drag: began at exactly 25 pt of travel with
@@ -121,7 +121,7 @@ export const swipeActions = {
    * How far the finger must drag from the open width toward the confirmation
    * offset for the full swipe to confirm. The confirmation offset is the row
    * width less `confirmInset`. Judged on the finger's travel, not the row's:
-   * the row lags the finger on its spring.
+   * past the confirm point the row runs ahead of the finger.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, 402 pt rows: with a 204.67 pt open width a release
    *   performed from 335 pt of swipe and not from 315, at every velocity
