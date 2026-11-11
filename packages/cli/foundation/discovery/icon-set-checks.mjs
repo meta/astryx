@@ -69,6 +69,7 @@ import {
 } from './module-exports.mjs';
 import {astryxIconDefinitions} from './icon-definition-discovery.mjs';
 import {rankIcons} from './icon-ranking.mjs';
+import {unmappedTemplateMeanings} from './template-icon-meanings.mjs';
 import {shellArg} from '../text/shell-arg.mjs';
 import {
   issueError,
@@ -405,6 +406,10 @@ function checkDefinitions(set) {
  *   {@link suggestedIcons} gives, if any
  * @property {IconSetUnchecked[]} unchecked what the checks could not judge:
  *   never counted, never failing, even under `--strict`
+ * @property {{unmapped: import('./template-icon-meanings.mjs').TemplateMeaning[]}} [templateMeanings]
+ *   the icon definitions the bundled templates use that the set's `map` does
+ *   not name, most used first: a copied template renders a placeholder for
+ *   each. Never counted, never failing
  */
 
 /**
@@ -414,9 +419,16 @@ function checkDefinitions(set) {
  * @param {{name: string, iconSets?: string}} loaded
  * @param {Map<string, IconSetUnchecked[]>} [unchecked] what
  *   {@link iconSetIssues} could not judge, by set name
+ * @param {import('./template-icon-meanings.mjs').TemplateMeaning[]} [templateMeanings]
+ *   the definitions the bundled templates use; each set lists the ones it
+ *   leaves unmapped
  * @returns {IconSetCoverage[]}
  */
-export function iconSetCoverage(loaded, unchecked = new Map()) {
+export function iconSetCoverage(
+  loaded,
+  unchecked = new Map(),
+  templateMeanings,
+) {
   if (!loaded.iconSets) return [];
   const found = discoverIconSetDirectory(loaded.iconSets, loaded.name);
   const astryx = astryxIconDefinitions().definitions.map(each => each.doc);
@@ -445,6 +457,16 @@ export function iconSetCoverage(loaded, unchecked = new Map()) {
           : [];
       }),
       unchecked: unchecked.get(set.name) ?? [],
+      ...(templateMeanings
+        ? {
+            templateMeanings: {
+              unmapped: unmappedTemplateMeanings(
+                templateMeanings,
+                set.data.map,
+              ),
+            },
+          }
+        : {}),
     };
   });
 }
@@ -592,27 +614,47 @@ export function suggestedIcons(set, doc) {
   }
   // 3. Ids that start with the name as written (`video` → `video-camera`),
   //    never a negated form. A plural is not the same start: `users` is not
-  //    `user-plus`, and `apps` is not `app-window`.
+  //    `user-plus`, and `apps` is not `app-window`. Only an id whose other
+  //    words are the definition's words, or a size, shape, or number, comes
+  //    here; one whose other words name something else (`delete-left`, a
+  //    key) comes after the icons the definition's words name.
   const nameRaw = nameId.split('-');
-  ranked(
+  const startsWithName = ranked(
     icons.filter(
       icon =>
         icon.raw.length > nameRaw.length &&
         nameRaw.every((word, index) => icon.raw[index] === word) &&
         !negated(icon.raw.slice(nameRaw.length)),
     ),
-  ).forEach(icon => add(icon.id, nameId));
+  );
+  const onlyMeaning = (/** @type {{raw: string[]}} */ icon) =>
+    icon.raw
+      .slice(nameRaw.length)
+      .every(word => meaning.has(stem(word)) || QUALIFIER_RE.test(word));
+  startsWithName.filter(onlyMeaning).forEach(icon => add(icon.id, nameId));
+  // A word another Astryx definition also has (`store` for save and for a
+  // shopping bag) does not say which one an icon draws: the words only this
+  // definition has come first.
+  const shared = sharedWords(doc.name);
+  const wordOrder = [
+    ...[...wordIds.keys()].filter(index => !shared.has(wordIds[index])),
+    ...[...wordIds.keys()].filter(index => shared.has(wordIds[index])),
+  ];
   // 4. An icon whose whole id is one of the definition's words.
-  for (const id of wordIds) {
+  for (const index of wordOrder) {
+    const id = wordIds[index];
     if (icons.some(icon => icon.id === id)) add(id, id.replace(/-/gu, ' '));
   }
   // 5. Another name the library gives an icon that is one of the
   //    definition's words (Lucide's `smile` on `face-slightly-smiling`).
-  for (const [index, id] of wordIds.entries()) {
+  for (const index of wordOrder) {
     for (const icon of icons) {
-      if (icon.other.includes(id)) add(icon.id, doc.words[index]);
+      if (icon.other.includes(wordIds[index])) add(icon.id, doc.words[index]);
     }
   }
+  startsWithName
+    .filter(icon => !onlyMeaning(icon))
+    .forEach(icon => add(icon.id, nameId));
   // 6. Last, two-word ids that are a one-word word with only a size, shape,
   //    or number after it (`columns` → `columns-3`, `plus` → `plus-circle`,
   //    `grid` → `grid-2x2`), best fit first. Any other second word names
@@ -632,6 +674,25 @@ export function suggestedIcons(set, doc) {
     ).forEach(icon => add(icon.id, word));
   }
   return found.slice(0, SUGGESTIONS_PER_DEFINITION);
+}
+
+/**
+ * The words, written as ids, that another Astryx definition than `name` also
+ * has as its name or one of its words.
+ * @param {string} name
+ * @returns {Set<string>}
+ */
+function sharedWords(name) {
+  /** @type {Set<string>} */
+  const shared = new Set();
+  for (const {doc} of astryxIconDefinitions().definitions) {
+    if (doc.name === name) continue;
+    shared.add(doc.name.replace(/([a-z0-9])([A-Z])/gu, '$1-$2').toLowerCase());
+    for (const word of doc.words) {
+      shared.add(word.trim().toLowerCase().replace(/\s+/gu, '-'));
+    }
+  }
+  return shared;
 }
 
 /**

@@ -38,6 +38,7 @@ import type {
 import type {DefinedTheme} from '../theme/defineTheme';
 import {getRegisteredTheme} from '../theme/themeRegistry';
 import {warnOnce} from '../utils/devWarning';
+import {sharedForReact} from '../utils/sharedForReact';
 
 // =============================================================================
 // Types
@@ -161,7 +162,11 @@ const PUBLIC_READ_REQUEST: IconRequest<never> = {size: 'md'};
 // Global Registry
 // =============================================================================
 
-let globalRegistry: Record<string, StoredIconEntry> = {};
+// Every copy of Core on one React shares this registry. Entries are React
+// elements, so a second React keeps its own.
+const registry = sharedForReact('icon/global-icon-registry/state', 1, () => ({
+  entries: {} as Record<string, StoredIconEntry>,
+}));
 
 /**
  * A key is namespaced when it carries a `<namespace>:` prefix — the runtime
@@ -232,7 +237,7 @@ function selectIconEntry(
       variantLists: [activeVariants, definingVariants],
     };
   }
-  const globalEntry = globalRegistry[name];
+  const globalEntry = registry.entries[name];
   if (globalEntry != null) {
     return {entry: globalEntry, variantLists: [activeVariants]};
   }
@@ -312,7 +317,7 @@ export function registerIcons(
     'Icon',
     '`registerIcons()` applies icon overrides globally. Prefer `defineTheme({ icons })` for theme-scoped icon overrides.',
   );
-  globalRegistry = {...globalRegistry, ...icons};
+  registry.entries = {...registry.entries, ...icons};
 }
 
 /**
@@ -574,5 +579,5 @@ export function resolveComponentIcon<Slot extends ComponentIconSlotName>(
  * @internal
  */
 export function resetIcons(): void {
-  globalRegistry = {};
+  registry.entries = {};
 }

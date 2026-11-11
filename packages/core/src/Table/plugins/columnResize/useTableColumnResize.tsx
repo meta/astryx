@@ -18,6 +18,7 @@ import {
   useMemo,
   useCallback,
   useEffect,
+  useState,
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
@@ -421,6 +422,24 @@ function ResizeHandle({
   tableRef,
 }: ResizeHandleProps) {
   const t = useComponentTranslator();
+  // The column's rendered width, which the handle announces. The shared
+  // resize observer reports it after layout, so render never reads layout.
+  // The handle's ref observes its header cell while the handle is attached.
+  const [renderedWidth, setRenderedWidth] = useState<number | null>(null);
+  const observeColumn = useCallback((handle: HTMLDivElement | null) => {
+    const th = handle?.closest('th');
+    if (th == null) {
+      return undefined;
+    }
+    return observeResize(th, entry => {
+      const width =
+        entry.borderBoxSize?.[0]?.inlineSize ??
+        th.getBoundingClientRect().width;
+      if (width > 0) {
+        setRenderedWidth(Math.round(width));
+      }
+    });
+  }, []);
   const setTableDragging = useCallback(
     (dragging: boolean) => {
       const table = tableRef.current;
@@ -786,28 +805,33 @@ function ResizeHandle({
     label: getNodeText(columnHeader) || columnKey,
   });
 
-  // A focusable role="separator" requires a numeric aria-valuenow, so fall
-  // back to the column's minWidth before the width has been measured.
-  const valueNow = currentWidth ?? minWidth;
+  // A focusable role="separator" requires a numeric aria-valuenow, so it
+  // falls back to the width the table asked for, then to the column's
+  // minWidth, until the column has been measured.
+  const valueNow = renderedWidth ?? currentWidth ?? minWidth;
   // Without a maximum, ARIA's default of 100 applies, below most column
   // widths. So an unbounded column announces a stand-in maximum that it never
   // goes below. That range is not a real limit, so the handle also says its
   // value in words.
   const isUnbounded = !Number.isFinite(maxWidth);
   const windowExtent = useWindowInlineExtent();
+  // The layout can render a column past its limits (a stretched table), so
+  // the announced range widens to hold the value it reports.
   const announcedMax = isUnbounded
     ? standInMaximum(windowExtent, valueNow, minWidth)
-    : maxWidth;
+    : Math.max(maxWidth, valueNow);
+  const announcedMin = Math.min(minWidth, valueNow);
   const valueText = isUnbounded
     ? t('@astryx.table.columnResize.widthValue', {width: Math.round(valueNow)})
     : undefined;
 
   return (
     <div
+      ref={observeColumn}
       role="separator"
       aria-orientation="vertical"
       aria-valuenow={valueNow}
-      aria-valuemin={minWidth}
+      aria-valuemin={announcedMin}
       aria-valuemax={announcedMax}
       aria-valuetext={valueText}
       aria-label={ariaLabel}

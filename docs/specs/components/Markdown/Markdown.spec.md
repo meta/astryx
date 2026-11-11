@@ -17,6 +17,7 @@ verified_by:
     packages/core/src/Markdown/Markdown.public.test.ts,
     packages/core/src/Markdown/MarkdownTable.a11y.chromium.spec.ts,
     packages/core/src/Markdown/parser.test.ts,
+    packages/core/src/Markdown/urlSchemes.test.ts,
     packages/core/src/Markdown/incremental.test.ts,
     packages/core/src/Markdown/remark.test.tsx,
     packages/core/src/Markdown/plugins/softBreaks.test.tsx,
@@ -42,6 +43,7 @@ system_specs:
     spec:AST-002/DEC-5,
     spec:AST-005/DEC-1,
     spec:AST-005/DEC-2,
+    spec:AST-005/DEC-3,
     spec:AST-025/DEC-1,
     spec:AST-025/DEC-4,
     spec:AST-036/DEC-1,
@@ -78,16 +80,28 @@ streaming behavior is the released one.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`, except the default Code block path for `diff` fences (FR29, below), its long-line wrap (below), its headerless layout (below), and per-block text direction (below)
-- Compatibility class: additive, opt-in public API, with four visible
+- Released default preserved: `yes`, except the default Code block path for `diff` fences (FR29, below), its long-line wrap (below), its headerless layout (below), per-block text direction (below), and `data:` link and image URLs (below)
+- Compatibility class: additive, opt-in public API, with five visible
   default-path rendering changes (the FR29 diff layer, the fenced-code wrap,
-  the headerless layout, and per-block text direction, below); existing parser nodes, DOM (apart from the direction markup below), styling, targets,
+  the headerless layout, per-block text direction, and `data:` URLs, below); existing parser nodes (apart from `data:` URLs and normalized destinations, below), DOM (apart from the direction markup below), styling, targets,
   dollar-delimited text, `components`, and `inlinePlugins` remain unchanged unless
   the caller supplies `plugins`, supplies `components.math`, supplies
   `codeLanguages`, or passes the matching explicit parser option.
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 - Additive opt-in prop (FR30): `codeLanguages` lets fences in less common languages paint with `component:CodeBlock` language modules; without it nothing changes.
+- Default-path change for `data:` URLs (`spec:AST-005/DEC-3`), a security fix
+  and not a breaking one: the parser drops every `data:` link and image URL, so
+  `<Markdown>` renders each as its source text and the public parser functions
+  no longer return a `data:` URL in `link.href` or `image.src`. A destination
+  that is blank once control characters and outer whitespace are removed is an
+  empty destination and still renders as text, or the image's alternative-text
+  fallback.
+- Normalized destinations (`spec:AST-005/DEC-3`): the parser stores every link
+  and image destination with control characters and outer whitespace removed,
+  from Markdown source, plugin transforms, and Remark plugins alike, so
+  `[a](< b(c) d >)` gives `b(c) d`. A destination without such characters is
+  unchanged.
 - Default-path rendering change for diff fences (FR29), a visible default change
   and not a breaking one: a `diff` fence that rendered as plain text renders as CodeBlock's diff
   layer over plaintext with a `diff` label, and a `diff-<language>` fence —
@@ -319,7 +333,7 @@ text. Outside a table cell, inline code retains its authored backslashes.
 | Ordered/unordered list | List carries `markdown-list`; each level's marker style follows its depth (`spec:AST-061/DEC-6`).                                                       | Start value, item count, and nested content.                                                    |
 | Task list              | Each task-marked item carries its own checked state; mixed task/plain items stay in one compatible list and preserve document order and nesting.        | Checked values, item content, and adjacent plain items.                                         |
 | Safe block image       | Default Image carries `markdown-image`, or a custom image renderer replaces it.                                                                         | Source and alternative text.                                                                    |
-| Unsafe block image URL | Markdown renders its fallback Image part with `markdown-image`; no custom image renderer receives the rejected URL.                                     | Alternative text shown by the fallback.                                                         |
+| Empty block image URL  | Markdown renders its fallback Image part with `markdown-image`. An unsafe URL never reaches the renderer: the parser drops it.                          | Alternative text shown by the fallback.                                                         |
 | Inline display         | Document carries `markdown`; no block target renders.                                                                                                   | Inline text, links, code, citations, plugins, and opt-in inline math.                           |
 | Math renderer absent   | Dollar-delimited source follows the released Markdown grammar and no `math` node or renderer output exists.                                             | Currency, unmatched delimiters, and ordinary prose.                                             |
 | Math renderer present  | Complete supported delimiters are opaque to Markdown formatting and are passed to the renderer as inert text.                                           | Inline or block display and any renderer-owned output.                                          |
@@ -394,7 +408,7 @@ required accessible meaning or make meaning color-only.
 | Blockquote       | Presents quoted block content on the default path.                                 | Current source and public docs | Prominent      | FR2, FR3           |
 | Table            | Presents parsed rows and columns in a keyboard-scrollable block wrapper.           | Current source and public docs | Prominent      | FR2                |
 | Divider          | Presents a horizontal separation between blocks.                                   | Current source and public docs | Supporting     | FR2, FR3           |
-| Image            | Presents a safe block image or the fallback for a rejected image URL.              | Current source and public docs | Prominent      | FR2, FR3           |
+| Image            | Presents a block image, or the fallback for an empty image URL.                    | Current source and public docs | Prominent      | FR2, FR3           |
 | Math             | Delegates an explicitly enabled expression to the caller's renderer as inert text. | Component contract             | Supporting     | FR6–FR11           |
 
 Custom renderers replace the existing default parts rather than becoming nested
@@ -443,9 +457,10 @@ and this change preserves the existing spelling exactly.
   Markdown parsing and link rendering to preserve the same normalized navigation
   decision as other Core links. Rejected links remain inert and do not reach a
   custom link renderer; accepted links retain their ordinary behavior.
-- `spec:AST-005/DEC-2` keeps embedded-resource policy separate. Markdown may
-  reject a broader set of image/resource URLs without narrowing the shared
-  navigation contract.
+- `spec:AST-005/DEC-2` keeps embedded-resource policy separate. The parser owns
+  Markdown link and image URL safety (`spec:AST-005/DEC-3`): it drops every
+  `javascript:`, `vbscript:`, and `data:` URL, and the renderer renders only the
+  nodes it parsed.
 - `module:Markdown/headingLinks` owns its opt-in public factory, heading projection,
   built-in sibling renderer, i18n, styles, accessibility behavior, and evidence.
   Markdown supplies only the generic plugin and built-in-heading composition seams.
@@ -488,7 +503,7 @@ and this change preserves the existing spelling exactly.
 | FR29                   | `Markdown.test.tsx` (a `diff` fence → plaintext + layer, a `diff-tsx` fence → tsx + layer, a plain fence unchanged, a custom `code` renderer receives `language="diff"` for both diff fences and nothing new)                                                                                                                         | default path and custom renderer, `diff` and `diff-<language>` fences                                                                                | a fence word other than `diff`/`diff-<language>` reaching the layer, or a custom renderer receiving a new prop or a different `language`                                                                   |
 | FR30                   | `Markdown.test.tsx` (a fence naming a listed module paints with it and labels with its name; the same fence without `codeLanguages` stays plain; a later entry wins a shared identifier; a `diff-<identifier>` fence takes the diff layer over the listed value; a custom `code` renderer receives the language word and nothing new) | listed and unlisted modules, a shared identifier, a `diff-<identifier>` fence, a custom `code` renderer                                              | a listed module's fence rendering plain, an unlisted identifier resolving to a module, or a custom renderer receiving a module or a new prop                                                               |
 | Public syntax/types    | `Markdown.public.test.ts`, core typecheck, and `Markdown.doc.mjs`                                                                                                                                                                                                                                                                     | Legacy exhaustive switches, math opt-ins, inferred extension-node unions                                                                             | A released union widens, an enabled union loses nodes, or docs drift from declarations.                                                                                                                    |
-| Navigation contract    | `parser.test.ts`, `Markdown.test.tsx`, and `Markdown.renderBoundary.test.tsx`                                                                                                                                                                                                                                                         | Parsed and rendered links, including transformed built-in links; accepted ordinary schemes; rejected destinations; links versus images               | A blocked destination reaches navigation or a custom link renderer, or resource policy narrows accepted navigation.                                                                                        |
+| Navigation contract    | `parser.test.ts`, `urlSchemes.test.ts`, `Markdown.test.tsx`, and `Markdown.renderBoundary.test.tsx`                                                                                                                                                                                                                                   | Parsed and rendered links, including transformed built-in links; accepted ordinary schemes; rejected destinations; links versus images               | A blocked destination reaches navigation or a custom link renderer, or resource policy narrows accepted navigation.                                                                                        |
 | Security/accessibility | `parser.test.ts`, `Markdown.test.tsx`, and renderer guidance                                                                                                                                                                                                                                                                          | Inert expression strings and renderer-owned semantics                                                                                                | Astryx executes math as HTML or silently claims renderer-owned accessibility.                                                                                                                              |
 | Autolink scan cost     | `parser.perf.test.ts` "GFM autolink scanning is linear in the input length" (100,000-character runs parse with autolink within a fixed budget) and `parser.test.ts` "finds the same bare emails as a scan from every character"                                                                                                       | A long plain run, a run with an `@` and no dotted domain, a run followed by an email and a URL, and a URL closed by a long run of `)`                | A scan whose cost grows with the square of a run exceeds the budget; an anchored scan that finds different emails fails the comparison                                                                     |
 
