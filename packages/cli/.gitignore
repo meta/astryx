@@ -17,3 +17,8 @@ foundation/*.d.mts
 # Transient fixture dir written by authoring-migration.tsc.test.mjs (runs the
 # real tsc over migrated output); created + removed per test run.
 .codemod-tsc-*/
+
+# Stored exports of the shipped plain-data doc files, written at `prepack` by
+# scripts/generate-stored-docs.mjs so the published package reads them instead
+# of importing each doc. Not committed: a checkout imports every doc.
+assets/docs.generated.json
