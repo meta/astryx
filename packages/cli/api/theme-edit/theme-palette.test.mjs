@@ -14,6 +14,7 @@ import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {
   themeEditHow,
@@ -850,6 +851,21 @@ describe('every color decision is generator config', () => {
         expect(candidate.stops).toContain(v[m].stop);
         expect(v[m].color).toMatch(/^#[0-9a-f]{6}/);
       }
+    // 85 is not in this layout: the light tint takes the lighter of 80
+    // and 90, as the tint walks lighter first in light.
+    expect(pal.tokens['--color-accent-muted'].light.stop).toBe(90);
+    // A stop with many digits is shown rounded.
+    const thirds = plan([{thing: 'accent', value: '#1e3a8a'}], {
+      config: {
+        stops: [0, 100 / 6, 100 / 3, 50, 200 / 3, 250 / 3, 100].map(x =>
+          Number(x.toFixed(12)),
+        ),
+        families: [],
+      },
+    });
+    expect(paletteNotes(thirds.pal, 'accent', 'x').join(' ')).not.toMatch(
+      /\d\.\d{3,}/,
+    );
     expect(() =>
       plan([{thing: 'accent', value: '#16a34a'}], {
         config: {stops: [0, 50, 100], families: []},
@@ -1185,8 +1201,9 @@ describe('color settings, refused well', () => {
     );
     expect(r.code).toBe('ERR_THEME_INVALID');
     expect(r.message).toContain('was edited by hand');
-    // The way out is told in words: no command that moves or deletes files.
-    expect(r.run).toEqual([]);
+    // The way out is told in words, with an editor command to run next:
+    // no command that moves or deletes files.
+    expect(r.run).toEqual(['astryx experimental theme editor show p']);
     expect(r.message).toContain('move the file out of tokens/');
     expect(read('tokens/p.palette.ts')).toBe(edited);
     // A missing receipt is no way around it.
@@ -1270,5 +1287,135 @@ describe('color settings, refused well', () => {
     await themeEditSet('p', 'vibrancy', '60', {cwd});
     expect(JSON.parse(read('palette.config.json')).vibrancy).toBe(60);
     await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
+  it("replays an official theme's per-mode focus color, and the theme stays usable", async () => {
+    // The official Neutral theme, resolved as an app gets it.
+    const pkg = (/** @type {string} */ rel) =>
+      import(
+        pathToFileURL(path.join(cwd, '../node_modules/@astryxdesign', rel)).href
+      );
+    const core = await pkg('core/dist/theme/index.js');
+    const {neutralTheme} = await pkg('theme-neutral/dist/neutral.js');
+    /** @type {Record<'light' | 'dark', string>} */
+    const focus = {
+      light: core.resolveThemeTokens(neutralTheme, {mode: 'light'})[
+        '--focus-outline-color'
+      ],
+      dark: core.resolveThemeTokens(neutralTheme, {mode: 'dark'})[
+        '--focus-outline-color'
+      ],
+    };
+    expect(focus.light).not.toBe(focus.dark);
+    for (const mode of /** @type {const} */ (['light', 'dark']))
+      await themeEditSet('p', '--focus-outline-color', focus[mode], {
+        cwd,
+        mode,
+      });
+    // A later command on the theme still works: the load check reads the
+    // token's type, and a focus color is a color.
+    await themeEditSet('p', 'corners', 'small', {cwd});
+    for (const thing of ['corners', '--focus-outline-color'])
+      for (const mode of thing === 'corners' ? [undefined] : ['light', 'dark'])
+        await themeEditUndo('p', {cwd, thing, ...(mode ? {mode} : {})});
+  });
+
+  it('undo never deletes a color file edited by hand, and names it', async () => {
+    await themeEditSet('p', 'accent', '#2563eb', {cwd});
+    const edited = read('tokens/p.palette.ts').replace(
+      /"45": "#[0-9a-f]{6}"/,
+      '"45": "#ff0000"',
+    );
+    fs.writeFileSync(file('tokens/p.palette.ts'), edited);
+    const refused = await refusal(() =>
+      themeEditSet('p', 'accent', '#16a34a', {cwd}),
+    );
+    // The way out is told in words, with an editor command to run next.
+    expect(refused.message).toContain('move the file out of tokens/');
+    expect(refused.run).toEqual(['astryx experimental theme editor show p']);
+    const r = await themeEditUndo('p', {cwd, thing: 'accent'});
+    expect(read('tokens/p.palette.ts')).toBe(edited);
+    expect(r.data.notes.join(' ')).toContain(
+      'tokens/p.palette.ts was edited by hand, so it stays',
+    );
+    expect(fs.existsSync(file('palette.config.json'))).toBe(false);
+    // The next color change asks again, until the file is moved out.
+    expect(
+      (await refusal(() => themeEditSet('p', 'accent', '#16a34a', {cwd}))).code,
+    ).toBe('ERR_THEME_INVALID');
+    fs.renameSync(file('tokens/p.palette.ts'), file('p.my-colors.ts'));
+    // A plain step back over the first color keeps an edited file too.
+    await themeEditSet('p', 'accent', '#16a34a', {cwd});
+    fs.writeFileSync(
+      file('tokens/p.palette.ts'),
+      read('tokens/p.palette.ts').replace(
+        /"50": "#[0-9a-f]{6}"/,
+        '"50": "#00ff00"',
+      ),
+    );
+    const step = await themeEditUndo('p', {cwd});
+    expect(/** @type {any} */ (step.data).undone.join(' ')).toContain(
+      'was edited by hand, so it stays',
+    );
+    expect(read('tokens/p.palette.ts')).toContain('#00ff00');
+    fs.rmSync(file('tokens'), {recursive: true, force: true});
+    fs.rmSync(file('p.my-colors.ts'), {force: true});
+  });
+
+  it('never counts formatting, a BOM, or a config edit without a receipt as a hand edit', async () => {
+    await themeEditSet('p', 'accent', '#2563eb', {cwd});
+    // As `prettier --no-semi` and a Windows editor write it.
+    fs.writeFileSync(
+      file('tokens/p.palette.ts'),
+      `\uFEFF${read('tokens/p.palette.ts').replace(/;$/gm, '')}`,
+    );
+    await themeEditSet('p', 'accent', '#16a34a', {cwd});
+    expect(read('tokens/p.palette.ts')).toContain('#16a34a');
+    // No receipt, and the documented hand edit to the config.
+    fs.rmSync(file('tokens/p.palette.receipt.json'));
+    const config = JSON.parse(read('palette.config.json'));
+    fs.writeFileSync(
+      file('palette.config.json'),
+      JSON.stringify({...config, vibrancy: 70}),
+    );
+    await themeEditSet('p', 'accent', '#0d9488', {cwd});
+    expect(read('tokens/p.palette.ts')).toContain('#0d9488');
+    const back = JSON.parse(read('palette.config.json'));
+    delete back.vibrancy;
+    fs.writeFileSync(file('palette.config.json'), JSON.stringify(back));
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
+  it('reports what an exact color changes around it, the page check included', async () => {
+    await themeEditSet('p', 'accent', '#2563eb', {cwd});
+    const r = await themeEditSet('p', '--color-accent', '#ffff00', {cwd});
+    const notes = r.data.notes.join(' ');
+    expect(notes).toContain('--color-accent uses your exact setting');
+    expect(notes).toContain(
+      'your exact --color-accent (#ffff00) stands out from the page at only',
+    );
+    await themeEditUndo('p', {cwd, thing: '--color-accent'});
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+});
+
+describe('font words', () => {
+  it('refuses CSS keywords and long names, and knows system families', async () => {
+    for (const v of ['inherit', 'initial', 'Inter, unset']) {
+      const r = await refusal(() => themeEditSet('p', 'font', v, {cwd}));
+      expect(r.code, v).toBe('ERR_THEME_BAD_VALUE');
+      expect(r.message, v).toContain('is a CSS keyword, not a font');
+    }
+    expect(
+      (await refusal(() => themeEditSet('p', 'font', 'x'.repeat(300), {cwd})))
+        .code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+    for (const v of ['system-ui', 'Arial', '"Segoe UI"', 'serif, sans-serif']) {
+      const r = await themeEditSet('p', 'font', v, {cwd});
+      expect(r.data.notes.join(' '), v).not.toContain('is not a system font');
+    }
+    const source = read('p.settings.ts');
+    expect(source).not.toMatch(/system-ui, system-ui/);
+    await themeEditUndo('p', {cwd, thing: 'font'});
   });
 });
