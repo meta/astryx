@@ -1568,6 +1568,14 @@ space. In empty space where bands overlap, the target whose box is nearest the
 finger takes the tap. A tap that works without the band works the same with
 it.
 
+The press check shares four internal exports across component folders,
+because `useTouchHitArea` and `touchHitAreaStyles` give their callers no group
+state, no box geometry and no option values: `HitAreaGroupContext`, the group
+flag that a Button in a toggle group reads; `touchTargetRect`, the box reader
+that grows a box toward 44 px; `distanceTo`, the distance from the finger to a
+box; and `BAND_ON_DESCENDANT`, the band option for a host whose band is on a
+descendant.
+
 Rejected: a measured, page-wide watch of every control's neighbors.
 
 ## Open questions
