@@ -580,12 +580,11 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const admission = useMemo(() => resolveTableAdmission(plugins), [plugins]);
   const mode = children ? 'children' : 'data';
   // Canonical identity for the row context. Virtualized tables always need
-  // it; otherwise a plugin consumes identity by declaring the internal
-  // `usesCanonicalRowKey` opt-in, which publishes the resolved key and its
-  // status on the row context. Tables without such a plugin keep released
-  // key behavior exactly, with no diagnostics.
+  // it; otherwise the whole-row activation claim publishes the resolved key
+  // and its status on the row context (see `wholeRowOwner`). Tables without
+  // such a claim keep released key behavior exactly, with no diagnostics.
   const canonicalIdentityOptIn = plugins.some(
-    p => p.transformBodyRow != null && p.usesCanonicalRowKey === true,
+    p => p.transformBodyRow != null && p.wholeRowOwner === 'activation',
   );
   const usesCanonicalIdentity =
     virtualization != null || canonicalIdentityOptIn;

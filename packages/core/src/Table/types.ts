@@ -502,15 +502,6 @@ export interface TablePlugin<
    */
   readonly rowModel?: TableRenderContext['rowModel'];
   /**
-   * Internal: this plugin reads the row's canonical identity from the row
-   * context. Declared explicitly instead of sniffing the transform's arity,
-   * so an unrelated four-parameter transform never opts a table in and a
-   * wrapped transform keeps working.
-   *
-   * @internal
-   */
-  readonly usesCanonicalRowKey?: boolean;
-  /**
    * The whole-row interaction this plugin owns. At most one claim per
    * table: two claims (including the same owner twice) neutralize the
    * activation claimant with a development diagnostic, whatever the plugin
