@@ -253,14 +253,6 @@
       "status": "allowed",
       "reason": "Deduplicates development warnings; a copy can at most repeat a warning once."
     },
-    "packages/core/src/Toast/useToast.tsx:fallbackContext": {
-      "status": "open",
-      "group": "F2 Toast host"
-    },
-    "packages/core/src/Toast/useToast.tsx:fallbackRoot": {
-      "status": "open",
-      "group": "F2 Toast host"
-    },
     "packages/core/src/TreeList/TreeList.tsx:clipGenerations": {
       "status": "open",
       "group": "triage"
