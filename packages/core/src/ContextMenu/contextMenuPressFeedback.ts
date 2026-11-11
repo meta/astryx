@@ -5,8 +5,9 @@
 /**
  * @file contextMenuPressFeedback.ts
  * @input UIKit's context-menu springs, the context-menu constants, the
- *   compositor animator, the presses ContextMenu's recognizer takes, and the
- *   press state core's press machine writes
+ *   compositor animator, the presses ContextMenu's recognizer takes, the
+ *   press state core's press machine writes, and the context-menu-trigger
+ *   mark (privateAttributes/contextMenuTrigger.stylex.ts)
  * @output useContextMenuPressFeedback: hold and release, from ContextMenu's
  *   menu; the growth follows the recognizer's finger, or a pen's press mark
  * @position The press feedback of ContextMenu's touch invocation
@@ -28,6 +29,10 @@
 import {useCallback, useRef, type RefObject} from 'react';
 import {useAttachment} from '../hooks/useAttachment';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {
+  closestContextMenuTrigger,
+  markContextMenuTrigger,
+} from '../privateAttributes/contextMenuTrigger.stylex';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
 import {PRESS_ONSET_MS} from '../utils/pressGesture';
 import {observeMutations} from '../utils/sharedMutationObserver';
@@ -69,11 +74,6 @@ const NO_LANDING: RefObject<() => number | null> = {current: () => null};
 /** With no recognizer to ask, every "on" is a pen's. */
 const NO_FINGER: RefObject<() => boolean> = {current: () => false};
 
-// The triggers a press mark belongs to: every mounted trigger, whether it
-// shows growth or not. A mark inside a trigger belongs to the nearest of them
-// at or above it. So a press on a nested trigger grows no outer trigger.
-const pressMarkOwners = new WeakSet<Element>();
-
 /**
  * Calls `onDue` in the first animation frame that runs at or after `dueAt`, on
  * the event clock, with the time its callback runs. `onWait` runs in each frame
@@ -98,19 +98,6 @@ function watchFramesFrom(
   return () => {
     cancelAnimationFrame(frame);
   };
-}
-
-function pressMarkOwnerOf(marked: Element): Element | null {
-  for (
-    let node: Element | null = marked;
-    node != null;
-    node = node.parentElement
-  ) {
-    if (pressMarkOwners.has(node)) {
-      return node;
-    }
-  }
-  return null;
 }
 
 /**
@@ -277,16 +264,17 @@ export function useContextMenuPressFeedback(
   useAttachment(
     triggerRef,
     element => {
-      pressMarkOwners.add(element);
+      // Every mounted trigger is marked, whether it shows growth or not. A
+      // press mark belongs to the nearest trigger at or above it, so a press
+      // on a nested trigger grows no outer trigger.
+      const unmark = markContextMenuTrigger(element);
       if (!isShown) {
-        return () => {
-          pressMarkOwners.delete(element);
-        };
+        return unmark;
       }
       const isMarkedOn = () =>
         element.getAttribute(PRESSED_ATTRIBUTE) === 'on' ||
         [...element.querySelectorAll(`[${PRESSED_ATTRIBUTE}="on"]`)].some(
-          marked => pressMarkOwnerOf(marked) === element,
+          marked => closestContextMenuTrigger(marked) === element,
         );
       let isPressed = isMarkedOn();
       let markedAt = 0;
@@ -319,7 +307,7 @@ export function useContextMenuPressFeedback(
       };
       fingerOnsetRef.current = (landed, target) => {
         // A finger on a nested trigger grows only that trigger.
-        if (target != null && pressMarkOwnerOf(target) !== element) {
+        if (target != null && closestContextMenuTrigger(target) !== element) {
           return;
         }
         startAt(landed + PRESS_ONSET_MS);
@@ -349,7 +337,7 @@ export function useContextMenuPressFeedback(
         stopOnset();
         stopObserving();
         fingerOnsetRef.current = null;
-        pressMarkOwners.delete(element);
+        unmark();
       };
     },
     isShown,

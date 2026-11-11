@@ -106,6 +106,7 @@ of a page scroll, so many of these can be read off Safari itself.
 | M-G18 | `HAPTIC_VIBRATION_PATTERNS` (every kind)        | On an Android device, compare against the platform HapticFeedbackConstants for the same moments.                                                                                                 | C      |
 | M-G19 | `UIKIT_GESTURES.press.momentumMemory`           | Safari page, hardest HID flick: time from the lift to the last scroll event.                                                                                                                     | C      |
 | M-G20 | `LongPressGestureRecognizer` taps phase         | Probe app: a UILongPressGestureRecognizer with numberOfTapsRequired 1: HID taps held 0.2, 0.5, 1, 2 s, then the press after gaps of 100 to 600 ms; record which recognize.                       | C      |
+| M-G21 | `UIKIT_MENU_PRESS.holdOpenSlop`                 | UIKit lab, a pull-down button inside a UIScrollView: HID presses moved 12.5, 13 and 13.5 pt within the content-touch delay; the largest move that still opens the menu.                          | C      |
 
 Done (UIKit lab, iOS 26.2 simulator, Oct 23 2026: the recognizers' ivars read
 in process, each confirmed with HID touches and the state log; values in
@@ -222,9 +223,8 @@ Bookmarks sheet.
 Done (UIKit lab, iOS 26.2 simulator, Oct 23–24 2026; in the segmented control's
 own table, `uikit/segmented.ts`, tagged `measured:`): M-SG02 (the selection
 spring and the drag clamp; the tracking spring is the shared
-`springs.fingerTracking`; the lift was measured too and is not in the table,
-since a pressed thumb's lift is a theme's) and M-SG03 (the tap's frames,
-fitted per frame).
+`springs.fingerTracking`; the lift's growth and spring are in the table too,
+as `liftGrowth` and `lift`) and M-SG03 (the tap's frames, fitted per frame).
 
 ## Sheets (UISheetPresentationController)
 
@@ -339,9 +339,10 @@ action (`showsMenuAsPrimaryAction`), three to twelve items, on a plain view
 and inside a UIScrollView; the gesture-state, presentation-modifier,
 display-link and feedback hooks; real HID touches.
 
-| ID    | Scene                  | Gesture                                                                                                                                                 | Extract                                                                                                                                 | Method |
-| ----- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| M-MN2 | button on a plain view | hold until the menu is open, then lift still; move 8 pt down, 8 pt right, 12 pt down, (7, 7), (8, 8) and lift; move 6 pt before the open and 6 pt after | row picked or not; handoff and list-selection recognizer states; highlighted row per frame: threshold, metric, where it is counted from | C      |
+| ID    | Scene                                                         | Gesture                                                                                                                                                 | Extract                                                                                                                                      | Method |
+| ----- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-MN1 | button on a plain view; the same button inside a UIScrollView | holds of 100, 130, 140, 150, 160, 170, 200 ms then lift; a press moved 12 and 30 pt within 80 ms                                                        | when the touch-down recognizer recognizes and the open spring starts, against touch-down; its minimum duration and allowable movement (read) | C, D   |
+| M-MN2 | button on a plain view                                        | hold until the menu is open, then lift still; move 8 pt down, 8 pt right, 12 pt down, (7, 7), (8, 8) and lift; move 6 pt before the open and 6 pt after | row picked or not; handoff and list-selection recognizer states; highlighted row per frame: threshold, metric, where it is counted from      | C      |
 
 ## Zoom media (UIScrollView zooming, Photos)
 

@@ -1548,6 +1548,95 @@ test('a slow drift past 11.5 px late in the hold cancels it: no menu and no clic
   }
 });
 
+test('a drift from before 735 ms that reaches the page behind a block still cancels the hold: no menu (AST-094 FR16)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'touches stamped and sent while the page is blocked need Chromium’s protocol',
+  );
+  // Each move's own time, and when the page got it.
+  await page.addInitScript(() => {
+    const w = window as unknown as {__moves: [number, number][]};
+    w.__moves = [];
+    window.addEventListener(
+      'pointermove',
+      event => {
+        w.__moves.push([event.timeStamp, performance.now()]);
+      },
+      {capture: true, passive: true},
+    );
+  });
+  const {center} = await openTouchStory(page);
+  const cdp = await page.context().newCDPSession(page);
+  const start = Date.now();
+  const at = async (ms: number) =>
+    new Promise(resolve => {
+      setTimeout(resolve, Math.max(0, start + ms - Date.now()));
+    });
+  const touch = async (
+    type: 'touchStart' | 'touchMove' | 'touchEnd',
+    ms: number,
+    dx: number | null,
+  ) =>
+    cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: dx == null ? [] : [{x: center.x + dx, y: center.y}],
+      timestamp: (start + ms) / 1000,
+    });
+  await touch('touchStart', 0, 0);
+  // The page is blocked from 600 ms to 850 ms, past the menu's moment. The
+  // finger crosses 11.5 px at 700 ms, so the page gets that move after the
+  // block.
+  await at(600);
+  const blocking = blockMainThread(page, 250);
+  await at(650);
+  const moves = [touch('touchMove', 650, 6)];
+  await at(700);
+  moves.push(touch('touchMove', 700, 14));
+  const blocked = await blocking;
+  await Promise.all(moves);
+  await at(1150);
+  await touch('touchEnd', 1150, null);
+  await afterTwoFrames(page);
+  const moment = (await touchStartedAt(page)) + menuDisplayMs;
+  const origin = await page.evaluate(() => performance.timeOrigin);
+  const blockEnd = blocked.to - origin;
+  expect(
+    blocked.from - origin,
+    'the block starts before the menu’s moment',
+  ).toBeLessThan(moment);
+  expect(blockEnd, 'the block ends after the menu’s moment').toBeGreaterThan(
+    moment,
+  );
+  const early = (
+    await page.evaluate(
+      () => (window as unknown as {__moves: [number, number][]}).__moves,
+    )
+  ).filter(([time]) => time < moment);
+  expect(
+    early.length,
+    'a move from before the menu’s moment reached the page',
+  ).toBeGreaterThan(0);
+  for (const [, receivedAt] of early) {
+    expect(
+      receivedAt,
+      'the move reached the page after the block',
+    ).toBeGreaterThanOrEqual(blockEnd);
+    // The press waits 50 ms for moves still queued.
+    expect(
+      receivedAt - blockEnd,
+      'the move reached the page within the press’s wait',
+    ).toBeLessThan(50);
+  }
+  expect(
+    await menuShownAt(page),
+    'the menu showed for a drift from before its moment',
+  ).toBeNull();
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
+});
+
 test('a finger still inside 11.5 px at the menu’s moment that crosses it just after still gets the menu (AST-094 FR12)', async ({
   page,
 }) => {

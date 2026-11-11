@@ -2,11 +2,13 @@
 
 /**
  * @file Programmatic API for the `icon` command (AST-084 FR6, FR7):
- * dispatcher over three leaves.
+ * dispatcher over its read leaves.
  *
  *   icon('<words>')       icon.search: icons ranked by meaning
  *   icon('<set>/<id>')    icon.detail: one icon and every variant's import
  *   icon('', {list})      icon.list: the installed sets
+ *   icon('', {definitions})  icon.definitions: every Astryx definition, its
+ *                         template count, and whether a set maps it
  *
  * Every read comes from installed icon sets' data files, through the
  * `Project` seam; nothing executes an icon module.
@@ -22,7 +24,7 @@ import {iconSearch} from './search/search.mjs';
 import {iconDetail} from './detail/detail.mjs';
 import {iconList} from './list/list.mjs';
 import {iconSetIcons} from './search/search.mjs';
-import {astryxIconDefinitions} from './_adapter.mjs';
+import {iconDefinitions} from './definitions/definitions.mjs';
 import {passed, refuseIgnoredPairs} from './_options.mjs';
 
 /** The default `limit` for `icon.search`. */
@@ -71,7 +73,6 @@ export async function icon(query, options = {}) {
       ['--list', '--limit'],
       ['--definitions', 'a query'],
       ['--definitions', '--all-icons'],
-      ['--definitions', '--set'],
       ['--definitions', '--limit'],
       ['--all-icons', 'a query'],
       ['--all-icons', '--limit'],
@@ -89,19 +90,7 @@ export async function icon(query, options = {}) {
   }
   const term = (query ?? '').trim();
   if (list) return iconList({cwd});
-  if (definitions) {
-    return {
-      type: /** @type {const} */ ('icon.definitions'),
-      data: {
-        definitions: astryxIconDefinitions().definitions.map(({doc}) => ({
-          name: doc.name,
-          builtIn: doc.builtIn === true,
-          description: doc.description,
-          words: doc.words,
-        })),
-      },
-    };
-  }
+  if (definitions) return iconDefinitions({cwd, set});
   if (allIcons) {
     if (set == null) {
       throw new AstryxError(

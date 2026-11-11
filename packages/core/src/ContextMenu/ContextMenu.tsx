@@ -38,7 +38,7 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/ContextMenu/ContextMenu.doc.mjs
  * - /packages/core/src/ContextMenu/ContextMenu.test.tsx
- * - /packages/core/src/ContextMenu/ContextMenuTouch.ts (the touch layer's one import site)
+ * - /packages/core/src/ContextMenu/ContextMenuTouchLayer.tsx (the touch layer)
  * - /packages/core/src/ContextMenu/contextMenuPress.ts (touch timeline)
  * - /packages/core/src/ContextMenu/contextMenuPressFeedback.ts (press feedback)
  * - /packages/core/src/ContextMenu/index.ts
@@ -85,7 +85,7 @@ import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useInternalListFocus} from '../hooks/useListFocus';
 import {useLongPress} from '../hooks/useLongPress';
 import {pressableProps} from '../utils/pressFeedback';
-import {useDropdownMenuPress} from '../hooks/useMenuPress';
+import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {shadowHostOf} from '../utils/flatTree';
 import {usePresentation} from '../utils/presentation';
@@ -778,7 +778,7 @@ export function ContextMenu({
     [isDisabled, openAtLocalPoint, getAnchorBaseRect],
   );
 
-  const menuPress = useDropdownMenuPress({
+  const menuPress = useMenuPress({
     menuRef: listRef,
     itemSelector: MENU_ITEM_SELECTOR,
     onDismiss: closeMenu,

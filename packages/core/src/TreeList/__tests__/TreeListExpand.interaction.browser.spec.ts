@@ -38,6 +38,7 @@ import {
   type Box,
   type CastFrame,
   type HeldAnimation,
+  watchAnimations,
 } from '@astryxdesign/interaction-harness';
 import {expectReducedMotionCrossFade} from '../../List/__tests__/reducedMotion';
 
@@ -569,31 +570,49 @@ const glideMs = async (page: Page) =>
       : Number.parseFloat(value) * 1000;
   });
 
-/** The durations of the motion a toggle starts, read on its first frame. */
-async function startedDurations(page: Page) {
-  return page.evaluate(async () => {
-    await new Promise(requestAnimationFrame);
-    const parent = document.querySelector(
-      '[role="treeitem"][data-tree-id="components"]',
-    );
-    const durationOf = (el: Element | null | undefined) =>
-      el
-        ?.getAnimations()
-        .map(animation =>
-          Number(animation.effect?.getComputedTiming().duration),
-        ) ?? [];
-    return {
-      group: durationOf(parent?.querySelector(':scope > [role="group"]')),
-      below: durationOf(
-        document.querySelector('[role="treeitem"][data-tree-id="app"]'),
-      ),
-      chevron: durationOf(
-        parent?.querySelector(
-          ':scope > :not([role="group"]) [data-tree-toggle] .astryx-icon',
+/**
+ * The property each part of the expand animates itself. A watch also reports
+ * runs inside its element, such as the group's rows' glides.
+ */
+const OWN_MOTION = {
+  group: 'opacity',
+  below: 'translate',
+  chevron: 'transform',
+} as const;
+
+/**
+ * Watches the expand's parts before a tap, so the durations of the motion it
+ * starts are read even once it has ended. Await it before the tap, and await
+ * what it returns after.
+ */
+async function watchStartedDurations(
+  page: Page,
+  names: ReadonlyArray<'group' | 'below' | 'chevron'> = [
+    'group',
+    'below',
+    'chevron',
+  ],
+) {
+  const all = parts(page);
+  const watches = await Promise.all(
+    names.map(async name => [name, await watchAnimations(all[name])] as const),
+  );
+  return async () =>
+    Object.fromEntries(
+      await Promise.all(
+        watches.map(
+          async ([name, watch]) =>
+            [
+              name,
+              (await watch.started())
+                .filter(run =>
+                  run.keyframes.some(frame => OWN_MOTION[name] in frame),
+                )
+                .map(run => run.durationMs),
+            ] as const,
         ),
       ),
-    };
-  });
+    ) as Partial<Record<'group' | 'below' | 'chevron', number[]>>;
 }
 
 test('expand under a finger: the rows below glide while the group fades in, and no frame shows a blank band', async ({
@@ -877,8 +896,9 @@ test('the rows below, the group and the chevron move on one timing: the theme’
 }) => {
   await open(page);
   const ms = await glideMs(page);
+  const durations = await watchStartedDurations(page);
   await tapToggle(page);
-  const started = await startedDurations(page);
+  const started = await durations();
   expect(started.group, JSON.stringify(started)).toContain(ms);
   expect(started.below, JSON.stringify(started)).toContain(ms);
   expect(started.chevron, JSON.stringify(started)).toContain(ms);
@@ -904,8 +924,9 @@ for (const [written, value] of [
         value,
       );
     expect(await glideMs(page)).toBe(600);
+    const durations = await watchStartedDurations(page, ['group', 'below']);
     await tapToggle(page);
-    const started = await startedDurations(page);
+    const started = await durations();
     expect(started.group, JSON.stringify(started)).toContain(600);
     expect(started.below, JSON.stringify(started)).toContain(600);
   });
@@ -982,11 +1003,10 @@ test('Android: a tap expands with the same motion (one touch model)', async ({
   test.skip(browserName !== 'chromium', 'Android is Chromium');
   await open(page);
   const {child, below} = parts(page);
+  const durations = await watchStartedDurations(page, ['below']);
   await tapToggle(page);
   await expect(child).toBeVisible();
-  expect(await below.evaluate(el => el.getAnimations().length)).toBeGreaterThan(
-    0,
-  );
+  expect((await durations()).below?.length).toBeGreaterThan(0);
   await expect.poll(async () => translateY(below)).toBe(0);
 });
 
@@ -1129,11 +1149,15 @@ test("right to left: the chevron's quarter turn mirrors", async ({page}) => {
   await tapToggle(page);
   await expect(child).toBeVisible();
   // The mirror lives in the chevron's transform: its horizontal scale is
-  // negative, while its angle turns as it does left to right.
+  // negative, while its angle turns as it does left to right. The sign of
+  // the matrix's determinant shows the mirror at every angle, at rest too.
   expect(
-    await chevron.evaluate(el =>
-      Number(/matrix\(([^,]+)/.exec(getComputedStyle(el).transform)?.[1]),
-    ),
+    await chevron.evaluate(el => {
+      const {a, b, c, d} = new DOMMatrixReadOnly(
+        getComputedStyle(el).transform,
+      );
+      return a * d - b * c;
+    }),
   ).toBeLessThan(0);
   await expect.poll(async () => rotation(chevron)).toBeCloseTo(90, 1);
 });
@@ -1238,6 +1262,19 @@ test('the rows below keep moving on every frame while the main thread is blocked
     {[`${testInfo.project.name}.json`]: JSON.stringify(proof, null, 1)},
     testInfo,
   );
+  // The frames the compositor presented in the judged part. A machine that
+  // starves the compositor of frames fails here by name, not on the stall
+  // bound below.
+  requireFrames(
+    (presented.length > 0 ? presented : tracked.map(frame => frame.t)).map(
+      t => ({t}),
+    ),
+    {
+      min: 8,
+      during: 'the block, in its judged part',
+      where: ({t}) => t >= proof.judged.from && t <= proof.judged.to,
+    },
+  );
   // Frames kept coming through the block, each one further down.
   expect(proof.changed, JSON.stringify(proof)).toBeGreaterThanOrEqual(3);
   expect(proof.monotonic, JSON.stringify(proof)).toBe(true);
@@ -1250,6 +1287,13 @@ test(
   async ({page}, testInfo) => {
     await open(page);
     const ms = await glideMs(page);
+    // The page holds the expand as it starts: a hold sent after the tap can
+    // come too late on a busy machine. It waits for three motions: the
+    // group's fade, the rows below and the chevron.
+    const hold = await armHold(page, page.locator('[role="tree"]'), {
+      count: 3,
+      judges: {target: parts(page).below, property: 'translate'},
+    });
     await tapToggle(page);
     const {storyboard} = await animationStoryboard(page, {
       name: 'tree-list-expand',
@@ -1257,7 +1301,7 @@ test(
       times: [0, 1, 2, 3, 4, 5, 6, 7].map(k => Math.round((k * ms) / 7)),
       columns: 8,
       cellScale: 0.45,
-      judges: {target: parts(page).below, property: 'translate'},
+      held: await hold.held(),
     });
     await releaseAnimations(page, {finish: true});
     await storyboard.write(testInfo);

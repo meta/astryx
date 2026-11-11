@@ -45,6 +45,7 @@ import {
   withStorybook,
   writeEvidence,
 } from '@astryxdesign/interaction-harness';
+import {UIKIT_TAP} from '../../motion/uikit/gestures';
 import {slowViewer} from './viewerTempo';
 
 const storybook = withStorybook(test);
@@ -177,6 +178,12 @@ function doubleTap(at: {x: number; y: number}): TouchScript {
   ];
 }
 
+// A double tap whose second touch reaches the page past UIKit's interval
+// between taps is two taps there: the play fails by name.
+const DOUBLE_TAP = {
+  boundaries: {tapIntervalMs: UIKIT_TAP.maximumIntervalBetweenTaps.value},
+};
+
 /** A slow drag by dx, held still before the lift (no release velocity). */
 function slowDrag(from: {x: number; y: number}, dx: number): TouchScript {
   return drag(
@@ -247,7 +254,7 @@ test('a zoomed photo keeps the drag until its edge; the next drag from the edge 
   const g = await openGallery(page);
   const centre = {x: g.box.x + g.box.width / 2, y: g.box.y + g.box.height / 2};
   const current = g.viewport.locator('[data-current] img');
-  await g.driver.play(doubleTap(centre));
+  await g.driver.play(doubleTap(centre), DOUBLE_TAP);
   await waitForAnimation(current);
   await waitForRest(current);
   const zoomed = await g.photo();
@@ -1139,6 +1146,7 @@ test("two pages on, a rotation keeps a zoomed photo's centre point", async ({
       x: fitted.x + fitted.width * 0.4,
       y: fitted.y + fitted.height / 2,
     }),
+    DOUBLE_TAP,
   );
   await waitForAnimation(img);
   await waitForRest(img);
