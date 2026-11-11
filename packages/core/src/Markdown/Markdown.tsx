@@ -56,6 +56,7 @@ import {Citation} from '../Citation/Citation';
 import type {CitationSource} from '../Citation/Citation';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
+import {RunningTextContext} from '../Text/runningTextContext';
 import {
   parseInlineAst,
   parseMarkdownAst,
@@ -1137,22 +1138,27 @@ function renderInline(
       }
       const LinkComp = components?.link;
       if (LinkComp) {
+        // Every Markdown link sits in running text, and the default link is
+        // underlined everywhere. The context gives a caller's Link the same
+        // resting underline.
         return (
-          <LinkComp key={index} href={safeHref}>
-            {node.children.map((c, i) =>
-              renderInline(
-                c,
-                i,
-                onLinkClick,
-                cursor,
-                citationCtx,
-                linkComponent,
-                inlinePlugins,
-                components,
-                preparedPlugins,
-              ),
-            )}
-          </LinkComp>
+          <RunningTextContext key={index} value={true}>
+            <LinkComp href={safeHref}>
+              {node.children.map((c, i) =>
+                renderInline(
+                  c,
+                  i,
+                  onLinkClick,
+                  cursor,
+                  citationCtx,
+                  linkComponent,
+                  inlinePlugins,
+                  components,
+                  preparedPlugins,
+                ),
+              )}
+            </LinkComp>
+          </RunningTextContext>
         );
       }
       const isExternal =
