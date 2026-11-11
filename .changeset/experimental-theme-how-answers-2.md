@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor how`: questions read the way people write them.
+[experimental] `astryx experimental theme editor how`: questions read the way people write them. (#11209)
 
 - Negation and "too" read the right way round: "shouldn't", "turn off", "never", "stop", "unbold", "too sharp" (rounder) and "too heavy" (lighter). "Everything except X", "but not in X" and "all but X" keep X as it is now. "Without" is read in the shipped languages, and "sans" means a typeface only before serif or font.
 - A typed value always wins. A hex beats a color word. A hex with the wrong number of digits is refused by name and never replaced with a sample. The sign, multi-value padding, `%` opacity, `em` tracking, numeric weights, written-out shadows and "40px tall" are kept. No color is picked when the question gives none.

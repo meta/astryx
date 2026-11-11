@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: colors are generated the way the official themes are.
+[experimental] `astryx experimental theme editor`: colors are generated the way the official themes are. (#11209)
 
 - An exact color you give stays exactly as given. In light it never moves: when no text reads on it, the text changes, and a pale fill that does not stand out from the page is reported. In dark it is kept too when text on it reads at 4.5:1 and it stands out from the dark page at 3:1, so the dark shades around it follow it; otherwise dark mode starts at shade 70, as the official themes do, and the result says why. A dark side never uses a light shade.
 - `set <theme> neutral <color>`: your exact color sits at its own shade in light and dark, and the shades around it follow it.

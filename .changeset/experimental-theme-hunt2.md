@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: settings that do what they say.
+[experimental] `astryx experimental theme editor`: settings that do what they say. (#11222)
 
 - An exact token or part property always wins over a dial, whatever the order. A changed setting moves last, so it wins over what came before it. A shorthand set after its longhands says it replaces them. A setting for both modes replaces the one-mode settings it would sit under.
 - One mode on a part whose variants each have their own value is refused, with the command that names the variant. A setting saved for a mode a one-mode theme does not have can still be removed. A base theme package that is gone no longer blocks moving off it.

@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme preview`: safer refusals and recovery.
+[experimental] `astryx experimental theme preview`: safer refusals and recovery. (#11209)
 
 - No refusal suggests deleting or moving files: a damaged theme-preview.json, a page changed by hand, or a file in the way gets plain instructions instead.
 - `--path` at the project root, in `src/` or at the routes folder itself is refused: those folders hold the app. An older preview found there is named, with the remove that clears it.

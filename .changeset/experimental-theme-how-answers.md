@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor how`: answers that are safe, bounded and right.
+[experimental] `astryx experimental theme editor how`: answers that are safe, bounded and right. (#11209)
 
 - Every command `how` suggests names your theme (the only one, the one changed last, or `--theme <name>`; with no theme, `my-theme`, made first), has a real value instead of a `<placeholder>`, carries no shell comment, and is checked as `set` checks it: a command that `set` would refuse, or that changes nothing, is left out, and the answer says why.
 - Plain-words questions read negations and more or less ("remove shadows from cards" gives `box-shadow none`, "less rounded cards" gives `corners less`), the values you type (hex, rgb(), lengths, dashed), states (hover, focus, checked, selected, disabled, pressed, invalid), dark or light mode, several changes in one question, a few words in other languages, and small typos. A question with no answer says so in JSON too, with the next commands to try.

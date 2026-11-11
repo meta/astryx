@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme`: fixes from a full review.
+[experimental] `astryx experimental theme`: fixes from a full review. (#11173)
 
 - `preview app --theme` copies the whole theme folder, generated colors included, byte for byte, so the new app type-checks.
 - `preview app <dir>` writes only into a new or empty folder (its `--overwrite` option is gone): a folder that is not empty is refused, with a free folder name to use.

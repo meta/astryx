@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] `CommandPalette`: refresh results when its `searchSource` changes while it is open.
+[fix] `CommandPalette`: refresh results when its `searchSource` changes while it is open. (#9679)
 
 @whispering3

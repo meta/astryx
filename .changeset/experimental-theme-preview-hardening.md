@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme preview`: safer adds, removes and starter apps.
+[experimental] `astryx experimental theme preview`: safer adds, removes and starter apps. (#11209)
 
 - Preview pages go in `_pages/`, a folder Next never routes, so a preview at the project root or in `src/` no longer turns on the Pages Router. A preview an older release wrote into `pages/` is moved on the next add or remove.
 - A refusal deletes nothing: `remove <page>` loads the theme before it deletes a file, and names the whole-preview remove when the theme does not load. A theme that is gone is replaced by the app's own theme, with a note.

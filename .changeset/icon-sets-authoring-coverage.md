@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] Icon sets: authoring a set is easier. An author sees which icon meanings the bundled templates use that the set does not map yet, such as `document` and `share`; a copied template shows a placeholder for each. Only the experimental icon commands, the icon-set lists in `integration check` and Doctor, two icon definitions' search words, and the icon-set guide change.
+[experimental] Icon sets: authoring a set is easier. An author sees which icon meanings the bundled templates use that the set does not map yet, such as `document` and `share`; a copied template shows a placeholder for each. Only the experimental icon commands, the icon-set lists in `integration check` and Doctor, two icon definitions' search words, and the icon-set guide change. (#11090)
 
 - **Authoring receipts.** `experimental icon new-set`, `add`, and `map` end with one line when the set leaves template meanings unmapped: how many there are, the most used first with their template counts, and the `map` command to run. The JSON adds `templateMeanings: {unmapped: [{definition, templates}]}`. A dry run adds nothing.
 - **`experimental icon --definitions`.** Each definition shows how many bundled templates use it (`templates`) and whether the set maps it (`mapped`). The set is the one `--set` names, else the project's main set, else the only set of the icon-set package you run it in. `--set` is now accepted with `--definitions`.

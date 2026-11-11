@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme`: make and change a theme one checked change at a time (`editor`), and preview it on real pages in your app (`preview`). Only the new experimental command group changes; `astryx theme` and its output stay as they were.
+[experimental] `astryx experimental theme`: make and change a theme one checked change at a time (`editor`), and preview it on real pages in your app (`preview`). Only the new experimental command group changes; `astryx theme` and its output stay as they were. (#11101)
 
 - **Checked changes.** `editor set <theme> <thing> <value>` takes a dial (corners, spacing, accent, neutral, success, warning, danger, info, font, headings, surfaces, buttons, type, text-size, base, mode), a design token, or a CSS property on a part, with `--on <part|family>`, `--when <prop>:<value>`, `--state`, `--mode light|dark` and `--only`. Each change is checked against what the installed Core's parts really read and against the token's type. A change that cannot take effect is refused (exit 1, an `ERR_THEME_*` code, nothing written), and the error leads with the command that works.
 - **What parts read.** It is derived from the installed Core itself, version for version: a catalog of every component renders on the server with the project's own React, joined to Core's stylesheet. The result is cached under `node_modules/.cache/astryx-theme/`. No new dependency.
