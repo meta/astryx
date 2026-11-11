@@ -44,6 +44,7 @@ import {useClipboard, useMediaQuery} from '@astryxdesign/core/hooks';
 import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {Selector} from '@astryxdesign/core/Selector';
+import {Breadcrumbs, BreadcrumbItem} from '@astryxdesign/core/Breadcrumbs';
 import {Carousel} from '@astryxdesign/core/Carousel';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {
@@ -53,6 +54,7 @@ import {
   BarsArrowUpIcon,
   ChartBarIcon,
   CheckIcon,
+  ChevronRightIcon,
   ClockIcon,
   CommandLineIcon,
   HandThumbUpIcon,
@@ -102,9 +104,6 @@ import {
 // ClockIcon is bound above; alias the same glyph for the design's
 // Clock01Icon without rebinding the existing name.
 import {ClockIcon as Clock01Icon} from '@heroicons/react/24/outline';
-import {Section} from '@astryxdesign/core/Layout';
-import {Heading} from '@astryxdesign/core/Text';
-import {Badge} from '@astryxdesign/core/Badge';
 
 /**
  * Icon data shape the template stores in its tables: an SVG component with
@@ -144,6 +143,14 @@ function HugeIcon({
 }
 
 // ─── Geometry steps (documented token gap; see the header note) ─────────
+// The rail the design sets at lg (22rem) and xl (26rem); the gap between
+// the columns steps with it (gap-x-12 → gap-x-16).
+const RAIL_LG = 352;
+const RAIL_XL = 416;
+const stickyTop = 80; // lg:top-20
+// The design's block rhythm: mt-14/pt-14 below lg, mt-16/pt-16 from it.
+const RHYTHM_LG = 56;
+const RHYTHM_XL = 64;
 const headlineStyle: CSSProperties = {
   fontSize: 40,
   fontWeight: 525,
@@ -151,6 +158,11 @@ const headlineStyle: CSSProperties = {
   lineHeight: 1.15,
   width: '100%',
   textAlign: 'center',
+};
+const h2Style: CSSProperties = {
+  fontSize: 24,
+  fontWeight: 525,
+  letterSpacing: '-0.025em',
 };
 /** The design's heading ladder, at its three steps: 30px, 36 from sm,
  *  48 from lg, tightened for its face, max-w-xl widening to max-w-3xl at lg
@@ -279,6 +291,54 @@ const hoverStyles = `
 .cr7-cols2{display:grid;grid-template-columns:minmax(0,1fr);gap:40px;}
 @media(min-width:640px){.cr7-cols2{grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;}}
 @media(min-width:1024px) and (max-width:1279px){.cr7-cols2{grid-template-columns:minmax(0,1fr);gap:40px;}}
+.cr7-faqq{font-family:var(--font-family-heading);font-weight:525;letter-spacing:-0.05em;line-height:1.15;font-size:20px;color:var(--color-text-primary);}
+@media(min-width:640px){.cr7-faqq{font-size:24px;}}
+@media(min-width:1024px){.cr7-faqq{font-size:30px;}}
+.cr7-faqa{max-width:560px;padding:0 16px 32px 16px;font-size:16px;color:var(--color-text-primary);}
+@media(min-width:640px){.cr7-faqa{padding:0 24px 40px;}}
+/* The FAQ section head: the eyebrow and heading over the foot line, beside
+   it from lg. */
+.cr7-faqhead{display:flex;flex-direction:column;gap:24px;}
+@media(min-width:1024px){.cr7-faqhead{flex-direction:row;align-items:flex-end;justify-content:space-between;gap:64px;}}
+/* ── Polish ──────────────────────────────────────────────────────────────
+   The closing band's doors and hand (closing band): two 40px doors —
+   the primary told apart by its fill, the other raised in white with a
+   soft shadow; the sparks in ink on the copy half. */
+
+@media(min-width:640px){}
+
+/* the sparks: the large one over the heading's top-left, the small one in
+   the strip between the risk line and the photograph */
+
+@media(min-width:640px){}
+@media(min-width:1024px){}
+/* the squiggle over the photograph's edge from xl, the sprout off its top
+   corner from lg — the hand's two wide-screen strokes */
+
+@media(min-width:1024px){}
+@media(min-width:1280px){
+
+}
+/* the photograph: the design's own crop ladder — the desk held in from
+   the left edge on a phone, the chair's floor kept from sm */
+
+@media(min-width:640px){}
+@media(min-width:1024px){}
+/* the footer's cells: horizontal rules between them below lg, full-height
+   rules and the 1.15/1/1/1.25 columns from it — the design's own cut.
+   (Polish: the paddings were written camelCase — paddingInline and kin —
+   which a stylesheet parses as unknown properties and drops, so every text
+   sat hard on its rule. Kebab, as CSS spells them.) */
+
+@media(min-width:1024px){
+
+}
+
+/* the newsletter's inline field: card ground, hairline ring that darkens
+   under the pointer, a 36px round submit in the brand fill */
+
+@media(min-width:640px){}
+
 .cr7-card{position:relative;display:flex;flex-direction:column;height:100%;border-radius:var(--radius-container);background:var(--color-background-card);box-shadow:var(--shadow-low);padding:8px;transition:box-shadow 200ms cubic-bezier(0,0,0.2,1);}
 .cr7-card:hover{box-shadow:var(--shadow-med);}
 .cr7-cardlink{position:absolute;inset:0;z-index:1;border-radius:inherit;background:transparent;border:none;padding:0;cursor:pointer;}
@@ -410,8 +470,20 @@ const hoverStyles = `
    design's max-[359px]:sr-only) */
 .cr12-un360{font-size:0;}
 @media(min-width:360px){.cr12-un360{font-size:inherit;}}
+/* ── Polish ───────────────────────────────────────────────────────────────
+   The design's motion, brought over whole. Tailwind runs every hover it
+   never sizes on its default curve — 150ms on cubic-bezier(0.4,0,0.2,1) —
+   and sizes every lift on ease-out — cubic-bezier(0,0,0.2,1) at the
+   duration the element names. The cr* rules ride
+   var(--duration-fast)/var(--ease-standard), so retargeting those two
+   tokens on the page's root converts all forty-odd of them at once; the
+   rules that name their own timing (the photographs, the poster, the
+   player's disc, the disclosures, the FAQ) were rewritten above on the
+   design's own values. */
+.cr13-root{--duration-fast:150ms;--ease-standard:cubic-bezier(0.4,0,0.2,1);}
 /* the design's globals.css: anchors glide for a reader who did not ask
    for stillness */
+@media(prefers-reduced-motion:no-preference){html:has(.cr13-root){scroll-behavior:smooth;}}
 
 /* The player's sheet (the dialog): the design's popover layer rises — 40px
    from the screen's foot on a phone, 12px from sm — over 300ms on
@@ -482,6 +554,7 @@ dialog.cr12-sheet::backdrop{
    bar steps in, and the zooms the design gates behind motion-safe
    never move at all. */
 @media(prefers-reduced-motion:reduce){
+  .cr13-root,.cr13-root *,.cr13-root *::before,.cr13-root *::after,
   dialog.cr12-sheet,dialog.cr12-sheet::backdrop,
   [popover].cr7-pop,[popover].cr7-pop *,[popover].cr7-pop *::before,[popover].cr7-pop *::after,
   .cr13-reachbar,.cr13-reachcta{
@@ -489,120 +562,13 @@ dialog.cr12-sheet::backdrop{
     animation-iteration-count:1 !important;
     transition-duration:0.01ms !important;
   }
+  html:has(.cr13-root){scroll-behavior:auto !important;}
   .cr7-card:hover .cr7-photo,
   .cr6-row:hover .cr6-photo,
   .cr9-poster:hover .cr9-poster-art,
   .cr9-poster:hover .cr9-poster-disc{transform:none;}
 }
 `;
-
-// ─── The merged base page's sections, until their rewrites land ────────
-
-const stickyRail: CSSProperties = {
-  position: 'sticky',
-  top: 'var(--spacing-8)',
-  alignSelf: 'start',
-};
-
-const BASE_COURSE = {
-  title: 'Applied AI: Build with Language Models',
-  level: 'Intermediate',
-  language: 'English',
-  rating: 4.8,
-  ratingCount: 1284,
-  learnerCount: '12,840',
-  lessonCount: 13,
-  runtime: '4h 07m',
-  price: 89,
-  compareAt: 129,
-  about:
-    'Most courses show you what a model can do. This one makes you build the three features every product team is asked for — retrieval that answers the right question, output you can hand to other code, and an evaluation harness that catches regressions before your users do. Every module ends in something that runs; the reviewed project is a working extraction pipeline you can adapt.',
-  skills: [
-    'Retrieval-augmented generation',
-    'Structured output',
-    'Evaluation harnesses',
-    'Prompt design',
-    'Vector search',
-  ],
-};
-
-const FAQS = [
-  {
-    q: 'Do I need production access to a language model?',
-    a: 'No. Every exercise runs on a free-tier API key, and the project review accepts either the free tier or a local model. The course states where results differ between them.',
-  },
-  {
-    q: 'How long do I have access?',
-    a: 'Access is lifetime, including every future revision of the lessons. When the tooling shifts — and it will — the affected lessons are re-recorded rather than patched with errata.',
-  },
-  {
-    q: 'What if the course is not right for me?',
-    a: 'Every purchase carries a 30-day money-back guarantee, no questions and no forms beyond one click. Certificates already issued are yours to keep.',
-  },
-  {
-    q: 'Is there a certificate?',
-    a: 'Yes — a graded certificate issued when the reviewed project passes. It lists the pipeline you built, not just attendance.',
-  },
-];
-
-function SectionHeader({title, action}: {title: string; action?: ReactNode}) {
-  return (
-    <HStack gap={2} vAlign="center" hAlign="between" wrap="wrap">
-      <Heading level={2}>{title}</Heading>
-      {action}
-    </HStack>
-  );
-}
-
-// ─── Course head: title, poster, facts ──────────────────────────────────────
-
-function AboutSection() {
-  return (
-    <Section padding={6}>
-      <VStack gap={4}>
-        <SectionHeader title="About this course" />
-        <Text type="body">{BASE_COURSE.about}</Text>
-        <VStack gap={2}>
-          <Text type="label">Skills you practice</Text>
-          <HStack gap={2} wrap="wrap">
-            {BASE_COURSE.skills.map(skill => (
-              <Badge key={skill} label={skill} />
-            ))}
-          </HStack>
-        </VStack>
-      </VStack>
-    </Section>
-  );
-}
-
-// ─── Syllabus ────────────────────────────────────────────────────────────────
-
-function FaqSection() {
-  return (
-    <Section padding={6}>
-      <VStack gap={4}>
-        <SectionHeader title="Common questions" />
-        <CollapsibleGroup type="multiple">
-          {FAQS.map(faq => (
-            <Collapsible
-              key={faq.q}
-              value={faq.q}
-              defaultIsOpen={false}
-              trigger={
-                <Text type="large" weight="bold">
-                  {faq.q}
-                </Text>
-              }>
-              <Text type="body">{faq.a}</Text>
-            </Collapsible>
-          ))}
-        </CollapsibleGroup>
-      </VStack>
-    </Section>
-  );
-}
-
-// ─── Enroll rail ─────────────────────────────────────────────────────────────
 
 // ─── Hook: below 768px the page switches to its phone composition ───────────
 // Core's useMediaQuery shares one listener per query across the page and
@@ -916,6 +882,41 @@ const COURSE = {
       helpful: 38,
       finished: true,
       text: 'I started without knowing what a CSV was. Maya never assumed I knew anything, never made me feel slow for asking, and answered every question I posted, even the ones I was embarrassed to ask. By week six I was using what I learned at work, and my manager has since moved me onto the reporting team, where I build the weekly figures for every ward.',
+    },
+  ],
+  // The questions people ask before they enrol, as the design's
+  // course-page copy keeps them: a group a piece, the answers worked out
+  // from the course they sit under.
+  faqs: [
+    {
+      group: 'Before',
+      q: 'Do I need to know anything before I start?',
+      a: 'Enough of the basics to follow along without stopping to look things up. Lesson one is free, so open that first: if its practice set feels routine to you, you are ready for the rest of the course.',
+    },
+    {
+      group: 'Time',
+      q: 'What if I cannot give it 6 hours a week?',
+      a: 'Nothing expires. 6 weeks at 6 hours a week is the pace the course was planned at, and at 4 hours it takes 9 weeks. The panel above works out a finish date for whatever pace you give it.',
+    },
+    {
+      group: 'Time',
+      q: 'What does a cohort add?',
+      a: 'A start date, a finish date and a live review of the week’s work every Thursday, with the same 30 people from the first week to the last. The lessons and the tutor are the ones the self-paced track gets.',
+    },
+    {
+      group: 'After',
+      q: 'What do I get when I finish?',
+      a: 'A certificate from the school that made the course, and the project the instructor’s team reviewed. Each comes with a link that anyone, an employer included, can open and check in a few seconds.',
+    },
+    {
+      group: 'Money',
+      q: 'Can I get my money back?',
+      a: 'Yes, within 30 days of enrolling, from your account page and with no form to fill in or reason to give. Lesson one is free with the tutor, so most people know the course suits them before they pay.',
+    },
+    {
+      group: 'Money',
+      q: 'Is it cheaper on Plus?',
+      a: 'Plus is $12 a month and opens this course along with every other. At $89 this one costs about 7 months of it, so buy it on its own if it is the only course you mean to take this year.',
     },
   ],
   // Where to go after this one: the same subject first, then the skills it
@@ -1734,6 +1735,38 @@ function Caps({
       style={{textTransform: 'uppercase', letterSpacing: '0.08em', ...style}}>
       {children}
     </Text>
+  );
+}
+
+/** The line over a section heading (the design's caps label): the capitals
+ *  in a chip of the brand's tint, with a dot of its dark ink. */
+function CapsLabel({children}: {children: React.ReactNode}) {
+  return (
+    <p style={{display: 'flex', margin: 0}}>
+      <span
+        style={{
+          display: 'inline-flex',
+          height: 28,
+          alignItems: 'center',
+          gap: 8,
+          borderRadius: 'var(--radius-element)',
+          background: 'var(--color-accent-muted)',
+          paddingInlineStart: 10,
+          paddingInlineEnd: 12,
+        }}>
+        <span
+          aria-hidden="true"
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: 999,
+            background: 'var(--color-text-accent)',
+            flexShrink: 0,
+          }}
+        />
+        <Caps>{children}</Caps>
+      </span>
+    </p>
   );
 }
 
@@ -4469,44 +4502,382 @@ function ReachBar() {
   );
 }
 
-// ─── Closing CTA band (the design's closing band) ─────────────────────
-
-export default function CourseDetailTemplate() {
+// ─── FAQ (the design's FaqStepRows) ──────────────────────────────────────
+/** The questions people ask before they enrol: rows a whole container
+ *  wide — the group label in caps, the question in the heading face, the
+ *  arrow disc that turns down — and the open row a slab of the brand's
+ *  tint, its answer indented under the question. The first row opens with
+ *  the page (a stack of closed rows reads as a list rather than as
+ *  something that opens). */
+function FaqStepRows() {
+  const items = COURSE.faqs;
+  // The design's heading ladder steps: 36 from sm, 48 from lg.
+  const sm = !useIsMobile(639);
+  const lg = !useIsMobile(1023);
   return (
-    <PreviewProvider>
-      <Layout
-        height="fill"
-        contentWidth={1200}
-        content={
-          <LayoutContent padding={6}>
-            <style>{hoverStyles}</style>
-            <EnrollmentProvider>
-              <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={6}>
-                <VStack gap={4}>
-                  <HeadBlock />
-                  <Poster />
-                  <DetailsBlock />
-                  <AboutSection />
-                  <SectionHeader title="Syllabus" />
-                  <Syllabus />
-                  <SectionHeader title="What the price covers" />
-                  <Covers />
-                  <SectionHeader title="Your instructor" />
-                  <Instructor />
-                  <SectionHeader title="Reviews" />
-                  <Reviews />
-                  <FaqSection />
+    <section style={{width: '100%'}} aria-labelledby="faq-heading">
+      <div className="cr7-faqhead">
+        <div>
+          <CapsLabel>Enrolling</CapsLabel>
+          <Text
+            as="h2"
+            id="faq-heading"
+            style={{...sectionHeadingStyle(sm, lg), marginTop: 20}}>
+            What people ask before they enroll
+          </Text>
+        </div>
+        <p
+          style={{
+            margin: 0,
+            maxWidth: 448,
+            fontSize: 16,
+            color: 'var(--color-text-secondary)',
+          }}>
+          A person answers anything this list does not.{' '}
+          <span style={{color: 'inherit'}}>Ask us</span>.
+        </p>
+      </div>
+
+      <div style={{marginTop: 56, width: '100%'}}>
+        <CollapsibleGroup type="single" defaultValue={items[0].q}>
+          {items.map((f, i) => (
+            <Collapsible
+              key={f.q}
+              value={f.q}
+              trigger={
+                <span style={{display: 'block', minWidth: 0}}>
+                  <span style={{display: 'block'}}>
+                    <Caps style={{fontVariantNumeric: 'tabular-nums'}}>
+                      {String(i + 1).padStart(2, '0')} · {f.group}
+                    </Caps>
+                  </span>
+                  <span
+                    className="cr7-faqq"
+                    style={{display: 'block', marginTop: 4}}>
+                    {f.q}
+                  </span>
+                </span>
+              }>
+              <p className="cr7-faqa" style={{margin: 0}}>
+                {f.a}
+              </p>
+            </Collapsible>
+          ))}
+        </CollapsibleGroup>
+      </div>
+    </section>
+  );
+}
+
+// ─── Block: a long-read part with its heading and hairline ──────────────────
+/** The design's own rhythm (the page shell): the first part of the
+ *  long read carries no top margin below lg (the grid's gap-10 parts it
+ *  from the panel above) and mt-16 from lg; every other part, mt-14/pt-14
+ *  below lg stepping to mt-16/pt-16 from it. The margins live on the parts
+ *  themselves, so no parent gap rides on top of them. */
+function Block({
+  id,
+  title,
+  first,
+  narrow,
+  rhythm,
+  children,
+}: {
+  id?: string;
+  title: ReactNode;
+  first?: boolean;
+  /** Below lg — the one-column composition. */
+  narrow?: boolean;
+  /** The rhythm in force: 56 below lg, 64 from it. */
+  rhythm: number;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      id={id}
+      style={{
+        marginTop: first ? (narrow ? 0 : rhythm) : rhythm,
+        ...(first
+          ? {}
+          : {borderTop: '1px solid var(--color-border)', paddingTop: rhythm}),
+      }}>
+      <Text
+        type="display-2"
+        as="h2"
+        style={{...h2Style, marginBottom: 24, display: 'block'}}>
+        {title}
+      </Text>
+      {children}
+    </section>
+  );
+}
+
+// ─── Main page ───────────────────────────────────────────────────────────────
+export default function CourseDetailTemplate() {
+  // The design's own composition steps: its container padding (px-6 →
+  // sm:px-8), its section rhythm (gap-32 → sm:gap-40), and the one that
+  // matters most — the two-column grid forms at lg (1024), not at a phone
+  // width. Below lg the page is one column in reading order: the title
+  // centered over the full-width poster, the facts, the panel, then the long
+  // read — which is why the design's title never stands far from its
+  // preview and its poster is never squeezed into half a screen.
+  const isTiny = useIsMobile(639); // below sm
+  const isNarrow = useIsMobile(1023); // below lg — one column
+  const isXl = !useIsMobile(1279); // xl and up — the wider rail
+  const railWidth = isXl ? RAIL_XL : RAIL_LG;
+  const heroGap = isXl ? 64 : 48; // xl:gap-x-16 / lg:gap-x-12
+  const rhythm = isNarrow ? RHYTHM_LG : RHYTHM_XL; // mt-14|pt-14 → mt-16|pt-16
+
+  // The long read, shared by both compositions. The blocks carry their own
+  // margins (the design's mt-14/pt-14 stepping to mt-16/pt-16 at lg), so
+  // no parent gap is added on top of them.
+  const aboutBlock = (
+    <Block title="About this course" first narrow={isNarrow} rhythm={rhythm}>
+      <VStack gap={6}>
+        <Text type="body" style={{width: '100%', maxWidth: 576}}>
+          Most courses show you what a model can do. This one makes you build
+          the three features every product team is asked for — retrieval that
+          answers the right question, output you can hand to other code, and an
+          evaluation harness that catches regressions before your users do.
+          Every module ends in something that runs; the reviewed project is a
+          working extraction pipeline you can adapt.
+        </Text>
+        <Caps>Skills you practice</Caps>
+        <HStack gap={2} wrap="wrap">
+          {COURSE.skills.map(s => (
+            <button
+              key={s}
+              type="button"
+              style={{
+                display: 'flex',
+                height: 40,
+                alignItems: 'center',
+                borderRadius: 'var(--radius-element)',
+                background: 'var(--color-background-card)',
+                paddingInline: 16,
+                fontSize: 14,
+                boxShadow: 'var(--shadow-low)',
+                border: 'none',
+                cursor: 'pointer',
+                transition:
+                  'box-shadow var(--duration-fast) var(--ease-standard)',
+              }}>
+              {s}
+            </button>
+          ))}
+        </HStack>
+      </VStack>
+    </Block>
+  );
+  const syllabusBlock = (
+    <Block title="Syllabus" narrow={isNarrow} rhythm={rhythm}>
+      <Syllabus />
+    </Block>
+  );
+  const coversBlock = (
+    <Block title="What the price covers" narrow={isNarrow} rhythm={rhythm}>
+      <Covers />
+    </Block>
+  );
+  const instructorBlock = (
+    <section
+      id="instructor"
+      style={{
+        marginTop: rhythm,
+        borderTop: '1px solid var(--color-border)',
+        paddingTop: rhythm,
+      }}>
+      <Text
+        type="display-2"
+        as="h2"
+        style={{...h2Style, marginBottom: 24, display: 'block'}}>
+        Your instructor
+      </Text>
+      <Instructor />
+    </section>
+  );
+
+  // One column, in the design's own reading order (the page shell:
+  // max-lg:order-1…5): head, poster, details, panel, long read, every part
+  // parted by the grid's gap-10 (40px).
+  const mobileBody = (
+    <VStack gap={0} style={{gap: 40}}>
+      <HeadBlock />
+      <Poster />
+      <DetailsBlock />
+      <EnrollPanel />
+      <VStack gap={0} style={{gap: 0}}>
+        {aboutBlock}
+        {syllabusBlock}
+        {coversBlock}
+        {instructorBlock}
+      </VStack>
+    </VStack>
+  );
+
+  // From lg: the title's column on the right, the poster and the long read
+  // down the left — the rail at the design's lg (22rem) and xl (26rem)
+  // widths — and ONLY the panel sticks at lg:top-20 inside the rail, which
+  // stretches to the long read's height, so the head and the facts scroll
+  // away and the price card rides down beside the syllabus, exactly as the
+  // design holds it.
+  const desktopBody = (
+    <HStack
+      vAlign="stretch"
+      gap={4}
+      style={{gap: heroGap, alignItems: 'stretch'}}>
+      <StackItem size="fill">
+        <VStack gap={0} style={{gap: 0}}>
+          <Poster />
+          {aboutBlock}
+          {syllabusBlock}
+          {coversBlock}
+          {instructorBlock}
+        </VStack>
+      </StackItem>
+      <VStack gap={0} style={{width: railWidth, flexShrink: 0, gap: 0}}>
+        <HeadBlock />
+        <VStack
+          gap={5}
+          style={{
+            marginTop: 40,
+            borderTop: '1px solid var(--color-border)',
+            paddingTop: 40,
+            width: '100%',
+          }}>
+          <DetailsBlock />
+        </VStack>
+        {/* #2613: no sticky prop on Astryx layout primitives — the panel's
+            slot style. The design's mt-12 (48px) clears the fold. */}
+        <VStack
+          gap={5}
+          style={{
+            position: 'sticky',
+            top: stickyTop,
+            marginTop: 48,
+            width: '100%',
+          }}>
+          <EnrollPanel />
+        </VStack>
+      </VStack>
+    </HStack>
+  );
+
+  const reviewsHeadingRow = (
+    <span style={{display: 'flex', alignItems: 'center', gap: 10}}>
+      {/* the star held against the figure it belongs to, 2px off it as on
+          the teacher's card */}
+      <VisuallyHidden>Reviews, rated </VisuallyHidden>
+      <StarFig value={COURSE.rating} size={24} bold />
+      <span aria-hidden="true">·</span>
+      <span style={{fontVariantNumeric: 'tabular-nums'}}>
+        {figure(COURSE.reviewCount)} reviews
+      </span>
+    </span>
+  );
+
+  return (
+    // cr13-root carries the page's motion tokens (display:contents keeps
+    // the wrapper out of the layout entirely) and answers the
+    // html:has(.cr13-root) smooth-anchor rule; the player's dialog renders
+    // inside it, so its buttons inherit the tokens too.
+    <div className="cr13-root" style={{display: 'contents'}}>
+      <EnrollmentProvider>
+        <PreviewProvider>
+          {/* height="auto": the page scrolls the WINDOW, as the design's
+          does — "fill" would make the content an internal scroll box, and
+          position: sticky never rides relative to the window through one
+          (the documented reason the design's panel rides beside the
+          syllabus). */}
+          <Layout
+            height="auto"
+            contentWidth={1280}
+            content={
+              // isScrollable={false}: the content must NOT become its own scroll
+              // box — position: sticky never rides relative to the window through
+              // an overflow:auto ancestor, and the design's panel rides beside
+              // the syllabus down the window's own scroll.
+              <LayoutContent padding={isTiny ? 6 : 8} isScrollable={false}>
+                <style>{hoverStyles}</style>
+                {/* The design's main rhythm (gap-32 → sm:gap-40) parts its
+                sections — the course page, the related rail, the FAQ, the
+                closing band — while the course section's own parts (the
+                breadcrumb, the grid, the reviews) sit on the block rhythm
+                inside it. */}
+                <VStack gap={10} style={{gap: isTiny ? 128 : 160}}>
+                  <VStack gap={0}>
+                    {/* The breadcrumb over the grid, parted by the design's
+                    mt-6 → lg:mt-8 (24/32px), inside the course section.
+                    The design's own trail: a chevron between the steps,
+                    the linked steps muted, the page itself last and
+                    truncated (site/breadcrumb.tsx). */}
+                    <Breadcrumbs
+                      label="Breadcrumb"
+                      separator={
+                        <Icon
+                          icon={ChevronRightIcon}
+                          size="sm"
+                          xstyle={rtlStyles.mirror}
+                          style={{
+                            flexShrink: 0,
+                            color: 'var(--color-text-secondary)',
+                          }}
+                        />
+                      }
+                      style={{
+                        fontSize: 14,
+                        marginBottom: isNarrow ? 24 : 32,
+                        maxWidth: '100%',
+                      }}>
+                      <BreadcrumbItem href="#">
+                        <span
+                          style={{
+                            color: 'var(--color-text-secondary)',
+                          }}>
+                          Courses
+                        </span>
+                      </BreadcrumbItem>
+                      <BreadcrumbItem href="#">
+                        <span style={{color: 'var(--color-text-secondary)'}}>
+                          {COURSE.topic}
+                        </span>
+                      </BreadcrumbItem>
+                      <BreadcrumbItem>
+                        <span
+                          style={{
+                            minWidth: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            color: 'var(--color-text-primary)',
+                          }}>
+                          {COURSE.title}
+                        </span>
+                      </BreadcrumbItem>
+                    </Breadcrumbs>
+                    {isNarrow ? mobileBody : desktopBody}
+                    {/* The reviews run the container's whole width under both
+                    columns, as the design lays its own under the listing:
+                    the panel stops riding at the teacher, the scores take a
+                    cell each across the page, and the list runs two abreast
+                    with rules between. The rating is the heading. */}
+                    <Block
+                      id="reviews"
+                      title={reviewsHeadingRow}
+                      narrow={isNarrow}
+                      rhythm={rhythm}>
+                      <Reviews />
+                    </Block>
+                  </VStack>
+                  <RelatedRail />
+                  <FaqStepRows />
                 </VStack>
-                <VStack gap={4} style={stickyRail}>
-                  <EnrollPanel />
-                </VStack>
-              </Grid>
-              <RelatedRail />
-              <ReachBar />
-            </EnrollmentProvider>
-          </LayoutContent>
-        }
-      />
-    </PreviewProvider>
+              </LayoutContent>
+            }
+          />
+        </PreviewProvider>
+        <ReachBar />
+      </EnrollmentProvider>
+    </div>
   );
 }

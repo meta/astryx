@@ -36,6 +36,7 @@ export const doc = {
     ChatBubbleOvalLeftIcon: 'message',
     CheckBadgeIcon: 'success',
     CheckIcon: 'check',
+    ChevronRightIcon: 'chevronRight',
     ClipboardDocumentCheckIcon: 'list',
     ClockIcon: 'clock',
     CommandLineIcon: 'code',
