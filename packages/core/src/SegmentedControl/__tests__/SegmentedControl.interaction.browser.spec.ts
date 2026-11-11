@@ -1861,6 +1861,29 @@ function sidewaysThenOff(
   return [...sideways, ...off];
 }
 
+// Longer than a scroller's content-touch delay, so the press shows first.
+const HOLD_MS = 450;
+
+/**
+ * One finger: held still on `from` until its press shows, then straight down
+ * to `down`, along to `to`, and a rest before the lift.
+ */
+function heldThenDownThenAlong(
+  from: {x: number; y: number},
+  down: {x: number; y: number},
+  to: {x: number; y: number},
+) {
+  const [landing, ...downward] = touchDrag(from, down, {durationMs: 250});
+  const held = downward
+    .slice(0, -1)
+    .map(frame => ({...frame, t: frame.t + HOLD_MS}));
+  const lastT = held[held.length - 1].t;
+  const along = touchDrag(down, to, {durationMs: 300, restMs: 200})
+    .slice(1)
+    .map(frame => ({...frame, t: frame.t + lastT}));
+  return [landing, ...held, ...along];
+}
+
 /** The radiogroup's bottom edge in client coordinates. */
 async function bottomOf(control: Control): Promise<number> {
   const group = await control.group.boundingBox();
@@ -1912,6 +1935,36 @@ test.describe('a drag that drifts off the control keeps choosing by its horizont
       'true',
     );
   });
+
+  for (const below of [30, 110]) {
+    test(`held on the selected segment, straight down ${below} px below the control, then along, the release selects the segment under the finger`, async ({
+      page,
+    }) => {
+      const control = await openControl(page);
+      // The page scrolls, so the browser's pan could take the finger.
+      await makePageScroll(page);
+      const selections = await recordSelections(control.group);
+      const moves = await recordTouchMoves(page);
+      const from = await clientCenter(control, 'grid');
+      const list = await clientCenter(control, 'list');
+      const y = (await bottomOf(control)) + below;
+      await control.driver.play(
+        heldThenDownThenAlong(from, {x: from.x, y}, {x: list.x, y}),
+      );
+      // The held finger stays the control's: each of its moves is cancelled,
+      // so the browser's pan never takes it.
+      const cancelled = await moves();
+      expect(cancelled.length).toBeGreaterThan(0);
+      expect(cancelled.every(Boolean)).toBe(true);
+      expect((await selections()).map(change => change.value)).toEqual([
+        'list',
+      ]);
+      await expect(control.segment('list')).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+    });
+  }
 
   test('past the end segment, the release selects the end segment', async ({
     page,
