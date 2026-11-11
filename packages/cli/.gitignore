@@ -33,5 +33,8 @@ assets/docs.generated.json
 # help without loading every command. Not committed: a checkout loads them.
 clients/cli/commands.generated.json
 
+# Written at prepack (scripts/generate-self-audit.mjs); never committed.
+assets/self-audit.generated.json
+
 # Written at prepack (scripts/generate-manifest.mjs); never committed.
 clients/cli/manifest.generated.json

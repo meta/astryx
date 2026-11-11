@@ -212,6 +212,21 @@ describe('planReleaseSpecs', () => {
     expect(plan.reasons[OTHER]).toContain('could not be followed');
   });
 
+  it('runs every release spec, with the reason, when the change has no file list', () => {
+    const read = file => TREE[file];
+    const plan = planReleaseSpecs({
+      listed: Object.keys(TREE),
+      changed: [],
+      read,
+      importers: () => new Map(),
+      map: MAP,
+      everything:
+        'GitHub truncated the changed-file list, so every release spec runs',
+    });
+    expect(plan.specs).toEqual([OTHER, PATTERN, SPEC, TAGGED].sort());
+    expect(plan.reasons[SPEC]).toContain('truncated');
+  });
+
   it('runs nothing for a deleted release spec', () => {
     const {[OTHER]: _deleted, ...rest} = TREE;
     expect(planIn(rest, [OTHER]).specs).toEqual([]);
