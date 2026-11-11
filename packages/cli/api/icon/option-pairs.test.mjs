@@ -80,6 +80,10 @@ async function makePackage({bare = false} = {}) {
     'export const Bin = props => null;\nexport const Close = props => null;\n';
   fs.writeFileSync(path.join(lib, 'index.js'), icons);
   fs.writeFileSync(path.join(lib, 'solid.js'), icons);
+  fs.writeFileSync(
+    path.join(dir, 'adapt.js'),
+    'export const adaptIcon = data => () => null;\n',
+  );
   if (!bare) {
     await iconNewSet('glyphs', {
       cwd: dir,
@@ -125,7 +129,6 @@ const CASES = {
       ['--list', '--limit'],
       ['--list', '--definitions'],
       ['--list', '--all-icons'],
-      ['--set', '--definitions'],
       ['--limit', '--definitions'],
       ['--limit', '--all-icons'],
       ['--definitions', '--all-icons'],
@@ -134,6 +137,7 @@ const CASES = {
       ['query', '--set'],
       ['query', '--limit'],
       ['--set', '--all-icons'],
+      ['--set', '--definitions'],
     ],
   },
   'experimental icon add': {
@@ -216,6 +220,7 @@ const CASES = {
       'options.dryRun': true,
       'options.from': FROM,
       'options.exclude': 'Close',
+      'options.adapter': './adapt.js#adaptIcon',
       'options.variants': 'outline,solid',
       'options.defaultVariant': 'solid',
       'options.displayName': 'Glyphs',
@@ -232,6 +237,8 @@ const CASES = {
       ['--from', '--default-variant'],
       ['--default-variant', '--display-name'],
       ['--default-variant', '--description'],
+      ['--exclude', '--adapter'],
+      ['--adapter', '--default-variant'],
     ],
     composes: [
       ['--dry-run', '--from'],
@@ -246,6 +253,11 @@ const CASES = {
       ['--variants', '--display-name'],
       ['--variants', '--description'],
       ['--display-name', '--description'],
+      ['--dry-run', '--adapter'],
+      ['--from', '--adapter'],
+      ['--adapter', '--variants'],
+      ['--adapter', '--display-name'],
+      ['--adapter', '--description'],
     ],
   },
   'experimental icon new-definition': {

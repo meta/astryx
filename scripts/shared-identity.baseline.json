@@ -65,10 +65,6 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
-    "packages/core/src/Icon/globalIconRegistry.tsx:globalRegistry": {
-      "status": "open",
-      "group": "F8 Public registries"
-    },
     "packages/core/src/List/listLayoutUpdates.ts:keptStyles": {
       "status": "open",
       "group": "triage"
@@ -237,10 +233,6 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/virtualization/measure.ts:textContext": {
-      "status": "allowed",
-      "reason": "A memo cache; a second cache per copy changes no result."
-    },
     "packages/core/src/Table/tableColumnAdmission.ts:heightSafe": {
       "status": "open",
       "group": "F1 Table capability and plugins"
@@ -289,10 +281,6 @@
       "status": "open",
       "group": "F2 Toast host"
     },
-    "packages/core/src/Toast/useToast.tsx:toastIdCounter": {
-      "status": "open",
-      "group": "F13 Shared id sequences"
-    },
     "packages/core/src/TreeList/TreeList.tsx:clipGenerations": {
       "status": "open",
       "group": "triage"
@@ -304,10 +292,6 @@
     "packages/core/src/gestures/fingerScroll.ts:watches": {
       "status": "open",
       "group": "triage"
-    },
-    "packages/core/src/gestures/haptics.ts:nextLabelId": {
-      "status": "open",
-      "group": "F13 Shared id sequences"
     },
     "packages/core/src/gestures/touchActionRule.ts:markedRoots": {
       "status": "allowed",
@@ -329,14 +313,6 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/hooks/useFocusTrap.ts:activeEscapeTrapCount": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useFocusTrap.ts:activeRegionContainers": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
     "packages/core/src/hooks/useMediaQuery.ts:watches": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
@@ -352,38 +328,6 @@
     "packages/core/src/i18n/resolve.ts:formatterCache": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
-    },
-    "packages/core/src/keyboard/keyboardHeight.ts:focusTakeovers": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardHeight.ts:stores": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardHeight.ts:touchStartWatches": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardLayoutGuide.ts:guides": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardTarget.ts:currentRides": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardTarget.ts:riddenAnimators": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardTarget.ts:targets": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/useMobileKeyboard.ts:revealsAtReport": {
-      "status": "open",
-      "group": "F6 Keyboard"
     },
     "packages/core/src/motion/animator.ts:frameDepth": {
       "status": "open",
@@ -493,10 +437,6 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
-    "packages/core/src/theme/themeRegistry.ts:themeRegistry": {
-      "status": "open",
-      "group": "F8 Public registries"
-    },
     "packages/core/src/theme/useTheme.ts:rootModeAttrListeners": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
@@ -536,14 +476,6 @@
     "packages/core/src/utils/devWarning.ts:warnedKeys": {
       "status": "allowed",
       "reason": "Deduplicates development warnings; a copy can at most repeat a warning once."
-    },
-    "packages/core/src/utils/focusReturn.ts:focusDetachedAtRemovalStart": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/utils/focusReturn.ts:temporaryFocus": {
-      "status": "open",
-      "group": "F5 Focus and announce"
     },
     "packages/core/src/utils/hitArea.ts:frame": {
       "status": "open",
@@ -602,8 +534,8 @@
       "group": "triage"
     },
     "packages/core/src/utils/layoutViewport.ts:thicknesses": {
-      "status": "open",
-      "group": "F6 Keyboard"
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/core/src/utils/plainDate.ts:dateTimeFormats": {
       "status": "allowed",
@@ -701,9 +633,13 @@
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
     },
+    "packages/core/src/virtualization/measure.ts:textContext": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
+    },
     "packages/lab/src/CodeEditor/CodeEditor.tsx:editorInstanceCounter": {
-      "status": "open",
-      "group": "F13 Shared id sequences"
+      "status": "allowed",
+      "reason": "A per-instance key that only re-runs the instance's own effects; no copy compares it with another's."
     },
     "packages/lab/src/EmojiPicker/EmojiPicker.tsx:bundledCategories": {
       "status": "allowed",

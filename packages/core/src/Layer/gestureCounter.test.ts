@@ -10,7 +10,8 @@
  *   ends at its release and runs once per press and layer. A release target
  *   holds the pointer while the pointer is over it, and no window listener
  *   stays after the press. The context-menu claim takes only a press that
- *   fired `contextmenu`
+ *   fired `contextmenu`. A claim runs its onRelease at its release, and no
+ *   other. A claim ends when another control takes the pointer
  * @position Unit test of packages/core/src/Layer/gestureCounter.ts
  */
 
@@ -318,6 +319,57 @@ describe('claimPress', () => {
     // Every window listener the press and its claim added is gone.
     expect(add).toHaveBeenCalled();
     expect([...listening].filter(([, n]) => n !== 0)).toEqual([]);
+  });
+
+  it('runs onRelease at the release of a claim that is still held', () => {
+    const {trigger, layer} = mountLayer();
+    const onRelease = vi.fn();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {onRelease});
+    expect(onRelease).not.toHaveBeenCalled();
+    trigger.dispatchEvent(pointerEvent('pointerup', 7));
+    expect(onRelease).toHaveBeenCalledOnce();
+  });
+
+  it('runs no onRelease for a claim whose layer closed first, or a cancelled press', () => {
+    const {trigger, layer} = mountLayer();
+    const onRelease = vi.fn();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {onRelease});
+    layer.dispatchEvent(
+      Object.assign(new Event('toggle'), {newState: 'closed'}),
+    );
+    trigger.dispatchEvent(pointerEvent('pointerup', 7));
+
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {onRelease});
+    trigger.dispatchEvent(pointerEvent('pointercancel', 7));
+    expect(onRelease).not.toHaveBeenCalled();
+  });
+
+  it('ends when another control takes the pointer, and then neither takes it back nor runs onRelease', () => {
+    const {trigger, layer} = mountLayer();
+    const row = document.createElement('div');
+    document.body.append(row);
+    const onRelease = vi.fn();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {onRelease});
+    expect(captured).toEqual([7]);
+    row.dispatchEvent(pointerEvent('gotpointercapture', 7));
+    row.dispatchEvent(pointerEvent('pointermove', 7, {x: 20, y: 20}));
+    expect(captured).toEqual([7]);
+    row.dispatchEvent(pointerEvent('pointerup', 7, {x: 20, y: 20}));
+    expect(onRelease).not.toHaveBeenCalled();
+  });
+
+  it('keeps the claim when the layer itself takes the pointer', () => {
+    const {trigger, layer} = mountLayer();
+    const onRelease = vi.fn();
+    trigger.dispatchEvent(pointerEvent('pointerdown', 7));
+    claimPress(layer, {onRelease});
+    layer.dispatchEvent(pointerEvent('gotpointercapture', 7));
+    trigger.dispatchEvent(pointerEvent('pointerup', 7));
+    expect(onRelease).toHaveBeenCalledOnce();
   });
 
   it('claims a press for the context menu only once that press fired contextmenu', () => {

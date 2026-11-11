@@ -30,8 +30,8 @@ export const docs = {
           "type": "table",
           "headers": [
             "Token",
-            "Light",
-            "Dark"
+            "Core default (light)",
+            "Core default (dark)"
           ],
           "rows": [
             [

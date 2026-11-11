@@ -5,7 +5,9 @@
 #
 # - ci.yml's canonical release-check, about every three hours and once each
 #   weekday at about 06:30 Pacific, before the 08:00 release cut: main's
-#   visual/a11y/RTL result, fixed forward on failure (DEC-7, FR24);
+#   visual/a11y/RTL result, fixed forward on failure (DEC-7, FR24). A check
+#   that starts in that hour is cut evidence (`evidence`), named Release
+#   evidence of <sha>;
 # - deploy.yml's full unit run, about hourly: every unit suite of every
 #   package, on that exact commit, never cancelled by a push (FR21);
 # - ci.yml's full Chromium interaction run, once a day in the 09:00 UTC hour:
@@ -156,7 +158,7 @@ jobs:
             // The weekday release cut is at 08:00 Pacific: one release-check
             // starts at about 06:30, whatever the window, so it finishes about
             // an hour before the cut (FR24). It is dispatched once a day, for
-            // the tip unless the tip already has a check.
+            // the tip, unless a check already started in the pre-cut hour.
             const pacificParts = when => Object.fromEntries(
               new Intl.DateTimeFormat('en-US', {
                 timeZone: 'America/Los_Angeles', weekday: 'short', hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
@@ -167,13 +169,17 @@ jobs:
             const dayOf = parts => `${parts.year}-${parts.month}-${parts.day}`;
             const minuteOf = parts => Number(parts.hour) * 60 + Number(parts.minute);
             const PRE_CUT = 6 * 60 + 30;
-            if (!heavy && !['Sat', 'Sun'].includes(pacific.weekday) && minuteOf(pacific) >= PRE_CUT && minuteOf(pacific) < PRE_CUT + 60) {
-              const startedToday = checks.some(run => {
-                if (run.conclusion === 'cancelled') return false;
-                const parts = pacificParts(Date.parse(run.created_at));
-                return dayOf(parts) === dayOf(pacific) && minuteOf(parts) >= PRE_CUT;
-              });
-              if (!startedToday && !(await covered(checks, true))) {
+            // A release-check that starts in the pre-cut hour is cut evidence
+            // (named Release evidence of <sha>). A check from before that hour
+            // is monitoring and does not cover the tip.
+            const preCutHour = !['Sat', 'Sun'].includes(pacific.weekday) && minuteOf(pacific) >= PRE_CUT && minuteOf(pacific) < PRE_CUT + 60;
+            const sincePreCut = checks.filter(run => {
+              const parts = pacificParts(Date.parse(run.created_at));
+              return dayOf(parts) === dayOf(pacific) && minuteOf(parts) >= PRE_CUT;
+            });
+            if (!heavy && preCutHour) {
+              const startedToday = sincePreCut.some(run => run.conclusion !== 'cancelled');
+              if (!startedToday) {
                 core.notice(`The pre-cut release-check runs now for ${short}.`);
                 heavy = true;
               }
@@ -202,7 +208,7 @@ jobs:
                 ...context.repo,
                 workflow_id: 'ci.yml',
                 ref: 'main',
-                inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': tip},
+                inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': tip, ...(preCutHour ? {evidence: 'true'} : {})},
               });
             }
 
