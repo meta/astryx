@@ -3,12 +3,12 @@ schema_version: 4
 template_version: 2
 kind: system-spec
 id: spec:AST-106
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
-phase: proposed
+approved_by: cixzhang
+approved_at: 2026-11-11
+phase: accepted
 owners: [ernestt]
 affects_architecture: []
 affects_families: []
@@ -115,10 +115,12 @@ Link cards, the selection format bar, and block moves also hold these:
 - **Selection format bar.** Every control on the bar is reachable by keyboard
   from the selection and named for assistive technology (FR7). It adds no
   content, so `RichTextView` shows nothing for it.
-- **Block move.** A keyboard command moves the focused block up or down, and the
-  move is announced to assistive technology; dragging is never the only way
-  (FR7). The handle, keyboard command, announcement, and drop rules are those of
-  a `spec:AST-103` reorderable collection. `RichTextView` shows the blocks in their moved order (FR5).
+- **Block move.** A keyboard command enters `spec:AST-103` reorder mode for the
+  block holding the caret (its FR4a `start`), so reorder mode is the one path
+  without a drag, and each move is announced to assistive technology (FR7). The
+  handle, keyboard command, announcement, and drop rules are those of a
+  `spec:AST-103` reorderable collection. `RichTextView` shows the blocks in
+  their moved order (FR5).
 
 ### Platform support
 
