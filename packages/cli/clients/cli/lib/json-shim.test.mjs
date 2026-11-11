@@ -98,6 +98,80 @@ describe('--json shim: parse errors emit JSON error envelope', () => {
   });
 });
 
+describe('--json shim: an option given without its value', () => {
+  it('emits ERR_MISSING_ARGUMENT with the command usage, exit 1', async () => {
+    const {status, stdout, stderr} = await runCli([
+      '--json',
+      'theme',
+      'add',
+      '--package',
+    ]);
+    expect(status).toBe(1);
+    expect(stderr).toBe('');
+    const parsed = parseJson(stdout);
+    expect(parsed.code).toBe('ERR_MISSING_ARGUMENT');
+    expect(parsed.error).toMatch(/--package <package>' argument missing/);
+    expect(parsed.suggestions).toEqual([
+      {name: 'astryx theme add [options] [slug]', reason: 'usage'},
+    ]);
+  });
+
+  it('prints the usage line after the error in text mode', async () => {
+    const {status, stderr} = await runCli(['theme', 'build', 'x.ts', '--out']);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(
+      /^Error: option '-o, --out <path>' argument missing\n/,
+    );
+    expect(stderr).toMatch(
+      /Usage: astryx theme build \[options\] <files\.\.\.>/,
+    );
+  });
+});
+
+describe('help <command words>', () => {
+  it('prints the help of the deepest command the words name', async () => {
+    const {status, stdout} = await runCli(['help', 'theme', 'build']);
+    expect(status).toBe(0);
+    expect(stdout).toMatch(
+      /^Usage: astryx theme build \[options\] <files\.\.\.>/,
+    );
+  });
+
+  it('answers a four-level command under --json', async () => {
+    const {status, stdout} = await runCli([
+      '--json',
+      'help',
+      'experimental',
+      'theme',
+      'editor',
+      'set',
+    ]);
+    expect(status).toBe(0);
+    expect(parseJson(stdout).data.command).toBe(
+      'astryx experimental theme editor set',
+    );
+  });
+
+  it('keeps Commander help when the private dispatch method is missing', async () => {
+    const {resolveDeepHelp} = await import('../index.mjs');
+    const withMethod = /** @type {any} */ (new Command());
+    const original = withMethod._dispatchHelpCommand;
+    resolveDeepHelp(withMethod);
+    expect(withMethod._dispatchHelpCommand).not.toBe(original);
+
+    const without = /** @type {any} */ (new Command());
+    without._dispatchHelpCommand = undefined;
+    expect(() => resolveDeepHelp(without)).not.toThrow();
+    expect(without._dispatchHelpCommand).toBeUndefined();
+  });
+
+  it('stops at the deepest known word', async () => {
+    const {status, stdout} = await runCli(['help', 'theme', 'nope']);
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/^Usage: astryx theme \[options\] \[command\]/);
+  });
+});
+
 describe('--json shim: unknown subcommand emits error envelope', () => {
   it('astryx bogus-cmd --json emits error envelope, exit 1 (not exit 0 + help)', async () => {
     const {status, stdout} = await runCli(['bogus-cmd', '--json']);
@@ -264,5 +338,4 @@ describe('--json shim: help shown for a failed invocation is an error envelope',
     expect(parsed.code).toBe('ERR_MISSING_ARGUMENT');
     expect(parsed.suggestions).toEqual([{name: 'late child', reason: 'available subcommand'}]);
   });
-
 });

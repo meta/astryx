@@ -53,7 +53,7 @@ export const doc = {
     {code: 0, when: 'the file was written (warnings included)'},
     {
       code: 1,
-      when: 'no file, a wrong extension, a missing file, a page that does not compile, has no default export, imports a package that is not installed, reads a browser API while rendering, throws, or takes over 60 seconds; a file to write outside the current folder; with --reverse, an existing output without --overwrite, a damaged embedded source, or HTML that is not an Astryx page',
+      when: 'no file, a wrong extension, a missing file, a page that does not compile, has no default export, imports a package that is not installed, reads a browser API while rendering, throws, crashes Node, or takes over 60 seconds; a file to write outside the current folder; with --reverse, an existing output without --overwrite, a damaged embedded source, or HTML that is not an Astryx page',
     },
   ],
   related: ['template', 'build'],
