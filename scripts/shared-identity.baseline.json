@@ -281,10 +281,6 @@
       "status": "open",
       "group": "F2 Toast host"
     },
-    "packages/core/src/Toast/useToast.tsx:toastIdCounter": {
-      "status": "open",
-      "group": "F13 Shared id sequences"
-    },
     "packages/core/src/TreeList/TreeList.tsx:clipGenerations": {
       "status": "open",
       "group": "triage"
@@ -296,10 +292,6 @@
     "packages/core/src/gestures/fingerScroll.ts:watches": {
       "status": "open",
       "group": "triage"
-    },
-    "packages/core/src/gestures/haptics.ts:nextLabelId": {
-      "status": "open",
-      "group": "F13 Shared id sequences"
     },
     "packages/core/src/gestures/touchActionRule.ts:markedRoots": {
       "status": "allowed",
@@ -646,8 +638,8 @@
       "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/lab/src/CodeEditor/CodeEditor.tsx:editorInstanceCounter": {
-      "status": "open",
-      "group": "F13 Shared id sequences"
+      "status": "allowed",
+      "reason": "A per-instance key that only re-runs the instance's own effects; no copy compares it with another's."
     },
     "packages/lab/src/EmojiPicker/EmojiPicker.tsx:bundledCategories": {
       "status": "allowed",

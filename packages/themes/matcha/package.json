@@ -74,7 +74,6 @@
     "!**/*.bench.*"
   ],
   "scripts": {
-    "api:report": "node ../../../scripts/api-report/cli.mjs --package .",
     "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-matcha-palette-refs.mjs --check && astryx theme build src/matchaTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/add-declaration-extensions.mjs && node ../../../scripts/emit-commonjs-declarations.mjs dist/source.d.ts && node ../../../scripts/check-fully-specified.mjs"
   },
   "dependencies": {
