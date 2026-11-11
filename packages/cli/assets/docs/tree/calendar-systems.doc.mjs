@@ -27,7 +27,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: '`Calendar` shows the Gregorian calendar unless you choose another one. Pass `calendar` to `<InternationalizationProvider>` to set it for a subtree. A locale on its own never changes the calendar: `fa-IR` shows Gregorian dates in Persian until you pass `calendar="persian"`. A locale with a `-u-ca-` keyword, such as `th-TH-u-ca-buddhist`, keeps Gregorian dates too; set `calendar` to choose one.',
+          text: '`Calendar` shows the Gregorian calendar unless you choose another one. Pass `calendar` to `<InternationalizationProvider>` to set it for a subtree. A locale on its own never changes the calendar: `fa-IR` shows Gregorian dates in Persian until you pass `calendar="persian"`. A locale with a `-u-ca-` keyword, such as `th-TH-u-ca-buddhist`, shows that calendar when you leave out `calendar`; pass `calendar="gregory"` to keep Gregorian dates.',
         },
         {
           type: 'code',

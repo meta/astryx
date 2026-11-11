@@ -2296,8 +2296,18 @@ describe('Timestamp calendar systems', () => {
     }
   });
 
-  it('keeps Gregorian dates for a -u-ca- keyword in the provider locale', () => {
+  it('follows a -u-ca- keyword in the provider locale', () => {
     renderTimestamp({locale: 'th-TH-u-ca-buddhist'}, 'date_long');
+    const ts = screen.getByTestId('ts');
+    expect(ts).toHaveTextContent('2569');
+    expect(ts).not.toHaveTextContent('2026');
+  });
+
+  it('keeps Gregorian dates under a -u-ca- keyword with calendar="gregory"', () => {
+    renderTimestamp(
+      {locale: 'th-TH-u-ca-buddhist', calendar: 'gregory'},
+      'date_long',
+    );
     const ts = screen.getByTestId('ts');
     expect(ts).toHaveTextContent('2026');
     expect(ts).not.toHaveTextContent('2569');
