@@ -13,6 +13,7 @@ import {describe, it, expect, vi, afterEach} from 'vitest';
 import {render, screen, waitFor, fireEvent} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {Field} from './Field';
+import {FieldStatus} from '../FieldStatus/FieldStatus';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
@@ -855,6 +856,13 @@ describe('Field caller text under a right-to-left page', () => {
     expect(screen.getByLabelText('Prefix https://')).toHaveAccessibleName(
       'Prefix https://',
     );
+  });
+
+  it('adds no span to an empty status message', () => {
+    render(
+      <FieldStatus type="warning" message="" variant="detached" id="empty" />,
+    );
+    expect(document.querySelector('#empty [dir]')).toBeNull();
   });
 
   it('keeps the page direction for text with a right-to-left letter', () => {

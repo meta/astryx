@@ -299,7 +299,7 @@ export function FieldLabel({
   // Plain text with no right-to-left letter keeps its written order on a
   // right-to-left page. The direction goes on an inner span, so the label's
   // alignment and its marker still follow the page.
-  const labelDir = textDirectionProps(label).dir;
+  const labelDir = label === '' ? undefined : textDirectionProps(label).dir;
   const descriptionDir = textDirectionProps(description).dir;
   const labelContent = (
     <>
