@@ -114,6 +114,8 @@ describe('DateInput typed entry with a calendar', () => {
 
     fireEvent.change(input, {target: {value: 'May 1, 31 Heisei'}});
     expect(onChange).toHaveBeenCalledTimes(1);
+    expect(input).not.toHaveAttribute('aria-invalid');
+    fireEvent.keyDown(input, {key: 'Enter'});
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expectShown(input, container, 'Enter a real date (Japanese Calendar)');
   });
@@ -125,7 +127,8 @@ describe('DateInput typed entry with a calendar', () => {
       status: {type: 'warning', message: 'Check the date'},
     });
     fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
-    expectShown(input, container, 'Enter a real date (Persian Calendar)');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
     fireEvent.blur(input);
     expect(input).toHaveValue('12/30/1404 AP');
     expectShown(input, container, 'Enter a real date (Persian Calendar)');
@@ -141,6 +144,9 @@ describe('DateInput typed entry with a calendar', () => {
     // A Gregorian year typed into a Buddhist field is Buddhist year 2026.
     fireEvent.change(input, {target: {value: '11/2/2026'}});
     expect(onChange).not.toHaveBeenCalled();
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
+    fireEvent.keyDown(input, {key: 'Enter'});
     expectShown(
       input,
       container,
@@ -160,8 +166,10 @@ describe('DateInput typed entry with a calendar', () => {
       'Invalid date',
     );
     fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
     expectShown(input, container, 'Enter a real date (Persian Calendar)');
     fireEvent.change(input, {target: {value: '1/1/1406 AP'}});
+    fireEvent.blur(input);
     expectShown(input, container, 'on or before Dey 10, 1405 AP');
   });
 
@@ -392,6 +400,8 @@ describe('DateInput onChange while typing a Gregorian date', () => {
     (locale, text) => {
       const {input, onChange, container} = renderField(locale);
       fireEvent.change(input, {target: {value: text}});
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(within(container).getByRole('alert')).toHaveTextContent('');
       fireEvent.blur(input);
       expect(input).toHaveValue(text);
       expectShown(input, container, 'Enter a real date');

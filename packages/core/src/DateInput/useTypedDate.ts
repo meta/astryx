@@ -147,7 +147,7 @@ export function typedDateError(
   }
   if (
     (result.kind === 'nonexistent' || result.kind === 'outOfRange') &&
-    (result.isComplete || isCommitted)
+    isCommitted
   ) {
     return result.kind;
   }
