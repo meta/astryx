@@ -43,7 +43,8 @@ export const docs = {
     {
       name: 'group',
       type: 'string',
-      description: 'Group label for grouping items visually.',
+      description:
+        'This prop has no effect. Set `item.auxiliaryData.group` on search-source items to group results in Typeahead or BaseTypeahead.',
     },
   ],
 };
@@ -79,7 +80,8 @@ export const docsZh = {
     {
       name: 'group',
       type: 'string',
-      description: '用于视觉分组的分组标签。',
+      description:
+        '此属性不影响渲染。要在 Typeahead 或 BaseTypeahead 中分组，请在搜索源返回的结果项上设置 `item.auxiliaryData.group`。',
     },
   ],
 };
@@ -94,6 +96,7 @@ export const docsDense = {
     icon: 'Icon/avatar before label.',
     description: 'Text below label.',
     isDisabled: 'Visually disabled.',
-    group: 'Group label for visual grouping.',
+    group:
+      'No effect. Group results via `item.auxiliaryData.group` in the search source.',
   },
 };

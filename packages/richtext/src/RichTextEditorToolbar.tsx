@@ -625,7 +625,9 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
    * one URL field, applied with Enter, with Remove when the selection is in a
    * link. The popover is not modal. Escape or Cancel closes it and returns
    * focus and the selection to the editor; a URL that cannot be linked shows
-   * an error under the field, which keeps focus.
+   * an error under the field, which keeps focus. With a collapsed selection,
+   * applying inserts the entered URL as link text at the caret; with a
+   * non-empty selection it links the selected text.
    *
    * Requires `LinkNode` to be registered (it is, by default) — no extra setup.
    * The entered URL is sanitized (see `sanitizeUrl`) so only
@@ -837,27 +839,36 @@ export function RichTextEditorToolbar({
         return false;
       }
 
-      restoreLinkSelection();
       const linkAttributes = hasNewTabLinks
         ? {target: '_blank', rel: 'noopener noreferrer'}
         : {};
-      const handled = editor.dispatchCommand(TOGGLE_LINK_COMMAND, {
-        url,
-        ...linkAttributes,
-      });
-      if (!handled) {
-        editor.update(() => {
-          const selection = $getSelection();
-          if ($isRangeSelection(selection) && selection.isCollapsed()) {
+      const savedSelection = savedSelectionRef.current;
+      // One update restores the selection, decides, and applies. Inside a
+      // command listener (Cmd/Ctrl+K) Lexical queues an update, so a flag set
+      // in one update cannot steer code that runs after it.
+      editor.update(() => {
+        if (savedSelection) {
+          $setSelection(savedSelection.clone());
+        }
+        const selection = $getSelection();
+        if ($isRangeSelection(selection) && selection.isCollapsed()) {
+          const node = selection.anchor.getNode();
+          const isInLink = $isLinkNode(node) || $isLinkNode(node.getParent());
+          // At a caret outside a link there is no text to link, so the URL
+          // becomes the link's text. The toggle command would link the whole
+          // text node around the caret instead.
+          if (!isInLink) {
             const linkNode = $createLinkNode(url, linkAttributes);
             linkNode.append($createTextNode(trimmed));
             selection.insertNodes([linkNode]);
+            return;
           }
-        });
-      }
+        }
+        editor.dispatchCommand(TOGGLE_LINK_COMMAND, {url, ...linkAttributes});
+      });
       return true;
     },
-    [editor, hasNewTabLinks, restoreLinkSelection],
+    [editor, hasNewTabLinks],
   );
 
   const toggleLink = useCallback(() => {

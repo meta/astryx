@@ -49,19 +49,6 @@ const internalBarrelBaseline = JSON.parse(
   ),
 );
 
-// Truthiness guards on ReactNode values that existed when
-// `@astryx/no-truthy-jsx-guard` arrived, by repo-relative file, once per
-// guard. The list only shrinks.
-const truthyGuardBaseline = JSON.parse(
-  readFileSync(
-    path.join(
-      import.meta.dirname,
-      'internal/eslint-plugin-astryx/no-truthy-jsx-guard.baseline.json',
-    ),
-    'utf8',
-  ),
-);
-
 // Private `data-astryx-*` attributes written by hand before
 // `@astryx/no-raw-private-attribute` arrived, by repo-relative file, once per
 // site. The list only shrinks.
@@ -205,6 +192,10 @@ export default defineConfig(
       // Canonical consumer fixtures are validated and built in copied,
       // standalone sandboxes rather than linted as workspace source.
       'internal/vibe-tests/fixtures/**',
+      // Vibe eval starter apps and reference solutions build inside copied
+      // consumer apps outside the workspace, with their own dependencies.
+      'internal/vibe-tests/eval/arms/**',
+      'internal/vibe-tests/eval/tasks/*/reference/**',
       // Changesets tooling (custom changelog module + config) is CommonJS
       // build/release glue, not shipped source — keep it out of the TS/ESM
       // lint pass (consistent with scripts/** above).
@@ -924,6 +915,29 @@ export default defineConfig(
       'no-restricted-syntax': 'off',
     },
   },
+  // Browser specs use the shared base test, whose contexts answer remote
+  // images locally and block other remote requests. A remote host that is
+  // slow then cannot stall a spec.
+  {
+    files: ['**/*.browser.spec.ts', '**/*.chromium.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            '@playwright/test',
+            'playwright/test',
+            'playwright',
+            'playwright-core',
+          ].map(name => ({
+            name,
+            message:
+              "Import from '@astryxdesign/a11y-spec/playwright' instead: its `test` keeps every browser context off remote hosts.",
+          })),
+        },
+      ],
+    },
+  },
   // Inside a package's own shipped source, import the module that defines a
   // name, not a folder's index (a barrel): a lazily imported module that goes
   // through a barrel pulls every sibling export into its graph, which broke
@@ -963,8 +977,7 @@ export default defineConfig(
   // renders a stray "0" (`&&`) or drops the slot (`? :`), so a slot's
   // presence is decided by `isRenderable` here too. The rule reads types, so
   // its scope is core, which the type-aware block above parses with the
-  // project service. The guards that predate the rule are listed in the
-  // baseline, once per guard; one more is reported (an error in strict mode).
+  // project service. Every guard is reported (an error in strict mode).
   {
     files: truthyGuardScope.files,
     ignores: truthyGuardScope.ignores,
@@ -972,10 +985,7 @@ export default defineConfig(
       '@astryx': astryxEslintPlugin,
     },
     rules: {
-      '@astryx/no-truthy-jsx-guard': [
-        reactSeverity,
-        {baseline: truthyGuardBaseline, root: import.meta.dirname},
-      ],
+      '@astryx/no-truthy-jsx-guard': reactSeverity,
     },
   },
   // A private `data-astryx-*` attribute is written once, in its owner module
@@ -998,6 +1008,19 @@ export default defineConfig(
         reactSeverity,
         {baseline: privateAttributeBaseline, root: import.meta.dirname},
       ],
+    },
+  },
+  // React attaches its wheel, touchstart and touchmove listeners as passive,
+  // so preventDefault() in those handlers does nothing. Shipped package
+  // source, the same files as the block above.
+  {
+    files: privateAttributeScope.files,
+    ignores: privateAttributeScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-prevent-default-in-passive-react-handler': 'error',
     },
   },
   // A source comment explains a reason, a constraint, or a quirk. It does not

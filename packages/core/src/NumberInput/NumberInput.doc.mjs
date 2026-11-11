@@ -160,7 +160,7 @@ export const docs = {
       name: 'hasNumberSteppers',
       type: 'boolean',
       description:
-        'Shows increment and decrement buttons at the end of the input on fine pointers. Hidden on coarse pointers (such as touch screens); text entry and keyboard stepping remain available.',
+        'Shows increment and decrement buttons at the end of the input on fine pointers. Hidden on coarse pointers (such as touch screens); text entry and keyboard stepping remain available. Holding a button with a mouse or a pen repeats the step and commits once, when the hold ends.',
       default: 'false',
     },
     {

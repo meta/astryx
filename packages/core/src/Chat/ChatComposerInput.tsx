@@ -28,6 +28,7 @@
  */
 
 import {
+  use,
   useRef,
   useState,
   useCallback,
@@ -67,7 +68,13 @@ import {
 } from './useChatPasteAsToken';
 import {Badge, type BadgeProps} from '../Badge';
 import {useChatComposerContext} from './ChatContext';
+import {
+  KeyboardSurfaceContext,
+  focusInKeyboardSurface,
+} from './keyboardSurface';
 import {themeProps} from '../utils/themeProps';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
+import type {EnterKeyHint} from '../Field/textEntryTraits';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -247,6 +254,14 @@ export interface ChatComposerInputProps extends Omit<
    * never submits while a composition is in progress.
    */
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
+  /**
+   * What the Return key of a touch keyboard says (the native
+   * `enterkeyhint`). Enter sends the message, so the key says so: iOS shows
+   * its Send key. When `onKeyDown` makes Enter insert a line break on touch
+   * keyboards, pass `'enter'` so the key shows Return again.
+   * @default 'send'
+   */
+  enterKeyHint?: EnterKeyHint;
 }
 
 // =============================================================================
@@ -373,6 +388,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     onFiles,
     onSubmit = composerCtx?.onSubmit,
     onKeyDown: onKeyDownProp,
+    enterKeyHint = 'send',
     xstyle,
     className,
     style,
@@ -380,13 +396,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   } = props;
   // Keep focus/blur observation available, but do not forward activation or
   // editing callbacks from the disabled root (including capture handlers).
-  const rootProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const rootProps = withholdCallerHandlers(rest, isDisabled);
   const label = labelFromProps ?? t('@astryx.chat.composerInput.label');
   const placeholder =
     placeholderFromProps ??
@@ -432,6 +442,10 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   const insertTextRef = useRef<(text: string) => void>(() => {});
   const expandTokenRef = useRef<(id: string) => void>(() => {});
 
+  // Inside ChatLayout's keyboard surface, every touch route into the text
+  // skips the browser's reveal. Elsewhere the browser's own focus applies.
+  const isKeyboardSurface = use(KeyboardSurfaceContext);
+
   // A single handle object shared between the forwarded ref (via
   // `useImperativeHandle`) and `selfRef` (used by internal consumers
   // like paste-as-token). We can't rely on `useImperativeHandle`'s
@@ -469,13 +483,13 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     // Read before focusing: `focus()` itself creates the offset-0 caret, so
     // asking afterwards cannot tell the user's own caret from the engine's.
     const existing = getSelectionRangeInside(editable);
-    editable.focus();
+    focusInKeyboardSurface(editable, isKeyboardSurface);
     if (existing) {
       restoreSelectionRange(existing);
       return;
     }
     placeCaretAtEnd(editable);
-  }, []);
+  }, [isKeyboardSurface]);
 
   /**
    * Focus the editable and put the caret after the draft, whatever the
@@ -490,9 +504,9 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     if (!editable) {
       return;
     }
-    editable.focus();
+    focusInKeyboardSurface(editable, isKeyboardSurface);
     placeCaretAtEnd(editable);
-  }, []);
+  }, [isKeyboardSurface]);
 
   const handle: ChatComposerInputHandle = {
     insertToken: (token: ChatComposerToken) => insertTokenRef.current(token),
@@ -519,6 +533,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     };
   }, [inputControlRef, focusEditableAtEnd]);
 
+  // Syncs the contentEditable DOM with the controlled `value`.
   useEffect(() => {
     if (controlledValue === undefined || !editableRef.current) {
       return;
@@ -546,14 +561,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
       // end of the new content so the next keystroke appends rather
       // than prepends.
       if (wasFocused) {
-        const selection = window.getSelection();
-        if (selection) {
-          const range = document.createRange();
-          range.selectNodeContents(editable);
-          range.collapse(false);
-          selection.removeAllRanges();
-          selection.addRange(range);
-        }
+        placeCaretAtEnd(editable);
       }
       setIsEmpty(controlledValue.length === 0);
     } else {
@@ -590,6 +598,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     onEmitChange: emitChange,
   });
   cleanupPortalsRef.current = tokens.cleanupPortals;
+  const handleTokenKeyDown = tokens.handleKeyDown;
 
   // --- Paste-as-token (internal default) ---
   const defaultPasteAsToken = useChatPasteAsToken({inputRef: selfRef});
@@ -614,9 +623,21 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     [emitChange, insertTextWithoutEmit],
   );
 
+  const insertTokenWithoutEmit = tokens.insertToken;
+  const insertToken = useCallback(
+    (token: ChatComposerToken) => {
+      const id = insertTokenWithoutEmit(token);
+      if (id != null) {
+        emitChange();
+      }
+      return id;
+    },
+    [emitChange, insertTokenWithoutEmit],
+  );
+
   // A caller may retain a handle across renders. Resolve mutation permission
   // through the latest callbacks rather than the render that created it.
-  insertTokenRef.current = isDisabled ? () => undefined : tokens.insertToken;
+  insertTokenRef.current = isDisabled ? () => undefined : insertToken;
   insertTextRef.current = isDisabled ? () => {} : insertText;
   expandTokenRef.current = isDisabled ? () => {} : tokens.expandToken;
 
@@ -640,6 +661,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         }
       : triggerMenu.ariaProps;
 
+  // Syncs the trigger menu's pending searches with `isDisabled`.
   useEffect(() => {
     if (isDisabled && triggerMenu.state.isActive) {
       // Reset also cancels pending searches, so late results cannot reopen
@@ -685,45 +707,8 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         return;
       }
 
-      // Handle Backspace near tokens — prevent browser from creating
-      // stray <br> elements or moving the cursor unexpectedly.
-      if (e.key === 'Backspace') {
-        const selection = window.getSelection();
-        if (selection && selection.isCollapsed && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0);
-          const {startContainer, startOffset} = range;
-
-          // Case 1: Cursor is in a text node right after a token.
-          // If the text node is just the trailing NBSP, remove it
-          // and place cursor after the token.
-          if (
-            startContainer.nodeType === Node.TEXT_NODE &&
-            startOffset === 0 &&
-            startContainer.previousSibling instanceof HTMLElement &&
-            startContainer.previousSibling.hasAttribute('data-astryx-token')
-          ) {
-            // Cursor is at start of text node right after a token — let
-            // the browser handle it normally (it will select/delete the token)
-          } else if (
-            startContainer.nodeType === Node.TEXT_NODE &&
-            startContainer.textContent === ' ' &&
-            startOffset <= 1 &&
-            startContainer.previousSibling instanceof HTMLElement &&
-            startContainer.previousSibling.hasAttribute('data-astryx-token')
-          ) {
-            // Cursor is in or after the trailing NBSP — remove the NBSP
-            // and the token in one action
-            e.preventDefault();
-            const tokenSpan = startContainer.previousSibling;
-            const parent = startContainer.parentNode;
-            if (parent) {
-              parent.removeChild(startContainer);
-              parent.removeChild(tokenSpan);
-            }
-            emitChange();
-            return;
-          }
-        }
+      if (handleTokenKeyDown(e)) {
+        return;
       }
 
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -834,6 +819,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
       emitChange,
       triggerMenu,
       onKeyDownProp,
+      handleTokenKeyDown,
     ],
   );
 
@@ -881,9 +867,13 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         return;
       }
 
-      // Paste-as-token: convert long pastes to token chips.
+      // Paste-as-token: convert long pastes to token chips. The default
+      // converter inserts through the handle, which publishes the change.
+      const versionBeforeToken = emitChangeVersionRef.current;
       if (pasteAsToken?.onPaste(e, text)) {
-        emitChange();
+        if (emitChangeVersionRef.current === versionBeforeToken) {
+          emitChange();
+        }
         return;
       }
 
@@ -941,6 +931,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         // Explicit in both states: losing editability must not lose focus.
         tabIndex={0}
         contentEditable={!isDisabled}
+        enterKeyHint={enterKeyHint}
         suppressContentEditableWarning
         onInput={handleInput}
         onClick={handleEditorClick}

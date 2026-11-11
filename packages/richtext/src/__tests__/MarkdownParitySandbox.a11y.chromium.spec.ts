@@ -24,7 +24,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -1852,13 +1852,37 @@ for (const viewport of [DESKTOP, PHONE]) {
         .locator('[data-parity-anchor]')
         .evaluate(element => ({...(element as HTMLElement).dataset}));
       expect(await axeViolations(page)).toEqual([]);
+      const editGeometry = await surfaceGeometry(page, edit);
+      // spec:AST-061 FR9: edit mode offsets the whole document by one constant
+      // amount, and every block keeps its top and height within 2px after it.
+      // A paragraph that gained or lost a line changes height by a line.
+      const readBlocks = readGeometry.blocks.filter(block => block.copy === 1);
+      const editBlocks = new Map(
+        editGeometry.blocks
+          .filter(block => block.copy === 1)
+          .map(block => [block.key, block]),
+      );
+      const pairs = readBlocks.flatMap(block => {
+        const edited = editBlocks.get(block.key);
+        return edited == null ? [] : [{block, edited}];
+      });
+      expect(pairs.length).toBeGreaterThan(0);
+      const offset = pairs[0].edited.top - pairs[0].block.top;
+      for (const {block, edited} of pairs) {
+        expect
+          .soft(Math.abs(edited.top - block.top - offset), `${block.key} top`)
+          .toBeLessThanOrEqual(2);
+        expect
+          .soft(Math.abs(edited.height - block.height), `${block.key} height`)
+          .toBeLessThanOrEqual(2);
+      }
       await capture(page, `${name}--edit`, {
         story: STORY.toggle,
         viewport,
         globals: `neutral ${colorMode} ltr`,
         mode: 'edit',
         anchor,
-        geometry: await surfaceGeometry(page, edit),
+        geometry: editGeometry,
       });
 
       // Back to read with the keyboard: the control is reachable without a pointer.
@@ -1931,10 +1955,13 @@ for (const [viewport, colorMode] of [
   });
 }
 
-// spec:AST-061 FR6: every block takes the direction of the surface around
-// it, whatever its first strong character, on both surfaces.
+// RichText blocks take the direction of the surface around them, whatever
+// their first strong character. Markdown blocks take the direction of their
+// own text, and the provider's when their text has no strong character.
 for (const direction of ['ltr', 'rtl'] as const) {
-  test(`blocks take the provider direction (${direction})`, async ({page}) => {
+  test(`blocks take their surface's direction rule (${direction})`, async ({
+    page,
+  }) => {
     const errors = await openStory(
       page,
       STORY.sideBySide,
@@ -1944,24 +1971,43 @@ for (const direction of ['ltr', 'rtl'] as const) {
     await waitForDocument(page, MARKDOWN);
     await waitForDocument(page, RICH_TEXT);
     for (const surface of [MARKDOWN, RICH_TEXT]) {
-      const geometry = await surfaceGeometry(page, surface);
-      const otherDirection = geometry.blocks
-        .filter(block => block.direction !== direction)
-        .map(block => block.key);
-      expect(otherDirection, surface).toEqual([]);
-      // Inside blocks too: table rows and cells, list items, and paragraphs.
-      const nested = await page.evaluate(
-        ({selector, expected}) =>
-          [
+      const ownText = surface === MARKDOWN;
+      // RichText: every block, and inside blocks too: table rows and cells,
+      // list items, and paragraphs. Markdown: every prose block and table
+      // cell, read against its own text; a container or wrapper is not
+      // checked, because it takes its parent's direction.
+      const mismatched = await page.evaluate(
+        ({selector, provider, isOwnText}) => {
+          const strong =
+            /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF\u3040-\u9FFF\uAC00-\uD7AF]|([\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF])/u;
+          const expectedFor = (element: Element): string => {
+            if (!isOwnText) {
+              return provider;
+            }
+            const match = strong.exec(element.textContent ?? '');
+            return match == null ? provider : match[1] != null ? 'rtl' : 'ltr';
+          };
+          const targets = isOwnText
+            ? ':is([role="paragraph"], p, h1, h2, h3, h4, h5, h6, blockquote, li, th, td)'
+            : ':is([data-parity-block], tr, th, td, li, p)';
+          return [
             ...document.querySelectorAll(
-              `${selector} [data-parity-body] :is(tr, th, td, li, p)`,
+              `${selector} [data-parity-body] ${targets}`,
             ),
           ]
-            .filter(element => getComputedStyle(element).direction !== expected)
-            .map(element => element.tagName),
-        {selector: surface, expected: direction},
+            .filter(
+              element =>
+                getComputedStyle(element).direction !== expectedFor(element),
+            )
+            .map(
+              element =>
+                (element as HTMLElement).dataset.parityBlock ??
+                `${element.tagName} ${(element.textContent ?? '').slice(0, 24)}`,
+            );
+        },
+        {selector: surface, provider: direction, isOwnText: ownText},
       );
-      expect(nested, `${surface} nested`).toEqual([]);
+      expect(mismatched, surface).toEqual([]);
     }
     expect(errors).toEqual([]);
   });

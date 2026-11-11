@@ -151,10 +151,12 @@ authoring check; it does not replace runtime catalog validation.
   purpose. The contributor guide owns the exact root-component recipe.
 - **INV8 — Copying is a self-contained snapshot.** The emitted source belongs to the
   adopting project. Repository-only demo assets and demo-content elements are
-  replaced with generic placeholders during copy; `template copy` and the
-  docsite's shadcn Install item are copies. `template show` returns the same
-  source a copy writes. Other example source handed out without a copy
-  replaces only demo-content elements. Live previews render the originals.
+  replaced with generic placeholders, and docs-only presentation wrappers are
+  removed, during copy; `template copy` and the docsite's shadcn Install item
+  are copies. `template show` returns the same source a copy writes. Other
+  example source handed out without a copy replaces only demo-content elements
+  and removes docs-only presentation wrappers. Live previews render the
+  originals.
   Later catalog updates do not mutate copied projects.
 - **INV9 — Catalog values may evolve.** Template ids, labels, metadata, categories,
   example data, and starter source are mutable catalog data under

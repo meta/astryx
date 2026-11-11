@@ -18,6 +18,7 @@ import {parseComponent} from './component/parse.mjs';
 import {parseHook} from './hook/parse.mjs';
 import {parseReference} from './reference/parse.mjs';
 import {loadComponentDoc} from '../../foundation/discovery/component-loader.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const goodComponent = {
   type: 'component',
@@ -177,6 +178,43 @@ describe('per-kind parsers (stamped format)', () => {
       parseDoc({name: 'Widget', props: [], audience: 'secret'}),
     ).toThrow();
   });
+
+  it('accepts a deprecated component that names its replacement, stamped or not', () => {
+    const deprecated = {
+      replacement: 'Gauge',
+      description: 'Render a Gauge instead.',
+    };
+    const {type, ...loose} = goodComponent;
+    expect(parseComponent({...goodComponent, deprecated}).deprecated).toEqual(
+      deprecated,
+    );
+    expect(parseDoc({...loose, deprecated}).deprecated).toEqual(deprecated);
+    expect(
+      parseDoc({
+        name: 'Part',
+        subComponentOf: 'Widget',
+        description: 'A part.',
+        props: [],
+        deprecated,
+      }).deprecated,
+    ).toEqual(deprecated);
+  });
+
+  it('rejects a deprecation without a replacement or with a field it does not know', () => {
+    const {type, ...loose} = goodComponent;
+    for (const deprecated of [
+      {description: 'Render a Gauge instead.'},
+      {replacement: '', description: 'Render a Gauge instead.'},
+      {replacement: 'Gauge'},
+      {replacement: 'Gauge', description: 'Render a Gauge.', since: '0.7.5'},
+      'Use Gauge.',
+    ]) {
+      expect(() => parseComponent({...goodComponent, deprecated})).toThrow(
+        /deprecated/u,
+      );
+      expect(() => parseDoc({...loose, deprecated})).toThrow();
+    }
+  });
 });
 
 describe('parseDoc (load boundary, both formats)', () => {
@@ -303,7 +341,7 @@ describe('loadComponentDoc (end-to-end load boundary)', () => {
   let tmpDir;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doc-test-'));
+    tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doc-test-'));
   });
 
   afterEach(() => {

@@ -59,6 +59,7 @@ import {
   holdLayoutSwap,
   landLayoutGlide,
   layoutMotionFor,
+  layoutStartFor,
   playLayoutFrames,
   playLayoutSwap,
   reportLayoutChange,
@@ -68,6 +69,7 @@ import {
 import {TopNavRenderContext} from '../TopNav/TopNavRenderContext';
 import {TopNavMobileContentContext} from '../TopNav/TopNavMobileContentContext';
 import {AppShellMobileContext} from './AppShellMobileContext';
+import {AppShellNestingContext, useAppShellMainId} from './useAppShellMainId';
 import type {AppShellMobileContextValue} from './AppShellMobileContext';
 import type {SpacingStep} from '../utils/types';
 import type {BaseProps} from '../BaseProps';
@@ -77,6 +79,7 @@ import {
   focusOutlineStyles,
 } from '../utils/focusOutline.stylex';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {themeProps} from '../utils/themeProps';
 import {useThemeDefinition} from '../theme/useTheme';
@@ -110,8 +113,6 @@ const ActivityWrapper = HasActivity
 // =============================================================================
 // Constants
 // =============================================================================
-
-const MAIN_CONTENT_ID = 'astryx-app-shell-main';
 
 /**
  * Extra time, on top of MobileNav's own worst-case close delay, that
@@ -471,6 +472,38 @@ const styles = stylex.create({
     top: 0,
     zIndex: 1,
   },
+  // The insets are zero unless the page sets `viewport-fit=cover`. The header
+  // background goes under the status bar and to the screen sides, as a UIKit
+  // bar does.
+  headerSafeAreaTop: {
+    paddingBlockStart: 'env(safe-area-inset-top, 0px)',
+  },
+  // The insets are physical sides, so a right-to-left context swaps them on
+  // the inline sides.
+  headerSafeAreaSides: {
+    paddingInlineStart: {
+      default: 'env(safe-area-inset-left, 0px)',
+      ':is([dir="rtl"] *)': 'env(safe-area-inset-right, 0px)',
+    },
+    paddingInlineEnd: {
+      default: 'env(safe-area-inset-right, 0px)',
+      ':is([dir="rtl"] *)': 'env(safe-area-inset-left, 0px)',
+    },
+  },
+  // In `auto`, the banner's wrapper and the phone top bar both stick. Below a
+  // banner, the bar sticks under the top inset, so its items stay clear of the
+  // status bar.
+  headerStickyBelowTopInset: {
+    top: 'env(safe-area-inset-top, 0px)',
+  },
+  // Main adds the bottom inset to the padding that LayoutContent publishes for
+  // `contentPadding`. The published value excludes the inset, so a bleed child
+  // subtracts only `contentPadding`. Main is border-box, so a child that fills
+  // it ends above the inset.
+  mainSafeAreaEnd: {
+    paddingBlockEnd:
+      'calc(var(--container-padding-block-end, 0px) + env(safe-area-inset-bottom, 0px))',
+  },
   // Sticky sideNav for auto height mode — sticks within the wrapper.
   // This div replaces the panel as the direct flex child of the middle
   // (horizontal) container, so it needs the same flex properties that
@@ -615,12 +648,16 @@ export function AppShell({
   if (isMobileNavOpen && !isMobileNavCloseHeld) {
     setIsMobileNavCloseHeld(true);
   }
+  // Syncs the mobile-nav close hold with a timer. The hold ends after the
+  // slide-out delay.
   useEffect(() => {
     if (!HasActivity || isMobileNavOpen) {
       return;
     }
-    const delayMs = window.matchMedia('(prefers-reduced-motion: reduce)')
-      .matches
+    const delayMs = matchesMediaQuery(
+      window,
+      '(prefers-reduced-motion: reduce)',
+    )
       ? 0
       : MOBILE_NAV_MAX_CLOSE_DELAY_MS + ACTIVITY_HIDE_BUFFER_MS;
     const timeout = setTimeout(() => {
@@ -645,12 +682,13 @@ export function AppShell({
     [mobileNavIsControlled, mobileNavOnOpenChange],
   );
 
+  const mainContentId = useAppShellMainId();
   // Move focus to the main content container when the skip link is activated.
   // Hash navigation alone doesn't reliably move focus in every browser, so
   // focus the target explicitly (it's focusable via tabIndex={-1}).
   const handleSkipLinkClick = useCallback(() => {
-    document.getElementById(MAIN_CONTENT_ID)?.focus();
-  }, []);
+    document.getElementById(mainContentId)?.focus();
+  }, [mainContentId]);
 
   // Main draws its focus ring only for focus a Tab press moved onto it, and
   // keeps it for as long as that focus stays, even once the content fits.
@@ -782,6 +820,8 @@ export function AppShell({
   const headerRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
 
+  // Syncs the header-height CSS variable with a ResizeObserver while the height
+  // is automatic.
   useEffect(() => {
     if (!isAuto || !headerRef.current || !shellRef.current) {
       return;
@@ -891,7 +931,12 @@ export function AppShell({
       role="banner"
       {...mergeProps(
         themeProps('app-shell-header', {variant}),
-        stylex.props(headerAreaStyle, isAuto && styles.headerSticky),
+        stylex.props(
+          headerAreaStyle,
+          isAuto && styles.headerSticky,
+          styles.headerSafeAreaTop,
+          styles.headerSafeAreaSides,
+        ),
       )}>
       {headerInner}
     </div>
@@ -945,10 +990,10 @@ export function AppShell({
           return;
         }
         const motion = layoutMotionFor(main);
-        // Only a spring glides the column; under Reduce Motion the two wraps
+        // Only a glide moves the column; under Reduce Motion the two wraps
         // cross-fade over a steady surface (`design:reduced-motion` DR2).
         let change: LayoutChange | null = null;
-        if (motion.kind === 'spring') {
+        if (motion.kind === 'glide') {
           change = reportLayoutChange(contentLayout, railRef);
           change.measureBefore();
         }
@@ -958,10 +1003,14 @@ export function AppShell({
         let held = 1;
         let entering = 0;
         const last = lastSwapRef.current;
-        if (last != null && motion.kind === 'spring') {
-          const elapsed =
-            Number(main.ownerDocument.timeline?.currentTime ?? 0) -
-            last.startedAt;
+        if (last != null && motion.kind === 'glide') {
+          // Read at the change's own start, where the glide it retargets
+          // carries on. After a block, that is later than the frame the
+          // timeline still reads.
+          const elapsed = Math.max(
+            0,
+            layoutStartFor(main.ownerDocument) - last.startedAt,
+          );
           if (elapsed < motion.progress.durationMs) {
             const p = 1 - motion.progress.remaining(elapsed);
             held = last.entering + (1 - last.entering) * p;
@@ -1001,7 +1050,7 @@ export function AppShell({
         const surface = backdropRef.current ?? main;
         const color = getComputedStyle(surface).backgroundColor;
         const isPainted = !/^rgba\(.*,\s*0\)$|^transparent$/.test(color);
-        const glides = layoutMotionFor(main).kind === 'spring';
+        const glides = layoutMotionFor(main).kind === 'glide';
         if ((isRtl ? travel > 0 : travel < 0) && glides && isPainted) {
           cover.push({
             element: surface,
@@ -1021,7 +1070,7 @@ export function AppShell({
         }
         const {held, entering} = pending;
         lastSwapRef.current = {
-          startedAt: Number(main.ownerDocument.timeline?.currentTime ?? 0),
+          startedAt: layoutStartFor(main.ownerDocument),
           held,
           entering,
         };
@@ -1169,7 +1218,7 @@ export function AppShell({
       ref={mainRefs}
       padding={contentPadding ?? 0}
       role="main"
-      id={MAIN_CONTENT_ID}
+      id={mainContentId}
       // Focusable skip-link target (WCAG 2.4.1) — without tabIndex, several
       // browsers won't move focus to the div when the skip link is activated.
       // A keyboard stop only while it scrolls overflowing content.
@@ -1184,8 +1233,9 @@ export function AppShell({
         drawsMainFocusRing
           ? [focusOutlineStyles.focusVisible, styles.mainScrollRegionInset]
           : styles.mainFocusTarget,
+        styles.mainSafeAreaEnd,
       ]}>
-      {children}
+      <AppShellNestingContext value={true}>{children}</AppShellNestingContext>
     </LayoutContent>
   );
 
@@ -1230,7 +1280,15 @@ export function AppShell({
         role={headerContent == null ? 'banner' : undefined}
         {...mergeProps(
           themeProps('app-shell-header', {variant}),
-          stylex.props(headerAreaStyle, isAuto && styles.headerSticky),
+          stylex.props(
+            headerAreaStyle,
+            isAuto && styles.headerSticky,
+            styles.headerSafeAreaSides,
+            // Under a banner, the banner's wrapper pads the top inset. This top
+            // bar takes only the side insets.
+            headerContent == null && styles.headerSafeAreaTop,
+            isAuto && headerContent != null && styles.headerStickyBelowTopInset,
+          ),
         )}>
         <LayoutHeader padding={0} hasDivider={navHasDividers}>
           <div
@@ -1279,7 +1337,7 @@ export function AppShell({
             <LayoutDividerContext value={null}>
               {/* Skip-to-content link */}
               <a
-                href={`#${MAIN_CONTENT_ID}`}
+                href={`#${mainContentId}`}
                 onClick={handleSkipLinkClick}
                 {...focusOutlineProps.focusVisible(styles.skipLink)}
                 data-testid="skip-to-content">

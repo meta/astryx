@@ -3,11 +3,26 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {expect, it} from 'vitest';
+import {afterAll, beforeAll, expect, it} from 'vitest';
 import {comparePackageTrees} from './verify-published.mjs';
 
+/**
+ * Every package tree below lives here, removed once the tests finish. It is
+ * made in beforeAll, not when the module loads: Vitest skips both hooks when a
+ * run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-verify-published-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
+
 function tree(entries) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-package-parity-'));
+  const root = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-package-parity-'));
   for (const [file, contents] of Object.entries(entries)) {
     const absolute = path.join(root, file);
     fs.mkdirSync(path.dirname(absolute), {recursive: true});

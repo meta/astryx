@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Link/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {use, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 
@@ -24,12 +24,14 @@ import {
   colorVars,
   durationVars,
   easeVars,
+  focusVars,
   spacingVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
 import {Tooltip} from '../Tooltip';
 import {Text} from '../Text';
+import {TextClampContext} from '../Text/textClampContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {
   TextType,
@@ -98,8 +100,23 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     borderStyle: 'none',
     padding: 0,
+    // Browsers centre a button's text; a wrapped label lines up as an
+    // anchor's does.
+    textAlign: 'inherit',
     pointerEvents: 'auto',
     position: 'relative',
+  },
+  // Inside a clamped Text the root joins the text's line boxes, so the
+  // clamp can cut through the link. An inline-flex box is atomic: a clamp
+  // cannot truncate it. The clamp also clips at the line edges, so the ring
+  // sits inside each line box.
+  inClampedText: {
+    display: 'inline',
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
+  },
+  externalIconInClampedText: {
+    marginInlineStart: spacingVars['--spacing-0-5'],
+    verticalAlign: 'middle',
   },
   hasUnderline: {
     textDecoration: 'underline',
@@ -188,9 +205,10 @@ export interface LinkProps extends BaseProps<
   hasUnderline?: boolean;
   /**
    * Whether the link is disabled.
-   * A disabled link renders as a plain anchor without an href (and without
-   * target/rel/onClick), so it cannot navigate or run onClick. It keeps a tab
-   * stop and is announced as a disabled link.
+   * A disabled link cannot navigate or run onClick. With `href` and no
+   * `onClick` it renders as a plain anchor without an href, target, or rel;
+   * with `onClick` it renders as a link-styled button. It keeps a tab stop and
+   * is announced as disabled.
    * @default false
    */
   isDisabled?: boolean;
@@ -278,6 +296,30 @@ export interface LinkProps extends BaseProps<
   children: ReactNode;
 }
 
+type LinkKeyDownHandler = React.KeyboardEventHandler<
+  HTMLAnchorElement | HTMLButtonElement
+>;
+
+// Spread these props after the caller's props, so a caller `aria-disabled` or
+// `role` cannot replace them. A caller `tabIndex` still applies, so a disabled
+// Link keeps the focus order it has when enabled.
+function disabledAnchorProps(onKeyDown?: LinkKeyDownHandler) {
+  return {
+    ...disabledInteractionProps(onKeyDown),
+    role: 'link',
+    'aria-disabled': true,
+  } as const;
+}
+
+// The native button keeps its own role.
+function disabledButtonProps(onKeyDown?: LinkKeyDownHandler) {
+  return {
+    ...disabledInteractionProps(onKeyDown),
+    role: undefined,
+    'aria-disabled': true,
+  } as const;
+}
+
 /**
  * A styled anchor link component.
  *
@@ -340,10 +382,19 @@ export function Link({
   // render as a <button> with link styling for semantic correctness.
   const renderAsButton =
     role === 'button' || (role === 'inert' && href == null);
+  const isExternalWithIcon = isExternalLink && !renderAsButton;
+  // Link reads the enclosing Text's clamp, never its own children (AV1). A
+  // Link with its own display or clamp keeps its own box.
+  const isInClampedText =
+    use(TextClampContext) && display === 'inline' && maxLines === 0;
 
   // The reflected theme attributes win over a caller's same-named `data-*`, so
   // theme targeting always sees the real value (public-component-api INV5).
   const reflectedAttributes = themeDataAttributes({color});
+  // For a color the root paints, the label inherits it, so the label, the
+  // underline, and the icon keep one color at rest and on hover, whatever a
+  // theme sets on its text targets.
+  const labelColor: TextColor = color in linkColorStyles ? 'inherit' : color;
 
   const sharedContent = (
     <>
@@ -351,14 +402,19 @@ export function Link({
         type={type}
         size={size}
         weight={weight}
-        color={color}
+        color={labelColor}
         display={display}
         maxLines={maxLines}>
         {children}
       </Text>
-      {isExternalLink && !renderAsButton && (
+      {isExternalWithIcon && (
         <>
-          <Icon icon="externalLink" size="xsm" color="inherit" />
+          <Icon
+            icon="externalLink"
+            size="xsm"
+            color="inherit"
+            xstyle={isInClampedText && styles.externalIconInClampedText}
+          />
           <VisuallyHidden>{newTabLabel}</VisuallyHidden>
         </>
       )}
@@ -375,7 +431,6 @@ export function Link({
         onClick={onClick}
         {...(isDisabled ? undefined : pressable)}
         aria-label={label || undefined}
-        aria-disabled={isDisabled || undefined}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
@@ -396,29 +451,27 @@ export function Link({
         )}
         {...props}
         {...reflectedAttributes}
-        // Focusable while disabled (spec:AST-085 FR1), but inert (FR2).
-        {...(isDisabled ? disabledInteractionProps(props.onKeyDown) : null)}>
+        {...(isDisabled ? disabledButtonProps(props.onKeyDown) : null)}>
         {sharedContent}
       </button>
     );
   } else if (isDisabled) {
     // A disabled link renders as an <a> with no href, so nothing can navigate
     // and the consumer onClick never fires. It keeps a Tab stop and the link
-    // role so keyboard and screen-reader users still find it (spec:AST-085
-    // FR1, FR5). The router LinkComponent is deliberately skipped — a disabled
-    // link performs no navigation, and custom router links may require a live
-    // href. target/rel are omitted with the href.
+    // role so keyboard and screen-reader users still find it. The router
+    // LinkComponent is deliberately skipped — a disabled link performs no
+    // navigation, and custom router links may require a live href. target/rel
+    // are omitted with the href.
     linkElement = (
       <a
         ref={ref as React.Ref<HTMLAnchorElement>}
-        role="link"
         aria-label={label || undefined}
-        aria-disabled={true}
         tabIndex={0}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
             styles.base,
+            isInClampedText && styles.inClampedText,
             linkColorStyles[color],
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
@@ -431,7 +484,7 @@ export function Link({
         )}
         {...props}
         {...reflectedAttributes}
-        {...disabledInteractionProps(props.onKeyDown)}>
+        {...disabledAnchorProps(props.onKeyDown)}>
         {sharedContent}
       </a>
     );
@@ -451,6 +504,7 @@ export function Link({
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
             styles.base,
+            isInClampedText && styles.inClampedText,
             linkColorStyles[color],
             !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
             hasUnderline && styles.hasUnderline,

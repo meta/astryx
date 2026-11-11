@@ -11,7 +11,7 @@
  *   interaction lane; jsdom checks only the compiled selector's shape.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
