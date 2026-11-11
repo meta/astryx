@@ -17,6 +17,12 @@ export const docs = {
   ],
   params: [
     {
+      name: 'anchor',
+      type: 'React.RefObject<Element | null> | (() => Element | null)',
+      description:
+        'The element the popover sits on when it is not the trigger: a ref to any element or a function returning one. A function is read when the popover opens, after each commit while open, and when its element leaves the document. The trigger keeps its toggle and ARIA. Omit it and the trigger is the anchor.',
+    },
+    {
       name: 'onShow',
       type: '() => void',
       description: 'Callback fired when the popover becomes visible.',
@@ -204,6 +210,8 @@ export const docsDense = {
   description:
     'Headless click-triggered popovers w/ focus trap, auto-focus, light dismiss, Escape, optional hidden close button. Every surface emits the canonical popover target. Custom compositions needing a distinct seam pass/document an owned surfaceTarget.',
   paramDescriptions: {
+    anchor:
+      'element popover sits on when not the trigger: ref or function; re-read on open, commits, and when its element leaves.',
     onShow: 'fires when popover becomes visible.',
     onHide: 'fires when popover hides; use to return focus when needed.',
     xstyle: 'StyleX styles for content wrapper, after default surface.',
