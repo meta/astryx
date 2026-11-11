@@ -17,6 +17,7 @@ import {createMotionEngine, type Animator} from '../motion/animator';
 import {solveSpring, toSpring} from '../motion/spring';
 import {cubicBezier} from '../motion/bezier';
 import {segmentedControl, springs} from '../motion/uikit';
+import {shadowVars} from '../theme/tokens.stylex';
 import {measureSegments, segmentTargetAt} from './useSegmentedTouchTracking';
 import {
   SegmentedSelectionMotion,
@@ -146,9 +147,10 @@ function begin(ctx: Ctx, clientX: number, isFinger = true): void {
   ctx.motion.begin(ctx.track, targetAt(ctx, clientX), isFinger);
 }
 
-/** A finger lands at `clientX`. */
+/** A finger lands at `clientX`, and the press tracker highlights it at once. */
 function press(ctx: Ctx, clientX: number): void {
   begin(ctx, clientX);
+  ctx.motion.highlighted();
 }
 
 /** The finger moves to `clientX`: a lens it holds chases it. */
@@ -656,28 +658,114 @@ describe('style reads at a change', () => {
 });
 
 describe('under a finger', () => {
-  it('landing on the selected segment lifts nothing by default (the pressed-thumb lift is a theme’s): the lens and the ::after stay hidden', async () => {
+  it('a finger landing on the selected segment lifts the lens there: it grows by 24 × 16 pt on the critically damped lift spring, then shrinks back after the release and hands back (FR14)', async () => {
     const ctx = setup('grid');
     press(ctx, clientCenterOf('grid'));
-    await advance(600);
-    expect(ctx.motion.isSliding).toBe(false);
-    expect(ctx.layer('lens', 'visibility')).toBe('');
+    // Bound at once, on the selected segment's own box.
+    expect(ctx.motion.isSliding).toBe(true);
+    expect(ctx.layer('lens', 'visibility')).toBe('visible');
+    expect(ctx.layer('lens', 'width')).toBe('96px');
+    expect(ctx.layer('lens', 'height')).toBe('27px');
     expect(ctx.layer('after', 'visibility')).toBe('');
+    // Lifted, it carries the theme's elevation, so the track stays visible.
+    expect(ctx.layer('lens', 'box-shadow')).toBe(shadowVars['--shadow-low']);
+    // It grows without overshoot: UIKit's lift is critically damped.
+    let width = 96;
+    for (let t = 0; t < 600; t += 25) {
+      await advance(25);
+      const next = 96 * ctx.animator.get('scaleX');
+      expect(next).toBeGreaterThanOrEqual(width - 1e-6);
+      expect(next).toBeLessThanOrEqual(120 + 1e-6);
+      width = next;
+    }
+    expect(96 * ctx.animator.get('scaleX')).toBeCloseTo(120, 1);
+    expect(27 * ctx.animator.get('scaleY')).toBeCloseTo(43, 1);
+    expect(ctx.animator.get('x')).toBeCloseTo(0, 6);
+    expect(release(ctx, clientCenterOf('grid'))).toBeNull();
+    await advance(600);
+    expect(ctx.animator.get('scaleX')).toBeCloseTo(1, 2);
+    expect(ctx.animator.get('scaleY')).toBeCloseTo(1, 2);
+    await advance(2000);
+    expect(ctx.motion.isSliding).toBe(false);
     expectOwnSurface(ctx.segments.grid);
+    // The hand-back clears the lifted edge with the lens.
+    expect(ctx.layer('lens', 'box-shadow')).toBe('');
   });
 
-  it('a drag holds the lens at its resting size until the finger lets go, then it settles back and hands back', async () => {
+  it('a finger pressing the segment a tap just chose, while the lens slides there, lifts the lens and it keeps sliding to that segment', async () => {
+    const ctx = setup('grid');
+    // The tap chose List: the lens slides there.
+    select(ctx, 'grid', 'list');
+    await advance(80);
+    const centerBefore = centerOf('list') + ctx.animator.get('x');
+    const vBefore = ctx.animator.getVelocity('x');
+    expect(centerBefore).toBeLessThan(centerOf('list') - 10);
+    expect(vBefore).toBeGreaterThan(100);
+    // The finger presses List before the lens lands.
+    press(ctx, clientCenterOf('list'));
+    // No jump and no lost velocity at the press.
+    expect(centerOf('list') + ctx.animator.get('x')).toBeCloseTo(
+      centerBefore,
+      6,
+    );
+    expect(ctx.animator.getVelocity('x')).toBeCloseTo(vBefore, 3);
+    // Lifted, it lands on List on the slide spring, grown by 24 × 16 pt.
+    await advance(1500);
+    expect(ctx.animator.get('x')).toBeCloseTo(0, 3);
+    expect(ctx.animator.get('scaleX') * 100).toBeCloseTo(124, 3);
+    expect(ctx.animator.get('scaleY') * 27).toBeCloseTo(43, 3);
+    expect(ctx.motion.isSliding).toBe(true);
+  });
+
+  it('a drag holds the lifted lens until the finger lets go, then it shrinks back and hands back', async () => {
     const ctx = setup('grid');
     press(ctx, clientCenterOf('grid'));
     drag(ctx, clientCenterOf('grid') + 10);
     await advance(2000);
     expect(ctx.motion.isSliding).toBe(true);
-    expect(ctx.animator.get('scaleX')).toBeCloseTo(1, 6);
-    expect(ctx.animator.get('scaleY')).toBeCloseTo(1, 6);
+    expect(96 * ctx.animator.get('scaleX')).toBeCloseTo(120, 3);
+    expect(27 * ctx.animator.get('scaleY')).toBeCloseTo(43, 3);
     expect(release(ctx, clientCenterOf('grid'))).toBeNull();
     await advance(2000);
     expect(ctx.motion.isSliding).toBe(false);
     expectOwnSurface(ctx.segments.grid);
+  });
+
+  it('a drag that commits another segment keeps the lifted edge while the lens travels there, until the hand-back (FR14)', async () => {
+    const ctx = setup('grid');
+    press(ctx, clientCenterOf('grid'));
+    drag(ctx, clientCenterOf('list'));
+    await advance(300);
+    expect(release(ctx, clientCenterOf('list'))).toBe('list');
+    ctx.motion.clicked(ctx.track, 'list', false);
+    await Promise.resolve();
+    // The new value repaints the lens from List's surface; the edge stays.
+    select(ctx, 'grid', 'list');
+    expect(ctx.motion.isSliding).toBe(true);
+    expect(ctx.layer('lens', 'box-shadow')).toBe(shadowVars['--shadow-low']);
+    await advance(100);
+    expect(ctx.layer('lens', 'box-shadow')).toBe(shadowVars['--shadow-low']);
+    await advance(3000);
+    expect(ctx.motion.isSliding).toBe(false);
+    expect(ctx.layer('lens', 'box-shadow')).toBe('');
+    expectOwnSurface(ctx.segments.list);
+  });
+
+  it('a lifted lens that commits another segment shrinks back on the lift spring while it travels on the slide spring', async () => {
+    const ctx = setup('grid');
+    press(ctx, clientCenterOf('grid'));
+    drag(ctx, clientCenterOf('list'));
+    await advance(600);
+    expect(release(ctx, clientCenterOf('list'))).toBe('list');
+    ctx.motion.clicked(ctx.track, 'list', false);
+    await Promise.resolve();
+    select(ctx, 'grid', 'list');
+    await advance(300);
+    // The lift's 0.25 s spring is nearly done; the slide's 0.4 s one is not.
+    expect(27 * ctx.animator.get('scaleY')).toBeCloseTo(27, 0);
+    await advance(3000);
+    expect(ctx.motion.isSliding).toBe(false);
+    expectOwnSurface(ctx.segments.list);
   });
 
   it('landing on another segment leaves the lens alone', () => {
@@ -816,9 +904,9 @@ describe('under a finger', () => {
       centerOf('table') + segmentedControl.dragOvershoot - centerOf('grid'),
       6,
     );
-    // At its resting size throughout: nothing lifts it.
-    expect(ctx.animator.get('scaleX')).toBeCloseTo(1, 6);
-    expect(ctx.animator.get('scaleY')).toBeCloseTo(1, 6);
+    // Lifted throughout: the chase moves it, and its size stays lifted.
+    expect(96 * ctx.animator.get('scaleX')).toBeCloseTo(120, 3);
+    expect(27 * ctx.animator.get('scaleY')).toBeCloseTo(43, 3);
   });
 
   it('letting go commits the segment nearest the finger: 40 % of the way stays, 60 % moves', async () => {
@@ -901,23 +989,61 @@ describe('under a finger', () => {
     expectOwnSurface(ctx.segments.grid);
   });
 
-  it('the lens is bound only once a drag from the selected segment moves it', async () => {
-    const ctx = setup('grid');
-    begin(ctx, clientCenterOf('grid'));
+  it('under a fine primary pointer a press binds nothing until it drags, and never lifts; under the touch presentation a finger’s or a pen’s press lifts the lens at once', async () => {
+    const ctx = setup('grid', {coarse: false});
+    ctx.motion.present(false);
+    begin(ctx, clientCenterOf('grid'), false);
+    ctx.motion.highlighted();
     expect(ctx.motion.isSliding).toBe(false);
     drag(ctx, clientCenterOf('list'));
     expect(ctx.motion.isSliding).toBe(true);
     await advance(1000);
     expect(ctx.animator.get('scaleX')).toBeCloseTo(1, 6);
+    expect(ctx.animator.get('scaleY')).toBeCloseTo(1, 6);
     expect(ctx.layer('after', 'visibility')).toBe('');
+    // Not lifted: the lens keeps the selected surface's own shadow.
+    expect(ctx.layer('lens', 'box-shadow')).toBe(
+      'rgba(0, 0, 0, 0.1) 0px 1px 2px',
+    );
     expect(release(ctx, clientCenterOf('list'))).toBe('list');
+    const finger = setup('grid');
+    press(finger, clientCenterOf('grid'));
+    expect(finger.motion.isSliding).toBe(true);
+    const pen = setup('grid');
+    begin(pen, clientCenterOf('grid'), false);
+    pen.motion.highlighted();
+    await advance(600);
+    expect(96 * pen.animator.get('scaleX')).toBeCloseTo(120, 1);
   });
 
-  it('a press cancelled before it drags leaves everything as it was', () => {
+  it('a press the tracker has not highlighted yet (a scroller’s content delay) lifts nothing; a drag that starts first lifts the lens', async () => {
     const ctx = setup('grid');
     begin(ctx, clientCenterOf('grid'));
+    await advance(100);
+    expect(ctx.motion.isSliding).toBe(false);
+    // The page took the touch for its scroll before the highlight.
     ctx.motion.cancel();
     expect(ctx.motion.isSliding).toBe(false);
+    // A horizontal drag that starts inside the delay lifts the lens itself.
+    begin(ctx, clientCenterOf('grid'));
+    drag(ctx, clientCenterOf('grid') + 12);
+    await advance(600);
+    expect(96 * ctx.animator.get('scaleX')).toBeCloseTo(120, 1);
+    // A highlight that follows changes nothing more.
+    ctx.motion.highlighted();
+    await advance(100);
+    expect(96 * ctx.animator.get('scaleX')).toBeCloseTo(120, 1);
+  });
+
+  it('a press cancelled before it drags shrinks the lifted lens back and hands back', async () => {
+    const ctx = setup('grid');
+    press(ctx, clientCenterOf('grid'));
+    await advance(300);
+    expect(96 * ctx.animator.get('scaleX')).toBeGreaterThan(110);
+    ctx.motion.cancel();
+    await advance(2000);
+    expect(ctx.motion.isSliding).toBe(false);
+    expectOwnSurface(ctx.segments.grid);
     drag(ctx, clientCenterOf('list'));
     expect(ctx.motion.isSliding).toBe(false);
   });
