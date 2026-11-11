@@ -1036,6 +1036,11 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
 - FR6 gap: under a starved compositor, Chromium can show a frame 40 to 60 ms
   after the main-thread frame that builds it. A retarget then first shows that
   far into its curve: up to 6.5 px on a loaded Switch.
+- FR16 gap: ContextMenu's long press keeps its outcome on a blocked main
+  thread, but its menu can show later. When the menu's timer runs more than a
+  frame late, the menu waits up to 50 ms for moves still queued. A move from
+  before the moment that reaches the page more than two frames late holds it
+  the same way.
 - Consumer docs: none until a component ships its touch presentation; each
   component documents its own, including the `presentation` value that keeps
   the released surface (FR25).

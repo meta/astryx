@@ -83,8 +83,11 @@ export interface Harness {
     view?: {left?: number; top?: number; width: number; height: number};
   };
   finger(id: number): Finger;
-  /** Advance the clock and run every timer due by `time`. */
-  advance(time: number): void;
+  /**
+   * Advance the clock and run every timer due by `time`. `runsAt`: when the
+   * page runs those timers on the clock, later behind a block.
+   */
+  advance(time: number, runsAt?: number): void;
 }
 
 export function createHarness(): Harness {
@@ -139,8 +142,8 @@ export function createHarness(): Harness {
       }
       return finger;
     },
-    advance: time => {
-      clock.time = time;
+    advance: (time, runsAt = time) => {
+      clock.time = runsAt;
       arena.advanceTime(time);
     },
   };
@@ -190,17 +193,22 @@ export class Finger {
     return this;
   }
 
-  /** `history`: the coalesced samples before this one, oldest first. */
+  /**
+   * `history`: the coalesced samples before this one, oldest first.
+   * `arrivesAt`: when the page gets the move on the clock, for a move that
+   * reaches it after its own time.
+   */
   move(
     x: number,
     y: number,
     time: number,
     history?: ReadonlyArray<TouchSample>,
+    arrivesAt = time,
   ): this {
     this.x = x;
     this.y = y;
     this.time = time;
-    this.harness.clock.time = time;
+    this.harness.clock.time = arrivesAt;
     this.harness.arena.moved([
       {id: this.id, x, y, time, ...(history == null ? {} : {history})},
     ]);
