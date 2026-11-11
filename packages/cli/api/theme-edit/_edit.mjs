@@ -57,7 +57,7 @@ import {
   fontNotes,
   styledChanges,
   previewAfter,
-  checkGroup,
+  checkSection,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
@@ -368,9 +368,9 @@ async function change(sub, slug, thing, value, options) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditShowResponse>}
  */
 export async function themeEditShow(theme, options = {}) {
-  const {cwd = process.cwd(), png = false, group} = options;
+  const {cwd = process.cwd(), png = false, section} = options;
   requireProject(cwd);
-  checkGroup(group);
+  checkSection(section);
   const data = loadTheme(cwd, theme);
   const ctx = await context(cwd);
   const f = themeFiles(cwd, theme);
@@ -386,7 +386,7 @@ export async function themeEditShow(theme, options = {}) {
   );
   const preview = await renderPreview(ctx, theme, data);
   await keepPreviewRoute(ctx, theme);
-  const sheet = await renderSheet(ctx, theme, data, {group});
+  const sheet = await renderSheet(ctx, theme, data, {group: section});
   const modes = modesOf(data);
   const shots = png
     ? await pictures(

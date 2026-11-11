@@ -105,6 +105,15 @@ describe('dial precedence', () => {
     expect(source).toContain('"ratio": 1.4');
   });
 
+  it('an exact font size wins over the standard small sizes', async () => {
+    await themeEditSet('s', '--font-size-xs', '0.8rem', {cwd});
+    await themeEditSet('s', 'type', 'display', {cwd});
+    const source = read('themes/s/s.settings.ts');
+    expect(source).toContain('"--font-size-xs": "0.8rem"');
+    expect(source).toContain('"--font-size-4xs": "0.375rem"');
+    await themeEditUndo('s', {cwd, thing: '--font-size-xs'});
+  }, 120_000);
+
   it('show keeps the whole scope of a part setting', async () => {
     await themeEditSet('s', 'background-color', '#ffffff', {
       cwd,
@@ -211,6 +220,16 @@ describe('how', () => {
     expect(r.understood.parts).not.toContain('badge');
   });
 
+  it('answers a question about another aspect for that aspect, not as a color question', async () => {
+    const text = await ask('make the text red');
+    expect(text.understood.aspects).toEqual(['text']);
+    expect(text.results[0].text).toContain('whole-theme tokens for text');
+    const corners = await ask('override the corner radius');
+    expect(corners.understood.aspects).toEqual(['corners']);
+    expect(JSON.stringify(corners.results)).not.toContain('--color-');
+    expect((await ask('error red')).understood.aspects).toEqual(['colors']);
+  });
+
   it('takes each color from the word it belongs to', async () => {
     const r = await ask('secondary button white with accent text');
     const commands = r.results
@@ -265,6 +284,23 @@ describe('preview pages', () => {
     expect(route).toContain("background: 'var(--color-background-body)'");
   }, 240_000);
 
+  it('keeps a Colors page added with --path in step, so it never imports a deleted file', async () => {
+    await themeEditSet('s', 'accent', '#7c3aed', {cwd});
+    const r = await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 's',
+      path: 'src/app/custom-preview',
+    });
+    expect(r.data.pages).toContain('colors');
+    const page = 'src/app/custom-preview/pages/colors.tsx';
+    expect(read(page)).toContain('import {palette}');
+    await themeEditUndo('s', {cwd, thing: 'accent'});
+    expect(fs.existsSync(path.join(cwd, 'themes/s/tokens/s.palette.ts'))).toBe(
+      false,
+    );
+    expect(read(page)).not.toContain('import {palette}');
+    expect(read(page)).toContain('This theme sets no color yet');
+  }, 240_000);
 });
 
 describe('preview picker refusals', () => {

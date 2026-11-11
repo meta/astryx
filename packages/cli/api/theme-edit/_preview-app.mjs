@@ -446,30 +446,82 @@ async function writeRoute(cwd, dir, data, theme) {
 }
 
 /**
- * Rewrite the in-app preview route of a theme when its imports changed, so
+ * Rewrite the in-app preview routes of a theme when their imports changed, so
  * a font package installed after `set` loads on the next change or `show`,
  * and its Colors page, so it names the shades the tokens use now.
- * Only the preview in the usual place (app/ or src/app/theme-preview) is
- * kept this way; a preview elsewhere follows on its next `preview add`.
+ * The preview in the usual place (app/ or src/app/theme-preview) and every
+ * preview added with --path for the theme are kept this way.
  * @param {string} cwd
  * @param {string} slug
  * @returns {Promise<boolean>} whether the route or the Colors page was rewritten
  */
 export async function refreshPreviewRoute(cwd, slug) {
   const at = previewDir(cwd, undefined, {optional: true});
-  const data = at && readPreview(at.dir);
-  if (!data || data.theme !== slug || !data.files.includes('page.tsx'))
-    return false;
-  const colors = await refreshColorsPage(cwd, at.dir, data);
-  const file = previewFile(cwd, at.dir, data, 'page.tsx');
-  const text = previewRouteSource({
-    pages: data.pages,
-    theme: await routeTheme(cwd, at.dir, data),
-  });
-  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text)
-    return colors;
-  fs.writeFileSync(file, text);
-  return true;
+  const dirs = [
+    ...new Set([...(at ? [at.dir] : []), ...recordedPreviews(cwd, slug)]),
+  ];
+  let changed = false;
+  for (const dir of dirs) {
+    const data = readPreview(dir);
+    if (!data || data.theme !== slug || !data.files.includes('page.tsx'))
+      continue;
+    if (await refreshColorsPage(cwd, dir, data)) changed = true;
+    const file = previewFile(cwd, dir, data, 'page.tsx');
+    const text = previewRouteSource({
+      pages: data.pages,
+      theme: await routeTheme(cwd, dir, data),
+    });
+    if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text) continue;
+    fs.writeFileSync(file, text);
+    changed = true;
+  }
+  return changed;
+}
+
+/**
+ * Where a theme's previews are, so a preview added with --path is kept in
+ * step too: themes/<theme>/previews.json, project-relative folders.
+ * @param {string} cwd
+ * @param {string} slug
+ */
+const previewsFile = (cwd, slug) =>
+  path.join(themeFiles(cwd, slug).dir, 'previews.json');
+
+/**
+ * The preview folders recorded for a theme that are still inside the
+ * project.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string[]}
+ */
+function recordedPreviews(cwd, slug) {
+  try {
+    const list = JSON.parse(fs.readFileSync(previewsFile(cwd, slug), 'utf8'));
+    return (Array.isArray(list) ? list : [])
+      .map(rel => path.resolve(cwd, String(rel)))
+      .filter(dir => !path.relative(cwd, dir).startsWith('..'));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Record a preview folder for a theme, or with `keep` false forget it.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} dir
+ * @param {boolean} [keep]
+ */
+function recordPreview(cwd, slug, dir, keep = true) {
+  if (!fs.existsSync(themeFiles(cwd, slug).dir)) return;
+  const rel = path.relative(cwd, dir).split(path.sep).join('/');
+  const list = recordedPreviews(cwd, slug)
+    .map(d => path.relative(cwd, d).split(path.sep).join('/'))
+    .filter(x => x !== rel);
+  if (keep) list.push(rel);
+  const file = previewsFile(cwd, slug);
+  if (list.length) fs.writeFileSync(file, `${JSON.stringify(list, null, 2)}\n`);
+  else fs.rmSync(file, {force: true});
 }
 
 /**
@@ -735,6 +787,7 @@ export async function themeEditPreviewAdd(description, options = {}) {
     }
   }
   await writeRoute(cwd, at.dir, data, theme);
+  if (data.theme) recordPreview(cwd, data.theme, at.dir);
   return {
     type: 'themeEdit.previewAdd',
     data: {
@@ -794,6 +847,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
     const skip = new Set(
       [
         from.history,
+        previewsFile(cwd, slug),
         from.preview,
         from.sheet,
         from.previewPng,
@@ -981,6 +1035,7 @@ export async function themeEditPreviewRemove(page, options = {}) {
     } catch {
       // Not empty: something there is not the preview's.
     }
+  if (data.theme) recordPreview(cwd, data.theme, at.dir, false);
   return {
     type: 'themeEdit.previewRemove',
     data: {folder: shown(cwd, at.dir), removed, pages: []},

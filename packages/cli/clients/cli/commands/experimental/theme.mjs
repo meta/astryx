@@ -337,25 +337,17 @@ function showBlocks(d) {
   const [head, ...others] = project(/** @type {any} */ (rest));
   return [
     head,
-    // Each setting with its whole scope, the parts it reaches when that is
-    // more than the part named, and what a stronger setting hides of it.
+    // Each setting as named fields: its whole scope, the parts it reaches,
+    // and what a stronger setting hides of it.
     ...(settings.length
-      ? [
-          section('settings:'),
-          list(
-            settings.map(
-              s =>
-                `${describe(s)} (${s.source})${s.parts.length > 1 || (s.parts.length && s.parts[0] !== s.on) ? ` -> ${s.parts.join(', ')}` : ''}${s.masked ? `; ${s.masked}` : ''}`,
-            ),
-          ),
-        ]
+      ? [section('settings:'), records(settings.map(s => flatRecord(s)))]
       : []),
     ...others,
     ...(colors.length
       ? [
           section('colors:'),
           ...colors.flatMap(c => [
-            `${c.color}, seed ${c.seed}`,
+            record({color: c.color, seed: c.seed}),
             record(c.tokens),
           ]),
         ]
@@ -525,7 +517,7 @@ export function registerExperimentalTheme(group, program) {
             themeEditShow(name, {
               cwd: process.cwd(),
               png: o.png ?? false,
-              group: o.group,
+              section: o.section,
             }),
           r => showBlocks(r.data),
         ),
@@ -594,20 +586,12 @@ export function registerExperimentalTheme(group, program) {
               `[ok] theme preview in ${r.data.folder}: ${r.data.added.length ? `added ${r.data.added.join(', ')}` : 'pages refreshed'}`,
               ...project(/** @type {any} */ (rest)),
               ...(matched.length
-                ? [
-                    section('matched:'),
-                    list(matched.map(m => `${m.page}: ${m.why}`)),
-                  ]
+                ? [section('matched:'), records(matched)]
                 : []),
               ...(skipped.length
                 ? [
                     section('skipped:'),
-                    list(
-                      skipped.map(
-                        s =>
-                          `${s.page}: ${s.reason}${s.installCommand ? ` (${s.installCommand})` : ''}`,
-                      ),
-                    ),
+                    records(skipped.map(s => flatRecord(s))),
                   ]
                 : []),
             ];

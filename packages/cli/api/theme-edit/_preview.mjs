@@ -48,7 +48,7 @@ export const SHOWCASE_GROUPS = [
   'pages',
 ];
 
-/** What each group holds, for help and `--group`. */
+/** What each section of the sheet holds, for help and `show --section`. */
 export const SHOWCASE_GROUP_HELP = {
   actions: 'buttons and links',
   inputs: 'text, number, date and time fields, forms',

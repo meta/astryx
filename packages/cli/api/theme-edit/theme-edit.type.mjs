@@ -97,7 +97,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditShowOptions
  * @property {string} [cwd] - The app folder (default: process.cwd()).
- * @property {string} [group] - Only one group on the sheet: actions, inputs, selection, navigation, feedback, data, containers, overlays, or pages.
+ * @property {string} [section] - Only one section of the sheet: actions, inputs, selection, navigation, feedback, data, containers, overlays, or pages.
  * @property {boolean} [png] - Also take PNG pictures of the previews.
  */
 

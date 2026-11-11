@@ -278,12 +278,12 @@ export async function previewAfter(ctx, slug, data, png) {
   };
 }
 
-/** @param {string | undefined} group */
-export function checkGroup(group) {
-  if (group != null && !SHOWCASE_GROUPS.includes(group))
+/** @param {string | undefined} section a section of the sheet */
+export function checkSection(section) {
+  if (section != null && !SHOWCASE_GROUPS.includes(section))
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `--group takes ${SHOWCASE_GROUPS.join(', ')}, not "${group}".`,
-      {didYouMean: nearest(group, SHOWCASE_GROUPS)},
+      `--section takes ${SHOWCASE_GROUPS.join(', ')}, not "${section}".`,
+      {didYouMean: nearest(section, SHOWCASE_GROUPS)},
     );
 }

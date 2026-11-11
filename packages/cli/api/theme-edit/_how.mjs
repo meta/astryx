@@ -19,6 +19,7 @@ import {
   FAMILIES,
   GROUPS,
   HOW,
+  INTENTS,
   P,
   PART_WORDS,
   familyOf,
@@ -399,12 +400,17 @@ const COLOR_QUESTIONS = [
 ];
 
 /**
- * The answer to a plain-words color question, or null when it is not one.
+ * The answer to a plain-words color question, or null when it is not one:
+ * a question that names a part, or an aspect other than color, is not.
  * @param {string} question
  * @returns {Array<{text: string, commands: string[]}> | null}
  */
 export function colorQuestion(question) {
   const q = question.toLowerCase();
+  // A question about another aspect ("make the text red", "override the
+  // corner radius") is answered for that aspect, not as a color question.
+  if (INTENTS.some(([aspect, re]) => aspect !== 'background' && re.test(q)))
+    return null;
   const hit = COLOR_QUESTIONS.find(([re]) => re.test(q));
   return hit ? [hit[1](q)] : null;
 }

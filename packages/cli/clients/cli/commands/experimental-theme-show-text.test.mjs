@@ -56,7 +56,7 @@ describe('experimental theme editor show text output', () => {
     const [color] = json.colors;
     expect(color).toMatchObject({color: 'accent', seed: '#7c3aed'});
     expect(flat()).toContain('colors:\n');
-    expect(flat()).toContain('accent, seed #7c3aed');
+    expect(flat()).toContain('color: accent\nseed: #7c3aed');
     expect(Object.keys(color.tokens).length).toBeGreaterThan(1);
     for (const [token, shades] of Object.entries(color.tokens))
       expect(flat()).toContain(`${token}: ${shades}`);

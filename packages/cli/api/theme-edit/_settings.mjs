@@ -519,11 +519,14 @@ export function compileTheme(ctx, data, base) {
   }
   // A scale steeper than the standard one enlarges the headings; the steps
   // below the base text size keep the standard ratio, so small text stays
-  // readable.
+  // readable. An exact token setting still wins.
   const scale = theme.typography?.scale;
   if (scale && scale.ratio > STANDARD_RATIO)
     for (const [k, step] of SMALL_STEPS)
-      putTok(k, `${Math.round(scale.base * STANDARD_RATIO ** step) / 16}rem`);
+      if (
+        !data.settings.some(x => x.source === 'token' && x.thing === k && !x.on)
+      )
+        putTok(k, `${Math.round(scale.base * STANDARD_RATIO ** step) / 16}rem`);
   for (const [k, {light, dark}] of Object.entries(tok)) {
     const l = light ?? base.light[k] ?? TOKENS[k];
     const d = dark ?? base.dark[k] ?? TOKENS[k];
@@ -771,9 +774,23 @@ async function runBuild(ctx, slug) {
  */
 export async function resolvedTokens(ctx, slug) {
   const f = themeFiles(ctx.project.cwd, slug);
-  const mod = await import(
-    `${pathToFileURL(f.js).href}?t=${Date.now()}${Math.random()}`
-  );
+  // The built module is ESM in a .js file, and an app's package.json may not
+  // say "type": "module": an .mjs copy beside it loads as ESM with no Node
+  // warning. The query keeps it out of the module cache.
+  const copy = path.join(f.dir, `.${slug}.load.mjs`);
+  fs.copyFileSync(f.js, copy);
+  /** @type {Record<string, any>} */
+  let mod;
+  try {
+    mod = await import(
+      `${pathToFileURL(copy).href}?t=${Date.now()}${Math.random()}`
+    );
+  } catch (e) {
+    if (e instanceof Error) e.message = e.message.split(copy).join(f.js);
+    throw e;
+  } finally {
+    fs.rmSync(copy, {force: true});
+  }
   const t = Object.values(mod).find(
     v => v && typeof v === 'object' && typeof v.name === 'string',
   );
