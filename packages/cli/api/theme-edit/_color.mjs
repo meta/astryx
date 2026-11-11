@@ -8,6 +8,7 @@
  * @position api/theme-edit — pure helpers
  */
 
+import {CSS_WIDE_KEYWORDS} from '../theme/build/font-warning.mjs';
 import {luminance, oklabToLinearRgb} from '../theme/palette/generate/color.mjs';
 
 /** @typedef {[number, number, number]} Rgb */
@@ -168,14 +169,7 @@ const NAMED = /** @type {Record<string, string>} */ ({
 export const COLOR_NAMES = Object.keys(NAMED);
 
 /** Color keywords that are valid colors but have no fixed value. */
-const KEYWORDS = [
-  'transparent',
-  'currentcolor',
-  'inherit',
-  'initial',
-  'unset',
-  'revert',
-];
+const KEYWORDS = ['transparent', 'currentcolor', ...CSS_WIDE_KEYWORDS];
 
 /** CSS system colors: valid, but they follow the user's device. */
 const SYSTEM = [

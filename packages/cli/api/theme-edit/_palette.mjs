@@ -21,12 +21,18 @@ import * as path from 'node:path';
 import {isAlive} from '../../foundation/release/cache.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {parse} from '@babel/parser';
+import {THEMES_DIR} from '../../foundation/discovery/theme-discovery.mjs';
 import {
+  ANCHOR_INPUT_KEYS,
   DEFAULT_21_STOPS,
+  FAMILY_INPUT_KEYS,
+  GENERATION_INPUT_KEYS,
   PALETTE_BLACK,
   PALETTE_GENERATOR_VERSION,
   PALETTE_WHITE,
   generateTonalPalette,
+  modesForStrategy,
   perceptualDelta,
 } from '../theme/palette/generate/generator.mjs';
 import {themePaletteGenerate} from '../theme/palette/generate/generate.mjs';
@@ -209,64 +215,134 @@ const TEXT = 4.5;
 const NON_TEXT = 3;
 
 /**
- * The stop each token starts from, `[light, dark]`, as the official neutral
- * theme maps them. The page background, `--color-background-body`, stays
- * the base theme's, so a tinted gray never tints the page. A layout without
- * one of these stops uses the nearest one it has.
+ * The official neutral theme's color mapping, read from the theme the CLI
+ * ships rather than copied: each token's stops, `[light, dark]`, written
+ * there as `<family>.<mode>[N]` or `withAlpha(<family>.<mode>[N], 'aa')`,
+ * and the parts whose secondary text it lifts (`[part, block]`).
+ * @returns {{stops: Record<string, Array<{stop: number, alpha?: string}>>, lifted: Array<[string, string]>}}
  */
-const NEUTRAL_STOPS = /** @type {Record<string, [number, number]>} */ ({
-  '--color-background-surface': [100, 15],
-  '--color-background-card': [100, 10],
-  '--color-background-popover': [100, 10],
-  '--color-background-muted': [95, 10],
-  '--color-text-primary': [0, 100],
-  '--color-text-secondary': [30, 65],
-  '--color-text-disabled': [60, 35],
-  '--color-icon-primary': [0, 100],
-  '--color-icon-secondary': [45, 65],
-  '--color-icon-disabled': [60, 35],
-  '--color-border-emphasized': [85, 35],
-  '--color-skeleton': [95, 35],
-});
+function readOfficialNeutral() {
+  const ast = parse(
+    fs.readFileSync(
+      path.join(THEMES_DIR, 'neutral', 'neutralTheme.ts'),
+      'utf8',
+    ),
+    {sourceType: 'module', plugins: ['typescript']},
+  );
+  /** @param {any} n @returns {{stop: number, alpha?: string} | null} */
+  const stopOf = n => {
+    if (n?.type === 'CallExpression' && n.callee?.name === 'withAlpha') {
+      const inner = stopOf(n.arguments[0]);
+      const alpha = n.arguments[1]?.value;
+      return inner && typeof alpha === 'string'
+        ? {...inner, alpha: alpha.toLowerCase()}
+        : null;
+    }
+    return n?.type === 'MemberExpression' &&
+      n.computed &&
+      n.property.type === 'NumericLiteral' &&
+      ['light', 'dark'].includes(n.object?.property?.name)
+      ? {stop: n.property.value}
+      : null;
+  };
+  /** @type {Record<string, Array<{stop: number, alpha?: string}>>} */
+  const stops = {};
+  /** @type {Array<[string, string]>} */
+  const lifted = [];
+  /** @param {any} node @param {string[]} keys */
+  const visit = (node, keys) => {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'ObjectProperty') {
+      const key = node.key.name ?? node.key.value;
+      const at = [...keys, String(key)];
+      if (keys.at(-1) === 'tokens' && node.value.type === 'ArrayExpression') {
+        const pair = node.value.elements.map(stopOf);
+        if (pair.length === 2 && pair.every(Boolean)) stops[key] = pair;
+      }
+      if (keys.at(-3) === 'components' && key === '--color-text-secondary')
+        lifted.push([keys.at(-2) ?? '', keys.at(-1) ?? '']);
+      visit(node.value, at);
+      return;
+    }
+    for (const [k, v] of Object.entries(node))
+      if (k !== 'loc' && k !== 'start' && k !== 'end')
+        for (const x of Array.isArray(v) ? v : [v]) visit(x, keys);
+  };
+  visit(ast.program, []);
+  return {stops, lifted};
+}
+const OFFICIAL = readOfficialNeutral();
+/** A token's official `[light, dark]` stops. @param {string} token */
+const officialStops = token =>
+  /** @type {[number, number]} */ (
+    (OFFICIAL.stops[token] ?? []).map(x => x.stop)
+  );
+
+/**
+ * The tokens the neutral color sets at the official theme's stops. The page
+ * background, `--color-background-body`, stays the base theme's, so a
+ * tinted gray never tints the page. A layout without one of these stops
+ * uses the nearest one it has.
+ */
+const NEUTRAL_STOPS = Object.fromEntries(
+  [
+    '--color-background-surface',
+    '--color-background-card',
+    '--color-background-popover',
+    '--color-background-muted',
+    '--color-text-primary',
+    '--color-text-secondary',
+    '--color-text-disabled',
+    '--color-icon-primary',
+    '--color-icon-secondary',
+    '--color-icon-disabled',
+    '--color-border-emphasized',
+    '--color-skeleton',
+  ].map(t => [t, officialStops(t)]),
+);
 /** Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`. */
-const NEUTRAL_TINTS =
-  /** @type {Record<string, [[number, string], [number, string]]>} */ ({
-    '--color-border': [
-      [0, '14'],
-      [100, '1a'],
+const NEUTRAL_TINTS = Object.fromEntries(
+  ['--color-border', '--color-overlay-hover', '--color-overlay-pressed'].map(
+    t => [
+      t,
+      /** @type {[[number, string], [number, string]]} */ (
+        OFFICIAL.stops[t].map(x => [x.stop, String(x.alpha)])
+      ),
     ],
-    '--color-overlay-hover': [
-      [0, '0d'],
-      [100, '0d'],
-    ],
-    '--color-overlay-pressed': [
-      [0, '1a'],
-      [100, '1a'],
-    ],
-  });
+  ),
+);
 /**
  * Accent and status stops, `[light, dark]`, as the official neutral theme
- * maps its accent tint and its status families. The dark fill starts at 70,
- * where the theme authoring guide puts it, when the exact color does not
- * read in dark. A status tint is translucent in dark (`[stop, alpha]`).
+ * maps its accent tint and its status families (info stands for them). The
+ * dark fill starts at 70, where the theme authoring guide puts it, when the
+ * exact color does not read in dark. A status tint is translucent in dark
+ * (`[stop, alpha]`).
  */
 const DARK_FILL = 70;
-const TEXT_STOP = /** @type {[number, number]} */ ([45, 80]);
-const ACCENT_MUTED = /** @type {[number, number]} */ ([85, 30]);
+const TEXT_STOP = officialStops('--color-text-info');
+const ACCENT_MUTED = officialStops('--color-accent-muted');
+const STATUS_MUTED = /** @type {[number, [number, string]]} */ (
+  OFFICIAL.stops['--color-info-muted'].map((x, i) =>
+    i === 0 ? x.stop : [x.stop, String(x.alpha)],
+  )
+);
+const ON_MUTED = officialStops('--color-on-info-muted');
 /**
  * The parts whose secondary text the official neutral theme lifts, with
- * the block it lifts it in and what the text sits on: the accent tint
- * under selected items and tree rows, a dropzone and numbered citations;
- * the translucent neutral track (`--color-neutral`) under segmented-control
- * labels.
+ * the block it lifts it in and what the text sits on: the accent tint,
+ * except under segmented-control labels, which sit on the translucent
+ * neutral track (`--color-neutral`).
  */
-export const LIFT_PARTS = /** @type {Array<[string, string, string]>} */ ([
-  ['item', 'selected', '--color-accent-muted'],
-  ['tree-list-item', 'selected', '--color-accent-muted'],
-  ['file-input', 'mode:dropzone', '--color-accent-muted'],
-  ['citation', 'variant:number', '--color-accent-muted'],
-  ['segmented-control-item', 'base', '--color-neutral'],
-]);
+export const LIFT_PARTS = OFFICIAL.lifted.map(
+  ([part, block]) =>
+    /** @type {[string, string, string]} */ ([
+      part,
+      block,
+      part === 'segmented-control-item'
+        ? '--color-neutral'
+        : '--color-accent-muted',
+    ]),
+);
 /** What each lifted background is, and the parts on it, for notes. */
 const LIFT_GROUNDS =
   /** @type {Record<string, {what: string, parts: string}>} */ ({
@@ -279,20 +355,16 @@ const LIFT_GROUNDS =
       parts: 'segmented-control labels',
     },
   });
-const STATUS_MUTED = /** @type {[number, [number, string]]} */ ([
-  85,
-  [75, '3d'],
-]);
-const ON_MUTED = /** @type {[number, number]} */ ([25, 80]);
 const BORDER = /** @type {[number, number]} */ ([80, 65]);
 /**
  * Text on a fill, from the neutral family as the official themes take it:
  * white (100) first in light, near-black (5) first in dark, and near-black
  * first in both modes on warning. Without a neutral color, black and white.
  */
+const [ON_LIGHT, ON_DARK] = officialStops('--color-on-accent');
 const ON_FILL = /** @type {Record<Mode, [number, number]>} */ ({
-  light: [100, 5],
-  dark: [5, 100],
+  light: [ON_LIGHT, ON_DARK],
+  dark: [ON_DARK, ON_LIGHT],
 });
 /** A layout needs this many stops between black and white to map every token. */
 const MIN_INNER_STOPS = 5;
@@ -365,11 +437,11 @@ function sameColor(a, b) {
  * @returns {Mode[]}
  */
 export function modesOf(data) {
-  return data.mode === 'light-only'
-    ? ['light']
-    : data.mode === 'dark-only'
-      ? ['dark']
-      : ['light', 'dark'];
+  return modesForStrategy(
+    data.mode === 'light-only' || data.mode === 'dark-only'
+      ? data.mode
+      : 'light-and-dark',
+  );
 }
 
 /**
@@ -463,17 +535,6 @@ function savedSettings(cwd, slug) {
 const strategyOf = modes =>
   modes.length > 1 ? 'light-and-dark' : `${modes[0]}-only`;
 
-/** The config fields the generator reads; anything else changes nothing. */
-const CONFIG_KEYS = [
-  'vibrancy',
-  'neutralProfile',
-  'modeStrategy',
-  'stops',
-  'families',
-];
-const FAMILY_KEYS = ['id', 'name', 'seed', 'kind', 'anchors'];
-const ANCHOR_KEYS = ['mode', 'stop', 'color', 'policy', 'maxDeltaE'];
-
 /**
  * The fields of a config the generator never reads (such as
  * `darkChromaTaper`), by path.
@@ -482,17 +543,19 @@ const ANCHOR_KEYS = ['mode', 'stop', 'color', 'policy', 'maxDeltaE'];
  */
 function deadKeys(config) {
   /** @type {string[]} */
-  const out = Object.keys(config).filter(k => !CONFIG_KEYS.includes(k));
+  const out = Object.keys(config).filter(
+    k => !GENERATION_INPUT_KEYS.includes(k),
+  );
   (Array.isArray(config.families) ? config.families : []).forEach(
     (/** @type {any} */ f, /** @type {number} */ i) => {
       if (!f || typeof f !== 'object') return;
       for (const k of Object.keys(f))
-        if (!FAMILY_KEYS.includes(k)) out.push(`families[${i}].${k}`);
+        if (!FAMILY_INPUT_KEYS.includes(k)) out.push(`families[${i}].${k}`);
       (Array.isArray(f.anchors) ? f.anchors : []).forEach(
         (/** @type {any} */ a, /** @type {number} */ j) => {
           if (a && typeof a === 'object')
             for (const k of Object.keys(a))
-              if (!ANCHOR_KEYS.includes(k))
+              if (!ANCHOR_INPUT_KEYS.includes(k))
                 out.push(`families[${i}].anchors[${j}].${k}`);
         },
       );
@@ -970,7 +1033,7 @@ function planPalette(cwd, slug, data, base) {
     // same bytes.
     /** @type {Record<string, unknown>} */
     const ordered = {};
-    for (const k of FAMILY_KEYS) if (k in out) ordered[k] = out[k];
+    for (const k of FAMILY_INPUT_KEYS) if (k in out) ordered[k] = out[k];
     for (const k of Object.keys(out)) if (!(k in ordered)) ordered[k] = out[k];
     return {family: /** @type {typeof out} */ (ordered), stop};
   };

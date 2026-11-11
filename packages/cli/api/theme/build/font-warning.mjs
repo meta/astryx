@@ -27,9 +27,18 @@
  */
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
+// CSS-wide keywords: valid in any declaration, never a family name.
+export const CSS_WIDE_KEYWORDS = new Set([
+  'inherit',
+  'initial',
+  'unset',
+  'revert',
+  'revert-layer',
+]);
+
 // font-family values that never need loading: CSS generic families, the ui-*
 // system keywords, and CSS-wide keywords that can appear in a token value.
-const GENERIC_KEYWORDS = new Set([
+export const GENERIC_KEYWORDS = new Set([
   'serif',
   'sans-serif',
   'monospace',
@@ -43,18 +52,14 @@ const GENERIC_KEYWORDS = new Set([
   'ui-sans-serif',
   'ui-monospace',
   'ui-rounded',
-  'inherit',
-  'initial',
-  'unset',
-  'revert',
-  'revert-layer',
+  ...CSS_WIDE_KEYWORDS,
 ]);
 
 // Families a clean machine already has: the members of core's own default
 // stacks (tokens.stylex.ts typographyDefaults) plus the classic web-safe
 // macOS/Windows set. Deliberately short — an unknown family warns, and for a
 // preinstalled rarity that is a one-line false alarm, not a broken theme.
-const SYSTEM_FAMILIES = new Set([
+export const SYSTEM_FAMILIES = new Set([
   '-apple-system',
   'blinkmacsystemfont',
   'segoe ui',
@@ -97,7 +102,23 @@ const SYSTEM_FAMILIES = new Set([
   'liberation serif',
   'dejavu sans',
   'dejavu sans mono',
+  'noto sans',
+  'ubuntu',
+  'cantarell',
+  // Shipped with Windows and macOS.
+  'comic sans ms',
+  'garamond',
 ]);
+
+/**
+ * Whether a family needs no font file: a CSS generic or keyword, or a
+ * family a clean machine already has. Case does not matter.
+ * @param {string} family without quotes
+ */
+export const isSystemFamily = family => {
+  const name = family.trim().replace(/\s+/g, ' ').toLowerCase();
+  return GENERIC_KEYWORDS.has(name) || SYSTEM_FAMILIES.has(name);
+};
 
 /**
  * Split a CSS font-family value into clean family names. Complete `var()`

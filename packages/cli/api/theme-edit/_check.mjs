@@ -9,10 +9,17 @@
  * @position api/theme-edit — checks over the part data
  */
 
-import {createRequire} from 'node:module';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {CSS_PROPERTIES} from './_css-properties.mjs';
+import {
+  cssProperties,
+  grammarText,
+  initialOf,
+  keywordsOf,
+  matchValue,
+  numbersIn,
+  propertyGrammar,
+} from './_css.mjs';
 import {
   AUTO_SPREAD,
   COLOR_PROPS,
@@ -312,9 +319,7 @@ function checkTypedValue(type, value, name, TOKENS, typeOf, slug) {
     bad('a shadow', '0 2px 4px rgb(0 0 0 / 0.2)');
   if (
     /^--focus-outline-style$/.test(name) &&
-    !/^(none|solid|dashed|dotted|double|groove|ridge|inset|outset|auto)$/.test(
-      value.trim(),
-    )
+    !matchValue('outline-style', value.trim())
   )
     bad('an outline style', 'solid');
 }
@@ -384,115 +389,50 @@ const SYSTEM_COLORS = [
 ];
 
 /**
- * Whether a value is a time the browser takes, at most a minute.
+ * Whether a value is a time the browser takes, at most a minute and never
+ * negative (the grammar has no range).
  * @param {string} value
  */
 function isTime(value) {
-  const v = value.trim().toLowerCase();
-  if (/^(calc|min|max|clamp)\(/.test(v)) return true;
-  const m = /^\+?(\d*\.?\d+(?:e[+-]?\d+)?)(ms|s)$/.exec(v);
-  if (!m) return false;
-  const ms = Number(m[1]) * (m[2] === 's' ? 1000 : 1);
-  return ms <= 60_000;
+  const ast = matchValue('transition-duration', value.trim());
+  return (
+    ast != null &&
+    numbersIn(ast).every(
+      n =>
+        !['s', 'ms'].includes(n.unit) ||
+        (n.value >= 0 && n.value * (n.unit === 's' ? 1000 : 1) <= 60_000),
+    )
+  );
 }
 
 /**
- * Whether a value is an easing the browser takes: a keyword, a cubic-bezier
- * with four numbers (x1 and x2 from 0 to 1), steps(n), or linear() with two
- * stops or more.
+ * Whether a value is an easing the browser takes. The grammar has no range
+ * for a step count: steps() needs at least one step, and two with
+ * `jump-none`.
  * @param {string} value
  */
 function isEasing(value) {
-  const v = value.trim().toLowerCase();
-  if (
-    /^(linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$/.test(v)
-  )
-    return true;
-  const m = /^(cubic-bezier|steps|linear)\((.*)\)$/.exec(v);
-  if (!m) return false;
-  const args = splitTop(m[2], ',').map(x => x.trim());
-  if (args.some(a => /var\(/.test(a))) return true;
-  const num = (/** @type {string} */ a) => /^[+-]?\d*\.?\d+$/.test(a);
-  if (m[1] === 'cubic-bezier')
-    return (
-      args.length === 4 &&
-      args.every(num) &&
-      [0, 2].every(i => Number(args[i]) >= 0 && Number(args[i]) <= 1)
-    );
-  if (m[1] === 'steps')
-    return (
-      /^\d+$/.test(args[0] ?? '') &&
-      Number(args[0]) >= 1 &&
-      args.length <= 2 &&
-      (args.length === 1 ||
-        /^(jump-start|jump-end|jump-none|jump-both|start|end)$/.test(
-          args[1],
-        )) &&
-      !(args[1] === 'jump-none' && Number(args[0]) < 2)
-    );
-  return args.length >= 2 && args.every(a => /^[+-]?\d*\.?\d+(\s|$)/.test(a));
+  const ast = matchValue('transition-timing-function', value.trim());
+  if (!ast) return false;
+  const count = numbersIn(ast).find(n => n.fn === 'steps');
+  return !count || count.value >= (/jump-none/i.test(value) ? 2 : 1);
 }
 
-/**
- * Whether a value is a font family list: each family a quoted name, a name
- * of words that do not start with a digit, or a var().
- * @param {string} value
- */
-function isFamilyList(value) {
-  return splitTop(value.trim(), ',').every(f => {
-    const t = f.trim();
-    return (
-      /^"[^"]+"$/.test(t) ||
-      /^'[^']+'$/.test(t) ||
-      /^var\(/i.test(t) ||
-      /^[\p{L}_-][\p{L}\p{N}_-]*(\s+[\p{L}_-][\p{L}\p{N}_-]*)*$/u.test(t)
-    );
-  });
-}
+/** Whether a value is a font family list. @param {string} value */
+const isFamilyList = value => matchValue('font-family', value.trim()) != null;
 
 /**
- * Whether a value is a shadow list: each layer is `inset`, two to four
- * lengths, and a color, in any order; or `none`.
+ * Whether a value is a shadow list. The grammar has no range for the blur
+ * (the third length), which is never negative.
  * @param {string} value
  */
 function isShadow(value) {
-  const v = value.trim();
-  if (v === 'none') return true;
-  const layers = splitTop(v, ',');
-  // light-dark() takes colors: a whole shadow per mode inside it is dropped.
-  if (
-    layers.length === 1 &&
-    splitTop(v, ' ').length === 1 &&
-    !/^var\(/i.test(v)
-  )
-    return false;
-  return layers.every(layer => {
-    const words = splitTop(layer.trim(), ' ');
-    // One var() stacks a shadow token in the list.
-    if (words.length === 1 && /^var\(/i.test(words[0])) return true;
-    const insets = words.filter(w => w.toLowerCase() === 'inset').length;
-    const nums = words.filter(w =>
-      /^[+-]?\d*\.?\d+(px|rem|em|pt|pc|cm|mm|in|vw|vh|vmin|vmax|ch|ex|lh)?$|^(calc|min|max|clamp)\(/i.test(
-        w,
-      ),
+  if (!matchValue('box-shadow', value.trim())) return false;
+  return splitTop(value.trim(), ',').every(layer => {
+    const lengths = splitTop(layer.trim(), ' ').filter(w =>
+      /^[+-]?\d*\.?\d+[a-z]*$/i.test(w),
     );
-    const vars = words.filter(w => /^var\(/i.test(w));
-    const rest = words.filter(
-      w =>
-        !nums.includes(w) && !vars.includes(w) && w.toLowerCase() !== 'inset',
-    );
-    // A blur (the third length) is never negative.
-    if (nums.length >= 3 && nums[2].startsWith('-')) return false;
-    // A var() fills a length or the color, whichever is missing.
-    const color = rest.length ? 0 : Math.min(1, vars.length);
-    const lengths = nums.length + vars.length - color;
-    return (
-      insets <= 1 &&
-      lengths >= 2 &&
-      lengths <= 4 &&
-      rest.length <= 1 &&
-      rest.every(w => isFixedColor(w))
-    );
+    return !(lengths[2] ?? '').startsWith('-');
   });
 }
 
@@ -564,98 +504,6 @@ function checkCycle(thing, value, TOKENS, data) {
     );
 }
 
-const require = createRequire(import.meta.url);
-/** @type {any} */
-let tree = null;
-/** css-tree, loaded on first use. */
-const csstree = () => (tree ??= require('css-tree'));
-
-/** What a var() or env() may stand for while the rest of a value is matched. */
-const VAR_STANDS_FOR = ['0', '1px', '1ms', 'red', 'ease', 'serif', '0 0 red'];
-
-/**
- * Whether a value matches a property's grammar as css-tree reads it (the
- * browser's grammar, from MDN's data). A var() or env() can hold anything,
- * so the value matches when some ordinary value in its place does.
- * @param {string} prop
- * @param {string} value
- */
-function matchesProperty(prop, value) {
-  const {lexer, parse} = csstree();
-  const vars =
-    value.match(/(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi) ?? [];
-  /** @param {string} v */
-  const tryOne = v => {
-    try {
-      return !lexer.matchProperty(prop, parse(v, {context: 'value'})).error;
-    } catch {
-      return false;
-    }
-  };
-  if (vars.length > 3) return false;
-  /** @param {string} v @param {number} i @returns {boolean} */
-  const fill = (v, i) =>
-    i === vars.length
-      ? tryOne(v)
-      : VAR_STANDS_FOR.some(stand => fill(v.replace(vars[i], stand), i + 1));
-  return fill(value, 0);
-}
-
-/**
- * The keywords a property's grammar takes, through the types it names.
- * @param {string} prop
- * @returns {string[]}
- */
-function keywordsOf(prop) {
-  const t = csstree();
-  const seen = new Set();
-  /** @type {Set<string>} */
-  const words = new Set();
-  /** @param {any} syntax */
-  const walk = syntax => {
-    if (!syntax) return;
-    t.definitionSyntax.walk(syntax, (/** @type {any} */ n) => {
-      if (n.type === 'Keyword') {
-        if (!n.name.startsWith('-')) words.add(n.name);
-      } else if (n.type === 'Type' && !seen.has(n.name)) {
-        seen.add(n.name);
-        walk(t.lexer.types[n.name]?.syntax);
-      }
-    });
-  };
-  walk(t.lexer.properties[prop]?.syntax);
-  return [...words];
-}
-
-/**
- * A value the property takes, to put in a suggestion: its initial value
- * from MDN's data (a shorthand's first longhand's).
- * @param {string} prop
- * @returns {string | null}
- */
-function initialOf(prop) {
-  const mdn = /** @type {Record<string, {initial?: string | string[]}>} */ (
-    createRequire(require.resolve('css-tree/package.json'))(
-      'mdn-data/css/properties.json',
-    )
-  );
-  const initial = mdn[prop]?.initial;
-  if (Array.isArray(initial)) return initial[0] ? initialOf(initial[0]) : null;
-  return typeof initial === 'string' && matchesProperty(prop, initial)
-    ? initial
-    : null;
-}
-
-/**
- * A property's grammar as text, cut at a whole term when it is long.
- * @param {any} syntax
- */
-function grammarText(syntax) {
-  const text = csstree().definitionSyntax.generate(syntax);
-  if (text.length <= 120) return text;
-  return `${text.slice(0, 120).replace(/\s*\|[^|]*$/, '')} | …`;
-}
-
 /**
  * Why a value is not one the property takes, or null. Colors are checked
  * by the editor's own color check; a property css-tree has no grammar for
@@ -666,13 +514,13 @@ function grammarText(syntax) {
  */
 function propertyProblem(prop, value) {
   const v = value.trim();
-  const known = csstree().lexer.properties[prop];
-  if (!known || COLOR_PROPS.test(prop) || matchesProperty(prop, v)) return null;
+  const known = propertyGrammar(prop);
+  if (!known || COLOR_PROPS.test(prop) || matchValue(prop, v)) return null;
   const near = /^[a-z-]+$/i.test(v)
     ? (nearest(v.toLowerCase(), keywordsOf(prop))[0] ?? null)
     : null;
   return {
-    takes: `a value its CSS grammar takes (${grammarText(known.syntax)})`,
+    takes: `a value its CSS grammar takes (${grammarText(known)})`,
     near: near ?? initialOf(prop),
   };
 }
@@ -1668,7 +1516,7 @@ export function checkSetting(
     return s;
   }
   const prop = kebab(thing);
-  if (CSS_PROPERTIES.has(prop)) {
+  if (cssProperties().has(prop)) {
     if (!s.on)
       refuse(
         E.ERR_MISSING_ARGUMENT,
@@ -1862,7 +1710,7 @@ export function checkSetting(
   const meant = kebab(String(thing).trim().replace(/:$/, ''))
     .replace(/[_\s]+/g, '-')
     .replace(/-+/g, '-');
-  if (meant !== prop && CSS_PROPERTIES.has(meant))
+  if (meant !== prop && cssProperties().has(meant))
     refuse(
       E.ERR_THEME_UNKNOWN_THING,
       `"${thing}" is not a dial, a token, or a CSS property; the property is ${meant}.`,
@@ -1919,7 +1767,7 @@ export function checkSetting(
           [`${HOW} --list properties`, `${HOW} --list dials`],
       didYouMean: hint
         ? []
-        : nearest(prop, [...Object.keys(DIALS), ...CSS_PROPERTIES]),
+        : nearest(prop, [...Object.keys(DIALS), ...cssProperties()]),
     },
   );
 }

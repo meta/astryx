@@ -10,6 +10,10 @@
  */
 
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
+import {
+  CSS_WIDE_KEYWORDS as CSS_WIDE,
+  isSystemFamily,
+} from '../theme/build/font-warning.mjs';
 
 /** The command prefix every suggested command starts with. */
 export const P = 'astryx experimental theme editor';
@@ -115,164 +119,60 @@ export const FONTS = {
   courier: ['Courier New', 'Courier, monospace'],
   rounded: ['Nunito', '"Varela Round", system-ui, sans-serif'],
   comic: ['Comic Sans MS', '"Comic Neue", cursive'],
+  // Preinstalled, as the theme build's font warning counts it.
+  roboto: ['Roboto', 'system-ui, sans-serif'],
 };
-/**
- * Family names that need no font file: CSS generic families and fonts the
- * usual desktop systems ship. Lowercase.
- */
-export const SYSTEM_FAMILIES = new Set([
-  'serif',
-  'sans-serif',
-  'monospace',
-  'cursive',
-  'fantasy',
-  'math',
-  'emoji',
-  'fangsong',
-  'system-ui',
-  'ui-serif',
-  'ui-sans-serif',
-  'ui-monospace',
-  'ui-rounded',
-  '-apple-system',
-  'blinkmacsystemfont',
-  'arial',
-  'arial black',
-  'helvetica',
-  'helvetica neue',
-  'segoe ui',
-  'tahoma',
-  'verdana',
-  'trebuchet ms',
-  'georgia',
-  'times',
-  'times new roman',
-  'palatino',
-  'garamond',
-  'courier',
-  'courier new',
-  'consolas',
-  'menlo',
-  'monaco',
-  'sf mono',
-  'sf pro',
-  'sf pro text',
-  'sf pro display',
-  'ubuntu',
-  'cantarell',
-  'noto sans',
-  'liberation sans',
-  'dejavu sans',
-  'comic sans ms',
-  'impact',
-]);
-
-/** CSS-wide keywords: never a family, and invalid inside a list. */
-export const CSS_WIDE_KEYWORDS = [
-  'inherit',
-  'initial',
-  'unset',
-  'revert',
-  'revert-layer',
-  'default',
-];
+/** CSS-wide keywords, and `default`, which font-family reserves: never a family, and invalid inside a list. */
+export const CSS_WIDE_KEYWORDS = [...CSS_WIDE, 'default'];
 
 /** Presets every desktop system already has, so no font file is needed. */
-export const SYSTEM_FONTS = [
-  'system',
-  'tahoma',
-  'verdana',
-  'segoe',
-  'helvetica',
-  'georgia',
-  'serif',
-  'mono',
-  'courier',
-];
+export const SYSTEM_FONTS = Object.keys(FONTS).filter(k =>
+  isSystemFamily(FONTS[k][0]),
+);
 
 /**
- * Open fonts with a package that loads them: preset -> family, fallbacks,
- * and the package. When the package is installed, previews show the font;
- * the app loads it by importing the package once.
- * @type {Record<string, {family: string, fallbacks: string, pkg: string}>}
+ * Open fonts with a package that loads them: preset -> family. The package
+ * is `@fontsource/<preset>` and the fallbacks follow the kind of font
+ * (`-mono`, serif, sans), except where OPEN_FONT_PACKAGES says otherwise.
+ * When the package is installed, previews show the font; the app loads it
+ * by importing the package once.
  */
-export const OPEN_FONTS = {
-  inter: {
-    family: 'Inter',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/inter',
-  },
-  roboto: {
-    family: 'Roboto',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/roboto',
-  },
-  poppins: {
-    family: 'Poppins',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/poppins',
-  },
-  figtree: {
-    family: 'Figtree',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/figtree',
-  },
-  'dm-sans': {
-    family: 'DM Sans',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/dm-sans',
-  },
-  manrope: {
-    family: 'Manrope',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/manrope',
-  },
-  'space-grotesk': {
-    family: 'Space Grotesk',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/space-grotesk',
-  },
-  'ibm-plex-sans': {
-    family: 'IBM Plex Sans',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/ibm-plex-sans',
-  },
-  'ibm-plex-mono': {
-    family: 'IBM Plex Mono',
-    fallbacks: 'ui-monospace, monospace',
-    pkg: '@fontsource/ibm-plex-mono',
-  },
-  'jetbrains-mono': {
-    family: 'JetBrains Mono',
-    fallbacks: 'ui-monospace, monospace',
-    pkg: '@fontsource/jetbrains-mono',
-  },
-  nunito: {
-    family: 'Nunito',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/nunito',
-  },
-  'source-serif': {
-    family: 'Source Serif 4',
-    fallbacks: 'Georgia, serif',
-    pkg: '@fontsource/source-serif-4',
-  },
-  'mona-sans': {
-    family: 'Mona Sans',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/mona-sans',
-  },
-  geist: {
-    family: 'Geist Sans',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/geist-sans',
-  },
-  'geist-mono': {
-    family: 'Geist Mono',
-    fallbacks: 'ui-monospace, monospace',
-    pkg: '@fontsource/geist-mono',
-  },
+const OPEN_FONT_FAMILIES = {
+  inter: 'Inter',
+  poppins: 'Poppins',
+  figtree: 'Figtree',
+  'dm-sans': 'DM Sans',
+  manrope: 'Manrope',
+  'space-grotesk': 'Space Grotesk',
+  'ibm-plex-sans': 'IBM Plex Sans',
+  'ibm-plex-mono': 'IBM Plex Mono',
+  'jetbrains-mono': 'JetBrains Mono',
+  nunito: 'Nunito',
+  'source-serif': 'Source Serif 4',
+  'mona-sans': 'Mona Sans',
+  geist: 'Geist Sans',
+  'geist-mono': 'Geist Mono',
 };
+/** Presets whose package is not named after them. */
+const OPEN_FONT_PACKAGES = /** @type {Record<string, string>} */ ({
+  'source-serif': 'source-serif-4',
+  geist: 'geist-sans',
+});
+/** @type {Record<string, {family: string, fallbacks: string, pkg: string}>} */
+export const OPEN_FONTS = Object.fromEntries(
+  Object.entries(OPEN_FONT_FAMILIES).map(([key, family]) => [
+    key,
+    {
+      family,
+      fallbacks: key.endsWith('-mono')
+        ? 'ui-monospace, monospace'
+        : /serif/i.test(family)
+          ? 'Georgia, serif'
+          : 'system-ui, sans-serif',
+      pkg: `@fontsource/${OPEN_FONT_PACKAGES[key] ?? key}`,
+    },
+  ]),
+);
 
 /**
  * Brand fonts no package loads, and the closest open font, for the warning

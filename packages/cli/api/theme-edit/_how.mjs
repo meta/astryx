@@ -13,7 +13,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
-import {CSS_PROPERTIES} from './_css-properties.mjs';
+import {cssProperties} from './_css.mjs';
 import {
   AUTO_SPREAD,
   COLOR_PROPS,
@@ -363,7 +363,7 @@ async function answer(subject, options, cwd) {
     Object.hasOwn(ctx.project.core.tokenDefaults, key)
   )
     return tokenAnswer(ctx, env, t, key, unknown, themeFields);
-  if (CSS_PROPERTIES.has(key)) {
+  if (cssProperties().has(key)) {
     const setters = Object.keys(C.MAP).filter(p => key in C.MAP[p].own);
     const value = exampleForProperty(key);
     const {commands, refused} = value
@@ -522,7 +522,7 @@ function lookupKey(t, ctx) {
     ctx.project.target.has(x) ||
     ASPECTS.includes(x) ||
     Object.hasOwn(DIALS, x) ||
-    CSS_PROPERTIES.has(x) ||
+    cssProperties().has(x) ||
     x === 'colors' ||
     x === 'palette';
   if (known(k)) return k;
@@ -911,7 +911,7 @@ async function listItems(kind, filter, cwd) {
     };
   if (kind === 'properties') {
     const props = filter
-      ? [...CSS_PROPERTIES].filter(x => f(x)).slice(0, 60)
+      ? [...cssProperties()].filter(x => f(x)).slice(0, 60)
       : COMMON_PROPERTIES;
     return {list: kind, items: props.map(name => ({name})), common: !filter};
   }

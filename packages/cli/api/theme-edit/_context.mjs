@@ -8,18 +8,13 @@
  * @position api/theme-edit — imported only by the adapter's operation helpers
  */
 
+import {isSystemFamily} from '../theme/build/font-warning.mjs';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
-import {
-  CLOSEST_OPEN_FONT,
-  OPEN_FONTS,
-  P,
-  SYSTEM_FAMILIES,
-  SYSTEM_FONTS,
-} from './_tables.mjs';
+import {CLOSEST_OPEN_FONT, OPEN_FONTS, P, SYSTEM_FONTS} from './_tables.mjs';
 import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
@@ -200,9 +195,7 @@ export function fontNotes(ctx, data) {
     if (
       s.thing !== 'font' ||
       SYSTEM_FONTS.includes(s.value) ||
-      SYSTEM_FAMILIES.has(
-        fontOf(s.value).family.replace(/["']/g, '').toLowerCase(),
-      ) ||
+      isSystemFamily(fontOf(s.value).family.replace(/["']/g, '')) ||
       OPEN_FONTS[s.value] ||
       fontOf(s.value).pkg ||
       s.value === 'rounded' ||
