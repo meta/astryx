@@ -96,23 +96,38 @@ interface WiredHandle {
 let nextHintId = 0;
 
 /**
+ * A wired handle's own naming: the `aria-label` and `aria-labelledby` it
+ * has apart from `attach`, and the label `attach` last wrote.
+ */
+interface OwnNaming {
+  label: string | null;
+  labelledBy: string | null;
+  written: string | null;
+}
+
+/**
  * The name announcements and the handle give an item: the element's
  * accessible name, with its handle left out. An item that is its own handle
- * is read with the `aria-label` it had before `attach` named it.
+ * is read with its own naming, not with the label `attach` wrote.
  */
 function nameOf(
   item: ReorderableItem,
-  ownLabels: WeakMap<HTMLElement, string | null>,
+  naming: WeakMap<HTMLElement, OwnNaming>,
 ): string {
-  if (item.handle !== item.element || !ownLabels.has(item.element)) {
+  const own = item.handle === item.element ? naming.get(item.element) : null;
+  if (own == null) {
     return readAccessibleName(item.element, {exclude: item.handle}) ?? '';
   }
   const copy = item.element.cloneNode(true) as HTMLElement;
-  const ownLabel = ownLabels.get(item.element);
-  if (ownLabel == null) {
-    copy.removeAttribute('aria-label');
-  } else {
-    copy.setAttribute('aria-label', ownLabel);
+  for (const [name, value] of [
+    ['aria-label', own.label],
+    ['aria-labelledby', own.labelledBy],
+  ] as const) {
+    if (value == null) {
+      copy.removeAttribute(name);
+    } else {
+      copy.setAttribute(name, value);
+    }
   }
   return readAccessibleName(copy) ?? '';
 }
@@ -162,8 +177,8 @@ export function attachReorderable(
   const t = getResolve('en', {});
   const hintId = `astryx-reorder-attach-hint-${(nextHintId += 1)}`;
   const wired = new Map<HTMLElement, WiredHandle>();
-  // Each wired handle's own `aria-label` before `attach` named it.
-  const ownLabels = new WeakMap<HTMLElement, string | null>();
+  // Each wired handle's own naming, apart from what `attach` writes.
+  const naming = new WeakMap<HTMLElement, OwnNaming>();
   // Every item's name, a fixed one's too: a refusal names it.
   const named = new Map<HTMLElement, {name: string; release: () => void}>();
   let detached = false;
@@ -233,7 +248,7 @@ export function attachReorderable(
     const present = new Set<HTMLElement>();
     for (const item of readItems()) {
       present.add(item.element);
-      const name = nameOf(item, ownLabels);
+      const name = nameOf(item, naming);
       const entry = named.get(item.element);
       if (entry == null || entry.name !== name) {
         entry?.release();
@@ -282,7 +297,22 @@ export function attachReorderable(
   // The handle's name: "Reorder" and the item's name, or its place when it
   // has none. Set again at each read, so it follows a rename and a move.
   const relabel = (item: ReorderableItem) => {
-    const name = nameOf(item, ownLabels);
+    const own = naming.get(item.handle);
+    if (own != null) {
+      // A label or a labelledby the app set since the last write is the
+      // handle's own now. A labelledby would hide the label `attach` writes,
+      // so it is kept aside while the handle is wired.
+      const label = item.handle.getAttribute('aria-label');
+      if (label !== own.written) {
+        own.label = label;
+      }
+      const labelledBy = item.handle.getAttribute('aria-labelledby');
+      if (labelledBy != null) {
+        own.labelledBy = labelledBy;
+        item.handle.removeAttribute('aria-labelledby');
+      }
+    }
+    const name = nameOf(item, naming);
     const label =
       name === ''
         ? t('@astryx.list.reorderHandleAt', {
@@ -292,14 +322,21 @@ export function attachReorderable(
     if (item.handle.getAttribute('aria-label') !== label) {
       item.handle.setAttribute('aria-label', label);
     }
+    if (own != null) {
+      own.written = label;
+    }
   };
 
   const wire = (item: ReorderableItem): WiredHandle => {
     const {handle, element, key} = item;
     const restore = snapshot(handle, HANDLE_ATTRIBUTES);
-    ownLabels.set(handle, handle.getAttribute('aria-label'));
+    naming.set(handle, {
+      label: handle.getAttribute('aria-label'),
+      labelledBy: handle.getAttribute('aria-labelledby'),
+      written: null,
+    });
     const unmark = markReorderHandle(handle);
-    const name = nameOf(item, ownLabels);
+    const name = nameOf(item, naming);
     if (name === '') {
       devWarn(
         'createReorderable',
@@ -326,11 +363,25 @@ export function attachReorderable(
       element,
       name,
       unwire: () => {
-        ownLabels.delete(handle);
+        const own = naming.get(handle);
+        naming.delete(handle);
         releaseKey();
         controller.release(handle);
         unmark();
         restore();
+        // The handle's own naming as it is now, not as it was at wiring.
+        if (own != null) {
+          for (const [name, value] of [
+            ['aria-label', own.label],
+            ['aria-labelledby', own.labelledBy],
+          ] as const) {
+            if (value == null) {
+              handle.removeAttribute(name);
+            } else {
+              handle.setAttribute(name, value);
+            }
+          }
+        }
       },
     };
   };

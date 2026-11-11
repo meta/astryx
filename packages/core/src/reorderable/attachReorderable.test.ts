@@ -421,6 +421,45 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
     ]);
   });
 
+  it("takes an app's new aria-label on a self-handle as its own, and detach restores the new one", () => {
+    const container = document.createElement('ul');
+    const row = document.createElement('li');
+    row.setAttribute('aria-label', 'Ace of spades');
+    container.append(row);
+    document.body.append(container);
+    const attachment = createReorderable({onReorder: () => {}}).attach(
+      container,
+      {items: () => [{key: 'ace', element: row, handle: row}]},
+    );
+    expect(row).toHaveAccessibleName('Reorder Ace of spades');
+    row.setAttribute('aria-label', 'Ace of hearts');
+    act(() => row.click());
+    expect(row).toHaveAccessibleName('Reorder Ace of hearts');
+    act(() => attachment.detach());
+    expect(row).toHaveAttribute('aria-label', 'Ace of hearts');
+  });
+
+  it('names a handle that has aria-labelledby "Reorder" plus its item, and detach restores it', () => {
+    const container = document.createElement('ul');
+    const row = document.createElement('li');
+    const title = document.createElement('span');
+    title.id = 'card-title';
+    title.textContent = 'King of hearts';
+    row.append(title);
+    row.setAttribute('aria-labelledby', 'card-title');
+    container.append(row);
+    document.body.append(container);
+    const attachment = createReorderable({onReorder: () => {}}).attach(
+      container,
+      {items: () => [{key: 'king', element: row, handle: row}]},
+    );
+    expect(row).toHaveAccessibleName('Reorder King of hearts');
+    expect(row).not.toHaveAttribute('aria-labelledby');
+    act(() => attachment.detach());
+    expect(row).toHaveAttribute('aria-labelledby', 'card-title');
+    expect(row).not.toHaveAttribute('aria-label');
+  });
+
   it('wires no handle for a keyless item', () => {
     const container = document.createElement('div');
     const row = document.createElement('div');
