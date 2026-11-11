@@ -191,6 +191,26 @@ function normalizePointerType(type: string): MenuPressPointerType | null {
   return type === 'mouse' || type === 'touch' || type === 'pen' ? type : null;
 }
 
+/**
+ * The identifier of the touch that a pointer's touchstart started. WebKit
+ * gives the touch the pointer's id, and Chromium gives it its own, so a lone
+ * changed touch is the pointer's too. Several changed touches, none with the
+ * pointer's id, name no touch.
+ */
+function touchOfPointer(
+  changed: TouchList | undefined,
+  pointerId: number,
+): number | null {
+  if (changed == null) {
+    return null;
+  }
+  const touches = Array.from(changed);
+  if (touches.some(touch => touch.identifier === pointerId)) {
+    return pointerId;
+  }
+  return touches.length === 1 ? touches[0].identifier : null;
+}
+
 function isRowFocusable(row: HTMLElement): boolean {
   return row.matches(FOCUSABLE_ROW_SELECTOR);
 }
@@ -342,6 +362,7 @@ export function useDropdownMenuPress(
 
   const gestureRef = useRef<MenuPressState<HTMLElement>>(IDLE_MENU_PRESS);
   const pointerIdRef = useRef<number | null>(null);
+  const touchIdentifierRef = useRef<number | null>(null);
   const detachRef = useRef<(() => void) | null>(null);
   // `useLongPress` detects the held finger, as in ContextMenu, so the hold
   // time and the movement tolerance have one home. A ref holds the handle,
@@ -598,6 +619,7 @@ export function useDropdownMenuPress(
           armClickGuard(doc, {
             staysInstalled: true,
             cancelsTouchEnd: native?.pointerType === 'touch',
+            touchIdentifier: touchIdentifierRef.current ?? undefined,
           });
           if (native != null) {
             activate(effect.row, native);
@@ -610,6 +632,7 @@ export function useDropdownMenuPress(
             armClickGuard(doc, {
               staysInstalled: true,
               cancelsTouchEnd: native?.pointerType === 'touch',
+              touchIdentifier: touchIdentifierRef.current ?? undefined,
             });
           }
           if (effect.dismiss) {
@@ -705,7 +728,17 @@ export function useDropdownMenuPress(
       const doc = getDocument();
       const view = doc.defaultView;
       pointerIdRef.current = pointerId;
+      touchIdentifierRef.current = null;
 
+      // The touchstart after this pointerdown names the touch, so the guard
+      // at the lift cancels only that touch's touchend.
+      const onTouchStart = (event: TouchEvent) => {
+        doc.removeEventListener('touchstart', onTouchStart, true);
+        touchIdentifierRef.current = touchOfPointer(
+          event.changedTouches,
+          pointerId,
+        );
+      };
       const onMove = (event: PointerEvent) => {
         if (event.pointerId !== pointerIdRef.current) {
           return;
@@ -778,12 +811,17 @@ export function useDropdownMenuPress(
         stepRef.current({type: 'cancel'});
       };
 
+      doc.addEventListener('touchstart', onTouchStart, {
+        capture: true,
+        passive: true,
+      });
       doc.addEventListener('pointermove', onMove, true);
       doc.addEventListener('pointerup', onUp, true);
       doc.addEventListener('pointercancel', onCancel, true);
       doc.addEventListener('pointerdown', onOtherPointerDown, true);
       view?.addEventListener('blur', onBlur);
       detachRef.current = () => {
+        doc.removeEventListener('touchstart', onTouchStart, true);
         doc.removeEventListener('pointermove', onMove, true);
         doc.removeEventListener('pointerup', onUp, true);
         doc.removeEventListener('pointercancel', onCancel, true);
