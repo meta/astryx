@@ -884,11 +884,11 @@ export async function commitTheme(ctx, slug, data, {history}) {
 
 /** @param {Ctx} ctx @param {ThemeData} data */
 export function fontPackages(ctx, data) {
-  /** @type {Array<{pkg: string, installed: boolean}>} */
+  /** @type {Array<{pkg: string, family: string, installed: boolean}>} */
   const out = [];
   for (const s of data.settings) {
     if (s.thing !== 'font') continue;
-    const pkg = fontOf(s.value).pkg;
+    const {pkg, family} = fontOf(s.value);
     if (!pkg || out.some(x => x.pkg === pkg)) continue;
     let installed = true;
     try {
@@ -896,7 +896,7 @@ export function fontPackages(ctx, data) {
     } catch {
       installed = false;
     }
-    out.push({pkg, installed});
+    out.push({pkg, family: family.replace(/["']/g, ''), installed});
   }
   return out;
 }

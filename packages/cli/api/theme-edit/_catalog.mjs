@@ -45,6 +45,21 @@ export const EXTRA = [
       ],
     ],
   ],
+  [
+    'ButtonGroup',
+    [
+      [
+        '',
+        h(
+          'ButtonGroup',
+          {label: 'Actions'},
+          h('Button', {label: 'Copy', variant: 'secondary'}),
+          h('Button', {label: 'Paste', variant: 'secondary'}),
+          h('Button', {label: 'Delete', variant: 'secondary'}),
+        ),
+      ],
+    ],
+  ],
   ['TextArea', [['', h('TextArea', {label: 'Notes', value: 'Some notes'})]]],
   ['NumberInput', [['', h('NumberInput', {label: 'Count', value: 3})]]],
   [
@@ -193,6 +208,7 @@ export const OPEN_OVERLAYS =
             __element: 'Popover',
             props: {
               isOpen: true,
+              label: 'Details',
               content: {
                 __element: 'Text',
                 props: {type: 'body'},

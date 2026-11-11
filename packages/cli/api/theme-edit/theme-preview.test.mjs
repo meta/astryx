@@ -13,6 +13,9 @@ import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {
   themeEditNew,
+  themeEditSet,
+  themeEditShow,
+  themeEditUndo,
   themeEditPreviewAdd,
   themeEditPreviewApp,
   themeEditPreviewList,
@@ -163,6 +166,69 @@ describe('preview add', () => {
     for (const f of ['pages/overview.tsx', 'pages/components.tsx'])
       expect(read(`src/app/theme-preview/${f}`)).not.toMatch(/__element|<XDS/);
     expect(typeErrors(dir)).toEqual([]);
+  }, 120_000);
+
+  it('writes a components page whose parts work on their own and survive leaving the page', () => {
+    const page = read('src/app/theme-preview/pages/components.tsx');
+    // A typeahead with no search source throws as it unmounts, past every
+    // boundary, so leaving the page would crash the production route.
+    for (const tag of page.match(
+      /<C\.(Tokenizer|Typeahead|CommandPalette)\b[^>]*>/g,
+    ) ?? [])
+      expect(tag).toContain('searchSource={SAMPLE_SOURCE}');
+    expect(page).toContain('const SAMPLE_SOURCE = {');
+    // A status object takes the value as its type.
+    expect(page).not.toMatch(
+      /<C\.(Selector|Tokenizer|TextInput)\b[^>]*status="/,
+    );
+    expect(page).toContain('status={{"type":"error"}}');
+    // A part renders inside its parent, or not at all.
+    for (const [part, parent] of [
+      ['Step', 'Stepper'],
+      ['SegmentedControlItem', 'SegmentedControl'],
+      ['RadioListItem', 'RadioList'],
+    ]) {
+      expect(page).not.toMatch(
+        new RegExp(`<Safe name="${part}">\\s*<C\\.${part}\\b`),
+      );
+      expect(page).toMatch(
+        new RegExp(`<Safe name="${part}">\\s*<C\\.${parent}\\b`),
+      );
+    }
+    expect(page).not.toContain('<Safe name="DropdownMenuRadioItem">');
+    expect(page).toMatch(/<C\.ButtonGroup [^>]*>\s*<C\.Button /);
+    expect(page).toContain('could not render here');
+    expect(read('src/app/theme-preview/pages/overview.tsx')).not.toContain(
+      'AppShell',
+    );
+  });
+
+  it('names the install line while missing, and the preview imports it once installed', async () => {
+    const pkgDir = path.join(cwd, 'node_modules', '@fontsource', 'inter');
+    fs.rmSync(pkgDir, {recursive: true, force: true});
+    const set = await themeEditSet('brand', 'font', 'inter', {cwd});
+    const note = set.data.notes.join(' ');
+    expect(note).toContain('Inter is not installed, so it does not load');
+    expect(note).toContain('install @fontsource/inter');
+    const route = 'src/app/theme-preview/page.tsx';
+    expect(read(route)).not.toContain('@fontsource/inter');
+    fs.mkdirSync(pkgDir, {recursive: true});
+    fs.writeFileSync(
+      path.join(pkgDir, 'package.json'),
+      '{"name": "@fontsource/inter", "version": "5.0.0", "main": "index.css"}\n',
+    );
+    fs.writeFileSync(path.join(pkgDir, 'index.css'), '');
+    try {
+      const show = await themeEditShow('brand', {cwd});
+      expect(show.data.notes.join(' ')).toContain("import '@fontsource/inter'");
+      expect(read(route)).toContain('import "@fontsource/inter/index.css";');
+    } finally {
+      fs.rmSync(path.join(cwd, 'node_modules', '@fontsource'), {
+        recursive: true,
+        force: true,
+      });
+      await themeEditUndo('brand', {cwd});
+    }
   }, 120_000);
 
   it('adds the page template the build ranking picks for a description', async () => {

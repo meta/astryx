@@ -84,11 +84,11 @@ export async function pictures(project, shots, modes) {
 export function fontNotes(ctx, data) {
   /** @type {string[]} */
   const notes = [];
-  for (const {pkg, installed} of fontPackages(ctx, data)) {
+  for (const {pkg, family, installed} of fontPackages(ctx, data)) {
     notes.push(
       installed
         ? `the app loads this font with one import: import '${pkg}';`
-        : `${pkg} is not installed, so previews fall back to the next font: ${installLine(ctx.project.cwd, [pkg])}; then the app imports it once: import '${pkg}';`,
+        : `${family} is not installed, so it does not load: the previews and the app show the next font in the stack. Install it: ${installLine(ctx.project.cwd, [pkg])}. Then the preview imports it on the next set or show, and the app imports it once: import '${pkg}';`,
     );
   }
   for (const s of data.settings) {

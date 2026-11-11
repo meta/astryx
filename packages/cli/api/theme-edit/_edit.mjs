@@ -45,6 +45,7 @@ import {
   paletteToken,
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
+import {refreshPreviewRoute} from './_preview-app.mjs';
 import {baseResolved} from './_project.mjs';
 import {
   requireProject,
@@ -99,7 +100,7 @@ export async function themeEditNew(name, options = {}) {
   /** @type {import('./_settings.mjs').ThemeData} */
   const data = {name, ...(like ? {like} : {}), mode: 'both', settings: []};
   const r = await commitTheme(ctx, name, data, {history: false});
-  const p = await previewAfter(ctx, name, data, png);
+  const p = await previewAndRoute(ctx, name, data, png);
   return {
     type: 'themeEdit.new',
     data: {
@@ -115,6 +116,36 @@ export async function themeEditNew(name, options = {}) {
       ...p,
     },
   };
+}
+
+/**
+ * The preview after a change, with the in-app preview route kept in step:
+ * its imports follow the theme, such as the stylesheet of a font package
+ * installed since the last change.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {boolean} png
+ */
+async function previewAndRoute(ctx, slug, data, png) {
+  const p = await previewAfter(ctx, slug, data, png);
+  await keepPreviewRoute(ctx, slug);
+  return p;
+}
+
+/**
+ * Rewrite the in-app preview route when its imports changed. A route that
+ * cannot be rewritten stays as it is; the change itself still stands, and
+ * the next `preview add` writes the route again.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ */
+async function keepPreviewRoute(ctx, slug) {
+  try {
+    await refreshPreviewRoute(ctx.project.cwd, slug);
+  } catch {
+    // A damaged or moved preview.
+  }
 }
 
 /**
@@ -161,7 +192,7 @@ async function change(sub, slug, thing, value, options) {
     } else
       data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (s.value);
     const r = await commitTheme(ctx, slug, data, {history: true});
-    const p = await previewAfter(ctx, slug, data, png);
+    const p = await previewAndRoute(ctx, slug, data, png);
     return {
       type: 'themeEdit.set',
       data: {
@@ -234,7 +265,7 @@ async function change(sub, slug, thing, value, options) {
     );
   if (s.thing === 'font' && sub === 'set')
     notes.push(...fontNotes(ctx, {...data, settings: [s]}));
-  const p = await previewAfter(ctx, slug, data, png);
+  const p = await previewAndRoute(ctx, slug, data, png);
   return {
     type: sub === 'set' ? 'themeEdit.set' : 'themeEdit.undo',
     data: {
@@ -246,6 +277,7 @@ async function change(sub, slug, thing, value, options) {
           : /** @type {import('./_settings.mjs').Setting} */ (prev),
       replaced: sub === 'set' ? prev : null,
       was: null,
+      notes,
       parts,
       family: fam
         ? {
@@ -258,7 +290,6 @@ async function change(sub, slug, thing, value, options) {
       styled,
       kept,
       lifted: r.lifted,
-      notes,
       problems: r.problems,
       warnings: r.warnings,
       ...p,
@@ -292,6 +323,7 @@ export async function themeEditShow(theme, options = {}) {
     ctx.project.core.tokenDefaults,
   );
   const preview = await renderPreview(ctx, theme, data);
+  await keepPreviewRoute(ctx, theme);
   const sheet = await renderSheet(ctx, theme, data, {group});
   const modes = modesOf(data);
   const shots = png
@@ -311,6 +343,7 @@ export async function themeEditShow(theme, options = {}) {
       like: data.like ?? null,
       mode: data.mode,
       settings: data.settings.map(s => ({...s, parts: partsOf(ctx, s)})),
+      notes: fontNotes(ctx, data),
       resolved: Object.fromEntries(
         KEY_TOKENS.map(k => [
           k,
@@ -319,7 +352,6 @@ export async function themeEditShow(theme, options = {}) {
       ),
       palette: pal && paletteReport(pal, data, theme),
       problems,
-      notes: fontNotes(ctx, data),
       preview,
       sheet: sheet.file,
       sheetComponents: sheet.components,
@@ -436,7 +468,7 @@ export async function themeEditUndo(theme, options = {}) {
     );
   if (current && current.mode !== prev.mode)
     undone.push(`mode ${current.mode} is back to ${prev.mode}`);
-  const p = await previewAfter(ctx, theme, prev, png);
+  const p = await previewAndRoute(ctx, theme, prev, png);
   return {
     type: 'themeEdit.undo',
     data: {

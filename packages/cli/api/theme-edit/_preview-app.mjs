@@ -365,6 +365,31 @@ async function writeRoute(cwd, dir, data, theme) {
 }
 
 /**
+ * Rewrite the in-app preview route of a theme when its imports changed, so
+ * a font package installed after `set` loads on the next change or `show`.
+ * Only the preview in the usual place (app/ or src/app/theme-preview) is
+ * kept this way; a preview elsewhere follows on its next `preview add`.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Promise<boolean>} whether the route was rewritten
+ */
+export async function refreshPreviewRoute(cwd, slug) {
+  const at = previewDir(cwd, undefined, {optional: true});
+  const data = at && readPreview(at.dir);
+  if (!data || data.theme !== slug || !data.files.includes('page.tsx'))
+    return false;
+  const file = previewFile(cwd, at.dir, data, 'page.tsx');
+  const text = previewRouteSource({
+    pages: data.pages,
+    theme: await routeTheme(cwd, at.dir, data),
+  });
+  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text)
+    return false;
+  fs.writeFileSync(file, text);
+  return true;
+}
+
+/**
  * How to open the preview, from where it is.
  * @param {string} cwd
  * @param {{dir: string, app: string | null}} at
