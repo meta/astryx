@@ -5,8 +5,9 @@
 /**
  * @file contextMenuPressFeedback.ts
  * @input UIKit's context-menu springs, the context-menu constants, the
- *   compositor animator, the presses ContextMenu's recognizer takes, and the
- *   press state core's press machine writes
+ *   compositor animator, the presses ContextMenu's recognizer takes, the
+ *   press state core's press machine writes, and the context-menu-trigger
+ *   mark (privateAttributes/contextMenuTrigger.stylex.ts)
  * @output useContextMenuPressFeedback: hold, release and let go, from
  *   ContextMenu. The growth follows the recognizer's finger, or a pen's
  *   press mark
@@ -15,20 +16,15 @@
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenu.tsx
  */
 
-// The growth starts in the first frame at or after the onset, 150 ms after a
-// finger lands, while the recognizer follows that finger. It plays its whole
-// spring from rest, from that frame, as Core Animation starts an animation at
-// its commit. The recognizer reports the landing; a pointer-only pen's press
-// waits for the press machine's "on". Only the recognizer's failure or cancel
-// returns it. A long press is a gesture, so the
-// growth plays UIKit's lift spring and each return its dismissal spring. The
-// compositor plays them, so a busy main thread does not stall them. Once the
-// menu opens, the trigger holds its size until the menu closes. Then it returns
-// on the dismissal spring. An inline trigger and Reduce Motion show no growth.
+// Only the recognizer's failure or cancel returns the growth.
 
 import {useCallback, useRef, type RefObject} from 'react';
 import {useAttachment} from '../hooks/useAttachment';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {
+  closestContextMenuTrigger,
+  markContextMenuTrigger,
+} from '../privateAttributes/contextMenuTrigger.stylex';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
 import {PRESS_ONSET_MS} from '../utils/pressGesture';
 import {observeMutations} from '../utils/sharedMutationObserver';
@@ -76,48 +72,40 @@ const NO_LANDING: RefObject<() => number | null> = {current: () => null};
 /** With no recognizer to ask, every "on" is a pen's. */
 const NO_FINGER: RefObject<() => boolean> = {current: () => false};
 
-// The triggers a press mark belongs to: every mounted trigger, whether it
-// shows growth or not. A mark inside a trigger belongs to the nearest of them
-// at or above it. So a press on a nested trigger grows no outer trigger.
-const pressMarkOwners = new WeakSet<Element>();
+/**
+ * The window that shows `element`. A trigger in a same-origin iframe or a
+ * Picture-in-Picture window gets its touches, frames and timeline from that
+ * window, whose clock starts later than the page's.
+ */
+function windowOf(element: Element): Window {
+  return element.ownerDocument.defaultView ?? window;
+}
 
 /**
- * Calls `onDue` in the first animation frame that runs at or after `dueAt`, on
- * the event clock, with the time its callback runs. `onWait` runs in each frame
- * before it. It reads only the clock. A frame comes on time where a timer does
- * not: Chromium holds the page's timers for about 100 ms after it handles a
- * touchstart. Returns the function that stops it.
+ * Calls `onDue` in the first animation frame of `view` that runs at or after
+ * `dueAt`, on that window's clock, with the time its callback runs. `onWait`
+ * runs in each frame before it. It reads only the clock. A frame comes on time
+ * where a timer does not: Chromium holds the page's timers for about 100 ms
+ * after it handles a touchstart. Returns the function that stops it.
  */
 function watchFramesFrom(
+  view: Window,
   dueAt: number,
   onWait: () => void,
   onDue: (time: number) => void,
 ): () => void {
-  let frame = requestAnimationFrame(function look() {
-    const time = performance.now();
+  let frame = view.requestAnimationFrame(function look() {
+    const time = view.performance.now();
     if (time >= dueAt) {
       onDue(time);
       return;
     }
     onWait();
-    frame = requestAnimationFrame(look);
+    frame = view.requestAnimationFrame(look);
   });
   return () => {
-    cancelAnimationFrame(frame);
+    view.cancelAnimationFrame(frame);
   };
-}
-
-function pressMarkOwnerOf(marked: Element): Element | null {
-  for (
-    let node: Element | null = marked;
-    node != null;
-    node = node.parentElement
-  ) {
-    if (pressMarkOwners.has(node)) {
-      return node;
-    }
-  }
-  return null;
 }
 
 /**
@@ -152,7 +140,6 @@ export function useContextMenuPressFeedback(
   const fingerOnsetRef = useRef<
     ((landedAt: number, target: Element | null) => void) | null
   >(null);
-  // Stops the frame watch of a growth still to come.
   const stopOnsetRef = useRef<(() => void) | null>(null);
   const stopOnset = useCallback(() => {
     stopOnsetRef.current?.();
@@ -180,7 +167,19 @@ export function useContextMenuPressFeedback(
     if (element == null) {
       return null;
     }
-    animatorRef.current ??= createMotionEngine(element);
+    // Another window's timeline runs on its own clock and frames.
+    const view = windowOf(element);
+    animatorRef.current ??= createMotionEngine(
+      element,
+      view === window
+        ? {}
+        : {
+            now: () => view.performance.now(),
+            requestFrame: callback => {
+              view.requestAnimationFrame(frame => callback(frame));
+            },
+          },
+    );
     return animatorRef.current;
   }, [visualRef]);
 
@@ -284,22 +283,24 @@ export function useContextMenuPressFeedback(
   useAttachment(
     triggerRef,
     element => {
-      pressMarkOwners.add(element);
+      // Every mounted trigger is marked, whether it shows growth or not. A
+      // press mark belongs to the nearest trigger at or above it, so a press
+      // on a nested trigger grows no outer trigger.
+      const unmark = markContextMenuTrigger(element);
       if (!isShown) {
-        return () => {
-          pressMarkOwners.delete(element);
-        };
+        return unmark;
       }
       const isMarkedOn = () =>
         element.getAttribute(PRESSED_ATTRIBUTE) === 'on' ||
         [...element.querySelectorAll(`[${PRESSED_ATTRIBUTE}="on"]`)].some(
-          marked => pressMarkOwnerOf(marked) === element,
+          marked => closestContextMenuTrigger(marked) === element,
         );
       let isPressed = isMarkedOn();
       let markedAt = 0;
       const startAt = (onsetAt: number) => {
         stopOnset();
         stopOnsetRef.current = watchFramesFrom(
+          windowOf(element),
           onsetAt,
           // The engine is built in a frame, not in the handler of the touch,
           // so the frame that starts the growth only creates its animation.
@@ -326,7 +327,7 @@ export function useContextMenuPressFeedback(
       };
       fingerOnsetRef.current = (landed, target) => {
         // A finger on a nested trigger grows only that trigger.
-        if (target != null && pressMarkOwnerOf(target) !== element) {
+        if (target != null && closestContextMenuTrigger(target) !== element) {
           return;
         }
         startAt(landed + PRESS_ONSET_MS);
@@ -341,7 +342,7 @@ export function useContextMenuPressFeedback(
             if (next) {
               if (!followsFinger.current()) {
                 stopOnset();
-                markedAt = performance.now();
+                markedAt = windowOf(element).performance.now();
                 growAtMark();
               }
             } else if (!isFollowed.current()) {
@@ -356,7 +357,7 @@ export function useContextMenuPressFeedback(
         stopOnset();
         stopObserving();
         fingerOnsetRef.current = null;
-        pressMarkOwners.delete(element);
+        unmark();
       };
     },
     isShown,

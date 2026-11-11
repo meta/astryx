@@ -398,6 +398,75 @@ describe('PowerSearch', () => {
     });
   });
 
+  // component:Tokenizer FR14 keeps the list open only when the picked choice
+  // itself is committed. A field that adds a filter at once is not.
+  describe('field list after a pick', () => {
+    it('closes after a pick that adds an empty-operator filter at once', async () => {
+      const user = userEvent.setup();
+      const emptyConfig: PowerSearchConfig = {
+        name: 'EmptyFirst',
+        fields: [
+          {
+            key: 'assignee',
+            label: 'Assignee',
+            defaultOperator: 'is_unset',
+            operators: [
+              {key: 'is_unset', label: 'is unset', value: {type: 'empty'}},
+            ],
+          },
+          ...config.fields,
+        ],
+      };
+      render(<PowerSearchWrapper config={emptyConfig} />);
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Assignee', hidden: true}),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(
+        screen.getByRole('option', {name: 'Assignee', hidden: true}),
+      );
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('keeps the field list closed after a field whose editor sets the value', async () => {
+      const user = userEvent.setup();
+      render(<PowerSearchWrapper config={config} />);
+      const input = screen.getByRole('combobox', {name: 'Search'});
+      await user.click(input);
+      await user.click(
+        await screen.findByRole('option', {name: 'Status', hidden: true}),
+      );
+
+      await user.click(
+        await screen.findByRole('combobox', {name: 'Value', hidden: true}),
+      );
+      await user.click(
+        await screen.findByRole('option', {name: 'Open', hidden: true}),
+      );
+      const apply = screen.queryByRole('button', {name: 'Apply', hidden: true});
+      if (apply != null) {
+        await user.click(apply);
+      }
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(screen.getByText(/Open/)).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(
+        screen.queryByRole('option', {name: 'Status', hidden: true}),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe('paste behavior', () => {
     it('pasting a field name shows matching field suggestions', async () => {
       const user = userEvent.setup();

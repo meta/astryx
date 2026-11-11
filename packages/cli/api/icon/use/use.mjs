@@ -114,10 +114,11 @@ export async function iconUse(
     list: Array.isArray(value),
   });
   // Doctor fails a project that installs several sets and leaves one out.
-  const unlisted = sets.filter(set => !listed.includes(set)).map(iconSetKey);
+  const unlistedSets = sets.filter(set => !listed.includes(set));
+  const unlisted = unlistedSets.map(iconSetKey);
   const left =
-    unlisted.length > 0
-      ? unlistedIconSets(sets.length, selector, backups, unlisted)
+    unlistedSets.length > 0
+      ? unlistedIconSets(sets, main, backupSets, unlistedSets)
       : null;
   return {
     type: 'icon.use',

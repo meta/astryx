@@ -82,7 +82,13 @@
  */
 
 import {LATE_START_MS} from './frameBlock';
-import {sharedKey} from '../utils/sharedRealm';
+import {
+  sharedKey,
+  sharedMap,
+  sharedState,
+  sharedWeakMap,
+  sharedWeakSet,
+} from '../utils/sharedRealm';
 import {paintedBackground} from './inertClone';
 import {
   inertCopy,
@@ -168,7 +174,10 @@ function glideProgress(area: Element): GlideProgress | null {
 }
 
 // A glide a gesture's release asks for, for the changes in one area.
-const releaseGlides = new WeakMap<Element, GlideProgress>();
+const releaseGlides = sharedWeakMap<Element, GlideProgress>(
+  'motion/animated-layout/release-glides',
+  1,
+);
 
 /**
  * Times the changes `area` and what it holds play in the next frame by
@@ -282,7 +291,10 @@ function round(value: number): number {
 // ---------------------------------------------------------------------------
 
 /** The glide each element reports now, so that only its end clears it. */
-const presentedGlides = new WeakMap<Element, object>();
+const presentedGlides = sharedWeakMap<Element, object>(
+  'motion/animated-layout/presented-glides',
+  1,
+);
 
 /** A glide's report in the presented hit-test registry. */
 interface GlideReport {
@@ -291,10 +303,18 @@ interface GlideReport {
   readonly remove: () => void;
 }
 
-const glideReports = new Set<GlideReport>();
+const glideReports = sharedState(
+  'motion/animated-layout/glide-reports',
+  1,
+  () => new Set<GlideReport>(),
+);
 
 /** The reports of ended glides, removed together in a later task. */
-const endedReports: GlideReport[] = [];
+const endedReports = sharedState(
+  'motion/animated-layout/ended-reports',
+  1,
+  (): GlideReport[] => [],
+);
 
 /**
  * Removes the reports of ended glides with one notice to the registry's
@@ -418,7 +438,10 @@ interface Settling {
 }
 
 /** Each window's motions that have not settled yet, read once a frame. */
-const settling = new WeakMap<Window, Set<Settling>>();
+const settling = sharedWeakMap<Window, Set<Settling>>(
+  'motion/animated-layout/settling',
+  1,
+);
 
 /**
  * Reads `entry` in each frame until it is done or its element leaves its
@@ -456,10 +479,10 @@ function watchSettle(view: Window, entry: Settling): () => void {
 }
 
 /** Each running animation's retime, for a ride that replaces its frames. */
-const settleRetimes = new WeakMap<
+const settleRetimes = sharedWeakMap<
   Animation,
   (keyframes: ReadonlyArray<Keyframe>, durationMs: number) => void
->();
+>('motion/animated-layout/settle-retimes', 1);
 
 /**
  * WebKit can draw a compositor animation's last frame with the values it last
@@ -532,7 +555,10 @@ function retimeSettle(
 }
 
 /** Each indicator's settle, stopped when the next change retimes it. */
-const transitionSettles = new WeakMap<Element, () => void>();
+const transitionSettles = sharedWeakMap<Element, () => void>(
+  'motion/animated-layout/transition-settles',
+  1,
+);
 
 /**
  * An indicator's CSS transition runs on the compositor too, so it resolves
@@ -783,7 +809,10 @@ interface ChangeStart {
  * Each document's change start: an iframe or a Picture-in-Picture window
  * keeps its own clock, with its own origin and frames.
  */
-const changeStarts = new WeakMap<Document, ChangeStart>();
+const changeStarts = sharedWeakMap<Document, ChangeStart>(
+  'motion/animated-layout/change-starts',
+  1,
+);
 
 /** The clock of the document whose timeline a start is read on. */
 function clockOf(doc: Document): number {
@@ -878,7 +907,7 @@ function shownBoxAt(element: Element, at: number): DOMRect {
 }
 
 /** Every animation this module started, so it can tell the app's apart. */
-const ours = new WeakSet<Animation>();
+const ours = sharedWeakSet<Animation>('motion/animated-layout/ours', 1);
 
 const TRANSFORM_PROPERTIES = ['transform', 'translate', 'rotate', 'scale'];
 
@@ -1034,7 +1063,10 @@ interface Glide {
   readonly scale: {readonly x: number; readonly y: number};
 }
 
-const glides = new WeakMap<Element, Glide>();
+const glides = sharedWeakMap<Element, Glide>(
+  'motion/animated-layout/glides',
+  1,
+);
 
 /**
  * The glide `element` is playing now, if any. For an adopter that draws
@@ -1494,7 +1526,7 @@ interface Batch {
   start: ChangeStart | null;
 }
 
-const batches = new Map<Element, Batch>();
+const batches = sharedMap<Element, Batch>('motion/animated-layout/batches', 1);
 
 function batchFor(area: Element): Batch {
   let batch = batches.get(area);
@@ -2286,17 +2318,20 @@ interface EdgeMotion {
 }
 
 /** Each element's running one-state reveal or conceal. */
-const edgeMotions = new WeakMap<Element, EdgeMotion>();
+const edgeMotions = sharedWeakMap<Element, EdgeMotion>(
+  'motion/animated-layout/edge-motions',
+  1,
+);
 
 /**
  * What a one-state motion an adopter stopped (`releaseLayoutExit`) showed,
  * and the timeline time it stopped at: a reveal started in the same frame,
  * the reversal that stopped it, starts there.
  */
-const stoppedShown = new WeakMap<
+const stoppedShown = sharedWeakMap<
   Element,
   {readonly fraction: number; readonly at: number}
->();
+>('motion/animated-layout/stopped-shown', 1);
 
 function timelineNow(element: Element): number {
   return Number(element.ownerDocument.timeline?.currentTime ?? Number.NaN);
@@ -2377,7 +2412,10 @@ function trackEdgeMotion(
 }
 
 /** Each exit's motion, whose parts hold their slides until its release. */
-const heldSlides = new WeakMap<Element, EdgeMotion>();
+const heldSlides = sharedWeakMap<Element, EdgeMotion>(
+  'motion/animated-layout/held-slides',
+  1,
+);
 
 /**
  * After this commit's glides start (the batch flushes in a microtask queued
@@ -2686,7 +2724,10 @@ function liveDuration(animation: Animation, fallback: number): number {
 }
 
 /** Each part's slide, by its motion: a stopped slide is no glide. */
-const slideTargets = new WeakMap<Animation, Element>();
+const slideTargets = sharedWeakMap<Animation, Element>(
+  'motion/animated-layout/slide-targets',
+  1,
+);
 
 /** Cancels a part's slide, and forgets it as the part's glide. */
 function stopGlideOf(animation: Animation): void {
@@ -2872,14 +2913,20 @@ function giveUpSpace(
 }
 
 /** Exits holding an element back, so a release can stop one. */
-const exits = new WeakMap<Element, Animation | null>();
+const exits = sharedWeakMap<Element, Animation | null>(
+  'motion/animated-layout/exits',
+  1,
+);
 
 /** What an exit replaced on its element, so a release puts back exactly it. */
 interface Replaced {
   readonly inert: boolean;
   readonly styles: ReadonlyArray<readonly [string, string, string]>;
 }
-const replaced = new WeakMap<Element, Replaced>();
+const replaced = sharedWeakMap<Element, Replaced>(
+  'motion/animated-layout/replaced',
+  1,
+);
 
 /**
  * The changed element's exit (`spec:AST-105` FR4): content that disappears
@@ -3662,7 +3709,10 @@ interface ResizeReveal {
   release(): void;
 }
 
-const resizeReveals = new WeakMap<Element, ResizeReveal>();
+const resizeReveals = sharedWeakMap<Element, ResizeReveal>(
+  'motion/animated-layout/resize-reveals',
+  1,
+);
 
 /** The inline properties a size hold sets, by axis. */
 const HOLD_PROPERTIES = {

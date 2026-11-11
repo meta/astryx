@@ -4,7 +4,7 @@
 
 /**
  * @file ContextMenuTouchLayer.tsx
- * @input ContextMenu's touch layer (ContextMenuTouch.ts), the gesture
+ * @input ContextMenu's press recognizer (contextMenuPress.ts), the gesture
  *   foundation and the UIKit context-menu constants
  * @output ContextMenuTouchLayer: renders nothing; runs the trigger's press
  *   recognizer, its press feedback and the lift while ContextMenu is under
@@ -24,10 +24,8 @@ import type {LiftFromTriggerResult} from '../liftFromTrigger/liftFromTrigger';
 import {contextMenu} from '../motion/uikit/contextMenu';
 import {isElement} from '../utils/nodeType';
 import {useContextMenuLift} from './ContextMenuLift';
-import {
-  ContextMenuPressRecognizer,
-  useContextMenuPressFeedback,
-} from './ContextMenuTouch';
+import {ContextMenuPressRecognizer} from './contextMenuPress';
+import {useContextMenuPressFeedback} from './contextMenuPressFeedback';
 
 /** The finger or pen that is still down as the menu opens under it. */
 export interface ContextMenuHeldPointer {
@@ -107,12 +105,12 @@ function heldPointerOf(
  * recognizer claims the finger. The page stops scrolling under it, and its
  * lift sends no click and no compatibility mouse events. The menu opens where
  * the finger landed: at `menuDisplayMs` if it is still down, or at the lift.
- * A finger still down goes on into the menu. A lift before the commit, a
- * second finger or a scroll gets no menu. So does
- * a drift past the tolerance before the menu shows. The press feedback grows
- * the trigger's visual from the onset, 150 ms after the finger lands, while
- * the recognizer follows the finger. It springs back when the recognizer ends the
- * press with no menu, and it holds while that menu is up.
+ * A finger still down goes on into the menu. Before the commit, a lift, a
+ * second finger or a scroll gets no menu. So does a drift past the tolerance
+ * before the menu shows. The press feedback grows the trigger's visual from
+ * the onset, 150 ms after the finger lands, while the recognizer follows the
+ * finger. It springs back when the recognizer ends the press with no menu, and
+ * it holds while that menu is up.
  */
 export function ContextMenuTouchLayer({
   triggerRef,
@@ -156,7 +154,8 @@ export function ContextMenuTouchLayer({
     () => {
       const recognizer = new ContextMenuPressRecognizer();
       // Its target-action listeners never hear `failed`, so a press that ends
-      // with no menu springs back from here.
+      // with no menu springs back, and releases what the commit mounted, from
+      // here.
       recognizer.addTransitionListener((press, _from, to) => {
         if (to === 'failed' || to === 'cancelled') {
           feedbackRef.current.end(press.clockTime);

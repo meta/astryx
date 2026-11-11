@@ -158,12 +158,15 @@ describe('two Reacts in one process', () => {
   it('gives each React its own React-bound value, and one per React', async () => {
     const otherReact = secondReact();
     const onThisReact = await freshInstance(
-      async () => import('../utils/sharedContext'),
+      async () => import('../utils/sharedForReact'),
     );
     const copyOnThisReact = await freshInstance(
-      async () => import('../utils/sharedContext'),
+      async () => import('../utils/sharedForReact'),
     );
-    const onOtherReact = await sharedContextOn(otherReact);
+    vi.resetModules();
+    vi.doMock('react', () => ({...otherReact, default: otherReact}));
+    const onOtherReact = await import('../utils/sharedForReact');
+    vi.doUnmock('react');
     const value = onThisReact.sharedForReact('test/two-reacts', 1, () => ({}));
     expect(
       copyOnThisReact.sharedForReact('test/two-reacts', 1, () => ({})),

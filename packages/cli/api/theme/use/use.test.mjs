@@ -61,6 +61,28 @@ afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
 
+/**
+ * A built local theme under src/themes.
+ * @param {string} slug
+ */
+function addLocalTheme(slug) {
+  const dir = path.join(tmpDir, 'src', 'themes', slug);
+  fs.mkdirSync(dir, {recursive: true});
+  fs.writeFileSync(
+    path.join(dir, `${slug}Theme.doc.mjs`),
+    `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type:'theme',name:'${slug}',displayName:'${slug}',description:'${slug}',maintained:false};\n`,
+  );
+  fs.writeFileSync(
+    path.join(dir, `${slug}Theme.ts`),
+    `export const ${slug}Theme = {};\n`,
+  );
+  fs.writeFileSync(
+    path.join(dir, `${slug}.js`),
+    `export const ${slug}Theme = {name:'${slug}'};\n`,
+  );
+  fs.writeFileSync(path.join(dir, `${slug}.css`), '/* css */\n');
+}
+
 describe('themeUse', () => {
   it('changes the default and regenerates the module', async () => {
     const result = await themeUse('ReEf', {cwd: tmpDir});
@@ -94,6 +116,68 @@ describe('themeUse', () => {
     await expect(themeUse('missing', {cwd: tmpDir})).rejects.toMatchObject({
       code: 'ERR_UNKNOWN_THEME',
       message: expect.stringContaining(' theme add missing`'),
+    });
+  });
+
+  it('leaves out an added local theme whose folder is gone, and says so', async () => {
+    addLocalTheme('mint');
+    await themeAdd('mint', {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'src/themes/mint'), {recursive: true});
+
+    const result = await themeUse('ocean', {cwd: tmpDir});
+
+    expect(result.data.themes.map(theme => theme.slug)).toEqual([
+      'ocean',
+      'reef',
+    ]);
+    expect(result.data.notes).toEqual([
+      expect.stringMatching(
+        /^Removed "mint" from the app themes: \.\/src\/themes no longer provides it\./,
+      ),
+    ]);
+  });
+
+  it('keeps refusing when an added theme is only missing from an installed package', async () => {
+    fs.rmSync(path.join(tmpDir, 'node_modules/@acme/themes/themes/reef'), {
+      recursive: true,
+    });
+    await expect(themeUse('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+      code: 'ERR_UNKNOWN_THEME',
+      message: expect.stringContaining(
+        'Added theme "reef" from @acme/themes is unavailable',
+      ),
+    });
+    expect(
+      parseThemeModuleRecord(
+        fs.readFileSync(path.join(tmpDir, 'src/astryx-themes.ts'), 'utf-8'),
+      ).themes,
+    ).toEqual({ocean: '@acme/themes', reef: '@acme/themes'});
+  });
+
+  it('names the reason when an added local theme fails validation', async () => {
+    addLocalTheme('mint');
+    await themeAdd('mint', {cwd: tmpDir});
+    const descriptor = path.join(tmpDir, 'src/themes/mint/mintTheme.doc.mjs');
+    fs.writeFileSync(
+      descriptor,
+      fs
+        .readFileSync(descriptor, 'utf-8')
+        .replace("name:'mint'", "name:'other'"),
+    );
+    await expect(themeUse('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message: expect.stringMatching(
+        /^Local theme "mint" in src\/themes\/mint is broken: .*names "other" but its directory is "mint"/,
+      ),
+    });
+  });
+
+  it('keeps refusing when a local theme folder is broken but present', async () => {
+    addLocalTheme('mint');
+    await themeAdd('mint', {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'src/themes/mint/mintTheme.doc.mjs'));
+    await expect(themeUse('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+      code: 'ERR_UNKNOWN_THEME',
     });
   });
 });
