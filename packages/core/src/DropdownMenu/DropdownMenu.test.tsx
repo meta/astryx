@@ -929,7 +929,9 @@ describe('DropdownMenu', () => {
       const trigger = screen.getByRole('button', {name: /Actions/});
       fireEvent.pointerDown(trigger, {pointerType: 'touch'});
       fireEvent.click(trigger, {detail: 1});
-      expect(screen.getByRole('menu', {hidden: true})).toHaveFocus();
+      expect(
+        screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+      ).toHaveFocus();
 
       const popoverEl = screen
         .getByRole('menu', {hidden: true})
@@ -1431,7 +1433,11 @@ describe('DropdownMenu items', () => {
 
     await user.click(screen.getByRole('button', {name: /Actions/}));
     const menu = screen.getByRole('menu', {hidden: true});
-    await waitFor(() => expect(menu).toHaveFocus());
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', {name: 'Copy ID', hidden: true}),
+      ).toHaveFocus(),
+    );
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     fireEvent.keyDown(menu, {key: 'Enter'});
 
@@ -2673,28 +2679,26 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
   });
 });
 
-describe('DropdownMenu open focus follows input modality (#4477)', () => {
+describe('DropdownMenu open focus follows the menu-button pattern (#9000)', () => {
   const items = [{label: 'Edit'}, {label: 'Duplicate'}, {label: 'Delete'}];
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('pointer open focuses the menu container, not the first item (items mode)', async () => {
+  it('pointer open focuses the first enabled item (items mode)', async () => {
     const user = userEvent.setup();
     render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    const focus = vi.spyOn(edit, 'focus');
 
     await user.click(screen.getByRole('button', {name: /Actions/}));
 
-    const menu = screen.getByRole('menu', {hidden: true});
-    await waitFor(() => expect(menu).toHaveFocus());
-    expect(menu).toHaveStyle({outline: 'none'});
-    expect(
-      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
-    ).not.toHaveFocus();
+    await waitFor(() => expect(edit).toHaveFocus());
+    expect(focus.mock.calls).toContainEqual([{focusVisible: false}]);
   });
 
-  it('pointer open focuses the menu container in compound mode', async () => {
+  it('pointer open focuses the first enabled item in compound mode', async () => {
     const user = userEvent.setup();
     render(
       <DropdownMenu button={{label: 'Actions'}}>
@@ -2705,14 +2709,14 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
 
     await user.click(screen.getByRole('button', {name: /Actions/}));
 
-    const menu = screen.getByRole('menu', {hidden: true});
-    await waitFor(() => expect(menu).toHaveFocus());
-    expect(
-      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
-    ).not.toHaveFocus();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+      ).toHaveFocus(),
+    );
   });
 
-  it('a row the pointer lit before the open frame keeps focus after a pointer open', async () => {
+  it('a row the pointer lit before the open frame does not override first-item focus', async () => {
     // The open's frame waits until the test runs it, as on a loaded page
     // where the pointer reaches a row first.
     const frames: FrameRequestCallback[] = [];
@@ -2725,8 +2729,9 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
 
     await user.click(screen.getByRole('button', {name: /Actions/}));
     const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
-    fireEvent.pointerMove(edit, {pointerType: 'mouse'});
-    expect(edit).toHaveFocus();
+    const del = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
+    fireEvent.pointerMove(del, {pointerType: 'mouse'});
+    expect(del).toHaveFocus();
     act(() => {
       for (const callback of frames.splice(0)) {
         callback(performance.now());
@@ -2736,7 +2741,7 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
     expect(edit).toHaveFocus();
   });
 
-  it('a pointer open with no row lit before the open frame still focuses the menu container', async () => {
+  it('a pointer open with no row lit before the open frame focuses the first item', async () => {
     const frames: FrameRequestCallback[] = [];
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
       frames.push(callback);
@@ -2752,7 +2757,9 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
       }
     });
 
-    expect(screen.getByRole('menu', {hidden: true})).toHaveFocus();
+    expect(
+      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+    ).toHaveFocus();
   });
 
   it('a keyboard open via Space still focuses the first enabled item when its frame runs', async () => {
@@ -2777,17 +2784,21 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
     ).toHaveFocus();
   });
 
-  it('first ArrowDown after a pointer open moves focus to the first enabled item', async () => {
+  it('ArrowDown after a pointer open moves focus to the next item', async () => {
     const user = userEvent.setup();
     render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
 
     await user.click(screen.getByRole('button', {name: /Actions/}));
     const menu = screen.getByRole('menu', {hidden: true});
-    await waitFor(() => expect(menu).toHaveFocus());
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+      ).toHaveFocus(),
+    );
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(
-      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+      screen.getByRole('menuitem', {name: 'Duplicate', hidden: true}),
     ).toHaveFocus();
   });
 
@@ -2802,7 +2813,11 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
 
     await user.click(screen.getByRole('button', {name: /Actions/}));
     const menu = screen.getByRole('menu', {hidden: true});
-    await waitFor(() => expect(menu).toHaveFocus());
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', {name: 'Delete', hidden: true}),
+      ).toHaveFocus(),
+    );
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(
@@ -2857,7 +2872,7 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
     );
   });
 
-  it('controlled pointer open focuses the menu container', async () => {
+  it('controlled pointer open focuses the first enabled item', async () => {
     function Controlled() {
       const [isOpen, setIsOpen] = useState(false);
       return (
@@ -2874,11 +2889,11 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
 
     await user.click(screen.getByRole('button', {name: /Actions/}));
 
-    const menu = screen.getByRole('menu', {hidden: true});
-    await waitFor(() => expect(menu).toHaveFocus());
-    expect(
-      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
-    ).not.toHaveFocus();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+      ).toHaveFocus(),
+    );
   });
 
   it('programmatic controlled open still focuses the first item', async () => {
@@ -2913,7 +2928,11 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
 
     await user.click(screen.getByRole('button', {name: /Actions/}));
     const menu = screen.getByRole('menu', {hidden: true});
-    await waitFor(() => expect(menu).toHaveFocus());
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+      ).toHaveFocus(),
+    );
 
     fireEvent.keyDown(menu, {key: 'Escape'});
     expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
@@ -2925,7 +2944,11 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
 
     await user.click(screen.getByRole('button', {name: /Actions/}));
     const menu = screen.getByRole('menu', {hidden: true});
-    await waitFor(() => expect(menu).toHaveFocus());
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+      ).toHaveFocus(),
+    );
 
     fireEvent.keyDown(menu, {key: 'Tab'});
     expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
@@ -3340,7 +3363,11 @@ describe('DropdownMenu press model', () => {
     fireEvent.pointerUp(trigger, mouse);
     fireEvent.click(trigger, {detail: 1});
     const menu = screen.getByRole('menu', {hidden: true});
-    await waitFor(() => expect(menu).toHaveFocus());
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+      ).toHaveFocus(),
+    );
 
     fireEvent.keyDown(menu, {key: 'Escape'});
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
@@ -4580,8 +4607,12 @@ describe('DropdownMenu header and footer', () => {
     render(<LabelsMenu />);
     await user.click(screen.getByRole('button', {name: /Labels/}));
     const menu = screen.getByRole('menu', {hidden: true});
-    // A pointer open focuses the menu itself; let that land first.
-    await waitFor(() => expect(menu).toHaveFocus());
+    // A pointer open focuses the first row; let that land first.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', {name: 'Bug', hidden: true}),
+      ).toHaveFocus(),
+    );
     return {user, menu};
   }
 
@@ -4631,10 +4662,9 @@ describe('DropdownMenu header and footer', () => {
   });
 
   it('Shift+Tab from a row moves straight to the header and keeps the menu open', async () => {
-    const {menu} = await open();
+    await open();
     const hide = vi.mocked(HTMLElement.prototype.hidePopover);
     hide.mockClear();
-    fireEvent.keyDown(menu, {key: 'ArrowDown'});
     const row = screen.getByRole('menuitem', {name: 'Bug', hidden: true});
     await waitFor(() => expect(row).toHaveFocus());
     fireEvent.keyDown(row, {key: 'Tab', shiftKey: true});
@@ -4644,15 +4674,18 @@ describe('DropdownMenu header and footer', () => {
     expect(hide).not.toHaveBeenCalled();
   });
 
-  it('a pointer open draws no focus ring on the menu; keyboard focus on it does', async () => {
+  it('a pointer open focuses the first row without a menu ring; keyboard focus on the menu does', async () => {
     const {menu} = await open();
-    // Opened with a pointer: the menu is focused but must not ring.
+    // Opened with a pointer: the first row is focused, while the menu itself
+    // has no keyboard focus ring.
     const ringClasses = stylex
       .props(focusOutlineStyles.focusVisible)
       .className!.split(' ')
       .filter(Boolean);
     const hasRing = () => ringClasses.every(c => menu.classList.contains(c));
-    expect(menu).toHaveFocus();
+    expect(
+      screen.getByRole('menuitem', {name: 'Bug', hidden: true}),
+    ).toHaveFocus();
     expect(hasRing()).toBe(false);
     // Keyboard: leave to the header and come back by Tab.
     const field = screen.getByRole('textbox', {
@@ -4686,7 +4719,11 @@ describe('DropdownMenu header and footer', () => {
       const trigger = screen.getByRole('button', {name: /Labels/});
       await user.click(trigger);
       const menu = screen.getByRole('menu', {name: 'Labels', hidden: true});
-      await waitFor(() => expect(menu).toHaveFocus());
+      await waitFor(() =>
+        expect(
+          screen.getByRole('menuitem', {name: 'Bug', hidden: true}),
+        ).toHaveFocus(),
+      );
       const hide = vi.mocked(HTMLElement.prototype.hidePopover);
       hide.mockClear();
       return {user, trigger, menu, hide};
@@ -4715,6 +4752,7 @@ describe('DropdownMenu header and footer', () => {
       'treats a %s footer control as unreachable: Tab from the menu stays on the menu',
       async (_label, control) => {
         const {menu, hide} = await openHidden(null, control);
+        act(() => menu.focus());
         fireEvent.keyDown(menu, {key: 'Tab'});
         expect(menu).toHaveFocus();
         expect(hide).not.toHaveBeenCalled();
@@ -4728,19 +4766,19 @@ describe('DropdownMenu header and footer', () => {
           <button type="button">Create label</button>
         </div>,
       );
+      act(() => menu.focus());
       fireEvent.keyDown(menu, {key: 'Tab'});
       expect(menu).toHaveFocus();
       expect(hide).not.toHaveBeenCalled();
     });
 
     it('treats a header control inside a display: none wrapper as unreachable: Shift+Tab from a row stays', async () => {
-      const {menu, hide} = await openHidden(
+      const {hide} = await openHidden(
         <div style={{display: 'none'}}>
           <input aria-label="Filter labels" />
         </div>,
         null,
       );
-      fireEvent.keyDown(menu, {key: 'ArrowDown'});
       const row = screen.getByRole('menuitem', {name: 'Bug', hidden: true});
       await waitFor(() => expect(row).toHaveFocus());
       fireEvent.keyDown(row, {key: 'Tab', shiftKey: true});
@@ -4795,11 +4833,10 @@ describe('DropdownMenu header and footer', () => {
     });
 
     it('treats a hidden header control as unreachable: Shift+Tab from a row stays on the row', async () => {
-      const {menu, hide} = await openHidden(
+      const {hide} = await openHidden(
         <input aria-label="Filter labels" hidden />,
         null,
       );
-      fireEvent.keyDown(menu, {key: 'ArrowDown'});
       const row = screen.getByRole('menuitem', {name: 'Bug', hidden: true});
       await waitFor(() => expect(row).toHaveFocus());
       fireEvent.keyDown(row, {key: 'Tab', shiftKey: true});
@@ -4871,7 +4908,11 @@ describe('DropdownMenu header and footer', () => {
       );
       await user.click(screen.getByRole('button', {name: /Labels/}));
       const root = screen.getByRole('menu', {name: 'Labels', hidden: true});
-      await waitFor(() => expect(root).toHaveFocus());
+      await waitFor(() =>
+        expect(
+          screen.getByRole('menuitem', {name: 'Bug', hidden: true}),
+        ).toHaveFocus(),
+      );
       const subTrigger = screen.getByRole('menuitem', {
         name: /Move to/,
         hidden: true,
@@ -5099,7 +5140,11 @@ describe('DropdownMenu header and footer', () => {
       );
       await user.click(screen.getByRole('button', {name: /Labels/}));
       const menu = screen.getByRole('menu', {name: 'Labels', hidden: true});
-      await waitFor(() => expect(menu).toHaveFocus());
+      await waitFor(() =>
+        expect(
+          screen.getByRole('menuitem', {name: 'Bug', hidden: true}),
+        ).toHaveFocus(),
+      );
       const radio = (name: string) =>
         screen.getByRole('radio', {name, hidden: true});
       const create = screen.getByRole('button', {

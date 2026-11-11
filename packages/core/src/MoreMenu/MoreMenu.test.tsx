@@ -299,30 +299,34 @@ describe('MoreMenu', () => {
     expect(menu.className).toContain('astryx-more-menu');
   });
 
-  it('pointer open focuses the menu container, not the first item (#4477)', async () => {
+  it('pointer open focuses the first enabled item (#9000)', async () => {
     const user = userEvent.setup();
     render(<MoreMenu items={defaultItems} />);
 
     await user.click(screen.getByRole('button', {name: 'More options'}));
 
-    const menu = screen.getByRole('menu', {hidden: true});
-    await waitFor(() => expect(menu).toHaveFocus());
-    expect(
-      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
-    ).not.toHaveFocus();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+      ).toHaveFocus(),
+    );
   });
 
-  it('first ArrowDown after a pointer open moves focus to the first item (#4477)', async () => {
+  it('ArrowDown after a pointer open moves focus to the next item (#9000)', async () => {
     const user = userEvent.setup();
     render(<MoreMenu items={defaultItems} />);
 
     await user.click(screen.getByRole('button', {name: 'More options'}));
     const menu = screen.getByRole('menu', {hidden: true});
-    await waitFor(() => expect(menu).toHaveFocus());
+    await waitFor(() =>
+      expect(
+        screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+      ).toHaveFocus(),
+    );
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(
-      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+      screen.getByRole('menuitem', {name: 'Delete', hidden: true}),
     ).toHaveFocus();
   });
 
