@@ -534,12 +534,16 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     fs.chmodSync(path.join(refused, CACHE_NAME), 0o755);
     expect(run(QUERIES[0], {tmp: refused, env: strictEnv})).toEqual(fresh);
     expect(entries(refused).size).toBe(0);
+
+    expect(derivedEntries(refused)).toEqual([]);
     // Plug'n'Play with a usable folder: no hook, no catalog, the same answer.
     const pnp = keptTmp('pnp');
     const asPnp = {...strictEnv, AS_PNP: '1'};
     expect(run(QUERIES[0], {tmp: pnp, env: asPnp})).toEqual(fresh);
     expect(run(QUERIES[0], {tmp: pnp, env: asPnp})).toEqual(fresh);
     expect(entries(pnp).size).toBe(0);
+
+    expect(derivedEntries(pnp)).toEqual([]);
   }, 120_000);
 
   it('is never kept by a checkout, even one a pack left a build id in', () => {
@@ -577,6 +581,8 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(first.status, first.stderr).toBe(0);
     expect(second.stdout).toBe(first.stdout);
     expect(entries(tmp).size).toBe(0);
+
+    expect(derivedEntries(tmp)).toEqual([]);
   }, 120_000);
 
   it('keeps no catalog gathered while Core could not be had', () => {
@@ -596,6 +602,8 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(JSON.parse(first.stdout).data).toBeTruthy();
     run(['search', 'button'], {tmp, cwd: outside, env: offline});
     expect(entries(tmp).size).toBe(0);
+
+    expect(derivedEntries(tmp)).toEqual([]);
   }, 180_000);
 
   it('keeps a digest of each environment value it read, never the value', () => {
@@ -632,7 +640,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(fs.statSync(path.join(tmp, CACHE_NAME, table)).ino).toBe(ino);
   }, 120_000);
 
-  it("is not used after an edit to the installed CLI's table-building code", async () => {
+  it("is not used after an edit to the installed CLI's table-building code or cards", async () => {
     // As patch-package or a hand edit leaves it: same build id, other code.
     const tmp = keptTmp('code-edit');
     const asks = ['color picker', 'menu button', 'date picker', 'tab list'].map(
@@ -663,6 +671,29 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     } finally {
       fs.writeFileSync(file, source);
     }
+    // The cards the table is built from: every card emptied.
+    const ask = ['search', 'color picker'];
+    run(ask, {tmp});
+    const was = run(ask, {tmp}).stdout;
+    const cardsFile = path.join(packed, 'api', 'search', '_cards.json');
+    const cardsText = fs.readFileSync(cardsFile, 'utf8');
+    const cards = Object.fromEntries(
+      Object.keys(JSON.parse(cardsText)).map(name => [
+        name,
+        {what: '', synonyms: [], props: []},
+      ]),
+    );
+    try {
+      fs.writeFileSync(cardsFile, JSON.stringify(cards));
+      const [kept, fresh] = await Promise.all([
+        runAsync(ask, {tmp}),
+        runAsync(ask, {tmp: freshTmp()}),
+      ]);
+      expect(fresh.stdout).not.toBe(was);
+      expect(kept).toEqual(fresh);
+    } finally {
+      fs.writeFileSync(cardsFile, cardsText);
+    }
   }, 180_000);
 
   it('is skipped silently when its folder cannot be used', () => {
@@ -676,6 +707,8 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     const expected = run(QUERIES[0], {tmp: freshTmp()});
     expect(run(QUERIES[0], {tmp: shared})).toEqual(expected);
     expect(entries(shared).size).toBe(0);
+
+    expect(derivedEntries(shared)).toEqual([]);
     const broken = spawnSync(
       process.execPath,
       [

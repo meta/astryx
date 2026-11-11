@@ -16,6 +16,8 @@ const ENTRIES_FILE = fileURLToPath(import.meta.url);
 const QUERY_WORDS_FILE = fileURLToPath(
   new URL('./_query-words.mjs', import.meta.url),
 );
+/** The cards search reads (./_adapter.mjs), by path. */
+const CARDS_FILE = fileURLToPath(new URL('./_cards.json', import.meta.url));
 
 /** @param {string[]} list @returns {Map<string, number>} */
 const counts = list => {
@@ -79,8 +81,9 @@ export function entryTable(all, cards) {
     ['entry-table', key],
     () => buildTable(all, cards),
     tableCodec(all),
-    // The code that builds it, loaded or not when the table is kept.
-    [ENTRIES_FILE, QUERY_WORDS_FILE],
+    // The code that builds it, loaded or not when the table is kept, and the
+    // cards it reads, which search reads after the catalog is kept.
+    [ENTRIES_FILE, QUERY_WORDS_FILE, CARDS_FILE],
   );
   last = {key, table: built};
   tables.set(all, built);
