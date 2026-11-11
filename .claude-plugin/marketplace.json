@@ -1,6 +1,6 @@
 {
   "name": "astryx",
-  "description": "The Astryx agent skill for Claude Code",
+  "description": "The Astryx agent skill",
   "owner": {
     "name": "Astryx",
     "url": "https://astryx.atmeta.com"
