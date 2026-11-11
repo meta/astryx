@@ -31,15 +31,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Public contract         | None changes. InputGroupText takes `children` and the base props.                                                                          |
-| Behavior                | A non-interactive, muted text or icon cell inside InputGroup that joins its neighbours' borders and rounds only the group's outer corners. |
-| End-user impact         | People see a fixed prefix or suffix such as `$` or `https://` as part of the field. It is read as plain text, not as a control.            |
-| Builder impact          | None.                                                                                                                                      |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change.                                                                                  |
-| Review checks           | Reject an interactive role or tab stop on the cell, text that wraps or shrinks, or rounded inner corners.                                  |
-| Governing rules         | `component:InputGroup`; `architecture:component-theming-surface`.                                                                          |
+| Area                    | Contract                                                                                                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | None changes. InputGroupText takes `children` and the base props.                                                                                                     |
+| Behavior                | A non-interactive, muted text or icon cell inside InputGroup that joins its neighbours' borders and rounds only the group's outer corners.                            |
+| End-user impact         | People see a fixed prefix or suffix such as `$` or `https://` as part of the field. It is read as plain text, not as a control.                                       |
+| Builder impact          | None.                                                                                                                                                                 |
+| Compatibility/readiness | Records shipped behavior; no API or default change. Plain text with no right-to-left letter sits in an inner `span` with `dir="ltr"`, and the cell isolates its text. |
+| Review checks           | Reject an interactive role or tab stop on the cell, text that wraps or shrinks, or rounded inner corners.                                                             |
+| Governing rules         | `component:InputGroup`; `architecture:component-theming-surface`.                                                                                                     |
 
 This table is a review projection; the body below is authoritative.
 
@@ -52,8 +52,9 @@ shown before or after the input. Consumer usage lives in
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public prop, default,
-  export, or DOM change
+- Compatibility class: no public prop, default, or export change. The DOM
+  changes: plain text with no right-to-left letter sits in an inner `span`
+  with `dir="ltr"`, and the cell isolates its text (`unicode-bidi: isolate`)
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 

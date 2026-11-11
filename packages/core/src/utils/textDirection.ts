@@ -12,14 +12,7 @@
  */
 
 import type {ReactNode} from 'react';
-
-/**
- * A character from a right-to-left block: Hebrew, Arabic (with its
- * supplements and presentation forms), Syriac, Thaana, NKo, Samaritan and
- * Mandaic, and the supplementary right-to-left blocks such as Adlam.
- */
-const RIGHT_TO_LEFT_LETTER =
-  /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
+import {hasStrongRightToLeft} from '../i18n/firstStrongDirection';
 
 /**
  * Under a right-to-left page, weak and neutral characters in left-to-right
@@ -33,5 +26,5 @@ export function textDirectionProps(content: ReactNode): {dir?: 'ltr'} {
   if (typeof content !== 'string' && typeof content !== 'number') {
     return {};
   }
-  return RIGHT_TO_LEFT_LETTER.test(String(content)) ? {} : {dir: 'ltr'};
+  return hasStrongRightToLeft(String(content)) ? {} : {dir: 'ltr'};
 }

@@ -44,6 +44,17 @@ describe('textDirectionProps', () => {
     }
   });
 
+  it('reads an invisible leading character as no right-to-left letter', () => {
+    expect(textDirectionProps('\uFEFF+3')).toEqual({dir: 'ltr'});
+    expect(textDirectionProps('\uFEFFhttps://')).toEqual({dir: 'ltr'});
+    expect(textDirectionProps('\uFEFF\u05E9\u05DC\u05D5\u05DD')).toEqual({});
+  });
+
+  it('agrees with the shared classifier on the right-to-left mark and Arabic letter mark', () => {
+    expect(textDirectionProps('\u200F+3')).toEqual({});
+    expect(textDirectionProps('\u061C+3')).toEqual({});
+  });
+
   it('leaves a rich node to its caller', () => {
     expect(textDirectionProps(null)).toEqual({});
     expect(textDirectionProps(undefined)).toEqual({});

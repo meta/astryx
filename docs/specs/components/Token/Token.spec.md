@@ -58,8 +58,9 @@ action beside the chip's own action.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public prop, default, DOM,
-  or styling output changes
+- Compatibility class: no public prop or default change. The DOM and styling
+  output change: a plain-text label with no right-to-left letter gets
+  `dir="ltr"`, and the label isolates its text (`unicode-bidi: isolate`)
 - Controlled/uncontrolled behavior: not applicable; Token holds no state
 - Migration decision: none
 
