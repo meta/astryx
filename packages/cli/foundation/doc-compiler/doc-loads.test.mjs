@@ -153,8 +153,6 @@ const RUNNERS = {
       'import ../experimental-theme-editor.doc.mjs',
       'import ../experimental-theme-eject.doc.mjs',
       'import ../experimental-theme-list.doc.mjs',
-      'import ../experimental-theme-palette-generate.doc.mjs',
-      'import ../experimental-theme-palette.doc.mjs',
       'import ../experimental-theme-preview-add.doc.mjs',
       'import ../experimental-theme-preview-app.doc.mjs',
       'import ../experimental-theme-preview-list.doc.mjs',
@@ -423,17 +421,12 @@ const RUNNERS = {
     sites: ['worker_threads.Worker'],
   },
   'foundation/fs/import-url.mjs': {
-    runs: 'the doc file at a file URL, for the doc importers',
+    runs: 'the module at a file URL, for the doc importers and the module loader',
     sites: ['import(<computed>)'],
   },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache',
-    sites: [
-      '.import() ×3',
-      'createJiti ×3',
-      'import(<computed>) ×2',
-      'require.cache',
-    ],
+    sites: ['.import() ×3', 'createJiti ×3', 'importUrl ×2', 'require.cache'],
   },
   'foundation/fs/read-record.mjs': {
     runs: "nothing; it wraps node:fs's read calls to record the paths an operation reads, and republishes them to ESM imports",

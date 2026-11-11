@@ -13,11 +13,15 @@ import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {
   themeEditNew,
+  themeEditSet,
+  themeEditShow,
+  themeEditUndo,
   themeEditPreviewAdd,
   themeEditPreviewApp,
   themeEditPreviewList,
   themeEditPreviewRemove,
 } from './theme-edit.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -164,6 +168,96 @@ describe('preview add', () => {
     expect(typeErrors(dir)).toEqual([]);
   }, 120_000);
 
+  it('adds a Colors page once the theme has generated colors, and keeps it in step', async () => {
+    const dir = path.join(cwd, 'src/app/theme-preview');
+    const page = 'src/app/theme-preview/pages/colors.tsx';
+    await themeEditSet('brand', 'accent', '#7c3aed', {cwd});
+    const r = await themeEditPreviewAdd(undefined, {cwd});
+    expect(r.data.added).toEqual(['colors']);
+    expect(r.data.pages).toEqual(['overview', 'components', 'colors']);
+    const source = read(page);
+    expect(source).toContain(
+      'import {palette} from "../../../../themes/brand/tokens/brand.palette";',
+    );
+    expect(source).toContain('"--color-accent"');
+    expect(read('src/app/theme-preview/page.tsx')).toContain('label: "Colors"');
+    expect(typeErrors(dir)).toEqual([]);
+    // A later change rewrites the tokens that use each shade.
+    await themeEditSet('brand', 'neutral', '#64748b', {cwd});
+    expect(read(page)).toContain('"--color-background-surface"');
+    // With no color left, the page stays and says how to set one.
+    await themeEditUndo('brand', {cwd, thing: 'neutral'});
+    await themeEditUndo('brand', {cwd, thing: 'accent'});
+    expect(read(page)).not.toContain('palette');
+    expect(read(page)).toContain('This theme sets no color yet');
+    expect(typeErrors(dir)).toEqual([]);
+    await themeEditPreviewRemove('colors', {cwd});
+    expect(fs.existsSync(path.join(cwd, page))).toBe(false);
+  }, 240_000);
+
+  it('writes a components page whose parts work on their own and survive leaving the page', () => {
+    const page = read('src/app/theme-preview/pages/components.tsx');
+    // A typeahead with no search source throws as it unmounts, past every
+    // boundary, so leaving the page would crash the production route.
+    for (const tag of page.match(
+      /<C\.(Tokenizer|Typeahead|CommandPalette)\b[^>]*>/g,
+    ) ?? [])
+      expect(tag).toContain('searchSource={SAMPLE_SOURCE}');
+    expect(page).toContain('const SAMPLE_SOURCE = {');
+    // A status object takes the value as its type.
+    expect(page).not.toMatch(
+      /<C\.(Selector|Tokenizer|TextInput)\b[^>]*status="/,
+    );
+    expect(page).toContain('status={{"type":"error"}}');
+    // A part renders inside its parent, or not at all.
+    for (const [part, parent] of [
+      ['Step', 'Stepper'],
+      ['SegmentedControlItem', 'SegmentedControl'],
+      ['RadioListItem', 'RadioList'],
+    ]) {
+      expect(page).not.toMatch(
+        new RegExp(`<Safe name="${part}">\\s*<C\\.${part}\\b`),
+      );
+      expect(page).toMatch(
+        new RegExp(`<Safe name="${part}">\\s*<C\\.${parent}\\b`),
+      );
+    }
+    expect(page).not.toContain('<Safe name="DropdownMenuRadioItem">');
+    expect(page).toMatch(/<C\.ButtonGroup [^>]*>\s*<C\.Button /);
+    expect(page).toContain('could not render here');
+    expect(read('src/app/theme-preview/pages/overview.tsx')).not.toContain(
+      'AppShell',
+    );
+  });
+
+  it('names the install line while missing, and the preview imports it once installed', async () => {
+    const pkgDir = path.join(cwd, 'node_modules', '@fontsource', 'inter');
+    fs.rmSync(pkgDir, {recursive: true, force: true});
+    const set = await themeEditSet('brand', 'font', 'inter', {cwd});
+    const note = set.data.notes.join(' ');
+    expect(note).toContain('Inter is not installed, so it does not load');
+    expect(note).toMatch(/(npm install|pnpm add|yarn add|bun add) @fontsource\/inter/);
+    const route = 'src/app/theme-preview/page.tsx';
+    expect(read(route)).not.toContain('@fontsource/inter');
+    fs.mkdirSync(pkgDir, {recursive: true});
+    fs.writeFileSync(
+      path.join(pkgDir, 'package.json'),
+      '{"name": "@fontsource/inter", "version": "5.0.0", "main": "index.css"}\n',
+    );
+    fs.writeFileSync(path.join(pkgDir, 'index.css'), '');
+    try {
+      const show = await themeEditShow('brand', {cwd});
+      expect(show.data.notes.join(' ')).toContain("import '@fontsource/inter'");
+      expect(read(route)).toContain('import "@fontsource/inter/index.css";');
+    } finally {
+      fs.rmSync(path.join(cwd, 'node_modules', '@fontsource'), {
+        recursive: true,
+        force: true,
+      });
+      await themeEditUndo('brand', {cwd});
+    }
+  }, 120_000);
+
   it('adds the page template the build ranking picks for a description', async () => {
     const r = await themeEditPreviewAdd('an analytics dashboard', {cwd});
     expect(r.data.added).toHaveLength(1);
@@ -298,6 +392,46 @@ describe('preview options and errors', () => {
     }
   }, 120_000);
 
+  it('skips a StyleX template page in an app with no StyleX compiler', async () => {
+    const r = await refusal(() =>
+      themeEditPreviewAdd(undefined, {
+        cwd,
+        path: 'src/app/stylex',
+        template: 'kanban-board',
+      }),
+    );
+    expect(r.code).toBe('ERR_DEP_MISSING');
+    expect(r.message).toContain('StyleX');
+    expect(filesUnder(path.join(cwd, 'src/app/stylex'))).toEqual([]);
+  }, 120_000);
+
+  it('refuses a theme that does not build before it writes any page', async () => {
+    const broken = path.join(cwd, 'themes', 'broken');
+    fs.mkdirSync(broken, {recursive: true});
+    const settings = JSON.parse(read('themes/brand/brand.settings.json'));
+    fs.writeFileSync(
+      path.join(broken, 'broken.settings.json'),
+      JSON.stringify({...settings, name: 'broken'}),
+    );
+    fs.writeFileSync(
+      path.join(broken, 'broken.theme.ts'),
+      'export const = ;\n',
+    );
+    try {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {
+          cwd,
+          path: 'src/app/broken',
+          theme: 'broken',
+        }),
+      );
+      expect(r.code).toBe('ERR_THEME_LOAD');
+      expect(filesUnder(path.join(cwd, 'src/app/broken'))).toEqual([]);
+    } finally {
+      fs.rmSync(broken, {recursive: true, force: true});
+    }
+  }, 120_000);
+
   it('lists no pages when there is no routes folder', async () => {
     const bare = path.join(cwd, 'bare-app');
     fs.mkdirSync(bare);
@@ -359,6 +493,26 @@ describe('preview remove', () => {
     fs.rmSync(dir, {recursive: true, force: true});
     fs.rmSync(path.join(cwd, 'keep-me.txt'));
   });
+});
+
+describe('the preview commands succeed from the command line', () => {
+  it('add, list and remove exit 0 with a JSON envelope each', async () => {
+    /** @param {string[]} args */
+    const ok = async args => {
+      const r = await runCli(
+        ['--json', 'experimental', 'theme', 'preview', ...args],
+        {cwd},
+      );
+      expect(r.status, args.join(' ')).toBe(0);
+      return JSON.parse(r.stdout);
+    };
+    expect((await ok(['add'])).type).toBe('themeEdit.previewAdd');
+    expect((await ok(['list'])).data.pages).toHaveLength(2);
+    expect((await ok(['remove', 'components'])).data.pages).toEqual([
+      'overview',
+    ]);
+    expect((await ok(['remove'])).data.pages).toEqual([]);
+  }, 120_000);
 });
 
 describe('preview app', () => {
@@ -487,6 +641,25 @@ describe('preview app', () => {
       expect(read('kept/tsconfig.json')).not.toBe('{}\n');
     } finally {
       fs.rmSync(app, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('checks the folder before it builds the theme, so a refusal writes nothing', async () => {
+    fs.mkdirSync(path.join(cwd, 'busy'));
+    fs.writeFileSync(path.join(cwd, 'busy', 'notes.md'), 'mine\n');
+    const js = path.join(cwd, 'themes/brand/brand.js');
+    const before = fs.readFileSync(js, 'utf8');
+    fs.rmSync(js);
+    try {
+      const r = await refusal(() =>
+        themeEditPreviewApp('busy', {cwd, theme: 'brand'}),
+      );
+      expect(r.code).toBe('ERR_FILE_EXISTS');
+      expect(fs.existsSync(js)).toBe(false);
+      expect(fs.readdirSync(path.join(cwd, 'busy'))).toEqual(['notes.md']);
+    } finally {
+      fs.writeFileSync(js, before);
+      fs.rmSync(path.join(cwd, 'busy'), {recursive: true, force: true});
     }
   }, 120_000);
 
