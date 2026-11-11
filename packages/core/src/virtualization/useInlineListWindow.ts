@@ -94,12 +94,19 @@ interface InlineTracking {
 const UNMEASURED: InlineListWindowGeometry = Object.freeze({isMeasured: false});
 const getUnmeasured = () => UNMEASURED;
 
-/** The largest inline band past each viewport edge, in CSS pixels. */
-const INLINE_BAND_LIMIT = 256;
+/**
+ * The inline band past each edge of the space between the insets: the
+ * smaller of a CSS pixel limit and a fraction of that space. Private, so a
+ * measurement build can switch it.
+ */
+const INLINE_BAND = {limit: 256, viewportFraction: 0.5};
 
 /** The distance mounted past each edge of the space between the insets. */
 export function getInlineBandPadding(visibleWidth: number): number {
-  return Math.max(0, Math.min(INLINE_BAND_LIMIT, visibleWidth / 2));
+  return Math.max(
+    0,
+    Math.min(INLINE_BAND.limit, visibleWidth * INLINE_BAND.viewportFraction),
+  );
 }
 
 /**

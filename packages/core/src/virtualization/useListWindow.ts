@@ -113,12 +113,19 @@ const EMPTY_GEOMETRY: ListWindowGeometry = Object.freeze({
 });
 const getEmptyGeometry = () => EMPTY_GEOMETRY;
 
-/** The largest block-axis band past each viewport edge, in CSS pixels. */
-const BLOCK_BAND_LIMIT = 512;
+/**
+ * The block-axis band past each viewport edge: the smaller of a CSS pixel
+ * limit and a fraction of the viewport height. Private, so a measurement
+ * build can switch it.
+ */
+const BLOCK_BAND = {limit: 512, viewportFraction: 1};
 
 /** The distance mounted past each viewport edge for a measured viewport. */
 export function getBlockBandPadding(viewportHeight: number): number {
-  return Math.max(0, Math.min(BLOCK_BAND_LIMIT, viewportHeight));
+  return Math.max(
+    0,
+    Math.min(BLOCK_BAND.limit, viewportHeight * BLOCK_BAND.viewportFraction),
+  );
 }
 
 /**
