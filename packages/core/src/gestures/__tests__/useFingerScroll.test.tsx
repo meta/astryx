@@ -28,7 +28,7 @@ function touch(type: string, target: Element, down: boolean): void {
   target.dispatchEvent(event);
 }
 
-let read: () => boolean = () => false;
+let read: (at?: number) => boolean = () => false;
 
 function List({other = false}: {other?: boolean}) {
   const ref = useRef<HTMLDivElement>(null);
@@ -110,6 +110,13 @@ function Page() {
   return <p data-testid="row">row</p>;
 }
 
+const pageRef: {current: Document | null} = {current: document};
+
+function PageThroughRef() {
+  read = useFingerScroll(pageRef);
+  return <p data-testid="row">row</p>;
+}
+
 // A phone: the finger-scroll watch listens only where the primary pointer is
 // coarse.
 let restorePointer: () => void;
@@ -148,6 +155,67 @@ describe('useFingerScroll', () => {
     expect(read()).toBe(false);
   });
 
+  it("reads a time inside a finger's scroll as the finger's after it ends, and a program scroll right after as the program's", () => {
+    const now = vi.spyOn(window.performance, 'now').mockReturnValue(100);
+    try {
+      const {getByTestId} = render(<List />);
+      const list = getByTestId('list');
+      const row = getByTestId('row');
+      touch('touchstart', row, true);
+      now.mockReturnValue(120);
+      list.dispatchEvent(new Event('scroll'));
+      now.mockReturnValue(150);
+      touch('touchend', row, false);
+      now.mockReturnValue(200);
+      list.dispatchEvent(new Event('scrollend'));
+      expect(read()).toBe(false);
+      expect(read(99)).toBe(false);
+      expect(read(130)).toBe(true);
+      expect(read(200)).toBe(true);
+      // The program scrolls right after: the observer records it later.
+      now.mockReturnValue(210);
+      list.dispatchEvent(new Event('scroll'));
+      expect(read()).toBe(false);
+      expect(read(216)).toBe(false);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("keeps a scroll that ended under the resting finger the finger's at any time up to the lift", () => {
+    const now = vi.spyOn(window.performance, 'now').mockReturnValue(100);
+    try {
+      const {getByTestId} = render(<List />);
+      const list = getByTestId('list');
+      const row = getByTestId('row');
+      touch('touchstart', row, true);
+      now.mockReturnValue(110);
+      list.dispatchEvent(new Event('scroll'));
+      now.mockReturnValue(120);
+      list.dispatchEvent(new Event('scrollend'));
+      expect(read(115)).toBe(true);
+      now.mockReturnValue(300);
+      touch('touchend', row, false);
+      expect(read()).toBe(false);
+      expect(read(250)).toBe(true);
+      expect(read(301)).toBe(false);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("reads a scroll the program drives with no finger as the program's at any time", () => {
+    const now = vi.spyOn(window.performance, 'now').mockReturnValue(100);
+    try {
+      const {getByTestId} = render(<List />);
+      getByTestId('list').dispatchEvent(new Event('scroll'));
+      expect(read(100)).toBe(false);
+      expect(read(50)).toBe(false);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it("reads a recognizer's own scroll as the program's, even with a finger resting inside", () => {
     const {getByTestId} = render(<List />);
     const list = getByTestId('list');
@@ -161,6 +229,16 @@ describe('useFingerScroll', () => {
 
   it('reads the page’s own scroll through the document', () => {
     const {getByTestId} = render(<Page />);
+    touch('touchstart', getByTestId('row'), true);
+    document.dispatchEvent(new Event('scroll'));
+    expect(read()).toBe(true);
+    touch('touchend', getByTestId('row'), false);
+    document.dispatchEvent(new Event('scrollend'));
+    expect(read()).toBe(false);
+  });
+
+  it('reads the page’s own scroll through a ref that names the document', () => {
+    const {getByTestId} = render(<PageThroughRef />);
     touch('touchstart', getByTestId('row'), true);
     document.dispatchEvent(new Event('scroll'));
     expect(read()).toBe(true);

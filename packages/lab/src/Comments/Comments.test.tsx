@@ -505,7 +505,7 @@ describe('Comments rendering', () => {
     const article = articleByAuthor('Avery Kim');
     expect(
       within(article).getByRole('button', {name: 'Like: 2'}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
     expect(within(article).queryByRole('button', {name: 'Reply'})).toBeNull();
     expect(
       within(article).queryByRole('button', {

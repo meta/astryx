@@ -145,6 +145,15 @@ export interface InternalListFocusOptions extends UseListFocusOptions {
    * a context menu. Unset (the default): a plain `focus()`.
    */
   focusFollowsLastInput?: boolean;
+  /**
+   * The arrow keys, Home, End and the Page keys visit a disabled item as they
+   * visit any other item. The item must take focus (`tabindex="-1"`). Use it in
+   * a menu, where a disabled row stays discoverable and inert. `focusFirst` and
+   * `focusLast` still land on an enabled item, so an open from the keyboard
+   * lands on a row that acts. Unset (the default): navigation skips disabled
+   * items.
+   */
+  reachesDisabledItems?: boolean;
 }
 
 /**
@@ -355,6 +364,39 @@ export function useListFocus<T extends HTMLElement = HTMLElement>(
   return useInternalListFocus<T>(options);
 }
 
+function isDisabledItem(el: HTMLElement): boolean {
+  return (
+    el.getAttribute('aria-disabled') === 'true' ||
+    (el as HTMLButtonElement).disabled === true ||
+    el.hasAttribute('disabled')
+  );
+}
+
+/**
+ * A `tabStopOrder` for a group whose disabled items stay focusable, such as a
+ * row of disabled Buttons. The group keeps one Tab stop while every item is
+ * disabled: the item that holds the stop, else the first enabled item, else
+ * the first item. With an enabled item it places the stop as the default does.
+ */
+export function oneTabStopAmong(
+  itemSelector: string,
+  boundarySelector: string,
+): (list: HTMLElement) => HTMLElement[] {
+  return list => {
+    const items = Array.from(
+      list.querySelectorAll<HTMLElement>(itemSelector),
+    ).filter(
+      el => !isHiddenWithin(el, list) && el.closest(boundarySelector) === list,
+    );
+    const enabled = items.filter(el => !isDisabledItem(el));
+    const candidates = enabled.length > 0 ? enabled : items;
+    const stop =
+      candidates.find(el => el.getAttribute('tabindex') === '0') ??
+      candidates[0];
+    return stop == null ? items : [stop, ...items.filter(el => el !== stop)];
+  };
+}
+
 /**
  * {@link useListFocus} with the Core-only {@link InternalListFocusOptions}.
  * Not re-exported from `hooks/index.ts`.
@@ -374,6 +416,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
     tabStopOrder,
     hasCaretGuard = false,
     focusFollowsLastInput = false,
+    reachesDisabledItems = false,
   } = options;
 
   const listRef = useRef<T>(null);
@@ -383,13 +426,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
    * A `.focus()` call on such an element silently no-ops, so navigation must
    * skip these to avoid freezing on a disabled item (menus-4, navigation-5).
    */
-  const isItemDisabled = useCallback((el: HTMLElement): boolean => {
-    return (
-      el.getAttribute('aria-disabled') === 'true' ||
-      (el as HTMLButtonElement).disabled === true ||
-      el.hasAttribute('disabled')
-    );
-  }, []);
+  const isItemDisabled = isDisabledItem;
 
   /**
    * Get all focusable items in the list.
@@ -434,17 +471,19 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
   );
 
   /**
-   * Find the next enabled item index from `start`, moving by `step`, optionally
-   * wrapping. Returns -1 when no enabled item exists in range. Skipping
+   * Find the next item index from `start` that `isSkipped` does not pass over
+   * (by default, the next enabled item), moving by `step`, optionally
+   * wrapping. Returns -1 when no such item exists in range. Skipping
    * disabled items here (rather than relying on the selector) keeps navigation
    * from stalling on an item whose `.focus()` silently no-ops.
    */
-  const findEnabledIndex = useCallback(
+  const findItemIndex = useCallback(
     (
       items: HTMLElement[],
       start: number,
       step: 1 | -1,
       shouldWrap: boolean,
+      isSkipped: (el: HTMLElement) => boolean = isItemDisabled,
     ): number => {
       const count = items.length;
       if (count === 0) {
@@ -459,7 +498,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
           index = (index + count) % count;
         }
         const item = items[index];
-        if (item && !isItemDisabled(item)) {
+        if (item && !isSkipped(item)) {
           return index;
         }
         index += step;
@@ -467,6 +506,11 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
       return -1;
     },
     [isItemDisabled],
+  );
+
+  const isSkippedByKeys = useCallback(
+    (el: HTMLElement): boolean => !reachesDisabledItems && isItemDisabled(el),
+    [reachesDisabledItems, isItemDisabled],
   );
 
   /**
@@ -579,26 +623,26 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
    */
   const focusFirst = useCallback((): boolean => {
     const items = getItems();
-    const index = findEnabledIndex(items, 0, 1, false);
+    const index = findItemIndex(items, 0, 1, false);
     if (index !== -1) {
       focusIndex(items, index);
       return true;
     }
     return false;
-  }, [getItems, findEnabledIndex, focusIndex]);
+  }, [getItems, findItemIndex, focusIndex]);
 
   /**
    * Focus the last enabled item. Returns true when an item was focused.
    */
   const focusLast = useCallback((): boolean => {
     const items = getItems();
-    const index = findEnabledIndex(items, items.length - 1, -1, false);
+    const index = findItemIndex(items, items.length - 1, -1, false);
     if (index !== -1) {
       focusIndex(items, index);
       return true;
     }
     return false;
-  }, [getItems, findEnabledIndex, focusIndex]);
+  }, [getItems, findItemIndex, focusIndex]);
 
   /**
    * PageDown / PageUp: move to the last / first enabled item fully
@@ -615,7 +659,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
       }
       const currentIndex = getCurrentIndex();
       const enabledIndices = items
-        .map((item, index) => (isItemDisabled(item) ? -1 : index))
+        .map((item, index) => (isSkippedByKeys(item) ? -1 : index))
         .filter(index => index !== -1);
       if (enabledIndices.length === 0) {
         return;
@@ -677,7 +721,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
         focusIndex(items, target);
       }
     },
-    [getItems, getCurrentIndex, isItemDisabled, focusIndex, focusFirst],
+    [getItems, getCurrentIndex, isSkippedByKeys, focusIndex, focusFirst],
   );
 
   /**
@@ -787,24 +831,30 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
         prevFrom = nextFrom - 1;
       }
 
-      if (isNext) {
-        const next = findEnabledIndex(items, nextFrom, 1, wrap);
-        if (next !== -1) {
-          focusIndex(items, next);
-        }
-      } else if (isPrev) {
-        const prev = findEnabledIndex(items, prevFrom, -1, wrap);
-        if (prev !== -1) {
-          focusIndex(items, prev);
-        }
-      } else if (isHome) {
-        focusFirst();
-      } else if (isEnd) {
-        focusLast();
-      } else if (isPageDown) {
+      if (isPageDown) {
         focusPage(1);
       } else if (isPageUp) {
         focusPage(-1);
+      } else {
+        let target: number;
+        if (isNext) {
+          target = findItemIndex(items, nextFrom, 1, wrap, isSkippedByKeys);
+        } else if (isPrev) {
+          target = findItemIndex(items, prevFrom, -1, wrap, isSkippedByKeys);
+        } else if (isHome) {
+          target = findItemIndex(items, 0, 1, false, isSkippedByKeys);
+        } else {
+          target = findItemIndex(
+            items,
+            items.length - 1,
+            -1,
+            false,
+            isSkippedByKeys,
+          );
+        }
+        if (target !== -1) {
+          focusIndex(items, target);
+        }
       }
 
       e.preventDefault();
@@ -817,10 +867,9 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
       hasHomeEnd,
       hasPaging,
       hasCaretGuard,
-      findEnabledIndex,
+      findItemIndex,
+      isSkippedByKeys,
       focusIndex,
-      focusFirst,
-      focusLast,
       focusPage,
       onEscape,
       ownsEvent,

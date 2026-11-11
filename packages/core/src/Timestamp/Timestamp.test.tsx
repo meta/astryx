@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Timestamp.test.tsx
+ * @input Uses Timestamp, Testing Library, and mocked browser APIs
+ * @output Regression coverage for formatting and the focusable details trigger
+ * @position Colocated Timestamp behavior and accessibility tests
+ */
+
 import 'temporal-polyfill/full/global';
 import {
   describe,
@@ -43,12 +50,7 @@ async function openTimestampHoverCard(): Promise<HTMLElement> {
   if (timestamp == null) {
     throw new Error('Expected Timestamp to render a <time> element');
   }
-  const trigger = timestamp.parentElement;
-  if (trigger == null) {
-    throw new Error('Expected Timestamp to render a hover-card trigger');
-  }
-
-  fireEvent.mouseEnter(trigger);
+  await userEvent.hover(timestamp);
   await waitFor(() => {
     expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
   });
@@ -770,9 +772,15 @@ describe('Timestamp', () => {
       // installs fake timers, which would stall them).
       vi.useRealTimers();
 
-      // Mock the Popover API, which jsdom does not implement.
-      HTMLElement.prototype.showPopover = vi.fn();
-      HTMLElement.prototype.hidePopover = vi.fn();
+      // Match HoverCard's Popover API mock so dismissal can observe which
+      // layer is actually open, including the copy button's nested tooltip.
+      const openPopovers = new WeakSet<HTMLElement>();
+      HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+        openPopovers.add(this);
+      });
+      HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+        openPopovers.delete(this);
+      });
 
       // jsdom does not derive :focus-visible from keyboard focus for a <time>
       // element; treat the focused element as focus-visible so the card's
@@ -781,6 +789,9 @@ describe('Timestamp', () => {
       (HTMLElement.prototype as any).matches = function (
         selector: string,
       ): boolean {
+        if (selector === ':popover-open') {
+          return openPopovers.has(this);
+        }
         if (selector === ':focus-visible') {
           return this === document.activeElement;
         }
@@ -820,23 +831,39 @@ describe('Timestamp', () => {
       expect(screen.getByTestId('ts')).toHaveAttribute('tabindex', '0');
     });
 
-    it('does not put aria-expanded on the role-less hover-card trigger', async () => {
-      render(
-        <Timestamp
-          value={Date.now() / 1000 - 3600}
-          format="relative"
-          data-testid="ts"
-        />,
-      );
-      const trigger = screen.getByTestId('ts').parentElement;
-      // The trigger is Text's <span>, which has no role, so aria-expanded is
-      // invalid on it (axe aria-allowed-attr, critical). aria-haspopup is
-      // global and still advertises the dialog.
-      await waitFor(() => {
-        expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
-      });
-      expect(trigger).not.toHaveAttribute('aria-expanded');
-    });
+    it.each([
+      ['relative', {format: 'relative'}],
+      ['relative_short', {format: 'relative_short'}],
+      ['auto', {format: 'auto'}],
+      ['configured absolute', {format: 'date_time', tooltipEntries: [{}]}],
+    ] as const)(
+      'names the %s details card from the tab stop only while it is open',
+      async (_, props) => {
+        render(
+          <Timestamp
+            value={Date.now() / 1000 - 3600}
+            {...props}
+            data-testid="ts"
+          />,
+        );
+        const trigger = screen.getByTestId('ts');
+        expect(trigger).toHaveAttribute('tabindex', '0');
+        expect(trigger).not.toHaveAttribute('aria-controls');
+        act(() => trigger.focus());
+        const card = await screen.findByRole('dialog', {hidden: true});
+        await waitFor(() => {
+          expect(trigger).toHaveAttribute('aria-controls', card.id);
+        });
+        // The time role supports neither aria-haspopup nor aria-expanded, and
+        // the time keeps its own role.
+        expect(trigger).not.toHaveAttribute('aria-haspopup');
+        expect(trigger).not.toHaveAttribute('aria-expanded');
+        expect(trigger).not.toHaveAttribute('role');
+        expect(trigger.closest('.astryx-timestamp')).not.toHaveAttribute(
+          'aria-haspopup',
+        );
+      },
+    );
 
     it('shows the hover card when the timestamp receives keyboard focus', async () => {
       const user = userEvent.setup();
@@ -875,6 +902,144 @@ describe('Timestamp', () => {
       });
       const card = screen.getByRole('dialog', {hidden: true});
       expect(normalize(card.textContent ?? '')).toContain(normalize(expected));
+      expect(el).toHaveAttribute('aria-controls', card.id);
+      expect(el).not.toHaveAttribute('aria-expanded');
+
+      // Move into the card before dismissing it: focus must return to the
+      // same semantic timestamp that exposed the popup relationship.
+      const copy = screen.getByRole('button', {name: /^Copy /, hidden: true});
+      act(() => copy.focus());
+      expect(copy).toHaveFocus();
+      // The copy button's own tooltip is the topmost layer on focus.
+      if (screen.queryByRole('tooltip', {hidden: true})) {
+        await user.keyboard('{Escape}');
+      }
+      await user.keyboard('{Escape}');
+      await waitFor(() => {
+        expect(el).not.toHaveAttribute('aria-controls');
+      });
+      expect(el).toHaveFocus();
+      expect(el).not.toHaveAttribute('aria-haspopup');
+    });
+
+    it('keeps the ref, caller props, and text styling when a card is attached', async () => {
+      const ref = {current: null as HTMLTimeElement | null};
+      const onFocus = vi.fn();
+      const {rerender} = render(
+        <Timestamp
+          ref={ref}
+          value="2026-02-19T17:00:00Z"
+          format="date_time"
+          tooltipEntries={[{}]}
+          aria-label="Published"
+          aria-controls="related-content"
+          id="published-at"
+          data-source="cms"
+          onFocus={onFocus}
+          type="body"
+          color="primary"
+          weight="bold"
+          className="custom-timestamp"
+          style={{marginInlineStart: 12}}
+          data-testid="ts"
+        />,
+      );
+      const time = screen.getByTestId('ts');
+      expect(ref.current).toBe(time);
+      expect(time).toHaveAttribute('aria-label', 'Published');
+      expect(time).toHaveAttribute('id', 'published-at');
+      expect(time).toHaveAttribute('data-source', 'cms');
+      const text = time.closest('.astryx-timestamp');
+      expect(text).toHaveClass('astryx-text', 'custom-timestamp');
+      expect(text).toHaveAttribute('data-type', 'body');
+      expect(text).toHaveAttribute('data-color', 'primary');
+      expect(text).toHaveStyle({marginInlineStart: '12px'});
+
+      act(() => time.focus());
+      const card = await screen.findByRole('dialog', {hidden: true});
+      await waitFor(() => {
+        expect(time).toHaveAttribute(
+          'aria-controls',
+          `related-content ${card.id}`,
+        );
+      });
+      expect(onFocus).toHaveBeenCalledOnce();
+
+      rerender(
+        <Timestamp
+          ref={ref}
+          value="2026-02-19T17:00:00Z"
+          format="date_time"
+          tooltipEntries={[{}]}
+          hasTooltip={false}
+          aria-controls="related-content"
+          data-testid="ts"
+        />,
+      );
+      expect(ref.current).toBe(screen.getByTestId('ts'));
+      expect(ref.current).not.toHaveAttribute('tabindex');
+      expect(ref.current).not.toHaveAttribute('aria-haspopup');
+      expect(ref.current).toHaveAttribute('aria-controls', 'related-content');
+      expect(
+        screen.queryByRole('dialog', {hidden: true}),
+      ).not.toBeInTheDocument();
+    });
+
+    it('keeps a caller aria-controls changed while the card is open', async () => {
+      const props = {
+        value: '2026-02-19T17:00:00Z',
+        format: 'date_time',
+        tooltipEntries: [{}],
+        'data-testid': 'ts',
+      } as const;
+      const {rerender} = render(<Timestamp {...props} aria-controls="first" />);
+      const time = screen.getByTestId('ts');
+      act(() => time.focus());
+      const card = await screen.findByRole('dialog', {hidden: true});
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', `first ${card.id}`);
+      });
+
+      rerender(<Timestamp {...props} aria-controls="second" />);
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', `second ${card.id}`);
+      });
+
+      act(() => time.blur());
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', 'second');
+      });
+    });
+
+    it('names no card after an open card is removed and a new one attaches', async () => {
+      const view = (hasTooltip: boolean) => (
+        <>
+          <Timestamp
+            value="2026-02-19T17:00:00Z"
+            format="date_time"
+            tooltipEntries={[{}]}
+            hasTooltip={hasTooltip}
+            data-testid="ts"
+          />
+          <button type="button">Elsewhere</button>
+        </>
+      );
+      const {rerender} = render(view(true));
+      const time = screen.getByTestId('ts');
+      act(() => time.focus());
+      const card = await screen.findByRole('dialog', {hidden: true});
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', card.id);
+      });
+
+      // The open card unmounts without a hide. Focus then moves on, and a new
+      // card attaches closed.
+      rerender(view(false));
+      act(() => screen.getByRole('button', {name: 'Elsewhere'}).focus());
+      rerender(view(true));
+      await act(async () => {});
+      expect(time).toHaveAttribute('tabindex', '0');
+      expect(time).not.toHaveAttribute('aria-controls');
     });
 
     it('keeps the default hover-card row in the viewer zone with timezoneID set', async () => {

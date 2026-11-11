@@ -12,7 +12,7 @@
  *   SelectableCard's public props do not change.
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /** The native input a group gives one card. */
 export interface SelectableCardInput {
@@ -26,5 +26,9 @@ export interface SelectableCardInput {
 
 /** Without a provider, a card renders its own checkbox. */
 export const SelectableCardInputContext =
-  createContext<SelectableCardInput | null>(null);
+  createSharedContext<SelectableCardInput | null>(
+    'SelectableCardInputContext',
+    1,
+    null,
+  );
 SelectableCardInputContext.displayName = 'SelectableCardInputContext';

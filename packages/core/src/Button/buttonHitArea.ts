@@ -4,14 +4,14 @@
 
 /**
  * @file buttonHitArea.ts
- * @input Uses React createContext and the touch hit-area options type
+ * @input Uses createSharedContext and the touch hit-area options type
  * @output Exports ButtonHitAreaContext, the touch hit-area options a Button
  *   passes to useTouchHitArea, and BUTTON_HIT_AREA, their default
  * @position Internal to Core. A Core part that renders a Button and needs a
  *   different band, such as InputClearButton, provides its own options.
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 import type {TouchHitAreaOptions} from '../utils/touchHitArea';
 
 // The band is on the content wrapper, so a band tap lands on a descendant.
@@ -21,6 +21,9 @@ export const BUTTON_HIT_AREA: TouchHitAreaOptions = {
   ownsDescendantTouches: false,
 };
 
-export const ButtonHitAreaContext =
-  createContext<TouchHitAreaOptions>(BUTTON_HIT_AREA);
+export const ButtonHitAreaContext = createSharedContext<TouchHitAreaOptions>(
+  'ButtonHitAreaContext',
+  1,
+  BUTTON_HIT_AREA,
+);
 ButtonHitAreaContext.displayName = 'ButtonHitAreaContext';
