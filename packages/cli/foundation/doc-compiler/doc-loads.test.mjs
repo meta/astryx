@@ -472,6 +472,10 @@ const RUNNERS = {
     runs: '`astryx manifest` and the error-code and response-type docs, to write the README tables (build time, not shipped)',
     sites: ['child_process.spawnSync', 'import(<computed>)'],
   },
+  'scripts/generate-manifest.mjs': {
+    runs: "`astryx manifest --json`, from a folder beside each package manager's lockfile, to store the manifest at `prepack` (build time)",
+    sites: ['child_process.spawnSync'],
+  },
   'scripts/sync-api-types.mjs': {
     runs: '`tsc`, to emit the API declarations (build time, not shipped)',
     sites: ['child_process.execFileSync'],

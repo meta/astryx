@@ -24,7 +24,7 @@ import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
 import {cliInstallAdvice, installFolder, projectRelease, SETUP_REMINDER_KEY, takeNotice} from '../../foundation/release/notices.mjs';
 import {isCi} from '../../foundation/release/update-notice-env.mjs';
-import {buildManifest} from './lib/manifest.mjs';
+import {buildManifest, storedManifest} from './lib/manifest.mjs';
 import {cliError} from './lib/cli-error.mjs';
 import {section, text, records} from './formatters/index.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -364,7 +364,8 @@ const READS_EVERY_COMMAND = new Set(['manifest']);
  * same way. It returns that one command, no command for a run that only
  * prints the version, or null for every command. These runs load every
  * command: the root help when no stored list ships (a checkout; the published
- * package prints it from the list, see `printsRootHelp`), the manifest,
+ * package prints it from the list, see `printsRootHelp`), the manifest
+ * when no stored manifest ships (the published package reads its own),
  * `help <command>`, an unknown word, and a flag the root does not declare.
  * They print or read the whole list.
  *
@@ -378,7 +379,8 @@ export function commandsForArgs(program, argv) {
     const arg = argv[i];
     // Commander reads a lone `-` as an operand, as it reads any word.
     if (arg.length < 2 || arg[0] !== '-') {
-      return commands.some(cmd => cmd.name === arg) && !READS_EVERY_COMMAND.has(arg)
+      return commands.some(cmd => cmd.name === arg) &&
+        (!READS_EVERY_COMMAND.has(arg) || (arg === 'manifest' && storedManifest() != null))
         ? new Set([arg])
         : null;
     }
