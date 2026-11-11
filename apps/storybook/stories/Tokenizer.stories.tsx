@@ -526,12 +526,32 @@ export const Loading: Story = {
   name: 'Loading (async source, with clear and end content)',
 };
 
+/** The value is busy, and searching stays usable. */
+export const InputBusy: Story = {
+  render: args => {
+    const [value, setValue] = useState<SearchableItem[]>([users[0], users[2]]);
+    return (
+      <Tokenizer
+        {...args}
+        searchSource={userSource}
+        value={value}
+        onChange={items => setValue(items)}
+      />
+    );
+  },
+  args: {
+    label: 'Team Members',
+    placeholder: 'Search people...',
+    isLoading: true,
+  },
+  name: 'Input busy (isLoading)',
+};
+
 /**
- * The field is busy while its value loads or saves. `changeAction` saves each
- * change: the proposed tokens show at once and the end-lane Spinner runs until
- * the save settles. Toggle `isLoading` to mark the value busy from outside.
+ * `changeAction` saves each change, Clear all included. The proposed tokens
+ * show at once, and the field is busy until the save settles.
  */
-export const Busy: Story = {
+export const TransitionAction: Story = {
   render: args => {
     const [value, setValue] = useState<SearchableItem[]>([users[0]]);
     return (
@@ -541,18 +561,18 @@ export const Busy: Story = {
         value={value}
         onChange={() => {}}
         changeAction={async items => {
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
           setValue(items);
         }}
+        hasClear
       />
     );
   },
   args: {
     label: 'Team Members',
     placeholder: 'Search people...',
-    isLoading: false,
   },
-  name: 'Busy (isLoading and changeAction)',
+  name: 'Transition action (changeAction)',
 };
 
 /**
