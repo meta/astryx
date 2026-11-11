@@ -653,7 +653,7 @@ describe('RSC server/client boundary (#823)', () => {
     expect(
       stale.join('\n'),
       `\nThese components import no client-only surface, so the directive pins them\n` +
-        `to the client bundle for nothing. Remove it (source file *and* index.ts):\n`,
+        `to the client bundle for nothing. Remove it from the source file:\n`,
     ).toBe('');
   });
 
@@ -673,6 +673,396 @@ describe('RSC server/client boundary (#823)', () => {
       `\nThese components ship without 'use client', so they are server modules —\n` +
         `but they reach a client-only surface. Either drop the client dependency or\n` +
         `restore the directive. scripts/check-use-client.mjs cannot see this:\n`,
+    ).toBe('');
+  });
+});
+
+/** Every `index.ts` barrel under `SRC_DIR`, the package root entry included. */
+function indexBarrels(): string[] {
+  const found: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, {withFileTypes: true})) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name === 'index.ts' || entry.name === 'index.tsx') {
+        found.push(full);
+      }
+    }
+  };
+  walk(SRC_DIR);
+  return found;
+}
+
+/**
+ * True when every statement of the module is erased or only forwards
+ * bindings: imports, re-exports, interfaces and type aliases. Such a module
+ * runs no code of its own.
+ */
+function isPassThrough(file: string): boolean {
+  const sourceFile = ts.createSourceFile(
+    file,
+    readFileSync(file, 'utf-8'),
+    ts.ScriptTarget.ESNext,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  return sourceFile.statements.every(
+    statement =>
+      ts.isImportDeclaration(statement) ||
+      ts.isExportDeclaration(statement) ||
+      ts.isInterfaceDeclaration(statement) ||
+      ts.isTypeAliasDeclaration(statement) ||
+      (ts.isExpressionStatement(statement) &&
+        ts.isStringLiteral(statement.expression)),
+  );
+}
+
+/**
+ * Walk the server module graph from `entry`. A `'use client'` module is a
+ * client reference on the server, so the walk stops there. Every other module
+ * runs on the server and must not reach a React API that React's server build
+ * omits.
+ */
+function findServerGraphViolations(
+  entry: string,
+): {reason: string; file: string; via: string}[] {
+  const problems: {reason: string; file: string; via: string}[] = [];
+  const visited = new Set<string>();
+  const queue: [string, string[]][] = [[entry, [relative(SRC_DIR, entry)]]];
+  while (queue.length > 0) {
+    const [file, via] = queue.pop()!;
+    if (visited.has(file) || !/\.(tsx?|jsx?|mjs)$/.test(file)) {
+      continue;
+    }
+    visited.add(file);
+    const info = parseModule(file);
+    if (info.hasUseClient) {
+      continue;
+    }
+    const chain = via.join(' -> ');
+    if (info.clientAPIs.length > 0) {
+      const apis = [...new Set(info.clientAPIs)].join(', ');
+      problems.push({
+        reason: `imports ${apis} from react`,
+        file: info.rel,
+        via: chain,
+      });
+    }
+    if (info.reactDom.length > 0) {
+      problems.push({
+        reason: `imports ${info.reactDom.join(', ')}`,
+        file: info.rel,
+        via: chain,
+      });
+    }
+    for (const use of clientValueUses(file)) {
+      problems.push({reason: use, file: info.rel, via: chain});
+    }
+    const targets = [
+      ...info.imports.map(imp => imp.target),
+      ...info.reExports.map(r => r.target),
+      ...info.starReExports,
+    ];
+    for (const target of targets) {
+      queue.push([target, [...via, relative(SRC_DIR, target)]]);
+    }
+  }
+  return problems;
+}
+
+/** Names a module declares and exports itself, re-exports excluded. */
+function ownExports(file: string): Set<string> {
+  const sourceFile = ts.createSourceFile(
+    file,
+    readFileSync(file, 'utf-8'),
+    ts.ScriptTarget.ESNext,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const names = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    const exported = ts.canHaveModifiers(statement)
+      ? ts
+          .getModifiers(statement)
+          ?.some(m => m.kind === ts.SyntaxKind.ExportKeyword)
+      : false;
+    if (exported) {
+      const isDefault = ts
+        .getModifiers(statement as ts.HasModifiers)
+        ?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword);
+      if (isDefault) {
+        names.add('default');
+      }
+      if (ts.isVariableStatement(statement)) {
+        for (const decl of statement.declarationList.declarations) {
+          names.add(decl.name.getText(sourceFile));
+        }
+      } else if (
+        (ts.isFunctionDeclaration(statement) ||
+          ts.isClassDeclaration(statement) ||
+          ts.isEnumDeclaration(statement)) &&
+        statement.name
+      ) {
+        names.add(statement.name.text);
+      }
+    }
+    if (
+      ts.isExportDeclaration(statement) &&
+      !statement.moduleSpecifier &&
+      statement.exportClause &&
+      ts.isNamedExports(statement.exportClause)
+    ) {
+      for (const element of statement.exportClause.elements) {
+        names.add(element.name.text);
+      }
+    }
+    if (ts.isExportAssignment(statement)) {
+      names.add('default');
+    }
+  }
+  return names;
+}
+
+/** The module that defines `name`, following pass-through barrels. */
+function definingModule(
+  target: string,
+  name: string,
+  seen = new Set<string>(),
+): string | null {
+  const key = `${target}|${name}`;
+  if (seen.has(key)) {
+    return null;
+  }
+  seen.add(key);
+  const info = parseModule(target);
+  const named = info.reExports.find(r => r.exportedName === name);
+  if (named) {
+    return definingModule(named.target, named.localName, seen);
+  }
+  if (ownExports(target).has(name)) {
+    return target;
+  }
+  for (const star of info.starReExports) {
+    const found = definingModule(star, name, seen);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+/** A component (PascalCase) or a hook (`useX`) name. */
+const isRenderName = (name: string) => /^([A-Z]|use[A-Z0-9])/.test(name);
+
+/** The name a function is known by: its own, or the variable that holds it. */
+function functionName(fn: ts.SignatureDeclaration): string | undefined {
+  if (
+    (ts.isFunctionDeclaration(fn) || ts.isFunctionExpression(fn)) &&
+    fn.name
+  ) {
+    return fn.name.text;
+  }
+  let holder: ts.Node = fn.parent;
+  // memo() and forwardRef() keep the component's name on the variable.
+  while (
+    ts.isCallExpression(holder) &&
+    /^(React\.)?(memo|forwardRef)$/.test(holder.expression.getText())
+  ) {
+    holder = holder.parent;
+  }
+  if (ts.isVariableDeclaration(holder) && ts.isIdentifier(holder.name)) {
+    return holder.name.text;
+  }
+  return undefined;
+}
+
+/**
+ * True when code at `node` runs while the module evaluates or while a
+ * component or hook renders. Event handlers, observer callbacks and class
+ * methods run later, in the browser.
+ */
+function runsDuringRender(node: ts.Node): boolean {
+  for (let current = node.parent; current; current = current.parent) {
+    if (!ts.isFunctionLike(current)) {
+      continue;
+    }
+    if (
+      ts.isMethodDeclaration(current) ||
+      ts.isConstructorDeclaration(current) ||
+      ts.isGetAccessorDeclaration(current) ||
+      ts.isSetAccessorDeclaration(current)
+    ) {
+      return false;
+    }
+    const name = functionName(current);
+    if (name !== undefined) {
+      return isRenderName(name);
+    }
+    // An unnamed function passed to a call (map, filter) runs where the call
+    // runs; any other unnamed function is a callback.
+    const parent = current.parent;
+    if (
+      ts.isCallExpression(parent) &&
+      parent.arguments.includes(current as ts.Expression)
+    ) {
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Uses, in a server module, of values defined in a `'use client'` module that
+ * fail on the server. There such a value is a client reference: it renders as
+ * a JSX element and passes as a prop, but calling it, constructing it or
+ * reading a property of it during render or module evaluation fails.
+ */
+function clientValueUses(file: string): string[] {
+  const sourceFile = ts.createSourceFile(
+    file,
+    readFileSync(file, 'utf-8'),
+    ts.ScriptTarget.ESNext,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const clientBindings = new Map<string, string>();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !statement.importClause) {
+      continue;
+    }
+    const clause = statement.importClause;
+    if (clause.isTypeOnly) {
+      continue;
+    }
+    const target = resolveSpecifier(
+      (statement.moduleSpecifier as ts.StringLiteral).text,
+      file,
+    );
+    if (!target) {
+      continue;
+    }
+    const bind = (local: string, imported: string) => {
+      const defining = definingModule(target, imported);
+      if (defining && parseModule(defining).hasUseClient) {
+        clientBindings.set(
+          local,
+          `${imported} from ${relative(SRC_DIR, defining)}`,
+        );
+      }
+    };
+    if (clause.name) {
+      bind(clause.name.text, 'default');
+    }
+    const bindings = clause.namedBindings;
+    if (bindings && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        if (!element.isTypeOnly) {
+          bind(element.name.text, (element.propertyName ?? element.name).text);
+        }
+      }
+    } else if (
+      bindings &&
+      ts.isNamespaceImport(bindings) &&
+      parseModule(target).hasUseClient
+    ) {
+      clientBindings.set(
+        bindings.name.text,
+        `* from ${relative(SRC_DIR, target)}`,
+      );
+    }
+  }
+  if (clientBindings.size === 0) {
+    return [];
+  }
+  const uses = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isIdentifier(node) &&
+      clientBindings.has(node.text) &&
+      runsDuringRender(node)
+    ) {
+      const parent = node.parent;
+      const source = clientBindings.get(node.text);
+      if (
+        (ts.isCallExpression(parent) || ts.isNewExpression(parent)) &&
+        parent.expression === node
+      ) {
+        uses.add(`calls ${source}`);
+      } else if (ts.isTaggedTemplateExpression(parent) && parent.tag === node) {
+        uses.add(`calls ${source}`);
+      } else if (
+        (ts.isPropertyAccessExpression(parent) ||
+          ts.isElementAccessExpression(parent)) &&
+        parent.expression === node
+      ) {
+        uses.add(`reads a property of ${source}`);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(sourceFile, visit);
+  return [...uses];
+}
+
+/**
+ * True when every module the barrel re-exports at runtime is a `'use client'`
+ * module, directly or through another pass-through barrel. Such a barrel's
+ * directive changes nothing: each export is a client reference either way.
+ */
+function reExportsOnlyClientModules(
+  file: string,
+  seen = new Set<string>(),
+): boolean {
+  if (seen.has(file)) {
+    return true;
+  }
+  seen.add(file);
+  const info = parseModule(file);
+  const targets = [
+    ...info.imports.map(imp => imp.target),
+    ...info.reExports.map(r => r.target),
+    ...info.starReExports,
+  ];
+  return targets.every((target): boolean => {
+    const targetInfo = parseModule(target);
+    if (targetInfo.hasUseClient && !isPassThrough(target)) {
+      return true;
+    }
+    return isPassThrough(target) && reExportsOnlyClientModules(target, seen);
+  });
+}
+
+describe('RSC boundary of barrels and the package root', () => {
+  const ROOT_ENTRY = join(SRC_DIR, 'index.ts');
+
+  it('keeps "use client" off every pass-through barrel that re-exports a server module', () => {
+    const masking = indexBarrels()
+      .filter(isPassThrough)
+      .filter(file => parseModule(file).hasUseClient)
+      .filter(file => !reExportsOnlyClientModules(file))
+      .map(file => `  ${relative(SRC_DIR, file)}`);
+    expect(
+      masking.join('\n'),
+      `\nA barrel runs no code, so its directive only turns every module it\n` +
+        `re-exports into a client reference — server-safe ones included. Each\n` +
+        `module carries its own directive. Remove it from:\n`,
+    ).toBe('');
+  });
+
+  it('runs the package root as a server module', () => {
+    expect(isPassThrough(ROOT_ENTRY)).toBe(true);
+    expect(parseModule(ROOT_ENTRY).hasUseClient).toBe(false);
+  });
+
+  it('reaches client-only React APIs only through "use client" modules', () => {
+    const problems = findServerGraphViolations(ROOT_ENTRY);
+    expect(
+      format(problems),
+      `\nA root import inside a Server Component runs these modules on the\n` +
+        `server, where React's server build omits the APIs below. Add 'use client'\n` +
+        `to the module or move the client-only code out of it:\n`,
     ).toBe('');
   });
 });

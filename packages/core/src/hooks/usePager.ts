@@ -289,7 +289,7 @@ function sameOffsets(
   );
 }
 
-function mod(value: number, count: number): number {
+export function mod(value: number, count: number): number {
   return ((value % count) + count) % count;
 }
 

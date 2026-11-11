@@ -1,6 +1,10 @@
 # Astryx agent docs (generated)
 .astryx-docs/
 AGENTS.md
+# The eval's Astryx arm commits the agent file its setup wrote.
+!eval/arms/astryx-vite/AGENTS.md
+# Each eval arm pins its dependencies with its own npm lockfile.
+!eval/arms/*/package-lock.json
 
 # Baseline comparison docs (generated)
 .baseline-docs/

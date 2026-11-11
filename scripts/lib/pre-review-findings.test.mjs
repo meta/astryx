@@ -49,11 +49,11 @@ describe('authoredLineCount', () => {
     const diff = [
       diffOf('pnpm-lock.yaml', lines(50)),
       diffOf('packages/core/src/__snapshots__/A.test.tsx.snap', lines(40)),
-      diffOf('packages/core/api-report.md', lines(30)),
+      diffOf('packages/core/src/data.generated.ts', lines(30)),
       diffOf('packages/core/src/A/A.tsx', lines(7)),
     ].join('\n');
     expect(
-      authoredLineCount(counted(diff), file => file.endsWith('api-report.md')),
+      authoredLineCount(counted(diff), file => file.endsWith('.generated.ts')),
     ).toBe(7);
   });
 

@@ -194,6 +194,7 @@ describe('spec-only workflow contract', () => {
     for (const name of [
       'Build docsite workspace dependencies',
       'Build the docsite',
+      "Write the docsite's API surface",
       'test-docsite (data tests)',
       'Verify the hidden production registry gate',
     ]) {
