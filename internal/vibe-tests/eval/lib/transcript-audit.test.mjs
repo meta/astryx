@@ -21,9 +21,10 @@ describe('pathsInCommand', () => {
 
   it('ignores JSX, URLs, comments and division', () => {
     const heredoc = "cat > src/App.tsx <<'EOF'\n<Button /> // note\nconst a = 1 / 2;\nfetch('https://example.com/x')\nEOF";
-    expect(resolveCommandPaths(heredoc, '/w').found).toEqual([]);
+    const outside = command => resolveCommandPaths(command, '/w').found.filter(({resolved}) => !resolved.startsWith('/w/'));
+    expect(outside(heredoc)).toEqual([]);
     const script = "python3 - <<'EOF'\nx = 1 / 2  # see /notes\nprint(open('src/App.tsx').read())\nEOF";
-    expect(resolveCommandPaths(script, '/w').found).toEqual([]);
+    expect(outside(script)).toEqual([]);
   });
 });
 
@@ -114,16 +115,33 @@ describe('reads the review found unaudited', () => {
   const audit = command => auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent');
 
   it.each([
-    'ls ~',
     'cat ${HOME}/.npmrc',
-    'ls $HOME',
     'cd ~ && cat .npmrc',
-    "find / -name '*.probe.mjs'",
+    'cd && cat .npmrc',
     'cd / && cat repo/x',
+    'cat src/../../../other__arm__r1/workspace/src/App.tsx',
     "cat <<'EOF' > /repo/x.txt\nhello\nEOF",
     "python3 - <<'EOF'\nprint(open('/repo/secret').read())\nEOF",
-  ])('flags %j', command => {
+    "cat <<'EOF' | python3 -\nprint(open('/repo/x.probe.mjs').read())\nEOF",
+    "bash <<'EOF'\ncat /repo/x.probe.mjs\nEOF",
+  ])('fails %j', command => {
     expect(audit(command).violations.length).toBeGreaterThan(0);
+  });
+
+  it.each(['ls ~', 'ls $HOME', "find / -name '*.probe.mjs'"])('warns about %j', command => {
+    const result = audit(command);
+    expect(result.violations).toEqual([]);
+    expect(result.warnings.length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    `node -e "console.log('a/b'.split('/'))"`,
+    `python3 -c "print('/'.join(['a','b']))"`,
+    "python3 - <<'EOF'\nprint('/'.join(['a', 'b']))\nEOF",
+    'echo $HOME',
+    'expr 6 / 2',
+  ])('passes %j', command => {
+    expect(audit(command).violations).toEqual([]);
   });
 
   it('blocks the sub-agent tool under its current name', () => {

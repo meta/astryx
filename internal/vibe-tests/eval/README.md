@@ -54,13 +54,14 @@ its folder. The agent is not sandboxed, so the runner audits it instead (below).
   the arm's root `AGENTS.md` or `CLAUDE.md`, if the arm's own setup wrote one.
   Today only `astryx init` writes one.
 
-After the agent stops, the runner reads its transcript. A path that reaches the
-home folder, the repository or any run under the run root, a folder that holds
-one of them (such as `/`), or any use of a web tool or a sub-agent, is a
-violation, and the run fails as `integrity`. Paths in shell commands resolve
-from the folder the agent's shell is in, which persists between commands.
-Heredoc bodies that are file content are skipped; bodies that an interpreter
-runs are scanned for path literals. The agent's own session folder, where it
+After the agent stops, the runner reads its transcript. A path inside the home
+folder, the repository or any run under the run root, or any use of a web tool
+or a sub-agent, is a violation, and the run fails as `integrity`. Naming one of
+those roots, or a folder that holds one (`ls ~`, `find /`), is a warning. Paths
+in shell commands resolve from the folder the agent's shell is in, which
+persists between commands. Heredoc bodies that are file content are skipped;
+shell heredocs are audited as shell text, and other interpreter heredocs are
+scanned for path literals. The agent's own session folder, where it
 saves long tool output, is allowed. Other outside paths are warnings to review. When the agent exits or times out, the runner kills its whole process
 group, so a server it started does not keep running.
 
