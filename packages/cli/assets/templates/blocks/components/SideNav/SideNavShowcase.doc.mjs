@@ -7,7 +7,7 @@ export const doc = {
   name: 'SideNav',
   displayName: 'Side Nav',
   isReady: true,
-  aspectRatio: 1,
+  aspectRatio: 16 / 9,
   isShowcase: true,
-  componentsUsed: ['SideNav'],
+  componentsUsed: ['SideNav', 'AppShell'],
 };
