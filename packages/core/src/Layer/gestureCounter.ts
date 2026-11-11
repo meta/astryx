@@ -7,7 +7,9 @@
  * @input Pointer and context-menu events through the shared input stream;
  *   keydown and click on the document
  * @output Exports the gesture identity, whether its click has run, whether a
- *   press is down, and the press claims (claimPress, claimContextMenuPress)
+ *   press is down or being released (afterRelease runs a callback once that
+ *   release is handled), the press mark a layer keeps from its opening
+ *   press, and the press claims (claimPress, claimContextMenuPress)
  * @position Internal to the package, not exported. useLayer reads it to tell
  *   a click that belongs to a dismissing press from a fresh one.
  *   useTouchTrigger, useMenuPress, ContextMenu and DropdownMenu read the
@@ -30,6 +32,11 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
   clickedGesture: null as number | null,
   contextMenuGesture: null as number | null,
   pressPointerId: null as number | null,
+  // The gesture whose release is being handled: from its pointerup until
+  // its click, or the next task when no click comes.
+  releasingGesture: null as number | null,
+  // Each pointer's latest press, so a mark survives another pointer's press.
+  pointerGestures: new Map<number, number>(),
   claimedPress: null as {
     layer: HTMLElement;
     pointerId: number;
@@ -38,6 +45,9 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
   isListening: false,
   unsubscribePress: null as (() => void) | null,
 }));
+
+/** How many pointers' latest presses the counter remembers. */
+const MAX_TRACKED_POINTERS = 8;
 
 function advance() {
   state.gesture += 1;
@@ -48,6 +58,15 @@ function advance() {
 function startPress(event: PointerEvent) {
   advance();
   state.pressPointerId = event.pointerId;
+  state.pointerGestures.delete(event.pointerId);
+  state.pointerGestures.set(event.pointerId, state.gesture);
+  // A touch gets a new pointer id each press: keep the latest few.
+  for (const pointerId of state.pointerGestures.keys()) {
+    if (state.pointerGestures.size <= MAX_TRACKED_POINTERS) {
+      break;
+    }
+    state.pointerGestures.delete(pointerId);
+  }
   const view = event.view ?? document.defaultView;
   if (state.unsubscribePress != null || view == null) {
     return;
@@ -64,7 +83,18 @@ function startPress(event: PointerEvent) {
   };
 }
 
-function endPress() {
+function endPress(event: PointerEvent) {
+  if (event.type === 'pointerup') {
+    const gesture = state.gesture;
+    state.releasingGesture = gesture;
+    // A release that brings no click (a touch whose touchend was cancelled)
+    // ends at the next task.
+    setTimeout(() => {
+      if (state.releasingGesture === gesture) {
+        state.releasingGesture = null;
+      }
+    }, 0);
+  }
   state.pressPointerId = null;
   state.unsubscribePress?.();
   state.unsubscribePress = null;
@@ -76,6 +106,9 @@ function markContextMenu() {
 
 function markClicked() {
   state.clickedGesture = state.gesture;
+  if (state.releasingGesture === state.gesture) {
+    state.releasingGesture = null;
+  }
 }
 
 function listen() {
@@ -106,6 +139,85 @@ export function currentGesture(): number {
 export function currentGestureHasClicked(): boolean {
   listen();
   return state.clickedGesture === state.gesture;
+}
+
+/**
+ * Whether the page is handling a press's release: from its `pointerup` until
+ * its click, or the next task when no click comes. The browser's light
+ * dismiss for that release has not run yet.
+ */
+export function isReleaseInFlight(): boolean {
+  listen();
+  return (
+    state.releasingGesture !== null && state.releasingGesture === state.gesture
+  );
+}
+
+/**
+ * Runs `callback` once, after the release in flight: at its click, or at the
+ * next task when no click comes, whichever is first. Returns the cancel.
+ */
+export function afterRelease(doc: Document, callback: () => void): () => void {
+  let isDone = false;
+  const run = () => {
+    if (isDone) {
+      return;
+    }
+    isDone = true;
+    cancel();
+    callback();
+  };
+  // Bubble phase on the window: the click has passed every handler, and the
+  // browser's light dismiss for the release has run.
+  const view = doc.defaultView;
+  view?.addEventListener('click', run, {once: true});
+  const timer = setTimeout(run, 0);
+  function cancel() {
+    isDone = true;
+    view?.removeEventListener('click', run);
+    clearTimeout(timer);
+  }
+  return cancel;
+}
+
+/** The pointer press a layer opened during, from `currentPressMark`. */
+export interface PressMark {
+  readonly gesture: number;
+  readonly pointerId: number;
+}
+
+/**
+ * The pointer press in flight, down or being released, or null when the
+ * gesture in flight is not a pointer press (a keystroke).
+ */
+export function currentPressMark(): PressMark | null {
+  listen();
+  for (const [pointerId, gesture] of state.pointerGestures) {
+    if (gesture === state.gesture) {
+      return {gesture, pointerId};
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether input now belongs to the press `mark` names: the same gesture, or,
+ * after another pointer pressed, an event from the mark's pointer while that
+ * pointer's latest press is still the mark's.
+ */
+export function isFromPress(mark: PressMark | null, event?: Event): boolean {
+  listen();
+  if (mark == null) {
+    return false;
+  }
+  if (state.gesture === mark.gesture) {
+    return true;
+  }
+  const pointerId = (event as PointerEvent | undefined)?.pointerId;
+  return (
+    pointerId === mark.pointerId &&
+    state.pointerGestures.get(pointerId) === mark.gesture
+  );
 }
 
 /** Whether a press is down, its release not yet seen by the page. */

@@ -11,16 +11,24 @@
  *   holds the pointer while the pointer is over it, and no window listener
  *   stays after the press. The context-menu claim takes only a press that
  *   fired `contextmenu`. A claim runs its onRelease at its release, and no
- *   other. A claim ends when another control takes the pointer
+ *   other. A claim ends when another control takes the pointer. A release
+ *   is in flight from its pointerup to its click or the next task, and
+ *   afterRelease runs once, at that click or that task. A press mark names
+ *   a pointer press, survives another pointer's press for its own pointer,
+ *   and is null for a keystroke
  * @position Unit test of packages/core/src/Layer/gestureCounter.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
+  afterRelease,
   claimContextMenuPress,
   claimPress,
   currentGesture,
+  currentPressMark,
+  isFromPress,
   isPressInFlight,
+  isReleaseInFlight,
 } from './gestureCounter';
 
 /** A pointer event of `type` for `pointerId`, which jsdom's events lack. */
@@ -382,5 +390,127 @@ describe('claimPress', () => {
     );
     claimContextMenuPress(layer);
     expect(captured).toEqual([7]);
+  });
+});
+
+describe('the release in flight and afterRelease', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    document.body.replaceChildren();
+  });
+
+  /** A press on a fresh button: down, then up, as the window sees them. */
+  function press(pointerId = 3) {
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    button.dispatchEvent(pointerEvent('pointerdown', pointerId));
+    return {
+      button,
+      release: () => button.dispatchEvent(pointerEvent('pointerup', pointerId)),
+    };
+  }
+
+  it('is in flight from the release until its click', () => {
+    const {button, release} = press();
+    expect(isReleaseInFlight()).toBe(false);
+    let duringRelease = false;
+    button.addEventListener('pointerup', () => {
+      duringRelease = isReleaseInFlight();
+    });
+    release();
+    expect(duringRelease).toBe(true);
+    button.click();
+    expect(isReleaseInFlight()).toBe(false);
+  });
+
+  it('ends at the next task when no click comes', () => {
+    vi.useFakeTimers();
+    const {release} = press();
+    release();
+    expect(isReleaseInFlight()).toBe(true);
+    vi.runOnlyPendingTimers();
+    expect(isReleaseInFlight()).toBe(false);
+  });
+
+  it('runs afterRelease once, at the click, and not again at the next task', () => {
+    vi.useFakeTimers();
+    const {button, release} = press();
+    const callback = vi.fn();
+    button.addEventListener('pointerup', () => {
+      afterRelease(document, callback);
+    });
+    release();
+    expect(callback).not.toHaveBeenCalled();
+    button.click();
+    expect(callback).toHaveBeenCalledTimes(1);
+    vi.runOnlyPendingTimers();
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs afterRelease once at the next task when no click comes', () => {
+    vi.useFakeTimers();
+    const {button, release} = press();
+    const callback = vi.fn();
+    button.addEventListener('pointerup', () => {
+      afterRelease(document, callback);
+    });
+    release();
+    vi.runOnlyPendingTimers();
+    expect(callback).toHaveBeenCalledTimes(1);
+    button.click();
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs nothing once cancelled', () => {
+    vi.useFakeTimers();
+    const {button, release} = press();
+    const callback = vi.fn();
+    let cancel = () => {};
+    button.addEventListener('pointerup', () => {
+      cancel = afterRelease(document, callback);
+    });
+    release();
+    cancel();
+    button.click();
+    vi.runOnlyPendingTimers();
+    expect(callback).not.toHaveBeenCalled();
+  });
+});
+
+describe('press marks', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it("names the pointer press in flight, and that press's click is from it", () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    button.dispatchEvent(pointerEvent('pointerdown', 4));
+    const mark = currentPressMark();
+    expect(mark).toEqual({gesture: currentGesture(), pointerId: 4});
+    button.dispatchEvent(pointerEvent('pointerup', 4));
+    expect(isFromPress(mark, new MouseEvent('click'))).toBe(true);
+    button.dispatchEvent(pointerEvent('pointerdown', 4));
+    expect(isFromPress(mark, pointerEvent('click', 4))).toBe(false);
+  });
+
+  it("keeps its pointer's input after another pointer presses", () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    button.dispatchEvent(pointerEvent('pointerdown', 5));
+    const mark = currentPressMark();
+    button.dispatchEvent(pointerEvent('pointerdown', 6));
+    expect(isFromPress(mark, pointerEvent('click', 5))).toBe(true);
+    expect(isFromPress(mark, pointerEvent('click', 6))).toBe(false);
+  });
+
+  it('is null for a keystroke', () => {
+    currentGesture();
+    document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter'}));
+    expect(currentPressMark()).toBeNull();
+    expect(isFromPress(null)).toBe(false);
   });
 });

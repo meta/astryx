@@ -3628,8 +3628,11 @@ describe('DropdownMenu press model', () => {
         fireEvent.pointerDown(trigger, mouse);
         fireEvent.pointerUp(trigger, mouse);
       });
+      // The replay lands while the release is handled, so the show waits for
+      // the release's click, or the next task when none comes (layer-runtime
+      // INV7a).
       await act(async () => {
-        await Promise.resolve();
+        await new Promise(resolve => setTimeout(resolve, 0));
       });
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
       expect(captured).toEqual([]);

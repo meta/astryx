@@ -65,6 +65,11 @@ import {useScrollLock} from '../hooks/useScrollLock';
 import {useFocusTrapEscapeCompatibilitySignal} from '../hooks/useFocusTrap';
 import {dispatchLayerEscapeKeyDown} from '../Layer/layerStack';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {
+  currentPressMark,
+  isFromPress,
+  type PressMark,
+} from '../Layer/gestureCounter';
 import {composeEventHandlers} from '../utils';
 import {mergeRefs} from '../utils/mergeRefs';
 import {useModalOutletWithoutRef} from '../Layer/modalOutlet';
@@ -329,6 +334,9 @@ export function BottomSheetSwitcher({
     xstyle,
   });
   const hostDialogRef = useRef<HTMLDialogElement | null>(null);
+  // The pointer press the flow opened during, if any: that press's click on
+  // the fresh scrim is not a dismissal.
+  const openingPressRef = useRef<PressMark | null>(null);
   const flowRef = useRef<HTMLDivElement | null>(null);
   const sheetDialogsRef = useRef(new Map<string, HTMLDialogElement>());
   // Sheet ids in the order their dialogs mounted (tree order on first mount).
@@ -636,6 +644,7 @@ export function BottomSheetSwitcher({
           if (dialog == null || dialog.open) {
             return;
           }
+          openingPressRef.current = currentPressMark();
           const hostId = [...sheetDialogsRef.current].find(
             ([, candidate]) => candidate === dialog,
           )?.[0];
@@ -1000,7 +1009,8 @@ export function BottomSheetSwitcher({
       if (
         hasScrim &&
         event.target === event.currentTarget &&
-        event.currentTarget === hostDialogRef.current
+        event.currentTarget === hostDialogRef.current &&
+        !isFromPress(openingPressRef.current, event.nativeEvent)
       ) {
         dismissOnLightInteraction();
       }
