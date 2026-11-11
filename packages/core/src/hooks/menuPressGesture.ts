@@ -29,7 +29,7 @@ export const MENU_PRESS_HANDOFF_PX: number = UIKIT_MENU_PRESS_HANDOFF_PX;
 
 export type MenuPressPointerType = 'mouse' | 'touch' | 'pen';
 
-/** @internal The machine's own shape, with the finger's handoff; not public contract. */
+/** @internal */
 export type MenuPressState<T> =
   | {phase: 'idle'}
   | {
@@ -57,7 +57,7 @@ export type MenuPressState<T> =
       row: T | null;
     };
 
-/** @internal The machine's own shape, with the finger's handoff; not public contract. */
+/** @internal */
 export type MenuPressInput<T> =
   | {
       type: 'down';
@@ -99,7 +99,7 @@ export type MenuPressInput<T> =
   /** The browser took the gesture: pointercancel, a second pointer, a scroll. */
   | {type: 'cancel'};
 
-/** @internal The machine's own shape, with the finger's handoff; not public contract. */
+/** @internal */
 export type MenuPressOutcome<T> =
   | {type: 'none'}
   /** A mouse pressed the trigger: open the menu now, under the held pointer. */
@@ -114,7 +114,7 @@ export type MenuPressOutcome<T> =
    */
   | {type: 'settle'; stray: boolean; dismiss: boolean};
 
-/** @internal The machine's own shape, with the finger's handoff; not public contract. */
+/** @internal */
 export interface MenuPressTransition<T> {
   gesture: MenuPressState<T>;
   effect: MenuPressOutcome<T>;
@@ -200,8 +200,7 @@ function release<T>(
  * pointer, or `null` over a divider, a heading, a disabled row, or outside
  * the menu.
  *
- * @internal The machine's own shape, with the finger's handoff; not public
- * contract.
+ * @internal
  */
 export function menuPressTransition<T>(
   gesture: MenuPressState<T>,
@@ -381,8 +380,9 @@ function stepTracking<T>(
 }
 
 // ---------------------------------------------------------------------------
-// The released public shape (`@astryxdesign/core/hooks`). The handoff
-// positions and `handoffFrom` stay internal: a caller of
+// The released public shape (`@astryxdesign/core/hooks`). The machine's own
+// types above carry the finger's handoff and are not public contract. The
+// handoff positions and `handoffFrom` stay internal: a caller of
 // `menuPressStep` keeps the settle rule, as released.
 // ---------------------------------------------------------------------------
 

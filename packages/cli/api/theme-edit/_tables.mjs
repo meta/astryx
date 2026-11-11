@@ -347,14 +347,14 @@ export const DIALS = {
       'spacing space room roomy airy dense density compact tight padding gap gaps margin breathing cramped spread spacious',
   },
   accent: {
-    help: 'The main brand color: primary buttons, links, selection and the focus ring. From the one color the editor generates its shades, light and dark, and points the accent tokens at them: --color-accent, --color-on-accent, --color-text-accent, --color-icon-accent, --color-accent-muted and --focus-outline-color. The fill keeps the exact color you gave, in dark mode too when text on it reads at 4.5:1 and it stands out from the dark page at 3:1; otherwise dark mode uses the shade nearest your color that passes both, and the result says so. A token moves to a nearby shade when it must read: text at 4.5:1, the focus ring at 3:1, the fill until the text on it reads. `how colors` explains it; the Colors preview page (`preview add`) shows every shade. For an exact color, set the token itself (set my --color-accent "#7c3aed"): an exact token always wins over the generated colors.',
+    help: 'The main brand color: primary buttons, links, selection and the focus ring. From the one color the editor generates its shades, light and dark, and points the accent tokens at them: --color-accent, --color-on-accent, --color-text-accent, --color-icon-accent, --color-accent-muted and --focus-outline-color. The fill keeps the exact color you gave in light, and in dark too when text on it reads at 4.5:1 and it stands out from the dark page at 3:1; otherwise dark mode uses shade 70, where the official themes put a dark fill, or the shade nearest it that passes both, and the result says so. Text on the fill is the neutral color\'s white or near-black (pure white or black without a neutral color), whichever reads on it. The fill never moves: when no text reads on it, or a pale fill does not stand out from the light page, the result says so. Other tokens move to a nearby shade when they must read: text at 4.5:1, the focus ring at 3:1. `how colors` explains it; the Colors preview page (`preview add`) shows every shade. For an exact color, set the token itself (set my --color-accent "#7c3aed"): an exact token always wins over the generated colors.',
     values: '<color>',
     examples: ['set my accent "#7c3aed"', 'set my accent rebeccapurple'],
     words:
       'accent brand primary main color colour key highlight link selection seed',
   },
   neutral: {
-    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background stays the base theme\'s (often a light gray), so a tinted gray never tints the page; the result names it, and for a white or off-white page set --color-background-body "#ffffff" (with --mode light in a theme with both modes). From the one color the editor generates light and dark shades (its hue and how much of it shows), and the surface, text, icon, border, skeleton and overlay tokens point at them. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
+    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background stays the base theme\'s (often a light gray), so a tinted gray never tints the page; the result names it, and for a white or off-white page set --color-background-body "#ffffff" (with --mode light in a theme with both modes). From the one color the editor generates light and dark shades; your exact color sits at its own shade in both modes, and the shades around it follow it. The surface, text, icon, border, skeleton and overlay tokens point at those shades. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
     values: '<color>',
     examples: ['set my neutral "#64748b"', 'set my neutral "#78716c"'],
     words:
@@ -385,7 +385,7 @@ export const DIALS = {
     words: 'info information notice help blue status',
   },
   vibrancy: {
-    help: 'How saturated the generated colors are: 0 is gray, 100 the most vivid, 50 the default; more and less step by 10. Every color the theme sets (accent, neutral, success, warning, danger, info) is generated again; the accent and status fills keep the exact color you gave, and the shades around them get more or less color. The whole theme only, and only once the theme sets a color.',
+    help: 'How saturated the generated colors are: 0 is gray, 100 the most vivid, 50 the default; more and less step by 10. Every color the theme sets (accent, neutral, success, warning, danger, info) is generated again; each exact color you gave stays as given at its own shade, and the shades around it get more or less color. more at 100 and less at 0 change nothing, so they are refused. The whole theme only, and only once the theme sets a color; undoing the last color removes vibrancy too.',
     values: '<0-100>|more|less',
     examples: ['set my vibrancy 70', 'set my vibrancy less'],
     words:
@@ -440,7 +440,7 @@ export const DIALS = {
     words: 'cta solid outline outlined soft tint caps uppercase filled',
   },
   type: {
-    help: 'The type personality: how far headings step up from body text and how they are set. compact: small steps (x1.15), semibold. standard: the default (x1.2). editorial: bigger steps (x1.3), tight tracking, semibold. display: big steps (x1.4), heavy weight, tighter tracking (a marketing feel). Text below the base size keeps its standard sizes, so small text stays readable. Works with text-size; a headings setting keeps its weight or tracking whatever the order.',
+    help: 'The type personality: how far headings step up from body text and how they are set. compact: small steps (x1.15), semibold. standard: the default (x1.2). editorial: bigger steps (x1.3), tight tracking, semibold. display: big steps (x1.4), heavy weight, tighter tracking (a marketing feel). Text below the base size keeps its standard sizes, so small text stays readable. Works with text-size; a headings setting keeps its weight or tracking whatever the order. Phones (touch screens below 1024px wide) keep the base theme reading sizes.',
     values: Object.keys(TYPE_STYLES).join('|'),
     examples: ['set my type display', 'set my type editorial'],
     words:
@@ -450,7 +450,7 @@ export const DIALS = {
     help:
       'Base text size; every heading size scales from it. Rungs: ' +
       TEXT_SIZE.map(([n, v]) => `${n} (${v}px)`).join(', ') +
-      ', or a number.',
+      ', or a number of pixels from 10 to 32. Phones (touch screens below 1024px wide) keep the base theme reading sizes.',
     values: 'small|medium|large|larger|more|less|<number>',
     examples: ['set my text-size small', 'set my text-size more'],
     words: 'text size font size small big large scale',
@@ -618,98 +618,6 @@ export const THING_HINTS = {
   'text-color': (_v, on) => [`${HOW} "text color on ${on ?? '<part>'}"`],
 };
 
-/**
- * Words for parts, and the parts (or groups, or `part:prop:value`) they
- * mean. The first match order is the answer order.
- * @type {Array<[RegExp, string[]]>}
- */
-export const PART_WORDS = [
-  [
-    /\b(header|top ?bar|title ?bar|nav ?bar|app ?bar|masthead)\b/,
-    ['app-shell-header'],
-  ],
-  [
-    /\b(nav(igation)? (links?|items?)|menu items?|top ?nav items?)\b/,
-    ['top-nav-item', 'side-nav-item'],
-  ],
-  [
-    /\b(app (name|title)|logo|brand name|site title|product name)\b/,
-    ['top-nav-heading'],
-  ],
-  [
-    /\b(side ?nav|sidebar|side ?panel|left (panel|column))\b/,
-    ['side-nav', 'side-nav-item'],
-  ],
-  [
-    /\b(content area|main area|behind the cards|main content)\b/,
-    ['layout-content'],
-  ],
-  [
-    /\b(page|desktop|backdrop|whole background|app background)\b/,
-    ['app-shell'],
-  ],
-  [/\b(windows?|panels?|cards?|boxes|tiles?)\b/, ['containers']],
-  [/\b(primary|main|blue) buttons?\b/, ['button:variant:primary']],
-  [/\b(secondary|other) buttons?\b/, ['button:variant:secondary']],
-  [/\b(ghost|text|link|cancel) buttons?\b/, ['button:variant:ghost']],
-  [
-    /\b(destructive|danger|delete|red) buttons?\b/,
-    ['button:variant:destructive'],
-  ],
-  [/\bbuttons?\b/, ['button']],
-  [/\b(banner|alert|notice|announcement|info box)\b/, ['banner']],
-  [
-    /\b(inputs?|text ?box(es)?|text ?fields?|fields?|forms?|dropdowns?|selects?)\b/,
-    ['inputs'],
-  ],
-  [/\b(checkbox(es)?|check ?marks?)\b/, ['checks']],
-  [/\b(toggles?|switch(es)?)\b/, ['switch']],
-  [/\b(progress|loading bar)\b/, ['progress-bar-fill', 'progress-bar-track']],
-  [/\b(table header|column headers?)\b/, ['table-header-cell']],
-  [/\b(table|rows?)\b/, ['table-row', 'table-cell']],
-  [/\b(tabs?)\b/, ['tab', 'tab-indicator']],
-  [/\b(badges?|pills?|chips?|tags?)\b/, ['badge']],
-  [/\b(status dots?|dots?)\b/, ['status-dot']],
-  [/\b(headings?|titles?)\b/, ['heading']],
-  [/\b(dialogs?|modals?|popups?)\b/, ['dialog']],
-  [/\b(tooltips?)\b/, ['tooltip']],
-  [/\b(toasts?)\b/, ['toast']],
-];
-
-/**
- * Words for aspects of a part. `background` comes last: color words mean it
- * only when no other aspect matched them.
- * @type {Array<[string, RegExp]>}
- */
-export const INTENTS = [
-  [
-    'text',
-    /\b(text|font colou?r|writing|words|white text|dark text|readable|unreadable|links?|labels?)\b/,
-  ],
-  [
-    'font',
-    /\b(font|typeface|bold|weight|heavier|lighter|italic|uppercase|letter ?spacing)\b/,
-  ],
-  [
-    'corners',
-    /\b(round(ed|er)?|corners?|radius|curv\w*|circular|circle|pill|sharp|square)\b/,
-  ],
-  [
-    'shadow',
-    /\b(shadows?|depth|elevat\w*|bevel\w*|raised|3d|glow|sunken|inset)\b/,
-  ],
-  ['border', /\b(borders?|outlines?|edges?|frames?|strokes?|thick)\b/],
-  [
-    'spacing',
-    /\b(spacing|space|padding|gaps?|margins?|room|roomy|dense|compact|tight|cramped|airy)\b/,
-  ],
-  ['size', /\b(taller|shorter|height|bigger|smaller)\b/],
-  [
-    'background',
-    /\b(background|bg|fill|filled|gradient|glossy|tint|paint|colou?r(ed)?|blue|red|green|white|black|dark|light|cream|beige)\b/,
-  ],
-];
-
 /** Sample values for design words in a `how` question. */
 export const DESIGN = /** @type {Record<string, string>} */ ({
   gradient: '"linear-gradient(#ffffff, #d1d5db)"',
@@ -729,3 +637,22 @@ export const COMMON_STATES = [
   'focus-within',
   'disabled',
 ];
+
+// These tables are looked up by words people type: with no prototype,
+// `constructor` or `__proto__` is never found in them.
+for (const table of [
+  FAMILIES,
+  FONTS,
+  OPEN_FONTS,
+  CLOSEST_OPEN_FONT,
+  HEADING_WEIGHTS,
+  HEADING_TRACKING,
+  SURFACES,
+  TYPE_STYLES,
+  DIALS,
+  GROUPS,
+  DIRECT,
+  THING_HINTS,
+  DESIGN,
+])
+  Object.setPrototypeOf(table, null);
