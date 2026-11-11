@@ -447,6 +447,26 @@ describe.skipIf(process.platform === 'win32')(
       ).toBe('ended');
       expect(await until(() => !alive(npm))).toBe(true);
     });
+
+    it('ends the install of a lock moved aside when its version is passed', async () => {
+      const at = Date.now() - 1000;
+      const npm = startGroup(process.execPath, ['-e', SLEEP]);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const lock = lockFor(npm, at);
+      const aside = `${lock}.stale-1-abcdef`;
+      fs.renameSync(lock, aside);
+      const facts = () => ({
+        argv: ['/usr/bin/node', '/x/npm/bin/npm-cli.js', ...INSTALL],
+        startedAt: at + 500,
+      });
+      // The moved folder's name holds no version.
+      expect(endRecordedInstall(aside, {factsOf: facts})).toBe('left');
+      expect(alive(npm)).toBe(true);
+      expect(
+        endRecordedInstall(aside, {factsOf: facts, version: '9.9.9'}),
+      ).toBe('ended');
+      expect(await until(() => !alive(npm))).toBe(true);
+    });
   },
 );
 
@@ -631,6 +651,88 @@ describe('resolvePublishedVersion', () => {
 });
 
 describe('tryLock', () => {
+  /**
+   * Run `fn` with fs.renameSync replaced by `rename`, which gets the real one.
+   * @param {(real: typeof fs.renameSync, from: string, to: string) => void} rename
+   * @param {() => void} fn
+   */
+  const withRename = (rename, fn) => {
+    const real = fsMutable.renameSync;
+    fsMutable.renameSync = (from, to) => rename(real, String(from), String(to));
+    syncBuiltinESMExports();
+    try {
+      fn();
+    } finally {
+      fsMutable.renameSync = real;
+      syncBuiltinESMExports();
+    }
+  };
+
+  it('puts back a new lock made between the judgement and the rename, before it has a record', () => {
+    const dir = path.join(tempDir('lock'), '.lock-fresh');
+    // An old lock with no record: stale once it is past the unowned bound.
+    fs.mkdirSync(dir, {recursive: true});
+    const old = new Date(Date.now() - 31 * 60_000);
+    fs.utimesSync(dir, old, old);
+    let first = true;
+    withRename(
+      (real, from, to) => {
+        if (first && from === dir) {
+          first = false;
+          // Another run removed the stale lock and made its own, and has
+          // not written its record yet.
+          fs.rmSync(dir, {recursive: true});
+          fs.mkdirSync(dir);
+          fs.writeFileSync(path.join(dir, 'mine'), '');
+        }
+        real(from, to);
+      },
+      () => expect(tryLock(dir)).toBe(false),
+    );
+    expect(fs.existsSync(path.join(dir, 'mine'))).toBe(true);
+  });
+
+  it('holds nothing and removes nothing when the put-back finds the name taken', () => {
+    const root = tempDir('lock');
+    const dir = path.join(root, '.lock-third');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'owner.json'),
+      JSON.stringify({pid: 999999, host: os.hostname(), at: 1}),
+    );
+    const old = new Date(Date.now() - 31 * 60_000);
+    fs.utimesSync(dir, old, old);
+    let calls = 0;
+    withRename(
+      (real, from, to) => {
+        calls++;
+        if (calls === 1) {
+          // A second run takes the lock just before this one moves it.
+          fs.writeFileSync(
+            path.join(dir, 'owner.json'),
+            JSON.stringify({pid: process.pid, host: 'second', at: Date.now()}),
+          );
+        } else if (calls === 2) {
+          // A third run takes the free name before the put-back.
+          fs.mkdirSync(dir);
+          fs.writeFileSync(path.join(dir, 'owner.json'), '{"host":"third"}');
+        }
+        real(from, to);
+      },
+      () => expect(tryLock(dir)).toBe(false),
+    );
+    // The third run's lock stands, and the second run's lock stays aside
+    // for it.
+    expect(fs.readFileSync(path.join(dir, 'owner.json'), 'utf8')).toContain(
+      'third',
+    );
+    const aside = fs.readdirSync(root).filter(n => n.includes('.stale-'));
+    expect(aside).toHaveLength(1);
+    expect(
+      fs.readFileSync(path.join(root, aside[0], 'owner.json'), 'utf8'),
+    ).toContain('second');
+  });
+
   it('puts back a lock another run took between the stale judgement and the rename', () => {
     const dir = path.join(tempDir('lock'), '.lock-race');
     fs.mkdirSync(dir, {recursive: true});
