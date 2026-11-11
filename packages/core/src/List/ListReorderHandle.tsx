@@ -296,8 +296,9 @@ export function ListReorderHandle({
     () => false,
   );
   const isEnabled = controller != null && !isDisabled;
-  // A finger's target: the shared touch hit area grows the handle's hit
-  // layer where the primary pointer is coarse.
+  // A finger's target: the handle's band grows it toward 44 px where the
+  // primary pointer is coarse, and the press check gives a tap on the band
+  // to a target whose box is under or nearer the finger.
   const hitAreaRef = useTouchHitArea(true);
   const handleRef = useMergedRefs(ref, hitAreaRef);
   // A handle that stops taking gestures mid-drag sends a drag of its row

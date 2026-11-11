@@ -227,6 +227,40 @@ describe('at a tap', () => {
     expect(onB).toHaveBeenCalledTimes(1);
   });
 
+  it('measures a target on a layer of its own, such as a grown switch input, by its parent’s box', () => {
+    const onA = vi.fn();
+    const onSwitch = vi.fn();
+    render(
+      <div data-testid="container">
+        <Host id="a" onClick={onA} />
+        <span id="track">
+          <input
+            id="switch"
+            type="checkbox"
+            role="switch"
+            aria-label="Sync"
+            onClick={onSwitch}
+            style={{position: 'absolute'}}
+          />
+        </span>
+      </div>,
+    );
+    const a = document.getElementById('a') as HTMLElement;
+    const track = document.getElementById('track') as HTMLElement;
+    const input = document.getElementById('switch') as HTMLElement;
+    const container = screen.getByTestId('container');
+    // The control ends at 124; the switch's track starts at 128, and its
+    // grown input reaches back to 118.
+    a.getBoundingClientRect = () => rect(100, 100, 24, 24);
+    track.getBoundingClientRect = () => rect(128, 104, 32, 16);
+    input.getBoundingClientRect = () => rect(118, 90, 52, 44);
+    elementsAtPoint = [a, input, track, container, document.body];
+    // 1 px past the control, 3 px before the track: the control's tap.
+    expect(tap(a, 125)).toBe(false);
+    expect(onA).toHaveBeenCalledTimes(1);
+    expect(onSwitch).not.toHaveBeenCalled();
+  });
+
   it('stops at the control’s own container: what paints below it, such as the page under a layer, is not beside it', () => {
     const {a, b, container, onA} = setUp();
     elementsAtPoint = [a, container, b, document.body];

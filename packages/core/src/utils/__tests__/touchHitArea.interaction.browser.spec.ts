@@ -315,6 +315,31 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
     });
   }
 
+  test('a tap 1 px before a button 4 px after a small Switch presses the button; a tap on the Switch’s own box turns it on', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), STORY);
+    const root = page.locator('#storybook-root');
+    const sync = root.getByRole('switch', {name: 'Sync'});
+    const output = root.locator('output[aria-label="Sync taps"]');
+    // The visible switch: the box the grown input sits in.
+    const track = await sync.evaluate(element => {
+      const r = element.parentElement!.getBoundingClientRect();
+      return {left: r.left, top: r.top, right: r.right, bottom: r.bottom};
+    });
+    const next = await boxOf(page, 'next');
+    expect(next.left - track.right).toBeCloseTo(4, 0);
+    const y = Math.round((next.top + next.bottom) / 2);
+    const driver = await touchDriver(page);
+    await tapAt(driver, {x: Math.round(next.left - 1), y});
+    await expect(output).toHaveText('Next 1, Sync off');
+    await tapAt(driver, {
+      x: Math.round((track.left + track.right) / 2),
+      y: Math.round((track.top + track.bottom) / 2),
+    });
+    await expect(output).toHaveText('Next 1, Sync on');
+  });
+
   test('a NavigationStack push reads no layout and writes no hit size on either screen’s rows, through the frames after it lands', async ({
     page,
   }) => {

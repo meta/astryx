@@ -805,7 +805,8 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   does not grow on the block axis: the row's edge is the boundary, and the
   row takes the taps above and below the control. Nothing reads layout for
   hit areas before a press. A visible box under the finger wins; the band
-  only claims empty space. At a tap's click, a press-time check reads the
+  only claims empty space. A target on a layer of its own, such as a switch's
+  grown input, shows its parent's box. At a tap's click, a press-time check reads the
   pressed control's box, and only when the finger landed on its band outside
   that box, the elements under the finger within the control's container, in
   one read. Where the finger is on another target's visible box, that target

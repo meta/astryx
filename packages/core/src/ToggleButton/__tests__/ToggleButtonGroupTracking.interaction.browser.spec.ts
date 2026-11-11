@@ -214,7 +214,7 @@ async function stackingOf(group: Locator) {
   });
 }
 
-test("under a finger the pixels on a toggle's own edges are the toggle's: the group's hit layer lies below its toggles", async ({
+test("under a finger the pixels on a toggle's own edges are the toggle's: each band lies below its toggle's content", async ({
   page,
 }) => {
   await openStory(page, storybook(), STORY);

@@ -6,32 +6,26 @@
  * @file touchHitArea.ts
  * @input Whether an element takes taps, the window's input stream and the
  *   geometry of utils/hitArea.ts
- * @output `useTouchHitArea`, a callback ref that gives a tap on its element's
- *   touch band to another target when the finger is on that target's box or
- *   nearer it
- * @position Core-internal hook for the coarse-only 44 px target. The band is
- *   CSS (`touchHitAreaStyles`, internal/touchHitArea.stylex.ts). This module
- *   reads layout only at a tap's click: the pressed control, and what lies
- *   under the finger when the finger is outside the control's box. It keeps no
- *   state in module scope, so copies of Core share nothing here.
- *
- * SYNC: When modified, update internal/touchHitArea.stylex.ts and
- * touchHitArea.test.tsx.
+ * @output `useTouchHitArea`: at a tap's click, it gives a tap on the band to
+ *   a target whose box is under or nearer the finger
+ * @position Core-internal hook for the coarse-only 44 px target, whose band
+ *   is CSS (internal/touchHitArea.stylex.ts). It reads layout only at a click
+ *   and keeps no module state, so copies of Core share nothing here.
+ *   SYNC: internal/touchHitArea.stylex.ts and touchHitArea.test.tsx.
  */
 
 import {useCallback, type RefCallback} from 'react';
-import {distanceTo, INTERACTIVE_SELECTOR} from './hitArea';
+import {distanceTo, INTERACTIVE_SELECTOR, type HitRect} from './hitArea';
 import {subscribeInput} from './inputStream';
 import {isElement} from './nodeType';
 
 /** How a host's band relates to its content. */
 export interface TouchHitAreaOptions {
   /**
-   * Whether a press that the browser hit-tests onto a descendant is the
-   * element's, whatever lies under the finger. Leave it on for a host that draws
-   * the band on itself and whose content can paint past its box, such as a
-   * list row with a swipe panel. Turn it off for a host whose band is on a
-   * descendant, such as Button's content wrapper or Switch's grown input.
+   * Whether a press that lands on a descendant is the element's, whatever lies
+   * under the finger: on for a host that draws the band on itself, such as a
+   * list row with a swipe panel; off for a host whose band is on a descendant,
+   * such as Button's content wrapper or Switch's grown input.
    * @default true
    */
   readonly ownsDescendantTouches?: boolean;
@@ -51,6 +45,29 @@ function isOwn(host: Element, candidate: Element): boolean {
   }
   const control = (candidate as HTMLLabelElement).control;
   return control != null && host.contains(control);
+}
+
+/**
+ * The box a target shows. A target on a layer of its own, such as Switch's
+ * grown input, is clipped to its parent's box: that is what the person sees.
+ */
+function visibleBox(target: Element): HitRect {
+  const box = target.getBoundingClientRect();
+  const parent = target.parentElement;
+  const view = target.ownerDocument.defaultView;
+  if (
+    parent == null ||
+    view?.getComputedStyle(target).position !== 'absolute'
+  ) {
+    return box;
+  }
+  const clip = parent.getBoundingClientRect();
+  return {
+    left: Math.max(box.left, clip.left),
+    top: Math.max(box.top, clip.top),
+    right: Math.min(box.right, clip.right),
+    bottom: Math.min(box.bottom, clip.bottom),
+  };
 }
 
 /**
@@ -85,7 +102,7 @@ function targetUnderFinger(
     if (target == null || isOwn(host, target)) {
       continue;
     }
-    const distance = distanceTo(target.getBoundingClientRect(), x, y);
+    const distance = distanceTo(visibleBox(target), x, y);
     if (distance === 0) {
       return target as HTMLElement;
     }

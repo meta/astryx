@@ -13,6 +13,7 @@ import {IconButton} from '@astryxdesign/core/IconButton';
 import {InfoTip} from '@astryxdesign/core/InfoTip';
 import {Link} from '@astryxdesign/core/Link';
 import {StackItem} from '@astryxdesign/core/Stack';
+import {Switch} from '@astryxdesign/core/Switch';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {ToggleButton, ToggleButtonGroup} from '@astryxdesign/core/ToggleButton';
@@ -572,12 +573,19 @@ export const TouchReach: Story = {
     docs: {
       description: {
         story:
-          'Under a coarse pointer: a lone 24 px button takes taps 10 px past each edge, 44 px in all; the 4 px gap of a ToggleButtonGroup splits at its middle; two loose 24 px buttons 4 px apart each keep every tap on their own box, since a visible box under the finger wins over a band; and an InfoTip right after a link takes no tap on the link, since it grows no room sideways.',
+          'Under a coarse pointer: a lone 24 px button takes taps 10 px past each edge, 44 px in all; the 4 px gap of a ToggleButtonGroup splits at its middle; two loose 24 px buttons 4 px apart each keep every tap on their own box, since a visible box under the finger wins over a band, and a tap in their gap goes to the nearer box; a button 4 px after a small Switch keeps a tap 1 px before its edge, since the grown input of the Switch is not its visible box; and an InfoTip right after a link takes no tap on the link, since it grows no room sideways.',
       },
     },
   },
   render: () => {
-    const [taps, setTaps] = useState({lone: 0, link: 0, cut: 0, copy: 0});
+    const [taps, setTaps] = useState({
+      lone: 0,
+      link: 0,
+      cut: 0,
+      copy: 0,
+      next: 0,
+    });
+    const [sync, setSync] = useState(false);
     const count = (key: keyof typeof taps) => () =>
       setTaps(current => ({...current, [key]: current[key] + 1}));
     const [formats, setFormats] = useState<string[]>([]);
@@ -612,6 +620,24 @@ export const TouchReach: Story = {
             icon={<Icon icon={Cog6ToothIcon} />}
             style={{width: 24, height: 24, minWidth: 24, padding: 0}}
             onClick={count('copy')}
+          />
+        </div>
+        <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
+          <Switch
+            label="Sync"
+            isLabelHidden
+            size="sm"
+            value={sync}
+            onChange={setSync}
+          />
+          <Button
+            label="Next"
+            data-testid="next"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('next')}
           />
         </div>
         <ToggleButtonGroup
@@ -651,6 +677,9 @@ export const TouchReach: Story = {
         </Text>
         <output aria-label="Reach taps">
           Lone {taps.lone}, Link {taps.link}, Cut {taps.cut}, Copy {taps.copy}
+        </output>
+        <output aria-label="Sync taps">
+          Next {taps.next}, Sync {sync ? 'on' : 'off'}
         </output>
       </VStack>
     );
