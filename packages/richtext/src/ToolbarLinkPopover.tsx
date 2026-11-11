@@ -92,17 +92,17 @@ export interface ToolbarLink {
  * The link popover's state for `editor`. It remembers the selection the
  * popover opened for, because focus in the field takes the page's selection
  * from the editor, and puts it back before linking, unlinking, or giving
- * focus back to the editor. `anchorRef` is the Link button the popover opens
- * beside.
+ * focus back to the editor. `buttonRef` is the Link button, which opening the
+ * popover scrolls into view.
  */
 export function useToolbarLink(
   editor: LexicalEditor,
   {
-    anchorRef,
+    buttonRef,
     hasNewTabLinks,
     promptForUrl,
   }: {
-    anchorRef: RefObject<HTMLElement | null>;
+    buttonRef: RefObject<HTMLElement | null>;
     hasNewTabLinks: boolean;
     promptForUrl?: (selectedText: string) => string | null | undefined;
   },
@@ -143,6 +143,7 @@ export function useToolbarLink(
     return lastLinkContextRef.current;
   }, []);
 
+  // Syncs with the Lexical editor's update and selection-change listeners.
   useEffect(
     () =>
       mergeRegister(
@@ -253,14 +254,14 @@ export function useToolbarLink(
     // Cmd/Ctrl+K can open the form while the Link button is scrolled out of
     // view, in the page or in the toolbar's own row. Bring it back so the
     // popover opens beside it.
-    anchorRef.current?.scrollIntoView?.({
+    buttonRef.current?.scrollIntoView?.({
       block: 'nearest',
       inline: 'nearest',
     });
     setIsOpen(true);
   }, [
-    anchorRef,
     applyLinkValue,
+    buttonRef,
     editor,
     promptForUrl,
     readLinkContext,
@@ -334,8 +335,9 @@ export function useToolbarLink(
 }
 
 /**
- * The non-modal popover a Link button opens, anchored to it, holding the URL
- * form. It is the button's popup: it sets the button's popup state and opens
+ * The non-modal popover a Link button opens, holding the URL form. It anchors
+ * to `anchorRef`, an element around the button that a press never scales,
+ * and finds the button inside it: it sets the button's popup state and opens
  * on a press of it. Render it beside the toolbar that holds the button, not
  * inside it: the toolbar is one roving tab stop, which would leave the form's
  * controls out of Tab and take its arrow keys.

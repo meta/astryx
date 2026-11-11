@@ -188,6 +188,11 @@ describe('RichTextEditorToolbar link popover', () => {
     expect(controlled).toContainElement(popover);
     // Outside the toolbar's roving tab stop, so Tab moves through the form.
     expect(screen.getByRole('toolbar')).not.toContainElement(popover);
+    // Anchored to a wrapper around the button, which a press never scales,
+    // not to the button itself.
+    const anchor = button.parentElement as HTMLElement;
+    expect(anchor.getAttribute('style') ?? '').toContain('anchor-name');
+    expect(button.getAttribute('style') ?? '').not.toContain('anchor-name');
   });
 
   it('holds one plain-text URL field with a placeholder', async () => {

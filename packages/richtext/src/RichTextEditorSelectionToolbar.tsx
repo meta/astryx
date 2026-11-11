@@ -290,6 +290,12 @@ const styles = stylex.create({
     width: '1px',
     pointerEvents: 'none',
   },
+  // The link popover's anchor: a box around the Link button that takes no
+  // space of its own.
+  linkAnchor: {
+    display: 'inline-flex',
+    flexShrink: 0,
+  },
   surface: {
     boxSizing: 'border-box',
     width: 'max-content',
@@ -359,11 +365,12 @@ export function RichTextEditorSelectionToolbar({
   const surfaceRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLSpanElement | null>(null);
   const linkButtonRef = useRef<HTMLButtonElement>(null);
+  const linkAnchorRef = useRef<HTMLSpanElement>(null);
   // The selection as it was when focus left the editor for the toolbar,
   // which Escape gives back.
   const heldSelectionRef = useRef<BaseSelection | null>(null);
   const link = useToolbarLink(editor, {
-    anchorRef: linkButtonRef,
+    buttonRef: linkButtonRef,
     hasNewTabLinks,
   });
   const {toggle: toggleLink} = link;
@@ -592,14 +599,20 @@ export function RichTextEditorSelectionToolbar({
                     />
                   ))}
                   {hasLink && !isTable && (
-                    <ToggleButton
-                      ref={linkButtonRef}
-                      label={t('@astryx.richTextEditor.toolbar.link')}
-                      icon={icon('link')}
-                      size="sm"
-                      isIconOnly
-                      isPressed={facts?.isLink === true || link.isOpen}
-                    />
+                    // The link popover anchors to this wrapper, which a press
+                    // never scales, and finds the button inside it.
+                    <span
+                      ref={linkAnchorRef}
+                      {...stylex.props(styles.linkAnchor)}>
+                      <ToggleButton
+                        ref={linkButtonRef}
+                        label={t('@astryx.richTextEditor.toolbar.link')}
+                        icon={icon('link')}
+                        size="sm"
+                        isIconOnly
+                        isPressed={facts?.isLink === true || link.isOpen}
+                      />
+                    </span>
                   )}
                 </HStack>
               }
@@ -610,7 +623,7 @@ export function RichTextEditorSelectionToolbar({
             {hasLink && !isTable && (
               <ToolbarLinkPopover
                 link={link}
-                anchorRef={linkButtonRef}
+                anchorRef={linkAnchorRef}
                 size="sm"
               />
             )}
