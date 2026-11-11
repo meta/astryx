@@ -838,8 +838,9 @@ function themeFilesIn(dir) {
  * @param {string} filePath the theme source
  * @param {string} cwd
  * @param {Map<string, string>} [claimed] outputs written earlier in this run, by the source that wrote them
+ * @param {string} [rerun] this build's command, to run again once the file is gone
  */
-function assertOutputsReplaceable(writes, filePath, cwd, claimed) {
+function assertOutputsReplaceable(writes, filePath, cwd, claimed, rerun) {
   const rel = (/** @type {string} */ file) => path.relative(cwd, file);
   const sourceKey = outputKey(filePath);
   const sourceHead = fileHead(filePath);
@@ -905,10 +906,19 @@ function assertOutputsReplaceable(writes, filePath, cwd, claimed) {
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }
+    // Outputs from CLIs before 0.6.7 have no header, so they read as files
+    // the build did not write; only the user can say they may go.
     if (stat.size > 0 && !fileHead(write.dest).includes(GENERATED_MARKER)) {
       throw new AstryxError(
-        `${rel(write.dest)} already exists and was not written by \`theme build\`, so the build does not replace it. Pick another --out, or delete the file if it is yours to replace.`,
-        undefined,
+        `${rel(write.dest)} was written by an older CLI (before 0.6.7) or by hand, so the build does not replace it. Delete that file and run the same build again, or pick another --out.`,
+        rerun
+          ? [
+              {
+                name: rerun,
+                reason: 'run the same build again once the file is deleted',
+              },
+            ]
+          : undefined,
         ERROR_CODES.ERR_FILE_EXISTS,
       );
     }
@@ -3809,7 +3819,15 @@ async function themeBuildInternal(
   // outside cwd read-only.
   if (!options.check) {
     confineOutputs(writes, writeRoot, options.out ? OUT_REMEDY : SOURCE_REMEDY);
-    assertOutputsReplaceable(writes, filePath, cwd, options.__claimedOutputs);
+    // prettier-ignore
+    const rerun = formatCliCommand(['theme', 'build', path.relative(cwd, filePath), ...(options.out ? ['--out', options.out] : []), ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])].map(shellWord).join(' '), cwd);
+    assertOutputsReplaceable(
+      writes,
+      filePath,
+      cwd,
+      options.__claimedOutputs,
+      rerun,
+    );
   }
 
   // Check mode: compare generated content against what's on disk instead of

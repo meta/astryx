@@ -105,7 +105,7 @@ export const doc = {
     },
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'an output path holds a non-empty file that a theme build did not write, such as package.json or app source; nothing is written',
+      when: 'an output path holds a non-empty file without the generated header, such as package.json, app source, or an output from a CLI before 0.6.7; nothing is written. Delete the file and run the same build again (the suggestion), or pick another out path',
     },
     {
       code: 'ERR_INVALID_ARGUMENT',

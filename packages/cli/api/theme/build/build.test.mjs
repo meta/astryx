@@ -1284,6 +1284,48 @@ describe('themeBuild() — outputs it may replace', () => {
     expect(fs.existsSync(path.join(tmpDir, 'ocean.js'))).toBe(false);
   });
 
+  it('refuses an output an older CLI wrote without the header, and names the way forward', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'ocean.css'),
+      '/* Built by an older astryx theme build */\n[data-astryx-theme="ocean"] {}\n',
+    );
+    let error;
+    try {
+      await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
+    expect(error.message).toBe(
+      'ocean.css was written by an older CLI (before 0.6.7) or by hand, so the build does not replace it. Delete that file and run the same build again, or pick another --out.',
+    );
+    expect(error.suggestions).toEqual([
+      {
+        name: expect.stringMatching(/ theme build ocean\.mjs$/),
+        reason: 'run the same build again once the file is deleted',
+      },
+    ]);
+    expect(error.suggestions[0].name).not.toMatch(/\brm\b/);
+    expect(fs.existsSync(path.join(tmpDir, 'ocean.js'))).toBe(false);
+  });
+
+  it('names --out in the rerun command when the build used it', async () => {
+    fs.mkdirSync(path.join(tmpDir, 'dist'));
+    fs.writeFileSync(path.join(tmpDir, 'dist', 'o.css'), 'body{}\n');
+    await expect(
+      themeBuild('ocean.mjs', {out: 'dist/o.css'}, {cwd: tmpDir}),
+    ).rejects.toMatchObject({
+      code: 'ERR_FILE_EXISTS',
+      suggestions: [
+        {
+          name: expect.stringMatching(
+            / theme build ocean\.mjs --out dist\/o\.css$/,
+          ),
+        },
+      ],
+    });
+  });
+
   it('replaces its own earlier outputs', async () => {
     await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
     await expect(
