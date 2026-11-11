@@ -192,13 +192,28 @@ export function DialogHeader({
   // set its default aria-labelledby — no registration handshake needed here.
   // The native dialog is not modal yet when the header mounts in its opening
   // render. Dialog focuses the title after showModal().
+  // A header that mounts in a dialog already open (content that loads late, a
+  // step that swaps its header) takes focus only when nothing inside the
+  // dialog holds it yet: it never takes focus from a field the person is in.
   useEffect(() => {
     const title = titleRef.current;
     if (!shouldAutoFocus || title == null) {
       return;
     }
     const nativeDialog = title.closest('dialog');
-    if (nativeDialog == null || nativeDialog.open) {
+    if (nativeDialog == null) {
+      title.focus();
+      return;
+    }
+    if (!nativeDialog.open) {
+      return;
+    }
+    const active = nativeDialog.ownerDocument.activeElement;
+    const isFocusInside =
+      active != null &&
+      active !== nativeDialog &&
+      nativeDialog.contains(active);
+    if (!isFocusInside) {
       title.focus();
     }
   }, [shouldAutoFocus]);
