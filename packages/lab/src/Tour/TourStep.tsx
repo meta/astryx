@@ -6,29 +6,11 @@
  * @file TourStep.tsx
  * @input Uses React, useLayer/useLayerDismissal and Button/IconButton/Text/Heading/Stack from @astryxdesign/core, TourContext
  * @output Exports TourStep component and TourStepProps
- * @position Lab experiment (meta/astryx#4239); a single spotlight step in a Tour
- *
- * A TourStep highlights a target element and renders a callout anchored to it,
- * with a heading, body, optional step progress ("2 of 5"), and back / next /
- * close controls. It registers with the parent `<Tour>` on mount (so step
- * order follows the children) and only renders its callout while it is the
- * active step. The target can be any element. The callout is a non-modal
- * `useLayer` anchored to the highlight ring drawn over the target, so a
- * press that scales the target does not move it. The target gets no trigger
- * wiring: without a backdrop a press on it does not end the tour, and focus
- * can leave the callout for the page. Escape ends the tour through the shared
- * layer dismissal stack; the step's own controls advance or close it.
- *
- * The highlight is drawn as a separate overlay tracking the target's box — the
- * consumer's element is never restyled, so there is no cascade fight with the
- * target's own styles. That overlay is promoted into the browser TOP LAYER
- * (via the popover API, like the rest of the layer system) so it sits above
- * page content without any hardcoded z-index; the callout is promoted after
- * it, so the callout stays above the highlight. Because it is promoted in
- * place (not portaled out of the tree), it stays inside the consumer's Theme
- * subtree and inherits theme tokens — including a scoped/nested theme's accent
- * for the ring. Dimming is an opt-in spotlight cutout (dims around the target,
- * not over it) rather than a flat scrim.
+ * @position Lab; one step of a Tour. It draws a highlight ring over its
+ *   target and a non-modal callout anchored to that ring. The target gets no
+ *   trigger wiring, and its own styles are never changed. Escape ends the
+ *   tour through the shared layer dismissal stack. The ring and the callout
+ *   open in the top layer in place, so they keep the consumer's theme tokens.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/Tour/Tour.tsx
@@ -385,18 +367,16 @@ export function TourStep({
     [anchorLayerTo],
   );
 
-  // Show the callout after the highlight overlay promotes itself, so the
-  // callout stays above the highlight in the top layer. Move focus to the
-  // step region so assistive technology reads the new step. When the tour
-  // ends and its removal loses focus, return focus to the target if it is in
-  // the tab order, else to the element that had focus when the tour started.
+  // Shows the callout after the highlight overlay promotes itself, so the
+  // callout stays above the highlight in the top layer.
   useEffect(() => {
     if (!isActiveStep) {
       return;
     }
     showLayer();
-    // The popover opens through the layer's own scheduling; focus it on the
-    // next frame, once it is shown.
+    // Focus moves to the step region, so assistive technology reads the new
+    // step. The popover opens through the layer's own scheduling, so focus
+    // waits one frame.
     const frame = requestAnimationFrame(() => {
       regionRef.current?.focus({preventScroll: true});
     });
@@ -407,7 +387,9 @@ export function TourStep({
       if (isTourRunningRef.current) {
         return;
       }
-      // Returns focus only when the callout's removal lost it.
+      // When the tour ends and the callout's removal lost focus, focus goes
+      // to the target if it is in the tab order, else to the element that
+      // had focus when the tour started.
       returnFocusOnRemovalRef.current?.(
         target != null && target.tabIndex >= 0
           ? target
