@@ -52,6 +52,8 @@ deciding_specs:
     spec:AST-001/DEC-2,
     spec:AST-002/DEC-1,
     spec:AST-099/DEC-5,
+    spec:AST-117/DEC-1,
+    spec:AST-117/DEC-2,
   ]
 ---
 
@@ -105,8 +107,9 @@ another implementation helper.
   `width` seam, and is the member's `container*` styling target under FR10 when
   it renders a box. A member omits its nested Field when a supported InputGroup
   owns the group label and supporting text.
-- `FormLayout` owns outer arrangement, spacing, direction, and form-level
-  optionality. It does not redefine a member's internal control geometry.
+- `FormLayout` owns outer arrangement, spacing, direction, form-level
+  optionality, and the form-level validation timing default (FR14). It does
+  not redefine a member's internal control geometry.
 - `InputGroup` owns the row height (fixed today; it grows with a set text size
   under `spec:AST-102` FR4, and the fixed height is a gap), connected outer surface, edge alignment,
   and group-level focus presentation for admitted children. Admission follows the
@@ -141,6 +144,7 @@ another implementation helper.
 | Transition Action | absent or component-supported `changeAction`                   | Callback first, optimistic value next, Action in a transition, one busy presentation                                                                      | approved family rule where exposed                   |
 | status placement  | `attached`, `detached`, or `tooltip` at the input-family layer | Attached is the default where the member supports safe overlap; detached and tooltip remain available to every input                                      | approved family rule                                 |
 | prop targets      | base props, `container*`, `control*`                           | Base props reach the primary semantic control; `container*` reaches Field; `control*` reaches the control box; no root styling input                      | approved by DEC-7                                    |
+| validation timing | `complete` or `commit` on members that reject entries          | A member's own rejection appears once the entry is complete, or only at commit; its message, invalid state, and announcement move together                | proposed by `spec:AST-117`                           |
 
 ## Cross-component invariants
 
@@ -271,6 +275,17 @@ another implementation helper.
   PowerSearch, CommandPalette, and ChatComposer. A member whose field brings up
   no keyboard, such as DateRangeInput, FileInput, ComplexSelector, or a touch
   picker field with no input mode, is outside it.
+
+- **FR14 — Members that reject entries share one validation timing.**
+  DateInput, DateTimeInput, TimeInput, and NumberInput take
+  `validationTiming`, `'complete'` by default or `'commit'`, and FormLayout's
+  `defaultValidationTiming` sets it for a form; a field's own prop wins. An
+  unfinished entry is never flagged, text that does not read as a value waits
+  for commit, a commit keeps rejected text, and a rejection's message, invalid
+  state, and announcement appear and clear together. `spec:AST-117` owns the
+  rule, including when each kind of entry is complete. Members that reject
+  nothing themselves, such as TextInput, Selector, and DateRangeInput, take no
+  timing.
 
 ## Allowed component variation
 
@@ -412,6 +427,10 @@ DEC-6 does not require unrelated components to add a new floor.
 - **On-screen keyboard (FR13):** no member meets FR13 on current main. No
   member has keyboard handling, and the keyboard module does not exist
   yet; `spec:AST-099` lists each gap.
+- **Validation timing (FR14):** no member takes `validationTiming`, and
+  FormLayout has no form default. NumberInput and TimeInput mark unfinished
+  drafts invalid and announce them on each keystroke with no visible message;
+  `spec:AST-117` lists each gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
   individual state behavior, but do not yet provide the complete real-browser
   inline-size/end-overlap matrix below. This current record names those
@@ -437,6 +456,7 @@ The exhaustive coverage obligation follows the membership and adoption tables.
 | FR11     | `InputClearButton.test.tsx` tooltip and accessible-name assertions, plus real-Chromium hover captures                                                                                                                                                                                                                    | a long field label; a locale override; light and dark                                                                             | The tooltip repeats the field label, or the accessible name loses the field label                                                                                                                                                                                                                                                          |
 | FR12     | `Typeahead.test.tsx`, `BaseTypeahead.test.tsx`, `Tokenizer.test.tsx`, `Selector.test.tsx`, and `MultiSelector.test.tsx` cases for both attributes, with Enter keeping its member-owned effect; `SearchKeyboard.interaction.browser.spec.ts` on a touch-emulated phone, where the search input a tap focuses carries both | Typeahead; Tokenizer; Selector and MultiSelector search row; a phone viewport with touch emulation                                | A missing attribute, or an Enter whose effect changes with the label, fails                                                                                                                                                                                                                                                                |
 | FR13     | TBD (gap): the per-field keyboard focus tests and simulator evidence `spec:AST-099` FR9 names                                                                                                                                                                                                                            | each member FR13 covers, in the page, a sheet, a docked bar Core moves, a floating bar, and a bar with its own `translate`        | A focused field left under the keyboard in a scroller (including one inside a fixed container FR9 leaves to the app), a Core host, or a docked bar Core moves, or a public prop for the behavior; a field with no scroller between it and a floating, own-`translate`, or full-viewport host is the app's to position and is not a failure |
+| FR14     | TBD (gap): the timing, completeness, commit, and announcement suites `spec:AST-117` names                                                                                                                                                                                                                                | DateInput, DateTimeInput, TimeInput, and NumberInput under each timing, standalone and in a FormLayout                            | A rejection appears before its timing allows, an unfinished entry is flagged, a commit drops rejected text, or the message, invalid state, and announcement part                                                                                                                                                                           |
 
 ## Decision links
 
