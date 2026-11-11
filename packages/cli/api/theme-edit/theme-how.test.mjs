@@ -164,11 +164,9 @@ const QUESTIONS = [
     {aspects: ['colors'], top: null},
   ],
   [
+    // A gray theme has no color to saturate, and none is picked for it.
     'more colorful please',
-    {
-      top: /^set q accent "#7c3aed" && set q vibrancy more$/,
-      adds: /--color-accent(\.0)?=#7c3aed/,
-    },
+    {aspects: ['colors'], top: null},
   ],
   [
     'warm gray neutrals',
@@ -854,6 +852,92 @@ describe('how commands, run by set', () => {
 });
 
 describe('how commands are for the theme in the app', () => {
+  it('refuses an empty --theme, and a --theme that does not exist for a picture or a list too', async () => {
+    expect(
+      (await refusal(() => themeEditHow('card', {cwd, theme: ''}))).code,
+    ).toBe('ERR_INVALID_ARGUMENT');
+    expect(
+      (
+        await refusal(() =>
+          themeEditHow('', {cwd, list: 'tokens', theme: 'nope'}),
+        )
+      ).code,
+    ).toBe('ERR_UNKNOWN_THEME');
+    const r = await runCli(
+      [
+        '--json',
+        'experimental',
+        'theme',
+        'editor',
+        'how',
+        'rounder buttons',
+        '--theme',
+        'q',
+        '--theme',
+        'q',
+      ],
+      {cwd},
+    );
+    expect(r.status).toBe(1);
+    expect(JSON.parse(r.stdout).code).toBe('ERR_INVALID_ARGUMENT');
+  }, 60_000);
+
+  it('picks the theme an editor command changed last, not the newest settings file, and says how it chose', async () => {
+    const {data} = await themeEditHow('rounder buttons', {cwd});
+    expect(['last-changed', 'only']).toContain(data.themeChosenBy);
+    const other = fs
+      .readdirSync(path.join(cwd, 'themes'))
+      .find(
+        d =>
+          d !== data.theme &&
+          fs.existsSync(path.join(cwd, 'themes', d, `${d}.settings.json`)),
+      );
+    if (!other) return;
+    // A checkout or touch of another theme's settings file does not move it.
+    const later = new Date(Date.now() + 60_000);
+    fs.utimesSync(
+      path.join(cwd, 'themes', other, `${other}.settings.json`),
+      later,
+      later,
+    );
+    expect((await themeEditHow('rounder buttons', {cwd})).data.theme).toBe(
+      data.theme,
+    );
+    expect(
+      (await themeEditHow('rounder buttons', {cwd, theme: 'q'})).data
+        .themeChosenBy,
+    ).toBe('named');
+  });
+
+  it('prints each command on a line of its own, never wrapped, and a sequence as one line', async () => {
+    const r = await runCli(
+      ['experimental', 'theme', 'editor', 'how', 'no shadow', '--theme', 'q'],
+      {cwd},
+    );
+    const lines = r.stdout.split('\n').filter(l => / editor set /.test(l));
+    expect(lines).toHaveLength(1);
+    expect(lines[0].trim().split(' && ')).toHaveLength(3);
+    for (const c of lines[0].trim().split(' && '))
+      expect(c).toMatch(
+        /^\S.* experimental theme editor set q --shadow-(low|med|high) none$/,
+      );
+    const one = await runCli(
+      [
+        'experimental',
+        'theme',
+        'editor',
+        'how',
+        'less rounded cards',
+        '--theme',
+        'q',
+      ],
+      {cwd},
+    );
+    expect(one.stdout).toMatch(
+      /^ {2}\S+.* experimental theme editor set q corners less --on card$/m,
+    );
+  }, 60_000);
+
   it('with no theme, names my-theme and makes it first', async () => {
     const bare2 = makeLinkedFixture('astryx-theme-how-none-', FIXTURE_PACKAGES);
     try {
@@ -893,14 +977,520 @@ describe('how commands are for the theme in the app', () => {
     expect(all.join('\n')).not.toMatch(/set my |<theme>|<value>/);
   });
 
-  it('a whole-theme question that set would refuse gets the step that makes it work first', async () => {
-    const {data} = await themeEditHow('more colorful please', {
-      cwd,
-      theme: 'q',
-    });
-    expect(data.results[0].sequence).toBe(true);
-    expect(data.results[0].commands.map(bare)[1]).toBe('set q vibrancy more');
+  it('a whole-theme question that set would refuse on a gray theme says why, and picks no color', async () => {
+    for (const q of ['more colorful please', 'make it pop']) {
+      const {data} = await themeEditHow(q, {cwd, theme: 'q'});
+      const all = data.results.flatMap((/** @type {any} */ r) => r.commands);
+      expect(all.join('\n'), q).not.toMatch(/ editor set /);
+      expect(data.results[0].text, q).toMatch(/is a gray/);
+    }
   });
+});
+
+/**
+ * Pass-2 questions: common phrasings of negation and "too", typed values,
+ * modes, parts and properties that were wrong, typos, and lookups phrased as
+ * questions. Same shape as {@link QUESTIONS}.
+ * @type {Array<[string, {parts?: string[], aspects?: string[], top: RegExp | null, adds?: RegExp, text?: RegExp}]>}
+ */
+const QUESTIONS_2 = [
+  // negation and "too"
+  [
+    "cards shouldn't have a border",
+    {top: /^set q border none --on card$/, adds: /card\.base\.border=none/},
+  ],
+  [
+    'turn off the shadow on hover for cards',
+    {
+      top: /^set q box-shadow none --on card --state hover$/,
+      adds: /card\.base\.:hover\.boxShadow=none/,
+    },
+  ],
+  [
+    'never use pure black for text',
+    {
+      top: /^set q --color-text-primary "#1f2937"$/,
+      adds: /--color-text-primary=#1f2937/,
+    },
+  ],
+  [
+    'design feedback: corners feel too sharp',
+    {top: /^set q corners more$/, adds: /--radius-element=12px/},
+  ],
+  [
+    'PM says the buttons feel too heavy',
+    {
+      top: /^set q font-weight 400 --on button$/,
+      adds: /button\.base\.fontWeight=400/,
+    },
+  ],
+  [
+    'shadows on everything except buttons',
+    {
+      top: /&& set q box-shadow none --on button$/,
+      adds: /button\.base\.boxShadow=none/,
+    },
+  ],
+  [
+    'compact spacing except in dialogs',
+    {
+      top: /^set q spacing less && set q spacing medium --on dialog$/,
+      adds: /dialog\.base\.--spacing-/,
+    },
+  ],
+  [
+    'bold text but not in the header',
+    {
+      top: /^set q --text-body-weight 700 && set q font-weight \d+ --on app-shell-header$/,
+      adds: /--text-body-weight=700/,
+    },
+  ],
+  [
+    'all buttons blue except the danger one',
+    {
+      top: /--on button && set q background "var\(--color-error\)" --on button --when variant:destructive$/,
+      adds: /variant:destructive\.background=var\(--color-error\)/,
+    },
+  ],
+  [
+    'кнопки без тени',
+    {
+      top: /^set q box-shadow none --on button$/,
+      adds: /button\.base\.boxShadow=none/,
+    },
+  ],
+  [
+    'cartes sans bordure',
+    {top: /^set q border none --on card$/, adds: /card\.base\.border=none/},
+  ],
+  [
+    'unbold the headings',
+    {top: /^set q headings regular$/, adds: /--text-heading-1-weight=400/},
+  ],
+  [
+    'stop rounding the cards',
+    {
+      top: /^set q corners square --on card$/,
+      adds: /card\.base\.borderRadius=0px/,
+    },
+  ],
+  // typed values
+  [
+    'the client wants their brand blue, #0057ff',
+    {top: /^set q accent "#0057ff"$/, adds: /--color-accent(\.0)?=#0057ff/},
+  ],
+  [
+    'like Linear: dark only, purple accent #5e6ad2',
+    {
+      top: /^set q mode dark-only && set q accent "#5e6ad2"$/,
+      adds: /mode=dark-only/,
+    },
+  ],
+  [
+    'gray text color #555',
+    {
+      top: /^set q --color-text-primary "#555"$/,
+      adds: /--color-text-primary=#555/,
+    },
+  ],
+  ['accent #12345', {top: null, text: /"#12345" is not a color/}],
+  [
+    'primary #5E6AD2, radius 6px, font Inter',
+    {
+      top: /^set q accent "#5e6ad2" && set q corners 6px && set q font inter$/,
+      adds: /--radius-element=6px/,
+    },
+  ],
+  [
+    '{"accent":"#3b82f6","radius":"8px"}',
+    {
+      top: /^set q accent "#3b82f6" && set q corners 8px$/,
+      adds: /--radius-element=8px/,
+    },
+  ],
+  ['radius -4px on cards', {top: null, text: /cannot be negative/}],
+  [
+    'headings are 600 weight and -0.02em tracking',
+    {
+      top: /^set q headings semibold && set q letter-spacing -0\.02em --on heading$/,
+      adds: /--text-heading-1-weight=600/,
+    },
+  ],
+  [
+    'disabled buttons should be 40% opacity',
+    {
+      top: /^set q opacity 0\.4 --on button --state disabled$/,
+      adds: /:disabled\.opacity=0\.4/,
+    },
+  ],
+  [
+    'button padding 12px 20px',
+    {
+      top: /^set q padding "12px 20px" --on button$/,
+      adds: /button\.base\.padding=12px 20px/,
+    },
+  ],
+  [
+    'card shadow: 0 1px 3px rgb(0 0 0 / 0.1)',
+    {
+      top: /^set q box-shadow "0 1px 3px rgb\(0 0 0 \/ 0\.1\)" --on card$/,
+      adds: /card\.base\.boxShadow=0 1px 3px/,
+    },
+  ],
+  [
+    'buttons in the mock are 40px tall with 8px radius',
+    {
+      top: /^set q min-height 40px --on button && set q border-radius 8px --on button$/,
+      adds: /button\.base\.minHeight=40px/,
+    },
+  ],
+  [
+    'per the brand guide, headings use Georgia',
+    {
+      top: /^set q font georgia --on heading$/,
+      adds: /typography\.heading\.family=Georgia/,
+    },
+  ],
+  // modes
+  [
+    'in dark mode, cards should be #1c1c1e',
+    {
+      top: /^set q background "#1c1c1e" --on card --mode dark$/,
+      adds: /card\.base\.background=light-dark\(/,
+    },
+  ],
+  [
+    'only in dark mode make the buttons pill',
+    {top: null, text: /same in light and dark/},
+  ],
+  [
+    'make dark mode borders subtler',
+    {
+      top: /^set q --color-border "#[0-9a-f]{6,8}" --mode dark$/,
+      adds: /--color-border\.1=/,
+    },
+  ],
+  // parts and properties
+  [
+    'selected side nav item has accent background',
+    {
+      top: /--on side-nav-item --state selected$/,
+      adds: /side-nav-item\.selected\.background=/,
+    },
+  ],
+  [
+    'the sidebar is #111827 and nav items are #9ca3af',
+    {
+      top: /--on side-nav && set q background "#9ca3af" --on side-nav-item$/,
+      adds: /side-nav-item\.base\.background=#9ca3af/,
+    },
+  ],
+  [
+    'focus-visible ring on buttons orange',
+    {
+      top: /^set q outline-color "#f97316" --on button --state focus-visible$/,
+      adds: /:focus-visible\.outlineColor=#f97316/,
+    },
+  ],
+  [
+    'tabs: selected tab has a 2px #6366f1 underline',
+    {
+      top: /^set q background "#6366f1" --on tab-indicator --state selected && set q height 2px --on tab-indicator$/,
+      adds: /tab-indicator\.selected\.background=#6366f1/,
+    },
+  ],
+  [
+    'cards lift on hover',
+    {
+      top: /^set q box-shadow "var\(--shadow-high\)" --on card --state hover$/,
+      adds: /card\.base\.:hover\.boxShadow/,
+    },
+  ],
+  [
+    'disabled inputs with a dashed border',
+    {
+      top: /^set q border-style dashed --on inputs --state disabled$/,
+      adds: /text-input\.disabled\.borderStyle=dashed/,
+    },
+  ],
+  [
+    'buttons 48px tall',
+    {
+      top: /^set q min-height 48px --on button$/,
+      adds: /button\.base\.minHeight=48px/,
+    },
+  ],
+  [
+    'icons should be the accent color',
+    {
+      top: /^set q --color-icon-primary "var\(--color-accent\)"$/,
+      adds: /--color-icon-primary=var\(--color-accent\)/,
+    },
+  ],
+  [
+    'darker borders',
+    {top: /^set q --color-border "#[0-9a-f]+"$/, adds: /--color-border=/},
+  ],
+  [
+    'lighter font weight for body',
+    {top: /^set q --text-body-weight 300$/, adds: /--text-body-weight=300/},
+  ],
+  [
+    'transparent header',
+    {
+      top: /^set q background transparent --on app-shell-header$/,
+      adds: /app-shell-header\.base\.background=transparent/,
+    },
+  ],
+  [
+    'make the modal overlay darker',
+    {top: /^set q --color-overlay "#[0-9a-f]+"$/, adds: /--color-overlay=/},
+  ],
+  [
+    'make the progress bar thicker',
+    {
+      top: /^set q height 8px --on progress-bar-track$/,
+      adds: /progress-bar-track\.base\.height=8px/,
+    },
+  ],
+  [
+    'smaller headings',
+    {top: /^set q type compact$/, adds: /--text-heading-1-weight=600/},
+  ],
+  [
+    'links underline on hover',
+    {
+      top: /^set q text-decoration underline --on link --state hover$/,
+      adds: /link\.base\.:hover\.textDecoration=underline/,
+    },
+  ],
+  [
+    'line height 1.6 for body text',
+    {top: /^set q --text-body-leading 1\.6$/, adds: /--text-body-leading=1\.6/},
+  ],
+  [
+    'make the app feel warmer',
+    {top: /^set q neutral "#78716c"$/, adds: /--color-background-surface/},
+  ],
+  [
+    'swap the accent and the danger colors',
+    {
+      top: /^set q accent "#[0-9a-f]{6}" && set q danger "#[0-9a-f]{6}"$/i,
+      adds: /--color-accent/,
+    },
+  ],
+  // typos and languages
+  [
+    'make the buttnos roudner',
+    {
+      top: /^set q corners more --on button$/,
+      adds: /button\.base\.borderRadius=12px/,
+    },
+  ],
+  [
+    'remvoe shaodws',
+    {
+      top: /^set q --shadow-low none && set q --shadow-med none && set q --shadow-high none$/,
+      adds: /--shadow-med=none/,
+    },
+  ],
+  [
+    'acent color #ff6600',
+    {top: /^set q accent "#ff6600"$/, adds: /--color-accent(\.0)?=#ff6600/},
+  ],
+  [
+    'rounder crads',
+    {top: /^set q corners more --on card$/, adds: /card\.base\.borderRadius/},
+  ],
+  [
+    'bttn pill',
+    {
+      top: /^set q corners pill --on button$/,
+      adds: /button\.base\.borderRadius=9999px/,
+    },
+  ],
+  [
+    'dialgo shadow stronger',
+    {
+      top: /^set q box-shadow "var\(--shadow-high\)" --on dialog$/,
+      adds: /dialog\.base\.boxShadow/,
+    },
+  ],
+  [
+    'botões mais arredondados',
+    {
+      top: /^set q corners more --on button$/,
+      adds: /button\.base\.borderRadius/,
+    },
+  ],
+  [
+    'pulsanti arrotondati',
+    {top: /--on button$/, adds: /button\.base\.borderRadius/},
+  ],
+  ['버튼을 둥글게', {top: /--on button$/, adds: /button\.base\.borderRadius/}],
+  [
+    'ボタンを青く',
+    {
+      top: /^set q background "#2563eb" --on button$/,
+      adds: /button\.base\.background=#2563eb/,
+    },
+  ],
+  // contradictions and repeats
+  ['rounder but square corners', {top: null, text: /contradict/}],
+  ['make the cards red and blue', {top: null, text: /contradict/}],
+  [
+    'pill buttons and pill buttons',
+    {
+      top: /^set q corners pill --on button$/,
+      adds: /button\.base\.borderRadius=9999px/,
+    },
+  ],
+];
+
+describe('how answers pass-2 questions', () => {
+  for (const [question, want] of QUESTIONS_2)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      expect(data.kind).toBe('question');
+      for (const p of want.parts ?? [])
+        expect(data.understood.parts).toContain(p);
+      for (const a of want.aspects ?? [])
+        expect(data.understood.aspects).toContain(a);
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results;
+      const all = results.map(r => r.text).join('\n') + (data.hint ?? '');
+      if (want.text) expect(all).toMatch(want.text);
+      // A contradiction is offered as choices, never as a sequence.
+      if (/contradict/.test(String(want.text))) {
+        expect(results[0].sequence).toBeFalsy();
+        expect(results[0].commands.length).toBe(2);
+        return;
+      }
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want.top === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      // The change comes before any lookup.
+      expect(results[0]).toBe(changes[0]);
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      if (want.adds) expect(await effect(commands)).toMatch(want.adds);
+    });
+
+  it('a lookup phrased as a question gets the lookup, not a change', async () => {
+    const token = (
+      await themeEditHow('what does --color-accent do', {cwd, theme: 'q'})
+    ).data;
+    expect(token).toMatchObject({
+      kind: 'setting',
+      source: 'token',
+      subject: 'what does --color-accent do',
+    });
+    const part = (
+      await themeEditHow("What's the CSS variable for card padding?", {
+        cwd,
+        theme: 'q',
+      })
+    ).data;
+    const all = part.results.flatMap((/** @type {any} */ r) => r.commands);
+    expect(all.join('\n')).not.toMatch(/ editor set /);
+    expect(part.results[0].text).toMatch(/^card reads --/);
+  });
+
+  it('a long question with many changes runs at most 12 steps, and says so', async () => {
+    const q = Array(40)
+      .fill('rounder buttons and no shadow on cards and bold headings')
+      .join(' and ');
+    const {data} = await themeEditHow(q, {cwd, theme: 'q'});
+    const seq = data.results.find((/** @type {any} */ r) => r.sequence);
+    // Repeats are dropped, so the three changes are left once each.
+    expect(seq.commands.length).toBeLessThanOrEqual(12);
+    expect(new Set(seq.commands).size).toBe(seq.commands.length);
+  });
+
+  it('undo and reset point to the commands that do them', async () => {
+    const undo = (await themeEditHow('undo the last change', {cwd, theme: 'q'}))
+      .data;
+    expect(undo.results[0].commands.map(bare)).toContain('undo q');
+    const reset = (
+      await themeEditHow('reset everything to default', {cwd, theme: 'q'})
+    ).data;
+    expect(reset.results[0].commands.map(bare)).toContain('show q');
+  });
+
+  it('a dark-mode ask on a light-only theme says it has no dark mode, and changes nothing', async () => {
+    await themeEditNew('lo', {
+      cwd,
+      like: 'neutral',
+      settings: {mode: 'light-only'},
+    });
+    const {data} = await themeEditHow('dark mode accent #a78bfa', {
+      cwd,
+      theme: 'lo',
+    });
+    expect(data.results[0].text).toMatch(/lo has only a light mode/);
+    expect(
+      data.results.flatMap((/** @type {any} */ r) => r.commands).join('\n'),
+    ).not.toMatch(/ editor set /);
+  }, 120_000);
+
+  it('runs pass-2 answers through set and checks the built CSS', async () => {
+    await themeEditNew('p2', {cwd, like: 'neutral'});
+    const dir = path.join(cwd, 'themes', 'p2');
+    const keep = path.join(cwd, 'p2-pristine');
+    fs.cpSync(dir, keep, {recursive: true});
+    const css = () => fs.readFileSync(path.join(dir, 'p2.css'), 'utf8');
+    for (const [question, want] of /** @type {Array<[string, RegExp]>} */ ([
+      [
+        "cards shouldn't have a border",
+        /\.astryx-card[^{]*\{[^}]*border:\s*none/,
+      ],
+      [
+        'the client wants their brand blue, #0057ff',
+        /--color-accent:[^;]*#0057ff/i,
+      ],
+      [
+        'in dark mode, cards should be #1c1c1e',
+        /card[^{]*\{[^}]*background:\s*light-dark\(.*#1c1c1e/,
+      ],
+      ['button padding 12px 20px', /button[^{]*\{[^}]*padding:\s*12px 20px/],
+      [
+        'focus-visible ring on buttons orange',
+        /button[^{]*:focus-visible[^{]*\{[^}]*outline-color:\s*#f97316/,
+      ],
+      ['compact spacing except in dialogs', /dialog[^{]*\{[^}]*--spacing-4:/],
+    ])) {
+      fs.rmSync(dir, {recursive: true, force: true});
+      fs.cpSync(keep, dir, {recursive: true});
+      const {data} = await themeEditHow(question, {cwd, theme: 'p2'});
+      const top = data.results.find((/** @type {any} */ r) =>
+        r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
+      );
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const before = css();
+      for (const c of commands) {
+        const [, theme, thing, ...rest] = words(bare(c));
+        const fi = rest.findIndex(w => /^--(on|when|state|mode)$/.test(w));
+        /** @type {Record<string, string>} */
+        const flags = {};
+        for (let i = fi < 0 ? rest.length : fi; i < rest.length; i += 2)
+          flags[rest[i].slice(2)] = rest[i + 1];
+        await themeEditSet(
+          theme,
+          thing,
+          (fi < 0 ? rest : rest.slice(0, fi)).join(' '),
+          {cwd, ...flags},
+        );
+      }
+      expect(before, question).not.toMatch(want);
+      expect(css(), question).toMatch(want);
+    }
+    fs.rmSync(keep, {recursive: true, force: true});
+  }, 300_000);
 });
 
 describe('how lookups', () => {
@@ -1151,6 +1741,54 @@ describe('how reads pictures within bounds', () => {
       ).code,
     ).toBe('ERR_INVALID_ARGUMENT');
     expect(parsePoints(['1,2;3,4', '5,6 7,8,9,10'])).toHaveLength(5);
+  });
+
+  it('reads every pixel of a small picture, honors tRNS for RGB, and names a 0x0 size', async () => {
+    // White at x=0, blue at x=1: the blue line is not skipped.
+    put(
+      'two.png',
+      png({
+        w: 2,
+        h: 1,
+        type: 2,
+        rows: Buffer.from([0, 255, 255, 255, 0, 0, 255]),
+      }),
+    );
+    const two = (await themeEditHow('two.png', {cwd})).data;
+    expect(two.colors.map((/** @type {any} */ c) => c.color).sort()).toEqual([
+      '#0000ff',
+      '#ffffff',
+    ]);
+    // tRNS names white as see-through, so only red is left.
+    const trns = Buffer.concat([
+      Buffer.from([0, 0, 0, 6]),
+      Buffer.from('tRNS', 'latin1'),
+      Buffer.from([0, 255, 0, 255, 0, 255]),
+      Buffer.alloc(4),
+    ]);
+    put(
+      'key.png',
+      png({
+        w: 2,
+        h: 1,
+        type: 2,
+        rows: Buffer.from([0, 255, 255, 255, 255, 0, 0]),
+        extra: [trns],
+      }),
+    );
+    const key = (await themeEditHow('key.png', {cwd})).data;
+    expect(key.colors.map((/** @type {any} */ c) => c.color)).toEqual([
+      '#ff0000',
+    ]);
+    put('empty.png', png({w: 0, h: 5}));
+    expect(
+      (await refusal(() => themeEditHow('empty.png', {cwd}))).message,
+    ).toMatch(/0x5 pixels/);
+    // A 16-bit picture is capped lower: it takes twice the memory.
+    put('deep.png', png({w: 5000, h: 5000, depth: 16, type: 6}));
+    expect(
+      (await refusal(() => themeEditHow('deep.png', {cwd}))).message,
+    ).toMatch(/16 bits per channel/);
   });
 
   it('the command refuses a count that is not a positive whole number', async () => {

@@ -39,25 +39,38 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {boolean} exists - false when the app has no theme: the commands name {@link EXAMPLE_THEME} and the answer starts with `new`.
  * @property {string[]} themes - Every theme the editor made in the app.
  * @property {string | null} note - Which theme the commands are for when the app has several, or that it has none.
+ * @property {'named' | 'only' | 'last-changed' | 'none'} chosenBy - How the theme was picked.
  * @property {import('./_settings.mjs').ThemeData} data
  * @property {{light: Record<string, string>, dark: Record<string, string>}} base
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string}} check
  */
 
 /**
- * The themes the editor made in the app, the most recently changed first.
+ * The themes the editor made in the app, the one an editor command changed
+ * last first.
  * @param {string} cwd
  * @returns {string[]}
  */
 function editorThemes(cwd) {
   const root = path.join(cwd, 'themes');
   if (!fs.existsSync(root)) return [];
-  return fs
-    .readdirSync(root)
-    .filter(d => fs.existsSync(themeFiles(cwd, d).settings))
-    .map(d => ({d, t: fs.statSync(themeFiles(cwd, d).settings).mtimeMs}))
-    .sort((a, b) => b.t - a.t || a.d.localeCompare(b.d))
-    .map(x => x.d);
+  return (
+    fs
+      .readdirSync(root)
+      .filter(d => fs.existsSync(themeFiles(cwd, d).settings))
+      // The undo history is written only by an editor command, so its time is
+      // the last change made here; a checkout or touch of the settings file
+      // does not move it.
+      .map(d => {
+        const f = themeFiles(cwd, d);
+        const t =
+          [f.history, f.settingsTs, f.settings].find(x => fs.existsSync(x)) ??
+          f.settings;
+        return {d, t: fs.statSync(t).mtimeMs};
+      })
+      .sort((a, b) => b.t - a.t || a.d.localeCompare(b.d))
+      .map(x => x.d)
+  );
 }
 
 /**
@@ -74,6 +87,12 @@ export async function howTheme(ctx, cwd, name) {
   let data = null;
   let slug = name ?? themes[0] ?? EXAMPLE_THEME;
   let note = null;
+  if (name === '')
+    throw new AstryxError(
+      '--theme was given no name.',
+      [{name: `${P} how --list kinds`, reason: 'or leave --theme out'}],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
   if (name) data = loadTheme(cwd, name);
   else if (themes.length) {
     try {
@@ -101,6 +120,13 @@ export async function howTheme(ctx, cwd, name) {
     exists,
     themes,
     note,
+    chosenBy: name
+      ? 'named'
+      : !themes.length
+        ? 'none'
+        : themes.length === 1
+          ? 'only'
+          : 'last-changed',
     data: theme,
     base,
     check(steps) {

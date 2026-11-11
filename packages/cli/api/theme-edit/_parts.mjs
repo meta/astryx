@@ -109,7 +109,16 @@ export async function renderGenerated(project, file, source, extra = []) {
   const dir = renderDir(project);
   // A lookup in an app with no themes must not leave a themes/ folder.
   const themes = path.dirname(dir);
-  const madeThemes = !fs.existsSync(themes);
+  // A themes/ folder that holds only other renders was made by another
+  // lookup running beside this one, so it is ours to remove too.
+  const madeThemes =
+    !fs.existsSync(themes) ||
+    (() => {
+      const names = fs.readdirSync(themes);
+      return (
+        names.length > 0 && names.every(n => n.startsWith('.astryx-render-'))
+      );
+    })();
   fs.mkdirSync(dir, {recursive: true});
   const entry = path.join(dir, file);
   fs.writeFileSync(entry, source);

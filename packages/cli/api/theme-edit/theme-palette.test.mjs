@@ -449,9 +449,13 @@ describe('color dials through the palette generator', () => {
     const theme = /** @type {any} */ (
       (await themeEditHow('brand color', {cwd})).data
     ).theme;
+    // No color given: how says how, and picks none.
     const brand = await ask('brand color');
-    expect(brand.commands).toContain(`set ${theme} accent`);
-    expect(brand.commands).not.toMatch(/<theme>|set my /);
+    expect(brand.commands).toContain('how accent');
+    expect(brand.commands).not.toMatch(/ set |<theme>|set my /);
+    expect((await ask('brand color #7c3aed')).commands).toContain(
+      `set ${theme} accent "#7c3aed"`,
+    );
     const more = await ask('make it more colorful');
     expect(more.commands).toContain(`set ${theme} vibrancy more`);
     // A theme whose colors are all grays has no color to take out, and
@@ -460,10 +464,12 @@ describe('color dials through the palette generator', () => {
     expect(`${less.commands}\n${less.text}`).toMatch(
       new RegExp(`set ${theme} vibrancy less|is a gray`),
     );
-    expect((await ask('dark mode colors')).commands).toContain('--mode dark');
+    // Explanations name the commands in words and pick no color.
+    expect((await ask('dark mode colors')).text).toContain('--mode dark');
     const status = await ask('status colors');
     for (const d of ['danger', 'success', 'warning', 'info'])
-      expect(status.commands).toContain(`set ${theme} ${d}`);
+      expect(status.text).toContain(d);
+    expect(status.commands).not.toMatch(/ set /);
     expect((await ask('error red')).commands.split('\n')[0]).toContain(
       `set ${theme} danger`,
     );

@@ -248,7 +248,7 @@
  * @typedef {object} ThemeEditHowOptions
  * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [list] - List what a change can name: dials, tokens, parts, groups, or properties (any case, singular or plural); the subject filters it. An empty string or `kinds` lists the kinds.
- * @property {string} [theme] - The theme the suggested commands are for, checked against its settings (default: the only theme the editor made in the app; with several, the one changed last; with none, `my-theme`, which the answer makes first).
+ * @property {string} [theme] - The theme the suggested commands are for, checked against its settings (default: the only theme the editor made in the app; with several, the one an editor command changed last; with none, `my-theme`, which the answer makes first). An empty name is refused.
  * @property {string[]} [at] - With a PNG picture: pixel points x,y, whole numbers inside the picture ("40,20;300,180", "40,20 300,180", several entries, or a flat "40,20,300,180").
  * @property {number} [count] - With a PNG picture: how many main colors (default 14).
  */

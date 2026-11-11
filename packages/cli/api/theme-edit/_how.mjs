@@ -27,7 +27,7 @@ import {
   familyOf,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
-import {nearest, refuse} from './_settings.mjs';
+import {loadTheme, nearest, refuse} from './_settings.mjs';
 import {ASPECTS} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
@@ -92,8 +92,15 @@ export function isPicture(subject, cwd) {
 export async function themeEditHow(subject, options = {}) {
   const {cwd = process.cwd()} = options;
   requireProject(cwd);
-  const data = await answer(subject, options, cwd);
-  return {type: 'themeEdit.how', data: withPrefix(data, cwd)};
+  try {
+    const data = await answer(subject, options, cwd);
+    return {type: 'themeEdit.how', data: withPrefix(data, cwd)};
+  } catch (e) {
+    // A refusal's commands start the same way as an answer's.
+    if (e instanceof AstryxError && e.suggestions)
+      e.suggestions = withPrefix(e.suggestions, cwd);
+    throw e;
+  }
 }
 
 /**
@@ -128,6 +135,13 @@ function withPrefix(value, cwd) {
 async function answer(subject, options, cwd) {
   const {list, at = [], count} = options;
   const t = (subject ?? '').trim();
+  // --theme names a theme whatever the subject, so a bad one is refused
+  // for a picture and a list too.
+  if (options.theme === '')
+    refuse(E.ERR_INVALID_ARGUMENT, '--theme was given no name.', {
+      run: [`${HOW} ${t ? JSON.stringify(t) : 'card'}`],
+    });
+  if (options.theme != null) loadTheme(cwd, options.theme);
   if (list != null) {
     if (at.length)
       refuse(
@@ -182,6 +196,7 @@ async function answer(subject, options, cwd) {
     : {};
   const themeFields = {
     theme: env.slug,
+    themeChosenBy: env.chosenBy,
     ...(env.note ? {themeNote: env.note} : {}),
   };
   /**
@@ -294,6 +309,43 @@ async function answer(subject, options, cwd) {
         : {}),
     };
   }
+  // "What does --color-accent do", "what's the variable for card padding":
+  // a question about what something is gets the lookup, not a change.
+  if (
+    /^\s*(what|which|where)\b.*\b(variables?|tokens?|do|does|means?|controls?|for)\b|^\s*what('s| is) the (css )?(variable|token|property)/i.test(
+      t,
+    ) &&
+    !/\b(command|make|makes|set|change)\b/i.test(t)
+  ) {
+    const tok = /--[a-z0-9-]+/i.exec(t)?.[0]?.toLowerCase();
+    if (tok && Object.hasOwn(ctx.project.core.tokenDefaults, tok))
+      return tokenAnswer(ctx, env, t, tok, unknown, themeFields);
+    const q = draftAnswer(ctx, env, t);
+    const groups = q.aspects.filter(a => Object.hasOwn(GROUPS, a));
+    const results = q.parts
+      .map(p => (FAMILIES[p] ? FAMILIES[p][0] : p))
+      .filter(p => ctx.project.target.has(p))
+      .map(p => {
+        const toks = (groups.length ? groups : [null]).flatMap(g =>
+          C.partReads(p, g).map(r => r.token),
+        );
+        return {
+          text: toks.length
+            ? `${p} reads ${[...new Set(toks)].slice(0, 6).join(', ')}${groups.length ? ` for ${groups.join(' and ')}` : ''}`
+            : `what ${p} reads`,
+          commands: [`${HOW} ${p}`],
+        };
+      });
+    if (results.length)
+      return {
+        kind: 'question',
+        subject: t,
+        understood: {parts: q.parts, aspects: q.aspects},
+        ...themeFields,
+        results,
+        ...unknown,
+      };
+  }
   const h = draftAnswer(ctx, env, t);
   const results = finish(env, h.drafts);
   const empty = !results.some(r => r.commands.length);
@@ -352,7 +404,11 @@ function finish(env, drafts) {
       commands: [`${P} new ${env.slug} --like ${env.data.like ?? 'neutral'}`],
     });
   const seen = new Set();
+  // Changes first; a lookup ("how card") after the commands that change.
+  const changes = (/** @type {{commands: string[]}} */ r) =>
+    r.commands.some(c => / editor (set|undo|new) /.test(c)) ? 0 : 1;
   return out
+    .sort((a, b) => changes(a) - changes(b))
     .filter(r => {
       const k = `${r.text}\n${r.commands.join('\n')}`;
       if (seen.has(k)) return false;

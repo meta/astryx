@@ -18,6 +18,12 @@ const SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
  */
 export const MAX_PIXELS = 40_000_000;
 
+/** A 16-bit picture takes twice the memory per pixel, so half as many. */
+export const MAX_PIXELS_16 = 20_000_000;
+
+/** The most pixels the main colors read one by one; past it they stride. */
+const SAMPLE_BUDGET = 4_000_000;
+
 /** The bit depths each PNG color type allows. */
 const DEPTHS = /** @type {Record<number, number[]>} */ ({
   0: [1, 2, 4, 8, 16],
@@ -78,15 +84,20 @@ export function decodePng(bytes) {
     else if (type === 'IDAT') data.push(body);
     else if (type === 'IEND') break;
   }
-  if (!header || !width || !height) throw new Error('the PNG has no header');
+  if (!header) throw new Error('the PNG has no header');
+  if (!width || !height)
+    throw new Error(
+      `the picture is ${width}x${height} pixels, so it has no colors`,
+    );
   if (interlace) throw new Error('interlaced PNG files are not supported');
   if (!DEPTHS[colorType]?.includes(depth))
     throw new Error(
       `color type ${colorType} at bit depth ${depth} is not a valid PNG format`,
     );
-  if (width * height > MAX_PIXELS)
+  const cap = depth === 16 ? MAX_PIXELS_16 : MAX_PIXELS;
+  if (width * height > cap)
     throw new Error(
-      `the picture is ${width}x${height}, more than ${MAX_PIXELS / 1e6} million pixels; crop or scale it down`,
+      `the picture is ${width}x${height}${depth === 16 ? ' at 16 bits per channel' : ''}, more than ${cap / 1e6} million pixels; crop or scale it down${depth === 16 ? ', or save it at 8 bits' : ''}`,
     );
   if (colorType === 3 && !palette)
     throw new Error('the PNG uses a palette but has none');
@@ -152,6 +163,22 @@ export function decodePng(bytes) {
     return colorType === 3 ? v : Math.round((v * 255) / max);
   };
   const entries = palette ? Math.floor(palette.length / 3) : 0;
+  /** A sample as stored, before scaling to 0-255. @param {number} y @param {number} i */
+  const raw16 = (y, i) => {
+    const row = y * stride;
+    if (depth === 16) return (rows[row + i * 2] << 8) | rows[row + i * 2 + 1];
+    if (depth === 8) return rows[row + i];
+    const bit = i * depth;
+    return (rows[row + (bit >> 3)] >> (8 - depth - (bit & 7))) & max;
+  };
+  // tRNS for gray and RGB pictures names one color that is fully
+  // see-through.
+  const key =
+    alpha && colorType === 0 && alpha.length >= 2
+      ? [alpha.readUInt16BE(0)]
+      : alpha && colorType === 2 && alpha.length >= 6
+        ? [alpha.readUInt16BE(0), alpha.readUInt16BE(2), alpha.readUInt16BE(4)]
+        : null;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const o = (y * width + x) * 4;
@@ -168,12 +195,22 @@ export function decodePng(bytes) {
       } else if (colorType === 0 || colorType === 4) {
         const g = sample(y, s);
         rgba[o] = rgba[o + 1] = rgba[o + 2] = g;
-        rgba[o + 3] = colorType === 4 ? sample(y, s + 1) : 255;
+        rgba[o + 3] =
+          colorType === 4
+            ? sample(y, s + 1)
+            : key && raw16(y, s) === key[0]
+              ? 0
+              : 255;
       } else {
         rgba[o] = sample(y, s);
         rgba[o + 1] = sample(y, s + 1);
         rgba[o + 2] = sample(y, s + 2);
-        rgba[o + 3] = colorType === 6 ? sample(y, s + 3) : 255;
+        rgba[o + 3] =
+          colorType === 6
+            ? sample(y, s + 3)
+            : key && key.every((k, n) => raw16(y, s + n) === k)
+              ? 0
+              : 255;
       }
     }
   }
@@ -202,8 +239,8 @@ export function colorsAt(pic, points) {
 }
 
 /**
- * The main colors of a picture: every second pixel bucketed to 5 bits per
- * channel, biggest share first, each with where it sits. A fully
+ * The main colors of a picture: every pixel (on a grid past 4 million)
+ * bucketed to 5 bits per channel, biggest share first, each with where it sits. A fully
  * see-through pixel shows no color, so it is skipped; a partly see-through
  * one counts as it looks over white.
  * @param {Picture} pic
@@ -213,8 +250,14 @@ export function colorsAt(pic, points) {
 export function mainColors(pic, count) {
   /** @type {Map<number, {n: number, r: number, g: number, b: number, x: number, y: number}>} */
   const buckets = new Map();
-  for (let y = 0; y < pic.height; y += 2) {
-    for (let x = 0; x < pic.width; x += 2) {
+  // Every pixel up to a budget, so a 1-pixel line is never skipped; a
+  // bigger picture is read on an even grid.
+  const step = Math.max(
+    1,
+    Math.ceil(Math.sqrt((pic.width * pic.height) / SAMPLE_BUDGET)),
+  );
+  for (let y = 0; y < pic.height; y += step) {
+    for (let x = 0; x < pic.width; x += step) {
       const i = (y * pic.width + x) * 4;
       const a = pic.rgba[i + 3] / 255;
       if (a === 0) continue;

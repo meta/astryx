@@ -417,14 +417,75 @@ function lookupBlocks(d) {
   /** @type {Record<string, unknown>} */
   const shown = {};
   for (const [k, v] of Object.entries(d)) shown[k] = safe(v);
-  const {hint, run: next, ...rest} = shown;
-  return [
-    ...(hint ? [String(hint)] : []),
-    ...project(rest),
-    ...(Array.isArray(next) && next.length
-      ? [`Tip: ${next.map(String).join(', or ')}`]
-      : []),
-  ];
+  const {
+    hint,
+    run: next,
+    results,
+    examples,
+    refused,
+    points,
+    items,
+    ...rest
+  } = /** @type {any} */ (shown);
+  // Commands print one to a line and are never wrapped, so a line pasted
+  // into a shell runs exactly one whole command; a sequence is one line.
+  /** @param {string[]} cmds @param {boolean} [sequence] */
+  const commandLines = (cmds, sequence) =>
+    sequence && cmds.length > 1
+      ? [`  ${cmds.join(' && ')}`, '  sequence: run as one line, in this order']
+      : cmds.map(c => `  ${c}`);
+  /** @param {Array<{command: string, why: string}>} list */
+  const refusedLines = list =>
+    list.flatMap(r => [`  x ${r.command}`, `    not run: ${r.why}`]);
+  /** @type {Array<string | import('../../formatters/index.mjs').Block>} */
+  const blocks = [...(hint ? [String(hint)] : []), ...project(rest)];
+  if (Array.isArray(results) && results.length)
+    blocks.push(
+      section('results:'),
+      text(
+        results
+          .flatMap((/** @type {any} */ r) => [
+            String(r.text),
+            ...commandLines(r.commands ?? [], r.sequence),
+            ...refusedLines(r.refused ?? []),
+          ])
+          .join('\n'),
+      ),
+    );
+  if (Array.isArray(examples) && examples.length)
+    blocks.push(section('examples:'), text(commandLines(examples).join('\n')));
+  if (Array.isArray(refused) && refused.length)
+    blocks.push(section('refused:'), text(refusedLines(refused).join('\n')));
+  if (Array.isArray(points) && points.length)
+    blocks.push(
+      section('points:'),
+      text(
+        points
+          .map(
+            (/** @type {any} */ x) => `  ${x.at}  ${x.color}  alpha ${x.alpha}`,
+          )
+          .join('\n'),
+      ),
+    );
+  if (Array.isArray(items) && items.length) {
+    if (items.some((/** @type {any} */ x) => Array.isArray(x.examples)))
+      blocks.push(
+        section('items:'),
+        text(
+          items
+            .flatMap((/** @type {any} */ x) => [
+              `${x.name}  ${x.values}`,
+              `  help: ${x.help}`,
+              ...commandLines(x.examples),
+            ])
+            .join('\n'),
+        ),
+      );
+    else blocks.push(...project({items}).slice(1));
+  }
+  if (Array.isArray(next) && next.length)
+    blocks.push(`Tip: ${next.map(String).join(', or ')}`);
+  return blocks;
 }
 
 /**
@@ -794,6 +855,14 @@ export function registerExperimentalTheme(group, program) {
         const listFlags = raw.filter(
           w => w === '--list' || w.startsWith('--list='),
         );
+        const themeFlags = raw.filter(
+          w => w === '--theme' || w.startsWith('--theme='),
+        );
+        if (themeFlags.length > 1)
+          return cliError('--theme is given twice; give it once.', {
+            suggestions: [{name: `${HOW} --help`, reason: 'give --theme once'}],
+            code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+          });
         if (listFlags.length > 1)
           return cliError('--list is given twice; give it once.', {
             suggestions: [
@@ -851,7 +920,13 @@ export function registerExperimentalTheme(group, program) {
               code: ERROR_CODES.ERR_INVALID_ARGUMENT,
             },
           );
-        if (picture && rest.length === 2 && !/^[1-9]\d*$/.test(rest[1]))
+        // A missing picture is the first thing to say, before a bad count.
+        if (
+          picture &&
+          rest.length === 2 &&
+          !/^[1-9]\d*$/.test(rest[1]) &&
+          fs.existsSync(path.resolve(rest[0]))
+        )
           return cliError(
             `The count after a picture must be a positive whole number, not "${rest[1]}".`,
             {
