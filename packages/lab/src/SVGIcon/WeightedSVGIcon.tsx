@@ -27,6 +27,7 @@ import * as stylex from '@stylexjs/stylex';
 import {mergeProps, themeProps} from '@astryxdesign/core/utils';
 import {iconVars} from './tokens.stylex';
 import {iconColorStyles} from './colors.stylex';
+import {iconA11yProps} from './iconA11y';
 import {opticalSize} from './variations.stylex';
 import {weightProbeStyles, weightRanges} from './weighted.stylex';
 import {registerWeightProbe} from './weightProbe';
@@ -79,6 +80,9 @@ const styles = stylex.create({
     flexShrink: 0,
     width: iconVars['--icon-size'],
     height: iconVars['--icon-size'],
+    // The probe's text sets this box's baseline. Centering it keeps the icon
+    // where SVGIcon sits in running text and leaves the line where it was.
+    verticalAlign: 'middle',
     fontFamily: 'AstryxWeightProbe',
     fontSynthesis: 'none',
     // The probe can be wider than the box; it must not add scrollable
@@ -172,11 +176,7 @@ export function WeightedSVGIcon({
   style,
   ...props
 }: WeightedSVGIconProps) {
-  const hasAccessibleName =
-    props['aria-label'] != null || props['aria-labelledby'] != null;
-  const a11yProps = hasAccessibleName
-    ? ({role: 'img'} as const)
-    : ({'aria-hidden': true} as const);
+  const a11yProps = iconA11yProps(props);
 
   const pinnedStyle: Record<string, string> | undefined =
     weight != null ? {'--astryx-icon-weight': String(weight)} : undefined;

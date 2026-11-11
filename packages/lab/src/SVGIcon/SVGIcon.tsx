@@ -24,6 +24,7 @@ import * as stylex from '@stylexjs/stylex';
 import {mergeProps} from '@astryxdesign/core/utils';
 import {iconVars} from './tokens.stylex';
 import {iconColorStyles} from './colors.stylex';
+import {iconA11yProps} from './iconA11y';
 import {variations, opticalSize} from './variations.stylex';
 import {themeProps} from '@astryxdesign/core/utils';
 
@@ -344,17 +345,7 @@ export function SVGIcon({
     ...(strokeWidth != null ? strokeWidthOverride : undefined),
   };
 
-  // Decorative by default, meaningful when named — mirroring core Icon's
-  // `label` logic. When the consumer passes an accessible name
-  // (aria-label / aria-labelledby), expose the svg as role="img" instead of
-  // hiding it: an aria-hidden element is removed from the accessibility
-  // tree, so its accessible name would be ignored. Spread BEFORE {...props}
-  // so an explicit aria-hidden/role from the consumer always wins.
-  const hasAccessibleName =
-    props['aria-label'] != null || props['aria-labelledby'] != null;
-  const a11yProps = hasAccessibleName
-    ? ({role: 'img'} as const)
-    : ({'aria-hidden': true} as const);
+  const a11yProps = iconA11yProps(props);
 
   return (
     <svg
