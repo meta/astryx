@@ -817,7 +817,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   frame around its text entry shows the entry's box (owner
   decision, 2026-11-10; DEC-32). A hit area a component or module
   record sets on purpose, such as `component:Thumbnail` AR4's, is unaffected.
-  Mobile size increases belong to theme adaptations (DEC-20).
+  Mobile size increases belong to theme adaptations (DEC-20). Implementation
+  gap: a tap that the press check hands to another target gets that target's
+  activation, focus, keyboard and picker, but not caret placement at the tap
+  point, native text selection, or the long-press callout.
 - **FR43 — Gestures work on the web.** Gestures attach for every pointer, a
   mouse, a pen, and a finger, not only a coarse primary pointer. A part that
   follows a pointer's drag, such as a switch's or a slider's thumb, a sheet, a
