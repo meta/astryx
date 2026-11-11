@@ -302,7 +302,7 @@ describe('component dispatcher — name resolution', () => {
   );
 
   it(
-    'names an example block and points at template and --blocks',
+    'names an example block in the message and keeps the matcher suggestions',
     async () => {
       let err;
       try {
@@ -312,17 +312,53 @@ describe('component dispatcher — name resolution', () => {
       }
       expect(err).toBeInstanceOf(AstryxError);
       expect(err.code).toBe('ERR_UNKNOWN_COMPONENT');
-      expect(err.message).toContain('example block of Table');
-      expect(err.suggestions.map(s => s.name)).toEqual([
-        'template TableSortableTable',
-        'component Table --blocks',
-      ]);
+      expect(err.message).toContain(
+        'astryx template TableSortableTable prints its source',
+      );
+      expect(err.message).toContain('astryx component Table --blocks lists it');
+      const names = err.suggestions.map(s => s.name);
+      expect(names).toContain('Table');
+      expect(names.some(name => name.includes(' '))).toBe(false);
     },
     SLOW,
   );
 
   it(
-    'keeps name suggestions, without example hints, for a name that is no block',
+    'points --blocks at the component whose listing holds the block',
+    async () => {
+      let err;
+      try {
+        await component('TableLeadingMarkSelection', {cwd});
+      } catch (e) {
+        err = e;
+      }
+      expect(err.code).toBe('ERR_UNKNOWN_COMPONENT');
+      expect(err.message).toContain('astryx component Table --blocks lists it');
+      expect(err.message).not.toContain('useTableSelectionState --blocks');
+    },
+    SLOW,
+  );
+
+  it(
+    'leaves out the --blocks pointer when no listing holds the block',
+    async () => {
+      let err;
+      try {
+        await component('AnimatorPlayingCardsVanilla', {cwd});
+      } catch (e) {
+        err = e;
+      }
+      expect(err.code).toBe('ERR_UNKNOWN_COMPONENT');
+      expect(err.message).toContain(
+        'astryx template AnimatorPlayingCardsVanilla prints its source',
+      );
+      expect(err.message).not.toContain('--blocks');
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps name suggestions, without an example pointer, for a name that is no block',
     async () => {
       let err;
       try {
@@ -331,9 +367,8 @@ describe('component dispatcher — name resolution', () => {
         err = e;
       }
       expect(err.code).toBe('ERR_UNKNOWN_COMPONENT');
-      expect(
-        (err.suggestions ?? []).some(s => s.name.startsWith('template ')),
-      ).toBe(false);
+      expect(err.suggestions?.length ?? 0).toBeGreaterThan(0);
+      expect(err.message).not.toContain('example block');
     },
     SLOW,
   );
