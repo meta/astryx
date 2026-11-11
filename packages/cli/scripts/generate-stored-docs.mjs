@@ -3,10 +3,12 @@
 
 /**
  * @file Writes assets/docs.generated.json at `prepack`: the exports of each doc
- * file Astryx ships that imports nothing, runs nothing as it loads, and exports
- * only plain data, keyed by a hash of the file's text, so the published package
+ * file Astryx ships that imports nothing, calls nothing as it loads, reads no
+ * name it does not declare, and exports only plain data, keyed by a hash of
+ * the file's text, so the published package
  * reads such a doc without importing it. The file is not committed; a checkout
- * without it imports every doc, with the same result.
+ * without it imports every doc, with the same result. `--clean` (at
+ * `postpack`) removes it.
  */
 
 import * as fs from 'node:fs';
@@ -55,42 +57,96 @@ function onlyDeclares(text) {
   } catch {
     return false;
   }
-  if (runsCode(program)) return false;
-  return program.body.every(
-    statement =>
-      statement.type === 'VariableDeclaration' ||
-      statement.type === 'ExportDefaultDeclaration' ||
-      (statement.type === 'ExportNamedDeclaration' && !statement.source),
-  );
+  if (
+    !program.body.every(
+      statement =>
+        statement.type === 'VariableDeclaration' ||
+        statement.type === 'ExportDefaultDeclaration' ||
+        (statement.type === 'ExportNamedDeclaration' && !statement.source),
+    )
+  ) {
+    return false;
+  }
+  /** @type {Set<string>} */
+  const declared = new Set();
+  for (const statement of program.body) {
+    const declaration =
+      statement.type === 'ExportNamedDeclaration'
+        ? statement.declaration
+        : statement;
+    if (declaration?.type !== 'VariableDeclaration') continue;
+    for (const declarator of declaration.declarations) {
+      if (declarator.id.type !== 'Identifier') return false;
+      declared.add(declarator.id.name);
+    }
+  }
+  return !runsCode(program, declared);
 }
 
 /**
- * Whether a syntax tree loads or reaches anything at run time: a dynamic
- * `import()`, `import.meta`, or a call of `require`.
+ * Node types whose value comes from running code, or is not plain data: a
+ * call (`Object.freeze`, `.map`, `Date.now()`), a construction, a tagged
+ * template, a function or class, an import, `this`, or an assignment.
+ */
+const RUNS_CODE = new Set([
+  'CallExpression',
+  'OptionalCallExpression',
+  'NewExpression',
+  'TaggedTemplateExpression',
+  'Import',
+  'ImportExpression',
+  'MetaProperty',
+  'ThisExpression',
+  'Super',
+  'AwaitExpression',
+  'YieldExpression',
+  'FunctionExpression',
+  'ArrowFunctionExpression',
+  'FunctionDeclaration',
+  'ClassExpression',
+  'ClassDeclaration',
+  'ObjectMethod',
+  'UpdateExpression',
+  'AssignmentExpression',
+]);
+
+/**
+ * Whether a syntax tree's values depend on anything but its own literals and
+ * the names it declares: code that runs as it loads (see {@link RUNS_CODE}),
+ * or a name it does not declare, such as `process`, `Date` or `globalThis`,
+ * whose value would be the publishing machine's.
  * @param {unknown} node
+ * @param {Set<string>} declared the file's top-level names
  * @returns {boolean}
  */
-function runsCode(node) {
+function runsCode(node, declared) {
   if (!node || typeof node !== 'object') return false;
-  if (Array.isArray(node)) return node.some(runsCode);
+  if (Array.isArray(node)) return node.some(n => runsCode(n, declared));
   const n = /** @type {Record<string, any>} */ (node);
-  if (n.type === 'Import' || n.type === 'ImportExpression') return true;
-  if (n.type === 'MetaProperty') return true;
-  if (
-    n.type === 'CallExpression' &&
-    n.callee?.type === 'Identifier' &&
-    n.callee.name === 'require'
-  ) {
-    return true;
+  if (RUNS_CODE.has(n.type)) return true;
+  if (n.type === 'Identifier') {
+    return !declared.has(n.name) && n.name !== 'undefined';
   }
-  return Object.entries(n).some(
-    ([key, value]) =>
-      key !== 'loc' &&
-      key !== 'leadingComments' &&
-      key !== 'trailingComments' &&
-      key !== 'innerComments' &&
-      runsCode(value),
-  );
+  return Object.entries(n).some(([key, value]) => {
+    if (
+      key === 'loc' ||
+      key === 'leadingComments' ||
+      key === 'trailingComments' ||
+      key === 'innerComments' ||
+      key === 'extra'
+    ) {
+      return false;
+    }
+    // Names that are not references: a declared name, a property key, a
+    // member's property, an export's outside name.
+    if (key === 'id' && n.type === 'VariableDeclarator') return false;
+    if (key === 'key' && !n.computed) return false;
+    if (key === 'property' && n.type === 'MemberExpression' && !n.computed) {
+      return false;
+    }
+    if (key === 'exported') return false;
+    return runsCode(value, declared);
+  });
 }
 
 /**
@@ -129,7 +185,11 @@ const isMain =
   path.resolve(process.argv[1]) ===
     path.resolve(new URL(import.meta.url).pathname);
 
-if (isMain) {
+if (isMain && process.argv.includes('--clean')) {
+  // `postpack`: the checkout goes back to importing every doc, so a later
+  // edit to a doc or the importer shows there.
+  fs.rmSync(STORED_DOCS_FILE, {force: true});
+} else if (isMain) {
   fs.writeFileSync(STORED_DOCS_FILE, await storedDocsText());
   console.log(`Wrote ${path.relative(process.cwd(), STORED_DOCS_FILE)}.`);
 }

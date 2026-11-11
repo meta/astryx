@@ -12,10 +12,19 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
+import {
+  cliTarball,
+  placeCli,
+  recyclePlacedCopies,
+  tarballFiles,
+} from '../test-utils/global-local-fixtures.mjs';
 
 const STORE = 'assets/docs.generated.json';
 const REPO = path.resolve(CLI_ROOT, '..', '..');
 const SANDBOX = path.join(REPO, 'apps', 'sandbox');
+const VERSION = JSON.parse(
+  fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
+).version;
 
 /** @type {string} */
 let work;
@@ -24,43 +33,13 @@ let packed;
 
 beforeAll(() => {
   work = fs.mkdtempSync(path.join(os.tmpdir(), 'packed-docs-'));
-  // The tarball as `pnpm publish` makes it, with the prepack step that
-  // writes the store run on its own (the rest of prepack emits types).
-  const wrote = !fs.existsSync(path.join(CLI_ROOT, STORE));
-  const gen = spawnSync(
-    process.execPath,
-    ['scripts/generate-stored-docs.mjs'],
-    {
-      cwd: CLI_ROOT,
-      encoding: 'utf8',
-    },
-  );
-  expect(gen.status, gen.stderr).toBe(0);
-  const pack = spawnSync('pnpm', ['pack', '--pack-destination', work], {
-    cwd: CLI_ROOT,
-    encoding: 'utf8',
-    env: {...process.env, npm_config_ignore_scripts: 'true'},
-    shell: process.platform === 'win32',
-  });
-  if (wrote) fs.rmSync(path.join(CLI_ROOT, STORE), {force: true});
-  expect(pack.status, pack.stderr).toBe(0);
-  const tarball = fs.readdirSync(work).find(f => f.endsWith('.tgz'));
-  expect(tarball).toBeDefined();
-  const untar = spawnSync('tar', ['-xzf', /** @type {string} */ (tarball)], {
-    cwd: work,
-    encoding: 'utf8',
-  });
-  expect(untar.status, untar.stderr).toBe(0);
-  packed = path.join(work, 'package');
-  // The tarball's dependencies, as an install would place them.
-  fs.symlinkSync(
-    path.join(CLI_ROOT, 'node_modules'),
-    path.join(packed, 'node_modules'),
-    'dir',
-  );
+  // The run's packed CLI, as `pnpm publish` makes it, placed with its
+  // dependencies as an install would.
+  packed = placeCli(path.join(work, 'cli'), VERSION).dir;
 }, 120_000);
 
 afterAll(() => {
+  recyclePlacedCopies();
   if (work) fs.rmSync(work, {recursive: true, force: true});
 });
 
@@ -113,12 +92,32 @@ describe('the packed package', () => {
   });
 
   it('ships the store', () => {
-    expect(fs.existsSync(path.join(packed, STORE))).toBe(true);
+    expect(tarballFiles(cliTarball())).toContain(STORE);
+  });
+
+  it('removes the store from the checkout after packing', () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
+    );
+    expect(pkg.scripts.postpack).toBe(
+      'node scripts/generate-stored-docs.mjs --clean',
+    );
   });
 
   it('imports no stored doc, with the same answer', () => {
     const fromTarball = docsListingImports(packed);
-    const fromCheckout = docsListingImports(CLI_ROOT);
+    // The checkout without a store, as it is after `postpack`: one a local
+    // pack or publish left behind is moved aside for this run.
+    const store = path.join(CLI_ROOT, STORE);
+    const aside = `${store}.aside-${process.pid}`;
+    const moved = fs.existsSync(store);
+    if (moved) fs.renameSync(store, aside);
+    let fromCheckout;
+    try {
+      fromCheckout = docsListingImports(CLI_ROOT);
+    } finally {
+      if (moved) fs.renameSync(aside, store);
+    }
     expect(fromCheckout.imported.length).toBeGreaterThan(50);
     expect(fromTarball.imported.length).toBeLessThan(5);
     expect(fromTarball.stdout.split(packed).join(CLI_ROOT)).toBe(

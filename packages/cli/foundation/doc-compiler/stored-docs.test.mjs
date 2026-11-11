@@ -4,23 +4,36 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {afterAll, afterEach, beforeAll, describe, expect, it} from 'vitest';
+import * as util from 'node:util';
+import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {importDocModule} from './import.mjs';
 import {docSourceKey, STORED_DOCS_FILE} from './stored-docs.mjs';
 import {storedDocsText} from '../../scripts/generate-stored-docs.mjs';
 
-// The file is written at `prepack`, so a checkout has none: write it for
-// these tests (the importer reads it once per process) and remove it.
-const written = !fs.existsSync(STORED_DOCS_FILE);
+// The file is written at `prepack`, so a checkout has none. These tests
+// serve its text from memory to the importer's read of it: writing it into
+// the tree would change what other suites, running alongside, read.
+const memory = vi.hoisted(() => ({file: '', text: ''}));
+vi.mock('node:fs', async importOriginal => {
+  const actual = /** @type {typeof import('node:fs')} */ (
+    await importOriginal()
+  );
+  /** @type {typeof actual.readFileSync} */
+  const readFileSync = /** @type {any} */ (
+    (/** @type {any} */ file, /** @type {any[]} */ ...rest) =>
+      memory.file && file === memory.file
+        ? memory.text
+        : actual.readFileSync(file, ...rest)
+  );
+  return {...actual, default: {...actual, readFileSync}, readFileSync};
+});
 /** @type {Record<string, Record<string, unknown>>} */
 let stored = {};
 beforeAll(async () => {
-  if (written) fs.writeFileSync(STORED_DOCS_FILE, await storedDocsText());
-  stored = JSON.parse(fs.readFileSync(STORED_DOCS_FILE, 'utf-8'));
-});
-afterAll(() => {
-  if (written) fs.rmSync(STORED_DOCS_FILE, {force: true});
+  memory.text = await storedDocsText();
+  memory.file = STORED_DOCS_FILE;
+  stored = JSON.parse(memory.text);
 });
 const GUIDE = path.join(
   CLI_ROOT,
@@ -62,6 +75,9 @@ describe('stored doc exports', () => {
     expect(stored[docSourceKey(text)]).toBeDefined();
     const read = await importDocModule(GUIDE);
     const native = await import(`${pathToFileURL(GUIDE).href}?native`);
+    // The store answered: the importer's own import gives a real module
+    // namespace (see the next test).
+    expect(util.types.isModuleNamespaceObject(read)).toBe(false);
     expect(Object.keys(read)).toEqual(Object.keys(native));
     expect({...read}).toEqual({...native});
     expect(Object.getPrototypeOf(read)).toBe(null);
@@ -76,6 +92,7 @@ describe('stored doc exports', () => {
     const file = path.join(dir, 'outside.doc.mjs');
     fs.copyFileSync(GUIDE, file);
     const read = await importDocModule(file);
+    expect(util.types.isModuleNamespaceObject(read)).toBe(true);
     expect(Object.prototype.toString.call(read)).toBe('[object Module]');
     expect({...read}).toEqual({...(await importDocModule(GUIDE))});
   });
