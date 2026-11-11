@@ -5,11 +5,20 @@
  * Tests for Text component
  */
 
-import {render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {describe, it, expect, vi} from 'vitest';
+import userEvent from '@testing-library/user-event';
 import {Text} from './Text';
+// Loaded up front, so the truncation tooltip's lazy import resolves at once.
+import '../Tooltip/Tooltip';
 import type {TextType} from './Text';
 import type {TextColor} from '../theme/types';
+
+// jsdom does not resolve var(); the browser spec checks the resolved value.
+// Untruncated text reads the private container override, else break-word.
+const DEFAULT_WRAP = 'var(--_astryx-text-overflow-wrap,break-word)';
+const wrapOf = (element: Element) =>
+  getComputedStyle(element).overflowWrap.replace(/\s/g, '');
 
 describe('Text', () => {
   describe('rendering', () => {
@@ -224,6 +233,33 @@ describe('Text', () => {
     });
   });
 
+  // Text FR3 (spec:AST-020 FR1, WCAG 2.2 1.4.10): a token longer than its line
+  // wraps in text that is not truncated; truncation keeps its own treatment.
+  describe('long unbroken tokens', () => {
+    const token =
+      'https://example.com/aVeryLongUnbrokenTokenThatIsWiderThan320px';
+
+    it('wraps them in inline and block text that is not truncated', () => {
+      render(
+        <>
+          <Text>{token}</Text>
+          <Text display="block">{`${token}/block`}</Text>
+        </>,
+      );
+      expect(wrapOf(screen.getByText(token))).toBe(DEFAULT_WRAP);
+      expect(wrapOf(screen.getByText(`${token}/block`))).toBe(DEFAULT_WRAP);
+    });
+
+    it('leaves single-line truncation clipping on one line', () => {
+      render(<Text maxLines={1}>{token}</Text>);
+      const style = getComputedStyle(screen.getByText(token));
+      expect(style.whiteSpace).toBe('nowrap');
+      expect(style.textOverflow).toBe('ellipsis');
+      expect(style.wordBreak).toBe('break-all');
+      expect(style.overflowWrap).not.toBe('break-word');
+    });
+  });
+
   it('renders the stable target and type data attribute for theme targeting', () => {
     render(<Text type="body">Themed Text</Text>);
     const element = screen.getByText('Themed Text');
@@ -401,5 +437,376 @@ describe('Text maxLines without a truncation tooltip', () => {
       );
     });
     expect(reads).toBeGreaterThan(0);
+  });
+});
+
+describe('Text keeps its children mounted when maxLines changes', () => {
+  it('keeps the same child elements, focus, and input values across a clamp toggle', () => {
+    const {rerender} = render(
+      <Text maxLines={2} hasTruncateTooltip={false}>
+        Lead text <input aria-label="Note" defaultValue="" />
+      </Text>,
+    );
+    const input = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Note',
+    });
+    input.value = 'typed';
+    input.focus();
+
+    rerender(
+      <Text maxLines={0} hasTruncateTooltip={false}>
+        Lead text <input aria-label="Note" defaultValue="" />
+      </Text>,
+    );
+    const after = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Note',
+    });
+    expect(after).toBe(input);
+    expect(after.value).toBe('typed');
+    expect(document.activeElement).toBe(after);
+
+    rerender(
+      <Text maxLines={2} hasTruncateTooltip={false}>
+        Lead text <input aria-label="Note" defaultValue="" />
+      </Text>,
+    );
+    expect(screen.getByRole('textbox', {name: 'Note'})).toBe(input);
+  });
+});
+
+// A page of truncated text mounted one closed tooltip layer per element at
+// load. The tooltip now mounts on the first hover, tap or focus, and that
+// interaction opens it as it would once mounted.
+describe('the truncation tooltip mounts on the first interaction', () => {
+  const LABEL = 'A label far wider than the space it has been given';
+
+  function withOverflowAndPopover() {
+    const proto = window.HTMLElement.prototype;
+    const original = {
+      scrollWidth: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'),
+      offsetWidth: Object.getOwnPropertyDescriptor(proto, 'offsetWidth'),
+      showPopover: proto.showPopover,
+      hidePopover: proto.hidePopover,
+    };
+    Object.defineProperty(proto, 'scrollWidth', {
+      configurable: true,
+      get: () => 400,
+    });
+    Object.defineProperty(proto, 'offsetWidth', {
+      configurable: true,
+      get: () => 100,
+    });
+    const showPopover = vi.fn();
+    const hidePopover = vi.fn();
+    proto.showPopover = showPopover;
+    proto.hidePopover = hidePopover;
+    return {
+      showPopover,
+      hidePopover,
+      restore: () => {
+        if (original.scrollWidth) {
+          Object.defineProperty(proto, 'scrollWidth', original.scrollWidth);
+        }
+        if (original.offsetWidth) {
+          Object.defineProperty(proto, 'offsetWidth', original.offsetWidth);
+        }
+        proto.showPopover = original.showPopover;
+        proto.hidePopover = original.hidePopover;
+      },
+    };
+  }
+
+  it('mounts no tooltip layer and no description before any interaction', async () => {
+    const {restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      // Let a lazily loaded tooltip settle, if one were mounting.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+      expect(screen.getByText(LABEL)).not.toHaveAttribute('aria-describedby');
+    } finally {
+      restore();
+    }
+  });
+
+  it('mounts the tooltip on the first hover and opens it after the hover delay', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      await waitFor(
+        () => {
+          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+        },
+        {timeout: 3000},
+      );
+      await waitFor(
+        () => {
+          expect(showPopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+      expect(text.getAttribute('aria-describedby')).toBe(
+        screen.getByRole('tooltip', {hidden: true}).id,
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('opens on the first hover after the hover delay, not later', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      // Truncation is measured and the Tooltip module loads.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+      vi.useFakeTimers();
+      const text = screen.getByText(LABEL);
+      act(() => {
+        fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+        fireEvent.mouseEnter(text);
+      });
+      act(() => {
+        vi.advanceTimersByTime(199);
+      });
+      expect(showPopover).not.toHaveBeenCalled();
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(showPopover).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      restore();
+    }
+  });
+
+  it('opens no tooltip when the pointer leaves before the hover delay ends', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      // A browser follows a mouse's pointerleave with mouseleave.
+      fireEvent.pointerLeave(text, {pointerType: 'mouse'});
+      fireEvent.mouseLeave(text);
+      await waitFor(
+        () => {
+          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+        },
+        {timeout: 3000},
+      );
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      expect(showPopover).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  // A finger's arrival is not yet a tap: only the tap's click mounts the
+  // tooltip, and the touch trigger answers it, arming the outside dismissal.
+  function tap(element: Element) {
+    fireEvent.pointerDown(element, {pointerType: 'touch'});
+    fireEvent.pointerUp(element, {pointerType: 'touch'});
+    fireEvent.click(element);
+  }
+
+  it('opens on the tap that mounts it, and a tap outside closes it', async () => {
+    const {showPopover, hidePopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <>
+          <Text type="body" maxLines={1}>
+            {LABEL}
+          </Text>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerEnter(text, {pointerType: 'touch'});
+      tap(text);
+      await waitFor(
+        () => {
+          expect(showPopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+      tap(screen.getByRole('button', {name: 'Elsewhere'}));
+      await waitFor(
+        () => {
+          expect(hidePopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  // Focus inside the clamped text mounts the tooltip. Whether it then opens
+  // is Tooltip's own focus rule: focus on a descendant of a trigger that is
+  // not itself focusable does not open it.
+  it('mounts on keyboard focus inside the clamped text', async () => {
+    const {restore} = withOverflowAndPopover();
+    try {
+      const user = userEvent.setup();
+      render(
+        <Text type="body" maxLines={1}>
+          <a href="#details">{LABEL}</a>
+        </Text>,
+      );
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+      await user.tab();
+      expect(screen.getByRole('link', {name: LABEL})).toHaveFocus();
+      await waitFor(
+        () => {
+          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('opens nothing for a click that follows a scroll with no press of its own', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerDown(text, {pointerType: 'touch'});
+      fireEvent.pointerCancel(text, {pointerType: 'touch'});
+      fireEvent.click(text);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      expect(showPopover).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  it("still mounts on a tap when the caller's handlers prevent the default", async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text
+          type="body"
+          maxLines={1}
+          onPointerDown={event => event.preventDefault()}
+          onClick={event => event.preventDefault()}>
+          {LABEL}
+        </Text>,
+      );
+      tap(screen.getByText(LABEL));
+      await waitFor(
+        () => {
+          expect(showPopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('opens for a mouse that leaves and comes back before the tooltip mounts', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      // A browser follows each pointer event of a mouse with its mouse event.
+      fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(text);
+      fireEvent.pointerLeave(text, {pointerType: 'mouse'});
+      fireEvent.mouseLeave(text);
+      fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(text);
+      await waitFor(
+        () => {
+          expect(showPopover).toHaveBeenCalled();
+        },
+        {timeout: 3000},
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('opens nothing after a mouse press made while the tooltip loads', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      fireEvent.pointerDown(text, {pointerType: 'mouse'});
+      await waitFor(
+        () => {
+          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+        },
+        {timeout: 3000},
+      );
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      expect(showPopover).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  it('mounts nothing for a touch that becomes a scroll', async () => {
+    const {restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerEnter(text, {pointerType: 'touch'});
+      fireEvent.pointerDown(text, {pointerType: 'touch'});
+      fireEvent.pointerCancel(text, {pointerType: 'touch'});
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+    } finally {
+      restore();
+    }
   });
 });

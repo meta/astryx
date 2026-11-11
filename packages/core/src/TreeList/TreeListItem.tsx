@@ -4,7 +4,8 @@
 
 /**
  * @file TreeListItem.tsx
- * @input Uses React, StyleX, theme tokens, TreeListBranches
+ * @input Uses React, StyleX, theme tokens, TreeListBranches, the shared press
+ *   overlays and the compositor press layer
  * @output Exports TreeListItem component (internal, not publicly exported)
  * @position Internal implementation; consumed by TreeList.tsx
  *
@@ -15,6 +16,7 @@
  */
 
 import {useId, useMemo, useRef, type ReactNode} from 'react';
+import {isRenderable} from '../utils/isRenderable';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -26,8 +28,10 @@ import {
 } from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
+  cancelNestedTouchPress,
   hasInteractiveAncestor,
   useClickableContainer,
 } from '../hooks/useClickableContainer';
@@ -38,8 +42,14 @@ import {useLinkComponent} from '../Link/useLinkComponent';
 import {TreeListBranches} from './TreeListBranches';
 import type {TreeListDensity, TreeListVariant} from './TreeListTypes';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TreeList/TreeListItem.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
@@ -83,9 +93,9 @@ const styles = stylex.create({
     // collapse, so adjacent rows end up a full gap apart — and it rides the
     // `rowWrapper`, which carries no theme target, so the paintable
     // `tree-list-item` stays a pure paint seam (layout lives off it). The <li>s
-    // stay contiguous — the gap is padding INSIDE each <li>, not space between
-    // them — so the per-<li> connector guide can still span it and read as a
-    // continuous line (see TreeListBranches). The lever's default is a subtle
+    // stay contiguous, because the gap is padding inside each <li>, not space
+    // between them. So the per-row connector guide can still span it and read
+    // as one line (see TreeListBranches). The lever's default is a subtle
     // `--spacing-0-5` (2px, set on the tree-list root); a theme widens or closes
     // it via the `tree-list` target.
     paddingBlock: 'calc(var(--tree-list-row-gap, 0px) / 2)',
@@ -413,7 +423,7 @@ export function TreeListItem({
   isTabbable,
 }: TreeListItemInternalProps) {
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const labelId = useId();
   const descriptionId = useId();
   const LinkComponent = useLinkComponent();
@@ -478,6 +488,28 @@ export function TreeListItem({
     interactiveRef: linkRef,
     disabled: isDisabled || !forwardsToLink,
   });
+
+  // A finger press that starts on a control inside the row does not activate
+  // the row, so the row shows no press for it. The row's own action, its link
+  // or invisible button, activates it. The Chevron does too when the row's
+  // surface toggles, since it runs that same toggle.
+  const actionButtonRef = useRef<HTMLButtonElement>(null);
+  const chevronRef = useRef<HTMLButtonElement>(null);
+  const surfaceToggles = onClick == null && handleClick != null;
+  const pressOnRow = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (isDisabled) {
+      return;
+    }
+    const chevron = chevronRef.current;
+    const ownAction =
+      surfaceToggles &&
+      chevron != null &&
+      event.target instanceof Node &&
+      chevron.contains(event.target)
+        ? chevron
+        : (linkRef.current ?? actionButtonRef.current);
+    cancelNestedTouchPress(event, event.currentTarget, ownAction);
+  };
   const {onMouseUp: openLinkOnMiddleClick} = useClickableContainer({
     containerRef: linkRowRef,
     href,
@@ -520,6 +552,7 @@ export function TreeListItem({
         )}>
         {label}
       </span>
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `description` is a string field: an empty string still describes the item */}
       {description != null && (
         <span
           id={descriptionId}
@@ -558,6 +591,7 @@ export function TreeListItem({
       // focusable element to receive Enter/Space). The row's handleClick ignores
       // clicks originating inside a <button>, so this never double-toggles.
       <button
+        ref={chevronRef}
         type="button"
         aria-expanded={isExpanded}
         aria-label={t('@astryx.treeList.toggleChildren')}
@@ -601,7 +635,7 @@ export function TreeListItem({
   const innerContent = (
     <>
       {chevron}
-      {startContent != null && (
+      {isRenderable(startContent) && (
         <span {...stylex.props(styles.startContent)}>{startContent}</span>
       )}
       {href != null && isDisabled ? (
@@ -634,6 +668,7 @@ export function TreeListItem({
         </LinkComponent>
       ) : onClick != null ? (
         <button
+          ref={actionButtonRef}
           type="button"
           onClick={onClick}
           aria-disabled={isDisabled || undefined}
@@ -649,7 +684,7 @@ export function TreeListItem({
       ) : (
         <span {...stylex.props(styles.content)}>{labelAndDescription}</span>
       )}
-      {endContent != null && (
+      {isRenderable(endContent) && (
         <span {...stylex.props(styles.endContent)}>{endContent}</span>
       )}
     </>
@@ -677,16 +712,16 @@ export function TreeListItem({
       data-tree-level={nestedLevel + 1}
       data-tree-disabled={isDisabled || undefined}
       {...focusOutlineProps.publishFocusVisibleVars(styles.wrapper)}>
-      {variant !== 'noGuides' && (
-        <div {...stylex.props(styles.treeBranches)}>
-          <TreeListBranches
-            ancestorsIsLast={ancestorsIsLast}
-            isLast={isLast}
-            nestedLevel={nestedLevel}
-          />
-        </div>
-      )}
       <div {...stylex.props(styles.rowWrapper)}>
+        {variant !== 'noGuides' && (
+          <div {...stylex.props(styles.treeBranches)}>
+            <TreeListBranches
+              ancestorsIsLast={ancestorsIsLast}
+              isLast={isLast}
+              nestedLevel={nestedLevel}
+            />
+          </div>
+        )}
         <div
           {...(isInteractive || (hasChildren && onClick == null)
             ? pressable
@@ -704,6 +739,10 @@ export function TreeListItem({
                   densityStyles[density],
                   styles.interactive,
                   interactionOverlayStyles.backgroundImage,
+                  // The touch press on a compositor layer (after the
+                  // overlay, whose own touch paint it turns off).
+                  rowPressLayerStyles.cell,
+                  rowPressLayerStyles.cellOnImage,
                   isDisabled && styles.disabled,
                   isSelected && styles.selected,
                   xstyle,
@@ -724,11 +763,14 @@ export function TreeListItem({
           )}
           ref={forwardsToLink ? linkRowRef : undefined}
           onClick={forwardsToLink ? delegateToLink : handleClick}
-          onMouseUp={forwardsToLink ? openLinkOnMiddleClick : undefined}>
+          onMouseUp={forwardsToLink ? openLinkOnMiddleClick : undefined}
+          onPointerDown={
+            forwardsToLink || handleClick != null ? pressOnRow : undefined
+          }>
           <div {...stylex.props(styles.indentedContent)}>{innerContent}</div>
         </div>
       </div>
-      {(isExpanded || isExiting) && renderedChildren != null && (
+      {(isExpanded || isExiting) && isRenderable(renderedChildren) && (
         <ul
           role="group"
           data-tree-exiting={isExiting ? '' : undefined}

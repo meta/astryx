@@ -268,7 +268,7 @@ describe('ToggleButton', () => {
     expect(pressedChangeAction).toHaveBeenCalledWith(true);
     expect(button).toHaveAttribute('aria-pressed', 'true');
     expect(button).toHaveAttribute('aria-busy', 'true');
-    expect(button).not.toBeDisabled();
+    expect(button).not.toHaveAttribute('aria-disabled');
 
     // Settle the action so the pending transition doesn't leak into later tests.
     await act(async () => {
@@ -300,14 +300,14 @@ describe('ToggleButton', () => {
     await user.click(button);
 
     expect(button).toHaveAttribute('aria-busy', 'true');
-    expect(button).not.toBeDisabled();
+    expect(button).not.toHaveAttribute('aria-disabled');
 
     await act(async () => {
       resolveAction?.();
       await Promise.resolve();
     });
     expect(button).not.toHaveAttribute('aria-busy', 'true');
-    expect(button).not.toBeDisabled();
+    expect(button).not.toHaveAttribute('aria-disabled');
   });
 
   it('interrupts an in-flight action on re-click (true -> false -> true)', async () => {
@@ -652,6 +652,60 @@ describe('ToggleButtonGroup (single)', () => {
   });
 });
 
+describe('ToggleButton caller attributes', () => {
+  // Spread so the pressed-state attributes are passed the way a wrapper that
+  // forwards arbitrary DOM props would pass them.
+  const callerProps: Record<string, string> = {
+    'data-is-pressed': 'bogus',
+    'aria-pressed': 'mixed',
+    'data-elevation': 'high',
+    'data-testid-extra': 'kept',
+  };
+
+  it('keeps the reflected pressed state when a caller passes its own', () => {
+    render(
+      <>
+        <ToggleButton
+          label="Unpressed"
+          isPressed={false}
+          onPressedChange={() => {}}
+          {...callerProps}
+        />
+        <ToggleButton
+          label="Pressed"
+          isPressed
+          onPressedChange={() => {}}
+          {...callerProps}
+        />
+      </>,
+    );
+    const unpressed = screen.getByRole('button', {name: 'Unpressed'});
+    const pressed = screen.getByRole('button', {name: 'Pressed'});
+    expect(unpressed).toHaveAttribute('data-is-pressed', 'false');
+    expect(unpressed).toHaveAttribute('aria-pressed', 'false');
+    expect(pressed).toHaveAttribute('data-is-pressed', 'true');
+    expect(pressed).toHaveAttribute('aria-pressed', 'true');
+    // The reflected elevation (the default, none) wins over a caller's too.
+    expect(unpressed).toHaveAttribute('data-elevation', 'none');
+    expect(pressed).toHaveAttribute('data-elevation', 'none');
+  });
+
+  it('still forwards other caller data attributes to the root', () => {
+    render(
+      <ToggleButton
+        label="Favorite"
+        isPressed={false}
+        onPressedChange={() => {}}
+        {...callerProps}
+      />,
+    );
+    expect(screen.getByRole('button', {name: 'Favorite'})).toHaveAttribute(
+      'data-testid-extra',
+      'kept',
+    );
+  });
+});
+
 // =============================================================================
 // ToggleButtonGroup — Multiple mode
 // =============================================================================
@@ -872,7 +926,10 @@ describe('disabled state', () => {
       </ToggleButtonGroup>,
     );
 
-    expect(screen.getByRole('button', {name: 'List'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'List'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
 
     await user.click(screen.getByRole('button', {name: 'List'}));
     expect(handleChange).not.toHaveBeenCalled();
@@ -888,7 +945,9 @@ describe('disabled state', () => {
       </ToggleButtonGroup>,
     );
 
-    expect(screen.getByRole('button', {name: 'Grid'})).toBeEnabled();
+    expect(screen.getByRole('button', {name: 'Grid'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
 
     await user.click(screen.getByRole('button', {name: 'Grid'}));
     expect(handleChange).toHaveBeenCalledWith('grid');
@@ -907,7 +966,10 @@ describe('disabled state', () => {
       </ToggleButtonGroup>,
     );
 
-    expect(screen.getByRole('button', {name: 'List'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'List'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
 
     await user.click(screen.getByRole('button', {name: 'List'}));
     expect(handleChange).not.toHaveBeenCalled();

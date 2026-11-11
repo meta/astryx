@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "close",
-    "matchCount": 45,
+    "matchCount": 49,
     "results": [
       {
         "domain": "component",
@@ -14,6 +14,17 @@
         "description": "<text>",
         "import": "@astryxdesign/core/AlertDialog",
         "command": "astryx component AlertDialog",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "DrawerHeader",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Drawer",
+        "command": "astryx component DrawerHeader",
         "mentions": []
       },
       {
@@ -36,6 +47,10 @@
         "description": "<text>",
         "import": "@astryxdesign/core/BottomSheet",
         "command": "astryx component BottomSheetSwitcher",
+        "deprecated": {
+          "replacement": "<text>",
+          "description": "<text>"
+        },
         "mentions": []
       },
       {
@@ -58,17 +73,6 @@
         "description": "<text>",
         "import": "@astryxdesign/core/Drawer",
         "command": "astryx component Drawer",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "DrawerHeader",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/Drawer",
-        "command": "astryx component DrawerHeader",
         "mentions": []
       },
       {
@@ -113,6 +117,17 @@
         "description": "<text>",
         "import": "@astryxdesign/core/hooks",
         "command": "astryx hook useImperativeDialog",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useKeyboardHint",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/hooks",
+        "command": "astryx hook useKeyboardHint",
         "mentions": []
       },
       {
@@ -227,19 +242,6 @@
         "title": "<text>",
         "command": "astryx docs migration/component-migration move-the-app-frame-first",
         "parent": "astryx docs migration/component-migration --index",
-        "mentions": []
-      },
-      {
-        "domain": "doc",
-        "name": "styling/styling-advanced",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs styling/styling-advanced compound-components",
-        "parent": "astryx docs styling/styling-advanced --index",
         "mentions": []
       }
     ]

@@ -17,6 +17,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
+import runnerLabels from './lib/runner-labels.cjs';
+
+const {STANDARD_RUNNERS, labelsOf} = runnerLabels;
 
 const dir = path.resolve(import.meta.dirname, '../workflows');
 const workflows = fs
@@ -28,18 +31,7 @@ const workflows = fs
   ]);
 
 /** Standard hosted runners: free on a public repository. */
-const FREE = new Set([
-  'ubuntu-latest',
-  'ubuntu-slim',
-  'ubuntu-24.04',
-  'ubuntu-22.04',
-  'ubuntu-24.04-arm',
-  'ubuntu-22.04-arm',
-  'macos-latest',
-  'macos-15',
-  'macos-14',
-  'windows-latest',
-]);
+const FREE = STANDARD_RUNNERS;
 
 /**
  * `workflow/job` → why that job may use a paid larger runner. Only the release
@@ -53,6 +45,11 @@ const PAID_ALLOWED = {
   'release.yml/publish': RELEASE_POOL,
   'ci.yml/release-merge-back': `${RELEASE_POOL}; byte parity with the publisher`,
   'ci.yml/release-bump': RELEASE_POOL,
+  // Release specs judge timing, and their budgets hold only on the release
+  // check's runner. A slim plan job starts this job only when a pull request
+  // changes a release spec or a module one imports.
+  'ci.yml/release-specs':
+    'the release check contract runner, for timing budgets; started only when a release spec is planned',
 };
 /** Jobs that use the paid pool only for a release-check a person dispatches. */
 const RELEASE_CHECK_JOBS = [
@@ -70,48 +67,6 @@ const RELEASE_CHECK_JOBS = [
 ];
 const RELEASE_GATE =
   "github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]'";
-
-/**
- * Every runner label a job can resolve to. Matrix values include `include`
- * entries; an expression yields its quoted runner literals. Anything that does
- * not resolve (`${{ vars.X }}`, `${{ inputs.X }}`, a computed matrix) is
- * returned raw, so it fails the free-runner check instead of passing unseen.
- */
-function labelsOf(job) {
-  const runsOn = job['runs-on'];
-  if (runsOn == null) return [];
-  const labels = [];
-  for (const value of [runsOn].flat().map(String)) {
-    const matrix = /^\$\{\{\s*matrix\.([a-zA-Z0-9_-]+)\s*\}\}$/.exec(value);
-    if (matrix) {
-      const key = matrix[1];
-      const m = job.strategy?.matrix;
-      const found =
-        m && typeof m === 'object'
-          ? [
-              ...[m[key] ?? []].flat(),
-              ...[m.include ?? []].flat().map(entry => entry?.[key]),
-              // A computed include can add any runner: fail closed.
-              ...(typeof m.include === 'string' ? [value] : []),
-            ]
-              .filter(item => item != null)
-              .map(String)
-          : [];
-      labels.push(...(found.length > 0 ? found : [value]));
-    } else if (value.includes('${{')) {
-      // The one expression shape the workflows use, `cond && 'a' || 'b'`,
-      // resolves to both labels; any other expression stays raw and fails.
-      const pair =
-        /^\$\{\{\s*([^|]+?)\s*&&\s*'([^']+)'\s*\|\|\s*'([^']+)'\s*\}\}$/.exec(
-          value,
-        );
-      labels.push(...(pair ? [pair[2], pair[3]] : [value]));
-    } else {
-      labels.push(value);
-    }
-  }
-  return labels;
-}
 
 describe('runner labels', () => {
   it('finds runner labels to check', () => {

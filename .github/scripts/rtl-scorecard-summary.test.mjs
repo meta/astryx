@@ -88,3 +88,77 @@ describe('RTL scorecard D1 exclusion disclosure', () => {
     expect(result.stdout).toContain('RTL-ready (D1 pass): —.');
   });
 });
+
+describe('RTL scorecard D5 physical-region disclosure', () => {
+  it('lists every declared physical region with its story and selector', () => {
+    const report = reportWith([]);
+    report.declaredD5PhysicalRegions = [
+      {
+        component: 'lab/charttheming-recharts',
+        storyId: 'lab-charttheming-recharts--theme-tokens',
+        physical: 'chart',
+        within: '[aria-label="Quarterly performance chart"]',
+      },
+    ];
+    const result = runSummary(report);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(
+      '### Declared D5 physical regions (human review required)',
+    );
+    expect(result.stdout).toContain(
+      '| lab/charttheming-recharts | lab-charttheming-recharts--theme-tokens | chart | [aria-label="Quarterly performance chart"] |',
+    );
+  });
+
+  it('says so when no physical region is declared', () => {
+    const result = runSummary(reportWith([]));
+    expect(result.stdout).toContain(
+      '_No declared D5 physical regions in this audit scope._',
+    );
+  });
+});
+
+describe('RTL scorecard retries after an ERROR', () => {
+  it('counts every retried story with its first reason and outcome, on one greppable line', () => {
+    const report = reportWith([]);
+    report.retries = {
+      count: 2,
+      stories: [
+        {
+          phase: 'D5+D6',
+          storyId: 'core-selector--searchable-with-sections',
+          firstError: 'TimeoutError: page.goto: Timeout 30000ms exceeded.',
+          outcome: 'recovered',
+        },
+        {
+          phase: 'D1',
+          storyId: 'core-menu--default',
+          firstError: 'Error: Target crashed',
+          outcome: 'error',
+          error: 'Error: Target crashed',
+        },
+      ],
+    };
+    const result = runSummary(report);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('### Retries after an ERROR (2)');
+    expect(result.stdout).toContain(
+      '| core-selector--searchable-with-sections | D5+D6 | TimeoutError: page.goto: Timeout 30000ms exceeded. | recovered |',
+    );
+    expect(result.stdout).toContain(
+      '| core-menu--default | D1 | Error: Target crashed | still ERROR: Error: Target crashed |',
+    );
+    expect(result.stdout).toContain(
+      'rtl-audit-retries: 2 [core-menu--default core-selector--searchable-with-sections]',
+    );
+  });
+
+  it('says none were needed when no story errored', () => {
+    const result = runSummary({
+      ...reportWith([]),
+      retries: {count: 0, stories: []},
+    });
+    expect(result.stdout).toContain('rtl-audit-retries: 0 []');
+  });
+});

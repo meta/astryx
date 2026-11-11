@@ -2,23 +2,31 @@
 
 /**
  * @file swizzle.copy leaf — copy a component's source into the consumer project
- * for customization, rewriting escaping relative imports to the OWNER package's
- * subpaths.
+ * for customization: what the OWNER package exports is imported from it, and
+ * every internal module the component needs is copied beside it.
  *
  * Side-effecting: writes files and returns a `swizzle.copy` receipt describing
- * what it did. Shared core discovery + component listing come from
- * api/swizzle/_adapter.mjs; everything here (owner resolution, the copy, import
- * rewriting, StyleX detection, maintainer feedback) is copy-specific. Errors
+ * what it did. Shared core discovery, component listing and the module graph
+ * (which modules the copy holds and how each import reads) come from
+ * api/swizzle/_adapter.mjs; owner resolution, where each file lands, reuse of
+ * existing helpers, StyleX detection and maintainer feedback are here. Errors
  * throw AstryxError (stable code + suggestions). All human prose /
  * package-manager prefixing lives in the CLI renderer.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {resolveComponentReplacement, resolveCore} from '../_adapter.mjs';
+import {
+  checkGhCli,
+  planCopy,
+  relativeSpecifierBetween,
+  renderFile,
+  resolveComponentReplacement,
+  resolveCore,
+} from '../_adapter.mjs';
 import {assertWithin, sanitizeName, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
-import {checkGhCli} from '../_github.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
+import {findPackageRoot} from '../../../foundation/fs/paths.mjs';
 import {
   CORE_PACKAGE,
   docStem,
@@ -32,59 +40,71 @@ import {AstryxError, writeFailed} from '../../error.mjs';
 /** Default issue tracker for maintainer feedback after swizzling. */
 const DEFAULT_ISSUES_URL = 'https://github.com/meta/astryx/issues/new';
 
+/** A private data attribute's owner module (`architecture:public-component-api` INV23). */
+const OWNER_MODULE = /^privateAttributes\/[^/]+\.stylex$/;
+/** A StyleX module, with or without its file extension. */
+const STYLEX_MODULE = /\.stylex(?:\.[cm]?[jt]sx?)?$/;
+/** @param {string} packageDir */
+function packageVersionOf(packageDir) {
+  try {
+    return String(JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8')).version ?? '0');
+  } catch {
+    return '0';
+  }
+}
+
 /**
- * Rewrite relative imports that point outside the component directory to use
- * the OWNER package's subpaths. Imports within the copied directory (./x) are
- * left untouched.
- *
- * e.g. with ownerPackage '@astryxdesign/core':
- *      '../theme/tokens.stylex' -> '@astryxdesign/core/theme/tokens.stylex'
- *      '../utils/mergeProps'     -> '@astryxdesign/core/utils'
- *      '../../locales/en.json'   -> '@astryxdesign/core/locales/en.json'
- *      import('../Tooltip/Tooltip') -> import('@astryxdesign/core/Tooltip')
- *
- * Most sibling dirs are barrels, so the top-dir collapse (`../utils/x` ->
- * `<pkg>/utils`) resolves. Two shapes must NOT be collapsed to the top dir:
- *   - Asset files (`.json`, `.css`): exported by full subpath (e.g.
- *     `./locales/*.json`, `./reset.css`), and collapsing a two-levels-up
- *     `../../locales/x.json` would emit the invalid `<pkg>/..`.
- *   - StyleX modules (`*.stylex`): the StyleX compiler needs the real module
- *     path so it can resolve the styles at compile time. The barrel re-export
- *     loses the module identity. Core exports every `.stylex` file by its
- *     deep subpath (e.g. `./utils/focusOutline.stylex`,
- *     `./theme/tokens.stylex`).
- *
- * @param {string} content
- * @param {string} [ownerPackage]
+ * Where a component's module graph starts: its folder's index, or else every
+ * source file at the top of the folder.
+ * @param {string} componentDir
+ * @returns {string[]}
  */
-export function rewriteImports(content, ownerPackage = CORE_PACKAGE) {
-  /** @param {string} importPath */
-  const mapTarget = importPath => {
-    // Strip ALL leading `../` so a two-levels-up path never yields `<pkg>/..`.
-    const rest = importPath.replace(/^(?:\.\.\/)+/, '');
-    const parts = rest.split('/');
-    const last = parts[parts.length - 1];
-    // Asset files are resolved by exact export / wildcard, never a barrel.
-    if (/\.(?:json|css)$/.test(last)) {
-      return `${ownerPackage}/${rest}`;
-    }
-    // StyleX modules need the deep path so the compiler can resolve them.
-    if (/\.stylex(?:\.[cm]?[jt]sx?)?$/.test(last)) {
-      return `${ownerPackage}/${rest}`;
-    }
-    return `${ownerPackage}/${parts[0]}`;
-  };
-  return content
-    .replace(
-      /(from\s+['"])(\.\.\/[^'"]+)(['"])/g,
-      (_m, prefix, importPath, suffix) =>
-        `${prefix}${mapTarget(importPath)}${suffix}`,
-    )
-    .replace(
-      /(import\(\s*['"])(\.\.\/[^'"]+)(['"])/g,
-      (_m, prefix, importPath, suffix) =>
-        `${prefix}${mapTarget(importPath)}${suffix}`,
-    );
+function entryFilesOf(componentDir) {
+  for (const name of ['index.ts', 'index.tsx', 'index.mjs', 'index.js']) {
+    const file = path.join(componentDir, name);
+    if (fs.existsSync(file)) return [file];
+  }
+  return fs
+    .readdirSync(componentDir)
+    .filter(f => /\.[cm]?[jt]sx?$/.test(f) && !/\.(?:test|spec|stories|doc)\./.test(f) && !/\.d\.[cm]?ts$/.test(f))
+    .map(f => path.join(componentDir, f))
+    .filter(f => fs.statSync(f).isFile());
+}
+
+/**
+ * A module path relative to the source root, without its extension.
+ * @param {string} srcRoot
+ * @param {string} file
+ */
+function toModulePath(srcRoot, file) {
+  return toPosix(path.relative(srcRoot, file)).replace(/\.[cm]?[jt]sx?$/, '');
+}
+
+/** @param {string} file */
+function toPosix(file) {
+  return file.split(path.sep).join('/');
+}
+
+/**
+ * @param {string} target
+ * @param {string} root
+ */
+function isWithin(target, root) {
+  const rel = path.relative(root, target);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+/**
+ * A helper's file name with the owner version before its extension:
+ * `layerStack.ts` -> `layerStack.v0.7.9.ts`, or `layerStack.v0.7.9-2.ts`.
+ * @param {string} dest
+ * @param {string} version
+ * @param {number} n
+ */
+function versionedPath(dest, version, n) {
+  const ext = /(\.stylex)?\.[cm]?[jt]sx?$/.exec(dest)?.[0] ?? path.extname(dest);
+  const stem = dest.slice(0, dest.length - ext.length);
+  return `${stem}.v${version}${n > 1 ? `-${n}` : ''}${ext}`;
 }
 
 /**
@@ -183,16 +203,10 @@ function confineWrite(target, cwd, options) {
   }
 }
 
-/** @param {string} file */
-function isExcludedFromCopy(file) {
-  return (
-    file.includes('.test.') || file.includes('.doc.') || file === 'README.md'
-  );
-}
-
 /**
  * Copy one component's source into the consumer project for customization,
- * rewriting escaping relative imports to the owner package's subpaths.
+ * with the internal modules it needs and its imports of the owner package's
+ * public paths.
  *
  * @param {string} component bare or XDS-prefixed component name
  * @param {{cwd?: string, output?: string, package?: string, overwrite?: boolean}} [options]
@@ -299,100 +313,302 @@ export async function swizzleCopy(component, options = {}) {
   const outputBase = confineWrite(output, cwd, {label: 'output directory'});
   const outputDir = path.join(outputBase, dirName);
 
-  // Pre-flight path and overwrite checks before any mkdir/writeFile.
-  const sourceFiles = fs.readdirSync(componentDir).filter(file => {
-    if (isExcludedFromCopy(file)) return false;
-    return fs.statSync(path.join(componentDir, file)).isFile();
+  // The receipt's feedback first: a swizzle that fails must fail before it
+  // writes anything.
+  const feedback = buildFeedback(dirName, owner.issuesUrl);
+
+  // The copy follows the component's module graph through the whole source
+  // root: `src/` when the package has one around the component, else the
+  // package itself.
+  const packageDir = findPackageRoot(componentDir) ?? componentDir;
+  const packageSrc = path.join(packageDir, 'src');
+  const inPackageSrc = componentDir.startsWith(packageSrc + path.sep);
+  const graphRoot = inPackageSrc ? packageSrc : packageDir;
+  // Carried modules keep their layout relative to this folder.
+  const srcRoot = inPackageSrc ? packageSrc : path.dirname(componentDir);
+  const plan = planCopy({
+    packageDir,
+    srcRoot: graphRoot,
+    componentDir,
+    ownerPackage: owner.ownerPackage,
+    entries: entryFilesOf(componentDir),
   });
-  for (const file of sourceFiles) {
-    confineWrite(path.join(outputDir, file), cwd, {
+  const ownerVersion = packageVersionOf(packageDir);
+
+  // Carried modules keep the package's layout around the component folder.
+  const depth = path.relative(srcRoot, componentDir).split(path.sep).length;
+  const shiftedRoot = path.resolve(outputDir, ...Array(depth).fill('..'));
+  const layoutRoot = isWithin(shiftedRoot, outputBase) ? shiftedRoot : outputBase;
+  /** @param {string} file */
+  const isComponentFile = file => file.startsWith(componentDir + path.sep);
+  // A module above that folder, such as `lib/` beside an integration's
+  // `components/`, goes under the output folder by its path in the package.
+  /** @param {string} file */
+  const layoutDestOf = file => {
+    if (isComponentFile(file)) {
+      return path.join(outputDir, path.relative(componentDir, file));
+    }
+    if (file.startsWith(srcRoot + path.sep)) {
+      return path.join(layoutRoot, path.relative(srcRoot, file));
+    }
+    return null;
+  };
+  const allFiles = [...plan.files.keys()];
+  // Such a module takes a folder named after the package when its own path
+  // is already a destination, so two modules never share one file.
+  const takenDests = new Set(
+    allFiles.map(layoutDestOf).filter(dest => dest != null),
+  );
+  /** @type {Map<string, string>} */
+  const rootDests = new Map();
+  // A module from another Astryx package goes under a folder named after that
+  // package, at its path in that package's source.
+  /** @param {string} file */
+  const otherPackageOf = file => {
+    for (const [root, name] of plan.otherPackages) {
+      if (file.startsWith(root + path.sep)) return {root, folder: name.split('/').pop() ?? name};
+    }
+    return null;
+  };
+  /** @param {string} file the version of the package a helper comes from */
+  const versionOf = file => {
+    const other = otherPackageOf(file);
+    return other
+      ? packageVersionOf(findPackageRoot(other.root) ?? other.root)
+      : ownerVersion;
+  };
+  for (const file of [...allFiles].sort()) {
+    if (layoutDestOf(file) != null) continue;
+    const other = otherPackageOf(file);
+    const base = other ? other.folder : path.basename(packageDir);
+    const packagePath = path.relative(other ? other.root : graphRoot, file);
+    let dest = other
+      ? path.join(outputBase, base, packagePath)
+      : path.join(outputBase, packagePath);
+    for (let n = 1; takenDests.has(dest); n++) {
+      const folder = n === 1 && !other ? base : `${base}-${n}`;
+      dest = path.join(outputBase, folder, packagePath);
+    }
+    takenDests.add(dest);
+    rootDests.set(file, dest);
+  }
+  /** @param {string} file */
+  const baseDestOf = file =>
+    layoutDestOf(file) ?? /** @type {string} */ (rootDests.get(file));
+
+  const componentFiles = allFiles.filter(isComponentFile);
+  const helpers = allFiles.filter(f => !isComponentFile(f));
+  // A private attribute owner module and the unexported style modules it
+  // imports travel whole and are replaced only with --overwrite.
+  const ownerGroup = new Set();
+  /** @param {string} file the source root a carried module sits under */
+  const rootOf = file => otherPackageOf(file)?.root ?? srcRoot;
+  const ownerQueue = helpers.filter(f =>
+    OWNER_MODULE.test(toModulePath(rootOf(f), f)),
+  );
+  while (ownerQueue.length > 0) {
+    const file = /** @type {string} */ (ownerQueue.shift());
+    if (ownerGroup.has(file)) continue;
+    ownerGroup.add(file);
+    for (const dep of plan.dependsOn.get(file) ?? []) {
+      if (!isComponentFile(dep) && STYLEX_MODULE.test(toModulePath(rootOf(dep), dep))) {
+        ownerQueue.push(dep);
+      }
+    }
+  }
+
+  /** @type {Map<string, string>} helper -> the file it is written to instead */
+  const redirected = new Map();
+  /** @param {string} file */
+  const destOf = file => redirected.get(file) ?? baseDestOf(file);
+  /** @param {string} file */
+  const render = file =>
+    renderFile(/** @type {any} */ (plan.files.get(file)), choice =>
+      typeof choice === 'string'
+        ? choice
+        : relativeSpecifierBetween(destOf(choice.from), destOf(choice.to)),
+    );
+  /** @param {string} dest */
+  const readExisting = dest => {
+    if (!fs.existsSync(dest)) return null;
+    try {
+      return fs.readFileSync(dest, 'utf-8');
+    } catch {
+      return '';
+    }
+  };
+  // A helper an earlier swizzle wrote is reused when it is the same. A
+  // different file is never overwritten: this copy moves its own helper to
+  // the next free version-suffixed name. A move changes the import in every
+  // helper that imports it, so the check repeats until nothing moves.
+  /** @type {Map<string, number>} helper -> how many names it tried */
+  const attempts = new Map();
+  for (let moved = true; moved; ) {
+    moved = false;
+    for (const file of helpers) {
+      if (ownerGroup.has(file)) continue;
+      const existing = readExisting(destOf(file));
+      if (existing == null || existing === render(file)) continue;
+      const attempt = (attempts.get(file) ?? 0) + 1;
+      attempts.set(file, attempt);
+      redirected.set(
+        file,
+        versionedPath(baseDestOf(file), versionOf(file), attempt),
+      );
+      moved = true;
+    }
+  }
+
+  // The component's own files come first, then the helpers it carries.
+  const outputs = [...componentFiles, ...helpers].map(file => {
+    const dest = confineWrite(destOf(file), cwd, {
       allowAbsolute: true,
       label: 'output file',
     });
-  }
-  const existingFiles = sourceFiles.filter(f =>
-    fs.existsSync(path.join(outputDir, f)),
-  );
-  if (existingFiles.length > 0 && !overwrite) {
+    const content = render(file);
+    const existing = readExisting(dest);
+    return {
+      file,
+      dest,
+      content,
+      component: isComponentFile(file),
+      owner: ownerGroup.has(file),
+      exists: existing != null,
+      unchanged: existing === content,
+    };
+  });
+  const existingFiles = outputs.filter(o => o.component && o.exists);
+  const changedShared = outputs.filter(o => o.owner && o.exists && !o.unchanged);
+  if ((existingFiles.length > 0 || changedShared.length > 0) && !overwrite) {
     const relOutputForMsg = path.relative(cwd, outputDir) || '.';
+    const sharedNote =
+      changedShared.length > 0
+        ? ` and ${changedShared.length} changed shared module(s) (${changedShared
+            .map(s => path.relative(cwd, s.dest))
+            .join(', ')})`
+        : '';
     throw new AstryxError(
-      `Refusing to overwrite ${existingFiles.length} existing file(s) in ${relOutputForMsg}/. ` +
+      `Refusing to overwrite ${existingFiles.length} existing file(s) in ${relOutputForMsg}/${sharedNote}. ` +
         `Re-run with --overwrite (or -f) to replace them.`,
       [],
       ERROR_CODES.ERR_FILE_EXISTS,
     );
   }
 
-  const outputDirExisted = fs.existsSync(outputDir);
-  try {
-    fs.mkdirSync(outputDir, {recursive: true});
-  } catch (err) {
-    throw writeFailed(outputDir, cwd, err);
-  }
+  // The marker tells @astryxdesign/build that the output folder holds Astryx
+  // source, so the copy compiles below the theme as the package does.
+  const markerDest = confineWrite(path.join(outputBase, SWIZZLE_MARKER), cwd, {
+    allowAbsolute: true,
+    label: 'output file',
+  });
+  const markerExisting = readExisting(markerDest);
+  const markerContent = swizzleMarkerContent(
+    markerExisting,
+    owner.ownerPackage,
+    ownerVersion,
+  );
+  // Every module under the marker compiles as Astryx source, so swizzle marks
+  // only a folder it owns: one the copy creates, an empty one, or one it
+  // marked before. Any other folder is reported with what it holds.
+  const foundInOutputBase =
+    markerExisting == null &&
+    fs.existsSync(outputBase) &&
+    fs.statSync(outputBase).isDirectory()
+      ? fs.readdirSync(outputBase).sort()
+      : [];
+  const marksOutputBase = foundInOutputBase.length === 0;
+  const writes = marksOutputBase
+    ? [
+        ...outputs,
+        {
+          dest: markerDest,
+          content: markerContent,
+          marker: true,
+          unchanged: markerExisting === markerContent,
+        },
+      ]
+    : outputs;
 
-  const files = fs.readdirSync(componentDir);
-  let copied = 0;
-  let usesStyleX = false;
-  // A copy that fails part-way undoes what it already wrote, so the report is
-  // true and a retry does not trip over half a component. Each entry keeps
-  // the bytes the file had before this run (null when the copy created it).
+  const outputDirExisted = fs.existsSync(outputDir);
+  /** @type {string[]} folders this run created, outermost first */
+  const createdDirs = [];
   /** @type {Array<{dest: string, original: Buffer|null}>} */
   const written = [];
-  for (const file of files) {
-    if (isExcludedFromCopy(file)) continue;
-    const srcPath = path.join(componentDir, file);
-    if (!fs.statSync(srcPath).isFile()) continue;
-    let content = fs.readFileSync(srcPath, 'utf-8');
-    if (file.endsWith('.ts') || file.endsWith('.tsx')) {
-      content = rewriteImports(content, owner.ownerPackage);
+  let copied = 0;
+  for (const output of writes) {
+    const counts = !('marker' in output);
+    // An identical file is already in place: it is part of this copy, unwritten.
+    if (output.unchanged) {
+      if (counts) copied++;
+      continue;
     }
-    if (
-      (file.endsWith('.ts') || file.endsWith('.tsx')) &&
-      content.includes('@stylexjs/stylex')
-    ) {
-      usesStyleX = true;
-    }
-    const dest = path.join(outputDir, file);
     try {
-      // The snapshot read is guarded too: a destination that cannot be read
-      // back (no permission, or a directory with this name) must still undo
-      // the earlier writes and report ERR_WRITE_FAILED.
-      const original = fs.existsSync(dest) ? fs.readFileSync(dest) : null;
-      written.push({dest, original});
-      fs.writeFileSync(dest, content);
+      const original = fs.existsSync(output.dest) ? fs.readFileSync(output.dest) : null;
+      const firstCreated = fs.mkdirSync(path.dirname(output.dest), {recursive: true});
+      if (firstCreated != null) createdDirs.push(firstCreated);
+      written.push({dest: output.dest, original});
+      fs.writeFileSync(output.dest, output.content);
+      if (counts) copied++;
     } catch (err) {
       const unrestored = undoCopy(written);
-      if (!outputDirExisted) {
-        try {
-          fs.rmdirSync(outputDir);
-        } catch {
-          // Not empty (something could not be undone), or already gone.
-        }
+      for (const dir of [...createdDirs].reverse()) {
+        fs.rmSync(dir, {recursive: true, force: true});
       }
-      throw writeFailed(dest, cwd, err, unrestored);
+      if (!outputDirExisted) {
+        fs.rmSync(outputDir, {recursive: true, force: true});
+      }
+      throw writeFailed(output.dest, cwd, err, unrestored);
     }
-    copied++;
   }
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, {recursive: true});
 
   const relOutput = path.relative(cwd, outputDir);
-  const copiedFiles = files.filter(
-    f =>
-      !isExcludedFromCopy(f) &&
-      fs.statSync(path.join(componentDir, f)).isFile(),
-  );
-  const feedback = buildFeedback(dirName, owner.issuesUrl);
-
   /** @type {import('../swizzle.type.mjs').SwizzleCopyResponse['data']} */
   const data = {
     component: dirName,
     package: owner.package,
     outputDir: relOutput,
     filesCopied: copied,
-    files: copiedFiles.map(f => f),
-    usesStyleX,
+    files: outputs.map(o => toPosix(path.relative(outputDir, o.dest))),
+    usesStyleX: outputs.some(o => o.content.includes('@stylexjs/stylex')),
+    dependencies: plan.dependencies,
   };
+  data.marker = marksOutputBase
+    ? {path: toPosix(path.relative(cwd, markerDest)), written: true}
+    : {
+        path: toPosix(path.relative(cwd, markerDest)),
+        written: false,
+        found: foundInOutputBase.slice(0, 5),
+      };
   if (feedback) data.feedback = feedback;
   return {type: 'swizzle.copy', package: data.package, data};
+}
+
+/** The file that marks a swizzle output folder as Astryx source. */
+const SWIZZLE_MARKER = 'astryx-swizzle.json';
+
+/**
+ * The marker's content after a copy from `ownerPackage`: the packages the
+ * folder's copies came from, each with its version. Unreadable content is
+ * replaced.
+ * @param {string|null} existing
+ * @param {string} ownerPackage
+ * @param {string} version
+ * @returns {string}
+ */
+function swizzleMarkerContent(existing, ownerPackage, version) {
+  /** @type {Record<string, string>} */
+  let packages = {};
+  try {
+    const parsed = existing == null ? null : JSON.parse(existing);
+    if (parsed?.packages && typeof parsed.packages === 'object') {
+      packages = {...parsed.packages};
+    }
+  } catch {
+    // Unreadable content is rewritten below.
+  }
+  packages[ownerPackage] = version;
+  return `${JSON.stringify({packages}, null, 2)}\n`;
 }
 
 /**

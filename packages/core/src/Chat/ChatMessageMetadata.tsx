@@ -26,7 +26,13 @@ import type {IconName} from '../Icon/globalIconRegistry';
 import {isRenderable, mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatMessageMetadata.generated';
+
+registerEnglishFallback(english);
 
 export type ChatMessageStatus =
   'sending' | 'sent' | 'delivered' | 'read' | 'error';
@@ -118,7 +124,7 @@ export function ChatMessageMetadata({
   style,
   ...rest
 }: ChatMessageMetadataProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const msgContext = useChatMessageContext();
   const sender = msgContext?.sender ?? 'assistant';
 

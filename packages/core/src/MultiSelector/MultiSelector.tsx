@@ -31,6 +31,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import type {IconName} from '../Icon';
@@ -39,9 +40,9 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputWrapperStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {useKeepLayerOpenProps} from '../Layer/useLayer';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Divider} from '../Divider';
 import {Spinner} from '../Spinner';
@@ -76,11 +77,10 @@ import {
 import {useMultiCombobox} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {devWarn, warnOnce} from '../utils/devWarning';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
@@ -105,11 +105,22 @@ import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
+registerEnglishFallback(english);
 
 // Sentinel value for the select-all item in keyboard navigation
 const SELECT_ALL_VALUE = '__xds_select_all__';
@@ -275,21 +286,6 @@ const styles = stylex.create({
       '[data-astryx-press="on"]': 'scale(0.98)',
     },
   },
-  // A disabled input-variant trigger keeps its tab stop (`spec:AST-085` FR1),
-  // and the shared disabled wrapper style drops the field focus ring, so the
-  // trigger shows keyboard focus here instead (FR6). It keys on the trigger
-  // itself, a direct child, so a focused status button keeps its own outline.
-  triggerDisabledFocus: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(> [aria-disabled="true"]:focus-visible)':
-        colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   triggerGhostDisabled: {
     backgroundImage: 'none',
     transform: {
@@ -328,10 +324,31 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
   },
 
+  // A panel with a search field, capped as a whole.
+  searchPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    // No taller than its layer's block-size cap, which folds in the software
+    // keyboard's. The search field's row keeps its height, and the list takes
+    // what is left.
+    maxHeight: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+  },
+
   // Dropdown container
   dropdown: {
     boxSizing: 'border-box',
-    maxHeight: '300px',
+    // In a search panel, the list shrinks below its content to fit the cap.
+    minHeight: 0,
+    // 300 px, and no taller than its layer's block-size cap, which folds in
+    // the software keyboard's: the list ends above the keyboard with the
+    // layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     padding: spacingVars['--spacing-1'],
   },
@@ -807,7 +824,7 @@ export interface MultiSelectorProps<
    * - 'tooltip': message is exposed from the on-field status icon
    * @default 'attached' for input selectors; 'detached' for secondary and ghost selectors
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -1159,7 +1176,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         controlClassName != null ||
         controlStyle != null),
   );
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const pressable = usePressFeedback();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -1192,7 +1209,18 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // Read by the live region above so it speaks what this element renders.
   const emptyStateRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
-  const triggerButtonRef = useMergedRefs<HTMLElement>(triggerRef, ref);
+
+  // A hover moves the highlight too, but the focus ring follows the shared
+  // interaction modality (architecture:interaction-modality INV1): it is read
+  // whenever a key or the pointer moves the highlight, so an action cell
+  // highlighted after pointer input keeps the hover treatment and no ring.
+  const triggerModality = useInteractionModalityTracking();
+  const readModality = triggerModality.readModality;
+  const triggerButtonRef = useMergedRefs<HTMLElement>(
+    triggerRef,
+    triggerModality.ref,
+    ref,
+  );
   const searchRef = useRef<HTMLInputElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
 
@@ -1341,7 +1369,10 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   );
 
   const sortedItems = useMemo(() => {
-    const selectedSet = selectedAtOpen ?? new Set<string>();
+    // Closed, the list keeps the order it opens in, so an index picked
+    // before it opens (the opening highlight, a typed match) names the same
+    // option after the selected options move to the top.
+    const selectedSet = selectedAtOpen ?? new Set(optimisticValue);
     const result: MultiSelectorOptionData[] = [];
     let pendingFlat: MultiSelectorOptionData[] = [];
 
@@ -1392,6 +1423,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     searchQuery,
     options,
     selectedAtOpen,
+    optimisticValue,
     hasSelectAll,
     selectAllLabel,
     createQuery,
@@ -1448,6 +1480,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    triggerModality,
     isFocusReturnAlways: hasExternalTrigger,
     popoverOptions: {
       hasLightDismiss: true,
@@ -1820,6 +1853,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onTriggerClick,
     onKeyDown: onComboboxKeyDown,
     onItemMouseEnter: onComboboxItemMouseEnter,
+    setHighlightedIndex,
   } = useMultiCombobox({
     selectableItems: sortedItems,
     isDisabled: isDisabled || isEffectivelyReadOnly,
@@ -1850,28 +1884,22 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   });
 
-  // A hover moves the highlight too, but the focus ring follows the shared
-  // interaction modality (architecture:interaction-modality INV1): it is read
-  // whenever a key or the pointer moves the highlight, so an action cell
-  // highlighted after pointer input keeps the hover treatment and no ring.
-  useInteractionModalityTracking();
-  const [isKeyboardHighlight, setIsKeyboardHighlight] = useState(
-    () => getInteractionModality() === 'keyboard',
-  );
-  const onKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLElement>) => {
-      onComboboxKeyDown(event);
-      setIsKeyboardHighlight(getInteractionModality() === 'keyboard');
-    },
-    [onComboboxKeyDown],
-  );
-  const onItemMouseEnter = useCallback(
-    (...args: Parameters<typeof onComboboxItemMouseEnter>) => {
-      onComboboxItemMouseEnter(...args);
-      setIsKeyboardHighlight(getInteractionModality() === 'keyboard');
-    },
-    [onComboboxItemMouseEnter],
-  );
+  // A new query is a new list: the old highlight's index would name another
+  // row, or one past the end, so it is cleared. With no row highlighted, Left
+  // and Right stay the search field's caret keys. Adjusted during render
+  // rather than in an effect.
+  const [highlightedQuery, setHighlightedQuery] = useState(searchQuery);
+  if (highlightedQuery !== searchQuery) {
+    setHighlightedQuery(searchQuery);
+    setHighlightedIndex(-1);
+  }
+
+  const {isKeyboardHighlight, onKeyDown, onItemMouseEnter} =
+    useKeyboardHighlight(
+      readModality,
+      onComboboxKeyDown,
+      onComboboxItemMouseEnter,
+    );
 
   // The trigger button owns its click so a consumer `onClick`, which lands on
   // the button, composes after the built-in toggle. A press elsewhere in the
@@ -2408,7 +2436,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     surface.activePresentation === 'bottom-sheet' || hasExternalTrigger;
 
   const panelContent = hasSearch ? (
-    <div>
+    <div {...stylex.props(styles.searchPanel)}>
       {renderSearch()}
       <Divider />
       <div {...stylex.props(styles.dropdown)}>
@@ -2473,13 +2501,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // A disabled trigger stays focusable but, like a natively disabled button,
   // runs no caller event handler other than focus and blur, and a press on it
   // reaches no handler at all (`spec:AST-085` FR2).
-  const callerProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const callerProps = withholdCallerHandlers(rest, isDisabled);
   const triggerSharedProps: React.HTMLAttributes<HTMLElement> = {
     ...callerProps,
     id: triggerId,
@@ -2528,20 +2550,24 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       ...(ariaLabelledByProp != null
         ? {'aria-labelledby': ariaLabelledByProp}
         : null),
-      ref: mergeRefs<HTMLElement>(el => {
-        popover.triggerRef(el);
-        triggerRef.current = el;
-        // A control that takes no focus has nowhere for focus to return to
-        // when the panel closes, and focus would land on the body — the
-        // person loses their place in the page. Making it programmatically
-        // focusable repairs the return without putting it in the tab order,
-        // which is the caller's decision to make. It does not make the
-        // control openable from the keyboard: only a real control does
-        // that, which is what the warning below is for.
-        if (el != null && !el.matches(FOCUSABLE_SELECTOR)) {
-          el.tabIndex = -1;
-        }
-      }, ref),
+      ref: mergeRefs<HTMLElement>(
+        el => {
+          popover.triggerRef(el);
+          triggerRef.current = el;
+          // A control that takes no focus has nowhere for focus to return to
+          // when the panel closes, and focus would land on the body — the
+          // person loses their place in the page. Making it programmatically
+          // focusable repairs the return without putting it in the tab order,
+          // which is the caller's decision to make. It does not make the
+          // control openable from the keyboard: only a real control does
+          // that, which is what the warning below is for.
+          if (el != null && !el.matches(FOCUSABLE_SELECTOR)) {
+            el.tabIndex = -1;
+          }
+        },
+        triggerModality.ref,
+        ref,
+      ),
       id: triggerId,
       onClick: isEffectivelyReadOnly
         ? onClick
@@ -2623,7 +2649,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             variant === 'input' &&
               isDisabled &&
               !surface.isTriggerFocusRingSuppressed &&
-              styles.triggerDisabledFocus,
+              inputDisabledFocusStyles.ring,
             isEffectivelyReadOnly && styles.triggerReadOnly,
             variant !== 'input' && isDisabled && styles.triggerGhostDisabled,
             variant !== 'input' &&

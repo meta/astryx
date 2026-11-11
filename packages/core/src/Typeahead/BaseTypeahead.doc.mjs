@@ -50,6 +50,18 @@ const anatomy = [
       'Caller content supplied through renderItem or item.element inside the stable result row.',
   },
   {
+    name: 'Menu content',
+    required: false,
+    description:
+      'Caller content from menu.render: information around the result list in the listbox role, or the content of the dialog role.',
+  },
+  {
+    name: 'Menu dialog',
+    required: false,
+    description:
+      'The named dialog a dialog-role menu shows in the anchored layer; it takes focus and returns it on close.',
+  },
+  {
     name: 'Selected result state',
     required: false,
     description:
@@ -107,7 +119,8 @@ export const docs = {
     {
       name: 'searchSource',
       type: 'SearchSource<T>',
-      description: 'Data source providing search and bootstrap methods.',
+      description:
+        'Data source providing search and bootstrap methods. `search(query, context)` may call `context.update(items)` to show matches it already has before it returns; the value it returns is the final list, and every list after the first for a query keeps the shown rows first and adds new rows after them.',
       required: true,
     },
     {
@@ -188,7 +201,7 @@ export const docs = {
       name: 'debounceMs',
       type: 'number',
       description:
-        'Debounce delay in ms before triggering search. Set to 0 for synchronous sources.',
+        'Debounce delay in ms before triggering search. Set to 0 for synchronous sources, and for a source that shows local matches through `context.update` and delays its own server request.',
       default: '150',
     },
     {
@@ -237,6 +250,18 @@ export const docs = {
       description: 'Callback when the dropdown opens or closes.',
     },
     {
+      name: 'menu',
+      type: 'BaseTypeaheadMenu',
+      description:
+        "What the menu shows. role 'listbox' (default) is the result list; its optional render({listbox, query, isBusy, isEmptySearch, close}) places information such as a header or a hint around it, and anything a person acts on stays a result so the arrow keys reach it. role 'dialog' shows render({query, close}) in a dialog named by label that takes focus; Escape, an outside press or close() returns focus to where it was when the menu opened. Astryx owns the layer either way. Switching from listbox to dialog keeps the menu open: call handleRef.open() from onChange.",
+    },
+    {
+      name: 'handleRef',
+      type: 'React.Ref<BaseTypeaheadHandle>',
+      description:
+        'Imperative handle: open() opens the menu (a dialog at once; a listbox shows or loads its results) and close() closes it. There is no controlled open state; onOpenChange reports changes.',
+    },
+    {
       name: 'inputId',
       type: 'string',
       description:
@@ -267,7 +292,8 @@ export const docsZh = {
     {
       name: 'searchSource',
       type: 'SearchSource<T>',
-      description: '提供搜索和引导方法的数据源。',
+      description:
+        '提供搜索和引导方法的数据源。`search(query, context)` 可调用 `context.update(items)` 先显示已有的匹配项；返回值是最终列表，同一查询在第一个列表之后的每个列表都保留已显示的行，并只在其后追加新行。',
       required: true,
     },
     {
@@ -346,7 +372,8 @@ export const docsZh = {
     {
       name: 'debounceMs',
       type: 'number',
-      description: '触发搜索前的防抖延迟（毫秒）。同步数据源设置为 0。',
+      description:
+        '触发搜索前的防抖延迟（毫秒）。同步数据源，以及通过 `context.update` 显示本地匹配项并自行延迟服务器请求的数据源，设置为 0。',
       default: '150',
     },
     {
@@ -391,6 +418,18 @@ export const docsZh = {
       name: 'onOpenChange',
       type: '(isOpen: boolean) => void',
       description: '下拉列表打开或关闭时的回调。',
+    },
+    {
+      name: 'menu',
+      type: 'BaseTypeaheadMenu',
+      description:
+        "菜单显示的内容。role 为 'listbox'（默认）时显示结果列表；可选的 render({listbox, query, isBusy, isEmptySearch, close}) 可在列表周围放置标题或提示等信息，用户可操作的内容仍需作为结果放在列表中，以便方向键可达。role 为 'dialog' 时在以 label 命名的对话框中显示 render({query, close})，并将焦点移入；按 Escape、点击外部或调用 close() 后焦点回到菜单打开时的位置。两种情况下图层都由 Astryx 管理。从 listbox 切换到 dialog 时菜单保持打开：在 onChange 中调用 handleRef.open()。",
+    },
+    {
+      name: 'handleRef',
+      type: 'React.Ref<BaseTypeaheadHandle>',
+      description:
+        '命令式句柄：open() 打开菜单（dialog 立即打开；listbox 显示或加载结果），close() 关闭菜单。没有受控的打开状态；onOpenChange 报告变化。',
     },
     {
       name: 'inputId',
@@ -480,6 +519,9 @@ export const docsDense = {
       'Keydown before internal nav. preventDefault() skips internal handling.',
     onChangeQuery: 'Fired on query text change.',
     onOpenChange: 'Fired on dropdown open/close.',
+    menu: "Menu content: {role:'listbox', render?({listbox,query,isBusy,isEmptySearch,close})} (info around the list; actions stay results) | {role:'dialog', label, render({query,close})} (takes focus; close returns focus to opener, else input). Astryx owns the layer. open() from onChange keeps it open across a role switch.",
+    handleRef:
+      'Handle: open(), close(). No controlled isOpen; onOpenChange reports.',
     inputId:
       'Legacy id alias; defined alias wins, otherwise native id passes through.',
     ariaDescribedBy:

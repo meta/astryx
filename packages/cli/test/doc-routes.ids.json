@@ -352,6 +352,7 @@
     "BannerStatuses",
     "BannerWithActionButton",
     "BaseTypeaheadCustomSearch",
+    "BaseTypeaheadMenu",
     "BaseTypeaheadShowcase",
     "BlockquoteShowcase",
     "BlockquoteTestimonials",

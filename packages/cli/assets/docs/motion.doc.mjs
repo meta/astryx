@@ -35,7 +35,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Nine duration tokens in fast, medium, and slow bands.',
+          text: 'Nine duration tokens in fast, medium, and slow bands, and `--duration-exit`, the standard dismissal duration, which follows `--duration-fast`.',
         },
         {
           type: 'token-ref',
@@ -109,7 +109,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Some users experience motion sensitivity; animation that feels polished to one person can cause discomfort for another. Astryx components already switch to instant changes when the OS reduced-motion setting is on. Do the same in your own animations with `@media (prefers-reduced-motion: reduce)`.',
+          text: 'Some users experience motion sensitivity; animation that feels polished to one person can cause discomfort for another. When the OS reduced-motion setting is on, Astryx components change at once under a mouse or trackpad, and under a finger they cross-fade instead of moving: opacity only, in 200 ms or less. A value that changes in place, such as a progress fill, takes its new value at once under any pointer. Do the same in your own animations with `@media (prefers-reduced-motion: reduce)`, adding `(pointer: coarse)` for the touch cross-fade.',
         },
       ],
     },
@@ -150,7 +150,7 @@ const styles = stylex.create({
       content: [
         {
           type: 'prose',
-          text: "A theme sets how motion feels with two knobs in `defineTheme`'s `motion`. They drive the CSS motion tokens; the springs of touch motion don't read them yet. Every theme follows each person's Reduce Motion setting; no theme loosens it.",
+          text: "A theme sets how motion feels with two knobs in `defineTheme`'s `motion`. They drive the CSS motion tokens, and `tempo` also times the springs of touch motion; those springs don't follow `character` yet. Every theme follows each person's Reduce Motion setting; no theme loosens it.",
         },
         {
           type: 'list',

@@ -11,6 +11,7 @@
 
 import {describe, it, expect} from 'vitest';
 import {
+  createISOTimeString,
   parseISOTime,
   formatISOTime,
   formatDisplayTime12h,
@@ -19,6 +20,7 @@ import {
   compareTime,
   isTimeInRange,
   adjustTime,
+  clampTime,
   type ISOTimeString,
 } from './timeParser';
 
@@ -51,6 +53,46 @@ describe('parseISOTime', () => {
     expect(parseISOTime('14:60')).toBeNull();
     expect(parseISOTime('14:30:60')).toBeNull();
     expect(parseISOTime('abc')).toBeNull();
+  });
+});
+
+describe('createISOTimeString', () => {
+  it('normalizes a valid time', () => {
+    expect(createISOTimeString('14:30')).toBe('14:30');
+    expect(createISOTimeString('9:05')).toBe('09:05');
+    expect(createISOTimeString('14:30:45')).toBe('14:30:45');
+  });
+
+  it('accepts what main read as the right time', () => {
+    expect(createISOTimeString(' 14:30 ')).toBe('14:30');
+    expect(createISOTimeString('14:30:15.250')).toBe('14:30:15');
+  });
+
+  it('rejects a 12-hour time instead of reading it 12 hours off', () => {
+    expect(createISOTimeString('2:30 PM')).toBeNull();
+    expect(createISOTimeString('2:30pm')).toBeNull();
+  });
+
+  it('rejects a field with anything but digits', () => {
+    expect(createISOTimeString('14:30abc')).toBeNull();
+    expect(createISOTimeString('14.9:30')).toBeNull();
+    expect(createISOTimeString('1e1:30')).toBeNull();
+    expect(createISOTimeString('14:30:00Z')).toBeNull();
+    expect(createISOTimeString('14:30.5')).toBeNull();
+  });
+
+  it('rejects a field with more than two digits', () => {
+    expect(createISOTimeString('014:30')).toBeNull();
+  });
+
+  it('answers null for a value that is not a string', () => {
+    expect(createISOTimeString(undefined as unknown as string)).toBeNull();
+    expect(createISOTimeString(null as unknown as string)).toBeNull();
+  });
+
+  it('rejects an out-of-range time', () => {
+    expect(createISOTimeString('24:00')).toBeNull();
+    expect(createISOTimeString('14:60')).toBeNull();
   });
 });
 
@@ -291,5 +333,26 @@ describe('adjustTime', () => {
   it('wraps around midnight', () => {
     expect(adjustTime('23:30' as ISOTimeString, 60)).toBe('00:30');
     expect(adjustTime('00:30' as ISOTimeString, -60)).toBe('23:30');
+  });
+});
+
+describe('clampTime', () => {
+  const t = (value: string) => value as ISOTimeString;
+
+  it('brings a time outside the bounds onto the bound', () => {
+    expect(clampTime(t('08:00'), t('09:00'))).toBe('09:00');
+    expect(clampTime(t('18:00'), undefined, t('17:00'))).toBe('17:00');
+    expect(clampTime(t('12:00'), t('09:00'), t('17:00'))).toBe('12:00');
+  });
+
+  it('keeps a bound with seconds when the time shows seconds', () => {
+    expect(clampTime(t('08:00:00'), t('09:00:30'), undefined, true)).toBe(
+      '09:00:30',
+    );
+  });
+
+  it('without seconds, gives the nearest whole minute inside a bound between minutes', () => {
+    expect(clampTime(t('08:00'), t('09:00:30'))).toBe('09:01');
+    expect(clampTime(t('18:00'), undefined, t('17:00:30'))).toBe('17:00');
   });
 });

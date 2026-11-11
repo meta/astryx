@@ -28,7 +28,7 @@ const {
 
 const head = 'abcdef1234567890abcdef1234567890abcdef12';
 const owner = {login: 'cixzhang'};
-const componentPath = 'packages/core/src/Button/Button.spec.md';
+const componentPath = 'docs/specs/components/Button/Button.spec.md';
 
 function componentRecord({body = 'Body.', decision = null} = {}) {
   const block =
@@ -87,6 +87,106 @@ describe('spec owner decision', () => {
     expect(requiresOwnerApproval([], {complete: false})).toBe(true);
   });
 
+  it('requires an engineering owner for an owner-gated file with no authority of its own', () => {
+    const {
+      requiredApprovalGroups: groupsFor,
+    } = require('./spec-owner-decision.cjs');
+    // A generated table beside a spec: no front matter, so an engineering
+    // owner decides it.
+    expect(
+      groupsFor([
+        {
+          path: 'docs/specs/AST-094-touch-presentations/motion-roles.md',
+          previousPath:
+            'docs/specs/AST-094-touch-presentations/motion-roles.md',
+          baseContent: '# Motion roles\n',
+          headContent: '# Motion roles\n\n| role |\n',
+        },
+      ]),
+    ).toEqual({spec: true, design: false, theme: false});
+    // A README whose body shows a front-matter example still has no
+    // authority of its own, even with two example lines.
+    const example = [
+      '# Native specs',
+      '',
+      '```md',
+      '---',
+      'authority: draft',
+      '---',
+      '```',
+      '',
+      '```md',
+      '---',
+      'authority: current',
+      '---',
+      '```',
+      '',
+    ].join('\n');
+    expect(
+      groupsFor([
+        {
+          path: 'packages/native/specs/README.md',
+          previousPath: 'packages/native/specs/README.md',
+          baseContent: example,
+          headContent: `${example}More.\n`,
+        },
+      ]),
+    ).toEqual({spec: true, design: false, theme: false});
+    // Added, too.
+    expect(
+      groupsFor([
+        {
+          path: 'packages/native/specs/swift/library/notes.md',
+          baseContent: null,
+          headContent: '# Notes\n',
+        },
+      ]).spec,
+    ).toBe(true);
+    // A draft record still needs no approval, and a design asset goes to the
+    // design group through its own flag.
+    expect(
+      groupsFor([
+        {
+          path: 'docs/specs/AST-999/spec.md',
+          baseContent: null,
+          headContent: 'authority: draft\n',
+        },
+        {
+          path: 'docs/design/assets/x.png',
+          baseContent: null,
+          headContent: null,
+        },
+      ]),
+    ).toEqual({spec: false, design: false, theme: false});
+  });
+
+  it('requires an engineering owner when a platform record becomes current', () => {
+    const swiftRecord = authority =>
+      [
+        '---',
+        'schema_version: 3',
+        'kind: component',
+        'id: component:swift/TextInput',
+        'platform_of: component:TextInput',
+        `authority: ${authority}`,
+        '---',
+        '',
+        '## Purpose',
+        '',
+        'A text field.',
+        '',
+      ].join('\n');
+    expect(
+      requiredApprovalGroups([
+        {
+          path: 'docs/specs/components/TextInput/TextInput.swift.spec.md',
+          baseContent: swiftRecord('draft'),
+          headContent: swiftRecord('current'),
+        },
+      ]),
+    ).toEqual({spec: true, design: false, theme: false});
+  });
+
   it('parses DESIGNOWNERS without comment examples', () => {
     expect(
       parseOwnerFile(`
@@ -120,7 +220,7 @@ describe('spec owner decision', () => {
     expect(
       requiredApprovalGroups([
         {
-          path: 'packages/core/src/Button/Button.spec.md',
+          path: 'docs/specs/components/Button/Button.spec.md',
           baseContent: 'kind: component\nauthority: current',
           headContent: 'kind: component\nauthority: current',
         },
@@ -719,5 +819,26 @@ describe('one review gate', () => {
     expect(
       compose({known: true, satisfied: false, text: '⏳ wait', url}),
     ).toEqual({state: 'pending', description: '⏳ wait', target_url: url});
+  });
+  it('reads a too-large run as a pending spec half that names the dispatch', () => {
+    const url = 'https://github.com/meta/astryx/actions/runs/8/attempts/1';
+    const spec = readSpecGate([
+      {
+        context: 'spec-owner-approval',
+        state: 'pending',
+        description:
+          'Mirrors review-required · spec too large to reconcile automatically',
+        target_url: url,
+        creator: {login: 'github-actions[bot]'},
+      },
+    ]);
+    expect(
+      composeReviewGate({codeGated: false, codeDescription: noCode, spec}),
+    ).toEqual({
+      state: 'pending',
+      description:
+        '⏳ Too large to reconcile automatically: a maintainer can run the Review signal workflow for this PR',
+      target_url: url,
+    });
   });
 });

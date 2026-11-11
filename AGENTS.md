@@ -19,17 +19,22 @@ nested `AGENTS.md`.
   `docs/README.md`.
 - Pull requests: choose one primary intent and use its template under
   `.github/PULL_REQUEST_TEMPLATE/`; read `docs/contributing/pull-requests.md`
-  before opening or reviewing a mixed change.
+  before opening or reviewing a mixed change. Before you request review, run
+  `pnpm review:pre` and its checklist from a fresh session.
 - Component work: derive the review's semantic triggers, load matching `current`
   global baseline claims with `node scripts/review-global-baselines.mjs
 --authority-commit <base-sha> --review-head <head-sha> --triggers
 <comma-separated-triggers>`, then read
-  the component's `{Name}.spec.md` when one exists and any `module:*` records it
+  the component's `docs/specs/components/<ComponentRoot>/{Name}.spec.md` when
+  one exists and any `module:*` records it
   lists. Load global records before narrower owners, but resolve the direct
   component or family owner first when it governs the exact delta. A global
   route exposes only the listed claim; it never makes the whole record govern
   the component or change. Preserve each matched record, claim, trigger, and
   match reason in the review receipt.
+- Before editing a path, run `pnpm specs:for <path>`. After editing, before
+  you commit or push, run `pnpm specs:for --diff origin/main` and follow every
+  concern-routed claim.
 - Any path: `pnpm specs:for <path>` lists the current records linked to it,
   the specs that decided them, and the global claims its component's triggers
   route. It reads the working tree, so on a pull-request branch it shows that
@@ -42,6 +47,8 @@ nested `AGENTS.md`.
   pixels and evidence in one atomic appearance-only PR. External contributors
   follow the normal contribution flow and are never asked to author specs;
   maintainers own missing authority.
+- Before adding a new `data-*` attribute to a component, treat it as public API: themes generate selectors on data attributes. Add one only when a current record names it and says why ([`architecture:public-component-api`](docs/architecture/public-component-api.md) DEC-2). For a dynamic per-instance style, first use a StyleX dynamic style (`stylex.create({x: (v) => ({...})})`), which sets a private CSS variable; never add a data attribute just to feed CSS. For any other internal-only concern, use a private `data-astryx-*` attribute under INV23, or no attribute.
+- Layers: anchored layers follow their anchor through CSS anchor positioning only; script never moves a layer to follow its anchor ([`architecture:layer-runtime`](docs/architecture/layer-runtime.md) INV21). A press scales only the trigger's own visual; a layer renders outside it and anchors to the untransformed box (INV22).
 - Cross-component work: read the relevant contract under `docs/families/`,
   applicable design spec under `docs/design/`, and current architecture under
   `docs/architecture/`.
@@ -49,10 +56,11 @@ nested `AGENTS.md`.
 - Writing or reviewing any knowledge record: run the rubric in
   `docs/contributing/spec-writing.md` over the record and put its results in
   the pull request description under `## Writing rubric results`. A record
-  describes the system in the present tense; proposals, history, pull
-  requests, and research stay out of it. When reviewing, read the record
-  against the reported results; a record pull request without them is
-  incomplete, so ask for them before reviewing the content.
+  describes the system in the present tense; proposals, history, pull requests,
+  research, and project status (what is built so far, what goes first) stay out
+  of it. When reviewing, read the record against the reported results; a record
+  pull request without them is incomplete, so ask for them before reviewing the
+  content.
 - Integration contribution work: read `docs/specs/AST-039/spec.md`. Every new
   discoverable item owns a strongly typed, same-stem `.doc.mjs`; root manifests
   locate directories and never catalog their items. No catalog file (like
@@ -154,10 +162,12 @@ For component-specific documentation, see the `{Name}.doc.mjs` file in each comp
 
 Documentation lives in two places:
 
-1. **File Headers** — Each source file has a structured JSDoc header with `@input`, `@output`, `@position`
+1. **File Headers** — Each source file has a structured JSDoc header with `@input`, `@output`, `@position`, in about 12 lines at most
 2. **Component Docs** — `{Name}.doc.mjs` files in each component directory (props, features, examples)
 
-**Update Protocol**: When modifying code, update the file's header comment. Look for `SYNC:` comments as reminders.
+**Update Protocol**: When modifying code, keep the file's header comment accurate. Look for `SYNC:` comments as reminders.
+
+**Source comments** ([`architecture:knowledge-contracts`](docs/architecture/knowledge-contracts.md#source-comments) INV29): make the code explain itself with names, structure, and control flow. A comment explains only non-obvious work: a reason, a constraint, an invariant, or a browser quirk. Never narrate the code, restate names or types, or cite pull requests, issues, dates, or spec records (`pnpm specs:for <path>` finds the record). When a citation is a file's only link to a record or claim, add that link to a record before you remove it: for a whole record, link the file through `applies_to`, `verified_by`, or `path-applicability:v1`; for a claim such as `AST-108 FR4`, add a claim-scoped reference such as `system_specs: [spec:AST-108/FR4]` to the file's own component, module, or theme record. Write in ASD-STE100 Simplified Technical English: short sentences, one topic each, active voice, present tense. Keep public JSDoc, the Effect note naming the system it syncs, and directives a tool reads: lint and TypeScript directives, `@pr-a11y` lines, and any other comment line a repository tool parses. The record has a worked before/after example.
 
 **Audience**: every `.doc.mjs`, and everything under `packages/cli/assets/docs/`, is written for people **building with** Astryx — not for people building Astryx. Internal review rubrics, readiness gates, audit checklists and lab→core criteria belong in the wiki. A public authoring-quality rubric belongs in shipped docs when callers use it to evaluate an artifact they create through Astryx and a current system spec assigns that ownership. [`packages/cli/assets/docs/README.md`](packages/cli/assets/docs/README.md) has the test and the page each kind of material goes to.
 
@@ -178,7 +188,7 @@ Documentation lives in two places:
 
 <!-- STYLEX-CAPS:START -->
 
-[StyleX v0.19.0 CSS Support]|Use CSS-native solutions. Don't build JS workarounds for supported features.
+[StyleX v0.19.1 CSS Support]|Use CSS-native solutions. Don't build JS workarounds for supported features.
 |AT-RULES: @media, @supports, @container (+named), @starting-style, @scope — YES
 |AT-RULES: @layer, @property (explicit) — NO (compiles but invalid CSS output)
 |PSEUDO-CLS: :hover, :focus, :focus-visible, :focus-within, :active, :disabled — YES
