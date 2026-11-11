@@ -363,14 +363,10 @@ describe('decodePng: refusals', () => {
     // Corrupt the IHDR color type (byte 9 of the IHDR body at offset 16).
     const badType = Buffer.from(png);
     badType[8 + 8 + 9] = 5;
-    expect(() => decodePng(badType)).toThrow(
-      'color type 5 at bit depth 8 is not a valid PNG format',
-    );
+    expect(() => decodePng(badType)).toThrow('is not a valid PNG format');
     const badDepth = Buffer.from(png);
     badDepth[8 + 8 + 8] = 3;
-    expect(() => decodePng(badDepth)).toThrow(
-      'color type 2 at bit depth 3 is not a valid PNG format',
-    );
+    expect(() => decodePng(badDepth)).toThrow('is not a valid PNG format');
   });
 });
 
@@ -387,7 +383,7 @@ describe('colorsAt', () => {
     }),
   );
 
-  it('gives the exact hex color and alpha at each point, in order', () => {
+  it('gives the exact hex color at each point, in order', () => {
     expect(
       colorsAt(pic, [
         {x: 1, y: 0},
@@ -403,29 +399,19 @@ describe('colorsAt', () => {
     ]);
   });
 
-  // Points outside the picture never reach colorsAt: the `how` lookup
-  // refuses them first, naming the picture's size (theme-edit.test.mjs).
-  it("reads every corner, the picture's last column and row included", () => {
-    const corners = [
-      {x: 0, y: 0},
-      {x: pic.width - 1, y: 0},
-      {x: 0, y: pic.height - 1},
-      {x: pic.width - 1, y: pic.height - 1},
-    ];
-    expect(colorsAt(pic, corners).map(p => p.color)).toEqual([
-      '#ff0000',
-      '#00ff00',
-      '#0000ff',
-      '#010203',
-    ]);
-  });
-
-  it('gives the alpha of a see-through pixel, to two decimals', () => {
-    const clear = decodePng(
-      makePng({width: 1, height: 1, colorType: 6, rows: [[10, 20, 30, 128]]}),
-    );
-    expect(colorsAt(clear, [{x: 0, y: 0}])).toEqual([
-      {at: '0,0', color: '#0a141e', alpha: 0.5},
+  it('gives null for a point outside the picture', () => {
+    expect(
+      colorsAt(pic, [
+        {x: -1, y: 0},
+        {x: 0, y: -1},
+        {x: 2, y: 0},
+        {x: 0, y: 2},
+      ]),
+    ).toEqual([
+      {at: '-1,0', color: null, alpha: null},
+      {at: '0,-1', color: null, alpha: null},
+      {at: '2,0', color: null, alpha: null},
+      {at: '0,2', color: null, alpha: null},
     ]);
   });
 

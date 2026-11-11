@@ -269,8 +269,10 @@ async function run(program, call, render, answer) {
     const err = /** @type {import('../../../../api/error.mjs').AstryxError} */ (
       e
     );
+    // Suggested commands start the way this project runs the CLI, in JSON
+    // as in text.
     return cliError(err.message, {
-      suggestions: err.suggestions,
+      suggestions: err.suggestions?.map(x => ({...x, name: cmd(x.name)})),
       code: err.code ?? ERROR_CODES.ERR_UNKNOWN,
     });
   }

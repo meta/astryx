@@ -14,7 +14,13 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {checkSetting} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
-import {compileTheme, keyOf, loadTheme, themeFiles} from './_settings.mjs';
+import {
+  compileTheme,
+  keyOf,
+  loadTheme,
+  readHistory,
+  themeFiles,
+} from './_settings.mjs';
 import {LIKE, P} from './_tables.mjs';
 
 /** The theme name commands use when the app has no theme yet. */
@@ -40,6 +46,8 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {string[]} themes - Every theme the editor made in the app.
  * @property {string | null} note - Which theme the commands are for when the app has several, or that it has none.
  * @property {'named' | 'only' | 'last-changed' | 'none'} chosenBy - How the theme was picked.
+ * @property {number} undoSteps - How many changes `undo` can step back.
+ * @property {boolean} bodyFontReachesHeadings - Whether `font X --on body` also changes the heading font in this release.
  * @property {import('./_settings.mjs').ThemeData} data
  * @property {{light: Record<string, string>, dark: Record<string, string>}} base
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string}} check
@@ -115,6 +123,45 @@ export async function howTheme(ctx, cwd, name) {
   const compiled = (/** @type {import('./_settings.mjs').ThemeData} */ d) =>
     JSON.stringify([d.mode, compileTheme(ctx, d, base)]);
   const before = compiled(theme);
+  // Whether a body font setting also moves the heading font: Core gives
+  // headings the body family when a theme names no heading family, so it is
+  // read from Core, and stays right when that changes.
+  const {core} = ctx.project;
+  /** @param {any} typography */
+  const headingOf = typography => {
+    try {
+      return core.resolveThemeTokens(
+        core.defineTheme({
+          name: 'how-probe',
+          ...(typography ? {typography} : {}),
+        }),
+        {mode: 'light'},
+      )['--font-family-heading'];
+    } catch {
+      return null;
+    }
+  };
+  const fontless = {
+    ...theme,
+    settings: theme.settings.filter(
+      x => x.thing !== 'font' || x.on === 'heading',
+    ),
+  };
+  const bodyFontReachesHeadings =
+    headingOf(compileTheme(ctx, fontless, base).typography) !==
+    headingOf(
+      compileTheme(
+        ctx,
+        {
+          ...fontless,
+          settings: [
+            ...fontless.settings,
+            {thing: 'font', value: 'courier', on: 'body', source: 'dial'},
+          ],
+        },
+        base,
+      ).typography,
+    );
   return {
     slug,
     exists,
@@ -129,6 +176,10 @@ export async function howTheme(ctx, cwd, name) {
           : 'last-changed',
     data: theme,
     base,
+    undoSteps: exists
+      ? readHistory(themeFiles(cwd, slug).history).steps.length
+      : 0,
+    bodyFontReachesHeadings,
     check(steps) {
       /** @type {import('./_settings.mjs').ThemeData} */
       const d = JSON.parse(JSON.stringify(theme));
