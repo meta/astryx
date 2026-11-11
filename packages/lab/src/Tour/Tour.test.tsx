@@ -426,4 +426,31 @@ describe('TourStep callout', () => {
     );
     expect(screen.getByRole('button', {name: 'Card action'})).toHaveFocus();
   });
+
+  it('returns focus to the opener when the tour ends on a target that cannot take focus', async () => {
+    const user = userEvent.setup();
+    function OpenerTour() {
+      const [isActive, setIsActive] = useState(false);
+      const cardRef = useRef<HTMLDivElement>(null);
+      return (
+        <>
+          <div ref={cardRef}>Revenue card</div>
+          <button type="button" onClick={() => setIsActive(true)}>
+            Start tour
+          </button>
+          <Tour isActive={isActive} onDismiss={() => setIsActive(false)}>
+            <TourStep targetRef={cardRef} heading="Your revenue">
+              Totals for the quarter.
+            </TourStep>
+          </Tour>
+        </>
+      );
+    }
+    render(<OpenerTour />);
+    await user.click(screen.getByRole('button', {name: 'Start tour'}));
+    await user.click(
+      await screen.findByRole('button', {name: 'Close tour', hidden: true}),
+    );
+    expect(screen.getByRole('button', {name: 'Start tour'})).toHaveFocus();
+  });
 });

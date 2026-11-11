@@ -2,12 +2,14 @@
 
 /**
  * @file TourCardTarget.interaction.browser.spec.ts
- * @input The built Lab Tour "Card Target" story: a step on a card, then a
- *   step on a Refresh button. Real Chromium and WebKit input drive it.
+ * @input The built Lab Tour "Card Target" story (a step on a card, then a
+ *   step on a Refresh button) and the dimmed "Showcase" story. Real browser
+ *   input drives them.
  * @output Proofs that the callout anchors next to a card, that Tab leaves the
  *   callout for the page, that pressing the introduced control keeps the
- *   tour, that Escape ends it, and that the close control's touch target
- *   grows under a coarse pointer. Each state is attached as a still.
+ *   tour, that Escape ends it, that a press on a dimmed page ends a backdrop
+ *   tour, and that the close control's touch target grows under a coarse
+ *   pointer. Each state is attached as a still.
  * @position Real-engine layer of Tour; the jsdom layer is Tour.test.tsx
  */
 
@@ -105,6 +107,16 @@ test('the close control is a labelled button whose touch target grows under a co
     () => matchMedia('(pointer: coarse)').matches,
   );
   test.skip(!isCoarse, 'the hit area grows only under a coarse pointer');
+  // The hit area writes its insets after its first measurement.
+  await expect
+    .poll(() =>
+      close.evaluate(button =>
+        (button as HTMLElement).style.getPropertyValue(
+          '--astryx-hit-inset-top',
+        ),
+      ),
+    )
+    .not.toBe('');
   // A point 21 px from the button's center on the block axis lies inside a
   // 44 px target. It hits the close button, not the callout around it.
   const hitsClose = await close.evaluate(button => {
@@ -114,4 +126,13 @@ test('the close control is a labelled button whose touch target grows under a co
     return document.elementFromPoint(x, y)?.closest('button') === button;
   });
   expect(hitsClose).toBe(true);
+});
+
+test('a press on the dimmed page ends a backdrop tour', async ({page}) => {
+  await openStory(page, storybook(), 'lab-tour--showcase');
+  await page.getByRole('button', {name: 'Start tour'}).click();
+  const step = page.getByRole('region', {name: 'Save your work'});
+  await expect(step).toBeVisible();
+  await page.mouse.click(4, 4);
+  await expect(step).toHaveCount(0);
 });

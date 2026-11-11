@@ -41,7 +41,7 @@ export const docs = {
           name: 'hasBackdrop',
           type: 'boolean',
           description:
-            'Dim the page around the active step as a spotlight cutout: the target stays lit while everything else darkens. Use for modal-style steps that demand focus; leave off for a lightweight coachmark that only rings the target.',
+            'Dim the page around the active step as a spotlight cutout: the target stays lit while everything else darkens. While the page is dimmed, a press anywhere outside the callout, the target included, ends the tour with "backdrop". Use for modal-style steps that demand focus; leave off for a lightweight coachmark that only rings the target, or for a step whose target the user should press.',
           default: 'false',
         },
         {

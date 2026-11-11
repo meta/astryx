@@ -38,6 +38,7 @@
  */
 
 import {
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -57,6 +58,11 @@ import {
 import {Button} from '@astryxdesign/core/Button';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {Icon} from '@astryxdesign/core/Icon';
+import {
+  focusForLastInput,
+  isFocusLost,
+  useInteractionModalityTracking,
+} from '@astryxdesign/core/internal/touch';
 import {Text} from '@astryxdesign/core/Text';
 import {Heading} from '@astryxdesign/core/Heading';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
@@ -125,6 +131,10 @@ const styles = stylex.create({
   overlayRoot: {
     position: 'fixed',
     inset: 0,
+    // A popover is sized to fit its content by default; the overlay fills
+    // the viewport so a dimmed step catches presses on the page.
+    width: '100%',
+    height: '100%',
     margin: 0,
     padding: 0,
     borderWidth: 0,
@@ -283,10 +293,15 @@ export function TourStep({
   const id = useId();
   const headingId = useId();
   const isActiveStep = tour != null && tour.activeStepId === id;
-  const regionRef = useRef<HTMLElement>(null);
-  // Whether focus is in the callout. Tracked from focus events because the
-  // callout leaves the DOM before the cleanup that reads this runs.
-  const hasFocusRef = useRef(false);
+  const regionRef = useRef<HTMLElement | null>(null);
+  const {ref: trackModality, readModality} = useInteractionModalityTracking();
+  const setRegion = useCallback(
+    (node: HTMLElement | null) => {
+      regionRef.current = node;
+      return trackModality(node);
+    },
+    [trackModality],
+  );
 
   // A non-modal anchored layer with no light dismiss: a press on the page or
   // on the target leaves the tour running.
@@ -298,6 +313,7 @@ export function TourStep({
   // passive cleanup below runs after this layout effect, so it can tell a
   // step change from the end of the tour.
   const isTourRunningRef = useRef(false);
+  const getOpener = tour?.getOpener;
   const isTourRunning = tour?.activeStepId != null;
   useClientLayoutEffect(() => {
     isTourRunningRef.current = isTourRunning;
@@ -359,8 +375,8 @@ export function TourStep({
   // Show the callout after the highlight overlay promotes itself, so the
   // callout stays above the highlight in the top layer. Move focus to the
   // step region so assistive technology reads the new step. When the tour
-  // ends with focus in the callout, return focus to the target if it is in
-  // the tab order.
+  // ends and its removal loses focus, return focus to the target if it is in
+  // the tab order, else to the element that had focus when the tour started.
   useEffect(() => {
     if (!isActiveStep) {
       return;
@@ -372,21 +388,29 @@ export function TourStep({
       regionRef.current?.focus({preventScroll: true});
     });
     const target = targetRef.current;
+    const ownerDocument = regionRef.current?.ownerDocument ?? document;
     return () => {
       cancelAnimationFrame(frame);
-      const hadFocus = hasFocusRef.current;
-      hasFocusRef.current = false;
+      const modality = readModality();
       hideLayer();
-      if (
-        hadFocus &&
-        !isTourRunningRef.current &&
-        target != null &&
-        target.tabIndex >= 0
-      ) {
-        target.focus({preventScroll: true});
+      if (isTourRunningRef.current) {
+        return;
       }
+      const destination =
+        target != null && target.tabIndex >= 0 ? target : getOpener?.();
+      // After the commit removes the callout: only when that removal lost
+      // focus, so a control the user moved to keeps it.
+      queueMicrotask(() => {
+        if (
+          destination != null &&
+          destination.isConnected &&
+          isFocusLost(null, ownerDocument)
+        ) {
+          focusForLastInput(destination, {preventScroll: true}, modality);
+        }
+      });
     };
-  }, [isActiveStep, targetRef, showLayer, hideLayer]);
+  }, [isActiveStep, targetRef, showLayer, hideLayer, readModality, getOpener]);
 
   const onDismiss = tour?.onDismiss;
   useLayerDismissal({
@@ -415,59 +439,53 @@ export function TourStep({
 
   const content = (
     <section
-      ref={regionRef}
+      ref={setRegion}
       aria-labelledby={headingId}
       tabIndex={-1}
-      onFocus={() => {
-        hasFocusRef.current = true;
-      }}
-      onBlur={event => {
-        if (!event.currentTarget.contains(event.relatedTarget)) {
-          hasFocusRef.current = false;
-        }
-      }}
-      {...stylex.props(styles.surface, styles.content)}
+      {...stylex.props(styles.surface)}
       data-testid={testId}>
-      <VStack gap={1}>
-        <HStack gap={2} xstyle={styles.header}>
-          <Heading level={4} id={headingId}>
-            {heading}
-          </Heading>
-          <IconButton
-            variant="ghost"
-            size="sm"
-            label="Close tour"
-            icon={<Icon icon="close" size="sm" />}
-            onClick={() => onDismiss('close')}
-          />
-        </HStack>
-        {children != null && <Text type="body">{children}</Text>}
-      </VStack>
-      <HStack gap={2} xstyle={styles.footer}>
-        {isStepCountShown && stepCount > 0 ? (
-          <Text type="supporting" color="secondary">
-            {`${activeStepIndex + 1} of ${stepCount}`}
-          </Text>
-        ) : (
-          <span />
-        )}
-        <HStack gap={2}>
-          {!isFirstStep && (
-            <Button
+      <div {...stylex.props(styles.content)}>
+        <VStack gap={1}>
+          <HStack gap={2} xstyle={styles.header}>
+            <Heading level={4} id={headingId}>
+              {heading}
+            </Heading>
+            <IconButton
               variant="ghost"
               size="sm"
-              label="Back"
-              onClick={onPrevious}
+              label="Close tour"
+              icon={<Icon icon="close" size="sm" />}
+              onClick={() => onDismiss('close')}
             />
+          </HStack>
+          {children != null && <Text type="body">{children}</Text>}
+        </VStack>
+        <HStack gap={2} xstyle={styles.footer}>
+          {isStepCountShown && stepCount > 0 ? (
+            <Text type="supporting" color="secondary">
+              {`${activeStepIndex + 1} of ${stepCount}`}
+            </Text>
+          ) : (
+            <span />
           )}
-          <Button
-            variant="primary"
-            size="sm"
-            label={isLastStep ? 'Done' : 'Next'}
-            onClick={onNext}
-          />
+          <HStack gap={2}>
+            {!isFirstStep && (
+              <Button
+                variant="ghost"
+                size="sm"
+                label="Back"
+                onClick={onPrevious}
+              />
+            )}
+            <Button
+              variant="primary"
+              size="sm"
+              label={isLastStep ? 'Done' : 'Next'}
+              onClick={onNext}
+            />
+          </HStack>
         </HStack>
-      </HStack>
+      </div>
     </section>
   );
 
