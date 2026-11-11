@@ -4938,7 +4938,6 @@ This release makes **bare component names canonical**: `Button`, `Stack`, `useTh
 - **Un-prefix migration — bare names are canonical** — Every `XDS*` component, hook, and type now has a bare alias (`XDSButton` → `Button`, `useXDSTheme` → `useTheme`, ~634 identifiers across 100 barrels). The prefixed names still work as aliases during the compat window, so this is non-breaking if you do nothing — but bare names are the new default for docs, discovery, and new code. (#2941)
   **Codemod:** `npx astryx upgrade --codemod drop-xds-prefix-imports`
 - **`@xds/core` un-prefix** — `XDSMetaAppShell` → `MetaAppShell` and related meta-app exports drop the `XDS` prefix. (#2957)
-  **Codemod:** `npx astryx upgrade --codemod drop-xds-meta-prefix`
 - **DatePicker components renamed to Input** — `XDSDateTimePicker` → `XDSDateTimeInput` and `XDSDateRangePicker` → `XDSDateRangeInput` (plus their props, size, and hour-format types), for consistency with `DateInput`/`TextInput`/`NumberInput`. (#2276)
   **Codemod:** `npx astryx upgrade --codemod rename-date-picker-to-input`
 - **Stack `element` → `as`** — `XDSStack`, `XDSHStack`, `XDSVStack`, and `XDSStackItem` use `as` instead of `element`, matching other polymorphic components. (#2441)
@@ -4964,7 +4963,7 @@ This release makes **bare component names canonical**: `Button`, `Stack`, `useTh
 npx astryx upgrade --apply
 ```
 
-This runs the release codemods in sequence. The bare-name migration (`drop-xds-prefix-imports`, `drop-xds-meta-prefix`) and the theme data-attribute migration (`migrate-theme-selectors-to-data-attrs`) are optional — run them explicitly when you're ready, e.g.:
+This runs the release codemods in sequence. The bare-name migration (`drop-xds-prefix-imports`) and the theme data-attribute migration (`migrate-theme-selectors-to-data-attrs`) are optional — run them explicitly when you're ready, e.g.:
 
 ```bash
 npx astryx upgrade --codemod drop-xds-prefix-imports --codemod-only --apply
