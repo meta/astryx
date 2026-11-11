@@ -71,7 +71,9 @@ reflows no line; only editing affordances appear or disappear.
   block's leading margin and the last block's trailing margin are zero.
 - **FR4 — Same measure.** Prose blocks cap at the same content width,
   `680px` by default, and wide blocks (fenced code, tables) span the
-  available width on every surface.
+  available width on every surface. A RichText table whose column widths a
+  writer set keeps those widths in `RichTextEditor` and `RichTextView`
+  (`spec:AST-106/DEC-3`).
 - **FR5 — Same structure.** Paragraph soft line breaks join into one line of
   flowing text; hard breaks break. A blockquote's lines continue one
   paragraph. Ordered and unordered lists nest by CommonMark indentation, show
@@ -186,11 +188,10 @@ RichText adopts DEC-8: its package entry stops exporting `sharedEditorTheme`,
 gains `BaseProps` and a `ref` and renames `linkOpensInNewTab` to `hasNewTabLinks`; and its
 Lexical peer ranges move to the Lexical 0.52 minor.
 `Markdown` renders fenced code unwrapped, scrolling sideways, and adopts the
-FR5 wrap; RichText already wraps fenced code. RichText's editing surface is
-18px narrower than the reading surface at every width, the field's inset, so a
-line that wraps close to the available width can take one more line in edit
-mode than in read mode, against FR9; at phone width a long fenced code line
-does.
+FR5 wrap; RichText already wraps fenced code. A product that switches in
+place keeps the editor's text as wide as the reading surface by setting the
+field's inset and border outside it, as the RichTextEditor docs show; a
+standalone editor keeps its form width.
 `Markdown`, through `component:CodeBlock`, and the RichText surfaces float
 Copy over the code of a fence that names no language; both adopt the FR8
 corner cluster that `component:CodeBlock` FR11 places.
@@ -315,10 +316,13 @@ JSON: `defaultValue` takes it, `onChange` reports the editor state that
 serializes to it, and `RichTextView` renders it. Markdown is an import and
 export format, not the value: `markdownToEditorStateJSON` and
 `editorStateJSONToMarkdown` convert between the two, and `spec:AST-062` owns
-what that conversion returns. RichText is not a document editor; collaboration,
-persistence, and document hosting stay outside it, and a product that edits
-whole documents chooses its own engine and stored value. This record stays
-the one visual contract that RichText and `Markdown` share.
+what that conversion returns. RichText is not a document host:
+collaboration, persistence, and document hosting stay with the product, which
+brings them around the editor or through `plugins`. RichText offers the opt-in
+document affordances that `spec:AST-106` admits, each as a plugin through
+`plugins`; with none turned on, it is the
+form field this decision describes. This record stays the one visual contract
+that RichText and `Markdown` share.
 
 ### DEC-8 — RichText's public surface is Lexical's, kept small
 

@@ -4,7 +4,7 @@
 
 /**
  * @file CommentActions.tsx
- * @input Uses React, React DOM flushSync, StyleX, useClipboardCopy, IconButton,
+ * @input Uses React, React DOM flushSync, StyleX, useClipboard, useAnnounce, IconButton,
  *   Button, Tooltip, ToggleButton, OverflowList, DropdownMenu, Popover, Text
  * @output Exports CommentActions (a comment's header actions), ReactionSummary
  *   (its reaction toggles), and the action-lookup helpers rows use for focus
@@ -20,7 +20,7 @@ import {
   DropdownMenu,
   type DropdownMenuOption,
 } from '@astryxdesign/core/DropdownMenu';
-import {useClipboardCopy} from '@astryxdesign/core/internal/clipboard-copy';
+import {useAnnounce, useClipboard} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
@@ -37,6 +37,8 @@ import {commentAnchorId, type AnyComment} from './utils';
 import type {CommentReaction, CommentReactionOption} from './types';
 
 const MORE_MENU_MIN_WIDTH = `calc(${spacingVars['--spacing-8']} * 5)`;
+/** How long a failed link copy shows: useClipboard's copied-state default. */
+const LINK_FEEDBACK_MS = 2000;
 
 const styles = stylex.create({
   actionsList: {
@@ -257,11 +259,12 @@ export function CommentActions({
 }) {
   const t = useTranslator();
   const linkCopyFailedLabel = t('@astryx.comments.linkCopyFailed');
-  const {
-    copy: copyToClipboard,
-    isCopied: isLinkCopied,
-    isFailed: isLinkCopyFailed,
-  } = useClipboardCopy({announceFailure: linkCopyFailedLabel});
+  const {copy: copyToClipboard, isCopied: isLinkCopied} = useClipboard();
+  const announce = useAnnounce();
+  const [isLinkCopyFailed, setIsLinkCopyFailed] = useState(false);
+  const linkCopyFailedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [isLinkTooltipOpen, setIsLinkTooltipOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(NO_COLLAPSED_ACTIONS);
@@ -284,8 +287,26 @@ export function CommentActions({
     <CommentIcon name="copyLink" />
   );
 
-  const copyCommentLink = () =>
-    copyToClipboard(new URL(href, window.location.href).href);
+  // A failed write shows for as long as a copied one, and is an error, so it
+  // goes to the assertive region.
+  const copyCommentLink = async () => {
+    const isWritten = await copyToClipboard(
+      new URL(href, window.location.href).href,
+    );
+    if (linkCopyFailedTimerRef.current != null) {
+      clearTimeout(linkCopyFailedTimerRef.current);
+      linkCopyFailedTimerRef.current = null;
+    }
+    setIsLinkCopyFailed(!isWritten);
+    if (isWritten) {
+      return;
+    }
+    announce(linkCopyFailedLabel, 'assertive');
+    linkCopyFailedTimerRef.current = setTimeout(() => {
+      linkCopyFailedTimerRef.current = null;
+      setIsLinkCopyFailed(false);
+    }, LINK_FEEDBACK_MS);
+  };
 
   const changePicker = (isOpen: boolean) => {
     setIsPickerOpen(isOpen);
