@@ -362,13 +362,15 @@ export function calendarMonthLabelDay(month: CalendarMonth): PlainDate {
  * "Aban 1405 AP", named by `calendarMonthLabelDay`. When `day` is given and the
  * month spans an era change, it formats that day instead, clamped to the
  * month, so January 1989 reads 昭和64年1月 on the 3rd and 平成元年1月 on the
- * 22nd.
+ * 22nd. `relatedYear` writes a Chinese or Dangi year as `formatCalendarDate`
+ * does.
  */
 export function formatCalendarMonthLabel(
   calendar: CalendarSystem,
   month: CalendarMonth,
   locale: Locale,
   day?: number,
+  labelOptions?: {readonly relatedYear?: boolean},
 ): string {
   const labelDay =
     day != null && calendarMonthSpansEras(calendar, month, locale)
@@ -381,6 +383,7 @@ export function formatCalendarMonthLabel(
     labelDay,
     locale,
     labelCalendar(calendar),
+    labelOptions,
   );
 }
 

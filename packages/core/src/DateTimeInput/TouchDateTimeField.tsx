@@ -676,6 +676,7 @@ export function TouchDateTimeField({
     monthModel.monthAt(monthIndex),
     locale,
     keptDay,
+    {relatedYear: true},
   );
 
   const dateDisplayValue = useMemo(() => {

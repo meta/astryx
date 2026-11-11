@@ -926,7 +926,15 @@ function MonthPane({
     hasVariableRowCount: false,
   });
 
-  const monthLabel = formatCalendarMonthLabel(calendar, month, locale);
+  // The sheet writes the year as the field does: a Chinese or Dangi year
+  // reads as its related Gregorian year.
+  const monthLabel = formatCalendarMonthLabel(
+    calendar,
+    month,
+    locale,
+    undefined,
+    {relatedYear: true},
+  );
 
   // Exactly one day per pane is tab-reachable, so Tab moves through the
   // picker rather than through 42 buttons: the focused day if the keyboard
@@ -984,6 +992,7 @@ function MonthPane({
                     day.date,
                     DATE_FORMAT_WITH_WEEKDAY,
                     locale,
+                    {relatedYear: true},
                   )}
                   aria-disabled={isDisabled || undefined}
                   aria-current={isToday ? 'date' : undefined}

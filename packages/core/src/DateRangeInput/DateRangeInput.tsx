@@ -290,7 +290,11 @@ function formatRangeDisplay(
     yearOf(start) === yearOf(today);
 
   const fmt = sameYear ? DATE_FORMAT_SHORT : DATE_FORMAT_SHORT_WITH_YEAR;
-  return `${formatCalendarDate(calendar, start, fmt, locale)} – ${formatCalendarDate(calendar, end, fmt, locale)}`;
+  // As in the date field, a Chinese or Dangi year reads as its related
+  // Gregorian year.
+  const format = (pd: PlainDate) =>
+    formatCalendarDate(calendar, pd, fmt, locale, {relatedYear: true});
+  return `${format(start)} – ${format(end)}`;
 }
 
 function isRangeEqual(a: DateRange | null, b: DateRange | null): boolean {

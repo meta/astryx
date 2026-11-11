@@ -419,18 +419,20 @@ export const DATE_FORMAT_MONTH_YEAR: Intl.DateTimeFormatOptions = {
  * or a month grid's name. `Intl` formats the month for running text; where
  * CLDR titlecases a stand-alone month name (its `contextTransforms`), the
  * label starts with a capital, as Calendar's weekday headers use CLDR's
- * stand-alone forms (`component:Calendar` FR1). Internal: not re-exported from
- * `utils/index.ts`.
+ * stand-alone forms (`component:Calendar` FR1). `labelOptions` reach
+ * `formatCalendarDate`. Internal: not re-exported from `utils/index.ts`.
  */
 export function plainDateFormatStandaloneMonthYear(
   pd: PlainDate,
   locale: Locale,
   calendar: Intl.DateTimeFormatOptions['calendar'] = 'gregory',
+  labelOptions?: {readonly relatedYear?: boolean},
 ): string {
-  const label = plainDateFormat(
+  const label = formatPlainDate(
     pd,
     {...DATE_FORMAT_MONTH_YEAR, calendar},
     locale,
+    labelOptions,
   );
   let language: string;
   try {
@@ -514,9 +516,20 @@ export function plainDateFormat(
   options: Intl.DateTimeFormatOptions,
   locale: Locale = 'en',
 ): string {
+  return formatPlainDate(pd, options, locale);
+}
+
+// Gregorian text keeps `format`. Its spaces can differ from those of the
+// joined `formatToParts`, such as U+202F in V8.
+function formatPlainDate(
+  pd: PlainDate,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+  labelOptions?: {readonly relatedYear?: boolean},
+): string {
   const calendar = options.calendar ?? 'gregory';
   if (calendar !== 'gregory' && isCalendarSystem(calendar)) {
-    return formatCalendarDate(calendar, pd, options, locale);
+    return formatCalendarDate(calendar, pd, options, locale, labelOptions);
   }
   const [format, date] = plainDateFormatInput(pd, options, locale);
   return format.format(date);

@@ -126,6 +126,46 @@ describe('DateRangeInput in a calendar', () => {
     expect(triggerText()).toContain('2568');
     expect(triggerText()).toContain('2569');
   });
+
+  // In `ja` and `de`, a short Chinese or Dangi date names the year only by
+  // its cycle name, such as 丙午 or bing-wu. The two calendars start the
+  // last month a day apart.
+  it.each([
+    ['ja', 'chinese', '2025年九月4日 – 2026年九月15日'],
+    ['ja', 'dangi', '2025年九月4日 – 2026年九月14日'],
+    ['de', 'chinese', '4. M09 2025 – 15. M09 2026'],
+    ['de', 'dangi', '4. M09 2025 – 14. M09 2026'],
+  ] as const)(
+    'writes the related Gregorian year in %s %s trigger text',
+    (locale, calendar, text) => {
+      renderRange(locale, {
+        calendar,
+        value: {start: '2025-10-24', end: '2026-10-24'},
+      });
+      expect(triggerText()).toBe(text);
+      expect(
+        screen.getByRole('button', {name: `Stay: ${text}`}),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it('keeps the cycle name in the popover Calendar', async () => {
+    renderRange('ja', {
+      calendar: 'chinese',
+      value: {start: '2026-10-20', end: '2026-10-24'},
+    });
+    fireEvent.click(
+      document.querySelector<HTMLElement>(
+        'button[aria-haspopup="dialog"]:not([tabindex="-1"])',
+      )!,
+    );
+    const grid = await waitFor(() => {
+      const element = document.querySelector('[role="grid"]');
+      expect(element).not.toBeNull();
+      return element as HTMLElement;
+    });
+    expect(grid).toHaveAttribute('aria-label', '丙午年九月');
+  });
 });
 
 describe('DateRangeInput in a calendar without Temporal', () => {
@@ -144,6 +184,15 @@ describe('DateRangeInput in a calendar without Temporal', () => {
     expect(String(warn.mock.calls[0]?.[0])).toContain(
       'needs a Temporal that supports it',
     );
+  });
+
+  it('shows Gregorian dates for Chinese', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    renderRange('ja', {
+      calendar: 'chinese',
+      value: {start: '2025-10-24', end: '2026-10-24'},
+    });
+    expect(triggerText()).toBe('2025年10月24日 – 2026年10月24日');
   });
 
   it('still writes Buddhist years', () => {

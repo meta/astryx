@@ -386,6 +386,38 @@ describe('the bottom sheet in a calendar', () => {
     ]);
     expect(wheelOptions('Month')).toHaveLength(12);
   });
+
+  // In `ja` and `de`, a Chinese or Dangi month label names the year only by
+  // its cycle name, such as 丙午 or bing-wu. The two calendars start this
+  // month a day apart.
+  it.each([
+    [
+      'ja',
+      'chinese',
+      '2026年九月',
+      '2026年九月15日土曜日',
+      '2026(丙午)年九月15日',
+    ],
+    [
+      'ja',
+      'dangi',
+      '2026年九月',
+      '2026年九月14日土曜日',
+      '2026(丙午)年九月14日',
+    ],
+    ['de', 'chinese', 'M09 2026', 'Samstag, 15. M09 2026', '15. M09 2026'],
+    ['de', 'dangi', 'M09 2026', 'Samstag, 14. M09 2026', '14. M09 2026'],
+  ] as const)(
+    'writes the related Gregorian year in %s %s labels, as the field does',
+    (locale, calendar, month, day, field) => {
+      openSheet(locale, {calendar, value: '2026-10-24'});
+      expect(screen.getByRole('combobox')).toHaveValue(field);
+      expect(title()).toHaveTextContent(new RegExp(`^${month}$`));
+      expect(
+        pane(month).querySelector('button[data-date="2026-10-24"]'),
+      ).toHaveAccessibleName(day);
+    },
+  );
 });
 
 describe('the DateTimeInput bottom sheet in a calendar', () => {
@@ -410,6 +442,32 @@ describe('the DateTimeInput bottom sheet in a calendar', () => {
       'data-date',
       '2026-10-23',
     );
+  });
+
+  it('writes the related Gregorian year in a Chinese heading and panes', () => {
+    withLayout(() => {
+      render(
+        <InternationalizationProvider locale="ja">
+          <DateTimeInput
+            label="日時"
+            calendar="chinese"
+            presentation="bottom-sheet"
+            value={'2026-10-24T09:00' as ISODateTimeString}
+            onChange={() => {}}
+          />
+        </InternationalizationProvider>,
+      );
+      fireEvent.click(document.querySelector('input[inputmode="none"]')!);
+    });
+    const heading = [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        'dialog[open] button[aria-expanded]',
+      ),
+    ].find(button => button.textContent === '2026年九月');
+    expect(heading).toBeDefined();
+    expect(
+      pane('2026年九月').querySelector('button[data-date="2026-10-24"]'),
+    ).toHaveAccessibleName('2026年九月15日土曜日');
   });
 });
 

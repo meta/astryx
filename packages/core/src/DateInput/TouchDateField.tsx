@@ -769,6 +769,7 @@ export function TouchDateField({
     monthModel.monthAt(monthIndex),
     locale,
     keptDay,
+    {relatedYear: true},
   );
 
   // Formats the committed value only. A function format is called with the ISO

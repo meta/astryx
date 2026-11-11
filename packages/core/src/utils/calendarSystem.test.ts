@@ -25,6 +25,7 @@ import {
   isInCalendarMonth,
 } from './calendarSystem';
 import {
+  DATE_FORMAT_SHORT_WITH_YEAR,
   DATE_FORMAT_WITH_WEEKDAY,
   formatSharedDate,
   getDaysInMonth,
@@ -622,5 +623,75 @@ describe('formatCalendarMonthLabel with a kept day', () => {
     expect(
       formatCalendarMonthLabel('japanese', month('1989-01-01'), 'ja-JP'),
     ).toBe('平成元年1月');
+  });
+});
+
+describe('formatCalendarMonthLabel with relatedYear', () => {
+  const day = iso('2026-10-24');
+  const label = (
+    calendar: CalendarSystem,
+    locale: string,
+    relatedYear?: boolean,
+  ) =>
+    formatCalendarMonthLabel(
+      calendar,
+      calendarMonthOf(calendar, day),
+      locale,
+      undefined,
+      relatedYear == null ? undefined : {relatedYear},
+    );
+
+  it.each([
+    ['chinese', 'ja', '2026年九月', '丙午年九月'],
+    ['dangi', 'ja', '2026年九月', '丙午年九月'],
+    ['chinese', 'de', 'M09 2026', 'M09 bing-wu'],
+    ['dangi', 'de', 'M09 2026', 'M09 bing-wu'],
+  ] as const)(
+    'writes the related year of a %s month in %s',
+    (calendar, locale, related, cycle) => {
+      expect(label(calendar, locale, true)).toBe(related);
+      expect(label(calendar, locale)).toBe(cycle);
+    },
+  );
+
+  it('keeps a label that already names the related year', () => {
+    for (const calendar of ['chinese', 'dangi'] as const) {
+      for (const locale of ['en', 'zh', 'ko', 'vi']) {
+        expect(label(calendar, locale, true)).toBe(label(calendar, locale));
+      }
+    }
+  });
+
+  it('changes no other calendar', () => {
+    const locales = ['en', 'ja-JP', 'de', 'ru', 'uk', 'ar', 'fa-IR', 'th'];
+    const days = ['1989-01-07', '2019-05-01', '2026-10-24'].map(value =>
+      iso(value as ISODateString),
+    );
+    const others = CALENDAR_SYSTEMS.filter(
+      calendar => calendar !== 'chinese' && calendar !== 'dangi',
+    );
+    for (const calendar of others) {
+      for (const locale of locales) {
+        for (const date of days) {
+          const month = calendarMonthOf(calendar, date);
+          const kept = calendarDayOfMonth(calendar, date);
+          expect(
+            formatCalendarMonthLabel(calendar, month, locale, kept, {
+              relatedYear: true,
+            }),
+          ).toBe(formatCalendarMonthLabel(calendar, month, locale, kept));
+          for (const options of [
+            DATE_FORMAT_WITH_WEEKDAY,
+            DATE_FORMAT_SHORT_WITH_YEAR,
+          ]) {
+            expect(
+              formatCalendarDate(calendar, date, options, locale, {
+                relatedYear: true,
+              }),
+            ).toBe(formatCalendarDate(calendar, date, options, locale));
+          }
+        }
+      }
+    }
   });
 });
