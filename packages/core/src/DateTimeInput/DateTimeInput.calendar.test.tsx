@@ -92,6 +92,10 @@ describe('DateTimeInput typed date entry with a calendar', () => {
     });
     fireEvent.change(input, {target: {value: 'April 30, 31 Heisei'}});
     expect(onChange).not.toHaveBeenCalled();
+    expect(input).not.toHaveAccessibleDescription(
+      expect.stringContaining('Enter a date on or after May 1, 1 Reiwa'),
+    );
+    fireEvent.blur(input);
     expectShown(input, container, 'Enter a date on or after May 1, 1 Reiwa');
   });
 
