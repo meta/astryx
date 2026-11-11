@@ -8,6 +8,11 @@ import {act, cleanup, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 const previewState = vi.hoisted(() => ({renders: [] as string[]}));
+const loadState = vi.hoisted(() => ({
+  isLoaded: true,
+  preloads: [] as string[],
+  resolvers: [] as Array<() => void>,
+}));
 const transitionState = vi.hoisted(() => ({
   callbacks: [] as Array<() => void>,
   deferred: false,
@@ -42,8 +47,10 @@ vi.mock('@astryxdesign/core/theme', () => ({
 
 vi.mock('@astryxdesign/theme-neutral/built', () => ({neutralTheme: {}}));
 vi.mock('../app/providers', () => ({useThemeMode: () => ({mode: 'light'})}));
-vi.mock('../components/templateComponents', () => ({
-  TEMPLATE_COMPONENTS: {
+vi.mock('../components/templateComponents', () => {
+  // The loaded components stand for the imported page modules. The registry
+  // entries stand for the lazy wrappers, which a thumbnail must not render.
+  const components: Record<string, () => ReactNode> = {
     first: () => {
       previewState.renders.push('first');
       return <div>First preview</div>;
@@ -52,8 +59,30 @@ vi.mock('../components/templateComponents', () => ({
       previewState.renders.push('second');
       return <div>Second preview</div>;
     },
-  },
-}));
+  };
+  const lazyComponents: Record<string, () => ReactNode> = {
+    first: () => <div>Lazy first preview</div>,
+    second: () => <div>Lazy second preview</div>,
+  };
+  const loaded = new Set<string>();
+  return {
+    TEMPLATE_COMPONENTS: lazyComponents,
+    getLoadedTemplate: (slug: string) =>
+      loadState.isLoaded || loaded.has(slug) ? components[slug] : undefined,
+    preloadTemplate: (slug: string) => {
+      loadState.preloads.push(slug);
+      if (loadState.isLoaded) {
+        return Promise.resolve(components[slug]);
+      }
+      return new Promise(resolve => {
+        loadState.resolvers.push(() => {
+          loaded.add(slug);
+          resolve(components[slug]);
+        });
+      });
+    },
+  };
+});
 
 import {TemplateThumbnail} from '../components/TemplateThumbnail';
 
@@ -65,6 +94,9 @@ let idleCallbacks: IdleRequestCallback[];
 
 beforeEach(() => {
   previewState.renders.length = 0;
+  loadState.isLoaded = true;
+  loadState.preloads.length = 0;
+  loadState.resolvers.length = 0;
   startTransitionMock.mockClear();
   transitionState.callbacks.length = 0;
   transitionState.deferred = false;
@@ -251,5 +283,86 @@ describe('TemplateThumbnail loading', () => {
 
     expect(startTransitionMock).not.toHaveBeenCalled();
     expect(previewState.renders).toEqual([]);
+  });
+  it('starts every visible template import before its render turn', () => {
+    loadState.isLoaded = false;
+    const view = render(
+      <>
+        <TemplateThumbnail slug="first" />
+        <TemplateThumbnail slug="second" />
+      </>,
+    );
+    expect(loadState.preloads).toEqual([]);
+
+    act(() => {
+      for (const callback of intersectionCallbacks) {
+        callback([visibleEntry], {} as IntersectionObserver);
+      }
+    });
+
+    expect(loadState.preloads).toEqual(['first', 'second']);
+    expect(idleCallbacks).toHaveLength(1);
+    expect(previewState.renders).toEqual([]);
+
+    view.unmount();
+    act(() => idleCallbacks.shift()?.(idleDeadline));
+    expect(startTransitionMock).not.toHaveBeenCalled();
+  });
+
+  it('releases the queue when a thumbnail unmounts during its import', async () => {
+    loadState.isLoaded = false;
+    const view = render(
+      <>
+        <TemplateThumbnail key="first" slug="first" />
+        <TemplateThumbnail key="second" slug="second" />
+      </>,
+    );
+
+    act(() => {
+      for (const callback of intersectionCallbacks) {
+        callback([visibleEntry], {} as IntersectionObserver);
+      }
+    });
+    act(() => idleCallbacks.shift()?.(idleDeadline));
+    expect(idleCallbacks).toHaveLength(0);
+
+    view.rerender(<TemplateThumbnail key="second" slug="second" />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(idleCallbacks).toHaveLength(1);
+    loadState.isLoaded = true;
+    act(() => idleCallbacks.shift()?.(idleDeadline));
+    await waitFor(() =>
+      expect(screen.queryByText('Second preview')).not.toBeNull(),
+    );
+    expect(previewState.renders).toEqual(['second']);
+  });
+
+  it('waits for the import and then renders the loaded template', async () => {
+    loadState.isLoaded = false;
+    render(<TemplateThumbnail slug="first" />);
+
+    act(() =>
+      intersectionCallbacks[0]?.([visibleEntry], {} as IntersectionObserver),
+    );
+    act(() => idleCallbacks.shift()?.(idleDeadline));
+    expect(startTransitionMock).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId('skeleton')).toHaveLength(1);
+
+    await act(async () => {
+      for (const resolve of loadState.resolvers) {
+        resolve();
+      }
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByText('First preview')).not.toBeNull(),
+    );
+    expect(startTransitionMock).toHaveBeenCalledOnce();
+    expect(previewState.renders).toEqual(['first']);
   });
 });

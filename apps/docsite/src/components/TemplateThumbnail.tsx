@@ -3,13 +3,14 @@
 /**
  * @file Renders a scaled live template preview inside a gallery tile.
  * @input Uses the template slug, theme mode, visibility, and measured tile size.
- * @output Renders visible previews in a normalized viewport and releases the global queue after each committed render.
+ * @output Starts the template import when the tile becomes visible, renders the loaded page in a normalized viewport, and releases the global queue after each committed render.
  * @position Client-side live preview for template gallery cards.
  */
 
 'use client';
 
 import {
+  type ComponentType,
   Suspense,
   startTransition,
   useCallback,
@@ -22,7 +23,11 @@ import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {Theme} from '@astryxdesign/core/theme';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {useThemeMode} from '../app/providers';
-import {TEMPLATE_COMPONENTS} from './templateComponents';
+import {
+  TEMPLATE_COMPONENTS,
+  getLoadedTemplate,
+  preloadTemplate,
+} from './templateComponents';
 import {scheduleThumbnailRender} from './thumbnailRenderScheduler';
 import previewCss from './TemplatePreviewSurface.module.css';
 
@@ -98,6 +103,9 @@ export function TemplateThumbnail({
   const [tileWidth, setTileWidth] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
   const [isRenderReady, setIsRenderReady] = useState(false);
+  const [LoadedTemplate, setLoadedTemplate] = useState<ComponentType | null>(
+    null,
+  );
   const isVisibleRef = useRef(false);
   const isRenderReadyRef = useRef(false);
   const resolveRenderRef = useRef<(() => void) | null>(null);
@@ -146,8 +154,19 @@ export function TemplateThumbnail({
     return () => observer.disconnect();
   }, []);
 
-  // The queue does not release the next thumbnail until this preview commits.
-  // That keeps lazy imports and chart rendering sequential, not just state updates.
+  // Syncs the template chunk download with visibility: every visible tile
+  // starts its import at once, so downloads run in parallel. Only the render
+  // waits for the queue.
+  useEffect(() => {
+    if (isVisible && Component != null) {
+      preloadTemplate(slug).catch(() => {});
+    }
+  }, [Component, isVisible, slug]);
+
+  // The queue does not release the next thumbnail until this preview commits,
+  // so template renders stay sequential. The job renders the loaded component,
+  // not the lazy one: a render that suspends shows the Suspense fallback, and
+  // React then holds back each reveal until 300ms after the latest fallback.
   useEffect(() => {
     if (!isVisible || isRenderReadyRef.current || !Component) {
       return;
@@ -161,15 +180,29 @@ export function TemplateThumbnail({
             resolve();
             return;
           }
+          // Cleanup calls settleRender, so an import that is still in flight
+          // never holds the queue.
           resolveRenderRef.current = resolve;
-          startTransition(() => {
-            if (isVisibleRef.current) {
-              isRenderReadyRef.current = true;
-              setIsRenderReady(true);
-            } else {
-              settleRender();
+          const show = (template: ComponentType) => {
+            if (!isActive) {
+              return;
             }
-          });
+            startTransition(() => {
+              if (isVisibleRef.current) {
+                isRenderReadyRef.current = true;
+                setLoadedTemplate(() => template);
+                setIsRenderReady(true);
+              } else {
+                settleRender();
+              }
+            });
+          };
+          const loaded = getLoadedTemplate(slug);
+          if (loaded) {
+            show(loaded);
+          } else {
+            preloadTemplate(slug).then(show, settleRender);
+          }
         }),
     );
 
@@ -178,7 +211,7 @@ export function TemplateThumbnail({
       cancel();
       settleRender();
     };
-  }, [Component, isVisible, settleRender]);
+  }, [Component, isVisible, settleRender, slug]);
 
   // Measure container width to compute render width
   useEffect(() => {
@@ -227,7 +260,7 @@ export function TemplateThumbnail({
               }>
               <Theme theme={neutralTheme} mode={mode}>
                 <div className={previewCss.viewport}>
-                  <Component />
+                  {LoadedTemplate ? <LoadedTemplate /> : <Component />}
                   <ThumbnailRenderSettled onSettled={settleRender} />
                 </div>
               </Theme>
