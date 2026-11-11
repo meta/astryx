@@ -13,7 +13,7 @@
  */
 
 import {animatorFor, type Animator} from '../motion/animator';
-import {reducesMotion} from '../motion/reducedMotion';
+import {reducedMotionFade} from '../motion/reducedMotion';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {getTouchStartCount, subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
@@ -381,7 +381,10 @@ function scrollRangeOf(scroller: Element, win: Window): number {
 // scroll would leave it covered. There, and under Reduce Motion, the field
 // moves at once.
 function risesSmoothly(field: Element): boolean {
-  return isIosWebKit(field.ownerDocument.defaultView) && !reducesMotion(field);
+  return (
+    isIosWebKit(field.ownerDocument.defaultView) &&
+    reducedMotionFade(field) == null
+  );
 }
 
 // The band a field must be in. It is inside its scroller's box and the

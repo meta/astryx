@@ -112,7 +112,7 @@ that times motion with it. Everything here is internal to
   that places the field rises on the browser's smooth scroll, beside the
   keyboard's slide (`risesSmoothly`); the scroll back records where it is
   headed. Chrome checks the field in the resize's own commit, so there, and
-  where motion is reduced (`reducesMotion`), the reveal moves at once. Each
+  where motion is reduced (`reducedMotionFade`), the reveal moves at once. Each
   reveal's scroll is recorded (`noteKeyboardScroll`). Once the keyboard reports
   it has gone, `keyboardScrollBack.ts` scrolls each scroller back to where it
   was, on the browser's smooth scroll, unless the person scrolled it meanwhile.

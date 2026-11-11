@@ -14,7 +14,7 @@
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
  */
 
-import {reducesMotion} from '../motion/reducedMotion';
+import {reducedMotionFade} from '../motion/reducedMotion';
 import {isTouchOnScreen, subscribeInput} from '../utils/inputStream';
 import {sharedWeakMap} from '../utils/sharedRealm';
 import {isIosWebKit} from '../utils/touchQueries';
@@ -212,7 +212,7 @@ function scrollBackAtBlur(
   for (const [scroller, added] of scrolls) {
     if (
       added.at == null ||
-      reducesMotion(scroller) ||
+      reducedMotionFade(scroller) != null ||
       Math.abs(scrollTopOf(scroller, win) - added.at) > KEYBOARD_EPSILON
     ) {
       continue;
@@ -262,7 +262,7 @@ function scrollBack(win: Window, scrolls: Map<Element, AddedScroll>): void {
 }
 
 function scrollBackBehavior(scroller: Element): ScrollBehavior {
-  return reducesMotion(scroller) ? 'instant' : 'smooth';
+  return reducedMotionFade(scroller) == null ? 'smooth' : 'instant';
 }
 
 // Firefox for Android can carry the reveal's document scroll as a visual-
