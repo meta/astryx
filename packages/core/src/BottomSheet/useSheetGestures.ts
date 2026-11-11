@@ -64,6 +64,7 @@ import {
   type UIEvent as ReactUIEvent,
 } from 'react';
 
+import {TAP_WOBBLE} from '../gestures/tapWobble';
 import {VelocityTracker} from '../gestures/VelocityTracker';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBand} from '../motion/rubberBand';
@@ -138,11 +139,6 @@ const CONTENT_END_HANDOFF_SLOP = 4;
 // the tap caused cut instead of animating. 8px is the usual tap slop and is
 // well under what a real pull covers in its first frames.
 const DRAG_PROMOTION_SLOP = 8;
-// A cancelled touchmove ends the touch's click in WebKit. A tap's wobble stays
-// under this distance, so the tap keeps its click. A kept first touchmove of
-// this distance already commits iOS Safari to the scroller's pan, so the
-// cancel starts at it.
-const PAN_CANCEL_SLOP = 5;
 
 // Short haptic tick on detent settle where supported. iOS Safari doesn't
 // expose navigator.vibrate, so this is a no-op there; skipped under
@@ -1782,7 +1778,7 @@ export function useSheetGestures({
       const isMostlyVertical = Math.abs(delta) > sideways;
       if (
         (opposesTop || opposesBottom) &&
-        Math.abs(delta) >= PAN_CANCEL_SLOP &&
+        Math.abs(delta) >= TAP_WOBBLE &&
         isMostlyVertical &&
         event.cancelable
       ) {
@@ -1835,16 +1831,12 @@ export function useSheetGestures({
       // edges stay armed.
       if (
         armed.top &&
-        delta <= -PAN_CANCEL_SLOP &&
+        delta <= -TAP_WOBBLE &&
         !chainAtBottom(armed.scrollers)
       ) {
         armed.top = false;
       }
-      if (
-        armed.bottom &&
-        delta >= PAN_CANCEL_SLOP &&
-        !chainAtTop(armed.scrollers)
-      ) {
+      if (armed.bottom && delta >= TAP_WOBBLE && !chainAtTop(armed.scrollers)) {
         armed.bottom = false;
       }
       // Reaching the end of the content mid-gesture. Arming at `touchstart`

@@ -73,12 +73,11 @@ import {
   compileTopic,
   docsLinkProblems,
   guideEntry,
-  lowerTopic,
   overlayLanguages,
   projectTree,
 } from '../docs/_adapter.mjs';
 import {typedEdges} from '../docs/node/node.mjs';
-import {detailView, indexView} from '../../foundation/doc-compiler/lenses.mjs';
+import {detailView} from '../../foundation/doc-compiler/lenses.mjs';
 import {isExperimentalTreeNode} from '../../foundation/doc-compiler/tree.mjs';
 import {
   semverCompare,
@@ -116,6 +115,7 @@ import {
   outsideProject,
   releaseFacts,
   builtIntegrationPackages,
+  authoringAudit,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 
@@ -1308,30 +1308,6 @@ function nameTypes(names) {
 }
 
 /**
- * The section keys the field reference lists (`astryx docs
- * authoring/field-reference --index`), read the way that command reads them.
- * @returns {Promise<{keys: Set<string>} | {keys: null, error: string}>}
- */
-async function authoringTopicKeys() {
-  try {
-    const {AUTHORING_REFERENCE_ROUTE} =
-      await import('../../foundation/discovery/authoring-self-docs.mjs');
-    const catalog = DocsCatalog.fromBuiltins();
-    const node = (await projectTree(catalog)).get(AUTHORING_REFERENCE_ROUTE);
-    if (!node?.ref?.topicFile) {
-      return {keys: null, error: 'the docs tree has no field reference'};
-    }
-    const index = indexView(await lowerTopic(catalog, guideEntry(node)));
-    return {keys: new Set(index.sections.map(section => section.id))};
-  } catch (err) {
-    return {
-      keys: null,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-/**
  * @param {Awaited<ReturnType<typeof import('../../foundation/discovery/authoring-surface.mjs').auditAuthoringSurface>>} surface
  * @returns {string[]}
  */
@@ -1386,12 +1362,7 @@ export async function checkAuthoringDocs(_ctx, options = {}) {
   const id = 'authoring-docs';
   const label = 'Authoring docs';
   try {
-    const {auditAuthoringSelfDocs} =
-      await import('../../foundation/discovery/authoring-self-docs.mjs');
-    const {auditAuthoringSurface} =
-      await import('../../foundation/discovery/authoring-surface.mjs');
-    const {root, sources} = options;
-    const audit = await auditAuthoringSelfDocs({root, sources});
+    const {audit, topic, surface: surfaceAudit} = await authoringAudit(options);
     const problems = [
       ...audit.unreachable.map(
         source =>
@@ -1405,19 +1376,13 @@ export async function checkAuthoringDocs(_ctx, options = {}) {
           `authoring section "${key}" is ${kilobytes(bytes)}, over the ${kilobytes(DOC_OUTPUT_BUDGET_BYTES)} one read may return`,
       ),
     ];
-    const topic =
-      options.topicKeys === undefined
-        ? await authoringTopicKeys()
-        : {keys: options.topicKeys};
     const surface = [
       ...('error' in topic
         ? [
             `\`${formatCliCommand('docs authoring/field-reference')}\` could not be read: ${topic.error}`,
           ]
         : []),
-      ...surfaceProblems(
-        await auditAuthoringSurface({root, sources, topicKeys: topic.keys}),
-      ),
+      ...surfaceProblems(surfaceAudit),
     ];
     if (problems.length + surface.length > 0) {
       return {

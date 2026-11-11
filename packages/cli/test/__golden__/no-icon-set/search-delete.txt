@@ -1,4 +1,4 @@
-Results for "delete" (19)
+Results for "delete" (20)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
@@ -20,6 +20,11 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs global/uninstall reset
 parent:      pnpm exec astryx docs global/uninstall --index
+name:        cli/api/functions/theme-build
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/api/functions/theme-build
+parent:      pnpm exec astryx docs cli/api/functions
 name:        cli/api/functions/theme-template
 domain:      doc
 package:     @astryxdesign/cli
