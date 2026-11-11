@@ -143,6 +143,7 @@ export function useToolbarLink(
     return lastLinkContextRef.current;
   }, []);
 
+  // Syncs with the Lexical editor's update and selection-change listeners.
   useEffect(
     () =>
       mergeRegister(
