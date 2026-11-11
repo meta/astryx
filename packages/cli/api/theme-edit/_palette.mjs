@@ -15,7 +15,6 @@
  * @position api/theme-edit — imported by _settings.mjs, _check.mjs, _how.mjs
  */
 
-import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {isAlive} from '../../foundation/release/cache.mjs';
@@ -46,6 +45,7 @@ import {
   ratio,
 } from './_color.mjs';
 import {P} from './_tables.mjs';
+import {sha256} from '../../foundation/render/source-block.mjs';
 
 /**
  * Write a file whole: a temp file beside it, renamed into place, so a link
@@ -104,6 +104,24 @@ function sweepTemps(dir) {
     } catch {
       // Gone already, or not ours to judge.
     }
+  }
+}
+
+/**
+ * Remove `dir` when it is empty; with `deep`, the empty folders under it
+ * first. A folder with a file in it stays.
+ * @param {string} dir
+ * @param {{deep?: boolean}} [opts]
+ */
+export function removeEmptyFolder(dir, opts = {}) {
+  if (!fs.existsSync(dir)) return;
+  if (opts.deep)
+    for (const e of fs.readdirSync(dir, {withFileTypes: true}))
+      if (e.isDirectory()) removeEmptyFolder(path.join(dir, e.name), opts);
+  try {
+    fs.rmdirSync(dir);
+  } catch {
+    // Not empty, or gone already.
   }
 }
 
@@ -1147,9 +1165,6 @@ export function paletteConfig(cwd, slug, data, base) {
   return planPalette(cwd, slug, data, base)?.config ?? null;
 }
 
-/** @param {string} text */
-const sha256 = text => createHash('sha256').update(text).digest('hex');
-
 /**
  * Write the palette config, palette and receipt the settings ask for, with
  * the same generator as `theme palette generate --out`; remove them all
@@ -1203,7 +1218,7 @@ function syncPaletteFiles(cwd, slug, data, base) {
       saved = undefined;
     }
     const hash = fs.existsSync(abs(f.config))
-      ? sha256(fs.readFileSync(abs(f.config), 'utf8'))
+      ? sha256(fs.readFileSync(abs(f.config)))
       : null;
     const mine = hash != null && (data.palette === hash || saved === hash);
     delete data.palette;
@@ -1244,7 +1259,7 @@ function syncPaletteFiles(cwd, slug, data, base) {
   // Nothing to rewrite: no notes either, so a kept hand edit is named once,
   // when a color change touches the config.
   if (same) {
-    data.palette = sha256(text);
+    data.palette = sha256(Buffer.from(text));
     // The theme reads only the selected shades, which come from the
     // generator, so a hand edit to the palette file never shows: say so.
     return paletteEdited(cwd, slug)
@@ -1267,7 +1282,7 @@ function syncPaletteFiles(cwd, slug, data, base) {
   }
   fs.mkdirSync(path.dirname(abs(f.config)), {recursive: true});
   writeWhole(abs(f.config), text);
-  data.palette = sha256(text);
+  data.palette = sha256(Buffer.from(text));
   themePaletteGenerate(f.config, {out: f.palette, overwrite: true}, {cwd});
   return plan.notes;
 }
@@ -1405,7 +1420,7 @@ export function paletteEdited(cwd, slug) {
   } catch {
     receipt = null;
   }
-  if (receipt?.candidateSha256 === sha256(text)) return false;
+  if (receipt?.candidateSha256 === sha256(Buffer.from(text))) return false;
   const data = paletteData(text);
   if (!data) return true;
   /** @type {any} */
@@ -1420,7 +1435,7 @@ export function paletteEdited(cwd, slug) {
           'utf8',
         ),
       )?.palette;
-      configMine = saved == null || saved === sha256(configText);
+      configMine = saved == null || saved === sha256(Buffer.from(configText));
       request = JSON.parse(configText.replace(/^\uFEFF/, ''));
     } catch {
       request = null;

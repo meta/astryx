@@ -57,6 +57,7 @@ import {
   paletteMapping,
   syncPalette,
   syncPaletteRefs,
+  removeEmptyFolder,
   writeWhole,
 } from './_palette.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
@@ -1466,9 +1467,9 @@ export async function buildTheme(ctx, slug, data) {
   let notes = [];
   await step(() => {
     notes = syncPalette(cwd, slug, data, base);
-    writeAtomic(f.settingsTs, settingsSource(slug, data, theme, pal, cwd));
+    writeWhole(f.settingsTs, settingsSource(slug, data, theme, pal, cwd));
     syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
-    if (!fs.existsSync(f.ts)) writeAtomic(f.ts, themeModuleSource(slug));
+    if (!fs.existsSync(f.ts)) writeWhole(f.ts, themeModuleSource(slug));
   });
   // Files an earlier build wrote that this one may not: the variants types
   // of an older base, and section sheets of an older look.
@@ -1502,7 +1503,7 @@ export async function buildTheme(ctx, slug, data) {
       lifted.push(`${x.target} ${x.key} ${kebab(x.prop)}`);
     }
     await step(() => {
-      writeAtomic(f.settingsTs, settingsSource(slug, data, theme, pal, cwd));
+      writeWhole(f.settingsTs, settingsSource(slug, data, theme, pal, cwd));
       syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
     });
     receipt = await step(() => runBuild(ctx, slug));
@@ -2067,18 +2068,6 @@ export function settingsStamp(data) {
 }
 
 /**
- * Whether the theme's build was made, whole, from these settings by this
- * CLI (a command stopped mid-build, or settings edited by hand, leave it
- * behind).
- * @param {string} cwd
- * @param {string} slug
- * @param {ThemeData} data
- */
-export function buildCurrent(cwd, slug, data) {
-  return staleBuild(cwd, slug, data) == null;
-}
-
-/**
  * Why the theme's build does not match its settings, in words, or null when
  * it does: a file missing, another CLI version, settings changed since the
  * build (a hand edit), or a build left half done (a command stopped).
@@ -2148,26 +2137,8 @@ function baseVersionOf(cwd, like) {
   }
 }
 
-/** @param {string} dir */
-function removeIfEmpty(dir) {
-  try {
-    fs.rmdirSync(dir);
-  } catch {
-    // Not empty, or gone already.
-  }
-}
-
 /** The undo steps a theme keeps; older ones are dropped. */
 export const HISTORY_STEPS = 80;
-
-/**
- * Write a file whole: a new file beside it, renamed into place.
- * @param {string} file
- * @param {string} text
- */
-export function writeAtomic(file, text) {
-  writeWhole(file, text);
-}
 
 /**
  * A theme's undo history: the settings text before each change, oldest
@@ -2286,23 +2257,23 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
     // for an undo, a top step equal to the settings, which undo skips),
     // never a step that undoes nothing or a lost step.
     await track(f.dir, wrote, () => {
-      writeAtomic(f.settings, `${JSON.stringify(data, null, 2)}\n`);
+      writeWhole(f.settings, `${JSON.stringify(data, null, 2)}\n`);
       if (historyAfter)
-        writeAtomic(
+        writeWhole(
           f.history,
           JSON.stringify(historyAfter.slice(-HISTORY_STEPS)),
         );
       else if (snapBefore && history)
-        writeAtomic(
+        writeWhole(
           f.history,
           JSON.stringify([...past, snapBefore].slice(-HISTORY_STEPS)),
         );
     });
   } catch (e) {
     const {failed, skipped} = restoreWritten(was, wrote);
-    removeIfEmpty(path.join(f.dir, 'tokens'));
-    if (dirMade) removeIfEmpty(f.dir);
-    if (rootMade) removeIfEmpty(f.root);
+    removeEmptyFolder(path.join(f.dir, 'tokens'));
+    if (dirMade) removeEmptyFolder(f.dir);
+    if (rootMade) removeEmptyFolder(f.root);
     if (failed.length || skipped.length)
       throw new AstryxError(
         `The change failed (${e instanceof Error ? e.message.split('\n')[0] : String(e)}). ${failed.length ? `These files could not be put back: ${failed.join(', ')}. ` : ''}${skipped.length ? `These files changed while it ran, so they were left as they are: ${skipped.join(', ')}. ` : ''}Run ${P} show ${slug} to rebuild from the settings.`,

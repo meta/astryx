@@ -43,16 +43,17 @@ import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
  * @property {string} category - The doc's category, such as Action or Overlay.
  * @property {unknown} defaults - Playground defaults, or null.
  * @property {{component: string, props: Record<string, unknown>} | null} wrapper - The parent the playground renders it in, or null.
+ * @property {boolean} opens - An overlay its playground shows in place: the pages render it open.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
  * @property {Record<string, {type: string, required: boolean}>} props - Each prop's declared type and whether it is required.
- * @property {Array<{className: string, values: Record<string, string[]>}>} targets
+ * @property {Array<{className: string, states: string[], values: Record<string, string[]>}>} targets
  */
 
 /** @type {Map<string, ThemeProject>} */
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 2;
+const DOCS_VERSION = 3;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
@@ -149,6 +150,16 @@ async function readComponents(coreDir) {
                 props: doc.playground.wrapper.props ?? {},
               }
             : null,
+        // An overlay with an open state, unless its playground opens it as
+        // a real overlay over the page.
+        opens:
+          doc.category === 'Overlay' &&
+          doc.playground?.overlay !== true &&
+          [doc, ...(Array.isArray(doc.components) ? doc.components : [])].some(
+            (/** @type {any} */ d) =>
+              Array.isArray(d?.props) &&
+              d.props.some((/** @type {any} */ p) => p?.name === 'isOpen'),
+          ),
         subComponentOf:
           typeof doc.subComponentOf === 'string' ? doc.subComponentOf : null,
         props: Object.fromEntries(
@@ -159,6 +170,7 @@ async function readComponents(coreDir) {
         ),
         targets: (doc.theming?.targets ?? []).map((/** @type {any} */ t) => ({
           className: t.className,
+          states: Array.isArray(t.states) ? t.states.map(String) : [],
           values: Object.fromEntries(
             (t.visualProps ?? []).map((/** @type {string} */ v) => {
               const p = props[v];

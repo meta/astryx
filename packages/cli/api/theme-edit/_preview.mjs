@@ -17,19 +17,19 @@ import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {
-  EXTRA,
-  OPEN_OVERLAYS,
   SAMPLE_PAGE,
   SHEET_ORDER,
   elementNames,
   pageSource,
 } from './_catalog.mjs';
-import {renderDir, renderGenerated} from './_parts.mjs';
+import {catalogVariants, renderDir, renderGenerated} from './_parts.mjs';
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {camel, fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
 import {importPathOf, installLine} from './_project.mjs';
-import {DIRECT} from './_tables.mjs';
+import {DIRECT, P} from './_tables.mjs';
+import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
+import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -48,20 +48,6 @@ export const SHOWCASE_GROUPS = [
   'overlays',
   'pages',
 ];
-
-/** What each section of the sheet holds, for help and `show --section`. */
-export const SHOWCASE_GROUP_HELP = {
-  actions: 'buttons and links',
-  inputs: 'text, number, date and time fields, forms',
-  selection: 'selectors, checkboxes, radios, switches, segmented controls',
-  navigation: 'top and side navigation, tabs, breadcrumbs, pagination',
-  feedback: 'banners, badges, progress, status dots, toasts',
-  data: 'text, headings, tables, lists, code, content',
-  containers: 'cards and layout',
-  overlays: 'dialogs, popovers, menus and tooltips, shown open',
-  pages:
-    'the sample app page and real template pages (dashboard, form, settings)',
-};
 
 /** Real template pages the theme-building page shows in full. */
 const PAGE_TEMPLATES = ['dashboard', 'contact-form', 'settings'];
@@ -90,8 +76,8 @@ function groupOf(name, category) {
 }
 
 /**
- * Items of the theme-building page: each component once per variant, the
- * hand-made extras, overlays open, the sample page, and template pages
+ * Items of the theme-building page: each component once per variant
+ * (overlays open), the sample page, and template pages
  * whose packages the project has.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string | undefined} group only this group
@@ -103,37 +89,17 @@ export function showcaseItems(project, group) {
   /** @param {string} name */
   const groupFor = name =>
     groupOf(name, project.components[name]?.category ?? '');
-  const extraNames = new Set([...EXTRA, ...OPEN_OVERLAYS].map(([n]) => n));
-  for (const [name, list] of [...EXTRA, ...OPEN_OVERLAYS]) {
-    const g = groupFor(name);
-    if (g)
-      for (const [label, tree] of list)
-        items.push({group: g, name, label, tree});
-  }
   for (const [name, info] of Object.entries(project.components)) {
-    const defaults = /** @type {any} */ (info.defaults);
     const g = groupFor(name);
-    if (!g || !defaults || typeof defaults !== 'object' || extraNames.has(name))
-      continue;
+    if (!g) continue;
     const inParent = inParentOf(project, name);
     if (inParent === null) continue;
-    const values = info.targets[0]?.values ?? {};
-    /** @type {Array<{label: string, props: Record<string, unknown>}>} */
-    const variants = [{label: '', props: {}}];
-    for (const p of ['variant', 'status', 'color'])
-      for (const v of values[p] ?? [])
-        variants.push({
-          label: v,
-          // A status like `{type: 'error', message?: string}` takes the
-          // value as its `type`; the bare string breaks the component.
-          props: {[p]: info.props?.[p]?.type.startsWith('{') ? {type: v} : v},
-        });
-    for (const v of variants.slice(0, 12))
+    for (const v of catalogVariants(info, 12))
       items.push({
         group: g,
         name,
         label: v.label,
-        tree: inParent({__element: name, props: {...defaults, ...v.props}}),
+        tree: inParent({__element: name, props: v.props}),
       });
   }
   items.push({
@@ -150,21 +116,10 @@ export function showcaseItems(project, group) {
     const file = path.join(TEMPLATES_DIR, t, 'page.tsx');
     if (!fs.existsSync(file)) continue;
     const src = fs.readFileSync(file, 'utf8');
-    const missing = [
-      ...src.matchAll(/^\s*(?:import|\})[^'"\n]*from\s+['"]([^'"]+)['"]/gm),
-    ]
-      .map(m => m[1])
-      .filter(spec => !spec.startsWith('.') && !resolves(project, spec));
-    if (missing.length) {
-      const pkgs = [
-        ...new Set(
-          missing.map(s =>
-            s.startsWith('@')
-              ? s.split('/').slice(0, 2).join('/')
-              : s.split('/')[0],
-          ),
-        ),
-      ];
+    const pkgs = [...extractImportedPackages(src)].filter(
+      pkg => !findNodeModulesPackage(project.cwd, pkg),
+    );
+    if (pkgs.length) {
       skipped.push(
         `the ${t} page needs ${pkgs.join(', ')} (${installLine(project.cwd, pkgs)})`,
       );
@@ -224,16 +179,6 @@ function inParentOf(project, name) {
     Object.entries(wrapper.props).filter(([k]) => !OPEN_PROPS.includes(k)),
   );
   return tree => ({__element: wrapper.component, props, children: [tree]});
-}
-
-/** @param {import('./_project.mjs').ThemeProject} project @param {string} spec */
-function resolves(project, spec) {
-  try {
-    project.req.resolve(spec);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -657,7 +602,6 @@ function changeLine(project, C, name, theme) {
   const kebabName = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
   const part = keys.includes(kebabName) ? kebabName : keys[0];
   if (!part) return null;
-  const P = 'astryx experimental theme editor';
   const t = theme ?? '<theme>';
   for (const [aspect, value] of /** @type {const} */ ([
     ['background', '"<color>"'],

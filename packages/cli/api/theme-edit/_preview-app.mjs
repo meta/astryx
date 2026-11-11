@@ -10,7 +10,6 @@
  * @position api/theme-edit — imported only by _adapter.mjs
  */
 
-import {createHash} from 'node:crypto';
 import {parse as parseModule} from '@babel/parser';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -58,6 +57,8 @@ import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {requireProject, context} from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {sha256} from '../../foundation/render/source-block.mjs';
+import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 
 const E = ERROR_CODES;
 
@@ -925,8 +926,7 @@ function readPreview(cwd, dir, pf = '') {
 }
 
 /** A short hash of a file's text. @param {string | Buffer} text */
-const digest = text =>
-  createHash('sha256').update(text).digest('hex').slice(0, 16);
+const digest = text => sha256(Buffer.from(text)).slice(0, 16);
 
 /**
  * A file's text as a formatter could have left it: white space outside
@@ -2296,11 +2296,7 @@ async function pageTemplates(cwd) {
  * @param {string} pkg
  */
 function installed(cwd, pkg) {
-  for (let dir = cwd; ; dir = path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, 'node_modules', pkg, 'package.json')))
-      return true;
-    if (path.dirname(dir) === dir) return false;
-  }
+  return findNodeModulesPackage(cwd, pkg) != null;
 }
 
 /**

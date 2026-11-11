@@ -28,6 +28,7 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
@@ -49,24 +50,6 @@ beforeAll(async () => {
 afterAll(() => {
   removeLinkedFixture(cwd);
 });
-
-/**
- * The error a call throws: its code, message and suggested commands.
- * @param {() => Promise<unknown>} fn
- */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
 
 /** A command without the CLI prefix: `set q corners more --on button`. @param {string} c */
 const bare = c => c.replace(/^.*? experimental theme (editor )?/, '');

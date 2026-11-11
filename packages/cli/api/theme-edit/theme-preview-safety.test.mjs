@@ -40,6 +40,11 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {
+  appPackages,
+  projectFiles,
+  refusal,
+} from '../../test-utils/theme-edit-fixture.mjs';
 
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
@@ -49,43 +54,13 @@ vi.mock('./_preview.mjs', async importOriginal =>
   ),
 );
 
-const APP_PACKAGES = {
-  name: 'app',
-  private: true,
-  type: 'module',
-  // The suggested install commands name the app's package manager; the
-  // field makes it the same here as in CI, whatever runs the tests.
-  packageManager: 'npm@10.9.0',
-  dependencies: {
-    '@heroicons/react': '*',
-    'lucide-react': '*',
-    recharts: '*',
-  },
-};
+const APP_PACKAGES = appPackages({packageManager: 'npm@10.9.0'});
 const ROUTE = 'src/app/theme-preview';
 
 /** @type {string} */
 let cwd;
+const {read, exists} = projectFiles(() => cwd);
 
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
-
-/** @param {string} rel */
-const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-/** @param {string} rel */
-const exists = rel => fs.existsSync(path.join(cwd, rel));
 /** @param {string} rel @param {string} text */
 const write = (rel, text) => {
   fs.mkdirSync(path.dirname(path.join(cwd, rel)), {recursive: true});

@@ -21,21 +21,17 @@ import {isAlive} from '../../foundation/release/cache.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine} from './_project.mjs';
+import {removeEmptyFolder} from './_palette.mjs';
+import {VOID} from '../../foundation/render/html-reader.mjs';
 import {
   RENDER_TIMEOUT_MS,
   renderPage,
   RenderError,
 } from '../../foundation/render/render-page.mjs';
-import {
-  EXTRA,
-  OPEN_OVERLAYS,
-  SAMPLE_PAGE,
-  elementNames,
-  pageSource,
-} from './_catalog.mjs';
+import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 3;
+const PART_DATA_VERSION = 4;
 
 /**
  * @typedef {object} PartRecord
@@ -52,33 +48,72 @@ const PART_DATA_VERSION = 3;
  */
 
 /**
- * The catalog: each component with playground defaults once per visual
- * variant value, the hand-made extras, and the sample page.
+ * A component's catalog entries, all from its doc: its playground defaults
+ * (open, for an overlay the playground shows in place), then once per value
+ * of each visual prop with a closed set of values: `variant`, `status`
+ * and `color`, and a number union such as a heading's level.
+ * @param {import('./_project.mjs').ComponentInfo} info
+ * @param {number} cap at most this many
+ * @returns {Array<{label: string, props: Record<string, unknown>}>}
+ */
+export function catalogVariants(info, cap) {
+  const defaults = /** @type {Record<string, unknown> | null} */ (
+    info.defaults
+  );
+  if (!defaults || typeof defaults !== 'object') return [];
+  const base =
+    info.opens && !('isOpen' in defaults)
+      ? {...defaults, isOpen: true}
+      : defaults;
+  const values = info.targets[0]?.values ?? {};
+  const variants = [{label: '', props: base}];
+  for (const p of ['variant', 'status', 'color'])
+    for (const v of values[p] ?? [])
+      variants.push({
+        label: v,
+        // A status like `{type: 'error', message?: string}` takes the
+        // value as its `type`; the bare string breaks the component.
+        props: {
+          ...base,
+          [p]: info.props?.[p]?.type.startsWith('{') ? {type: v} : v,
+        },
+      });
+  // The states the doc names that a prop sets: checked (a boolean value)
+  // and disabled.
+  const states = new Set(info.targets.flatMap(t => t.states ?? []));
+  if (states.has('checked') && info.props?.value?.type.startsWith('boolean'))
+    variants.push({
+      label: base.value === true ? 'off' : 'on',
+      props: {...base, value: base.value !== true},
+    });
+  if (states.has('disabled') && info.props?.isDisabled)
+    variants.push({label: 'disabled', props: {...base, isDisabled: true}});
+  for (const p of Object.keys(values)) {
+    const type = info.props?.[p]?.type ?? '';
+    if (!/^\s*\d+(\s*\|\s*\d+)*\s*$/.test(type)) continue;
+    for (const n of type.split('|').map(Number))
+      if (n !== base[p])
+        variants.push({label: `${p} ${n}`, props: {...base, [p]: n}});
+  }
+  return variants.slice(0, cap);
+}
+
+/**
+ * The catalog: each component with playground defaults, once per visual
+ * variant value ({@link catalogVariants}), and the sample page.
  * @param {import('./_project.mjs').ThemeProject} project
  * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, string>}}
  */
 export function catalogItems(project) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
-  for (const [name, info] of Object.entries(project.components)) {
-    const defaults = /** @type {any} */ (info.defaults);
-    if (!defaults || typeof defaults !== 'object') continue;
-    const values = info.targets[0]?.values ?? {};
-    /** @type {Array<Record<string, string>>} */
-    const variants = [{}];
-    for (const p of ['variant', 'status', 'color'])
-      for (const v of values[p] ?? []) variants.push({[p]: v});
-    for (const v of variants.slice(0, 16)) {
-      const label = Object.values(v).join(' ');
+  for (const [name, info] of Object.entries(project.components))
+    for (const v of catalogVariants(info, 16))
       items.push({
         name,
-        label,
-        tree: {__element: name, props: {...defaults, ...v}},
+        label: v.label,
+        tree: {__element: name, props: v.props},
       });
-    }
-  }
-  for (const [name, list] of [...EXTRA, ...OPEN_OVERLAYS])
-    for (const [label, tree] of list) items.push({name, label, tree});
   /** @type {Record<string, string>} */
   const imports = {};
   for (const n of elementNames([items.map(i => i.tree), SAMPLE_PAGE])) {
@@ -212,7 +247,8 @@ export async function renderGenerated(project, file, source, extra = []) {
     // it, so a render running beside this one keeps its own.
     for (const f of [entry, ...extra.map(x => path.join(dir, x.name))])
       fs.rmSync(f, {force: true});
-    removeEmpty(madeThemes ? themes : dir);
+    // Another render may still use it: a folder with a file in it stays.
+    removeEmptyFolder(madeThemes ? themes : dir, {deep: true});
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
   }
@@ -220,21 +256,6 @@ export async function renderGenerated(project, file, source, extra = []) {
 
 /** @param {unknown} v @returns {v is Record<string, unknown>} */
 const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
-
-/**
- * Remove `dir` and the folders under it when no file is left in them.
- * @param {string} dir
- */
-function removeEmpty(dir) {
-  if (!fs.existsSync(dir)) return;
-  for (const e of fs.readdirSync(dir, {withFileTypes: true}))
-    if (e.isDirectory()) removeEmpty(path.join(dir, e.name));
-  try {
-    fs.rmdirSync(dir);
-  } catch {
-    // Not empty: another render is using it.
-  }
-}
 
 /**
  * The part data for the installed Core, from the cache or built now.
@@ -336,22 +357,6 @@ export function declarations(css) {
   return decls;
 }
 
-const VOID = new Set([
-  'area',
-  'base',
-  'br',
-  'col',
-  'embed',
-  'hr',
-  'img',
-  'input',
-  'link',
-  'meta',
-  'source',
-  'track',
-  'wbr',
-]);
-
 /** @param {string} v */
 const refs = v => [...v.matchAll(/var\((--[a-zA-Z0-9_-]+)/g)].map(m => m[1]);
 
@@ -393,7 +398,6 @@ export function walkMarkup(html, decls, tokens) {
   const stack = [{env: {}, target: null, fg: null, bg: null}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
-  let inSample = false;
   for (const m of html.matchAll(
     /([^<]+)|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*?)(\/?)>/g,
   )) {
@@ -412,13 +416,10 @@ export function walkMarkup(html, decls, tokens) {
       }
       continue;
     }
-    if (!close && tag === 'section')
-      inSample = /data-cat="sample-page"/.test(attrs);
     if (close) {
       if (stack.length > 1) stack.pop();
       continue;
     }
-    void inSample;
     const cls = (/class="([^"]*)"/.exec(attrs)?.[1] ?? '')
       .split(/\s+/)
       .filter(Boolean);
