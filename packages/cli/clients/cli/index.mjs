@@ -363,8 +363,10 @@ const READS_EVERY_COMMAND = new Set(['manifest']);
  * first operand after the root's own options, so this reads the arguments the
  * same way. It returns that one command, no command for a run that only
  * prints the version, or null for every command. These runs load every
- * command: help, the manifest, `help <command>`, an unknown word, and a flag
- * the root does not declare. They print or read the whole list.
+ * command: the root help when no stored list ships (a checkout; the published
+ * package prints it from the list, see `printsRootHelp`), the manifest,
+ * `help <command>`, an unknown word, and a flag the root does not declare.
+ * They print or read the whole list.
  *
  * @param {import('commander').Command} program the root, with its options
  * @param {string[]} argv the arguments after `astryx`

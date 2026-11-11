@@ -33,7 +33,11 @@ const isMain =
   path.resolve(process.argv[1]) ===
     path.resolve(new URL(import.meta.url).pathname);
 
-if (isMain) {
+if (isMain && process.argv.includes('--clean')) {
+  // `postpack`: the checkout goes back to loading every command for help, so
+  // a command added or changed later shows there.
+  fs.rmSync(COMMAND_LIST_FILE, {force: true});
+} else if (isMain) {
   fs.writeFileSync(COMMAND_LIST_FILE, await commandListText());
   console.log(`Wrote ${path.relative(process.cwd(), COMMAND_LIST_FILE)}.`);
 }

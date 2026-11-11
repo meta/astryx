@@ -120,6 +120,7 @@
     "generate:command-list": "node scripts/generate-command-list.mjs",
     "readme": "node scripts/generate-cli-readme.mjs",
     "readme:check": "node scripts/generate-cli-readme.mjs --check",
+    "postpack": "node scripts/generate-command-list.mjs --clean",
     "prepack": "pnpm sync:api-types && node scripts/generate-command-list.mjs"
   },
   "dependencies": {
