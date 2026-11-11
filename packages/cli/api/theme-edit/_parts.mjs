@@ -20,7 +20,7 @@ import * as path from 'node:path';
 import {isAlive} from '../../foundation/release/cache.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {importPathOf, installLine} from './_project.mjs';
+import {importPathOf, installLine, literals} from './_project.mjs';
 import {removeEmptyFolder} from './_palette.mjs';
 import {VOID} from '../../foundation/render/html-reader.mjs';
 import {
@@ -48,23 +48,138 @@ const PART_DATA_VERSION = 4;
  */
 
 /**
- * A component's catalog entries, all from its doc: its playground defaults
- * (open, for an overlay the playground shows in place), then once per value
- * of each visual prop with a closed set of values: `variant`, `status`
- * and `color`, and a number union such as a heading's level.
- * @param {import('./_project.mjs').ComponentInfo} info
+ * A sample value for a required prop the doc declares, from its type: the
+ * component's name for text, false for a flag, the first value of a union.
+ * Undefined for a type with no plain sample, such as a function.
+ * @param {string} name
+ * @param {string} type
+ * @returns {unknown}
+ */
+function sampleOf(name, type) {
+  if (type.includes('=>')) return undefined;
+  // Null and undefined are the absence of a value, never a sample.
+  const t = type
+    .split('|')
+    .map(x => x.trim())
+    .filter(x => x !== 'null' && x !== 'undefined')
+    .join(' | ');
+  if (t === 'string' || /ReactNode$/.test(t)) return name;
+  if (t === 'boolean') return false;
+  if (t === 'number') return 1;
+  const words = literals(t);
+  if (words.length) return words[0];
+  if (/^\d+(\s*\|\s*\d+)*$/.test(t)) return Number(t.split('|')[0]);
+  return undefined;
+}
+
+/**
+ * Three items made from the element the doc suggests for a group's
+ * children, each with its own label and value; the first takes the group's
+ * value, so it shows selected.
+ * @param {{__element: string, props?: Record<string, unknown>, children?: unknown}} slot
+ * @param {unknown} selected
+ */
+function slotItems(slot, selected) {
+  return [1, 2, 3].map(i => {
+    const props = {...(slot.props ?? {})};
+    if (typeof props.label === 'string') props.label = `${props.label} ${i}`;
+    if ('value' in props || typeof selected === 'string')
+      props.value =
+        i === 1 && typeof selected === 'string'
+          ? selected
+          : `${String(props.value ?? 'item')}-${i}`;
+    return {...slot, props};
+  });
+}
+
+/**
+ * The props a component renders with: its doc's playground defaults, or,
+ * for a doc with none (an older Core), a sample for each required prop.
+ * A group with no children gets three of the items its doc suggests. Null
+ * for a doc with no defaults that has no theming targets (a hook or a
+ * helper), or that is a part its parent lists as an item: it works only
+ * inside the parent, whose own entry shows it.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @returns {Record<string, unknown> | null}
+ */
+export function demoProps(project, name) {
+  const info = project.components[name];
+  const given =
+    info.defaults && typeof info.defaults === 'object'
+      ? /** @type {Record<string, unknown>} */ ({...info.defaults})
+      : null;
+  if (
+    !given &&
+    // Only a component a theme styles: hooks, providers and helpers have
+    // docs too, and render nothing.
+    (!/^[A-Z]/.test(name) ||
+      !info.targets.length ||
+      // A doc that declares no props of its own name is a family page,
+      // not a component the Core exports.
+      !Object.keys(info.props ?? {}).length ||
+      (info.subComponentOf && isItemOf(project, name)))
+  )
+    return null;
+  const props = given ?? {};
+  if (!given)
+    for (const [p, d] of Object.entries(info.props ?? {})) {
+      if (!d.required || /^on[A-Z]/.test(p)) continue;
+      if (p === 'children' && d.slots.length) continue;
+      const v = sampleOf(name, d.type);
+      // A required prop with no plain sample, such as a render function:
+      // the component cannot be shown from its doc alone.
+      if (v === undefined) return null;
+      props[p] = v;
+    }
+  const kids = info.props?.children;
+  const slot = kids?.slots?.[0];
+  if (!('children' in props) && kids) {
+    if (slot?.__element && (kids.required || slot.__element.startsWith(name))) {
+      if (info.props.value && !('value' in props) && slot.props?.value != null)
+        props.value = `${String(slot.props.value)}-1`;
+      props.children = slotItems(slot, props.value);
+    }
+  }
+  return props;
+}
+
+/**
+ * Whether a part's parent lists it as an item of its children.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ */
+export function isItemOf(project, name) {
+  const parent = project.components[name]?.subComponentOf;
+  const slots = parent
+    ? (project.components[parent]?.props?.children?.slots ?? [])
+    : [];
+  return slots.some(s => s?.__element === name);
+}
+
+/**
+ * A component's catalog entries, all from its doc: its demo props
+ * ({@link demoProps}), then once per value of each visual prop with a
+ * closed set of values (`variant`, `status`, `color`, and a number union
+ * such as a heading's level), and its checked and disabled states. An
+ * overlay the playground shows in place renders open; on a page people
+ * see, once, as some of its variants size the window, not the card.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
  * @param {number} cap at most this many
+ * @param {{shown?: boolean}} [opts] `shown`: for a page people see
  * @returns {Array<{label: string, props: Record<string, unknown>}>}
  */
-export function catalogVariants(info, cap) {
-  const defaults = /** @type {Record<string, unknown> | null} */ (
-    info.defaults
-  );
-  if (!defaults || typeof defaults !== 'object') return [];
+export function catalogVariants(project, name, cap, opts = {}) {
+  const info = project.components[name];
+  const demo = demoProps(project, name);
+  if (!demo) return [];
+  if (info.opens && opts.shown)
+    return [
+      {label: '', props: 'isOpen' in demo ? demo : {...demo, isOpen: true}},
+    ];
   const base =
-    info.opens && !('isOpen' in defaults)
-      ? {...defaults, isOpen: true}
-      : defaults;
+    info.opens && !('isOpen' in demo) ? {...demo, isOpen: true} : demo;
   const values = info.targets[0]?.values ?? {};
   const variants = [{label: '', props: base}];
   for (const p of ['variant', 'status', 'color'])
@@ -79,13 +194,19 @@ export function catalogVariants(info, cap) {
         },
       });
   // The states the doc names that a prop sets: checked (a boolean value)
-  // and disabled.
+  // and disabled. The label says the state shown.
   const states = new Set(info.targets.flatMap(t => t.states ?? []));
-  if (states.has('checked') && info.props?.value?.type.startsWith('boolean'))
+  if (states.has('checked') && info.props?.value?.type.startsWith('boolean')) {
+    const on = base.value !== true;
     variants.push({
-      label: base.value === true ? 'off' : 'on',
-      props: {...base, value: base.value !== true},
+      label: on ? 'on' : 'off',
+      props: {
+        ...base,
+        value: on,
+        ...(typeof base.label === 'string' ? {label: on ? 'On' : 'Off'} : {}),
+      },
     });
+  }
   if (states.has('disabled') && info.props?.isDisabled)
     variants.push({label: 'disabled', props: {...base, isDisabled: true}});
   for (const p of Object.keys(values)) {
@@ -107,8 +228,8 @@ export function catalogVariants(info, cap) {
 export function catalogItems(project) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
-  for (const [name, info] of Object.entries(project.components))
-    for (const v of catalogVariants(info, 16))
+  for (const name of Object.keys(project.components))
+    for (const v of catalogVariants(project, name, 16))
       items.push({
         name,
         label: v.label,

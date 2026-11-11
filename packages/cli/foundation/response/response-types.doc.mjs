@@ -153,7 +153,7 @@ export const doc = {
       value: 'themeEdit.previewList',
       stability: 'experimental',
       description:
-        'The pages of the theme preview: the route `folder` (null with no preview), the `theme`, and the `pages` (`id`, `label`). Experimental: may change or be removed in a patch release.',
+        'The pages of the theme preview: the route `folder` (null with no preview), the `theme`, `themeMissing` (true when that theme is gone), the `pages` (`id`, `label`) and `notes`. Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.previewRemove',

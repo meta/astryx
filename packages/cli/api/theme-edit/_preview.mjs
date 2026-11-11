@@ -22,7 +22,12 @@ import {
   elementNames,
   pageSource,
 } from './_catalog.mjs';
-import {catalogVariants, renderDir, renderGenerated} from './_parts.mjs';
+import {
+  catalogVariants,
+  isItemOf,
+  renderDir,
+  renderGenerated,
+} from './_parts.mjs';
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {camel, fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
@@ -87,14 +92,20 @@ export function showcaseItems(project, group) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
   /** @param {string} name */
-  const groupFor = name =>
-    groupOf(name, project.components[name]?.category ?? '');
-  for (const [name, info] of Object.entries(project.components)) {
+  const groupFor = name => {
+    const info = project.components[name];
+    // A part with no category of its own sits with its parent.
+    const parent = info?.subComponentOf
+      ? project.components[info.subComponentOf]
+      : null;
+    return groupOf(name, info?.category || parent?.category || '');
+  };
+  for (const name of Object.keys(project.components)) {
     const g = groupFor(name);
     if (!g) continue;
     const inParent = inParentOf(project, name);
     if (inParent === null) continue;
-    for (const v of catalogVariants(info, 12))
+    for (const v of catalogVariants(project, name, 12, {shown: true}))
       items.push({
         group: g,
         name,
@@ -174,7 +185,10 @@ function inParentOf(project, name) {
   const info = project.components[name];
   if (!info?.subComponentOf) return tree => tree;
   const wrapper = info.wrapper;
-  if (!wrapper || project.components[wrapper.component]?.wrapper) return null;
+  // A part its parent does not list as an item, such as a heading of the
+  // text family, renders on its own.
+  if (!wrapper) return isItemOf(project, name) ? null : tree => tree;
+  if (project.components[wrapper.component]?.wrapper) return null;
   const props = Object.fromEntries(
     Object.entries(wrapper.props).filter(([k]) => !OPEN_PROPS.includes(k)),
   );
@@ -1029,8 +1043,9 @@ const camelName = camel;
 
 /**
  * A PNG of an HTML file, with a Playwright the project has installed, else
- * a Chrome or Chromium found on the machine. Null with a reason when neither
- * is there.
+ * a Chrome or Chromium found on the machine. Not ok with a reason when
+ * neither is there, or when one is there and fails: the reason then names
+ * its error.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string} html absolute
  * @param {string} png absolute
@@ -1038,6 +1053,16 @@ const camelName = camel;
  * @returns {Promise<{ok: true, file: string} | {ok: false, reason: string}>}
  */
 export async function screenshot(project, html, png, mode) {
+  /** What was found and why it could not take the picture. @type {string[]} */
+  const failed = [];
+  /** The first line of an error, with no path of this machine. @param {unknown} e */
+  const firstLine = e =>
+    String(/** @type {any} */ (e)?.message ?? e ?? '')
+      .split('\n')
+      .map(l => l.trim())
+      .find(Boolean)
+      ?.split(project.cwd)
+      .join('.') ?? 'it stopped with no message';
   for (const pkg of ['playwright', 'playwright-core']) {
     /** @type {string} */
     let entry;
@@ -1063,8 +1088,9 @@ export async function screenshot(project, html, png, mode) {
         await browser.close();
       }
       return {ok: true, file: shown(project.cwd, png)};
-    } catch {
-      // This Playwright has no browser to launch: try Chrome directly.
+    } catch (e) {
+      // This Playwright could not launch its browser: try Chrome directly.
+      failed.push(`${pkg}: ${firstLine(e)}`);
     }
   }
   const chrome = chromeBinary();
@@ -1085,7 +1111,21 @@ export async function screenshot(project, html, png, mode) {
     );
     if (r.status === 0 && fs.existsSync(png))
       return {ok: true, file: shown(project.cwd, png)};
+    failed.push(
+      `${chrome}: ${firstLine(
+        r.error ??
+          (r.stderr ||
+            (r.signal
+              ? `stopped by ${r.signal}`
+              : `exit ${r.status}, and no picture was written`)),
+      )}`,
+    );
   }
+  if (failed.length)
+    return {
+      ok: false,
+      reason: `A browser was found, but it could not take the picture (${failed.join('; ')}). Give Playwright its browser (npx playwright install chromium), or check that ${chrome ?? 'Google Chrome or Chromium'} starts on this machine. The HTML preview needs neither.`,
+    };
   return {
     ok: false,
     reason: `No browser was found to take the picture. Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or install Google Chrome or Chromium. The HTML preview needs neither.`,

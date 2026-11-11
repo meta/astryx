@@ -1482,6 +1482,41 @@ function commitStep(step) {
 }
 
 /**
+ * Page files in the preview folder that theme-preview.json does not list:
+ * a stopped change can leave one behind when its step record is damaged.
+ * @param {string} dir
+ * @returns {string[]} paths relative to the preview folder
+ */
+function unrecordedPages(dir) {
+  /** @type {string[]} */
+  let listed = [];
+  try {
+    const files = JSON.parse(
+      fs.readFileSync(path.join(dir, PREVIEW_DATA), 'utf8'),
+    )?.files;
+    if (Array.isArray(files)) listed = files.map(String);
+  } catch {
+    // No record, or a damaged one: every page file is unrecorded.
+  }
+  /** @type {string[]} */
+  const out = [];
+  for (const sub of [PAGES_DIR, LEGACY_PAGES_DIR]) {
+    /** @type {string[]} */
+    let names;
+    try {
+      names = fs.readdirSync(path.join(dir, sub));
+    } catch {
+      continue;
+    }
+    for (const name of names.sort()) {
+      const rel = `${sub}/${name}`;
+      if (name.endsWith('.tsx') && !listed.includes(rel)) out.push(rel);
+    }
+  }
+  return out;
+}
+
+/**
  * Finish a preview change that was stopped part way (a kill), from the
  * step record it left: its leftover temp files go; each file it was writing
  * keeps the hash of what is on disk when that is the new or the old text,
@@ -1520,7 +1555,10 @@ function recoverPreview(cwd, dir) {
       }
     }
     fs.rmSync(pendingFile, {force: true});
-    return `removed ${shown(cwd, pendingFile)}, a damaged step record of a preview change that was stopped`;
+    const strays = unrecordedPages(dir).map(rel =>
+      shown(cwd, path.join(dir, rel)),
+    );
+    return `removed ${shown(cwd, pendingFile)}, a damaged step record of a preview change that was stopped${strays.length ? `; ${strays.join(', ')} ${strays.length > 1 ? 'are' : 'is'} in no preview record and may be from that change, so ${strays.length > 1 ? 'they stay' : 'it stays'} until you remove ${strays.length > 1 ? 'them' : 'it'}` : ''}`;
   }
   const inside = (/** @type {string} */ rel) =>
     confined(path.join(dir, rel), dir, PENDING);
@@ -3167,7 +3205,10 @@ export async function themeEditPreviewList(options = {}) {
   const data = at && readPreview(cwd, at.dir, pf);
   /** @type {string[]} */
   const notes = [];
-  if (data?.theme && !fs.existsSync(themeFiles(cwd, data.theme).dir)) {
+  const themeMissing = Boolean(
+    data?.theme && !fs.existsSync(themeFiles(cwd, data.theme).dir),
+  );
+  if (data?.theme && themeMissing) {
     const themes = editedThemes(cwd);
     notes.push(
       `the preview wears ${data.theme}, which is gone, so its route does not build; ${PREVIEW} add${pf} switches it to ${themes.length === 1 ? themes[0] : "the app's own theme"}`,
@@ -3178,6 +3219,7 @@ export async function themeEditPreviewList(options = {}) {
     data: {
       folder: at && data ? shownDir(cwd, at.dir) : null,
       theme: data?.theme ?? null,
+      themeMissing,
       pages: (data?.pages ?? []).map(x => ({id: x.id, label: x.label})),
       notes,
     },
@@ -3467,6 +3509,17 @@ async function removePreview(page, options, box) {
       );
     }
   tidyPageFolders(at.dir);
+  // Files the record does not list stay: the preview never deletes what it
+  // has no record of writing. Each is named, so the folder left is no
+  // surprise.
+  for (const rel of unrecordedPages(at.dir)) {
+    const name = shown(cwd, path.join(at.dir, rel));
+    if (kept.includes(name)) continue;
+    kept.push(name);
+    notes.push(
+      `${name} is kept: the preview has no record of writing it, so it may hold your work`,
+    );
+  }
   try {
     fs.rmdirSync(at.dir);
     // Route group folders, such as (tools)/, that only held the preview.

@@ -193,6 +193,10 @@ describe('preview add', () => {
 
   it('writes a components page whose parts work on their own and survive leaving the page', () => {
     const page = read('src/app/theme-preview/_pages/components.tsx');
+    // A part its parent does not list as an item renders on its own, and
+    // an overlay shows open once.
+    expect(page).toContain('<Cell name="Heading">');
+    expect(page).not.toContain('variant="fullscreen"');
     // A typeahead with no search source throws as it unmounts, past every
     // boundary, so leaving the page would crash the production route.
     for (const tag of page.match(
@@ -442,6 +446,7 @@ describe('preview options and errors', () => {
       expect(r.data).toEqual({
         folder: null,
         theme: null,
+        themeMissing: false,
         pages: [],
         notes: [],
       });

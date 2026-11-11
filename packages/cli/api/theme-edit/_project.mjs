@@ -46,7 +46,7 @@ import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
  * @property {boolean} opens - An overlay its playground shows in place: the pages render it open.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
  * @property {string[]} keywords - The doc's search keywords.
- * @property {Record<string, {type: string, required: boolean}>} props - Each prop's declared type and whether it is required.
+ * @property {Record<string, {type: string, required: boolean, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, and the elements the doc suggests for it.
  * @property {Array<{className: string, states: string[], values: Record<string, string[]>}>} targets
  */
 
@@ -104,7 +104,7 @@ export function installLine(cwd, packages) {
 }
 
 /** @param {string} type @returns {string[]} */
-const literals = type =>
+export const literals = type =>
   [...String(type ?? '').matchAll(/'([^']+)'/g)].map(m => m[1]);
 
 /**
@@ -134,11 +134,19 @@ async function readComponents(coreDir) {
         continue;
       }
       if (!doc || typeof doc.name !== 'string') continue;
+      // A doc for several components lists each one's props under its own
+      // entry.
+      const own = Array.isArray(doc.props)
+        ? doc.props
+        : (Array.isArray(doc.components) ? doc.components : []).find(
+            (/** @type {any} */ c) => c?.name === doc.name,
+          )?.props;
       /** @type {Record<string, any>} */
       const props = Object.fromEntries(
-        (Array.isArray(doc.props) ? doc.props : []).map(
-          (/** @type {any} */ p) => [p.name, p],
-        ),
+        (Array.isArray(own) ? own : []).map((/** @type {any} */ p) => [
+          p.name,
+          p,
+        ]),
       );
       out[doc.name] = {
         importPath: resolveImportPath(coreDir, doc.name),
@@ -167,7 +175,11 @@ async function readComponents(coreDir) {
         props: Object.fromEntries(
           Object.entries(props).map(([n, p]) => [
             n,
-            {type: String(p.type ?? ''), required: p.required === true},
+            {
+              type: String(p.type ?? ''),
+              required: p.required === true,
+              slots: Array.isArray(p.slotElements) ? p.slotElements : [],
+            },
           ]),
         ),
         targets: (doc.theming?.targets ?? []).map((/** @type {any} */ t) => ({

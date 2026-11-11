@@ -2341,7 +2341,15 @@ const QUESTIONS_G = [
   // part words: a catalog part, or say there is none
   ['menu rounder', {top: /^set q corners more --on dropdown-menu$/}],
   ['select rounder', {top: /^set q corners more --on selector$/}],
-  ['list rounder', {top: /^set q corners more --on list$/}],
+  // A list shows no edge of its own (its items do): no command, and the
+  // answer names the parts inside that show one.
+  [
+    'list rounder',
+    {
+      top: null,
+      text: /list has no background, border or shadow of its own[\s\S]*item/,
+    },
+  ],
   ['footer rounder', {top: /^set q corners more --on layout-footer$/}],
   [
     'combobox rounder',

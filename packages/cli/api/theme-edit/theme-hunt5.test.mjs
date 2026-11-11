@@ -152,7 +152,7 @@ describe('spacing and scope', () => {
     expect(
       (
         await refusal(() =>
-          themeEditSet('t', 'spacing', 'roomy', {cwd, on: 'divider'}),
+          themeEditSet('t', 'spacing', 'roomy', {cwd, on: 'status-dot'}),
         )
       ).code,
     ).toBe('ERR_THEME_NO_EFFECT');
