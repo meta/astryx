@@ -8,6 +8,7 @@
 
 import {createHash} from 'node:crypto';
 import {DOMAINS, words, fold, nameWords} from './_query-words.mjs';
+import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
 
 /** @param {string[]} list @returns {Map<string, number>} */
 const counts = list => {
@@ -65,7 +66,13 @@ export function entryTable(all, cards) {
     tables.set(all, last.table);
     return last.table;
   }
-  const built = buildTable(all, cards);
+  // The table is a function of the text it is built from: kept beside the
+  // catalog, a later run with the same catalog reads it back.
+  const built = persistedDerived(
+    ['entry-table', key],
+    () => buildTable(all, cards),
+    tableCodec(all),
+  );
   last = {key, table: built};
   tables.set(all, built);
   return built;
@@ -73,6 +80,54 @@ export function entryTable(all, cards) {
 
 /** @type {{key: string, table: EntryTable} | null} */
 let last = null;
+
+/**
+ * A table's plain-JSON form and back. Candidates are kept as their place in
+ * `all`, maps as their entries in order, so the table reads back the same.
+ * @param {any[]} all
+ * @returns {{encode: (table: EntryTable) => any, decode: (stored: any) => EntryTable}}
+ */
+export function tableCodec(all) {
+  return {
+    encode(table) {
+      const place = new Map(all.map((c, k) => [c, k]));
+      const t = /** @type {any} */ (table);
+      return {
+        ids: t.ids,
+        candidate: t.candidate.map((/** @type {any} */ c) => place.get(c)),
+        domain: t.domain,
+        name: t.name,
+        fields: Object.fromEntries(
+          Object.entries(t.fields).map(([f, {post, idf, len, avg}]) => [
+            f,
+            {post: [...post], idf: [...idf], len, avg},
+          ]),
+        ),
+      };
+    },
+    decode(stored) {
+      return /** @type {EntryTable} */ (
+        /** @type {unknown} */ ({
+          ids: stored.ids,
+          index: new Map(
+            stored.ids.map(
+              (/** @type {string} */ id, /** @type {number} */ k) => [id, k],
+            ),
+          ),
+          candidate: stored.candidate.map((/** @type {number} */ k) => all[k]),
+          domain: stored.domain,
+          name: stored.name,
+          fields: Object.fromEntries(
+            Object.entries(stored.fields).map(([f, {post, idf, len, avg}]) => [
+              f,
+              {post: new Map(post), idf: new Map(idf), len, avg},
+            ]),
+          ),
+        })
+      );
+    },
+  };
+}
 /** @type {WeakMap<object, number>} */
 const cardIds = new WeakMap();
 let nextCardId = 0;

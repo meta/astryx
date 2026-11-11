@@ -494,6 +494,62 @@ export async function persistedGather(key, load, codec, keep = () => true) {
 }
 
 /**
+ * A value derived from what a kept gather holds, kept beside the gather: it
+ * is a function of `key` alone (with this CLI build), so a stored value is
+ * used as it is, with no stamps to check. Kept only where gathers are kept
+ * (a search or build of an installed CLI whose cache folder exists);
+ * anywhere else, or on any read or write error, `compute` runs as before.
+ * @template T, E
+ * @param {unknown[]} key - Everything the value is computed from.
+ * @param {() => T} compute
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
+ * @returns {T}
+ */
+export function persistedDerived(key, compute, codec) {
+  if (!run) return compute();
+  const id = withoutRecording(buildId);
+  const dir = id == null ? null : withoutRecording(gatherCacheDir);
+  if (id == null || dir == null) return compute();
+  const file = entryFile(dir, ['derived', ...key], id);
+  try {
+    const stored = JSON.parse(
+      withoutRecording(() => fs.readFileSync(file, 'utf-8')),
+    );
+    if (stored?.format === FORMAT && stored.derived === true) {
+      const value = codec.decode(stored.value);
+      try {
+        const now = new Date();
+        withoutRecording(() => fs.utimesSync(file, now, now));
+      } catch {
+        // An entry that cannot be touched is evicted sooner; nothing more.
+      }
+      return value;
+    }
+  } catch {
+    // No usable entry: computed below.
+  }
+  const value = compute();
+  withoutRecording(() => {
+    try {
+      const encoded = codec.encode(value);
+      const text = JSON.stringify({
+        format: FORMAT,
+        derived: true,
+        value: encoded,
+      });
+      if (!isDeepStrictEqual(JSON.parse(text).value, encoded)) return;
+      const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+      fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
+      fs.renameSync(temp, file);
+      evict(dir);
+    } catch {
+      // A value that cannot be stored is computed again next time.
+    }
+  });
+  return value;
+}
+
+/**
  * Store a fresh gather with what the run read, unless its plain form does not
  * read back as the same value. Silent on any failure.
  * @template T, E

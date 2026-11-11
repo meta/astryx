@@ -206,7 +206,31 @@ let fresh = 0;
 const freshTmp = () => path.join(work, 'tmp', `fresh-${fresh++}`);
 
 /**
- * The kept entries in a temp folder's cache: each file's inode and time.
+ * @param {string} file
+ * @returns {boolean} whether a cache file holds a derived value
+ */
+function derivedEntry(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8')).derived === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The derived values kept in a temp folder's cache folder.
+ * @param {string} tmp
+ * @returns {string[]}
+ */
+function derivedEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter(name => derivedEntry(path.join(dir, name)));
+}
+
+/**
+ * The kept catalogs in a temp folder's cache: each file's inode and time
+ * (a value derived from a catalog, search's entry table, is not a catalog).
  * @param {string} tmp
  * @returns {Map<string, {ino: number, mtimeMs: number}>}
  */
@@ -216,7 +240,9 @@ function entries(tmp) {
   const out = new Map();
   if (!fs.existsSync(dir)) return out;
   for (const name of fs.readdirSync(dir)) {
-    const {ino, mtimeMs} = fs.statSync(path.join(dir, name));
+    const file = path.join(dir, name);
+    if (derivedEntry(file)) continue;
+    const {ino, mtimeMs} = fs.statSync(file);
     out.set(name, {ino, mtimeMs});
   }
   return out;
@@ -591,6 +617,19 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       }
     }
     expect(states).toBeGreaterThan(0);
+  }, 120_000);
+
+  it("keeps search's entry table beside the catalog, and reads it back the same", () => {
+    const tmp = keptTmp('table');
+    const fresh = run(QUERIES[0], {tmp: freshTmp()});
+    expect(run(QUERIES[0], {tmp})).toEqual(fresh);
+    expect(derivedEntries(tmp)).toHaveLength(1);
+    const [table] = derivedEntries(tmp);
+    const {ino} = fs.statSync(path.join(tmp, CACHE_NAME, table));
+    // Read back, not rebuilt: the same file, and the same answer.
+    expect(run(QUERIES[0], {tmp})).toEqual(fresh);
+    expect(run(QUERIES[1], {tmp})).toEqual(run(QUERIES[1], {tmp: freshTmp()}));
+    expect(fs.statSync(path.join(tmp, CACHE_NAME, table)).ino).toBe(ino);
   }, 120_000);
 
   it('is skipped silently when its folder cannot be used', () => {
