@@ -166,6 +166,10 @@ FR4's first-move rule has two accepted tradeoffs, which are not gaps:
   (FR1–FR5).
 - The viewport's placement, stacking, collision handling, announcement, F6
   entry, focus handoff, landmark, and modal rehosting (FR6–FR12).
+- Toast's touch layer, `Toast/useToastBannerSwipe.ts`: the swipe and the exit
+  under a finger, and the swipe's math (`followOffset`, `isDismissRelease`,
+  `retractTarget`, `retractCurve`). Only `Toast.tsx` imports it. Its measured
+  values are the UIKit table's Toast domain, `motion/uikit/toast.ts` (FR4, FR5).
 
 **Does not own / non-goals**
 
