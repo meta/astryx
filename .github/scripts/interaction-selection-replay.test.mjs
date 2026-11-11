@@ -108,7 +108,7 @@ describe('failedInteractionJobs', () => {
       oid,
       checkSuites: {
         totalCount: 1 + extraSuites,
-        nodes: [{checkRuns: {nodes: runs}}],
+        nodes: [{checkRuns: {totalCount: runs.length, nodes: runs}}],
       },
     },
   });
@@ -145,5 +145,24 @@ describe('failedInteractionJobs', () => {
         nodes: [commit('a', [], 40)],
       })),
     ).toThrow('more check suites than one page lists');
+  });
+
+  it('fails loudly when a suite has more failed check runs than one page lists', () => {
+    expect(() =>
+      failedInteractionJobs(1, () => ({
+        pageInfo: {hasPreviousPage: false, startCursor: 'c1'},
+        nodes: [
+          {
+            commit: {
+              oid: 'a',
+              checkSuites: {
+                totalCount: 1,
+                nodes: [{checkRuns: {totalCount: 60, nodes: []}}],
+              },
+            },
+          },
+        ],
+      })),
+    ).toThrow('more failed check runs than one page lists');
   });
 });
