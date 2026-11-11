@@ -161,7 +161,7 @@ and its panels stay put, so no element is added to any row.
 - **Gesture tuning.** Axis-lock distance, commit ratio, fling velocity,
   resistance past the panel, and the slides and springs a swipe drives: behavior
   constants in source, not public API and not design tokens (the same ruling the
-  touch press model received for its clocks). A close that a press or Escape
+  touch press model received for its clocks). A close that a tap or Escape
   starts plays the row's spring from rest (FR7, `spec:AST-094` FR45).
 - **Vertical swipes**, and a swipe whose only
   meaning is dismissal (Toast already has that in `useToastGesture`).

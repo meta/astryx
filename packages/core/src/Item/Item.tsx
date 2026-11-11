@@ -279,9 +279,9 @@ export interface ItemProps extends BaseProps<HTMLElement> {
    * scroller's. The gesture is a touch accelerator and never a row's only path
    * to a verb. A verb reachable only by swipe is unreachable by keyboard and by
    * mouse. So every entry must also be reachable through the row's own content
-   * (a menu or a button in `endContent`). An open row closes on a press by any
-   * pointer on its own content, which activates nothing and paints no press. It
-   * also closes on a press elsewhere, when the list or page scrolls with focus
+   * (a menu or a button in `endContent`). An open row closes on a touch tap on
+   * its own content, which activates nothing and paints no press. It also
+   * closes on a press elsewhere, when the list or page scrolls with focus
    * outside it, and on Escape.
    *
    * Available on a row whose role permits interactive descendants — a

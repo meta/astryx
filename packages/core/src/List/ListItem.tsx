@@ -164,7 +164,7 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
    */
   itemKey?: string | number;
 
-  /** Swipe actions from `createSwipe`, passed to `Item` unchanged. */
+  /** Swipe actions from `createSwipe`, passed to `Item` with this row's `itemKey` added. */
   swipe?: Swipe;
 
   /** @deprecated Pass `swipe` instead. */
