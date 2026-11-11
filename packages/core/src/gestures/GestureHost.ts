@@ -676,15 +676,20 @@ function eventTime(event: Event, timing: EventClock | null): number {
 }
 
 /**
- * The arena clock for a document whose window's clock is `timing`. A
- * same-origin iframe or a Picture-in-Picture window stamps its events from
- * its own start.
+ * The arena clock for `doc`. The page's own document keeps the page's clock.
+ * A same-origin iframe or a Picture-in-Picture window stamps its events from
+ * its own start, so its clock reads that window's `performance`. A page can
+ * replace that object after the host exists, so each reading looks it up.
  */
-function documentClock(timing: EventClock | null): GestureClock {
-  if (timing == null || timing === globalThis.performance) {
+function documentClock(doc: Document): GestureClock {
+  const view = doc.defaultView;
+  if (view == null || view === globalThis) {
     return browserClock;
   }
-  return {...browserClock, now: () => timing.now()};
+  return {
+    ...browserClock,
+    now: () => clockOf(doc)?.now() ?? browserClock.now(),
+  };
 }
 
 /** A touch list as an array; a synthetic event may carry none. */
@@ -822,8 +827,13 @@ export class GestureHost {
   private claimedLiftTimer: unknown = null;
   /** The arena's clock, which the claimed lifts' timer runs on too. */
   private readonly clock: GestureClock;
-  /** The clock of the document's own window, which stamps its events. */
-  private readonly timing: EventClock | null;
+  /**
+   * The clock of the document's own window, which stamps its events. A page
+   * can replace it after the host exists, so each read looks it up.
+   */
+  private get timing(): EventClock | null {
+    return clockOf(this.doc);
+  }
   /** Fingers still waiting for their pointerdown, by arena id. */
   private readonly unpairedTouches = new Map<number, PlacedContact>();
   private readonly isPrimaryPointerCoarse: () => boolean;
@@ -922,8 +932,7 @@ export class GestureHost {
         return {left, top, width, height};
       },
     };
-    this.timing = clockOf(doc);
-    this.clock = options.clock ?? documentClock(this.timing);
+    this.clock = options.clock ?? documentClock(doc);
     this.arena = new GestureArena({
       clock: this.clock,
       environment,
