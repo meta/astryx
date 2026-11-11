@@ -129,4 +129,14 @@ describe('fitting legs to a budget', () => {
     });
     expect(plan.count).toBe(3);
   });
+
+  it('never plans more legs than maxLegs, even when the items over the budget fill them', () => {
+    const seconds = {A: 700, B: 700, C: 700, d: 10};
+    const plan = fitLegsToBudget(Object.keys(seconds), cost(seconds), {
+      budget: 600,
+      maxLegs: 3,
+    });
+    expect(plan.count).toBe(3);
+    expect(plan.shares.flat().sort()).toEqual(['A', 'B', 'C', 'd']);
+  });
 });
