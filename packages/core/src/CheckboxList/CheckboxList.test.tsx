@@ -69,7 +69,60 @@ beforeEach(() => {
   };
 });
 
+/** A pointer press on `target`, as the press controller and React read it. */
+function pointerDown(
+  target: Element,
+  init: {pointerType: string; button: number; ctrlKey?: boolean},
+): void {
+  fireEvent.pointerDown(target, {pointerId: 1, ...init});
+  fireEvent.pointerUp(target, {pointerId: 1, ...init});
+}
+
+/** Runs `check` on macOS, where a ctrl-click is the context click. */
+function onApplePlatform(check: () => void): void {
+  Object.defineProperty(navigator, 'platform', {
+    configurable: true,
+    get: () => 'MacIntel',
+  });
+  try {
+    check();
+  } finally {
+    Reflect.deleteProperty(navigator, 'platform');
+  }
+}
+
 describe('CheckboxList', () => {
+  it("paints a primary mouse press on a row's box at once, and none for a macOS ctrl-click or a pen's barrel button", () => {
+    render(
+      <CheckboxList label="Alerts" value={[]} onChange={() => {}}>
+        <CheckboxListItem label="Email" value="email" />
+        <CheckboxListItem label="SMS" value="sms" />
+      </CheckboxList>,
+    );
+    const target = screen.getByRole('checkbox', {name: 'SMS'});
+    const row = target.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    onApplePlatform(() =>
+      pointerDown(target, {pointerType: 'mouse', button: 0, ctrlKey: true}),
+    );
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    pointerDown(target, {pointerType: 'pen', button: 2});
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+  });
+
   it('forwards CheckboxListItem align to its Item row unchanged', () => {
     render(
       <CheckboxList label="Toppings" value={[]} onChange={() => {}}>

@@ -44,6 +44,10 @@ import {
 } from './pressGesture';
 import {pointerQuery} from '../gestures/__tests__/pointerQuery';
 import {pressFinePointerProps} from '../privateAttributes/pressFinePointer.stylex';
+import {registerFinePress} from './finePress';
+
+// The components that mark fine-pointer surfaces load this rule as they load.
+registerFinePress();
 
 let release: () => void = () => undefined;
 let scroller: HTMLElement;

@@ -64,6 +64,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
 import {registerBoxHold} from '../utils/boxHold';
+import {registerFinePress} from '../utils/finePress';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {
   registerEnglishFallback,
@@ -76,6 +77,7 @@ registerEnglishFallback(english);
 // Registered here, not in the press controller, so a page with no box carries
 // none of its code.
 registerBoxHold();
+registerFinePress();
 
 /** Written by the press controller while the row is pressed. */
 const PRESSED_ON = '[data-astryx-press="on"]';

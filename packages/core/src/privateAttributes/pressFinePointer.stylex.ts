@@ -7,9 +7,10 @@
  *   paintsFinePointerPress, which reads the mark
  * @position Owner module of the private fine-pointer press attribute: the
  *   only file that writes its name. CheckboxInput, CheckboxListItem and
- *   RadioListItem mark their rows. The press controller
- *   (utils/pressFeedback.ts) then paints a mouse's or a pen's press there at
- *   `pointerdown`, as it paints a finger's. No package entry exports it.
+ *   RadioListItem mark their rows, and load the primary-click rule through
+ *   utils/finePress.ts. The press controller (utils/pressFeedback.ts) then
+ *   paints a mouse's or a pen's press there at `pointerdown`, as it paints a
+ *   finger's. No package entry exports it.
  */
 
 const PRESS_FINE_POINTER = 'data-astryx-press-fine-pointer';
