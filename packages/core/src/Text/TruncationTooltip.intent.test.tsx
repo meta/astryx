@@ -6,7 +6,8 @@
  *   component, the layer runtime nor the touch trigger,
  *   that a held tap opens the tooltip as soon as it loads, that a scroll or a
  *   key press drops a held press, and that a failed load keeps the text and
- *   is asked for again on the next interaction
+ *   is asked for again on the next interaction, and that a pointer's focus
+ *   inside the text does not take the first tap
  * @position Validates the truncation tooltip's base intent (Text and Heading
  *   PR1). Each test starts from a fresh module registry.
  */
@@ -169,6 +170,72 @@ describe('the truncation tooltip base (PR1)', () => {
     await settle(300);
     expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
   });
+
+  function pointerFocus(element: HTMLElement) {
+    // Chrome on Android focuses a focusable element between a press and its
+    // click. That focus is not :focus-visible; jsdom treats every focus as one.
+    const realMatches = element.matches.bind(element);
+    vi.spyOn(element, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? false : realMatches(selector),
+    );
+    act(() => element.focus());
+  }
+
+  it.each([
+    ['loaded', false],
+    ['still loading', true],
+  ])(
+    'the first tap on a focusable child of truncated text opens the tooltip, though the tap focuses the child first (Tooltip %s)',
+    async (_state, holdLoad) => {
+      const showPopover = withOverflowAndPopover();
+      const {Text} = await import('./Text');
+      if (holdLoad) {
+        releaseTooltip = () => {};
+      }
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL} <button type="button">Edit</button>
+        </Text>,
+      );
+      if (!holdLoad) {
+        await settle(300);
+      }
+      const child = screen.getByRole('button', {name: 'Edit'});
+      fireEvent.pointerDown(child, {pointerType: 'touch'});
+      fireEvent.pointerUp(child, {pointerType: 'touch'});
+      pointerFocus(child);
+      fireEvent.click(child);
+      if (holdLoad) {
+        await settle();
+        await act(async () => {
+          releaseTooltip?.();
+        });
+      }
+      await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
+        timeout: 8000,
+      });
+    },
+    15000,
+  );
+
+  it('a keyboard focus inside truncated text still mounts the tooltip', async () => {
+    withOverflowAndPopover();
+    const {Text} = await import('./Text');
+    render(
+      <Text type="body" maxLines={1}>
+        {LABEL} <button type="button">Edit</button>
+      </Text>,
+    );
+    await settle(300);
+    // A Tab press makes the focus that follows :focus-visible.
+    fireEvent.keyDown(document.body, {key: 'Tab'});
+    act(() => screen.getByRole('button', {name: 'Edit'}).focus());
+    await waitFor(
+      () =>
+        expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull(),
+      {timeout: 8000},
+    );
+  }, 15000);
 
   it('keeps the text after a failed load and asks again on the next hover', async () => {
     const showPopover = withOverflowAndPopover();
