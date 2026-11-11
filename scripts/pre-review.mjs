@@ -54,7 +54,7 @@ export const CHECKLIST_LINK =
   'docs/contributing/pull-requests.md#pre-review-checklist';
 
 export const CHECKS = {
-  a: 'API delta: a current record decides each added or changed API report row',
+  a: 'API delta: a current record decides each added or changed row of the API delta the review bot posts',
   b: 'Behavior: each observable behavior change cites a current record and clause, or the description says "No behavior change"',
   c: 'Behavior props: a prop that selects a behavior follows the naming and one-prop rules',
   d: 'Public boundary: no internal or private context in source, tests, fixtures, commits, or pull request text',
@@ -68,7 +68,6 @@ export const CHECKS = {
   l: 'Mergeable: the change merges into the base without conflicts',
 };
 
-const API_REPORT = /(?:^|\/)api-report\.md$/;
 const LAB = /^packages\/lab\//;
 const TEMPLATES = /^packages\/cli\/assets\/templates\//;
 const NOT_PACKAGE_CODE =
@@ -102,7 +101,6 @@ function isPublished(file) {
 function isPublishedPackageCode(file) {
   return (
     isPackageReleasePath(file) &&
-    !API_REPORT.test(file) &&
     !NOT_PACKAGE_CODE.test(file) &&
     isPublished(file)
   );
@@ -122,7 +120,6 @@ function isPackageSource(file) {
 export function fileClass(file, classes) {
   if (classes.ownerGatedRecord) return 'record, owner-gated';
   if (classes.specRecord) return 'record';
-  if (API_REPORT.test(file)) return 'API report';
   if (LAB.test(file)) return 'Lab';
   if (isPublishedPackageCode(file)) return 'published package code';
   if (file.startsWith('packages/')) return 'package file';
@@ -141,15 +138,9 @@ export function applicableChecks(files, diff) {
   for (const file of files) {
     const lines = addedByFile[file] ?? [];
     const adds = pattern => lines.some(line => pattern.test(line));
-    if (API_REPORT.test(file) && lines.length > 0) {
-      note('a', `${file} has added or changed rows`);
-      if (adds(/^\s*hook use[A-Z]/)) note('e', `${file} adds a hook row`);
-      if (adds(/^\s*prop (?:\w+Behavior|(?:is|has)[A-Z]\w*)\??:/)) {
-        note('c', `${file} adds a behavior or boolean prop row`);
-      }
-    }
     if (classes[file].ownerGatedRecord) note('g', `${file} is owner-gated`);
     if (isPublishedPackageCode(file)) {
+      note('a', `${file} is published package code, which can change its API`);
       note('b', `${file} is published package code`);
       if (adds(/\b\w+Behavior\??\s*:/))
         note('c', `${file} adds a behavior prop`);

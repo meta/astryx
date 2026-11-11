@@ -1135,6 +1135,8 @@ function DropdownMenuPopover({
     onShow: handleLayerShow,
     onCloseStart: surfaceMotion.closeStart,
     hasLightDismiss: true,
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     hasCloseButton: false,
     hasAutoFocus: false,
     // Without a header or footer the popup's own role="menu" is the exposed

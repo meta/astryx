@@ -60,6 +60,18 @@ const RUNNERS = {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
   },
+  'api/theme-edit/_preview.mjs': {
+    runs: 'a Playwright the project has installed, or a Chrome found on the machine, to picture a preview only with --png',
+    sites: ['child_process.spawnSync', 'import(<computed>)'],
+  },
+  'api/theme-edit/_project.mjs': {
+    runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
+    sites: ['import(<computed>) ×2', 'require'],
+  },
+  'api/theme-edit/_settings.mjs': {
+    runs: 'the built theme module, to read its resolved tokens after a build',
+    sites: ['import(<computed>)'],
+  },
   'api/theme/build/build.mjs': {
     runs: "theme source modules, through jiti; the project's installed Core, and a Core's root entry once a theme imports it",
     sites: [
@@ -118,6 +130,40 @@ const RUNNERS = {
   'clients/cli/commands/experimental/index.mjs': {
     runs: SELF_DOCS,
     sites: ['import ../experimental.doc.mjs'],
+  },
+  'clients/cli/commands/experimental/theme.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/theme-edit/themeEditHow.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditNew.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewAdd.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewApp.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewList.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditSet.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditShow.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditUndo.doc.mjs',
+      'import ../experimental-theme-add.doc.mjs',
+      'import ../experimental-theme-compile.doc.mjs',
+      'import ../experimental-theme-editor-how.doc.mjs',
+      'import ../experimental-theme-editor-new.doc.mjs',
+      'import ../experimental-theme-editor-set.doc.mjs',
+      'import ../experimental-theme-editor-show.doc.mjs',
+      'import ../experimental-theme-editor-undo.doc.mjs',
+      'import ../experimental-theme-editor.doc.mjs',
+      'import ../experimental-theme-eject.doc.mjs',
+      'import ../experimental-theme-list.doc.mjs',
+      'import ../experimental-theme-preview-add.doc.mjs',
+      'import ../experimental-theme-preview-app.doc.mjs',
+      'import ../experimental-theme-preview-list.doc.mjs',
+      'import ../experimental-theme-preview-remove.doc.mjs',
+      'import ../experimental-theme-preview.doc.mjs',
+      'import ../experimental-theme-remove.doc.mjs',
+      'import ../experimental-theme-targets.doc.mjs',
+      'import ../experimental-theme-template.doc.mjs',
+      'import ../experimental-theme-use.doc.mjs',
+      'import ../experimental-theme.doc.mjs',
+    ],
   },
   'clients/cli/commands/experimental/render.mjs': {
     runs: SELF_DOCS,
@@ -375,17 +421,12 @@ const RUNNERS = {
     sites: ['worker_threads.Worker'],
   },
   'foundation/fs/import-url.mjs': {
-    runs: 'the doc file at a file URL, for the doc importers',
+    runs: 'the module at a file URL, for the doc importers and the module loader',
     sites: ['import(<computed>)'],
   },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache',
-    sites: [
-      '.import() ×3',
-      'createJiti ×3',
-      'import(<computed>) ×2',
-      'require.cache',
-    ],
+    sites: ['.import() ×3', 'createJiti ×3', 'importUrl ×2', 'require.cache'],
   },
   'foundation/fs/read-record.mjs': {
     runs: "nothing; it wraps node:fs's read calls to record the paths an operation reads, and republishes them to ESM imports",
