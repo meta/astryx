@@ -850,23 +850,30 @@ export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
   ) {
     return error;
   }
-  const typed = dirName.toLowerCase();
-  const block = (await discoverAll(cwd)).find(
-    template =>
-      template.type === 'block' && template.dirName.toLowerCase() === typed,
-  );
-  if (block == null) {
+  // A block doc that fails to load must not replace the unknown-component
+  // error and its suggestions: the pointer is extra help, so a failed lookup
+  // keeps the original error.
+  try {
+    const typed = dirName.toLowerCase();
+    const block = (await discoverAll(cwd)).find(
+      template =>
+        template.type === 'block' && template.dirName.toLowerCase() === typed,
+    );
+    if (block == null) {
+      return error;
+    }
+    const parent = await listingParent(block, coreDir, cwd);
+    const listing = parent
+      ? `, and astryx component ${parent} --blocks lists it`
+      : '';
+    return new AstryxError(
+      `${error.message}. It is an example block: astryx template ${block.dirName} prints its source${listing}.`,
+      error.suggestions,
+      ERROR_CODES.ERR_UNKNOWN_COMPONENT,
+    );
+  } catch {
     return error;
   }
-  const parent = await listingParent(block, coreDir, cwd);
-  const listing = parent
-    ? `, and astryx component ${parent} --blocks lists it`
-    : '';
-  return new AstryxError(
-    `${error.message}. It is an example block: astryx template ${block.dirName} prints its source${listing}.`,
-    error.suggestions,
-    ERROR_CODES.ERR_UNKNOWN_COMPONENT,
-  );
 }
 
 /**
