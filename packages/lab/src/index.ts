@@ -104,6 +104,13 @@ export {
 } from './ChatReasoning/ChatReasoning';
 export * from './Chat';
 
+// DialogHeroHeader — hero-style Dialog header (meta/astryx#4182)
+export {
+  DialogHeroHeader,
+  type DialogHeroHeaderProps,
+  type DialogHeroHeaderMediaMode,
+} from './DialogHeroHeader';
+
 // Tour — guided product-tour / NUX walkthrough (meta/astryx#4239)
 export {
   Tour,
@@ -157,6 +164,36 @@ export {
   mailIcon,
   lockIcon,
   starterIcons,
+  WeightedSVGIcon,
+  WeightedIconSprite,
+  weightedIconSymbolId,
+  type WeightedSVGIconProps,
+  type WeightedIconSpriteProps,
+  buildWeightedIcon,
+  parseSVGPaths,
+  ICON_WEIGHTS,
+  type IconWeight,
+  type WeightedIconDef,
+  type WeightedIconLayer,
+  type WeightedIconPath,
+  type BuildWeightedIconOptions,
+  registerWeightProbe,
+  xWeightedIcon,
+  checkWeightedIcon,
+  bellWeightedIcon,
+  homeWeightedIcon,
+  settingsWeightedIcon,
+  calendarWeightedIcon,
+  menuWeightedIcon,
+  heartWeightedIcon,
+  eyeWeightedIcon,
+  starWeightedIcon,
+  folderWeightedIcon,
+  shieldWeightedIcon,
+  searchWeightedIcon,
+  mailWeightedIcon,
+  lockWeightedIcon,
+  weightedStarterIcons,
 } from './SVGIcon';
 
 // Chart components — composable d3-based data visualization
@@ -352,6 +389,9 @@ export {
   type TabBarItemProps,
   type TabBarProps,
 } from './TabBar';
+
+// TabBarMoreList: the screen of TabBar's More tab (UIMoreListController).
+export {TabBarMoreList, type TabBarMoreListProps} from './TabBarMoreList';
 
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:

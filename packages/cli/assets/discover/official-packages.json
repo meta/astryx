@@ -102,6 +102,10 @@
         },
         {
           "kind": "component",
+          "name": "ChatVirtualizer"
+        },
+        {
+          "kind": "component",
           "name": "CircleCheckIndicator"
         },
         {
@@ -127,6 +131,10 @@
         {
           "kind": "component",
           "name": "CommentThread"
+        },
+        {
+          "kind": "component",
+          "name": "DialogHeroHeader"
         },
         {
           "kind": "component",
@@ -194,6 +202,10 @@
         },
         {
           "kind": "component",
+          "name": "TabBarMoreList"
+        },
+        {
+          "kind": "component",
           "name": "ThreeDBar"
         },
         {
@@ -223,6 +235,10 @@
         {
           "kind": "component",
           "name": "TransferList"
+        },
+        {
+          "kind": "component",
+          "name": "WeightedSVGIcon"
         },
         {
           "kind": "template",
@@ -255,6 +271,10 @@
         {
           "kind": "template",
           "name": "CommentThreadShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "DialogHeroHeaderShowcase"
         },
         {
           "kind": "template",

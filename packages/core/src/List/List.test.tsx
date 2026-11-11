@@ -745,14 +745,15 @@ describe('List', () => {
     expect(item).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('disables the invisible button when isDisabled', () => {
+  it('keeps the disabled action button focusable', () => {
     const {container} = render(
       <List>
         <ListItem label="Disabled" onClick={() => {}} isDisabled />
       </List>,
     );
     const button = container.querySelector('button');
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toBeDisabled();
   });
 
   it('does not fire onClick when disabled item is clicked', async () => {
@@ -1272,7 +1273,7 @@ describe('List and swipe actions', () => {
     expect(row.tagName).toBe('LI');
     expect(row.parentElement).toBe(screen.getByRole('list'));
     // The panel arrives with the lazily loaded swipe layer.
-    await swipeLayerLoaded();
+    await swipeLayerLoaded(row);
     const panel = row.querySelector('[data-swipe-panel="trailing"]');
     expect(panel).not.toBeNull();
     // Commit: presentational.

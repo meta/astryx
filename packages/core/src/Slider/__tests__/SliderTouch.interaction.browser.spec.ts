@@ -32,6 +32,7 @@ import {
   frames,
   holdAnimations,
   markElement,
+  MARKER_RGB,
   openStory,
   type Point,
   releaseAnimations,
@@ -45,7 +46,7 @@ import {
   touchDriver,
   type TouchScript,
   traceRendering,
-  trackMarker,
+  trackMarkers,
   waitForRest,
   withStorybook,
   writeEvidence,
@@ -1429,8 +1430,9 @@ test(
     const block = await blocking;
     await page.waitForTimeout(150);
     const castFrames = await cast.stop();
-    const tracked = await trackMarker(page, castFrames);
-    const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+    const [tracked, control] = await trackMarkers(page, castFrames, {
+      colors: [MARKER_RGB, CONTROL_RGB],
+    });
     // Judged until two of the cast's own steps from rest: 2 px in
     // Chromium's PNG cast, 4 px in WebKit's JPEG cast. WebKit's tail then
     // shows the cast's 2 px plateaus, not a stall.

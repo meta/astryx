@@ -31,6 +31,7 @@ import {registerUpgrade} from './upgrade.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {generateCompressedIndex} from '../../../foundation/agent-docs/agent-docs.mjs';
 import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -41,7 +42,7 @@ let exitCode;
 beforeEach(() => {
   originalCwd = process.cwd();
   // Repo-local temp dir: under cwd so Vite allows the astryx.config import.
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-upgrade-order-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-upgrade-order-'));
   process.chdir(tmpDir);
   logCalls = [];
   stdoutCalls = [];

@@ -568,6 +568,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-chat-virtualizer",
+      "path": "components/lab/chat-virtualizer",
+      "aliases": []
+    },
+    {
       "name": "component-lab-circle-check-indicator",
       "path": "components/lab/circle-check-indicator",
       "aliases": []
@@ -600,6 +605,11 @@
     {
       "name": "component-lab-comments",
       "path": "components/lab/comments",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-dialog-hero-header",
+      "path": "components/lab/dialog-hero-header",
       "aliases": []
     },
     {
@@ -683,6 +693,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-tab-bar-more-list",
+      "path": "components/lab/tab-bar-more-list",
+      "aliases": []
+    },
+    {
       "name": "component-lab-three-d-bar",
       "path": "components/lab/three-d-bar",
       "aliases": []
@@ -725,6 +740,11 @@
     {
       "name": "component-lab-transfer-list-selector",
       "path": "components/lab/transfer-list-selector",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-weighted-svg-icon",
+      "path": "components/lab/weighted-svg-icon",
       "aliases": []
     },
     {
@@ -1380,6 +1400,11 @@
     {
       "name": "example-base-typeahead-custom-search-bar",
       "path": "examples/base-typeahead/custom-search-bar",
+      "aliases": []
+    },
+    {
+      "name": "example-base-typeahead-menu",
+      "path": "examples/base-typeahead/menu",
       "aliases": []
     },
     {
@@ -2359,6 +2384,11 @@
     {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-internationalization-provider-calendar",
+      "path": "examples/internationalization-provider/calendar",
       "aliases": []
     },
     {
@@ -3762,6 +3792,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-direction-hook-usage",
+      "path": "examples/use-direction/hook-usage",
+      "aliases": []
+    },
+    {
       "name": "example-use-drag-to-snap-points-playing-card-on-three-places",
       "path": "examples/use-drag-to-snap-points/playing-card-on-three-places",
       "aliases": []
@@ -3807,6 +3842,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-interactive-role-one-tile-four-roles",
+      "path": "examples/use-interactive-role/one-tile-four-roles",
+      "aliases": []
+    },
+    {
       "name": "example-use-keyboard-hint-arrow-key-hint",
       "path": "examples/use-keyboard-hint/arrow-key-hint",
       "aliases": []
@@ -3824,6 +3864,11 @@
     {
       "name": "example-use-link-component-article-cards",
       "path": "examples/use-link-component/article-cards",
+      "aliases": []
+    },
+    {
+      "name": "example-use-linkify-links-in-a-comment-thread",
+      "path": "examples/use-linkify/links-in-a-comment-thread",
       "aliases": []
     },
     {
@@ -3877,6 +3922,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-power-search-config-filtered-directory-table",
+      "path": "examples/use-power-search-config/filtered-directory-table",
+      "aliases": []
+    },
+    {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
       "aliases": []
@@ -3912,6 +3962,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-column-settings-state-column-visibility-picker",
+      "path": "examples/use-table-column-settings-state/column-visibility-picker",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-grouped-rows-collapsible-groups",
       "path": "examples/use-table-grouped-rows/collapsible-groups",
       "aliases": []
@@ -3929,6 +3984,11 @@
     {
       "name": "example-use-table-row-status-semantic-and-custom-markers",
       "path": "examples/use-table-row-status/semantic-and-custom-markers",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-rows-virtualization-fixed-height-rows",
+      "path": "examples/use-table-rows-virtualization/fixed-height-rows",
       "aliases": []
     },
     {
@@ -3982,6 +4042,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-truncation-tooltip-on-cut-off-text",
+      "path": "examples/use-truncation/tooltip-on-cut-off-text",
+      "aliases": []
+    },
+    {
       "name": "example-use-typeahead-type-to-focus-a-country",
       "path": "examples/use-typeahead/type-to-focus-a-country",
       "aliases": []
@@ -4019,6 +4084,11 @@
     {
       "name": "hook-create-pan-gesture",
       "path": "hooks/create-pan-gesture",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-reorderable",
+      "path": "hooks/create-reorderable",
       "aliases": []
     },
     {
@@ -4089,6 +4159,11 @@
     {
       "name": "hook-use-dev-warning",
       "path": "hooks/use-dev-warning",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-direction",
+      "path": "hooks/use-direction",
       "aliases": []
     },
     {
@@ -4182,6 +4257,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-linkify",
+      "path": "hooks/use-linkify",
+      "aliases": []
+    },
+    {
       "name": "hook-use-list-focus",
       "path": "hooks/use-list-focus",
       "aliases": []
@@ -4242,6 +4322,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-power-search-config",
+      "path": "hooks/use-power-search-config",
+      "aliases": []
+    },
+    {
       "name": "hook-use-press-feedback",
       "path": "hooks/use-press-feedback",
       "aliases": []
@@ -4287,6 +4372,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-column-settings-state",
+      "path": "hooks/use-table-column-settings-state",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-filter-state",
       "path": "hooks/use-table-filter-state",
       "aliases": []
@@ -4319,6 +4409,11 @@
     {
       "name": "hook-use-table-row-status",
       "path": "hooks/use-table-row-status",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-rows-virtualization",
+      "path": "hooks/use-table-rows-virtualization",
       "aliases": []
     },
     {
@@ -4379,6 +4474,11 @@
     {
       "name": "hook-use-tree-focus",
       "path": "hooks/use-tree-focus",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-truncation",
+      "path": "hooks/use-truncation",
       "aliases": []
     },
     {
@@ -4699,6 +4799,11 @@
     {
       "name": "showcase-dialog-header-default",
       "path": "showcases/dialog-header/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-dialog-hero-header-default",
+      "path": "showcases/dialog-hero-header/default",
       "aliases": []
     },
     {

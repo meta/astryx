@@ -31,12 +31,21 @@ import {createPortal} from 'react-dom';
 import {LayerContentBoundary} from './layerScopedContext';
 import {layerClickBoundary} from './layerClickBoundary';
 import {addAnchorName, readAnchorNames, removeAnchorName} from './anchorName';
-import {currentGesture, currentGestureHasClicked} from './gestureCounter';
+import {
+  claimContextMenuPress,
+  currentGesture,
+  currentGestureHasClicked,
+} from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
 import {layerViewportInset} from './layerViewportInset.stylex';
 import {keyboardLiftStyle, useLayerKeyboardClearance} from './LayerTouch';
+import {
+  layerEntranceSide,
+  readLayerEntranceSide,
+  writeLayerEntranceSide,
+} from './layerEntranceSide';
 import {LAYER_ANCHORED_ATTRIBUTE} from './layerKeyboardClearance';
 import {settledBox} from './settledBox';
 import {layerInsetProperties} from './layerInset';
@@ -58,6 +67,8 @@ import {preserveAnimations} from './preserveAnimations';
 import {useLayerContext} from './LayerContext';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
+import {observeResize} from '../utils/sharedResizeObserver';
+import {observeMutations} from '../utils/sharedMutationObserver';
 import {containsAlongFlatTree, parentAcrossShadow} from '../utils/flatTree';
 import {isShadowRoot} from '../utils/nodeType';
 import {subscribeInput} from '../utils/inputStream';
@@ -490,6 +501,21 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * hidden starts here.
    */
   onCloseStart?: () => void;
+  /**
+   * Watches the open layer for touches outside it that pan; returns the
+   * function that stops watching. A light-dismiss layer is given one by its
+   * owner (usePopover's `watchOutsidePans`). An anchored menu, which closes
+   * as such a pan begins, is given none.
+   */
+  watchesOutsidePans?: (layer: HTMLElement) => () => void;
+  /**
+   * The component writes the entrance's side itself, after the commit that
+   * moves the layer (a Selector's list over its selected option). The runtime
+   * then skips its own read as the layer shows, so a show reads the layer
+   * once. A layer element swapped in while it is open still gets the
+   * runtime's read.
+   */
+  writesEntranceSide?: boolean;
 }
 
 type InternalContextLayerReturn = ContextLayerReturn & InternalLayerFields;
@@ -518,6 +544,18 @@ function placeAfresh(layer: HTMLElement): void {
 }
 
 /**
+ * Whether an animation is running and ends on its own. A paused or idle
+ * animation does not end by itself. An animation with an infinite end time
+ * never ends. Waiting on either holds the layer for good.
+ */
+function endsOnItsOwn(animation: Animation): boolean {
+  return (
+    animation.playState === 'running' &&
+    animation.effect?.getComputedTiming().endTime !== Infinity
+  );
+}
+
+/**
  * The finite animations still running on `layer` and its content. A layer
  * that fades out keeps running them after the browser hides it, and it stays
  * placed against its anchor until they end.
@@ -526,13 +564,7 @@ function exitAnimations(layer: HTMLElement | null): Animation[] {
   if (layer == null || typeof layer.getAnimations !== 'function') {
     return [];
   }
-  return layer
-    .getAnimations({subtree: true})
-    .filter(
-      animation =>
-        animation.playState === 'running' &&
-        animation.effect?.getComputedTiming().endTime !== Infinity,
-    );
+  return layer.getAnimations({subtree: true}).filter(endsOnItsOwn);
 }
 
 /**
@@ -572,15 +604,22 @@ function animationNames(layer: HTMLElement): string {
   return style?.getPropertyValue('animation-name').trim() || 'none';
 }
 
+/** The settled boxes of a layer and its anchor, from one measurement pass. */
+interface AnchorBoxes {
+  readonly layer: DOMRect;
+  readonly anchor: DOMRect;
+}
+
 /**
  * Whether the standard list has failed a layer that must keep its anchor
  * clear: its box covers the anchor or, while the anchor is in view, leaves the
  * viewport on the block axis. Only a box that overlaps the anchor counts; a
  * layer flush against it does not.
  */
-function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
-  const a = anchor.getBoundingClientRect();
-  const l = settledBox(layer);
+function failsAnchor(
+  {layer: l, anchor: a}: AnchorBoxes,
+  viewportBlock: number,
+): boolean {
   if (l.width <= 0 || l.height <= 0) {
     return false;
   }
@@ -589,8 +628,6 @@ function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
     a.left < l.right &&
     l.top < a.bottom &&
     a.top < l.bottom;
-  // The viewport's block extent, as the layer's anchor positioning sees it.
-  const viewportBlock = layer.ownerDocument.documentElement.clientHeight;
   const anchorInView = a.bottom > 0 && a.top < viewportBlock;
   return covers || (anchorInView && (l.top < 0 || l.bottom > viewportBlock));
 }
@@ -607,12 +644,50 @@ function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
  * in the first frame painted after a scroll of the anchor stops
  * (`observeScrollStop`), because during a scroll the browser does not choose
  * an option again. Nothing watches an anchor that moves without resizing, so
- * the layer never jumps to another side mid-scroll.
+ * the layer never jumps to another side mid-scroll. It returns the boxes it
+ * read when it leaves the layer in place, so a show reads them once. After a
+ * fresh placement, or without an anchor, it returns `null`.
  */
-function keepAnchorClear(layer: HTMLElement, anchor: HTMLElement | null): void {
-  if (anchor && failsAnchor(layer, anchor)) {
-    placeAfresh(layer);
+function keepAnchorClear(
+  layer: HTMLElement,
+  anchor: HTMLElement | null,
+): AnchorBoxes | null {
+  if (anchor == null) {
+    return null;
   }
+  // One measurement pass. `settledBox` can write the layer's transforms and
+  // restore them, so it reads last.
+  const anchorBox = anchor.getBoundingClientRect();
+  // The viewport's block extent, as the layer's anchor positioning sees it.
+  const viewportBlock = layer.ownerDocument.documentElement.clientHeight;
+  const boxes = {anchor: anchorBox, layer: settledBox(layer)};
+  if (failsAnchor(boxes, viewportBlock)) {
+    placeAfresh(layer);
+    return null;
+  }
+  return boxes;
+}
+
+/**
+ * Gives a shown layer's entrance its side. The boxes `keepAnchorClear` read
+ * stand when it left the layer in place; otherwise the side is read here,
+ * after the placement. Only an anchored layer has a side.
+ */
+function writeEntranceSide(
+  layer: HTMLElement,
+  trigger: HTMLElement | null,
+  boxes: AnchorBoxes | null,
+): void {
+  if (trigger == null || !layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)) {
+    writeLayerEntranceSide(layer, null);
+    return;
+  }
+  writeLayerEntranceSide(
+    layer,
+    boxes == null
+      ? readLayerEntranceSide(layer, trigger)
+      : layerEntranceSide(boxes.layer, boxes.anchor),
+  );
 }
 
 /**
@@ -767,6 +842,116 @@ function observeAnchorClearance(
     observer?.disconnect();
     stopObservingScrollStop();
     view.removeEventListener('resize', reread);
+  };
+}
+
+/** Whether `element` is shown as a popover (`:popover-open`). */
+function isShownAsPopover(element: HTMLElement): boolean {
+  try {
+    return element.matches(':popover-open');
+  } catch {
+    // An engine without the pseudo-class has no popovers to be shown as.
+    return false;
+  }
+}
+
+/**
+ * Whether `anchor` is a valid CSS anchor right now: it has a layout box, and
+ * any `<dialog>` it sits in is showing, as a modal (`open`) or as a popover
+ * (a non-modal `Drawer` is shown with `showPopover()` and never `open`).
+ * `Dialog` displays its element during render but only calls `showModal()` in
+ * a later Effect, so in that window the trigger already has a box while the
+ * dialog is not yet in the top layer; opening a layer then paints it before
+ * the dialog is modal.
+ */
+function isAnchorReady(anchor: HTMLElement): boolean {
+  // No layout box at all: `display: none`, or inside a closed `<dialog>`. An
+  // element that renders but is empty (an inline `<span>` with no content, such
+  // as a ContextMenu's cursor anchor in a shadow root without Astryx's styles)
+  // still has one 0x0 client rect and is a valid anchor.
+  if (anchor.getClientRects().length === 0) {
+    return false;
+  }
+  const dialog = anchor.closest('dialog');
+  return dialog == null || dialog.open || isShownAsPopover(dialog);
+}
+
+/**
+ * Calls `onReady` one frame later, once every running animation that ends on
+ * its own, on the document timeline, on `anchor` or an ancestor, has finished.
+ * Calls it synchronously if `document.getAnimations` does not exist (jsdom).
+ * Returns a cancel function.
+ *
+ * `getBoundingClientRect()` reflects an ancestor's CSS transform, so an
+ * anchor sitting inside a running entry animation — Dialog's own
+ * scale/translate enter transition, e.g. — keeps reporting a different box
+ * every frame for as long as that animation runs, even though a
+ * `ResizeObserver` sees no size change at all (a transform never changes the
+ * anchor's own layout box). Anchoring a layer to the trigger's box mid
+ * transition, rather than the one it settles into, has produced a CSS
+ * anchor-positioning resolution that never gets revisited once the trigger
+ * stops moving: the layer is stranded at its unanchored fallback position
+ * for the rest of that open.
+ *
+ * The check itself waits one frame before reading `document.getAnimations()`:
+ * a CSS animation just triggered by a `display`/class change (exactly what
+ * unhides a Dialog's content) is not yet in that list in the same task —
+ * measured directly, not assumed — so checking synchronously would always see
+ * zero animations and defeat the whole guard. One frame is enough for the UA
+ * to have started it.
+ *
+ * The wait skips an animation that never ends by itself: a paused one, an
+ * infinite one such as `StatusDot`'s pulse, and a scroll- or view-driven one.
+ * `Animation.finished` never resolves for these, so waiting on them would
+ * block a layer that anchors to them from ever opening.
+ */
+
+function waitForAncestorAnimations(
+  anchor: HTMLElement,
+  onReady: () => void,
+): () => void {
+  if (typeof document.getAnimations !== 'function') {
+    onReady();
+    return () => {};
+  }
+  let cancelled = false;
+  const handle = requestAnimationFrame(() => {
+    if (cancelled) {
+      return;
+    }
+    const running = document.getAnimations().filter(animation => {
+      const target =
+        animation.effect instanceof KeyframeEffect
+          ? animation.effect.target
+          : null;
+      if (
+        !(target instanceof Node) ||
+        !(target === anchor || target.contains(anchor))
+      ) {
+        return false;
+      }
+      // A scroll- or view-driven animation finishes only when the person
+      // scrolls to the end of its range, so it is not a settle to wait on.
+      if (animation.timeline !== document.timeline) {
+        return false;
+      }
+      return endsOnItsOwn(animation);
+    });
+    if (running.length === 0) {
+      onReady();
+      return;
+    }
+    void Promise.all(
+      running.map(async animation => animation.finished.catch(() => {})),
+    ).then(() => {
+      if (!cancelled) {
+        onReady();
+      }
+    });
+  });
+  return () => {
+    cancelled = true;
+    cancelAnimationFrame(handle);
   };
 }
 
@@ -1091,6 +1276,10 @@ function useLayerImplementation(
       : false;
   const keepsAnchorClear =
     mode === 'context' ? (options.keepsAnchorClear ?? false) : false;
+  const watchesOutsidePans =
+    mode === 'context' ? options.watchesOutsidePans : undefined;
+  const writesEntranceSide =
+    mode === 'context' ? (options.writesEntranceSide ?? false) : false;
   const onCloseStartRef = useRef<(() => void) | undefined>(undefined);
   onCloseStartRef.current =
     mode === 'context' ? options.onCloseStart : undefined;
@@ -1121,6 +1310,13 @@ function useLayerImplementation(
   // reference lets the ref callback recognize and reopen its replacement.
   const openedPopoverRef = useRef<HTMLElement | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  // A detach (contextRef(null)) still in its transient window — cancelled if
+  // the same element reattaches before the microtask runs, applied
+  // (removing the anchor name) otherwise. See contextRef below.
+  const pendingTriggerDetachRef = useRef<{
+    element: HTMLElement;
+    cancelled: boolean;
+  } | null>(null);
   // Context layers place a persistent inert marker at their real JSX position.
   // Its parent tells us whether the final layer can stay inline or needs a
   // corrective portal, including after the render call moves.
@@ -1189,6 +1385,13 @@ function useLayerImplementation(
   // theirs to act on.
   const dismissedByGestureRef = useRef<number | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
+
+  // Stops the watch for pans outside the open layer (`watchesOutsidePans`).
+  const stopOutsidePanWatchRef = useRef<(() => void) | null>(null);
+  const stopOutsidePanWatch = useCallback(() => {
+    stopOutsidePanWatchRef.current?.();
+    stopOutsidePanWatchRef.current = null;
+  }, []);
 
   const wasJustDismissed = useCallback(() => {
     const gesture = currentGesture();
@@ -1348,7 +1551,7 @@ function useLayerImplementation(
     mountStore.set(null);
   }, [mode, lazyMount, keepsMountAfterShow, mountStore]);
 
-  const show = useCallback(() => {
+  const openNow = useCallback(() => {
     // Every caller lands here, so this is where the dismissing press is
     // absorbed: opening now would reopen the popup that same press closed.
     if (wasJustDismissed()) {
@@ -1414,8 +1617,18 @@ function useLayerImplementation(
         closedAnimations !== 'none' &&
         closedAnimations !== animationNames(popover);
       closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
-      if (keepsAnchorClear) {
-        keepAnchorClear(popover, triggerRef.current);
+      if (lightDismiss) {
+        claimContextMenuPress(popover);
+        if (watchesOutsidePans != null) {
+          stopOutsidePanWatch();
+          stopOutsidePanWatchRef.current = watchesOutsidePans(popover);
+        }
+      }
+      const anchorBoxes = keepsAnchorClear
+        ? keepAnchorClear(popover, triggerRef.current)
+        : null;
+      if (!writesEntranceSide) {
+        writeEntranceSide(popover, triggerRef.current, anchorBoxes);
       }
       isOpenRef.current = true;
       setIsOpen(true);
@@ -1425,6 +1638,10 @@ function useLayerImplementation(
     anchorId,
     onShow,
     keepsAnchorClear,
+    writesEntranceSide,
+    lightDismiss,
+    watchesOutsidePans,
+    stopOutsidePanWatch,
     requestContextMount,
     applyDeferredWritingContext,
     showPopoverElement,
@@ -1432,7 +1649,155 @@ function useLayerImplementation(
     wasJustDismissed,
   ]);
 
+  // A wait for the trigger to get a layout box, started by a show() that
+  // found none. Cancelled by the next show()/hide() or by
+  // unmount, so a stale wait from a closed-then-reopened layer never fires
+  // openNow() after the fact.
+  const pendingAnchorWaitRef = useRef<(() => void) | null>(null);
+  // The element that wait is observing, so a trigger swapped out underneath it
+  // can restart the wait on the new element (see `contextRef`).
+  const pendingAnchorElementRef = useRef<HTMLElement | null>(null);
+
+  // The deferred restart `contextRef` queues after a trigger swap. Any
+  // show()/hide() or a new wait supersedes it, so a layer that was hidden in
+  // the same commit never reopens by itself.
+  const pendingRestartRef = useRef<{cancelled: boolean} | null>(null);
+
+  const cancelPendingAnchorWait = useCallback(() => {
+    pendingAnchorWaitRef.current?.();
+    pendingAnchorWaitRef.current = null;
+    pendingAnchorElementRef.current = null;
+    if (pendingRestartRef.current) {
+      pendingRestartRef.current.cancelled = true;
+      pendingRestartRef.current = null;
+    }
+  }, []);
+
+  // A wait that reached its end: nothing is pending any more, so a later
+  // trigger swap must not restart it.
+  const finishAnchorWait = useCallback(() => {
+    pendingAnchorWaitRef.current = null;
+    pendingAnchorElementRef.current = null;
+  }, []);
+
+  // A trigger with no layout box (no client rect) is not a valid CSS anchor. Opening against it now resolves the popover to
+  // its fallback position (the viewport corner), and unlike a live layout
+  // change, that resolution does not get revisited once the trigger later
+  // gets a box: the popover is stuck there for the rest of this open.
+  //
+  // The concrete case this guards: a Dialog mounts its children before it
+  // opens (`isOpen` gates only `showModal()`, not rendering), so a context
+  // layer with `isDefaultOpen` or a controlled `isOpen={true}` inside one can
+  // mount, and show() can run, while the trigger sits inside a `<dialog>`
+  // that hasn't gone modal yet and so has no box. Anchor readiness lives here
+  // rather than in each caller because this is the one place that already
+  // owns the trigger element (`triggerRef`, set by `contextRef` below) and the
+  // one place every context-mode show() funnels through.
+  const show = useCallback(() => {
+    cancelPendingAnchorWait();
+
+    const anchor = mode === 'context' ? triggerRef.current : null;
+    if (!anchor) {
+      openNow();
+      return;
+    }
+    if (isAnchorReady(anchor)) {
+      // A trigger that already has a layout box is a valid anchor: open now, in the
+      // same task as the interaction that asked, so a menu still opens on
+      // press and not on the next frame. Only a trigger with no layout box has to wait.
+      openNow();
+      return;
+    }
+    // No layout engine to wait on (jsdom, an old browser): same fallback
+    // sharedResizeObserver.ts uses for the same gap. Skip the wait rather than
+    // throw, and open against whatever box is available now. A missing
+    // `document.getAnimations` is the signal for "no real layout" here: jsdom
+    // reports every box as 0x0 forever, so a ResizeObserver stub that never
+    // fires would otherwise hold every layer closed.
+    if (
+      typeof ResizeObserver === 'undefined' ||
+      typeof document.getAnimations !== 'function'
+    ) {
+      openNow();
+      return;
+    }
+    // The wait is driven by signals, never by polling. Any of them re-reads `isAnchorReady`; the first that
+    // finds the anchor ready wins. None resolves against a boxless trigger, so
+    // a layer whose container gains layout much later still ends up anchored,
+    // not opened against a 0x0 box because a cap gave up first:
+    //
+    // - ResizeObserver: a block-level trigger gaining a box.
+    // - IntersectionObserver: reports a `display: inline` trigger, which
+    //   ResizeObserver never delivers an entry for, such as the wrapper
+    //   `<span>` of a text-only Tooltip or HoverCard. It also fires
+    //   when a hidden ancestor is displayed.
+    // - The enclosing `<dialog>`'s `open` attribute and `toggle` event: the
+    //   trigger can have a box before the dialog is modal (see
+    //   `isAnchorReady`), and a popover-shown dialog never sets `open`.
+    //
+    // A ResizeObserver stub that fires synchronously (several component tests
+    // use one) resolves exactly as fast as it always did. Environments with no
+    // real layout ever are excluded before this point.
+    const anchorElement: HTMLElement = anchor;
+    const dialog = anchor.closest('dialog');
+    let cancelSettleWait: () => void = () => {};
+    let resolved = false;
+    // The shared observers hand back an unsubscribe for this
+    // registration only, so the teardown does not touch other observers of the
+    // same element.
+    let stopResize: () => void = () => {};
+    let stopMutations: () => void = () => {};
+    const release = () => {
+      stopResize();
+      intersection?.disconnect();
+      stopMutations();
+      dialog?.removeEventListener('toggle', check);
+    };
+    const resolve = () => {
+      resolved = true;
+      release();
+      // Once the box exists, a short settle wait lets an ancestor's running
+      // entry animation finish before the layer anchors to it.
+      cancelSettleWait = waitForAncestorAnimations(anchor, () => {
+        finishAnchorWait();
+        openNow();
+      });
+    };
+    function check() {
+      if (!resolved && isAnchorReady(anchorElement)) {
+        resolve();
+      }
+    }
+    const intersection =
+      typeof IntersectionObserver === 'undefined'
+        ? null
+        : new IntersectionObserver(check);
+    stopResize = observeResize(anchor, check);
+    if (!resolved) {
+      intersection?.observe(anchor);
+      if (dialog) {
+        stopMutations = observeMutations(
+          dialog,
+          {attributes: true, attributeFilter: ['open']},
+          check,
+        );
+        dialog.addEventListener('toggle', check);
+      }
+    } else {
+      // The registration itself resolved the wait before its unsubscribe
+      // existed, so release it now.
+      release();
+    }
+    pendingAnchorWaitRef.current = () => {
+      resolved = true;
+      release();
+      cancelSettleWait();
+    };
+    pendingAnchorElementRef.current = anchor;
+  }, [mode, openNow, cancelPendingAnchorWait, finishAnchorWait]);
+
   const hide = useCallback(() => {
+    cancelPendingAnchorWait();
     pendingShowRef.current = false;
     if (isOpenRef.current) {
       const el = popoverRef.current;
@@ -1445,6 +1810,7 @@ function useLayerImplementation(
       // dismissals from ours.
       openedPopoverRef.current = null;
       isOpenRef.current = false;
+      stopOutsidePanWatch();
       // See finding infra-4 note in `show`: mirror the same guard on hide so
       // unsupported browsers degrade gracefully instead of throwing.
       if (el) {
@@ -1465,7 +1831,13 @@ function useLayerImplementation(
     }
     releaseAnchor(popoverRef.current);
     clearContextMount();
-  }, [onHide, clearContextMount, releaseAnchor]);
+  }, [
+    onHide,
+    clearContextMount,
+    releaseAnchor,
+    cancelPendingAnchorWait,
+    stopOutsidePanWatch,
+  ]);
 
   // A deferred show() replays through a ref so the queued closure reaches the
   // current callback rather than the one captured when it was queued.
@@ -1479,8 +1851,46 @@ function useLayerImplementation(
   const clearObserversRef = useRef<(() => void) | null>(null);
 
   // Stable ref for the trigger element (context mode only).
+  //
+  // A combined ref can call this ref with `null` and then with the same
+  // element. Removing `anchor-name` in that gap strands an open layer at its
+  // fallback position. So a `null` call removes the name one microtask later,
+  // unless the same element attaches again first. A different element takes
+  // over at once, and a `null` with nothing after it (an unmount) removes the
+  // name.
   const contextRef = useCallback(
     (el: HTMLElement | null) => {
+      if (!el) {
+        const stale = triggerRef.current;
+        if (!stale) {
+          return;
+        }
+        const pending = {element: stale, cancelled: false};
+        pendingTriggerDetachRef.current = pending;
+        queueMicrotask(() => {
+          if (pending.cancelled || triggerRef.current !== stale) {
+            return;
+          }
+          removeAnchorName(stale, anchorId);
+          triggerRef.current = null;
+          // A real unmount: stop waiting on an element that will never get a
+          // box, and release the observers an open layer kept on it.
+          if (pendingAnchorElementRef.current === stale) {
+            cancelPendingAnchorWait();
+          }
+          if (keepsAnchorClear && isOpenRef.current) {
+            clearObserversRef.current?.();
+            clearObserversRef.current = null;
+          }
+        });
+        return;
+      }
+      // Reattaching the exact element a pending detach targeted: cancel it,
+      // the churn never happened as far as the anchor name is concerned.
+      if (pendingTriggerDetachRef.current?.element === el) {
+        pendingTriggerDetachRef.current.cancelled = true;
+        pendingTriggerDetachRef.current = null;
+      }
       // Remove only THIS layer's anchor name from the previous element so
       // other layers sharing the same trigger keep their anchors.
       if (triggerRef.current && triggerRef.current !== el) {
@@ -1500,13 +1910,13 @@ function useLayerImplementation(
 
       // A trigger replaced while the layer is open (React detaches the old
       // node with `null`, then attaches the new one): the old trigger's
-      // observers are removed before the new trigger's are added (INV6), and
+      // observers are removed before the new trigger's are added, and
       // binding them reads the new trigger's geometry at once.
       if (keepsAnchorClear && isOpenRef.current && el !== previous) {
         clearObserversRef.current?.();
         clearObserversRef.current = null;
         const layer = popoverRef.current;
-        if (el && layer) {
+        if (layer) {
           clearObserversRef.current = observeAnchorClearance(
             layer,
             el,
@@ -1515,8 +1925,27 @@ function useLayerImplementation(
           keepAnchorClear(layer, el);
         }
       }
+
+      // A show() is still waiting for a box on a different trigger: that wait
+      // observes the element it started with, so it would never end for this
+      // one. Restart it on the new trigger, after the commit that attached it.
+      const waitingOn = pendingAnchorElementRef.current;
+      if (waitingOn && waitingOn !== el) {
+        cancelPendingAnchorWait();
+        const restart = {cancelled: false};
+        pendingRestartRef.current = restart;
+        queueMicrotask(() => {
+          if (restart.cancelled) {
+            return;
+          }
+          pendingRestartRef.current = null;
+          if (triggerRef.current === el && !isOpenRef.current) {
+            showRef.current();
+          }
+        });
+      }
     },
-    [anchorId, keepsAnchorClear],
+    [anchorId, cancelPendingAnchorWait, keepsAnchorClear],
   );
 
   // Arm only when the dismissing gesture's click is still ahead of us. Some
@@ -1559,12 +1988,17 @@ function useLayerImplementation(
   }, []);
 
   // Syncs the document's capture-phase gesture tracking with this mount.
-  // Unmount forgets the layer's dismissal.
+  // Unmount forgets the layer's dismissal, releases a pending anchor wait and
+  // stops the outside-pan watch.
   useEffect(() => {
     // Install capture-phase gesture tracking before the first interaction.
     currentGesture();
-    return () => forgetDismissalRef.current?.();
-  }, []);
+    return () => {
+      forgetDismissalRef.current?.();
+      pendingAnchorWaitRef.current?.();
+      stopOutsidePanWatch();
+    };
+  }, [stopOutsidePanWatch]);
 
   // Reconcile browser-initiated closes (light-dismiss, popover="auto" stack
   // eviction). These are the only cases where the DOM mutates without going
@@ -1620,6 +2054,7 @@ function useLayerImplementation(
       if (toggleEvent.newState === 'closed' && isOpenRef.current) {
         openedPopoverRef.current = null;
         isOpenRef.current = false;
+        stopOutsidePanWatch();
         rememberDismissal(
           (e.currentTarget as HTMLElement | null)?.ownerDocument ?? document,
         );
@@ -1629,7 +2064,13 @@ function useLayerImplementation(
         clearContextMount();
       }
     },
-    [onHide, clearContextMount, rememberDismissal, releaseAnchor],
+    [
+      onHide,
+      clearContextMount,
+      rememberDismissal,
+      releaseAnchor,
+      stopOutsidePanWatch,
+    ],
   );
 
   // Ref callback for popover element — sets up the `toggle` listener.
@@ -1697,9 +2138,10 @@ function useLayerImplementation(
         // keyboard cap follows the replacement element too.
         followLayerElement();
         if (showPopoverElement(el)) {
-          if (keepsAnchorClear) {
-            keepAnchorClear(el, triggerRef.current);
-          }
+          const anchorBoxes = keepsAnchorClear
+            ? keepAnchorClear(el, triggerRef.current)
+            : null;
+          writeEntranceSide(el, triggerRef.current, anchorBoxes);
         } else {
           afterPopoverOperations(el.ownerDocument, () => {
             const current = popoverRef.current;
@@ -1707,10 +2149,12 @@ function useLayerImplementation(
               isOpenRef.current &&
               current === el &&
               openedPopoverRef.current !== el &&
-              showPopoverElement(el) &&
-              keepsAnchorClear
+              showPopoverElement(el)
             ) {
-              keepAnchorClear(el, triggerRef.current);
+              const anchorBoxes = keepsAnchorClear
+                ? keepAnchorClear(el, triggerRef.current)
+                : null;
+              writeEntranceSide(el, triggerRef.current, anchorBoxes);
             }
           });
         }
@@ -1808,7 +2252,7 @@ function useLayerImplementation(
     return () => observer.disconnect();
   }, [isOpen, mode, updateAnchorInView]);
 
-  // A layer that keeps its anchor clear (FR4) re-reads its geometry while it
+  // A layer that keeps its anchor clear re-reads its geometry while it
   // is open: content that grows, an anchor that resizes or moves (in layout or
   // by a scroll) or a viewport resize can each re-settle the standard list over the anchor or
   // give the layer a scroll range (`observeAnchorClearance`). The external

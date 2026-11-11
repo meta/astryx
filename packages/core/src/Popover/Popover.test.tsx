@@ -954,6 +954,32 @@ describe('Popover', () => {
       }
     });
 
+    it('focuses the first content control in document order, a field before its buttons', () => {
+      render(
+        <Popover
+          content={
+            <div>
+              <input aria-label="URL" />
+              <button type="button">Apply</button>
+              <button type="button">Cancel</button>
+            </div>
+          }
+          label="Link">
+          <button type="button">Open link</button>
+        </Popover>,
+      );
+
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: 'Open link'}), {
+          detail: 1,
+        });
+      });
+
+      expect(
+        screen.getByRole('textbox', {name: 'URL', hidden: true}),
+      ).toHaveFocus();
+    });
+
     it('still focuses the content when the opening handler swaps it in', async () => {
       function Swapped() {
         const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -1778,14 +1804,21 @@ describe('Popover touch presentation', () => {
   it('under a finger, grows the popover out of its trigger in place of the layer\u2019s entrance', () => {
     isCoarse = true;
     const layer = open();
-    expect(layer.style.getPropertyValue('animation-name')).toBe('none');
-    expect(layer.style.getPropertyValue('transform-origin')).not.toBe('');
+    const surface = screen.getByRole('dialog', {name: 'Filters', hidden: true});
+    expect(surface.style.getPropertyValue('animation-name')).toBe('none');
+    expect(surface.style.getPropertyValue('transform-origin')).not.toBe('');
     const scale = recorded.find(
       animation =>
-        animation.target === layer && 'scale' in animation.keyframes[0],
+        animation.target === surface && 'scale' in animation.keyframes[0],
     );
     expect(scale).toBeDefined();
     expect(String(scale!.keyframes[0].scale).split(' ')[0]).toBe('0.01');
+    // The growth plays on the surface. Chromium lays the anchored layer out
+    // again each time it restyles it, so nothing animates the layer.
+    expect(recorded.filter(animation => animation.target === layer)).toEqual(
+      [],
+    );
+    expect(layer.style.getPropertyValue('transform-origin')).toBe('');
   });
 
   it('under a finger, shrinks back into its trigger on a copy that outlives the close', () => {

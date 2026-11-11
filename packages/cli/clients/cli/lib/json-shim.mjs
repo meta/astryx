@@ -188,6 +188,7 @@ function commanderCodeToErrorCode(commanderCode, message) {
     case 'commander.unknownOption':
       return ERROR_CODES.ERR_INVALID_OPTION;
     case 'commander.missingArgument':
+    case 'commander.optionMissingArgument':
     case 'commander.missingMandatoryOptionValue':
       return ERROR_CODES.ERR_MISSING_ARGUMENT;
     case 'commander.excessArguments':
@@ -249,6 +250,8 @@ function applyShimRecursively(cmd) {
     } catch {
       // Never let recording interfere with the error path.
     }
+    // The error handler names the rejected command's usage from it.
+    /** @type {any} */ (err)[REJECTED_COMMAND] = cmd;
     throw err;
   });
   cmd.configureOutput({
@@ -274,6 +277,25 @@ function applyShimRecursively(cmd) {
   for (const sub of cmd.commands) {
     applyShimRecursively(sub);
   }
+}
+
+/** Carries the command Commander rejected from exitOverride to the error handler. */
+const REJECTED_COMMAND = Symbol.for('astryx.jsonShim.rejectedCommand');
+
+/**
+ * The usage line of the command a parse error came from, as a suggestion, for
+ * an option given without its value.
+ * @param {unknown} err
+ * @param {string} code
+ * @returns {import('../../../foundation/response/base').Suggestion[] | undefined}
+ */
+function usageSuggestion(err, code) {
+  if (code !== 'commander.optionMissingArgument') return undefined;
+  const cmd = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+  if (!cmd) return undefined;
+  const parts = [];
+  for (let node = cmd; node; node = node.parent) parts.unshift(node.name());
+  return [{name: `${parts.join(' ')} ${cmd.usage()}`.trim(), reason: 'usage'}];
 }
 
 /** Marks a command whose `command`/`addCommand` already self-install the shim. */
@@ -448,12 +470,18 @@ export function handleCommanderError(err) {
   // Real error paths. Strip Commander's "error: " prefix once: in the envelope
   // the key is already `error`, and in text mode the Astryx prefix replaces it.
   const cleaned = message.replace(/^error:\s*/i, '');
+  const suggestions = usageSuggestion(err, code);
   if (jsonActive()) {
-    emitJsonError(cleaned, undefined, commanderCodeToErrorCode(code, cleaned));
+    emitJsonError(
+      cleaned,
+      suggestions,
+      commanderCodeToErrorCode(code, cleaned),
+    );
   } else {
     // Commander's own line was suppressed above, so a parse failure reads the
     // same as every other CLI error — the `Error: …` line cliError prints.
     process.stderr.write(`Error: ${cleaned}\n`);
+    if (suggestions) process.stderr.write(`Usage: ${suggestions[0].name}\n`);
   }
   process.exit(exitCode || 1);
 }
