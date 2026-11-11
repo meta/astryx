@@ -655,11 +655,15 @@ describe('stable and canary publication authority', () => {
         path.join(dir, 'packages/core/package.json'),
         JSON.stringify({version: '0.7.13'}),
       );
-      return spawnSync(
-        'bash',
-        ['-c', `set -eu\n${computation}\nprintf '%s' "$CANARY_VERSION"`],
-        {cwd: dir, env: {...process.env, GITHUB_SHA: sha}, encoding: 'utf8'},
-      ).stdout;
+      try {
+        return spawnSync(
+          'bash',
+          ['-c', `set -eu\n${computation}\nprintf '%s' "$CANARY_VERSION"`],
+          {cwd: dir, env: {...process.env, GITHUB_SHA: sha}, encoding: 'utf8'},
+        ).stdout;
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
     };
     // SemVer 2.0.0's grammar (semver.org), which `semver.valid` applies: a
     // numeric pre-release identifier has no leading zero.
