@@ -48,8 +48,8 @@ export interface ContextMenuTouchLayerProps {
  * recognizer claims the finger. The page stops scrolling under it, and its
  * lift sends no click and no compatibility mouse events. The menu opens where
  * the finger landed: at `menuDisplayMs` if it is still down, or at the lift.
- * A lift before the commit, a second finger or a scroll gets no menu. So does
- * a drift past the tolerance before the menu shows.
+ * Before the commit, a lift, a second finger or a scroll gets no menu. So
+ * does a drift past the tolerance before the menu shows.
  */
 export function ContextMenuTouchLayer({
   triggerRef,
