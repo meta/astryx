@@ -905,6 +905,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // True while an answer that arrived with the popup dismissed waits for the
   // next open, including an empty answer.
   const keptAnswerRef = useRef(false);
+  // The typed text whose search a dismissal dropped: a debounce it cleared, or
+  // a request it aborted. The next open searches it.
+  const droppedQueryRef = useRef<string | null>(null);
 
   // The previous source is remembered in state, not a ref, so a render React
   // discards cannot consume the comparison without its state updates.
@@ -973,6 +976,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       clearTimeout(searchTimeoutRef.current);
       searchTimeoutRef.current = null;
       searchGenRef.current++;
+      droppedQueryRef.current = queryRef.current;
+    } else if (searchInFlightRef.current != null && searchSource.cancel) {
+      droppedQueryRef.current = searchInFlightRef.current.query;
     }
     searchSource.cancel?.();
     setLoading(false);
@@ -1213,6 +1219,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       dismissedRef.current = false;
       keptCountRef.current = null;
       keptAnswerRef.current = false;
+      droppedQueryRef.current = null;
       searchInFlightRef.current = {gen, query: searchQuery};
       setLoading(true);
       setHasSearched(true);
@@ -1577,6 +1584,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       queryRef.current = newQuery;
       keptCountRef.current = null;
       keptAnswerRef.current = false;
+      droppedQueryRef.current = null;
       onChangeQuery?.(newQuery);
 
       if (searchTimeoutRef.current) {
@@ -1797,7 +1805,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // field holds show at once, and the layer's show announces a kept count. An
   // empty answer shows only when it arrived while the popup was dismissed.
   // Results a replaced source or an older query left behind count as none.
-  // Returns false when nothing is on hand or pending, so the caller loads.
+  // Text whose search a dismissal dropped is searched now. Returns false when
+  // nothing is on hand or pending, so the caller loads.
   const openWithKeptAnswer = useCallback(
     (highlightFirst: boolean) => {
       const isPending = resumePendingSearch();
@@ -1813,7 +1822,22 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         }
         return true;
       }
-      return isPending;
+      if (isPending) {
+        return true;
+      }
+      // Text typed just before a dismissal is never left unsearched.
+      const dropped = droppedQueryRef.current;
+      if (
+        dropped != null &&
+        dropped === queryRef.current &&
+        dropped.length > 0 &&
+        !isBelowMinQueryLength(dropped, minQueryLength)
+      ) {
+        droppedQueryRef.current = null;
+        void performSearch(dropped);
+        return true;
+      }
+      return false;
     },
     [
       resumePendingSearch,
@@ -1821,6 +1845,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       query.length,
       hasEntriesOnFocus,
       showLayer,
+      minQueryLength,
+      performSearch,
     ],
   );
 

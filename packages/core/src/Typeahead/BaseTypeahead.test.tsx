@@ -1532,7 +1532,7 @@ describe('BaseTypeahead pending work after a dismissal', () => {
     };
     const pressEscape = (input: HTMLElement) =>
       fireEvent.keyDown(input, {key: 'Escape'});
-    const OPEN_PATHS: Array<[string, OpenPath]> = [
+    const OPEN_PATHS: [string, OpenPath][] = [
       [
         'ArrowDown',
         {
@@ -1653,6 +1653,29 @@ describe('BaseTypeahead pending work after a dismissal', () => {
         );
       },
     );
+
+    it("searches the typed text when a press on the field's label dismissed it inside the debounce", async () => {
+      vi.useFakeTimers({shouldAdvanceTime: true});
+      try {
+        const {input, search, answer} = renderPending({debounceMs: 200});
+        input.focus();
+        fireEvent.change(input, {target: {value: 'al'}});
+        // A press on the label takes focus from the input with no target in
+        // the field, then the label returns focus to the input.
+        act(() => input.blur());
+        await act(async () => vi.advanceTimersByTime(400));
+        expect(search).not.toHaveBeenCalled();
+
+        act(() => input.focus());
+        expect(search).toHaveBeenLastCalledWith('al', expect.anything());
+        expect(input).toHaveAttribute('aria-busy', 'true');
+        await answer('al', ['Alpine']);
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByText('Alpine')).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
     it('searches again on ArrowDown for an empty settled answer not kept through a dismissal', async () => {
       const {input, search, answer} = renderPending({});
