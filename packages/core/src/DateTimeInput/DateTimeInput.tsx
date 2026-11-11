@@ -5,7 +5,7 @@
 /**
  * @file DateTimeInput.tsx
  * @input Uses React, Field, Calendar, NativeDateSegment, NativeTimeSegment, TouchDateTimeField, usePopover, useAnnounce, time parsing utilities, StyleX intrinsic flex layout
- * @output Exports DateTimeInput component, DateTimeInputProps, and native picker type; cleared values keep the pointer Calendar controlled-empty
+ * @output Exports DateTimeInput component, DateTimeInputProps, and native picker type; cleared values keep the pointer Calendar controlled-empty; typed date rejections reach onEntryErrorChange
  * @position Core implementation; consumed by index.ts, tested by DateTimeInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -88,7 +88,10 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
-import {useTypedDateField} from '../DateInput/useTypedDate';
+import {
+  type DateEntryError,
+  useTypedDateField,
+} from '../DateInput/useTypedDate';
 
 import {
   useFieldInputStyling,
@@ -497,8 +500,30 @@ export interface DateTimeInputProps extends Omit<
 
   /**
    * Status indicator for the input.
+   *
+   * While typed date text is rejected, the field shows its own error message
+   * in place of `status`. With `onEntryErrorChange`, an `error` status with a
+   * message shows instead, and the field's own message applies only without
+   * one. A `warning` or `success` status never replaces a rejection.
    */
   status?: InputStatus;
+
+  /**
+   * Called each time the date segment's rejection of typed text changes, with
+   * `null` when the rejection ends. `kind` is `'unreadable'`, `'incomplete'`,
+   * `'nonexistent'` (a date the calendar does not have), `'outOfRange'`
+   * (before the date of `min` or after the date of `max`), or `'unavailable'`
+   * (a day `dateConstraints` rules out). `text` is the typed text, and `date`
+   * is the Gregorian ISO date the text names, for `'outOfRange'` and
+   * `'unavailable'`.
+   *
+   * It also runs when a new `min`, `max`, `dateConstraints`, or `value`, a
+   * calendar pick, disabling the field, or Enter or blur changes the
+   * rejection, and never twice for the same rejection. Passing it lets an
+   * `error` `status` word the rejection (see `status`). The native and touch
+   * pickers produce no typed rejections, so it never runs there.
+   */
+  onEntryErrorChange?: (error: DateEntryError | null) => void;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -660,6 +685,7 @@ function PointerDateTimeField({
   timeLabel,
   size: sizeProp,
   status,
+  onEntryErrorChange,
   labelTooltip,
   numberOfMonths = 1,
   weekStartsOn,
@@ -1034,6 +1060,7 @@ function PointerDateTimeField({
     isDisabled: isEffectivelyDisabled,
     status,
     isStatusAnnounced: true,
+    onEntryErrorChange,
     hasPlaceholder: placeholderFromProps != null,
   });
 
@@ -1830,8 +1857,8 @@ function PointerDateTimeField({
                 )}
               />
               {/*
-            Announces a typed date rejection that the field status does not
-            announce. The field status announces the rest.
+            Announces the date rejection message that the field status does
+            not announce. The field status announces the rest.
           */}
               <VisuallyHidden as="div" role="alert" aria-live="assertive">
                 {dateAlertMessage}
@@ -2114,9 +2141,12 @@ export function DateTimeInput(props: DateTimeInputProps) {
     case 'native':
       // Only `adaptive-native` on a coarse pointer resolves here (FR2).
       return <PointerDateTimeField {...rest} nativeMode="adaptive" />;
-    case 'sheet':
+    case 'sheet': {
+      // The sheet takes no typed text.
+      const {onEntryErrorChange: _onEntryErrorChange, ...sheetProps} = rest;
       // Month indexes depend on the calendar. A new calendar remounts the sheet.
-      return <TouchDateTimeField key={calendar} {...rest} />;
+      return <TouchDateTimeField key={calendar} {...sheetProps} />;
+    }
     case 'desktop':
       return <PointerDateTimeField {...rest} />;
   }

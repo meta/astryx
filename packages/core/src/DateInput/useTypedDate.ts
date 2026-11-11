@@ -7,12 +7,13 @@
  * @input Provider locale and calendar, a field's format, bounds and constraints;
  *   calendarDateParser, and parseDateInput for other Gregorian text
  * @output Typed-date reading, committed text, the format hint, the calendar
- *   description and rejection messages for a date text field, and the typed
- *   entry state that DateInput and DateTimeInput share
+ *   description and rejection messages for a date text field, the typed
+ *   entry state that DateInput and DateTimeInput share, and the DateEntryError
+ *   that the field reports to its caller
  * @position DateInput helper hook; used by DateInput and DateTimeInput
  */
 
-import {useCallback, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {InputStatus} from '../Field/types';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
@@ -49,6 +50,55 @@ registerEnglishFallback(english);
 
 /** A rejected typed date, by the message it announces. */
 export type TypedDateError = 'unreadable' | 'nonexistent' | 'outOfRange';
+
+/**
+ * Why a date field rejects the text that a person typed. The field reports it
+ * through `onEntryErrorChange`, so the app can word its own message.
+ */
+export interface DateEntryError {
+  /**
+   * The reason, independent of the locale and the calendar:
+   * - `'unreadable'`: text that is not a date
+   * - `'incomplete'`: part of a date that Enter or blur cannot finish
+   * - `'nonexistent'`: a date that the calendar does not have
+   * - `'outOfRange'`: a date before `min` or after `max`
+   * - `'unavailable'`: a date that `dateConstraints` rules out
+   */
+  kind:
+    'unreadable' | 'incomplete' | 'nonexistent' | 'outOfRange' | 'unavailable';
+  /** The typed text. */
+  text: string;
+  /**
+   * The Gregorian ISO date that the text names. It is set for `outOfRange` and
+   * `unavailable`.
+   */
+  date?: ISODateString;
+}
+
+function isSameEntryError(
+  a: DateEntryError | null,
+  b: DateEntryError | null,
+): boolean {
+  return (
+    a === b ||
+    (a != null &&
+      b != null &&
+      a.kind === b.kind &&
+      a.text === b.text &&
+      a.date === b.date)
+  );
+}
+
+function isOutsideBounds(
+  date: PlainDate,
+  min: ISODateString | undefined,
+  max: ISODateString | undefined,
+): boolean {
+  return (
+    (min != null && plainDateIsBefore(date, plainDateFromISO(min))) ||
+    (max != null && plainDateIsAfter(date, plainDateFromISO(max)))
+  );
+}
 
 export interface UseTypedDateOptions {
   /** The component that names itself in development warnings. */
@@ -102,6 +152,33 @@ export function typedDateError(
     return result.kind;
   }
   return null;
+}
+
+/** The rejection a result shows, as the field reports it to its caller. */
+function dateEntryError(
+  result: CalendarDateParseResult | null,
+  isCommitted: boolean,
+  text: string,
+  min: ISODateString | undefined,
+  max: ISODateString | undefined,
+): DateEntryError | null {
+  const error = typedDateError(result, isCommitted);
+  if (error == null || result == null) {
+    return null;
+  }
+  if (result.kind === 'incomplete') {
+    return {kind: 'incomplete', text};
+  }
+  if (result.kind === 'outOfRange') {
+    return {
+      kind: isOutsideBounds(result.date, min, max)
+        ? 'outOfRange'
+        : 'unavailable',
+      text,
+      date: plainDateToISO(result.date),
+    };
+  }
+  return {kind: error, text};
 }
 
 /**
@@ -258,10 +335,16 @@ export interface UseTypedDateFieldOptions extends UseTypedDateOptions {
    * date typing already reported gives way to the field's value.
    */
   isDisabled: boolean;
-  /** The caller's status. Rejected text that stays shows its own error instead. */
+  /**
+   * The caller's status. Rejected text that stays shows its own error instead,
+   * except that a caller with `onEntryErrorChange` words the error: its error
+   * status shows in place of the field's own message.
+   */
   status?: InputStatus;
   /** Whether the shown status announces itself, as Field's status does. */
   isStatusAnnounced: boolean;
+  /** Reports each change of the typed rejection, and null when it ends. */
+  onEntryErrorChange?: (error: DateEntryError | null) => void;
   /** Whether the caller gave a placeholder, which replaces the format hint. */
   hasPlaceholder: boolean;
 }
@@ -277,7 +360,7 @@ export interface TypedDateField {
   isInvalid: boolean;
   /** The status the field shows. */
   fieldStatus: InputStatus | undefined;
-  /** A typed rejection that the field status does not announce. */
+  /** The rejection message that the field status does not announce. */
   alertMessage: string;
   handleChange: (text: string) => void;
   /** Commits typed text, on Enter or blur. */
@@ -298,6 +381,7 @@ export function useTypedDateField({
   isDisabled,
   status,
   isStatusAnnounced,
+  onEntryErrorChange,
   hasPlaceholder,
   ...options
 }: UseTypedDateFieldOptions): TypedDateField {
@@ -333,12 +417,84 @@ export function useTypedDateField({
     isErrorShown && errorMessage != null
       ? {type: 'error', message: errorMessage}
       : undefined;
-  const fieldStatus = typedStatus ?? status;
+  const entryError = isDisabled
+    ? null
+    : dateEntryError(
+        typedResult,
+        isRejectionCommitted,
+        pendingInput ?? '',
+        options.min,
+        options.max,
+      );
+
+  // The rejection that the caller last received. Handlers report a rejection
+  // that they cause in the same update. A rejection that a prop change causes
+  // reaches the caller only after the render. Until then the field keeps the
+  // caller's status, so it never shows and announces its own message just
+  // before the caller's message replaces it.
+  const [heardEntryError, setHeardEntryError] = useState<DateEntryError | null>(
+    null,
+  );
+  const reportedEntryErrorRef = useRef<DateEntryError | null>(null);
+  const hasEntryErrorCallback = onEntryErrorChange != null;
+  const isCallerBehind =
+    hasEntryErrorCallback && !isSameEntryError(entryError, heardEntryError);
+  // A caller that receives rejections words them: its error message replaces
+  // the field's own message. A warning or a success never hides a rejection.
+  const callerErrorMessage =
+    hasEntryErrorCallback && status?.type === 'error' && status.message
+      ? status.message
+      : null;
+  const fieldStatus =
+    isCallerBehind || callerErrorMessage != null
+      ? status
+      : (typedStatus ?? status);
+  let alertMessage = '';
+  if (errorMessage != null && !isCallerBehind) {
+    if (callerErrorMessage != null) {
+      // Inside an InputGroup no Field announces the caller's status.
+      alertMessage = isStatusAnnounced ? '' : callerErrorMessage;
+    } else {
+      alertMessage =
+        isStatusAnnounced && typedStatus != null ? '' : errorMessage;
+    }
+  }
+
+  const reportEntryError = useCallback(
+    (error: DateEntryError | null) => {
+      if (onEntryErrorChange == null) {
+        return;
+      }
+      setHeardEntryError(error);
+      if (!isSameEntryError(error, reportedEntryErrorRef.current)) {
+        reportedEntryErrorRef.current = error;
+        onEntryErrorChange(error);
+      }
+    },
+    [onEntryErrorChange],
+  );
+
+  // Syncs the caller's entry error with a rejection that a new `min`, `max`,
+  // `dateConstraints`, `value`, or disabled state starts, changes, or ends.
+  useEffect(() => {
+    if (onEntryErrorChange == null) {
+      return;
+    }
+    if (!isSameEntryError(entryError, reportedEntryErrorRef.current)) {
+      reportedEntryErrorRef.current = entryError;
+      onEntryErrorChange(entryError);
+    }
+    if (!isSameEntryError(entryError, heardEntryError)) {
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- shows the field's own message once the caller has the rejection
+      setHeardEntryError(entryError);
+    }
+  }, [entryError, heardEntryError, onEntryErrorChange]);
 
   const reset = useCallback(() => {
     setPendingInput(null);
     setIsRejectionCommitted(false);
-  }, []);
+    reportEntryError(null);
+  }, [reportEntryError]);
 
   // A value from outside drops typed text. Computed during render, so it
   // takes no extra render.
@@ -393,6 +549,15 @@ export function useTypedDateField({
       setIsRejectionCommitted(false);
       // Report a date only once more typing cannot change it.
       const result = typedDate.parse(text);
+      reportEntryError(
+        dateEntryError(
+          text.trim() ? result : null,
+          false,
+          text,
+          options.min,
+          options.max,
+        ),
+      );
       if (result.kind === 'value' && result.isComplete) {
         const date = plainDateToISO(result.date);
         if (report(date)) {
@@ -400,7 +565,15 @@ export function useTypedDateField({
         }
       }
     },
-    [isDisabled, typedDate, report, onTypedDate],
+    [
+      isDisabled,
+      typedDate,
+      reportEntryError,
+      options.min,
+      options.max,
+      report,
+      onTypedDate,
+    ],
   );
 
   const commit = useCallback(() => {
@@ -421,6 +594,9 @@ export function useTypedDateField({
       // Keep the text and show why it cannot commit; never finish or adjust
       // the date.
       setIsRejectionCommitted(true);
+      reportEntryError(
+        dateEntryError(result, true, pendingInput, options.min, options.max),
+      );
       return;
     }
     if (result.kind === 'value') {
@@ -429,7 +605,17 @@ export function useTypedDateField({
     // A new typing session reports a retyped date again.
     lastFiredRef.current = undefined;
     reset();
-  }, [pendingInput, isDisabled, onClear, typedDate, report, reset]);
+  }, [
+    pendingInput,
+    isDisabled,
+    onClear,
+    typedDate,
+    reportEntryError,
+    options.min,
+    options.max,
+    report,
+    reset,
+  ]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -458,8 +644,7 @@ export function useTypedDateField({
     isPending: pendingInput !== null,
     isInvalid: typedError != null,
     fieldStatus,
-    alertMessage:
-      isStatusAnnounced && typedStatus != null ? '' : (errorMessage ?? ''),
+    alertMessage,
     handleChange,
     commit,
     handleFocus,

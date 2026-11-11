@@ -174,7 +174,13 @@ export const docs = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        'Status indicator object for error, warning, or success states with a message.',
+        'Status indicator object for error, warning, or success states with a message. While typed date text is rejected, the field shows its own error message instead; with onEntryErrorChange, an error status with a message shows in place of that message. A warning or success never replaces a rejection.',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'incomplete' | 'nonexistent' | 'outOfRange' | 'unavailable', text: string, date?: ISODateString} | null) => void",
+      description:
+        "Called each time the date segment's rejection of typed text changes, and with null when the rejection ends. kind is 'unreadable', 'incomplete' (part of a date that Enter or blur cannot finish), 'nonexistent' (a date the calendar does not have), 'outOfRange' (before the date of min or after the date of max), or 'unavailable' (a day dateConstraints rules out); text is the typed text; date is the Gregorian ISO date the text names, for 'outOfRange' and 'unavailable'. It also runs when a new min, max, dateConstraints, or value, a calendar pick, disabling the field, or Enter or blur changes the rejection, and never twice for the same rejection. With it, an error status with a message replaces the field's own message. The native and touch pickers take no typed text, so it never runs there.",
     },
     {
       name: 'labelTooltip',
@@ -573,7 +579,14 @@ export const docsZh = {
     {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
-      description: '错误、警告或成功状态的状态指示对象，附带消息。',
+      description:
+        '错误、警告或成功状态的状态指示对象，附带消息。输入的文本被拒绝时，字段显示自身的错误消息；传入 onEntryErrorChange 时，改为显示带消息的 error 状态。warning 或 success 状态不会替代拒绝消息。',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'incomplete' | 'nonexistent' | 'outOfRange' | 'unavailable', text: string, date?: ISODateString} | null) => void",
+      description:
+        "每当日期部分对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。kind 为 'unreadable'、'incomplete'（按 Enter 或失焦也无法补全的部分日期）、'nonexistent'（该日历中不存在的日期）、'outOfRange'（早于 min 的日期或晚于 max 的日期）或 'unavailable'（被 dateConstraints 排除的日期）；text 为输入的文本；date 为文本所指的公历 ISO 日期，用于 'outOfRange' 和 'unavailable'。新的 min、max、dateConstraints 或 value、在日历中选择日期、禁用字段，或按 Enter、失焦改变拒绝时也会调用；同一拒绝不会重复调用。传入此回调后，带消息的 error 状态会替代字段自身的错误消息。原生和触控选择器不接受输入文本，因此不会调用。",
     },
     {
       name: 'labelTooltip',
@@ -737,7 +750,10 @@ export const docsDense = {
     timeLabel:
       'accessible label for the time input; defaults to "{label} time"',
     size: 'input control size',
-    status: 'error/warning/success status w/ message',
+    status:
+      'error/warning/success status w/ message; a typed rejection shows its own error instead, unless onEntryErrorChange is set and status is an error w/ message',
+    onEntryErrorChange:
+      "(error|null) on each typed-rejection change: kind 'unreadable'|'incomplete'|'nonexistent'|'outOfRange' (min/max)|'unavailable' (dateConstraints), text, date (Gregorian ISO, outOfRange/unavailable); also on new min/max/dateConstraints/value, calendar pick, disable, Enter/blur; never twice for one rejection; with it an error status w/ message replaces the field's own message; never on native/touch pickers",
     labelTooltip: 'tooltip text via info icon at label end',
     numberOfMonths:
       'Astryx pointer-calendar months shown simultaneously; ignored by native date controls and the mobile touch sheet',
