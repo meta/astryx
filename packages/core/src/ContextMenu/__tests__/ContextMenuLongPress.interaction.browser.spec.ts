@@ -955,7 +955,9 @@ test('the menu’s anchor sits under the finger, on screen and as laid out, whil
   }
   const menu = page.getByRole('menu', {name: 'Photo actions'});
   // The cursor anchor (the trigger's last child), on screen and as laid out
-  // (engines differ on which one anchor positioning reads), and the menu.
+  // (engines differ on which one anchor positioning reads). The menu as laid
+  // out. Its entrance plays as a transform on its layer, and a slow first frame
+  // (a cold shader cache) can hold it at its start.
   const read = async () =>
     trigger.evaluate(el => {
       const anchor = el.lastElementChild as HTMLElement | null;
@@ -964,9 +966,8 @@ test('the menu’s anchor sits under the finger, on screen and as laid out, whil
       const left = box.left + (box.width - host.offsetWidth) / 2;
       const top = box.top + (box.height - host.offsetHeight) / 2;
       const onScreen = anchor?.getBoundingClientRect();
-      const list = document
-        .querySelector('[role="menu"]')
-        ?.getBoundingClientRect();
+      const list = document.querySelector<HTMLElement>('[role="menu"]');
+      const layer = list?.closest<HTMLElement>('[popover]');
       return {
         onScreen: onScreen == null ? null : {x: onScreen.x, y: onScreen.y},
         laidOut:
@@ -976,7 +977,13 @@ test('the menu’s anchor sits under the finger, on screen and as laid out, whil
                 x: left + host.clientLeft + anchor.offsetLeft,
                 y: top + host.clientTop + anchor.offsetTop,
               },
-        menu: list == null ? null : {x: list.x, y: list.y},
+        menu:
+          list == null || layer == null
+            ? null
+            : {
+                x: layer.offsetLeft + list.offsetLeft,
+                y: layer.offsetTop + list.offsetTop,
+              },
       };
     });
   // The middle of the card and near its far corner, where an anchor placed
