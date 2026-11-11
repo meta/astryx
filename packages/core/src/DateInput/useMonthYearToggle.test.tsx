@@ -2,19 +2,27 @@
 
 import {act, fireEvent, render} from '@testing-library/react';
 import {useLayoutEffect, useRef, useState} from 'react';
-import {describe, expect, it} from 'vitest';
-import {useFadeInert} from './useFadeInert';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import * as reducedMotion from '../motion/reducedMotion';
+import {useMonthYearToggle} from './useMonthYearToggle';
+
+vi.mock('../motion/reducedMotion', async importOriginal => ({
+  ...(await importOriginal<typeof reducedMotion>()),
+  playReducedMotionDip: vi.fn(),
+}));
+
+const {playReducedMotionDip} = reducedMotion;
 
 function Panels({
   isWheelOpen,
-  isDeferred = true,
+  isTouch = true,
   onCommit,
   onToggle,
 }: {
   isWheelOpen: boolean;
-  isDeferred?: boolean;
+  isTouch?: boolean;
   onCommit?: () => void;
-  /** Renders a toggle that hands focus over, as the sheets' handlers do. */
+  /** Renders a toggle that hands focus over, as the sheets' title does. */
   onToggle?: (next: boolean) => void;
 }) {
   // Every commit, to count the renders a toggle costs.
@@ -23,21 +31,17 @@ function Panels({
   });
   const calendarRef = useRef<HTMLDivElement | null>(null);
   const wheelsRef = useRef<HTMLDivElement | null>(null);
-  const {isCalendarInert, isWheelsInert, followFocus} = useFadeInert(
+  const {isCalendarInert, isWheelsInert, toggle} = useMonthYearToggle({
     isWheelOpen,
+    setIsWheelOpen: next => onToggle?.(next),
+    isTouch,
     calendarRef,
     wheelsRef,
-    isDeferred,
-  );
+  });
   return (
     <>
       {onToggle != null && (
-        <button
-          type="button"
-          onClick={() => {
-            followFocus(!isWheelOpen);
-            onToggle(!isWheelOpen);
-          }}>
+        <button type="button" onClick={() => toggle(!isWheelOpen)}>
           Toggle
         </button>
       )}
@@ -103,7 +107,7 @@ async function fadeEnd(element: HTMLElement, type = 'transitionend') {
   });
 }
 
-describe('useFadeInert', () => {
+describe('useMonthYearToggle: inert and focus', () => {
   it('makes the outgoing panel inert when its fade ends, never with the toggle', async () => {
     const view = render(<Panels isWheelOpen={false} />);
     const calendar = view.getByTestId('calendar');
@@ -218,9 +222,9 @@ describe('useFadeInert', () => {
   });
 
   it('swaps inert with the toggle with a mouse, fade or not', () => {
-    const view = render(<Panels isWheelOpen={false} isDeferred={false} />);
+    const view = render(<Panels isWheelOpen={false} isTouch={false} />);
     fading(view.getByTestId('calendar'), view.getByTestId('wheels'));
-    view.rerender(<Panels isWheelOpen isDeferred={false} />);
+    view.rerender(<Panels isWheelOpen isTouch={false} />);
     expect(view.getByTestId('calendar').hasAttribute('inert')).toBe(true);
     expect(view.getByTestId('wheels').hasAttribute('inert')).toBe(false);
   });
@@ -231,15 +235,13 @@ describe('useFadeInert', () => {
       commits += 1;
     };
     const view = render(
-      <Panels isWheelOpen={false} isDeferred={false} onCommit={onCommit} />,
+      <Panels isWheelOpen={false} isTouch={false} onCommit={onCommit} />,
     );
     commits = 0;
-    view.rerender(
-      <Panels isWheelOpen isDeferred={false} onCommit={onCommit} />,
-    );
+    view.rerender(<Panels isWheelOpen isTouch={false} onCommit={onCommit} />);
     expect(commits).toBe(1);
     view.rerender(
-      <Panels isWheelOpen={false} isDeferred={false} onCommit={onCommit} />,
+      <Panels isWheelOpen={false} isTouch={false} onCommit={onCommit} />,
     );
     expect(commits).toBe(2);
   });
@@ -277,5 +279,102 @@ describe('useFadeInert', () => {
     toggle.focus();
     fireEvent.click(toggle);
     expect(document.activeElement).toBe(toggle);
+  });
+});
+
+const CLOSED = 'matrix(0, -1, 1, 0, 0, 0)';
+
+function Title() {
+  const [isOpen, setIsOpen] = useState(false);
+  const calendarRef = useRef<HTMLDivElement | null>(null);
+  const wheelsRef = useRef<HTMLDivElement | null>(null);
+  const {titleRef, toggle} = useMonthYearToggle({
+    isWheelOpen: isOpen,
+    setIsWheelOpen: setIsOpen,
+    isTouch: true,
+    calendarRef,
+    wheelsRef,
+  });
+  return (
+    <button
+      ref={titleRef}
+      type="button"
+      data-open={isOpen}
+      onClick={() => toggle(!isOpen)}>
+      <span className="astryx-icon" />
+    </button>
+  );
+}
+
+describe('useMonthYearToggle: the chevron under Reduced Motion on a touch screen', () => {
+  const dips: {cancel: ReturnType<typeof vi.fn>}[] = [];
+  let glyphOpacity = '1';
+  beforeEach(() => {
+    dips.length = 0;
+    glyphOpacity = '1';
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches:
+        query.includes('prefers-reduced-motion: reduce') ||
+        /pointer:\s*coarse/.test(query),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    Element.prototype.animate = vi.fn() as typeof Element.prototype.animate;
+    const computed = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(element =>
+      element.classList.contains('astryx-icon')
+        ? ({
+            opacity: glyphOpacity,
+            transform: (element as HTMLElement).style.transform || CLOSED,
+          } as CSSStyleDeclaration)
+        : computed(element),
+    );
+    vi.mocked(playReducedMotionDip).mockClear();
+    vi.mocked(playReducedMotionDip).mockImplementation(() => {
+      const dip = {cancel: vi.fn()};
+      dips.push(dip);
+      return dip;
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('holds the shown turn until the dip lands, then lets the new state turn it', () => {
+    const view = render(<Title />);
+    const glyph = view.container.querySelector<HTMLElement>('.astryx-icon')!;
+    fireEvent.click(view.getByRole('button'));
+    expect(dips).toHaveLength(1);
+    const [element, , land, from] =
+      vi.mocked(playReducedMotionDip).mock.calls[0];
+    expect(element).toBe(glyph);
+    expect(from).toBe(1);
+    expect(glyph.style.transform).toBe(CLOSED);
+    land();
+    expect(glyph.style.transform).toBe('');
+  });
+
+  it('restarts a second dip within the first from the glyph’s presented opacity, and cancels the first', () => {
+    const view = render(<Title />);
+    fireEvent.click(view.getByRole('button'));
+    // Part way into the first dip.
+    glyphOpacity = '0.4';
+    fireEvent.click(view.getByRole('button'));
+    expect(dips).toHaveLength(2);
+    expect(dips[0].cancel).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(playReducedMotionDip).mock.calls[1][3]).toBe(0.4);
+  });
+
+  it('cancels its dip on unmount', () => {
+    const view = render(<Title />);
+    fireEvent.click(view.getByRole('button'));
+    view.unmount();
+    expect(dips[0].cancel).toHaveBeenCalledTimes(1);
   });
 });

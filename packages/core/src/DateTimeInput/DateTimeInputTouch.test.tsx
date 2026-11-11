@@ -895,7 +895,7 @@ describe('DateTimeInput touch surface', () => {
       return element;
     };
     // A running exit on both surfaces, so their own `inert` waits for the
-    // fade's end (useFadeInert).
+    // fade's end (useMonthYearToggle).
     for (const which of ['calendar', 'wheels'] as const) {
       surface(which).getAnimations = () =>
         [

@@ -2,24 +2,41 @@
 'use client';
 
 /**
- * @file useFadeInert.ts
- * @input Whether the month/year wheels are open, and the two panels the
- *   month/year toggle cross-fades (the calendar and the wheels)
- * @output Exports `useFadeInert`: which panel is `inert`, whether the
- *   toggle's cross-fade runs, and the toggle's focus hand-off
+ * @file useMonthYearToggle.ts
+ * @input Whether the month/year wheels show, whether a finger drives the
+ *   sheet, and the two panels the toggle cross-fades
+ * @output Exports `useMonthYearToggle`: which panel is `inert`, whether the
+ *   cross-fade runs, the title's ref, and `toggle`, which the title and Done
+ *   call
  * @position Internal hook of TouchDateField.tsx and TouchDateTimeField.tsx
  *
- * Under a finger, the panels swap `inert` when the outgoing panel's exit
- * ends. With a mouse they swap it with the toggle. The toggle's handler calls
- * `followFocus`, so focus leaves the outgoing panel in the toggle's commit.
+ * SYNC: When modified, update useMonthYearToggle.test.tsx and
+ * MonthYearToggle.interaction.browser.spec.ts.
  */
 
 import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {
+  playReducedMotionDip,
+  reducedMotionFade,
+  type ReducedMotionDip,
+} from '../motion/reducedMotion';
 
 /** A month grid's tab stop: one day in each pane that has one. */
 const TAB_STOP = '[tabindex="0"]';
+
+/**
+ * Frames the hand-off tries for before it gives up: about half a second,
+ * longer than the toggle's fade.
+ */
+const FOCUS_FRAMES = 30;
+
+/**
+ * The properties that carry a panel's exit. The layer on top fades its
+ * `opacity`. The layer beneath holds `visibility` as long, then takes `hidden`.
+ */
+const EXIT_PROPERTIES = new Set(['opacity', 'visibility']);
 
 /**
  * The tab stop of the month in view. The mouse calendar gives every mounted
@@ -39,18 +56,6 @@ function shownTabStop(panel: HTMLElement): HTMLElement | null {
   }
   return stops[0] ?? null;
 }
-
-/**
- * Frames the hand-off tries for before it gives up: about half a second,
- * longer than the toggle's fade.
- */
-const FOCUS_FRAMES = 30;
-
-/**
- * The properties that carry a panel's exit. The layer on top fades its
- * `opacity`. The layer beneath holds `visibility` as long, then takes `hidden`.
- */
-const EXIT_PROPERTIES = new Set(['opacity', 'visibility']);
 
 /** Whether a transition of `property` runs on the element itself. */
 function isRunning(element: Element, property: string): boolean {
@@ -81,27 +86,57 @@ function isExiting(element: Element): boolean {
     );
 }
 
-/**
- * `inert` is inherited, so flipping it restyles a panel's whole subtree;
- * here both flips wait for the cross-fade to end, when nothing on screen
- * moves. Meanwhile the caller's `aria-hidden` keeps assistive technology out
- * of the outgoing panel. The caller's shield keeps touches off both, as a
- * UIKit view animation does.
- */
-export function useFadeInert(
-  isWheelOpen: boolean,
-  calendarRef: RefObject<HTMLElement | null>,
-  wheelsRef: RefObject<HTMLElement | null>,
+interface MonthYearToggleOptions {
+  /** Whether the month/year wheels show. */
+  isWheelOpen: boolean;
+  /** Sets it. `toggle` calls it after the focus hand-off and the dip. */
+  setIsWheelOpen: (isOpen: boolean) => void;
   /**
-   * Under a finger: wait for the fade. With a mouse the panels swap `inert`
-   * with the toggle, so a click right after it lands.
+   * Whether a finger drives the sheet. Under a finger the panels swap `inert`
+   * when the fade ends. With a mouse they swap it with the toggle, so a click
+   * right after it lands.
    */
-  isDeferred: boolean,
-): {
+  isTouch: boolean;
+  calendarRef: RefObject<HTMLElement | null>;
+  wheelsRef: RefObject<HTMLElement | null>;
+}
+
+/**
+ * The month/year toggle of the touch date fields' calendar sheet.
+ *
+ * `inert` is inherited, so flipping it restyles a panel's whole subtree.
+ * Under a finger both flips wait for the cross-fade to end, when nothing on
+ * screen moves. Meanwhile the caller's `aria-hidden` keeps assistive
+ * technology out of the outgoing panel, and the caller's shield keeps touches
+ * off both, as a UIKit view animation does. `toggle` moves focus inside the
+ * outgoing panel into the incoming one in the toggle's commit.
+ *
+ * Under Reduced Motion on a touch screen the title's chevron does not turn.
+ * It dips instead (playReducedMotionDip), and the turn lands at the dip's
+ * middle.
+ *
+ * @example
+ * ```
+ * const {isCalendarInert, isWheelsInert, isFading, titleRef, toggle} =
+ *   useMonthYearToggle({isWheelOpen, setIsWheelOpen, isTouch, calendarRef, wheelsRef});
+ * <button ref={titleRef} onClick={() => toggle(!isWheelOpen)} />
+ * ```
+ */
+export function useMonthYearToggle({
+  isWheelOpen,
+  setIsWheelOpen,
+  isTouch,
+  calendarRef,
+  wheelsRef,
+}: MonthYearToggleOptions): {
   isCalendarInert: boolean;
   isWheelsInert: boolean;
+  /** True while the cross-fade runs under a finger: the caller's shield shows. */
   isFading: boolean;
-  followFocus: (next: boolean) => void;
+  /** A callback ref for the title button: the chevron's dip finds its icon. */
+  titleRef: (element: Element | null) => void;
+  /** Opens (`true`) or closes the wheels. The title and Done call it. */
+  toggle: (next: boolean) => void;
 } {
   // `settled`: the toggle state whose exit has ended. `focusedFor`: the
   // toggle state whose incoming panel took focus, and so is live early.
@@ -112,7 +147,7 @@ export function useFadeInert(
   // With a mouse the panels swap `inert` with the toggle. So `settled`
   // follows `isWheelOpen` during render, React's pattern for state that
   // tracks a prop, and the toggle costs one commit.
-  if (!isDeferred && settled !== isWheelOpen) {
+  if (!isTouch && settled !== isWheelOpen) {
     setFade({settled: isWheelOpen, focusedFor: null});
   }
   const isFading = settled !== isWheelOpen;
@@ -148,8 +183,7 @@ export function useFadeInert(
     // The cross-fade ends when either panel's own transition ends. The layer
     // beneath may have none: it stays visible, covered. Only a transition
     // that runs after the toggle counts. One already running ends on its own
-    // clock. The wheels' warm-up turns their `visibility` on, and a toggle
-    // soon after would otherwise settle at its end.
+    // clock.
     const started = new Set<string>();
     const keyOf = (event: Event) => {
       const index = panels.indexOf(event.target as HTMLElement);
@@ -205,11 +239,8 @@ export function useFadeInert(
   const pendingFocusRef = useRef<{incoming: HTMLElement; from: Element} | null>(
     null,
   );
-  /**
-   * The toggle's event handler calls this before it changes the state, with
-   * the state it sets. Focus inside the outgoing panel then moves to the
-   * incoming one in the toggle's commit, never staying in a fading panel.
-   */
+  // Focus inside the outgoing panel moves to the incoming one in the toggle's
+  // commit, never staying in a fading panel.
   const followFocus = useCallback(
     (next: boolean) => {
       const outgoing = (next ? calendarRef : wheelsRef).current;
@@ -265,12 +296,61 @@ export function useFadeInert(
   // Synchronizes with the frame clock: a pending retry ends with the hook.
   useEffect(() => () => cancelAnimationFrame(focusFrameRef.current), []);
 
-  if (!isDeferred) {
+  const titleElementRef = useRef<Element | null>(null);
+  const dipRef = useRef<ReducedMotionDip | null>(null);
+  const dipChevron = useCallback(() => {
+    const icon =
+      titleElementRef.current?.querySelector<HTMLElement>('.astryx-icon') ??
+      null;
+    if (icon == null || typeof icon.animate !== 'function') {
+      return;
+    }
+    const fade = reducedMotionFade(icon);
+    if (fade == null || fade.duration === 0) {
+      return;
+    }
+    const style = getComputedStyle(icon);
+    // A second change within a dip restarts it from the glyph's presented
+    // opacity.
+    const from = dipRef.current == null ? 1 : Number(style.opacity);
+    // The chevron keeps the turn it shows until the dip's middle: an inline
+    // transform holds it over the styles of the new state.
+    const shown = style.transform;
+    dipRef.current?.cancel();
+    icon.style.transform = shown;
+    dipRef.current = playReducedMotionDip(
+      icon,
+      fade,
+      () => {
+        icon.style.transform = '';
+      },
+      from,
+    );
+  }, []);
+  // Synchronizes with the dip's animation: it does not outlive the title.
+  useEffect(() => () => dipRef.current?.cancel(), []);
+  // The ref sits on the title button because a registry Icon does not forward
+  // one, and the dip finds the icon inside it.
+  const titleRef = useCallback((element: Element | null) => {
+    titleElementRef.current = element;
+  }, []);
+
+  const toggle = useCallback(
+    (next: boolean) => {
+      followFocus(next);
+      dipChevron();
+      setIsWheelOpen(next);
+    },
+    [followFocus, dipChevron, setIsWheelOpen],
+  );
+
+  if (!isTouch) {
     return {
       isCalendarInert: isWheelOpen,
       isWheelsInert: !isWheelOpen,
       isFading: false,
-      followFocus,
+      titleRef,
+      toggle,
     };
   }
   const isIncomingLive = isFading && focusedFor === isWheelOpen;
@@ -282,6 +362,7 @@ export function useFadeInert(
       ? !settled && !(isIncomingLive && isWheelOpen)
       : !isWheelOpen,
     isFading,
-    followFocus,
+    titleRef,
+    toggle,
   };
 }

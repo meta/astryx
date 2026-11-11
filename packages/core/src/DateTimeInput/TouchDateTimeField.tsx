@@ -105,12 +105,7 @@ import {
 } from '../DateInput/MonthScroller';
 import {MonthYearWheels} from '../DateInput/MonthYearWheels';
 import {Wheel, type WheelOption} from '../DateInput/Wheel';
-import {
-  MonthPager,
-  TimeWheels,
-  useChevronDip,
-  useWheelsWarmUp,
-} from '../DateInput/datePickerTouch';
+import {MonthPager, TimeWheels} from '../DateInput/datePickerTouch';
 import {
   hour12From24,
   hour24From12,
@@ -120,9 +115,8 @@ import {
   secondRows,
   wheelBounds,
 } from '../TimeInput/timeWheelRules';
-import {useFadeInert} from '../DateInput/useFadeInert';
+import {useMonthYearToggle} from '../DateInput/useMonthYearToggle';
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
-import {monthYearToggleMotion} from '../DateInput/monthYearToggle.stylex';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {
   dateInputTouchGeometry,
@@ -207,7 +201,6 @@ const TOGGLE_DURATION = durationVars['--duration-medium-min'];
 const TOGGLE_ENTRANCE = easeVars['--ease-entrance'];
 const TOGGLE_EXIT = easeVars['--ease-exit'];
 const TOGGLE_TURN = easeVars['--ease-move'];
-const CHEVRON_TURN = monthYearToggleMotion.chevronTurn;
 
 const styles = stylex.create({
   iconButton: {
@@ -420,7 +413,7 @@ const styles = stylex.create({
   /**
    * While the month/year toggle cross-fades, a shield over both surfaces
    * takes touches, as a UIKit view animation ignores them. `inert` swaps only
-   * at the fade's end (useFadeInert). A pseudo-element, so showing it
+   * at the fade's end (useMonthYearToggle). A pseudo-element, so showing it
    * restyles nothing inside the surfaces.
    */
   touchDateSurfaceStackFading: {
@@ -473,26 +466,21 @@ const styles = stylex.create({
         reducedMotionFadeConsts.easing,
     },
   },
-  // The hidden wheels under a finger once the sheet has settled: laid out, at
-  // opacity 0, so the toggle's commit only changes their opacity
-  // (useWheelsWarmUp). Still inert and hidden from assistive technology.
-  touchDateSurfaceWarm: {
-    visibility: 'visible',
-  },
   // Under a finger, UIDatePicker's chevron: it points along the reading
   // direction for the calendar and turns down on the toggle's clock. With a
   // mouse it points down and stays. Under Reduced Motion it does not turn.
-  // The turn lands mid-dip on a touch screen (useChevronDip).
+  // The turn lands mid-dip on a touch screen (useMonthYearToggle). A test
+  // holds the quarter turn to the UIKit table.
   touchTitleChevron: {
     display: 'inline-flex',
     flexShrink: 0,
     transform: {
       default: 'none',
       '@media (pointer: coarse)': {
-        default: `rotate(-${CHEVRON_TURN})`,
+        default: 'rotate(-90deg)',
         // Mirrored under RTL, so it points along the reading direction; the
         // same function list in both states keeps the turn a turn.
-        ':is([dir="rtl"] *)': `scaleX(-1) rotate(-${CHEVRON_TURN})`,
+        ':is([dir="rtl"] *)': 'scaleX(-1) rotate(-90deg)',
       },
     },
     transitionProperty: {
@@ -713,27 +701,25 @@ export function TouchDateTimeField({
   );
   const [activePanel, setActivePanel] = useState<TouchDateTimePanel>('date');
   const [isWheelOpen, setIsWheelOpen] = useState(false);
-  // The surfaces swap `inert` when the toggle's fade ends (useFadeInert),
+  // The surfaces swap `inert` when the toggle's fade ends (useMonthYearToggle),
   // since flipping it restyles a surface's subtree. `aria-hidden` follows the
   // toggle at once, and a shield takes touches while the fade runs.
   const calendarSurfaceRef = useRef<HTMLDivElement | null>(null);
   const wheelsSurfaceRef = useRef<HTMLDivElement | null>(null);
   const {isTouch} = useTouchPresentation();
-  const {isCalendarInert, isWheelsInert, isFading, followFocus} = useFadeInert(
-    isWheelOpen,
-    calendarSurfaceRef,
-    wheelsSurfaceRef,
-    isTouch,
-  );
+  const {isCalendarInert, isWheelsInert, isFading, titleRef, toggle} =
+    useMonthYearToggle({
+      isWheelOpen,
+      setIsWheelOpen,
+      isTouch,
+      calendarRef: calendarSurfaceRef,
+      wheelsRef: wheelsSurfaceRef,
+    });
   // The header's arrows and Reset leave with the toggle and arrive with the
   // fade's end. They sit outside the surfaces' shield, so they go inert at
   // once.
   const isCalendarActionsInert = isWheelOpen || isCalendarInert;
   const MonthGrid = isTouch ? MonthPager : MonthScroller;
-  // Once the sheet settles, the hidden wheels are laid out at opacity 0, so
-  // the toggle itself only changes opacity.
-  const isWheelsWarm = useWheelsWarmUp(isSheetOpen && isTouch);
-  const {ref: chevronRef, dip: dipChevron} = useChevronDip();
   const [draftTime, setDraftTime] = useState<ISOTimeString | undefined>(() =>
     normalizeISOTime(splitDateTime(value).time, hasSeconds),
   );
@@ -1193,13 +1179,9 @@ export function TouchDateTimeField({
           )}>
           <div {...stylex.props(styles.touchHeader)}>
             <button
-              ref={chevronRef}
+              ref={titleRef}
               type="button"
-              onClick={() => {
-                followFocus(!isWheelOpen);
-                dipChevron();
-                setIsWheelOpen(!isWheelOpen);
-              }}
+              onClick={() => toggle(!isWheelOpen)}
               aria-expanded={isWheelOpen}
               aria-label={t('@astryx.dateInput.chooseMonthYear', {
                 monthYear: monthYearLabel,
@@ -1340,8 +1322,6 @@ export function TouchDateTimeField({
               {...stylex.props(
                 styles.touchDateSurface,
                 !isWheelOpen && styles.touchDateSurfaceHidden,
-                // Laid out ahead of the toggle, at opacity 0 (useWheelsWarmUp).
-                !isWheelOpen && isWheelsWarm && styles.touchDateSurfaceWarm,
               )}>
               <div
                 aria-hidden="true"
@@ -1364,11 +1344,7 @@ export function TouchDateTimeField({
                   size="md"
                   width="100%"
                   label={t('@astryx.dateInput.doneChoosingMonth')}
-                  onClick={() => {
-                    followFocus(false);
-                    dipChevron();
-                    setIsWheelOpen(false);
-                  }}
+                  onClick={() => toggle(false)}
                 />
               </div>
             </div>

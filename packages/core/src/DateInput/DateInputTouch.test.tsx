@@ -72,7 +72,6 @@ import {IconButton} from '../IconButton';
 import type * as IconButtonModule from '../IconButton';
 import {MonthYearWheels} from './MonthYearWheels';
 import type * as MonthYearWheelsModule from './MonthYearWheels';
-import {SHEET_SETTLE_MS} from './useWheelsWarmUp';
 import {MonthPager} from './datePickerTouch';
 import type * as DatePickerTouchModule from './datePickerTouch';
 
@@ -2383,7 +2382,7 @@ describe('DateInput — month/year wheels', () => {
   it('keeps the header actions and both footer actions out of reach while the toggle fades', async () => {
     renderAndOpen();
     // A running exit on both panels, so their own `inert` waits for the
-    // fade's end (useFadeInert).
+    // fade's end (useMonthYearToggle).
     for (const which of ['calendar', 'wheels'] as const) {
       (panel(which) as HTMLElement).getAnimations = () =>
         [
@@ -3408,14 +3407,11 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(vi.mocked(useCalendarDays)).not.toHaveBeenCalled();
   });
 
-  it('under a finger: the month/year toggle re-renders none of the sheet\u2019s buttons, only the wheels it brings live', async () => {
+  it('under a finger: the month/year toggle re-renders none of the sheet\u2019s buttons, only the wheels it brings live', () => {
     // The toggle changes the title's chevron, the panels' classes and the
     // wheels' `isActive`. Every button keeps its element, so React skips it,
     // and the wheels render once.
     renderAndOpen();
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, SHEET_SETTLE_MS + 500));
-    });
     vi.mocked(MonthYearWheels).mockClear();
     vi.mocked(Button).mockClear();
     vi.mocked(IconButton).mockClear();
@@ -3425,16 +3421,13 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(vi.mocked(MonthYearWheels)).toHaveBeenCalledTimes(1);
   });
 
-  it('under a finger: the arrows the toggle keeps still move focus on at the range end', async () => {
+  it('under a finger: the arrows the toggle keeps still move focus on at the range end', () => {
     // The toggle re-renders neither month arrow, so a press after the toggle
     // runs the arrows' earlier callbacks. They must still move focus off an
     // arrow that hides.
     renderAndOpen(
       <Controlled initial="2026-03-10" min="2026-01-01" max="2026-04-30" />,
     );
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, SHEET_SETTLE_MS + 500));
-    });
     const title = () =>
       document.querySelector<HTMLElement>('[data-title="month-year"]')!;
     vi.mocked(IconButton).mockClear();
@@ -3450,7 +3443,7 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(screen.getByRole('button', {name: 'Next month'})).toHaveFocus();
   });
 
-  it('under a finger: the month grid\u2019s callback the toggle keeps still moves focus on when a settled month reaches the range end', async () => {
+  it('under a finger: the month grid\u2019s callback the toggle keeps still moves focus on when a settled month reaches the range end', () => {
     // The toggle leaves the callback unchanged, so the memoized pager does not
     // re-render. A month the pager settles on after the toggle reaches the
     // callback from before it, which must still move focus off the arrow
@@ -3458,9 +3451,6 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     renderAndOpen(
       <Controlled initial="2026-03-10" min="2026-01-01" max="2026-04-30" />,
     );
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, SHEET_SETTLE_MS + 500));
-    });
     const title = () =>
       document.querySelector<HTMLElement>('[data-title="month-year"]')!;
     const pagerRenders = vi.mocked(MonthPager.type);
@@ -3926,9 +3916,10 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(chevron).toContain("'@media (pointer: coarse)': TOGGLE_TURN");
     // At rest it points along the reading direction (mirrored under RTL,
     // with the same function list in both states so the turn stays a turn).
-    expect(chevron).toContain('default: `rotate(-${CHEVRON_TURN})`');
+    const turn = datePicker.calendar.monthYearToggle.chevronTurnDegrees;
+    expect(chevron).toContain(`default: 'rotate(-${turn}deg)'`);
     expect(chevron).toContain(
-      '\':is([dir="rtl"] *)\': `scaleX(-1) rotate(-${CHEVRON_TURN})`',
+      `':is([dir="rtl"] *)': 'scaleX(-1) rotate(-${turn}deg)'`,
     );
     const open = declarations(source, 'titleChevronOpen');
     expect(open).toContain("default: 'rotate(0deg)'");
@@ -3969,9 +3960,13 @@ describe('DateInput — scroll CSS (definition-level)', () => {
       '--duration-medium-min',
       225,
     ]);
-    // Not in tokens.stylex.ts: that module is a released subpath.
-    const tokens = read('monthYearToggle.stylex.ts');
-    expect(tokens).toContain(`chevronTurn: '${toggle.chevronTurnDegrees}deg'`);
+    // Both fields write the table's quarter turn as a literal.
+    for (const field of [
+      'TouchDateField.tsx',
+      '../DateTimeInput/TouchDateTimeField.tsx',
+    ]) {
+      expect(read(field)).toContain(`rotate(-${toggle.chevronTurnDegrees}deg)`);
+    }
   });
 
   /**
@@ -4093,9 +4088,7 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(declarations(source, 'touchTitleChevronOpen')).toContain(
       "default: 'rotate(0deg)'",
     );
-    expect(source).toContain(
-      'const {ref: chevronRef, dip: dipChevron} = useChevronDip()',
-    );
+    expect(source).toContain('ref={titleRef}');
   });
 
   it('follows design:reduced-motion: a mouse at once, a touch screen the policy\u2019s cross-fade, no turn', () => {
@@ -4124,11 +4117,9 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(chevron).toContain(
       "'@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s'",
     );
-    // The turn lands at the dip's middle (useChevronDip), not on a delay.
+    // The turn lands at the dip's middle (useMonthYearToggle), not on a delay.
     expect(chevron.includes('transitionDelay')).toBe(false);
-    expect(source).toContain(
-      'const {ref: chevronRef, dip: dipChevron} = useChevronDip()',
-    );
+    expect(source).toContain('useMergedRefs(monthYearButtonRef, titleRef)');
   });
 
   it('keeps the virtual keyboard down on the touch field', () => {

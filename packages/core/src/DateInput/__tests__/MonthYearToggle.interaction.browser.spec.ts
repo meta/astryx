@@ -40,9 +40,12 @@ import {
   type CastFrame,
   type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
-import {SHEET_SETTLE_MS} from '../useWheelsWarmUp';
+import {datePicker} from '../../motion/uikit/datePicker';
 
 const storybook = withStorybook(test);
+
+/** The title chevron's quarter turn, from the UIKit table. */
+const TURN = `rotate(-${datePicker.calendar.monthYearToggle.chevronTurnDegrees}deg)`;
 
 /** CSS's named cubic-bézier easings, which a browser may report by name. */
 const NAMED_EASINGS: Record<string, ReadonlyArray<number>> = {
@@ -218,18 +221,7 @@ async function openCalendar(
     .locator('.astryx-bottom-sheet')
     .first();
   await settlesAt(sheet, 'transform', 'matrix(1, 0, 0, 1, 0, 0)');
-  // Under a finger the hidden wheels warm up once the sheet has settled
-  // (useWheelsWarmUp): their `visibility` turns visible at opacity 0, with its
-  // own transition. Wait for its end, so a test's first tap meets a panel at
-  // rest. `blockMainThread` and `armHold` take any running animation
-  // on the panel, and on a slow runner the warm-up can still be running.
   const wheels = page.locator('[data-panel="wheels"]').first();
-  await expect
-    .poll(async () => wheels.evaluate(e => getComputedStyle(e).visibility), {
-      timeout: SHEET_SETTLE_MS + 2000,
-    })
-    .toBe('visible');
-  await settlesAt(wheels, 'visibility', 'visible');
   const title = page.locator('[data-title="month-year"]');
   const titleBox = await title.boundingBox();
   if (titleBox == null) {
@@ -293,12 +285,10 @@ test('the wheels fade in and the chevron turns on the theme’s tokens nearest U
     ms: tokens.ms,
     ease: tokens.entrance,
   });
-  expectToggleRun(
-    await turn.started(),
-    'transform',
-    ['rotate(-90deg)', 'rotate(0deg)'],
-    {ms: tokens.ms, ease: tokens.move},
-  );
+  expectToggleRun(await turn.started(), 'transform', [TURN, 'rotate(0deg)'], {
+    ms: tokens.ms,
+    ease: tokens.move,
+  });
 });
 
 test('the wheels fade out on the exit curve when they close', async ({
@@ -353,12 +343,10 @@ test('DateTimeInput: the calendar and the wheels cross-fade on the theme’s mot
     ms: tokens.ms,
     ease: tokens.entrance,
   });
-  expectToggleRun(
-    await turn.started(),
-    'transform',
-    ['rotate(-90deg)', 'rotate(0deg)'],
-    {ms: tokens.ms, ease: tokens.move},
-  );
+  expectToggleRun(await turn.started(), 'transform', [TURN, 'rotate(0deg)'], {
+    ms: tokens.ms,
+    ease: tokens.move,
+  });
 });
 
 test('a second tap mid-fade turns the fade around from where it is', async ({
@@ -895,41 +883,6 @@ async function wheelsState(page: Page, selector: string) {
     });
 }
 
-for (const [name, story, selector] of [
-  ['DateInput', STORY, '[data-panel="wheels"]'],
-  ['DateTimeInput', DTI_STORY, '[data-date-surface="wheels"]'],
-] as const) {
-  test(`${name}: once the sheet settles, the hidden wheels are laid out at opacity 0, still inert`, async ({
-    page,
-  }) => {
-    // Their cylinders' layers then exist before the title is tapped. So the
-    // toggle's commit only changes opacity, and Mobile Safari builds nothing in
-    // the fade's first frames.
-    if (story === STORY) {
-      await openCalendar(page);
-    } else {
-      await openStory(page, storybook(), story);
-      const driver = await touchDriver(page);
-      const opener = page.getByRole('button', {name: /^Open /}).first();
-      const box = await opener.boundingBox();
-      if (box == null) {
-        throw new Error('no opener');
-      }
-      await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
-    }
-    await expect(page.locator(selector)).toBeAttached();
-    await expect
-      .poll(async () => (await wheelsState(page, selector)).visibility, {
-        timeout: SHEET_SETTLE_MS + 2000,
-      })
-      .toBe('visible');
-    const state = await wheelsState(page, selector);
-    expect(state.opacity).toBe('0');
-    expect(state.inert).toBe(true);
-    expect(state.ariaHidden).toBe('true');
-  });
-}
-
 type CommitLog = {
   frame: number;
   /** The document timeline's time, ms. */
@@ -973,11 +926,11 @@ for (const [name, story, titleSelector, panelSelector, panelKey] of [
     const wheels = page
       .locator(`${panelSelector.slice(0, -1)}="wheels"]`)
       .first();
-    await expect
-      .poll(async () => wheels.evaluate(e => getComputedStyle(e).visibility), {
-        timeout: SHEET_SETTLE_MS + 2000,
-      })
-      .toBe('visible');
+    await settlesAt(
+      page.getByRole('dialog').locator('.astryx-bottom-sheet').first(),
+      'transform',
+      'matrix(1, 0, 0, 1, 0, 0)',
+    );
     const tokens = await toggleTokens(page);
     await page.evaluate(
       ({selector, key}) => {

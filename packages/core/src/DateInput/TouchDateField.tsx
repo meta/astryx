@@ -126,8 +126,8 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
-import {MonthPager, useChevronDip, useWheelsWarmUp} from './datePickerTouch';
-import {useFadeInert} from './useFadeInert';
+import {MonthPager} from './datePickerTouch';
+import {useMonthYearToggle} from './useMonthYearToggle';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {MonthYearWheels} from './MonthYearWheels';
@@ -150,7 +150,6 @@ const UNKNOWN_TODAY_STAND_IN = plainDateFromISO('1970-01-01');
 
 registerEnglishFallback(english);
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
-import {monthYearToggleMotion} from './monthYearToggle.stylex';
 
 /**
  * The comfortable minimum tap target on both iOS and Android, honoured by
@@ -187,7 +186,6 @@ const TOGGLE_DURATION = durationVars['--duration-medium-min'];
 const TOGGLE_ENTRANCE = easeVars['--ease-entrance'];
 const TOGGLE_EXIT = easeVars['--ease-exit'];
 const TOGGLE_TURN = easeVars['--ease-move'];
-const CHEVRON_TURN = monthYearToggleMotion.chevronTurn;
 
 const sizeStyles = stylex.create({
   sm: {
@@ -453,14 +451,15 @@ const styles = stylex.create({
     // distance to cover. Same duration as the surface it announces, so the
     // two land together. Under a finger it is UIDatePicker's chevron. It points along
     // the reading direction for the calendar, and turns down on the toggle's
-    // duration and the move curve.
+    // duration and the move curve. A test holds the quarter turn to the UIKit
+    // table (datePicker.calendar.monthYearToggle.chevronTurnDegrees).
     transform: {
       default: 'none',
       '@media (pointer: coarse)': {
-        default: `rotate(-${CHEVRON_TURN})`,
+        default: 'rotate(-90deg)',
         // Mirrored under RTL, so it points along the reading direction; the
         // same function list in both states keeps the turn a turn.
-        ':is([dir="rtl"] *)': `scaleX(-1) rotate(-${CHEVRON_TURN})`,
+        ':is([dir="rtl"] *)': 'scaleX(-1) rotate(-90deg)',
       },
     },
     transitionProperty: 'transform',
@@ -468,8 +467,8 @@ const styles = stylex.create({
       default: SWAP_DURATION,
       '@media (pointer: coarse)': TOGGLE_DURATION,
       // Under Reduced Motion the chevron does not turn. On a touch screen the
-      // turn lands at the middle of its opacity dip (useChevronDip), and with
-      // a mouse at once.
+      // turn lands at the middle of its opacity dip (useMonthYearToggle), and
+      // with a mouse at once.
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
       '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
         '0s',
@@ -541,8 +540,8 @@ const styles = stylex.create({
   /**
    * While the month/year toggle cross-fades, a shield over both panels takes
    * touches, as a UIKit view animation ignores them. `inert` swaps only at
-   * the fade's end (useFadeInert). A pseudo-element on the body, so showing
-   * it restyles nothing inside the panels.
+   * the fade's end (useMonthYearToggle). A pseudo-element on the body, so
+   * showing it restyles nothing inside the panels.
    */
   bodyFading: {
     '::after': {
@@ -667,12 +666,6 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
         reducedMotionFadeConsts.easing,
     },
-  },
-  // The hidden wheels under a finger once the sheet has settled: laid out, at
-  // opacity 0, so the toggle's commit only changes their opacity
-  // (useWheelsWarmUp). Still inert and hidden from assistive technology.
-  panelOverlayWarm: {
-    visibility: 'visible',
   },
   footer: {
     paddingBlockStart: spacingVars['--spacing-2'],
@@ -833,18 +826,20 @@ export function TouchDateField({
     isSheetOpen ? sheetBodyRef : inputRef,
   );
   const [isWheelOpen, setIsWheelOpen] = useState(false);
-  // The panels swap `inert` when the toggle's fade ends (useFadeInert), since
-  // flipping it restyles a panel's subtree. `aria-hidden` follows the toggle
-  // at once, and a shield takes touches while the fade runs.
+  // The panels swap `inert` when the toggle's fade ends (useMonthYearToggle),
+  // since flipping it restyles a panel's subtree. `aria-hidden` follows the
+  // toggle at once, and a shield takes touches while the fade runs.
   const calendarPanelRef = useRef<HTMLDivElement | null>(null);
   const wheelsPanelRef = useRef<HTMLDivElement | null>(null);
   const {isTouch} = useTouchPresentation();
-  const {isCalendarInert, isWheelsInert, isFading, followFocus} = useFadeInert(
-    isWheelOpen,
-    calendarPanelRef,
-    wheelsPanelRef,
-    isTouch,
-  );
+  const {isCalendarInert, isWheelsInert, isFading, titleRef, toggle} =
+    useMonthYearToggle({
+      isWheelOpen,
+      setIsWheelOpen,
+      isTouch,
+      calendarRef: calendarPanelRef,
+      wheelsRef: wheelsPanelRef,
+    });
   // The header's actions and the footer's two leave with the toggle and
   // arrive with the fade's end. They sit outside the panels' shield, so they
   // go inert at once. Otherwise a tap on Done during the fade would fall
@@ -852,17 +847,13 @@ export function TouchDateField({
   const isCalendarActionsInert = isWheelOpen || isCalendarInert;
   const isWheelsActionsInert = !isWheelOpen || isWheelsInert;
   const MonthGrid = isTouch ? MonthPager : MonthScroller;
-  // Once the sheet settles, the hidden wheels are laid out at opacity 0, so
-  // the toggle itself only changes opacity.
-  const isWheelsWarm = useWheelsWarmUp(isSheetOpen && isTouch);
-  const {ref: chevronRef, dip: dipChevron} = useChevronDip();
   const scrollerHandleRef = useRef<MonthScrollerHandle | null>(null);
   const previousArrowRef = useRef<HTMLButtonElement | null>(null);
   const nextArrowRef = useRef<HTMLButtonElement | null>(null);
   const monthYearButtonRef = useRef<HTMLButtonElement | null>(null);
   // The title button takes two refs: the chevron's dip reads it, and the
   // month arrows hand focus to it when both hide.
-  const titleButtonRef = useMergedRefs(monthYearButtonRef, chevronRef);
+  const titleButtonRef = useMergedRefs(monthYearButtonRef, titleRef);
   // Pending focus handoff from the clear button; see handleClear.
   const clearFocusTimerRef = useRef<number | null>(null);
   // Releases the focus timer on unmount.
@@ -1264,11 +1255,7 @@ export function TouchDateField({
   // A live hidden wheel would hold the compositor to the main thread during
   // the fade. The buttons keep their identity, so React skips them.
   const closeSheet = useCallback(() => setIsSheetOpen(false), []);
-  const closeWheels = useCallback(() => {
-    followFocus(false);
-    dipChevron();
-    setIsWheelOpen(false);
-  }, [followFocus, dipChevron]);
+  const closeWheels = useCallback(() => toggle(false), [toggle]);
   const monthArrowButtons = useMemo(
     () => (
       <>
@@ -1385,11 +1372,7 @@ export function TouchDateField({
         <button
           ref={titleButtonRef}
           type="button"
-          onClick={() => {
-            followFocus(!isWheelOpen);
-            dipChevron();
-            setIsWheelOpen(!isWheelOpen);
-          }}
+          onClick={() => toggle(!isWheelOpen)}
           aria-expanded={isWheelOpen}
           // One string, not a template: the comma and the word order are
           // the translator's to choose, not English's.
@@ -1416,7 +1399,7 @@ export function TouchDateField({
             color="secondary"
             // The transform rides on the Icon itself, not a wrapper span, so
             // the element a theme can target is the element that moves (and,
-            // under reduced motion on a touch screen, dips: useChevronDip).
+            // under reduced motion on a touch screen, dips: useMonthYearToggle).
             // StyleX's types do not model the touch key's nested RTL
             // condition, so the styles are cast; they compile as written.
             xstyle={
@@ -1520,8 +1503,6 @@ export function TouchDateField({
             styles.panel,
             styles.panelOverlay,
             !isWheelOpen && styles.panelOverlayHidden,
-            // Laid out ahead of the toggle, at opacity 0 (useWheelsWarmUp).
-            !isWheelOpen && isWheelsWarm && styles.panelOverlayWarm,
           )}>
           {monthYearWheels}
         </div>
