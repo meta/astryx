@@ -499,6 +499,23 @@ function lookupBlocks(d) {
  * @returns {ReturnType<typeof cliError> | null}
  */
 function strayOption(command, rest) {
+  // A scope flag given twice would keep only the last one without a word.
+  for (const flag of ['on', 'when', 'state', 'mode']) {
+    const all = flagValues(flag);
+    if (new Set(all).size > 1)
+      return cliError(
+        `--${flag} was given twice (${all.join(', ')}); give it once.`,
+        {
+          suggestions: [
+            {
+              name: `${EDITOR} ${command} --help`,
+              reason: 'every option it takes',
+            },
+          ],
+          code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+        },
+      );
+  }
   const word = rest.find(w => typeof w === 'string' && w.startsWith('--'));
   if (word == null) return null;
   return cliError(
@@ -510,6 +527,22 @@ function strayOption(command, rest) {
       code: ERROR_CODES.ERR_INVALID_OPTION,
     },
   );
+}
+
+/**
+ * A refusal for words after what a command takes, which would otherwise be
+ * dropped without a word; null when there are none.
+ * @param {string} command
+ * @param {string[]} extra
+ */
+function extraWords(command, extra) {
+  if (!extra.length) return null;
+  return cliError(`${command} does not take "${extra.join(' ')}".`, {
+    suggestions: [
+      {name: `${EDITOR} ${command} --help`, reason: 'what it takes'},
+    ],
+    code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+  });
 }
 
 /**
@@ -647,7 +680,12 @@ export function registerExperimentalTheme(group, program) {
   explained(
     defineCommand(editor, showDoc, {
       fn: showFn,
-      action: (/** @type {string} */ name, /** @type {any} */ o) =>
+      action: (
+        /** @type {string} */ name,
+        /** @type {any} */ o,
+        /** @type {any} */ c,
+      ) =>
+        extraWords('show', (c?.args ?? []).slice(1)) ??
         run(
           program,
           () =>
@@ -673,6 +711,7 @@ export function registerExperimentalTheme(group, program) {
         /** @type {import('commander').Command} */ c,
       ) =>
         strayOption('undo', [which, ...(c?.args ?? []).slice(3)]) ??
+        extraWords('undo', (c?.args ?? []).slice(3)) ??
         run(
           program,
           () =>

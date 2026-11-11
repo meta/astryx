@@ -1046,9 +1046,17 @@ async function colorsPage(cwd, dir, slug) {
       source: colorsPageSource({slug, module: null, seeds: {}, uses: {}}),
       colors: false,
     };
-  const exact = new Set(
-    data.settings.filter(s => s.source === 'token' && !s.on).map(s => s.thing),
-  );
+  /** Whether the theme sets a token exactly, as a whole-theme value, in a mode. @param {string} token @param {'light' | 'dark'} m */
+  const exact = (token, m) =>
+    data.settings.some(
+      s =>
+        s.source === 'token' &&
+        s.thing === token &&
+        !s.on &&
+        !s.when &&
+        !s.state &&
+        (!s.mode || s.mode === m),
+    );
   /** @type {Record<string, Record<'light' | 'dark', Record<string, string[]>>>} */
   const uses = {};
   // Only the theme's own modes have shades; text on a fill is marked on
@@ -1061,8 +1069,8 @@ async function colorsPage(cwd, dir, slug) {
         : ['light', 'dark']
   );
   for (const [token, v] of Object.entries(pal.tokens)) {
-    if (exact.has(token)) continue;
     for (const m of modes) {
+      if (exact(token, m)) continue;
       const r = v[m];
       if (r.family === 'black' || r.family === 'white') continue;
       const byMode = (uses[r.family ?? v.family] ??= {light: {}, dark: {}});

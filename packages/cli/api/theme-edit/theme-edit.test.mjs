@@ -213,7 +213,7 @@ describe('refusals', () => {
     );
     expect(r.code).toBe('ERR_MISSING_ARGUMENT');
     expect(r.run[0]).toBe(
-      'astryx experimental theme editor set t box-shadow none --on <part>',
+      'astryx experimental theme editor set t box-shadow none --on card',
     );
   });
 });
@@ -815,8 +815,7 @@ describe('the command', () => {
         cwd,
       },
     );
-    expect(fresh.stdout).toContain(
-      'Will replace: astryx theme template, astryx theme eject',
-    );
+    // Each stable command is claimed once, by its own copy.
+    expect(fresh.stdout).not.toContain('Will replace');
   });
 });

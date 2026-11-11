@@ -42,7 +42,9 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   findAstryxProject,
   findPackageRoot,
+  findProjectCoreDir,
 } from '../../foundation/fs/paths.mjs';
+import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {tryLock} from '../../foundation/release/cache.mjs';
 import {q} from './_settings.mjs';
 
@@ -117,23 +119,6 @@ export function projectRoot(cwd) {
   return project ?? start;
 }
 
-/**
- * The node_modules folder Core resolves from for `root` (its own, or one
- * above it, as Node finds packages), or null when Core is not installed.
- * @param {string} root
- * @returns {string | null}
- */
-function coreModules(root) {
-  for (let d = root; ; d = path.dirname(d)) {
-    const modules = path.join(d, 'node_modules');
-    if (
-      fs.existsSync(path.join(modules, '@astryxdesign', 'core', 'package.json'))
-    )
-      return modules;
-    if (path.dirname(d) === d) return null;
-  }
-}
-
 /** The locks this process holds now. */
 const HELD = new Set();
 
@@ -141,18 +126,22 @@ const HELD = new Set();
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Where a project's locks are: the `.cache` of the node_modules its Core
- * is installed in (the project's own, or a workspace root's), shared by
+ * Where a project's locks are: the `.cache` of the node_modules holding
+ * the Core the command reads (the project's own, or a workspace root's), shared by
  * every shell and user that can change the project, outside the source
- * tree. Null when Core is not installed for it (nothing can be written
- * without Core, so there is nothing to keep apart). A folder that
+ * tree. Null outside a project or without Core (nothing can be written
+ * then, so there is nothing to keep apart). A folder that
  * cannot be written is refused, naming it.
  * @param {string} root
  * @returns {string | null}
  */
 function lockDir(root) {
-  const modules = coreModules(root);
-  if (!modules) return null;
+  // The Core the command reads decides where; outside a project there is
+  // none, and no lock.
+  if (isOutsideProject(root)) return null;
+  const core = findProjectCoreDir(root);
+  if (!core) return null;
+  const modules = path.dirname(path.dirname(core));
   const dir = path.join(modules, '.cache', 'astryx-theme', 'locks');
   try {
     fs.mkdirSync(dir, {recursive: true});
@@ -210,13 +199,8 @@ async function withLock(root, name, fn) {
       if (waited > 30_000) {
         const o = owner();
         throw new AstryxError(
-          `Another command is changing ${name.replace(/^theme-/, '')} and did not finish within 30 seconds${o ? ` (process ${o.pid} on ${o.host}, for ${Math.round((Date.now() - Number(o.at)) / 1000)} s)` : ''}. Nothing was changed; run this command again. If no astryx command is running, remove the lock ${lock}.`,
-          [
-            {
-              name: `rm -r ${q(lock)}`,
-              reason: 'only when no astryx command is running',
-            },
-          ],
+          `Another command is changing ${name.replace(/^theme-/, '')} and did not finish within 30 seconds${o ? ` (process ${o.pid} on ${o.host}, for ${Math.round((Date.now() - Number(o.at)) / 1000)} s)` : ''}. Nothing was changed; run this command again. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
+          [],
           ERROR_CODES.ERR_THEME_BUSY,
         );
       }

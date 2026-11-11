@@ -162,5 +162,4 @@ export const doc = {
     },
   ],
   related: ['experimental theme editor', 'experimental theme compile'],
-  replaces: ['theme template', 'theme eject'],
 };

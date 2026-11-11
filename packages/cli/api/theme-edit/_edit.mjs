@@ -36,7 +36,9 @@ import {
   partDefault,
   partsOf,
   q,
+  undoArgs,
   withoutBadValues,
+  NAME_RULE,
   readHistory,
   refuse,
   settingsProblem,
@@ -44,10 +46,10 @@ import {
   shown,
   slugOk,
   themeFiles,
-  buildCurrent,
   buildTheme,
+  staleBuild,
 } from './_settings.mjs';
-import {checkSetting} from './_check.mjs';
+import {checkSetting, exampleOf, storedTokenProblem} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {
   PALETTE_DIALS,
@@ -99,7 +101,7 @@ export async function themeEditNew(name, options = {}) {
         .slice(0, 64) || 'my-theme';
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `"${String(name ?? '').slice(0, 80)}" is not a theme name (lowercase letters, digits and dashes, starting with a letter, 64 characters at most).`,
+      `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}).`,
       {run: [`${P} new ${fixed}`]},
     );
   }
@@ -120,7 +122,7 @@ export async function themeEditNew(name, options = {}) {
   }
   if (fs.existsSync(f.settings))
     refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.`, {
-      run: [`${P} show ${name}`, `${P} set ${name} base <theme>`],
+      run: [`${P} show ${name}`, `${P} set ${name} base neutral`],
     });
   if (fs.existsSync(f.dir) && fs.readdirSync(f.dir).length)
     refuse(
@@ -140,6 +142,10 @@ export async function themeEditNew(name, options = {}) {
   const ctx = await context(cwd);
   /** @type {import('./_settings.mjs').ThemeData} */
   const data = {name, ...(like ? {like} : {}), mode: 'both', settings: []};
+  /** @type {import('./_settings.mjs').Ctx} */ (ctx).base = await baseResolved(
+    ctx.project,
+    data.like,
+  );
   applyNewSettings(ctx, name, data, settings);
   const r = await commitTheme(ctx, name, data, {history: false});
   const p = await previewAndRoute(ctx, name, data, png);
@@ -303,6 +309,50 @@ export async function themeEditSet(theme, thing, value, options = {}) {
 }
 
 /**
+ * Refuse a theme whose saved exact tokens the type rules no longer take,
+ * naming the undo that removes the one that fails.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} [skip]
+ */
+function refuseStoredTokens(ctx, slug, data, skip) {
+  const bad = storedTokenProblem(ctx, slug, data, skip);
+  if (bad)
+    refuse(
+      E.ERR_THEME_INVALID,
+      `themes/${slug}/${slug}.settings.json: ${describe(bad.setting)} holds a value the editor no longer accepts (${bad.why}).`,
+      {
+        run: [
+          `${P} undo ${slug} ${undoArgs(bad.setting)}`,
+          `${P} set ${slug} ${bad.setting.thing} ${q(exampleOf(ctx.C.typeOf(bad.setting.thing), bad.setting.thing))}`,
+        ],
+      },
+    );
+}
+
+/**
+ * A note for type scale steps that land outside 9 to 200 pixels.
+ * @param {Record<string, string>} res resolved light tokens
+ * @returns {string[]}
+ */
+function extremeSteps(res) {
+  const out = Object.entries(res)
+    .filter(([k]) => /^--font-size-/.test(k))
+    .map(([k, v]) => {
+      const n = Number.parseFloat(v);
+      return /** @type {[string, number]} */ ([k, /rem$/.test(v) ? n * 16 : n]);
+    })
+    .filter(([, px]) => Number.isFinite(px) && (px < 9 || px > 200))
+    .map(([k, px]) => `${k} ${Math.round(px)}px`);
+  return out.length
+    ? [
+        `some scale steps are outside reading sizes (9 to 200px): ${out.slice(0, 4).join(', ')}`,
+      ]
+    : [];
+}
+
+/**
  * @param {'set' | 'undo'} sub
  * @param {string} slug
  * @param {string} thing
@@ -315,6 +365,7 @@ async function change(sub, slug, thing, value, options) {
   requireProject(cwd);
   const data = loadTheme(cwd, slug, thing);
   const ctx = await context(cwd);
+  refuseStoredTokens(ctx, slug, data, thing);
   const flags = {
     on: options.on,
     when: options.when,
@@ -322,8 +373,50 @@ async function change(sub, slug, thing, value, options) {
     mode: options.mode,
     only: options.only,
   };
-  const s = checkSetting(ctx, slug, data, thing, value, flags, sub === 'undo');
-  const base = await baseResolved(ctx.project, data.like);
+  /** @type {{light: Record<string, string>, dark: Record<string, string>}} */
+  let base;
+  try {
+    base = await baseResolved(ctx.project, data.like);
+  } catch (e) {
+    // A base package that is gone: moving off it still works.
+    if (!(sub === 'set' && thing === 'base')) throw e;
+    base = await baseResolved(
+      ctx.project,
+      value === 'none' ? undefined : value,
+    );
+  }
+  /** @type {import('./_settings.mjs').Ctx} */ (ctx).base = base;
+  /** @type {import('./_settings.mjs').Setting} */
+  let s;
+  try {
+    s = checkSetting(ctx, slug, data, thing, value, flags, sub === 'undo');
+  } catch (e) {
+    // A stored setting this Core no longer knows (a renamed part or
+    // property, or a hand edit) can still be removed.
+    const stored =
+      sub === 'undo'
+        ? data.settings.find(
+            x =>
+              x.thing === thing &&
+              (x.on ?? null) === (flags.on ?? null) &&
+              (x.when ?? null) === (flags.when ?? null) &&
+              (x.state ?? null) === (flags.state ?? null) &&
+              (x.mode ?? null) === (flags.mode ?? null),
+          )
+        : null;
+    if (!stored) throw e;
+    s = stored;
+  }
+  // undo <thing> <value> removes the setting only when that is its value.
+  if (sub === 'undo' && value != null && value !== '') {
+    const held = data.settings.find(x => keyOf(x) === keyOf(s));
+    if (held && held.value !== value.trim())
+      refuse(
+        E.ERR_THEME_NOT_SET,
+        `The theme sets ${describe(held)}, not ${value}.`,
+        {run: [`${P} undo ${slug} ${undoArgs(held)}`]},
+      );
+  }
   const compiledBefore = compileTheme(ctx, data, base);
   if (sub === 'set' && (s.thing === 'base' || s.thing === 'mode')) {
     const before = s.thing === 'base' ? (data.like ?? 'none') : data.mode;
@@ -334,6 +427,7 @@ async function change(sub, slug, thing, value, options) {
       data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (s.value);
     const r = await commitTheme(ctx, slug, data, {history: true});
     const p = await previewAndRoute(ctx, slug, data, png);
+    const after = await baseResolved(ctx.project, data.like).catch(() => base);
     return {
       type: 'themeEdit.set',
       data: {
@@ -345,7 +439,7 @@ async function change(sub, slug, thing, value, options) {
         parts: [],
         group: null,
         changedTokens: r.changed,
-        styled: [],
+        styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
         lifted: r.lifted,
         notes: [
@@ -355,6 +449,24 @@ async function change(sub, slug, thing, value, options) {
           ...r.notes,
           `your ${data.settings.length} settings are kept`,
           ...otherModeNotes(data),
+          // The colors are made again for the new base or mode: their
+          // shade notes follow.
+          ...data.settings
+            .filter(x => x.source === 'dial' && PALETTE_DIALS.includes(x.thing))
+            .flatMap(x =>
+              paletteNotes(
+                paletteMapping(
+                  cwd,
+                  slug,
+                  data,
+                  after,
+                  ctx.project.core.tokenDefaults,
+                ),
+                x.thing,
+                slug,
+                modesOf(data),
+              ).slice(0, -1),
+            ),
         ],
         problems: r.problems,
         warnings: r.warnings,
@@ -377,7 +489,13 @@ async function change(sub, slug, thing, value, options) {
           also: near.length
             ? [`settings for ${s.thing}: ${near.join('; ')}`]
             : [],
-          run: [`${P} show ${slug}`],
+          run: [
+            ...data.settings
+              .filter(x => x.thing === s.thing)
+              .slice(0, 3)
+              .map(x => `${P} undo ${slug} ${undoArgs(x)}`),
+            `${P} show ${slug}`,
+          ],
         },
       );
     }
@@ -398,8 +516,36 @@ async function change(sub, slug, thing, value, options) {
           data.settings.splice(v, 1)[0]?.value
         );
     }
-  } else if (prev) data.settings[prevIdx] = s;
-  else data.settings.push(s);
+  } else if (prev && JSON.stringify(prev) === JSON.stringify(s)) {
+    // The same setting again: nothing moves.
+  } else {
+    // A changed setting goes last, so it wins over what came before it.
+    if (prev) data.settings.splice(prevIdx, 1);
+    data.settings.push(s);
+  }
+  // A setting for both modes replaces the ones made for one mode, which it
+  // would otherwise sit under.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  const covered =
+    sub === 'set' && !s.mode && s.source !== 'dial'
+      ? data.settings.filter(
+          x => x !== s && x.mode && keyOf({...x, mode: undefined}) === k,
+        )
+      : [];
+  data.settings = data.settings.filter(x => !covered.includes(x));
+  // A shorthand set after its longhands on the same part replaces them.
+  const longhands =
+    sub === 'set' && s.source === 'property'
+      ? data.settings.filter(
+          x =>
+            x !== s &&
+            x.source === 'property' &&
+            x.on === s.on &&
+            x.when === s.when &&
+            x.state === s.state &&
+            x.thing.startsWith(`${s.thing}-`),
+        )
+      : [];
   const r = await commitTheme(ctx, slug, data, {history: true});
   const styled = styledChanges(compiledBefore, compileTheme(ctx, data, base));
   const parts = partsOf(ctx, s);
@@ -409,6 +555,36 @@ async function change(sub, slug, thing, value, options) {
       : [];
   /** @type {string[]} */
   const notes = [
+    ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
+    // Phones keep the base theme's reading sizes (a coarse pointer below
+    // the lg width), so a size change says where it applies.
+    ...(sub === 'set' &&
+    !s.on &&
+    (['text-size', 'type'].includes(s.thing) ||
+      /^--(font-size-|text-[a-z0-9-]+-(size|leading)$)/.test(s.thing))
+      ? [
+          'phones (touch screens below 1024px wide) keep the base theme reading sizes; this applies on wider or mouse screens',
+        ]
+      : []),
+    // A scale step far outside reading sizes is named.
+    ...(sub === 'set' && ['text-size', 'type'].includes(s.thing)
+      ? extremeSteps(r.res.light)
+      : []),
+    // An accepted change that the theme already showed says so.
+    ...(sub === 'set' &&
+    !r.unchanged &&
+    !r.changed.length &&
+    !styled.length &&
+    !ctx.unchecked
+      ? [
+          `this changes nothing you see: the theme already shows ${describe(s)} (it is saved, and stays when the base theme changes)`,
+        ]
+      : []),
+    ...(longhands.length
+      ? [
+          `${s.thing} comes after ${longhands.map(x => x.thing).join(', ')} on ${s.on}, so it replaces them there`,
+        ]
+      : []),
     ...(r.unchanged
       ? [
           `no change: ${describe(s)} is already set, so nothing was built and no undo step was added`,
@@ -551,15 +727,16 @@ function unsetColorNotes(data, base, slug) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditShowResponse>}
  */
 export async function themeEditShow(theme, options = {}) {
-  const {cwd = process.cwd(), png = false, section} = options;
+  const {cwd = process.cwd(), png = false} = options;
   requireProject(cwd);
-  checkSection(section);
+  const section = checkSection(options.section, theme);
   const data = loadTheme(cwd, theme);
   const ctx = await context(cwd);
+  refuseStoredTokens(ctx, theme, data);
   const f = themeFiles(cwd, theme);
   // A build that does not match the settings (a command stopped mid-build,
   // a hand edit, another CLI) is made again from the settings, and said.
-  const stale = !buildCurrent(cwd, theme, data);
+  const stale = staleBuild(cwd, theme, data);
   if (stale) await buildTheme(ctx, theme, data);
   const res = await resolvedTokens(ctx, theme);
   const problems = await contrastProblems(ctx, data, res);
@@ -597,7 +774,7 @@ export async function themeEditShow(theme, options = {}) {
       notes: [
         ...(stale
           ? [
-              `the build did not match ${theme}.settings.json (a command stopped while building, or a hand edit), so it was built again from the settings`,
+              `the build did not match ${theme}.settings.json (${stale}), so it was built again from the settings`,
             ]
           : []),
         ...fontNotes(ctx, data),
@@ -759,22 +936,19 @@ function partValues(ctx, data, res, mode) {
  */
 function colorsReport(pal, data) {
   if (!pal) return {vibrancy: null, colors: [], colorNotes: []};
-  const exact = new Set(
-    data.settings.filter(s => s.source === 'token' && !s.on).map(s => s.thing),
-  );
+  /** What the user set for each token exactly, in each mode. */
+  const exactBy =
+    /** @type {Record<string, {light?: string, dark?: string}>} */ ({});
+  for (const s of data.settings)
+    if (s.source === 'token' && !s.on && !s.when && !s.state)
+      for (const m of s.mode ? [s.mode] : ['light', 'dark'])
+        (exactBy[s.thing] ??= {})[/** @type {'light' | 'dark'} */ (m)] =
+          s.value;
   /** @param {import('./_palette.mjs').StopRef} r */
   const shade = r =>
     r.family === 'black' || r.family === 'white'
       ? `${r.family} ${r.color}`
       : `${r.family ? `${r.family} ` : ''}${r.stop}${r.alpha ? ` at opacity ${r.alpha}` : ''} ${r.color}${r.exact ? ' (your exact color)' : ''}`;
-  /** What the user set for each token exactly, by mode when it differs. */
-  const exactValue = /** @type {Record<string, string>} */ ({});
-  for (const s of data.settings)
-    if (s.source === 'token' && !s.on)
-      exactValue[s.thing] = [
-        ...(exactValue[s.thing] ? [exactValue[s.thing]] : []),
-        s.mode ? `${s.mode} ${s.value}` : s.value,
-      ].join(', ');
   // A theme with one mode lists only that mode's shades.
   const modes = modesOf(data);
   /** @param {{light: import('./_palette.mjs').StopRef, dark: import('./_palette.mjs').StopRef}} v */
@@ -789,8 +963,16 @@ function colorsReport(pal, data) {
           .filter(([, v]) => v.family === fam.id)
           .map(([k, v]) => [
             k,
-            exact.has(k)
-              ? `${exactValue[k]} (your exact setting wins over the generated ${shades(v)})`
+            // Each mode says what it shows: the exact setting where one is
+            // made for it, else the generated shade.
+            exactBy[k]
+              ? modes
+                  .map(m =>
+                    exactBy[k][m] != null
+                      ? `${m} ${exactBy[k][m]} (your exact setting wins over the generated ${shade(v[m])})`
+                      : `${m} ${shade(v[m])}`,
+                  )
+                  .join(', ')
               : shades(v),
           ]),
       ),
@@ -831,9 +1013,49 @@ function colorFiles(slug) {
  */
 export async function themeEditUndo(theme, options = {}) {
   const {cwd = process.cwd(), png = false, thing} = options;
+  // base and mode are not settings in the list: undoing one sets it back to
+  // its default.
+  if (thing === 'base' || thing === 'mode')
+    return change(
+      'set',
+      theme,
+      thing,
+      thing === 'base' ? 'none' : 'both',
+      options,
+    );
   if (thing != null)
     return change('undo', theme, thing, options.value, options);
   requireProject(cwd);
+  // A scope flag without a thing would undo some other change.
+  const scoped = /** @type {const} */ (['on', 'when', 'state', 'mode']).find(
+    k => options[k] != null,
+  );
+  if (scoped || options.only)
+    refuse(
+      E.ERR_MISSING_ARGUMENT,
+      `--${scoped ?? 'only'} names where one setting applies; name the setting too, or drop it to step back one change.`,
+      {
+        run: [
+          // The saved settings in that scope, as commands that remove them.
+          ...(() => {
+            try {
+              return loadTheme(cwd, theme)
+                .settings.filter(x =>
+                  scoped
+                    ? String(/** @type {any} */ (x)[scoped] ?? '') ===
+                      String(options[scoped])
+                    : x.only,
+                )
+                .slice(0, 3)
+                .map(x => `${P} undo ${theme} ${undoArgs(x)}`);
+            } catch {
+              return [];
+            }
+          })(),
+          `${P} undo ${theme}`,
+        ],
+      },
+    );
   // A damaged settings file is what undo recovers from: the last history
   // entry replaces it without the current file being read.
   /** @type {import('./_settings.mjs').ThemeData | null} */
