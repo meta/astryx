@@ -48,7 +48,7 @@ import {themeTempo} from '../motion/themeTempo';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBandClamp, rubberBandUnclamp} from '../motion/rubberBand';
 import {paging, registerPagingTable} from '../motion/uikit/paging';
-import {nearestLoopCopy} from '../utils/loopIndex';
+import {mod, nearestLoopCopy} from '../utils/loopIndex';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {isRtlElement} from './isRtlElement';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
@@ -267,10 +267,6 @@ function sameOffsets(
     a.length === b.length &&
     a.every((offset, i) => Math.abs(offset - b[i]) < 0.5)
   );
-}
-
-function mod(value: number, count: number): number {
-  return ((value % count) + count) % count;
 }
 
 /** A position curve seen as the track's x (mirrored for LTR). */
