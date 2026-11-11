@@ -21,6 +21,8 @@
 import path from 'node:path';
 
 import {
+  componentFolderOf,
+  componentPathOf,
   parseRouting,
   resolveModule as resolve,
   valueImports,
@@ -101,8 +103,6 @@ const PAGE = /origin\}\/(?!iframe\.html)([\w.-]+)/g;
 const OPENS_STORIES = /iframe\.html\?id=/;
 /** A spec's extra visits: `// @visits Markdown Citation`. */
 const VISITS = /^\s*(?:\/\/|\/?\*+)\s*@visits\s+(.+?)\s*(?:\*\/)?\s*$/gm;
-/** The component folder a path lies in. */
-const FOLDER = /^(packages\/[^/]+\/src\/[A-Z][^/]*\/)/;
 
 /**
  * The files a module loads through relative value imports, itself included.
@@ -140,11 +140,11 @@ function componentFolder(name, listed) {
   const own = listed.find(file =>
     new RegExp(`^packages/[^/]+/src/${name}/`).test(file),
   );
-  if (own) return FOLDER.exec(own)[1];
+  if (own) return componentPathOf(own);
   const source = listed.find(file =>
     new RegExp(`^packages/[^/]+/src/[A-Z][^/]*/${name}\\.tsx$`).test(file),
   );
-  return source ? FOLDER.exec(source)[1] : null;
+  return source ? componentPathOf(source) : null;
 }
 
 /**
@@ -169,7 +169,8 @@ function subjectFolder(file, id, listed, read) {
           new Set(listed),
           path.posix.normalize(`${path.posix.dirname(file)}/${specifier}`),
         );
-        const folder = target && FOLDER.exec(target)?.[1];
+        const folder =
+          target && componentFolderOf(target) && componentPathOf(target);
         if (folder) return folder;
       }
     }
@@ -194,7 +195,7 @@ function subjectFolder(file, id, listed, read) {
       named.startsWith(name) &&
       (best == null || name.length > best.name.length)
     )
-      best = {name, folder: match[1]};
+      best = {name, folder: componentPathOf(each)};
   }
   if (best) return best.folder;
   return null;

@@ -8,7 +8,7 @@
  * @input `--listed <file>`: every file of the merge commit. `--changed
  *   <file>`: the changed files. `--root <dir>`: the merge commit's checkout.
  *   `--out <file>`: where the plan goes.
- * @output `{specs, reason, shards}`, and `has_specs`, `specs` and `shards`
+ * @output `{specs, reasons, shards}`, and `has_specs`, `specs` and `shards`
  *   (the shard matrix) for `$GITHUB_OUTPUT`.
  * @position The plan job before the release-spec shards. A release spec (a
  *   `*.release.*.spec.ts` file or a spec tagged `@pr-a11y release-only`) runs
@@ -23,7 +23,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {isRenderedSource, proofImporters} from './a11y-pr-contracts.mjs';
+import {
+  componentPathOf,
+  isRenderedSource,
+  proofImporters,
+} from './a11y-pr-contracts.mjs';
 import {releaseSpecs, specVisits, storyFiles} from './release-spec-visits.mjs';
 import {
   assertEachOnce,
@@ -38,7 +42,8 @@ export const SHARD_SECONDS = 12 * 60;
 export const UNKNOWN_SECONDS = 60;
 
 /**
- * The fewest shards, each at most `SHARD_SECONDS` of recorded time; a spec
+ * The fewest shards a slowest-first split fits, each at most `SHARD_SECONDS`
+ * of recorded time; a spec
  * longer than that runs in a shard of its own. Every spec is in exactly one
  * shard.
  * @param {string[]} specs
@@ -85,8 +90,8 @@ export function shardSpecs(specs, seconds) {
  * @param {(specs: string[]) => Map<string, Set<string>>} options.importers
  *   each file the specs load, to the specs that load it; it throws when the
  *   imports cannot be followed
- * @param {Record<string, string[]>} options.pages fixture pages, to the
- *   component folders each renders
+ * @param {{stories: Record<string, string[]>, pages: Record<string, string[]>}} options.map
+ *   `.github/release-spec-visits.json`
  * @returns {{specs: string[], reasons: Record<string, string>}}
  */
 export function planReleaseSpecs({listed, changed, read, importers, map}) {
@@ -120,7 +125,7 @@ export function planReleaseSpecs({listed, changed, read, importers, map}) {
       continue;
     }
     const hit = rendered.find(file =>
-      visit.folders.some(folder => file.startsWith(folder)),
+      visit.folders.includes(componentPathOf(file)),
     );
     if (hit) add(spec, `it visits the component ${hit} belongs to`);
   }

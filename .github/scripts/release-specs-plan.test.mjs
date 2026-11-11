@@ -17,7 +17,11 @@ import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
 
-import {proofImporters} from './a11y-pr-contracts.mjs';
+import {
+  componentFolderOf,
+  componentPathOf,
+  proofImporters,
+} from './a11y-pr-contracts.mjs';
 import {
   isReleaseFile,
   planReleaseSpecs,
@@ -265,7 +269,7 @@ describe('the release specs of this repository', () => {
     // name another one, a `@visits` line names its own.
     const stories = storyFiles(listed, read);
     for (const spec of releaseSpecs(listed, read)) {
-      const own = /^(packages\/[^/]+\/src\/[A-Z][^/]*\/)/.exec(spec)?.[1];
+      const own = componentFolderOf(spec) ? componentPathOf(spec) : null;
       if (own)
         expect(
           specVisits(spec, {listed, read, stories, map}).folders,
@@ -355,5 +359,29 @@ describe('shardSpecs', () => {
 
   it('plans no shard for no spec', () => {
     expect(shardSpecs([], {})).toEqual([]);
+  });
+});
+
+describe('componentPathOf', () => {
+  it("names a file's component folder, or its package's source folder", () => {
+    expect(componentPathOf('packages/core/src/Button/Button.tsx')).toBe(
+      'packages/core/src/Button/',
+    );
+    expect(
+      componentPathOf('packages/core/src/Button/__tests__/Button.test.tsx'),
+    ).toBe('packages/core/src/Button/');
+    expect(componentFolderOf('packages/core/src/Button/Button.tsx')).toBe(
+      'core/Button',
+    );
+    // Rich Text has no component folders: the package is the component.
+    expect(componentPathOf('packages/richtext/src/plugins/Code.tsx')).toBe(
+      'packages/richtext/src/',
+    );
+    expect(componentFolderOf('packages/richtext/src/plugins/Code.tsx')).toBe(
+      null,
+    );
+    expect(componentPathOf('apps/storybook/stories/Button.stories.tsx')).toBe(
+      null,
+    );
   });
 });
