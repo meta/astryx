@@ -799,3 +799,49 @@ describe('Field in a narrow row', () => {
     expect(getComputedStyle(root).minWidth).not.toBe('0');
   });
 });
+
+describe('Field caller text under a right-to-left page', () => {
+  afterEach(() => {
+    __resetLiveRegionsForTest();
+  });
+
+  const renderField = (text: string) =>
+    render(
+      <div dir="rtl">
+        <Field
+          label={text}
+          description={text}
+          inputID="mixed"
+          status={{type: 'error', message: text}}
+          statusVariant="detached">
+          <input id="mixed" aria-describedby="mixed-desc" />
+        </Field>
+      </div>,
+    );
+
+  it('lays out a label, description and status with no right-to-left letter left to right', () => {
+    renderField('Prefix https://');
+    const input = screen.getByLabelText('Prefix https://');
+    expect(input).toHaveAccessibleName('Prefix https://');
+    expect(input).toHaveAccessibleDescription('Prefix https://');
+    const label = document.querySelector('label[for="mixed"]');
+    expect(label?.querySelector('span[dir="ltr"]')).toHaveTextContent(
+      'Prefix https://',
+    );
+    expect(
+      document.getElementById('mixed-desc')?.querySelector('span[dir="ltr"]'),
+    ).toHaveTextContent('Prefix https://');
+    expect(
+      document.getElementById('mixed-status')?.querySelector('span[dir="ltr"]'),
+    ).toHaveTextContent('Prefix https://');
+  });
+
+  it('keeps the page direction for text with a right-to-left letter', () => {
+    const text = 'example.com \u0645\u0648\u0642\u0639';
+    renderField(text);
+    expect(screen.getByLabelText(text)).toHaveAccessibleName(text);
+    expect(document.querySelector('label[for="mixed"] [dir]')).toBeNull();
+    expect(document.querySelector('#mixed-desc [dir]')).toBeNull();
+    expect(document.querySelector('#mixed-status [dir]')).toBeNull();
+  });
+});

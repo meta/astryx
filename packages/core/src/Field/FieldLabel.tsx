@@ -32,6 +32,7 @@ import {renderIconSlot} from '../Icon/Icon';
 import type {IconType} from '../Icon';
 import {InfoTip} from '../InfoTip/InfoTip';
 import {themeProps} from '../utils/themeProps';
+import {textDirectionProps} from '../utils/textDirection';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useResolvedOptionality} from '../hooks/useResolvedRequired';
 import {
@@ -295,10 +296,15 @@ export function FieldLabel({
     disabled: !forwardsDescriptionClick,
   });
 
+  // Plain text with no right-to-left letter keeps its written order on a
+  // right-to-left page. The direction goes on an inner span, so the label's
+  // alignment and its marker still follow the page.
+  const labelDir = textDirectionProps(label).dir;
+  const descriptionDir = textDirectionProps(description).dir;
   const labelContent = (
     <>
       {labelIcon && renderIconSlot(labelIcon, {size: 'sm', color: 'inherit'})}
-      {label}
+      {labelDir == null ? label : <span dir={labelDir}>{label}</span>}
       {statusText && (
         <span {...stylex.props(styles.optionalRequired)}>
           <span aria-hidden="true"> ∙ </span>
@@ -377,7 +383,11 @@ export function FieldLabel({
           forwardsDescriptionClick && styles.descriptionClickable,
           isLabelHidden && styles.srOnly,
         )}>
-        {description}
+        {descriptionDir == null ? (
+          description
+        ) : (
+          <span dir={descriptionDir}>{description}</span>
+        )}
       </span>
     </div>
   );

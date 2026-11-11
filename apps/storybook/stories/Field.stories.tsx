@@ -448,3 +448,42 @@ export const FilterBar: Story = {
     </div>
   ),
 };
+
+/**
+ * Caller text that holds only weak and neutral characters, or that mixes a
+ * Latin word into right-to-left text, as the label, the description and the
+ * status message. `MixedDirectionText.a11y.chromium.spec.ts` reads its
+ * character order under RTL and LTR.
+ */
+const MIXED_DIRECTION_TEXTS = [
+  'https://',
+  '.com',
+  '+3',
+  '@alice',
+  'iPhone جديد',
+  'example.com موقع',
+];
+
+export const MixedDirection: Story = {
+  args: {label: ''},
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
+      {MIXED_DIRECTION_TEXTS.map((text, index) => (
+        <Field
+          key={text}
+          label={text}
+          description={text}
+          inputID={`mixed-${index}`}
+          status={{type: 'warning', message: text}}
+          statusVariant="detached">
+          <NativeInput
+            id={`mixed-${index}`}
+            describedBy={`mixed-${index}-desc`}
+            value=""
+            onChange={() => {}}
+          />
+        </Field>
+      ))}
+    </div>
+  ),
+};
