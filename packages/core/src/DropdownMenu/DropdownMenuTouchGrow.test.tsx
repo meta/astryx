@@ -15,6 +15,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import type * as InputHold from '../Layer/inputHold';
 import type * as ReducedMotionPreference from '../motion/reducedMotionPreference';
+import type * as ModuleLoader from '../utils/moduleLoader';
 import {scroll} from '../motion/uikit/scroll';
 import {DropdownMenu, type DropdownMenuOption} from './DropdownMenu';
 import * as menuSurfaceMotion from './menuSurfaceMotion';
@@ -58,6 +59,27 @@ vi.mock('../Layer/inputHold', async importOriginal => ({
     return end;
   },
 }));
+// The imports that load through the shared module loader, by import.
+const sharedLoads = vi.hoisted(() => new Map<unknown, number>());
+vi.mock('../utils/moduleLoader', async importOriginal => {
+  const actual = await importOriginal<typeof ModuleLoader>();
+  return {
+    ...actual,
+    createModuleLoader: <T,>(importModule: () => Promise<T>) => {
+      const loader = actual.createModuleLoader(importModule);
+      return {
+        ...loader,
+        load: async () => {
+          sharedLoads.set(
+            importModule,
+            (sharedLoads.get(importModule) ?? 0) + 1,
+          );
+          return loader.load();
+        },
+      };
+    },
+  };
+});
 // The one Reduce Motion predicate, which a case can turn on by itself, as a
 // new theme setting would.
 const preference = vi.hoisted(() => ({reduces: false}));
@@ -350,6 +372,65 @@ describe('DropdownMenu touch grow', () => {
     await settleLoad();
     expect(loads).toBe(2);
     expect(motion.enter).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads the grow's code through the shared module loader", async () => {
+    const importMotion = async () => menuSurfaceMotion;
+    setMenuSurfaceMotionImportForTest(importMotion);
+    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
+    await settleLoad();
+    expect(sharedLoads.get(importMotion)).toBeGreaterThan(0);
+    expect(motion.enter).toHaveBeenCalledTimes(1);
+  });
+
+  it("a menu that mounts while the grow's code loads shares that load at the page's first touch", async () => {
+    stubCoarsePointer();
+    let loads = 0;
+    let finish: (module: typeof menuSurfaceMotion) => void = () => {};
+    setMenuSurfaceMotionImportForTest(async () => {
+      loads++;
+      return new Promise(resolve => {
+        finish = resolve;
+      });
+    });
+    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
+    // The page's first touch starts the load.
+    fireEvent.touchStart(document.body);
+    await settleLoad();
+    expect(loads).toBe(1);
+    // A second menu mounts while that load is in flight, and a touch follows.
+    render(<DropdownMenu button={{label: 'More'}} items={ITEMS} />);
+    fireEvent.touchStart(document.body);
+    await settleLoad();
+    expect(loads).toBe(1);
+    finish(menuSurfaceMotion);
+    await settleLoad();
+    expect(loads).toBe(1);
+  });
+
+  it("warns once in development when the grow's code fails to load, and the next open asks again", async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let loads = 0;
+    setMenuSurfaceMotionImportForTest(async () => {
+      loads++;
+      throw new Error('offline');
+    });
+    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    fireEvent.pointerDown(trigger, touch);
+    await settleLoad();
+    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
+      key: 'Escape',
+    });
+    await settleLoad();
+    fireEvent.pointerDown(trigger, touch);
+    await settleLoad();
+    expect(loads).toBe(2);
+    const warnings = warn.mock.calls.filter(([message]) =>
+      String(message).startsWith('DropdownMenu:'),
+    );
+    expect(warnings).toHaveLength(1);
   });
 
   it("an open that waits longer than an entrance shows the menu with the layer's own entrance, and a late load grows nothing", async () => {

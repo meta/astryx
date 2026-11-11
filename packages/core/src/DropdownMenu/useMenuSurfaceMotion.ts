@@ -30,7 +30,9 @@ import {holdInput} from '../Layer/inputHold';
 import {createPresentationHold} from '../Layer/presentationHold';
 import {prefersReducedMotion} from '../motion/reducedMotionPreference';
 import {isCoarsePointer} from '../utils/coarsePointer';
+import {devWarn} from '../utils/devWarning';
 import {subscribeInput} from '../utils/inputStream';
+import {createModuleLoader} from '../utils/moduleLoader';
 import {sharedState} from '../utils/sharedRealm';
 import type * as MenuSurfaceMotionModule from './menuSurfaceMotion';
 import type {MenuSurfaceGeometry, MenuSurfaceMotion} from './menuSurfaceMotion';
@@ -42,36 +44,32 @@ async function importOwnMotion(): Promise<MotionModule> {
 }
 
 /**
- * The grow's code, once per page for every copy of Core: the loaded module,
- * the load in flight, and the import a test can replace. A change to the
- * module's calls bumps the version, so each copy then keeps its own.
+ * The grow's code, once per page for every copy of Core: the shared module
+ * loader, and whether a failed load has warned. A change to the module's
+ * calls bumps the version, so each copy then keeps its own.
  */
 const motionCode = sharedState(
   'dropdown-menu/use-menu-surface-motion/code',
-  1,
-  () => ({
-    loaded: null as MotionModule | null,
-    loading: null as Promise<MotionModule> | null,
-    importMotion: importOwnMotion,
-  }),
+  2,
+  () => ({loader: createModuleLoader(importOwnMotion), hasWarned: false}),
 );
 
 /**
  * Starts loading the grow's code, once per page. A failed load is forgotten,
- * so the next open tries again.
+ * so the next open tries again. Development builds warn once.
  */
 async function loadMotion(): Promise<MotionModule> {
-  motionCode.loading ??= motionCode.importMotion().then(
-    module => {
-      motionCode.loaded = module;
-      return module;
-    },
-    (error: unknown) => {
-      motionCode.loading = null;
-      throw error;
-    },
-  );
-  return motionCode.loading;
+  return motionCode.loader.load().catch((error: unknown) => {
+    if (!motionCode.hasWarned) {
+      motionCode.hasWarned = true;
+      devWarn(
+        'DropdownMenu',
+        "the touch grow's code failed to load, so the menu fades in instead.",
+        error,
+      );
+    }
+    throw error;
+  });
 }
 
 /**
@@ -82,16 +80,15 @@ export const MENU_GROW_LOAD_WAIT_MS = 250;
 
 /** @internal For tests: forgets the loaded code. */
 export function resetMenuSurfaceMotionForTest(): void {
-  motionCode.loaded = null;
-  motionCode.loading = null;
-  motionCode.importMotion = importOwnMotion;
+  motionCode.loader = createModuleLoader(importOwnMotion);
+  motionCode.hasWarned = false;
 }
 
 /** @internal For tests: replaces how the grow's code loads. */
 export function setMenuSurfaceMotionImportForTest(
   load: () => Promise<MotionModule>,
 ): void {
-  motionCode.importMotion = load;
+  motionCode.loader = createModuleLoader(load);
 }
 
 /**
@@ -100,12 +97,9 @@ export function setMenuSurfaceMotionImportForTest(
  * Returns the unsubscribe.
  */
 function loadAtFirstTouch(view: Window): () => void {
-  // Under a fine primary pointer the trigger's own touch loads it.
-  if (
-    motionCode.loaded != null ||
-    motionCode.loading != null ||
-    !isCoarsePointer(view)
-  ) {
+  // Under a fine primary pointer the trigger's own touch loads it. A load in
+  // flight is the loader's to share.
+  if (motionCode.loader.loaded() != null || !isCoarsePointer(view)) {
     return () => {};
   }
   const unsubscribe = subscribeInput(view, 'touchstart', () => {
@@ -246,8 +240,9 @@ export function useMenuSurfaceMotion(): MenuSurfaceMotionCalls {
         return;
       }
       const measure = () => ({surface: boxOf(surface), source: boxOf(source)});
-      if (motionCode.loaded != null) {
-        motionFor(motionCode.loaded, surface).enter(measure);
+      const loaded = motionCode.loader.loaded();
+      if (loaded != null) {
+        motionFor(loaded, surface).enter(measure);
         // Taps stay off the page until the menu shows, at the grow's first
         // frame.
         growFrameHoldRef.current = holdUntilGrowFrame(surface);
