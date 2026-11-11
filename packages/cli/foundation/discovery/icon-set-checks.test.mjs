@@ -1068,3 +1068,44 @@ describe('suggestions from a definition word never bridge to another meaning', (
     expect(suggest('textCase', ['case-sensitive'])).toEqual(['case-sensitive']);
   });
 });
+
+describe('suggestions prefer the icon the definition names over a longer id', () => {
+  const definitions = new Map(
+    astryxIconDefinitions().definitions.map(({doc}) => [doc.name, doc]),
+  );
+  /** @param {string} name @param {string[]} ids */
+  const suggest = (name, ids) =>
+    suggestedIcons(
+      {data: {icons: ids.map(id => ({id, words: id.split('-')})), map: {}}},
+      /** @type {any} */ (definitions.get(name)),
+    ).map(each => each.icon);
+
+  it('puts an id whose other words name something else after the icons its words name', () => {
+    // A backspace key and a pattern lock are not delete and unlock.
+    expect(suggest('delete', ['delete-left', 'trash'])).toEqual([
+      'trash',
+      'delete-left',
+    ]);
+    expect(suggest('unlock', ['unlock-pattern', 'unlocked'])).toEqual([
+      'unlocked',
+      'unlock-pattern',
+    ]);
+    // Other words that are the definition's own, or a size or shape, still
+    // come first.
+    expect(suggest('add', ['add-circle', 'plus'])[0]).toBe('add-circle');
+  });
+
+  it('puts a word another definition shares after the words only this one has', () => {
+    // `store` is a word of save and of a shopping bag.
+    expect(suggest('save', ['store', 'floppy-disk'])).toEqual([
+      'floppy-disk',
+      'store',
+    ]);
+  });
+
+  it('suggests the building for bank, never a shelf of books', () => {
+    expect(suggest('bank', ['library', 'building-library'])).toEqual([
+      'building-library',
+    ]);
+  });
+});

@@ -30,6 +30,7 @@ import {
   User,
 } from 'lucide-react';
 import {Text, Heading} from '@astryxdesign/core/Text';
+import {DialogHeader, useImperativeDialog} from '@astryxdesign/core/Dialog';
 import {
   VStack,
   HStack,
@@ -195,50 +196,111 @@ function ShowcaseContent({
 
 function ShowcaseNavigation() {
   const {isMobile} = useAppShellMobile();
+  // Named explicitly: DialogHeader only names a dialog that already contains
+  // it when the dialog mounts, and imperative content arrives later.
+  const signIn = useImperativeDialog({
+    purpose: 'form',
+    width: 400,
+    'aria-label': 'Sign in',
+  });
+  // A new key on each open mounts a new form, so a reopened dialog starts empty.
+  const signInOpens = useRef(0);
   return (
-    <TopNav
-      label="Theme preview navigation"
-      heading={<TopNavHeading heading="Studio" />}
-      centerContent={
-        isMobile ? undefined : (
-          <>
-            <TopNavItem label="Shop" href="#" isSelected />
-            <TopNavItem label="New In" href="#" />
-            <TopNavItem label="Stories" href="#" />
-            <TopNavItem label="Help" href="#" />
-          </>
-        )
-      }
-      endContent={
-        <HStack gap={2} vAlign="center">
-          <HStack gap={0.5}>
+    <>
+      <TopNav
+        label="Theme preview navigation"
+        heading={<TopNavHeading heading="Studio" />}
+        centerContent={
+          isMobile ? undefined : (
+            <>
+              <TopNavItem label="Shop" href="#" isSelected />
+              <TopNavItem label="New In" href="#" />
+              <TopNavItem label="Stories" href="#" />
+              <TopNavItem label="Help" href="#" />
+            </>
+          )
+        }
+        endContent={
+          <HStack gap={2} vAlign="center">
+            <HStack gap={0.5}>
+              <Button
+                label="Search"
+                tooltip="Search"
+                variant="ghost"
+                isIconOnly
+                icon={<Icon icon={Search} size="md" />}
+                href="#"
+              />
+              <Button
+                label="Account"
+                tooltip="Account"
+                variant="ghost"
+                isIconOnly
+                icon={<Icon icon={User} size="md" />}
+                href="#"
+              />
+              <Button
+                label="Cart"
+                tooltip="Cart"
+                variant="ghost"
+                isIconOnly
+                icon={<Icon icon={ShoppingBag} size="md" />}
+                href="#"
+              />
+            </HStack>
             <Button
-              label="Search"
-              tooltip="Search"
-              variant="ghost"
-              isIconOnly
-              icon={<Icon icon={Search} size="md" />}
-              href="#"
-            />
-            <Button
-              label="Account"
-              tooltip="Account"
-              variant="ghost"
-              isIconOnly
-              icon={<Icon icon={User} size="md" />}
-              href="#"
-            />
-            <Button
-              label="Cart"
-              tooltip="Cart"
-              variant="ghost"
-              isIconOnly
-              icon={<Icon icon={ShoppingBag} size="md" />}
-              href="#"
+              label="Sign in"
+              variant="primary"
+              onClick={() =>
+                signIn.show(
+                  <SignInForm
+                    key={++signInOpens.current}
+                    onClose={signIn.hide}
+                  />,
+                )
+              }
             />
           </HStack>
-          <Button label="Sign in" variant="primary" href="#" />
-        </HStack>
+        }
+      />
+      {signIn.element}
+    </>
+  );
+}
+
+/** Sign in opens a real dialog, so a theme's header, close control, fields
+ * and footer buttons can be reviewed together. */
+function SignInForm({onClose}: {onClose: () => void}) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  return (
+    <Layout
+      header={<DialogHeader title="Sign in" onOpenChange={() => onClose()} />}
+      content={
+        <LayoutContent>
+          <VStack gap={4}>
+            <TextInput
+              label="Email"
+              placeholder="you@studio.com"
+              value={email}
+              onChange={setEmail}
+            />
+            <TextInput
+              label="Password"
+              type="password"
+              value={password}
+              onChange={setPassword}
+            />
+          </VStack>
+        </LayoutContent>
+      }
+      footer={
+        <LayoutFooter>
+          <HStack gap={2} hAlign="end">
+            <Button label="Cancel" variant="secondary" onClick={onClose} />
+            <Button label="Sign in" variant="primary" onClick={onClose} />
+          </HStack>
+        </LayoutFooter>
       }
     />
   );
