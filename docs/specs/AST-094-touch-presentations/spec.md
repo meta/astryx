@@ -1041,6 +1041,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   frame late, the menu waits up to 50 ms for moves still queued. A move from
   before the moment that reaches the page more than two frames late holds it
   the same way.
+- Two waits: the arena's yield covers one task; the press's 50 ms covers moves
+  Chromium queues past the task and frame (FR16). The press reads when the page
+  runs from the arena (`pageTime()`), and each touch carries the time and
+  samples of the input that moved it (`inputTime`, `inputSamples`).
 - Consumer docs: none until a component ships its touch presentation; each
   component documents its own, including the `presentation` value that keeps
   the released surface (FR25).
