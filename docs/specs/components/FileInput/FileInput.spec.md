@@ -34,14 +34,15 @@ ownership for the upload affordance that FileInput paints through Icon.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`
+- Released default preserved: `no`; in dropzone mode an unset
+  `statusVariant` resolves to `detached` (FR6, DEC-2)
 - Compatibility class: additive public theming target; no existing target,
-  runtime default, DOM, prop, interaction, or accessibility behavior changes
+  DOM, prop, interaction, or accessibility behavior changes
 - Controlled/uncontrolled behavior: unchanged; FileInput remains controlled
 - Migration decision: `component:FileInput/DEC-1`
-- Dropzone status placement (FR6): the docs mark `attached` unsupported in
-  dropzone mode, and the released `attached` rendering stays until the next
-  minor release
+- Dropzone status placement (FR6): a dropzone defaults to `detached`; an
+  explicit `statusVariant="attached"` keeps the released attached rendering
+  until the next minor release (DEC-2)
 
 Consumer migration instructions belong in consumer docs and release notes.
 
@@ -199,7 +200,7 @@ Icon retains its general target and base glyph semantics.
 **Reference:** `component:FileInput/DEC-2`
 **Decider:** cixzhang, 2026-11-10
 
-A dropzone defaults to `detached` from this patch release. An explicit
+A dropzone defaults to `detached`. An explicit
 `attached` keeps its released rendering until the next minor release, which
 resolves it to `detached`. The owner asked: "9259 can we have a non breaking
 version that just updates thw default then saves the cleanup of the attached
