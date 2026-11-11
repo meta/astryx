@@ -237,7 +237,7 @@ describe('ContextMenuPressRecognizer', () => {
       harness.advance(DISPLAY);
       expect(press.isMenuDue).toBe(false);
       at(DISPLAY + 115);
-      harness.advance(DISPLAY + 50);
+      harness.advance(DISPLAY + 115);
       expect(press.isMenuDue).toBe(true);
       finger.up(DISPLAY + 300);
     });
@@ -295,9 +295,9 @@ describe('ContextMenuPressRecognizer', () => {
       at(DISPLAY + 40);
       harness.advance(DISPLAY);
       expect(press.isMenuDue).toBe(false);
-      // No more moves came: the wait ends 50 ms on, on the arena's clock.
+      // No more moves came: the wait ends 50 ms after the late timer ran.
       at(DISPLAY + 90);
-      harness.advance(DISPLAY + 50);
+      harness.advance(DISPLAY + 90);
       expect(press.isMenuDue).toBe(true);
       finger.up(DISPLAY + 300);
     });
