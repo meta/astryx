@@ -23,11 +23,13 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import yaml from 'yaml';
+
 import {importerGraph, proofImporters} from './a11y-pr-contracts.mjs';
 import {chromiumSelection, isInteractionSpec} from './playwright-legs.mjs';
 
 const COMMENT =
-  'Replay of the Chromium interaction selection (spec:AST-030 FR31). Regenerate with node .github/scripts/interaction-selection-replay.mjs (the same pull requests), --prs <numbers>, or --resume to continue an interrupted run. `reviewed`: failing specs outside a selection that a review found not to be escapes, and why.';
+  'Replay of the Chromium interaction selection (spec:AST-030 FR31). Regenerate with node .github/scripts/interaction-selection-replay.mjs (the same pull requests), --prs <numbers>, or --resume to continue an interrupted run. `reviewed`: for one pull request (`#<number> <spec>`), a failing spec outside its selection that a review found not to be an escape, and why.';
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../..',
@@ -42,20 +44,25 @@ const git = (...args) =>
 const gh = (...args) =>
   execFileSync('gh', args, {encoding: 'utf8', maxBuffer: 1 << 28});
 
-/** The lane's scope, as ci.yml's pr-interaction scope step reads it. */
-function laneScope() {
-  const ci = fs.readFileSync(
-    path.join(ROOT, '.github/workflows/ci.yml'),
-    'utf8',
+/** The lane's scope: the Chromium selection step's own `SCOPE_PATHS`. */
+export function laneScope(ci = readCi()) {
+  const step = ci.jobs['interaction-legs'].steps.find(
+    each => each.id === 'select-chromium',
   );
-  const job = ci.slice(ci.indexOf('\n  pr-interaction:\n'));
-  const paths =
-    /- name: Decide this job's scope\n\s+id: scope\n\s+uses: [^\n]+\n\s+with:\n\s+paths: '([^']+)'/.exec(
-      job,
-    )?.[1];
-  if (paths == null) throw new Error("No scope in ci.yml's pr-interaction job");
+  const paths = step?.env?.SCOPE_PATHS;
+  if (paths == null)
+    throw new Error("No SCOPE_PATHS on ci.yml's select-chromium step");
   return new RegExp(paths);
 }
+
+function readCi() {
+  return yaml.parse(
+    fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8'),
+  );
+}
+
+/** The key of a reviewed note: one pull request's one failing spec. */
+export const reviewKey = (pr, spec) => `#${pr} ${spec}`;
 
 const PR_QUERY = `query($n: Int!) { repository(owner: "meta", name: "astryx") {
   pullRequest(number: $n) { number mergeCommit { oid } headRefOid
@@ -223,7 +230,9 @@ function main(args) {
       picked == null || picked.full
         ? []
         : failures.filter(spec => !picked.specs.includes(spec));
-    const unreviewed = missed.filter(spec => reviewed[spec] == null);
+    const unreviewed = missed.filter(
+      spec => reviewed[reviewKey(number, spec)] == null,
+    );
     escapes += unreviewed.length;
     rows.push({
       pr: number,
@@ -238,11 +247,13 @@ function main(args) {
           ? unknown
             ? 'failures unknown: a failed job has no log'
             : 'no failure'
-          : missed.length === 0
-            ? 'caught'
-            : unreviewed.length > 0
-              ? `escape: ${unreviewed.join(', ')}`
-              : 'not an escape (reviewed)',
+          : picked == null
+            ? 'out of scope at its merge commit: the lane runs no proof for it'
+            : missed.length === 0
+              ? 'caught'
+              : unreviewed.length > 0
+                ? `escape: ${unreviewed.join(', ')}`
+                : 'not an escape (reviewed)',
     });
     console.error(`#${number}: ${rows.at(-1).verdict}`);
     write();

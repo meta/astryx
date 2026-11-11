@@ -532,7 +532,11 @@ function plan(args) {
   }
   const files = list(suite, out, filters);
   if (files.length === 0)
-    throw new Error(`Playwright listed no ${key} spec files`);
+    throw new Error(
+      filters.length > 0
+        ? `Playwright listed none of the ${key} spec files the selection names at this pull request's head: they were added on main after the branch point. Update the branch to run them.`
+        : `Playwright listed no ${key} spec files`,
+    );
   const recorded = readDurations(durations);
   // The same costs the leg count used, so the split matches its estimate.
   const legsPlan = planLegs(

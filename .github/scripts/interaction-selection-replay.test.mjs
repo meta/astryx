@@ -11,6 +11,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
+import yaml from 'yaml';
+
+import {laneScope, reviewKey} from './interaction-selection-replay.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const record = JSON.parse(
@@ -65,7 +68,32 @@ describe('the Chromium selection replay record', () => {
       if (!Array.isArray(row.selection)) continue;
       for (const spec of row.full_run_failures)
         if (!row.selection.includes(spec))
-          expect(record.reviewed[spec], `#${row.pr} ${spec}`).toBeTruthy();
+          expect(
+            record.reviewed[reviewKey(row.pr, spec)],
+            `#${row.pr} ${spec}`,
+          ).toBeTruthy();
     }
+  });
+
+  it("replays with the Chromium lane's own scope", () => {
+    const ci = yaml.parse(
+      fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'),
+    );
+    const counter = ci.jobs['interaction-legs'];
+    const scope = counter.steps.find(each => each.id === 'scope-chromium');
+    expect(laneScope(ci).source).toBe(new RegExp(scope.with.paths).source);
+    // Not another job's scope, such as the accessibility contracts'.
+    const contracts = ci.jobs['pr-component-a11y-contracts'].steps.find(
+      each => each.id === 'scope',
+    );
+    expect(laneScope(ci).source).not.toBe(
+      new RegExp(contracts.with.paths).source,
+    );
+  });
+
+  it('keys each reviewed note by its pull request and spec', () => {
+    for (const key of Object.keys(record.reviewed))
+      expect(key).toMatch(/^#\d+ packages\/[^/]+\/src\/\S+\.spec\.ts$/);
+    expect(reviewKey(10816, 'a.spec.ts')).toBe('#10816 a.spec.ts');
   });
 });
