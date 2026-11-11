@@ -334,8 +334,8 @@ function applyRowActivationStyle(
     '--_table-row-overlay-inset',
     `${ACTIVE_BAR_WIDTH_PX}px`,
   );
-  // Inline shadow only: under forced colors it computes to nothing and the
-  // stylesheet outline above carries the marker instead.
+  // Inline shadow only. Forced colors drop this shadow. The forced-colors
+  // rule in `activationStyles` draws the marker.
   const bar = `inset ${isRtlElement(row) ? '-' : ''}${ACTIVE_BAR_WIDTH_PX}px 0 0 ${activeBarColor}`;
   if (firstCell.style.boxShadow !== bar) {
     firstCell.style.boxShadow = bar;
@@ -629,9 +629,18 @@ export function useTableActivation<T extends Record<string, unknown>>(
         }
         // A row an earlier plugin already marked current keeps its
         // semantics: activation stays fully off it rather than adding a tab
-        // stop and key affordances that would do nothing. Presses and paint
-        // shed competing owners independently of plugin order.
-        if (props.htmlProps['aria-current'] != null) {
+        // stop and key affordances that would do nothing. `false` states no
+        // current state, matching `hasCompetingCurrentOwner`, so skipping it
+        // keeps the result independent of plugin order.
+        const declaredCurrent = props.htmlProps['aria-current'];
+        // ARIA `false` states no current state, unlike JSX children:
+        // `isRenderable` would skip `true` and keep `'false'`.
+        const declaresCompetingCurrent =
+          // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- aria-current states differ from JSX renderability
+          declaredCurrent != null &&
+          declaredCurrent !== false &&
+          declaredCurrent !== 'false';
+        if (declaresCompetingCurrent) {
           warnOnce(
             'table-activation-current-owner-early',
             'useTableActivation',
