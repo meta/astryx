@@ -311,8 +311,13 @@ export function TourStep({
   const isTourRunningRef = useRef(false);
   const getOpener = tour?.getOpener;
   const isTourRunning = tour?.activeStepId != null;
+  // An unmounted tour is not running: an app that removes Tour from
+  // onDismiss still gets the focus return.
   useClientLayoutEffect(() => {
     isTourRunningRef.current = isTourRunning;
+    return () => {
+      isTourRunningRef.current = false;
+    };
   }, [isTourRunning]);
 
   // The active target's viewport box, tracked so the highlight overlay can sit

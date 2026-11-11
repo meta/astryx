@@ -455,4 +455,34 @@ describe('TourStep callout', () => {
     );
     expect(screen.getByRole('button', {name: 'Start tour'})).toHaveFocus();
   });
+
+  it('returns focus to the opener when the app unmounts the tour from onDismiss', async () => {
+    const user = userEvent.setup();
+    function UnmountingTour() {
+      const [isActive, setIsActive] = useState(false);
+      const cardRef = useRef<HTMLDivElement>(null);
+      return (
+        <>
+          <div ref={cardRef}>Revenue card</div>
+          <button type="button" onClick={() => setIsActive(true)}>
+            Start tour
+          </button>
+          {isActive && (
+            <Tour isActive onDismiss={() => setIsActive(false)}>
+              <TourStep targetRef={cardRef} heading="Your revenue">
+                Totals for the quarter.
+              </TourStep>
+            </Tour>
+          )}
+        </>
+      );
+    }
+    render(<UnmountingTour />);
+    await user.click(screen.getByRole('button', {name: 'Start tour'}));
+    await user.click(
+      await screen.findByRole('button', {name: 'Close tour', hidden: true}),
+    );
+    expect(screen.queryByText('Your revenue')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Start tour'})).toHaveFocus();
+  });
 });
