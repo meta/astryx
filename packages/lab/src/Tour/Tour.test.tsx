@@ -338,9 +338,11 @@ describe('TourStep callout', () => {
   it('anchors to a target that is not a button', () => {
     render(<CardTargetTour />);
     const card = screen.getByTestId('card-target');
-    const anchorName = (card.style as unknown as Record<string, string>)
-      .anchorName;
-    expect(anchorName ?? '').not.toBe('');
+    const anchorNameOf = (element: HTMLElement) =>
+      (element.style as unknown as Record<string, string>).anchorName ?? '';
+    // The callout anchors to the highlight box drawn over the card.
+    expect(anchorNameOf(screen.getByTestId('tour-highlight'))).not.toBe('');
+    expect(anchorNameOf(card)).toBe('');
     expect(card).not.toHaveAttribute('aria-haspopup');
     expect(card).not.toHaveAttribute('aria-expanded');
   });

@@ -7,9 +7,9 @@
  *   input drives them.
  * @output Proofs that the callout anchors next to a card, that Tab leaves the
  *   callout for the page, that pressing the introduced control keeps the
- *   tour, that Escape ends it, that a press on a dimmed page ends a backdrop
- *   tour, and that the close control's touch target grows under a coarse
- *   pointer. Each state is attached as a still.
+ *   tour, that a held press on a scaling target leaves the callout in place,
+ *   that Escape ends it, that a press on a dimmed page ends a backdrop tour,
+ *   and that the close control's touch target grows under a coarse pointer. Each state is attached as a still.
  * @position Real-engine layer of Tour; the jsdom layer is Tour.test.tsx
  */
 
@@ -29,32 +29,16 @@ async function startTour(page: Page) {
 test('the callout anchors next to a card target', async ({page}, testInfo) => {
   await startTour(page);
   const region = page.getByRole('region', {name: 'Your revenue'});
-  // The step's target is the card that holds the Revenue heading. While the
-  // step shows, that card carries the layer's anchor name.
-  const card = await page
-    .getByRole('heading', {name: 'Revenue', exact: true})
-    .evaluate(element => {
-      let node: HTMLElement | null = element;
-      while (
-        node != null &&
-        node.style.getPropertyValue('anchor-name') === ''
-      ) {
-        node = node.parentElement;
-      }
-      if (node == null) {
-        return null;
-      }
-      const box = node.getBoundingClientRect();
-      return {bottom: box.bottom, left: box.left, right: box.right};
-    });
+  // The callout anchors to the highlight box drawn over the card.
+  const card = await page.getByTestId('tour-highlight').boundingBox();
   const callout = await region.boundingBox();
   if (card == null || callout == null) {
-    throw new Error('the card is not an anchor, or the callout has no box');
+    throw new Error('the highlight or the callout has no box');
   }
-  // Below the card, overlapping it along the inline axis.
-  expect(callout.y).toBeGreaterThanOrEqual(card.bottom - 1);
-  expect(callout.x).toBeLessThan(card.right);
-  expect(callout.x + callout.width).toBeGreaterThan(card.left);
+  // Below the card's highlight, overlapping it along the inline axis.
+  expect(callout.y).toBeGreaterThanOrEqual(card.y + card.height - 1);
+  expect(callout.x).toBeLessThan(card.x + card.width);
+  expect(callout.x + callout.width).toBeGreaterThan(card.x);
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await testInfo.attach('card-step', {
     body: await page.screenshot(),
@@ -93,6 +77,39 @@ test('pressing the introduced control keeps the tour, and Escape ends it', async
   });
   await page.keyboard.press('Escape');
   await expect(step).toHaveCount(0);
+});
+
+test('a held press on a target that scales leaves the callout in place', async ({
+  page,
+}) => {
+  await startTour(page);
+  await page
+    .getByRole('region', {name: 'Your revenue'})
+    .getByRole('button', {name: 'Next'})
+    .click();
+  const step = page.getByRole('region', {name: 'Refresh it'});
+  await expect(step).toBeVisible();
+  const before = await step.boundingBox();
+  const refresh = await page
+    .getByRole('button', {name: 'Refresh', exact: true})
+    .boundingBox();
+  if (before == null || refresh == null) {
+    throw new Error('the callout or the target has no box');
+  }
+  await page.mouse.move(
+    refresh.x + refresh.width / 2,
+    refresh.y + refresh.height / 2,
+  );
+  await page.mouse.down();
+  // Long enough for the press scale to finish.
+  await page.waitForTimeout(400);
+  const held = await step.boundingBox();
+  await page.mouse.up();
+  if (held == null) {
+    throw new Error('the callout lost its box during the press');
+  }
+  expect(Math.abs(held.x - before.x)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(held.y - before.y)).toBeLessThanOrEqual(0.5);
 });
 
 test('the close control is a labelled button whose touch target grows under a coarse pointer', async ({

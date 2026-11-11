@@ -59,8 +59,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
-  focusForLastInput,
-  isFocusLost,
+  prepareFocusReturnOnRemoval,
   useInteractionModalityTracking,
 } from '@astryxdesign/core/internal/touch';
 import {Text} from '@astryxdesign/core/Text';
@@ -188,10 +187,12 @@ function TourHighlight({
   rect,
   hasBackdrop,
   onBackdropClick,
+  highlightRef,
 }: {
   rect: TargetRect | null;
   hasBackdrop: boolean;
   onBackdropClick: () => void;
+  highlightRef: (node: HTMLDivElement | null) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -220,6 +221,7 @@ function TourHighlight({
         hasBackdrop && styles.overlayInteractive,
       )}>
       <div
+        ref={highlightRef}
         data-testid="tour-highlight"
         {...stylex.props(
           styles.highlight,
@@ -294,10 +296,20 @@ export function TourStep({
   const headingId = useId();
   const isActiveStep = tour != null && tour.activeStepId === id;
   const regionRef = useRef<HTMLElement | null>(null);
-  const {ref: trackModality, readModality} = useInteractionModalityTracking();
+  // Focus return reads the last input from shared modality tracking.
+  const {ref: trackModality} = useInteractionModalityTracking();
+  // Prepared when the callout mounts, since the layer mounts its content
+  // after the step's first commit. Kept on unmount: the cleanup that returns
+  // focus runs after the callout leaves the DOM.
+  const returnFocusOnRemovalRef = useRef<
+    ((opener: Element | null) => void) | null
+  >(null);
   const setRegion = useCallback(
     (node: HTMLElement | null) => {
       regionRef.current = node;
+      if (node != null) {
+        returnFocusOnRemovalRef.current = prepareFocusReturnOnRemoval(node);
+      }
       return trackModality(node);
     },
     [trackModality],
@@ -360,17 +372,16 @@ export function TourStep({
     };
   }, [targetRef, isActiveStep]);
 
-  // Anchor the layer to the target while this step is active. The target is
-  // only an anchor: it gets no trigger ARIA and no press handler.
-  useClientLayoutEffect(() => {
-    if (!isActiveStep) {
-      return;
-    }
-    anchorLayerTo(targetRef.current);
-    return () => {
-      anchorLayerTo(null);
-    };
-  }, [isActiveStep, targetRef, anchorLayerTo]);
+  // The callout anchors to the highlight box, not to the target. The box is
+  // placed from the target's measured rect, so a press that scales the
+  // target does not move the callout. The target gets no anchor name, no
+  // trigger ARIA and no press handler.
+  const setHighlight = useCallback(
+    (node: HTMLDivElement | null) => {
+      anchorLayerTo(node);
+    },
+    [anchorLayerTo],
+  );
 
   // Show the callout after the highlight overlay promotes itself, so the
   // callout stays above the highlight in the top layer. Move focus to the
@@ -388,29 +399,20 @@ export function TourStep({
       regionRef.current?.focus({preventScroll: true});
     });
     const target = targetRef.current;
-    const ownerDocument = regionRef.current?.ownerDocument ?? document;
     return () => {
       cancelAnimationFrame(frame);
-      const modality = readModality();
       hideLayer();
       if (isTourRunningRef.current) {
         return;
       }
-      const destination =
-        target != null && target.tabIndex >= 0 ? target : getOpener?.();
-      // After the commit removes the callout: only when that removal lost
-      // focus, so a control the user moved to keeps it.
-      queueMicrotask(() => {
-        if (
-          destination != null &&
-          destination.isConnected &&
-          isFocusLost(null, ownerDocument)
-        ) {
-          focusForLastInput(destination, {preventScroll: true}, modality);
-        }
-      });
+      // Returns focus only when the callout's removal lost it.
+      returnFocusOnRemovalRef.current?.(
+        target != null && target.tabIndex >= 0
+          ? target
+          : (getOpener?.() ?? null),
+      );
     };
-  }, [isActiveStep, targetRef, showLayer, hideLayer, readModality, getOpener]);
+  }, [isActiveStep, targetRef, showLayer, hideLayer, getOpener]);
 
   const onDismiss = tour?.onDismiss;
   useLayerDismissal({
@@ -497,6 +499,7 @@ export function TourStep({
         rect={rect}
         hasBackdrop={hasBackdrop}
         onBackdropClick={() => onDismiss('backdrop')}
+        highlightRef={setHighlight}
       />
       {layer.render(<LayerDepthProvider>{content}</LayerDepthProvider>, {
         placement,

@@ -93,7 +93,11 @@ export {
   NAVIGATION_POP_SPRING,
   NAVIGATION_PUSH_SPRING,
 } from '../motion/uikit/springs';
-export {focusForLastInput, isFocusLost} from '../utils/focusReturn';
+export {
+  focusForLastInput,
+  isFocusLost,
+  prepareFocusReturnOnRemoval,
+} from '../utils/focusReturn';
 export {useInteractionModalityTracking} from '../utils/interactionModality';
 
 // Lab components that watch a finger's scroll read whether a scroller's
