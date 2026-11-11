@@ -65,7 +65,7 @@ function auditRunner(pkg) {
     JSON.stringify(pathToFileURL(path.join(pkg, rel)).href);
   return `const {recordReads} = await import(${at('foundation/fs/read-record.mjs')});
 const {selfAuditInputs} = await import(${at('foundation/discovery/stored-self-audit.mjs')});
-const {AUTHORING_AUDIT, authoringAuditData} = await import(${at('api/doctor/doctor.mjs')});
+const {AUTHORING_AUDIT, authoringAuditData} = await import(${at('api/doctor/_authoring-audit.mjs')});
 const seen = new Map();
 const {audit, topic, surface} = await recordReads(seen, () => authoringAuditData());
 const value = {audit, topic: topic.keys === null ? topic : {keys: [...topic.keys]}, surface};
