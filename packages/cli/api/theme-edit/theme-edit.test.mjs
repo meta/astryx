@@ -693,7 +693,7 @@ describe('the command', () => {
     expect(out.code).toBe('ERR_THEME_NO_EFFECT');
     // The same prefix the text output uses.
     expect(out.suggestions[0].name).toMatch(
-      /^(astryx|npx \S+) experimental theme editor set t color "#ffffff" --on card$/,
+      /^(astryx|(?:npx|pnpm dlx|yarn dlx|bunx) \S+) experimental theme editor set t color "#ffffff" --on card$/,
     );
   });
 
