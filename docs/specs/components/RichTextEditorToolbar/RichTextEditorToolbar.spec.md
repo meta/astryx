@@ -66,7 +66,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Does not own / non-goals**
 
-- The other toolbar controls — owned by `spec:AST-061`.
+- The toolbar's props — owned by `spec:AST-061`.
 - Link URL sanitizing — owned by `sanitizeUrl` in `@astryxdesign/richtext`.
 - Anchoring at a text selection — the Core Popover anchors only to a button.
 
@@ -83,7 +83,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR1 | The toolbar's link control opens an anchored, non-modal popover attached to its Link button instead of a dialog; it holds the URL field and Apply/Cancel, and focus and the selection return to the editor at the link on Enter, Escape or Cancel. The popover holds Remove while the selection is in a link. | Owner decision, Nov 6 2026 (Cindy) (DEC-1)                                    |
 | FR2 | The popover opens above the toolbar and flips below it only when there is no room above, so it does not cover the editor's first lines.                                                                                                                                                                       | Design decision (Ernest, design owner) (DD1)                                  |
 | FR3 | Cmd/Ctrl+K in the editor opens the same popover. It first brings the Link button into view, in the page and in the toolbar's row, so the popover opens beside it.                                                                                                                                             | Current behavior                                                              |
-| FR4 | Apply and Cancel draw the shared `check` and `close` icons, so a theme restyles them through `icons`. Remove draws fixed component artwork; it becomes a component icon slot when the slot system ships. The form adds no `richtext:*` icon key.                                                              | `spec:AST-087` FR11; `architecture:icon-resolution-and-component-slots` INV10 |
+| FR4 | Apply and Cancel draw the shared `check` and `close` icons, so a theme restyles them through `icons`. Remove draws fixed component artwork. The form adds no `richtext:*` icon key.                                                                                                                           | `spec:AST-087` FR11; `architecture:icon-resolution-and-component-slots` INV10 |
 | FR5 | The popover is at most 320 px wide and never wider than the viewport's gutters, so at phone width the field and its buttons stay on one row inside the screen.                                                                                                                                                | Current behavior                                                              |
 | FR6 | The URL field starts empty with the `example.com` placeholder, asks touch screens for a URL keyboard, marks no spelling, and takes focus as the popover opens. A URL that cannot be linked shows an error under the field and keeps focus there.                                                              | Current behavior                                                              |
 
@@ -106,8 +106,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Family and system relationships
 
-- `spec:AST-061` owns the toolbar's controls and props; this record owns the
-  link control's interaction.
+- `spec:AST-061` owns the toolbar's props; this record owns the link control's
+  interaction.
 
 ## Verification map
 

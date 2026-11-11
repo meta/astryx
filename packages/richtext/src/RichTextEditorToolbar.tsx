@@ -123,9 +123,6 @@ interface LinkContext {
   isLink: boolean;
 }
 
-// A vertical Divider's default 100% height needs a definite parent height.
-// Toolbar slots are sized by their controls instead, so let flexbox stretch
-// these group separators across the slot's resolved height.
 // The link popover's anchor: a box around the Link button that takes no
 // space of its own.
 const linkAnchorStyles = stylex.create({
@@ -135,6 +132,9 @@ const linkAnchorStyles = stylex.create({
   },
 });
 
+// A vertical Divider's default 100% height needs a definite parent height.
+// Toolbar slots are sized by their controls instead, so let flexbox stretch
+// these group separators across the slot's resolved height.
 const toolbarDividerStyles = stylex.create({
   vertical: {
     alignSelf: 'stretch',
@@ -516,12 +516,6 @@ function ToolbarLinkForm({
 }: ToolbarLinkFormProps) {
   const t = useTranslator();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  // The field takes focus as the form opens, a frame later so the popover is
-  // shown by then.
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, []);
   const apply = () => {
     if (!onApply()) {
       inputRef.current?.focus();
@@ -1206,8 +1200,8 @@ export function RichTextEditorToolbar({
           isOpen={isLinkPopoverOpen}
           onOpenChange={handleLinkPopoverOpenChange}
           isModal={false}
-          // The form focuses its field, and Cancel is its close control.
-          hasAutoFocus={false}
+          // Popover's focus entry focuses the URL field, the form's first
+          // control. Cancel is its close control.
           hasCloseButton={false}
           // Above the toolbar, so the popover does not cover the editor's
           // first lines, where the linked words often are. It flips below
