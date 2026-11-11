@@ -572,12 +572,14 @@ export const TouchReach: Story = {
     docs: {
       description: {
         story:
-          'Under a coarse pointer: a lone 24 px button takes taps 10 px past each edge, 44 px in all; the 4 px gap of a ToggleButtonGroup splits at its middle; and an InfoTip right after a link takes no tap on the link, since it grows no room sideways.',
+          'Under a coarse pointer: a lone 24 px button takes taps 10 px past each edge, 44 px in all; the 4 px gap of a ToggleButtonGroup splits at its middle; two loose 24 px buttons 4 px apart each keep every tap on their own box, since a visible box under the finger wins over a band; and an InfoTip right after a link takes no tap on the link, since it grows no room sideways.',
       },
     },
   },
   render: () => {
-    const [taps, setTaps] = useState({lone: 0, link: 0});
+    const [taps, setTaps] = useState({lone: 0, link: 0, cut: 0, copy: 0});
+    const count = (key: keyof typeof taps) => () =>
+      setTaps(current => ({...current, [key]: current[key] + 1}));
     const [formats, setFormats] = useState<string[]>([]);
     return (
       <VStack gap={6} hAlign="start">
@@ -589,9 +591,27 @@ export const TouchReach: Story = {
             variant="ghost"
             icon={<Icon icon={Cog6ToothIcon} />}
             style={{width: 24, height: 24, minWidth: 24, padding: 0}}
-            onClick={() =>
-              setTaps(current => ({...current, lone: current.lone + 1}))
-            }
+            onClick={count('lone')}
+          />
+        </div>
+        <div style={{display: 'flex', gap: 4}}>
+          <Button
+            label="Cut"
+            data-testid="cut"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={TrashIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('cut')}
+          />
+          <Button
+            label="Copy"
+            data-testid="copy"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('copy')}
           />
         </div>
         <ToggleButtonGroup
@@ -622,7 +642,7 @@ export const TouchReach: Story = {
             href="#pricing"
             onClick={event => {
               event.preventDefault();
-              setTaps(current => ({...current, link: current.link + 1}));
+              count('link')();
             }}>
             pricing
           </Link>
@@ -630,7 +650,7 @@ export const TouchReach: Story = {
           for teams.
         </Text>
         <output aria-label="Reach taps">
-          Lone {taps.lone}, Link {taps.link}
+          Lone {taps.lone}, Link {taps.link}, Cut {taps.cut}, Copy {taps.copy}
         </output>
       </VStack>
     );

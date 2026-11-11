@@ -127,7 +127,7 @@ test('under a coarse pointer the info button takes taps toward 44 px up and down
   expect(await hitsButton(page, box.x + box.width + 2, centerY)).toBe(false);
 });
 
-test('inside a divided List row the info button’s band ignores the row’s divider', async ({
+test('in a divided List row’s end slot the info button grows no taller, and the row’s divider stays on the row', async ({
   browser,
 }) => {
   const page = await pageWith(browser, 'coarse');
@@ -146,11 +146,10 @@ test('inside a divided List row the info button’s band ignores the row’s div
     );
   // The row's divider width stays on the row's own band.
   expect(inheritedDivider).toBe('');
-  expect(reach.top).toBeCloseTo(reach.bottom, 1);
-  expect(reach.top + reach.bottom + (box?.height ?? 0)).toBeCloseTo(
-    Math.max(MIN_TOUCH_TARGET, box?.height ?? 0),
-    0,
-  );
+  // In the row's end slot the row's edge is the boundary: the row takes the
+  // taps above and below the button.
+  expect(reach.top).toBeCloseTo(0, 1);
+  expect(reach.bottom).toBeCloseTo(0, 1);
 });
 
 test('under a fine pointer the info button grows nothing', async ({

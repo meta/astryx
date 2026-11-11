@@ -6,8 +6,8 @@
  *   `document.elementsFromPoint`
  * @output Checks that ListItem gives each enabled interactive row the touch
  *   band, with the List's room between rows, and that a tap on a row's band
- *   that lies on the next row does nothing, also after a re-render passes a
- *   new inline ref.
+ *   that lies on the next row goes to the next row, also after a re-render
+ *   passes a new inline ref.
  * @position Test for ListItem's hit area wiring. List.test.tsx checks the
  *   band's CSS, and ListTouchHitArea.interaction.browser.spec.ts its hit
  *   testing.
@@ -64,15 +64,16 @@ describe('ListItem touch hit area', () => {
     expect(banded).toEqual([row('Pressable'), row('Link'), row('Delegated')]);
   });
 
-  it('does nothing for a tap on a row’s band that lies on the next row, after a re-render too', () => {
+  it('gives a tap on a row’s band that lies on the next row to the next row, after a re-render too', () => {
     const onFirst = vi.fn();
+    const onSecond = vi.fn();
     const rowRef = (tick: number) => (node: HTMLLIElement | null) => {
       node?.setAttribute('data-tick', String(tick));
     };
     const rows = (tick: number) => (
       <List>
         <ListItem label="First" onClick={onFirst} ref={rowRef(tick)} />
-        <ListItem label="Second" onClick={() => {}} />
+        <ListItem label="Second" onClick={onSecond} />
       </List>
     );
     const {rerender} = render(rows(0));
@@ -100,5 +101,6 @@ describe('ListItem touch hit area', () => {
     first.dispatchEvent(click);
     expect(click.defaultPrevented).toBe(true);
     expect(onFirst).not.toHaveBeenCalled();
+    expect(onSecond).toHaveBeenCalledTimes(1);
   });
 });

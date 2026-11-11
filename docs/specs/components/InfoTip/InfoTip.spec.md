@@ -150,8 +150,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **AR1 — The trigger is a named button.** The button is in the tab order,
   named (FR1), and, under a coarse pointer, grows toward 44 px up and down
   through an invisible band. It sits in running text, so the band grows no
-  room sideways, and a tap on the band that lies nearer a neighbor, such as
-  a link just before it, does nothing (`spec:AST-094` FR42).
+  room sideways. A tap on another target's visible box, such as a link just
+  before it, stays that target's (`spec:AST-094` FR42).
 - **AR2 — The help is a toggletip.** `component:Tooltip` AR6: keyboard and
   touch users pin and close the help without hover, the button reports
   `aria-expanded`, and the help is announced once when it pins.

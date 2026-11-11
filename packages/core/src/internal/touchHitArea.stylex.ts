@@ -6,7 +6,8 @@
  * @output Exports `touchHitAreaStyles`: `layer`, a host's invisible hit band
  *   under a coarse pointer; `room` and `band`, its two halves, for a host that
  *   draws the band on a descendant; `member`, the room of a group's member;
- *   `inline`, no sideways growth for a control that sits in running text
+ *   `inline`, no sideways growth for a control that sits in running text;
+ *   `rowEnd`, no block growth for the controls in a row's end slot
  * @position Internal styling utility for Button (and so the input clear
  *   button), CheckboxInput, RadioListItem, List rows and reorder handles,
  *   InfoTip, SegmentedControl segments and Lab's PageControl. Each also
@@ -19,7 +20,9 @@
  * its gap as the room between its members (`member`), and its end members
  * keep the default room outward. The band sits below the host's content in
  * the host's own stacking context, so the content keeps its taps. Outside
- * the host's box a tap on the band lands on the host. SYNC:
+ * the host's box a tap on the band lands on the host; where the band lies
+ * over another target's visible box, that target takes the tap at its click
+ * (utils/touchHitArea.ts). SYNC:
  * utils/touchHitArea.ts and utils/touchHitArea.test.tsx.
  */
 
@@ -29,6 +32,9 @@ import {spacingVars} from '../theme/tokens.stylex';
 // StyleX reads these at build time, so they are spelled out.
 const TOUCH = '@media (pointer: coarse)';
 const ROOM = '22px';
+// Inside a row's end slot the row's edge is the boundary: a control there
+// grows no taller, and the row takes the taps above and below it.
+const ROOM_BLOCK = 'var(--_hit-row-block, 22px)';
 // A member's layer can render after it, inside the group, so the last member
 // is the last child that is not a layer. SYNC: Button.tsx IS_LAST_ITEM.
 const LAST = ':nth-last-child(1 of :not([popover]):not(template):not(dialog))';
@@ -70,8 +76,8 @@ const BAND = {
 // Each host sets its own room, so a host inside a group member never takes
 // the member's room.
 const ROOM_SIDES = {
-  '--_hit-room-block-start': ROOM,
-  '--_hit-room-block-end': ROOM,
+  '--_hit-room-block-start': ROOM_BLOCK,
+  '--_hit-room-block-end': ROOM_BLOCK,
   '--_hit-room-inline-start': ROOM,
   '--_hit-room-inline-end': ROOM,
 } as const;
@@ -85,11 +91,11 @@ export const touchHitAreaStyles = stylex.create({
   member: {
     '--_hit-room-block-start': {
       default: 'var(--_hit-group-block)',
-      ':first-child': ROOM,
+      ':first-child': ROOM_BLOCK,
     },
     '--_hit-room-block-end': {
       default: 'var(--_hit-group-block)',
-      [LAST]: ROOM,
+      [LAST]: ROOM_BLOCK,
     },
     '--_hit-room-inline-start': {
       default: 'var(--_hit-group-inline)',
@@ -111,11 +117,16 @@ export const touchHitAreaStyles = stylex.create({
     '--_hit-room-inline-start': {default: '2px', ':first-child': ROOM},
     '--_hit-room-inline-end': {default: '2px', [LAST]: ROOM},
   },
-  inlineGroup0: {'--_hit-group-inline': '0px', '--_hit-group-block': ROOM},
+  // A row's end slot: its controls get no block room.
+  rowEnd: {'--_hit-row-block': '0px'},
+  inlineGroup0: {
+    '--_hit-group-inline': '0px',
+    '--_hit-group-block': ROOM_BLOCK,
+  },
   blockGroup0: {'--_hit-group-block': '0px', '--_hit-group-inline': ROOM},
   inlineGroupSpacing05: {
     '--_hit-group-inline': `calc(${spacingVars['--spacing-0-5']} / 2)`,
-    '--_hit-group-block': ROOM,
+    '--_hit-group-block': ROOM_BLOCK,
   },
   blockGroupSpacing05: {
     '--_hit-group-block': `calc(${spacingVars['--spacing-0-5']} / 2)`,
@@ -123,7 +134,7 @@ export const touchHitAreaStyles = stylex.create({
   },
   inlineGroupSpacing1: {
     '--_hit-group-inline': `calc(${spacingVars['--spacing-1']} / 2)`,
-    '--_hit-group-block': ROOM,
+    '--_hit-group-block': ROOM_BLOCK,
   },
   blockGroupSpacing1: {
     '--_hit-group-block': `calc(${spacingVars['--spacing-1']} / 2)`,
@@ -135,6 +146,6 @@ export const touchHitAreaStyles = stylex.create({
   },
   inlineGroupSpacing5: {
     '--_hit-group-inline': `calc(${spacingVars['--spacing-5']} / 2)`,
-    '--_hit-group-block': ROOM,
+    '--_hit-group-block': ROOM_BLOCK,
   },
 });

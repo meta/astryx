@@ -73,6 +73,7 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {isCoarsePointer} from '../utils/coarsePointer';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ItemSwipeBridge} from './ItemSwipeLayer';
 
@@ -930,6 +931,7 @@ export function Item({
         <span
           {...stylex.props(
             styles.endContent,
+            touchHitAreaStyles.rowEnd,
             align === 'first-line' && styles.firstLineSlot,
             isDisabled && styles.disabledContent,
           )}>

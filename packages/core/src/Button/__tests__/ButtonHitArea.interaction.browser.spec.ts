@@ -5,8 +5,8 @@
  * @input The built "Touch targets" Button story and real touch input on a
  *   phone-sized touch context
  * @output Browser proofs that a Button's touch target grows toward 44 px
- *   through an invisible band, never acts for a tap a neighbor is nearer to,
- *   and changes no box (spec:AST-094 FR42)
+ *   through an invisible band that never takes a tap from another target's
+ *   visible box, and changes no box (spec:AST-094 FR42)
  * @position Browser layer of Button's hit band; the band itself is
  *   internal/touchHitArea.stylex.ts
  */
@@ -87,7 +87,7 @@ test.describe('Button touch target (spec:AST-094 FR42), under a finger', () => {
     );
   });
 
-  test('a tap in the gap acts only for the nearer button: nearer the one under the other’s band, it does nothing', async ({
+  test('a tap on a button’s box is that button’s, even under the other’s band; a tap in the gap goes to the band on top', async ({
     page,
   }) => {
     await openStory(page, storybook(), STORY);
@@ -98,15 +98,14 @@ test.describe('Button touch target (spec:AST-094 FR42), under a finger', () => {
     const y = middleY(italic.box);
     await tapAt(driver, {x: italic.box.left - 0.75, y});
     await expect(taps).toHaveText('Bold 0, Italic 1, Underline 0');
-    // Italic's band lies over the gap here, and Bold is nearer: the tap is
-    // cancelled, so neither acts, and the person taps again.
-    await tapAt(driver, {x: bold.box.right + 0.75, y});
-    await expect(taps).toHaveText('Bold 0, Italic 1, Underline 0');
+    // Italic's band lies over Bold's edge here: Bold's visible box wins.
+    await tapAt(driver, {x: Math.floor(bold.box.right) - 1, y});
+    await expect(taps).toHaveText('Bold 1, Italic 1, Underline 0');
     await tapAt(driver, {
       x: (italic.box.left + italic.box.right) / 2,
       y: italic.box.top - italic.insets.top + 1,
     });
-    await expect(taps).toHaveText('Bold 0, Italic 2, Underline 0');
+    await expect(taps).toHaveText('Bold 1, Italic 2, Underline 0');
   });
 
   test('a tap nearer an offset neighbour never presses the farther button', async ({

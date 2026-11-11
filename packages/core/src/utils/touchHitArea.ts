@@ -6,8 +6,8 @@
  * @file touchHitArea.ts
  * @input Whether an element takes taps, the window's input stream and the
  *   geometry of utils/hitArea.ts
- * @output `useTouchHitArea`, a callback ref that lets a tap on its element's
- *   touch band act only when no neighbour is nearer the finger
+ * @output `useTouchHitArea`, a callback ref that gives a tap on its element's
+ *   touch band to another target when the finger is on that target's box
  * @position Core-internal hook for the coarse-only 44 px target. The band is
  *   CSS (`touchHitAreaStyles`, internal/touchHitArea.stylex.ts). This module
  *   reads layout only at a tap's click: the pressed control, and what lies
@@ -19,7 +19,7 @@
  */
 
 import {useCallback, type RefCallback} from 'react';
-import {distanceTo, INTERACTIVE_SELECTOR} from './hitArea';
+import {INTERACTIVE_SELECTOR} from './hitArea';
 import {subscribeInput} from './inputStream';
 import {isElement} from './nodeType';
 
@@ -27,7 +27,7 @@ import {isElement} from './nodeType';
 export interface TouchHitAreaOptions {
   /**
    * Whether a press that the browser hit-tests onto a descendant is the
-   * element's, however near a neighbour is. Leave it on for a host that draws
+   * element's, whatever lies under the finger. Leave it on for a host that draws
    * the band on itself and whose content can paint past its box, such as a
    * list row with a swipe panel. Turn it off for a host whose band is on a
    * descendant, such as Button's content wrapper or Switch's grown input.
@@ -52,43 +52,51 @@ function isOwn(host: Element, candidate: Element): boolean {
   return control != null && host.contains(control);
 }
 
+/** Whether `element`'s own box holds the point (x, y). */
+function contains(element: Element, x: number, y: number): boolean {
+  const box = element.getBoundingClientRect();
+  return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+}
+
 /**
- * Whether a neighbour is nearer the press at (x, y) than `host`. It reads the
- * host's box, and only when the press is outside it, the interactive elements
+ * The other target whose visible box is under the finger at (x, y), or null.
+ * A visible box under the finger wins; the band only claims empty space. It
+ * reads the host's box, and only when the press is outside it, the elements
  * under the finger, up to the host's own container: what paints below that,
  * such as the page under a layer, is not beside the host. One layout flush
  * serves every read.
  */
-function isNearerNeighbour(host: Element, x: number, y: number): boolean {
-  const own = distanceTo(host.getBoundingClientRect(), x, y);
-  if (own === 0) {
-    return false;
+function targetUnderFinger(
+  host: Element,
+  x: number,
+  y: number,
+): HTMLElement | null {
+  if (contains(host, x, y)) {
+    return null;
   }
   for (const element of host.ownerDocument.elementsFromPoint?.(x, y) ?? []) {
     if (host.contains(element)) {
       continue;
     }
     if (element.contains(host)) {
-      return false;
+      return null;
     }
-    const neighbour = element.closest(INTERACTIVE_SELECTOR);
-    if (
-      neighbour != null &&
-      !isOwn(host, neighbour) &&
-      distanceTo(neighbour.getBoundingClientRect(), x, y) < own
-    ) {
-      return true;
+    // The browser also lists an element whose band, not its box, is under
+    // the finger.
+    const target = element.closest(INTERACTIVE_SELECTOR);
+    if (target != null && !isOwn(host, target) && contains(target, x, y)) {
+      return target as HTMLElement;
     }
   }
-  return false;
+  return null;
 }
 
 /**
  * Checks each finger's tap on `host` until the returned function runs. The
  * press notes where the finger landed and reads nothing, so a scroll that it
- * starts never waits. The tap's click then cancels itself when it began on the
- * band and a neighbour is nearer the finger: nothing acts, and the person taps
- * again. A keyboard or assistive-technology click (detail 0) goes through.
+ * starts never waits. When the tap began on the band over another target's
+ * visible box, its click goes to that target, as it does without the band. A
+ * keyboard or assistive-technology click (detail 0) goes through.
  */
 function checkTaps(host: Element, ownsDescendantTouches: boolean): () => void {
   const view = host.ownerDocument.defaultView;
@@ -109,13 +117,17 @@ function checkTaps(host: Element, ownsDescendantTouches: boolean): () => void {
     const onClick = (click: MouseEvent): void => {
       end();
       if (
-        click.detail !== 0 &&
-        isElement(click.target) &&
-        host.contains(click.target) &&
-        isNearerNeighbour(host, clientX, clientY)
+        click.detail === 0 ||
+        !isElement(click.target) ||
+        !host.contains(click.target)
       ) {
+        return;
+      }
+      const target = targetUnderFinger(host, clientX, clientY);
+      if (target != null) {
         click.preventDefault();
         click.stopPropagation();
+        target.click();
       }
     };
     const stopClick = subscribeInput(view, 'click', onClick, {cancels: true});
@@ -140,8 +152,9 @@ function checkTaps(host: Element, ownsDescendantTouches: boolean): () => void {
 /**
  * A callback ref for an element that takes taps (`enabled`) and draws a touch
  * band (`touchHitAreaStyles.layer`, or `band` on a descendant with
- * `BAND_ON_DESCENDANT`). Under a finger, a tap on the band acts only when no
- * neighbour is nearer the finger. Keep `options` stable, as a module constant.
+ * `BAND_ON_DESCENDANT`). Under a finger, a tap on the band over empty space
+ * acts on the element; over another target's visible box, it acts on that
+ * target. Keep `options` stable, as a module constant.
  *
  * @example
  * ```

@@ -5,7 +5,7 @@
  * @input Vitest, Testing Library, StyleX's injected rules, stubbed element
  *   rects and a stubbed `document.elementsFromPoint`
  * @output Tests for the touch hit area: no work before a press, the press
- *   check at a tap's click (a neighbour nearer the finger cancels the tap),
+ *   check at a tap's click (a visible box under the finger takes the tap),
  *   and the band's per-side room in CSS
  * @position Unit test for utils/touchHitArea.ts and
  *   internal/touchHitArea.stylex.ts. The real-browser geometry is in
@@ -20,6 +20,8 @@ import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {Button} from '../Button/Button';
 import {ButtonGroup} from '../ButtonGroup/ButtonGroup';
 import {InfoTip} from '../InfoTip/InfoTip';
+import {List} from '../List/List';
+import {ListItem} from '../List/ListItem';
 
 function Host({id, onClick}: {id: string; onClick?: () => void}) {
   const ref = useTouchHitArea(true);
@@ -198,13 +200,13 @@ describe('at a tap', () => {
     expect(onA).toHaveBeenCalledTimes(1);
   });
 
-  it('cancels a tap on the band that lies on a neighbour’s visible box: neither control acts', () => {
+  it('gives a tap on the band that lies on another target’s visible box to that target, as without the band', () => {
     const {a, b, container, onA, onB} = setUp();
-    // 6 px past the control, 2 px inside the link.
+    // 6 px past the control, 2 px inside the link: the link's box wins.
     elementsAtPoint = [a, b, container, document.body];
     expect(tap(a, 130)).toBe(true);
     expect(onA).not.toHaveBeenCalled();
-    expect(onB).not.toHaveBeenCalled();
+    expect(onB).toHaveBeenCalledTimes(1);
     // One tap only: the next tap inside the control acts.
     expect(tap(a, 110)).toBe(false);
     expect(onA).toHaveBeenCalledTimes(1);
@@ -278,14 +280,15 @@ describe('the band', () => {
       expect(band.selector).toMatch(/::after$/);
       expect(band.value).toContain(`var(--_hit-room-${side})`);
     }
-    for (const side of [
-      'block-start',
-      'block-end',
-      'inline-start',
-      'inline-end',
+    // The block room yields to a row's end slot (rowEnd).
+    for (const [side, room] of [
+      ['block-start', 'var(--_hit-row-block,22px)'],
+      ['block-end', 'var(--_hit-row-block,22px)'],
+      ['inline-start', '22px'],
+      ['inline-end', '22px'],
     ]) {
       expect(declared(lone, `--_hit-room-${side}`)).toEqual([
-        expect.objectContaining({value: '22px'}),
+        expect.objectContaining({value: room}),
       ]);
     }
   });
@@ -328,6 +331,25 @@ describe('the band', () => {
       declared(tip, `--_hit-room-${side}`).map(({value}) => value);
     expect(room('inline-start')).toContain('0px');
     expect(room('inline-end')).toContain('0px');
-    expect(room('block-start')).toEqual(['22px']);
+    expect(room('block-start')).toEqual(['var(--_hit-row-block,22px)']);
+  });
+
+  it('gives a control in a List row’s end slot no block room: the row takes the taps above and below it', () => {
+    render(
+      <List>
+        <ListItem
+          label="Network"
+          endContent={<Button label="Forget" onClick={() => {}} />}
+        />
+      </List>,
+    );
+    const forget = screen.getByRole('button', {name: 'Forget'});
+    const slot = forget.parentElement as HTMLElement;
+    expect(declared(slot, '--_hit-row-block').map(({value}) => value)).toEqual([
+      '0px',
+    ]);
+    expect(
+      declared(forget, '--_hit-room-block-start').map(({value}) => value),
+    ).toContain('var(--_hit-row-block,22px)');
   });
 });

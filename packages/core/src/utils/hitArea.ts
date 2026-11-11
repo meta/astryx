@@ -109,4 +109,6 @@ export const INTERACTIVE_SELECTOR = [
   '[role="option"]',
   '[role="slider"]',
   '[tabindex]:not([tabindex="-1"])',
+  // A pressable surface, such as a List row with a click handler.
+  '[data-astryx-pressable]',
 ].join(',');

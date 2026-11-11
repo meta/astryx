@@ -292,11 +292,16 @@ const styles = stylex.create({
   },
   // The invisible input covers the track. Under a coarse pointer it is the
   // hit area a finger needs: at least 44 × 44 px, centered on the track, and
-  // nothing visible grows. A tap on it nearer a neighbour does nothing
-  // (utils/touchHitArea.ts).
+  // nothing visible grows. In a row's end slot it grows no taller
+  // (touchHitAreaStyles.rowEnd). Where it lies over another target's visible
+  // box, that target takes the tap (utils/touchHitArea.ts).
   inputCoarse: {
     width: {default: '100%', '@media (pointer: coarse)': 'max(100%, 44px)'},
-    height: {default: '100%', '@media (pointer: coarse)': 'max(100%, 44px)'},
+    height: {
+      default: '100%',
+      '@media (pointer: coarse)':
+        'max(100%, min(44px, 100% + 2 * var(--_hit-row-block, 22px)))',
+    },
   },
   inputDisabled: {
     cursor: 'default',

@@ -180,8 +180,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   element never adds a tab stop; today the dot adds no tab stop, which is the
   FR5 gap. Under a coarse pointer, a standalone dot with a tooltip grows
   toward 44 px up and down through an invisible band. It sits in running text,
-  so the band grows no room sideways, and a tap on the band that lies nearer a
-  neighbor does nothing (`spec:AST-094` FR42). AR2 gap: a standalone dot with
+  so the band grows no room sideways, and a tap on another target's visible
+  box stays that target's (`spec:AST-094` FR42). AR2 gap: a standalone dot with
   a tooltip has no band. A caller `tabIndex`
   passes through (FR6).
 - **AR3 — Decorative icon.** The icon wrapper is `aria-hidden`, so the label
