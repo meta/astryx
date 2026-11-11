@@ -608,7 +608,7 @@ async function runCase(page: Page, item: AuditCase) {
   const sensors = await pageSensors(page);
   check(!sensors.storybookError, 'storybook error display');
   check(sensors.mode === item.mode, `mode ${sensors.mode}`);
-  check(sensors.theme === 'astryx-neutral', `theme ${sensors.theme}`);
+  check(sensors.theme === 'neutral', `theme ${sensors.theme}`);
   check(sensors.direction === item.direction, `direction ${sensors.direction}`);
   check(sensors.dpr === 2, `dpr ${sensors.dpr}`);
   check(sensors.fonts === 'loaded', `fonts ${sensors.fonts}`);
