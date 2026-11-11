@@ -348,6 +348,24 @@ describe('lift', () => {
     expect(lift.isLifted()).toBe(false);
   });
 
+  it('a second drop while the source returns changes nothing: the return goes on from where it is', async () => {
+    const {source} = renderList();
+    const lift = createLiftFromTrigger();
+    lift.lift(source, options());
+    await vi.advanceTimersByTimeAsync(1000);
+    lift.drop();
+    await vi.advanceTimersByTimeAsync(30);
+    expect(lift.isLifted()).toBe(true);
+    vi.mocked(holdInput).mockClear();
+    lift.drop();
+    await vi.advanceTimersByTimeAsync(16);
+    expect(lift.isLifted()).toBe(true);
+    expect(vi.mocked(holdInput)).not.toHaveBeenCalled();
+    await vi.runAllTimersAsync();
+    expect(lift.isLifted()).toBe(false);
+    expectInlineAsBefore(source);
+  });
+
   it('pins the caller’s styles with its own while lifted, and puts them back with them once the source is back', async () => {
     const {source} = renderList();
     const lift = createLiftFromTrigger();
