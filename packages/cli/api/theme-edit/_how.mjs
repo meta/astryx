@@ -71,13 +71,15 @@ const PICTURE_NAME = /\.(png|jpe?g|gif|webp|bmp|avif|heic|tiff?|svg)$/i;
  * @param {string} cwd
  */
 export function isPicture(subject, cwd) {
-  if (!subject || /\s/.test(subject.trim())) return false;
-  if (PICTURE_NAME.test(subject)) return true;
+  if (!subject) return false;
+  // A file that exists is a picture whatever its name: macOS names every
+  // screenshot "Screenshot … at 1.23.45 PM.png".
   try {
-    return fs.statSync(path.resolve(cwd, subject)).isFile();
+    if (fs.statSync(path.resolve(cwd, subject.trim())).isFile()) return true;
   } catch {
-    return false;
+    // Not a file here.
   }
+  return !/\s/.test(subject.trim()) && PICTURE_NAME.test(subject);
 }
 
 /**
@@ -390,11 +392,30 @@ async function answer(subject, options, cwd) {
     };
   }
   // "What does --color-accent do", "what's the variable for card padding":
+  // A question about the tool itself gets the command that answers it.
+  const tool = toolAnswer(t, env);
+  if (tool === 'list') {
+    const kind =
+      /\b(dials?|tokens?|parts?|groups?|properties|property)\b/i
+        .exec(t)?.[1]
+        ?.toLowerCase() ?? 'kinds';
+    return answer('', {...options, list: kind}, cwd);
+  }
+  if (tool)
+    return {
+      kind: 'question',
+      subject: t,
+      understood: {parts: [], aspects: []},
+      ...themeFields,
+      results: tool,
+      ...unknown,
+    };
   // a question about what something is gets the lookup, not a change.
   if (
-    /^\s*(what|which|where)\b.*\b(variables?|tokens?|do|does|means?|controls?|for)\b|^\s*what('s| is) the (css )?(variable|token|property)/i.test(
+    (/^\s*(what|which|where)\b.*\b(variables?|tokens?|do|does|means?|controls?|for)\b|^\s*what('s| is) the (css )?(variable|token|property)/i.test(
       t,
-    ) &&
+    ) ||
+      /^\s*(is there|are there|explain|what is|what's|what are)\b/i.test(t)) &&
     !/\b(command|make|makes|set|change)\b/i.test(t)
   ) {
     const tok = /--[a-z0-9-]+/i.exec(t)?.[0]?.toLowerCase();
@@ -431,6 +452,18 @@ async function answer(subject, options, cwd) {
         ...themeFields,
         results,
         ...unknown,
+      };
+    // "which token sets the page background?": the token the answer would
+    // set, looked up.
+    const token = q.parts.includes('page')
+      ? '--color-background-body'
+      : q.drafts
+          .flatMap(d => d.options.flat())
+          .find(st => st.thing.startsWith('--'))?.thing;
+    if (token && Object.hasOwn(ctx.project.core.tokenDefaults, token))
+      return {
+        ...tokenAnswer(ctx, env, token, token, unknown, themeFields),
+        subject: t,
       };
   }
   const h = draftAnswer(ctx, env, t);
@@ -816,6 +849,66 @@ function colorsAnswer(env, dialCommands) {
 }
 
 /**
+ * The answer to a question about the tool itself: help, a list, how to see
+ * a change, or the difference between two things it names. 'list' means
+ * the caller lists the kind the question names.
+ * @param {string} t
+ * @param {import('./_how-commands.mjs').HowTheme} env
+ * @returns {Array<{text: string, commands: string[]}> | 'list' | null}
+ */
+function toolAnswer(t, env) {
+  const q = t
+    .trim()
+    .toLowerCase()
+    .replace(/[?.!]+$/, '');
+  if (
+    /^(help|usage|\?|how does (this|it) work|what can (i|you) (ask|do))$/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: 'how answers a part, a setting, a plain-words question or a PNG picture with the commands that make the change; set makes it, show lists what a theme sets',
+        commands: [`${HOW} --help`, `${HOW} --list kinds`],
+      },
+    ];
+  if (
+    /^(list|show)( me)? (all|every|the)? ?(the )?(dials?|tokens?|parts?|groups?|properties)\b/.test(
+      q,
+    )
+  )
+    return 'list';
+  if (/\b(see|view|preview|check) (my |the )?(changes?|theme|edits?)\b/.test(q))
+    return [
+      {
+        text: `show lists what ${env.slug} sets; a preview page shows the theme in the app`,
+        commands: [
+          `${P} show ${env.slug}`,
+          `${PREVIEW} add --theme ${env.slug}`,
+        ],
+      },
+    ];
+  const diff = /\bdifference between (.+?) and (.+)$/.exec(q);
+  if (diff) {
+    const props = cssProperties();
+    return [diff[1], diff[2]].map(x => {
+      const w = x.trim().replace(/^(the|a) /, '');
+      return {
+        text: Object.hasOwn(DIALS, w)
+          ? `${w} is a dial: ${DIALS[w].help}`
+          : props.has(w)
+            ? `${w} is a CSS property: set it on one part with --on`
+            : w.startsWith('--')
+              ? `${w} is a token: one value the whole theme reads`
+              : `what ${w} is`,
+        commands: [`${HOW} ${w}`],
+      };
+    });
+  }
+  return null;
+}
+
+/**
  * The tokens most parts read for one aspect, for a whole-theme change.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_how-commands.mjs').HowTheme} env
@@ -829,17 +922,22 @@ function wholeThemeTokens(ctx, env, aspect) {
     .sort((a, b) => C.anyReader(b).length - C.anyReader(a).length)
     .slice(0, 6);
   if (!toks.length) return [];
-  const value = exampleForToken(
-    C.typeOf(toks[0]),
-    toks[0],
-    env.base.light[toks[0]] ?? '',
-  );
+  // The example uses the most read token whose example changes what shows:
+  // a fully round corner (9999px) scaled up stays fully round.
+  /** @type {string[]} */
+  let commands = [];
+  for (const tok of toks) {
+    const now = env.base.light[tok] ?? '';
+    if (parseFloat(now) >= 999) continue;
+    const value = exampleForToken(C.typeOf(tok), tok, now);
+    if (!value) continue;
+    commands = checked(env, [[{verb: 'set', thing: tok, value}]]).commands;
+    if (commands.length) break;
+  }
   return [
     {
       text: `whole-theme tokens for ${aspect}, most used first: ${toks.map(k => `${k} (${C.anyReader(k).length} parts)`).join(', ')}`,
-      commands: value
-        ? checked(env, [[{verb: 'set', thing: toks[0], value}]]).commands
-        : [`${HOW} ${toks[0]}`],
+      commands: commands.length ? commands : [`${HOW} ${toks[0]}`],
     },
   ];
 }

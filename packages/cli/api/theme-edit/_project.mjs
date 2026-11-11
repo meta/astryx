@@ -45,6 +45,7 @@ import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
  * @property {{component: string, props: Record<string, unknown>} | null} wrapper - The parent the playground renders it in, or null.
  * @property {boolean} opens - An overlay its playground shows in place: the pages render it open.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
+ * @property {string[]} keywords - The doc's search keywords.
  * @property {Record<string, {type: string, required: boolean}>} props - Each prop's declared type and whether it is required.
  * @property {Array<{className: string, states: string[], values: Record<string, string[]>}>} targets
  */
@@ -53,7 +54,7 @@ import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 3;
+const DOCS_VERSION = 4;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
@@ -162,6 +163,7 @@ async function readComponents(coreDir) {
           ),
         subComponentOf:
           typeof doc.subComponentOf === 'string' ? doc.subComponentOf : null,
+        keywords: Array.isArray(doc.keywords) ? doc.keywords.map(String) : [],
         props: Object.fromEntries(
           Object.entries(props).map(([n, p]) => [
             n,

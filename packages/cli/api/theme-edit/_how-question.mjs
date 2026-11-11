@@ -24,6 +24,8 @@ import {
 import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
 import {COLOR_PROPS, GROUPS} from './_tables.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
+import {SYSTEM_FAMILIES} from '../theme/build/font-warning.mjs';
+import {cssProperties, matchValue} from './_css.mjs';
 
 /** @typedef {import('./_how-commands.mjs').Step} Step */
 
@@ -148,6 +150,9 @@ const SHORT = /** @type {Record<string, string>} */ ({
 
 /** Plain words that are never corrected, though one letter off a VOCAB word. */
 const KEEP = new Set([
+  'lines',
+  'shadowy',
+  'times',
   'remote',
   'reverse',
   'access',
@@ -230,6 +235,47 @@ function corrected(w, vocab) {
   return bestD <= limit ? best : w;
 }
 
+/** A stop on a gray family: "gray-50", "slate 100", "zinc-900". */
+const GRAY_STOP =
+  /\b(gr[ae]y|slate|zinc|neutral|stone)[\s-]?(50|[1-9]00|950)\b/g;
+
+/**
+ * The color at a stop of a gray family, in OKLCH: the lightness the common
+ * 50-950 gray scales give each stop, with the family's slight hue.
+ * @param {string} family @param {number} stop
+ */
+function grayStop(family, stop) {
+  const L = /** @type {Record<number, number>} */ ({
+    50: 0.985,
+    100: 0.967,
+    200: 0.928,
+    300: 0.872,
+    400: 0.707,
+    500: 0.551,
+    600: 0.446,
+    700: 0.373,
+    800: 0.278,
+    900: 0.21,
+    950: 0.13,
+  })[stop];
+  // Grays are near neutral at the light and dark ends, tinted most in
+  // the middle.
+  const [base, hue] = /** @type {Record<string, [number, number]>} */ ({
+    gray: [0.03, 264],
+    grey: [0.03, 264],
+    slate: [0.05, 257],
+    zinc: [0.015, 286],
+    neutral: [0, 0],
+    stone: [0.012, 56],
+  })[family];
+  const chroma = Number(
+    (base * Math.min(1, 2 * Math.min(L, 1 - L))).toFixed(4),
+  );
+  return hex(
+    /** @type {number[]} */ (parseColor(`oklch(${L} ${chroma} ${hue})`)),
+  );
+}
+
 /** Hues people name, as fills a part can take. */
 const HUES = /** @type {Record<string, string>} */ ({
   red: '#dc2626',
@@ -246,6 +292,7 @@ const HUES = /** @type {Record<string, string>} */ ({
   navy: '#1e3a8a',
   indigo: '#4f46e5',
   purple: '#7c3aed',
+  charcoal: '#333333',
   violet: '#7c3aed',
   pink: '#db2777',
   magenta: '#c026d3',
@@ -299,18 +346,29 @@ const THEME_COLOR_WORDS = /** @type {Array<[RegExp, string, string]>} */ ([
 function colorsIn(c) {
   /** @type {Array<[number, string, boolean?]>} */
   const found = [];
+  // "gray-50", "zinc 900": a stop on a gray family, by its lightness.
+  for (const m of c.matchAll(GRAY_STOP))
+    found.push([m.index ?? 0, grayStop(m[1], Number(m[2])), true]);
   const re =
-    /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\([^)]*\)|\b(?:(light|pale|dark)\s+)?([a-z]+)\b/g;
-  for (const m of c.matchAll(re)) {
-    const before = c.slice(Math.max(0, (m.index ?? 0) - 5), m.index);
-    if (/\bnot\s*$|\bno\s*$/.test(before)) continue;
+    /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix)\([^)]*\)|\b(?:(light|pale|dark|subtle|soft)\s+)?([a-z]+)\b/g;
+  for (const m of c
+    .replace(GRAY_STOP, s => ' '.repeat(s.length))
+    .matchAll(re)) {
+    const before = c.slice(Math.max(0, (m.index ?? 0) - 12), m.index);
+    // "charcoal text instead of black": the color after "instead of" is
+    // the one to move away from.
+    if (/\bnot\s*$|\bno\s*$|\binstead of\s*$|\brather than\s*$/.test(before))
+      continue;
     const whole = m[0];
     if (whole.startsWith('#') || whole.includes('(')) {
       // A typed hex color keeps the case it is written in, as set stores it.
-      if (parseColor(whole)) found.push([m.index ?? 0, whole, true]);
+      // A color-mix() is kept as typed; set checks it.
+      if (parseColor(whole) || /^color-mix\(/.test(whole))
+        found.push([m.index ?? 0, whole, true]);
       continue;
     }
-    const [shade, word] = [m[1], m[2]];
+    const shade = m[1] === 'subtle' || m[1] === 'soft' ? 'pale' : m[1];
+    const word = m[2];
     if (shade && SHADED[shade]?.[word]) {
       found.push([m.index ?? 0, SHADED[shade][word]]);
       continue;
@@ -504,6 +562,8 @@ const OVERRIDES = [
     {on: 'dropdown-menu-item'},
   ],
   [/\b(nav(igation)? (links?|items?))\b/, {on: 'top-nav-item'}],
+  [/\b((dropdown |context )?menus?)\b/, {on: 'dropdown-menu'}],
+  [/\bfooters?\b/, {on: 'layout-footer'}],
   [/\b(side ?nav|sidebar|side ?panel)\b/, {on: 'side-nav'}],
   [
     /\b(app (name|title)|logo|site title|product name)\b/,
@@ -526,7 +586,7 @@ const OVERRIDES = [
   [/\b(banners?|alerts?|notices?|announcements?)\b/, {on: 'banner'}],
   [/\b(text ?areas?|multi-?line (inputs?|fields?))\b/, {on: 'text-area'}],
   [
-    /\b(select (dropdowns?|menus?|box(es)?|inputs?)|selects|dropdowns?|pickers?)\b/,
+    /\b(select (dropdowns?|menus?|box(es)?|inputs?)|selects|dropdowns?|pickers?|select(?! (the|a|an|all|any|one|which|what|it|them)\b))\b/,
     {on: 'selector'},
   ],
   [/\b(skeletons?( loaders?)?|loading placeholders?)\b/, {on: 'skeleton'}],
@@ -545,7 +605,7 @@ const OVERRIDES = [
   [/\b(badges?|chips?|tags?)\b/, {on: 'badge'}],
   [/\bh([1-4])\b/, {on: 'heading'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
-  [/\bpopups?\b/, {on: 'dialog'}],
+  [/\b(modals?|popups?)\b/, {on: 'dialog'}],
   [/\bcode\b/, {on: 'code', role: 'code'}],
   [/\bbody( text)?\b/, {on: 'body', role: 'body'}],
 ];
@@ -567,6 +627,14 @@ const NOT_PART_WORDS = new Set([
   'step',
   'token',
 ]);
+
+/** A word without its plural ending. @param {string} w */
+const singular = w =>
+  /(x|ch|sh|ss)es$/.test(w)
+    ? w.slice(0, -2)
+    : /[^s]s$/.test(w)
+      ? w.slice(0, -1)
+      : w;
 
 /** @type {WeakMap<object, {parts: Array<[RegExp, PartRef]>, vocab: string[]}>} */
 const lexicons = new WeakMap();
@@ -604,7 +672,7 @@ function partLexicon(ctx) {
         .filter(key => !key.includes('-'))
         .flatMap(key => [key, `${key}s`]),
     ]),
-  ].filter(w => w.length >= 5);
+  ];
   const lex = {parts: [...OVERRIDES, ...derived], vocab};
   lexicons.set(project, lex);
   return lex;
@@ -644,6 +712,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {boolean} except - "but not on X": X keeps what the clause before does
  * @property {Record<string, string>} decl - CSS written as `prop: value`
  * @property {string[]} [quoted] - family names the clause writes in quotes
+ * @property {{prop: string, value: string} | null} named - a CSS property the clause names, with its value as typed
  */
 
 /**
@@ -670,7 +739,7 @@ function aspectsOf(text) {
   )
     add('corners');
   if (
-    /\b(shadows?|elevat\w*|depth|raised|lifts?|lifted|lifting|glow\w*|bevel\w*|sunken|inset|flat)\b/.test(
+    /\b(shadows?|shadowy|elevat\w*|depth|raised|lifts?|lifted|lifting|glow\w*|bevel\w*|sunken|inset|flat)\b/.test(
       c,
     )
   )
@@ -735,7 +804,12 @@ function aspectsOf(text) {
       (/\b(thick(er)?|thin(ner)?)\b/.test(c) &&
         /\b(progress|underline|indicator)/.test(c))) &&
     !a.includes('fontsize') &&
-    !a.includes('tracking')
+    !a.includes('tracking') &&
+    // "a bigger shadow" is a stronger shadow, not a bigger part.
+    !(
+      a.includes('shadow') &&
+      !/\b(taller|shorter|wider|narrower|width|height|tall)\b/.test(c)
+    )
   )
     add('size');
   if (
@@ -747,7 +821,10 @@ function aspectsOf(text) {
   if (
     /\b(faded|fade|opacity|see-through|washed out)\b/.test(c) ||
     (/\d+%/.test(
-      c.replace(/\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\([^)]*\)/g, ''),
+      c.replace(
+        /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix|clamp|calc)\([^)]*\)/g,
+        '',
+      ),
     ) &&
       !a.includes('corners'))
   )
@@ -814,6 +891,16 @@ function clausesOf(q, partWords) {
       parts.push(p);
       rest = rest.replace(re, ' ');
     }
+    // "list rounder": a catalog name that is also a plain word is the part
+    // when the clause names no other part and asks for a shape change.
+    const shapeAsk =
+      /\b(round\w*|corners?|radius|shadows?|borders?|padding|bold\w*|bigger|smaller|taller|wider)\b/;
+    if (!parts.length && shapeAsk.test(text))
+      for (const w of NOT_PART_WORDS)
+        if (new RegExp(`\\b${w}s?\\b`).test(text)) {
+          parts.push({on: w});
+          break;
+        }
     // "pill" names a corner shape, not a badge, when the clause is about shape.
     if (cornerWords || /\bpill( shaped)?\b/.test(text))
       for (let i = parts.length - 1; i >= 0; i--)
@@ -839,7 +926,7 @@ function clausesOf(q, partWords) {
       ) && !/\bno (wait|longer)\b/.test(negText);
     // "too X" asks for less X: too sharp is rounder, too heavy is lighter.
     const tooLess =
-      /\btoo (big|large|round|rounded|bold|heavy|thick|dark|spacious|airy|bright|loud|strong|harsh|much|wide|tall)\b/;
+      /\btoo (big|large|round|rounded|roundy|bubbly|shadowy|bold|heavy|thick|dark|spacious|airy|bright|loud|strong|harsh|much|wide|tall)\b/;
     const tooMore =
       /\btoo (small|cramped|tight|crowded|faded|light|thin|sharp|square|boxy|pointy|subtle|weak|narrow|dim|low|short)\b/;
     const dir = /\bnot (\w+ ){0,2}enough\b/.test(text)
@@ -875,8 +962,9 @@ function clausesOf(q, partWords) {
         break;
       }
     const mode =
-      /\bdark( mode| theme)?\b/.test(text) &&
-      /\b(mode|theme|in dark)\b/.test(text)
+      (/\bdark( mode| theme)?\b/.test(text) &&
+        /\b(mode|theme|in dark)\b/.test(text)) ||
+      /\bnight( mode| theme)\b/.test(text)
         ? 'dark'
         : /\blight (mode|theme)\b/.test(text)
           ? 'light'
@@ -891,17 +979,60 @@ function clausesOf(q, partWords) {
       text,
       parts,
       aspects,
+      named: namedProperty(text),
       neg,
       dir,
       colors: colorsIn(text),
       bad: badHex(text),
-      lengths: lengthsIn(text),
+      // A typed clamp() or calc() is a length, kept whole.
+      lengths: [
+        ...(text.match(/\b(?:clamp|calc|min|max)\([^)]*\)/g) ?? []),
+        ...lengthsIn(text),
+      ],
       state,
       mode,
       except,
       decl,
     };
   });
+}
+
+/**
+ * A CSS property the clause names, with its value kept whole ("caret-color
+ * #2563eb", "transition: background-color 150ms ease", "border-radius 12px
+ * 12px 0 0"). The value runs to the end of the clause or the part it is
+ * for, and is the longest start of it the property's grammar accepts.
+ * Plain words that are also properties ("color", "padding") count only
+ * with a colon; the aspect words read those.
+ * @param {string} text
+ * @returns {{prop: string, value: string} | null}
+ */
+function namedProperty(text) {
+  const props = cssProperties();
+  for (const m of text.matchAll(
+    /\b([a-z]+(?:-[a-z]+)+|[a-z]+(?=\s*:))\s*:?\s*/g,
+  )) {
+    const prop = m[1];
+    if (!props.has(prop)) continue;
+    const rest = text
+      .slice((m.index ?? 0) + m[0].length)
+      .replace(/^(?:to|of|is|=)\s+/, '')
+      .replace(
+        /\s+(?:on|for|in|when|while|if)\s+(?:the\s+|all\s+|every\s+)?[a-z][\w-]*.*$/,
+        '',
+      )
+      .trim();
+    // Words, with a function's arguments kept as one ("rgba(0, 0, 0, .2)").
+    const tokens = rest.match(/(?:[^\s(]+\([^)]*\)[^\s]*|[^\s]+)/g) ?? [];
+    for (let n = tokens.length; n > 0; n--) {
+      const value = tokens
+        .slice(0, n)
+        .join(' ')
+        .replace(/[.;,]+$/, '');
+      if (value && matchValue(prop, value)) return {prop, value};
+    }
+  }
+  return null;
 }
 
 /**
@@ -988,6 +1119,7 @@ export function draftAnswer(ctx, env, question) {
     .replace(/(?<=[a-z])\.(?=[a-z])/gi, ' ')
     .replace(/(?<![\w-])\.(?=[a-z])/gi, ' ')
     .replace(/\s*=\s*/g, ' ')
+    .replace(/\bon\s*:\s*/g, 'on ')
     // Near-white and near-black are their own colors.
     .replace(/\boff[- ]?white\b/gi, '#fafafa')
     .replace(/\boff[- ]?black\b/gi, '#111111')
@@ -1142,6 +1274,51 @@ export function draftAnswer(ctx, env, question) {
       c.text = `${prev.text.replace(/\bon\b.*$/, '')} ${c.text}`;
     }
   }
+  // "the cards and the dialogs both need 16px radius": a clause that only
+  // names a part, before one that says what to change, takes that ask.
+  for (let i = 0; i < clauses.length - 1; i++) {
+    const c = clauses[i];
+    const next = clauses[i + 1];
+    if (
+      c.parts.length &&
+      !c.aspects.length &&
+      !c.colors.length &&
+      !c.lengths.length &&
+      !c.except &&
+      next.aspects.length &&
+      next.parts.length &&
+      !lex.parts
+        .reduce((t, [re]) => t.replace(re, ' '), ` ${c.text} `)
+        .replace(/\b(the|a|an|all|every|on|for|both)\b/g, ' ')
+        .trim()
+    ) {
+      const parts = c.parts;
+      Object.assign(c, {...next, parts, text: next.text});
+    }
+  }
+  // "BORDER-RADIUS: 8PX; ON: CARD": a clause that is only "on <part>" names
+  // the part of the clause before it.
+  for (let i = 1; i < clauses.length; i++) {
+    const c = clauses[i];
+    if (
+      c.parts.length &&
+      !c.aspects.length &&
+      /^on\b/.test(c.text) &&
+      !clauses[i - 1].parts.length
+    ) {
+      clauses[i - 1].parts = c.parts;
+      c.parts = [];
+      c.text = '';
+    }
+  }
+  // "Arial everywhere", "code blocks should use Menlo": a family named with
+  // its capitals is a font ask; so is the system font by name.
+  for (const c of clauses)
+    if (
+      !c.aspects.includes('family') &&
+      (systemFamilyIn(c.text, question) || OS_FONT.test(c.text))
+    )
+      c.aspects.push('family');
   // "the table ... a header" is the table's header row.
   if (/\b(tables?|rows?|zebra)\b/.test(q))
     for (const c of clauses)
@@ -1176,7 +1353,7 @@ export function draftAnswer(ctx, env, question) {
       // purple"), or one for the other mode ("in light mode … in dark mode").
       (!prev.colors.length ||
         prev.neg ||
-        /\b(hate|dislike|not a fan|tired of|sick of)\b/.test(prev.text) ||
+        /\b(hate|dislike|not a fan|tired of|sick of|too)\b/.test(prev.text) ||
         Boolean(c.mode && prev.mode && c.mode !== prev.mode)) &&
       !prev.parts.length
     ) {
@@ -1187,7 +1364,20 @@ export function draftAnswer(ctx, env, question) {
         )
           ? 'accent'
           : null);
-      if (role) c.text = `${role} ${c.text}`;
+      if (role) {
+        c.text = `${role} ${c.text}`;
+        // "the danger red is too bright, use #b91c1c": the typed color is
+        // the target, so the clause before it asks for nothing of its own.
+        if (
+          !/#[0-9a-f]{3,8}\b/.test(prev.text) &&
+          prev.dir &&
+          !prev.parts.length
+        ) {
+          prev.text = '';
+          prev.colors = [];
+          prev.aspects = [];
+        }
+      }
     }
   }
   // "nav items" in a question about the sidebar are the side nav's; an
@@ -1265,7 +1455,32 @@ export function draftAnswer(ctx, env, question) {
       (!c.parts.length || (!prev.parts.length && !prev.aspects.length))
     )
       c.mode = prev.mode;
+    // "on focus, inputs get a 2px outline": a clause that only names a state
+    // gives it to the clause after it.
+    if (
+      !c.state &&
+      prev?.state &&
+      !prev.parts.length &&
+      !prev.aspects.length &&
+      c.parts.length
+    )
+      c.state = prev.state;
   }
+  // "when hovering a card, lift it with a bigger shadow": a clause that only
+  // names a part and a state, beside clauses that say what to change, asks
+  // for nothing of its own.
+  for (const c of clauses)
+    if (
+      c.parts.length &&
+      c.state &&
+      !c.aspects.length &&
+      !c.colors.length &&
+      !c.lengths.length &&
+      clauses.some(o => o !== c && o.aspects.length)
+    ) {
+      c.parts = [];
+      c.text = '';
+    }
   // The tab's text is on the tab, not on its underline.
   for (const c of clauses)
     for (const p of c.parts)
@@ -1548,6 +1763,36 @@ export function draftAnswer(ctx, env, question) {
             options: [],
             lookup: `${HOW} ${p.on}`,
           });
+      continue;
+    }
+    // "combobox rounder": a word a component's doc lists, as the subject of
+    // a shape change with no part named, is a part how cannot name; it is
+    // never a whole-theme change.
+    const unknown = !c.parts.length && unknownPart(c.text);
+    if (unknown) {
+      push({
+        text: `no part is called "${unknown.word}"${unknown.parts.length ? `; the closest parts: ${unknown.parts.join(', ')}` : ''}. Name one of them, or list the parts`,
+        options: [],
+        lookup: `${HOW} --list parts ${unknown.word}`,
+      });
+      continue;
+    }
+    // A CSS property named with its value is set as named, on each part.
+    if (
+      c.named &&
+      c.parts.length &&
+      c.parts.every(p => TARGET.has(one(p.on)) || FAMILIES[p.on])
+    ) {
+      for (const p of c.parts.slice(0, 3)) {
+        seenPart(p.on);
+        const {noState: _n, ...f} = flagsFor(c, p);
+        const d = {
+          text: `${c.named.prop} on ${p.on}${f.state ? ` when ${f.state}` : ''}, as you wrote it`,
+          options: [[set(c.named.prop, c.named.value, {...f, ...modeOf(c)})]],
+        };
+        push(d);
+        recordTop(c, d.options[0] ?? []);
+      }
       continue;
     }
     const targets = c.parts.length ? c.parts : [null];
@@ -1851,7 +2096,9 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'leading': {
-        const n = /\b(\d(?:\.\d+)?)\b(?!\s*(px|rem|em|%))/.exec(c.text)?.[1];
+        const n =
+          /\b(normal)\b/.exec(c.text)?.[1] ??
+          /\b(\d(?:\.\d+)?)\b(?!\s*(px|rem|em|%))/.exec(c.text)?.[1];
         const tok =
           !on || on === 'body' || p?.role === 'body'
             ? '--text-body-leading'
@@ -2293,6 +2540,12 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'fontsize': {
+        // A size of 0 hides the text: refused by name, never made bigger.
+        if (/\b(font|text) size\s*:?\s*0(px|rem|em)?\b(?!\.)/.test(c.text))
+          return {
+            text: 'a font size of 0 hides the text; give a size above 0',
+            options: [],
+          };
         const px = c.lengths[0];
         const f2 = /\bmuch\b/.test(c.text) ? 1.5 : 1.25;
         const factor = c.dir === 'less' ? 1 / f2 : f2;
@@ -2897,7 +3150,11 @@ export function draftAnswer(ctx, env, question) {
       };
     if (/\b(dark|light)\b/.test(t) && /\b(mode|theme|only)\b/.test(t))
       seenAspect('mode');
-    if (/\bdark[- ]?(mode|theme)? only\b|\bonly dark\b|\bdark-only\b/.test(t))
+    if (
+      /\bdark[- ]?(mode|theme)? only\b|\bonly dark\b|\bdark-only\b|\bdark by default\b|\bdefault(s)? to dark\b|\balways dark\b/.test(
+        t,
+      )
+    )
       return {
         text: 'a theme with only a dark mode: mode dark-only',
         options: [[set('mode', 'dark-only')]],
@@ -3164,7 +3421,12 @@ export function draftAnswer(ctx, env, question) {
     if (c.dir && color && (color === NATURAL[dial] || color === HUES.amber))
       color = null;
     if (!color && c.dir && !/\btoo (warm|cool)\b/.test(t)) {
-      const lighter = /\b(light(er)?|brighter|paler)\b/.test(t);
+      // "too dark" asks for lighter, "too bright" for darker.
+      const lighter =
+        /\btoo dark\b/.test(t) ||
+        /\b(light(er)?|brighter|paler)\b/.test(
+          t.replace(/\btoo (light|bright|pale)\b/g, ' '),
+        );
       if (c.mode && modal) {
         const steps = perMode(
           token,
@@ -3195,6 +3457,35 @@ export function draftAnswer(ctx, env, question) {
       text: `${dial}: the editor makes its light and dark shades from ${color}`,
       options: [[set(dial, color)], [set(token, color)]],
     };
+  }
+
+  /**
+   * A part word how cannot name: the clause starts with a word a component
+   * doc lists as a keyword, or a near catalog name, and asks for a shape
+   * change. Gives the word and the parts of the components that list it.
+   * @param {string} text
+   * @returns {{word: string, parts: string[]} | null}
+   */
+  function unknownPart(text) {
+    const m =
+      /^(?:the |a |an |my |our |all |every )?([a-z]+)\b(?: [a-z]+)? (?:rounder|rounded|bolder|bold|bigger|smaller|taller|wider|darker|lighter|padding|shadow|border|corners?|radius)\b/.exec(
+        text,
+      );
+    if (!m) return null;
+    const word = singular(m[1]);
+    // A word how reads as a change ("border radius") is not a part.
+    if (aspectsOf(word).length || aspectsOf(m[1]).length) return null;
+    const owners = Object.values(ctx.project.components)
+      .filter(info =>
+        (info.keywords ?? []).some(
+          k => singular(String(k).toLowerCase()) === word,
+        ),
+      )
+      .map(info => info.targets[0]?.className.replace(/^astryx-/, ''))
+      .filter(t => t && TARGET.has(t));
+    return owners.length
+      ? {word, parts: [...new Set(owners)].slice(0, 4)}
+      : null;
   }
 
   /**
@@ -3284,6 +3575,28 @@ export function draftAnswer(ctx, env, question) {
   return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
 }
 
+/** Words for the operating system's own font. */
+const OS_FONT =
+  /^(mac|macos|apple|windows|ios|android|os)$|\b(mac|macos|apple|windows|ios|android|os|system)('s)?( default| own| native)?( ui)? (font|typeface)\b|\bdefault (mac|apple|windows|system|os) (font|typeface)\b/i;
+
+/**
+ * A family a clean machine already has (the editor's font check reads the
+ * same list), named in the clause and written with its capitals in the
+ * question, as typed there.
+ * @param {string} c the clause, lower-case
+ * @param {string} question
+ */
+function systemFamilyIn(c, question) {
+  for (const name of [...SYSTEM_FAMILIES].sort((x, y) => y.length - x.length)) {
+    if (!/^[a-z]/.test(name) || !new RegExp(`\\b${name}\\b`).test(c)) continue;
+    const typed = new RegExp(`\\b${name.replace(/ /g, '\\s+')}\\b`, 'i').exec(
+      question,
+    )?.[0];
+    if (typed && /^[A-Z]/.test(typed)) return typed;
+  }
+  return null;
+}
+
 /**
  * A font a clause names: a preset, an open font, or a family written with
  * capitals in the question.
@@ -3326,13 +3639,27 @@ function fontIn(cl, question) {
   /** @type {string | undefined} */
   let typed;
   for (const re of [
-    new RegExp(`\\b(?:[Uu]se|[Ff]ont|[Tt]ypeface)s?:?\\s+["']?${NAME}`, 'g'),
+    new RegExp(
+      `\\b(?:[Uu]se|[Ff]ont|[Tt]ypeface|[Tt]o)s?:?\\s+["']?${NAME}`,
+      'g',
+    ),
     new RegExp(`\\b${NAME}\\s+(?:font|typeface)\\b`, 'g'),
+    // "Plus Jakarta Sans as the main font", "Arial everywhere", "Fira
+    // Code for monospace".
+    new RegExp(
+      `(?:^|[\\s,;:])${NAME}\\s+(?:as|for|everywhere|throughout|across)\\b`,
+      'g',
+    ),
   ]) {
     for (const m of question.matchAll(re)) {
       const name = m[1].replace(/ (Font|Typeface)$/, '');
-      if (GENERIC.test(name.split(' ')[0])) continue;
-      if (c.includes(name.toLowerCase())) {
+      if (GENERIC.test(name.split(' ')[0]) || OS_FONT.test(name)) continue;
+      // "Plus Jakarta Sans": a clause break word may start the name.
+      const low = name.toLowerCase();
+      if (
+        c.includes(low) ||
+        (low.split(' ').length > 2 && c.includes(low.replace(/^\S+ /, '')))
+      ) {
         typed = name;
         break;
       }
@@ -3347,6 +3674,11 @@ function fontIn(cl, question) {
   )
     return typed;
   if (known) return known;
+  // "the default Mac font": the system font.
+  if (OS_FONT.test(c)) return 'system';
+  // A family every machine has, named with its capitals ("use Menlo").
+  const local = systemFamilyIn(c, question);
+  if (local) return local;
   if (/\bmono(space|spaced)?\b/.test(c)) return 'mono';
   if (/\bsans(-serif)?\b/.test(c)) return 'system';
   if (/\bserif\b/.test(c)) return 'serif';
