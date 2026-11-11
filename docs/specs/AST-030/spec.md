@@ -671,8 +671,7 @@ they are separately named.
   imported modules it changes. It does not run specs tagged
   `@pr-a11y release-only`, does not trigger on a changed component that a
   spec visits (and has no map from pattern stories and fixture pages to
-  components, and no job time limit), and does not run on a Lab-only pull
-  request.
+  components), and does not run on a Lab-only pull request.
 
 ### Platform support
 
