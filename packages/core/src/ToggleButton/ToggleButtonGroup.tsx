@@ -32,11 +32,13 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {ButtonSize} from '../Button';
 import type {BaseProps} from '../BaseProps';
-import {PressGroupContext} from '../hooks/pressGroupContext';
+import {
+  HitAreaGroupContext,
+  PressGroupContext,
+} from '../hooks/pressGroupContext';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {useGroupPressTracking} from '../hooks/useGroupPressTracking';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {mergeProps} from '../utils';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {themeProps} from '../utils/themeProps';
@@ -83,15 +85,16 @@ const styles = stylex.create({
     display: 'inline-flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
+    // The touch band's room between members is half the gap
+    // (touchHitAreaStyles.member).
+    '--_hit-group-inline': `calc(${spacingVars['--spacing-1']} / 2)`,
+    '--_hit-group-block': '22px',
   },
   vertical: {
     flexDirection: 'column',
     alignItems: 'stretch',
-  },
-  // While the group tracks presses, its hit layer is the root's `::before`,
-  // below its toggles, so the root is the layer's containing block.
-  tracking: {
-    position: 'relative',
+    '--_hit-group-inline': '22px',
+    '--_hit-group-block': `calc(${spacingVars['--spacing-1']} / 2)`,
   },
 });
 
@@ -266,13 +269,13 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps): ReactNode {
     [selectedValues, toggle, size, isDisabled, tracksPress],
   );
   const groupRef = useRef<HTMLDivElement>(null);
-  const {hitAreaRef} = useGroupPressTracking(groupRef, tracksPress);
+  useGroupPressTracking(groupRef, tracksPress);
   // A caller's `ref` reaches the root, like the other host props. The
   // group's own refs join it.
   const callerRef = (
     props as ToggleButtonGroupProps & {ref?: Ref<HTMLDivElement>}
   ).ref;
-  const mergedRef = useMergedRefs(callerRef, groupRef, hitAreaRef);
+  const mergedRef = useMergedRefs(callerRef, groupRef);
 
   return (
     <ToggleButtonGroupContext value={contextValue}>
@@ -286,8 +289,6 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps): ReactNode {
           themeProps('toggle-button-group'),
           stylex.props(
             styles.group,
-            tracksPress && styles.tracking,
-            tracksPress && touchHitAreaStyles.layerBelowChildren,
             orientation === 'vertical' && styles.vertical,
             xstyle,
           ),
@@ -296,7 +297,9 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps): ReactNode {
         )}>
         {/* Only a ToggleButton with a value joins the tracking (ToggleButton
             reads the group). Any other child keeps its own press. */}
-        <PressGroupContext value={null}>{children}</PressGroupContext>
+        <PressGroupContext value={null}>
+          <HitAreaGroupContext value>{children}</HitAreaGroupContext>
+        </PressGroupContext>
       </div>
     </ToggleButtonGroupContext>
   );

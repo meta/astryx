@@ -18,26 +18,8 @@ import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Icon} from '../Icon/Icon';
 import {InternationalizationProvider} from '../i18n';
-import type * as HitAreaModule from '../utils/hitArea';
-import type {HitInsets} from '../utils/hitArea';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {InfoTip} from './InfoTip';
-
-// On a coarse pointer, the shared hit area measures neighbours in a real
-// layout. Here it reports what it was asked to watch, and each test answers
-// for it.
-const hitAreaWatches = vi.hoisted(
-  () => [] as {element: Element; onInsets: (insets: HitInsets) => void}[],
-);
-vi.mock('../utils/hitArea', async importOriginal => ({
-  ...(await importOriginal<typeof HitAreaModule>()),
-  watchHitArea: (element: Element, onInsets: (insets: HitInsets) => void) => {
-    const watch = {element, onInsets};
-    hitAreaWatches.push(watch);
-    return () => {
-      hitAreaWatches.splice(hitAreaWatches.indexOf(watch), 1);
-    };
-  },
-}));
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -414,44 +396,19 @@ describe('InfoTip', () => {
   });
 
   describe('touch hit area (AR1)', () => {
-    it('grows the button toward 44 px as far as the shared hit area allows', async () => {
-      const {unmount} = render(<InfoTip content="Helpful context" />);
+    it('gives the button the touch band, with no room sideways: it sits in running text', () => {
+      render(<InfoTip content="Helpful context" />);
       const trigger = screen.getByRole('button', {name: 'More information'});
-      const watch = hitAreaWatches.find(entry => entry.element === trigger);
-      expect(watch).toBeDefined();
-
-      act(() => watch?.onInsets({top: 12, right: 6, bottom: 12, left: 4}));
-      expect(trigger.style.getPropertyValue('--astryx-hit-inset-top')).toBe(
-        '12px',
-      );
-      expect(trigger.style.getPropertyValue('--astryx-hit-inset-left')).toBe(
-        '4px',
-      );
-
-      unmount();
-      await Promise.resolve();
-      expect(hitAreaWatches.some(entry => entry.element === trigger)).toBe(
-        false,
-      );
-    });
-
-    it('clears the button’s insets when its watch stops', async () => {
-      const {unmount} = render(<InfoTip content="Helpful context" />);
-      const trigger = screen.getByRole('button', {name: 'More information'});
-      const watch = hitAreaWatches.find(entry => entry.element === trigger);
-      act(() => watch?.onInsets({top: 12, right: 6, bottom: 12, left: 4}));
-      expect(trigger.style.getPropertyValue('--astryx-hit-inset-top')).toBe(
-        '12px',
-      );
-
-      unmount();
-      await Promise.resolve();
-      expect(trigger.style.getPropertyValue('--astryx-hit-inset-top')).toBe(
-        '0px',
-      );
-      expect(trigger.style.getPropertyValue('--astryx-hit-inset-left')).toBe(
-        '0px',
-      );
+      for (const style of [
+        touchHitAreaStyles.band,
+        touchHitAreaStyles.inline,
+      ]) {
+        for (const name of (stylex.props(style).className ?? '').split(/\s+/)) {
+          if (!name.startsWith('touchHitArea__')) {
+            expect(trigger.classList).toContain(name);
+          }
+        }
+      }
     });
   });
 });

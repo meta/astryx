@@ -198,10 +198,13 @@ describe('ToggleButtonGroup tracks a held pointer across its toggles (family:act
     }
   });
 
-  it("draws each tracked toggle's touch band on the group's hit layer: a tracked toggle draws none of its own, and a toggle without a value keeps its own", () => {
-    const band = (stylex.props(touchHitAreaStyles.layer).className ?? '')
+  it('gives every toggle its own touch band, with the group’s room between members, and the root none', () => {
+    const band = (stylex.props(touchHitAreaStyles.band).className ?? '')
       .split(' ')
-      .filter(Boolean);
+      .filter(name => name !== '' && !name.startsWith('touchHitArea__'));
+    const member = (stylex.props(touchHitAreaStyles.member).className ?? '')
+      .split(' ')
+      .filter(name => name !== '' && !name.startsWith('touchHitArea__'));
     expect(band.length).toBeGreaterThan(0);
     const hasOwnBand = (toggle: Element) =>
       [...toggle.querySelectorAll('*')].some(element =>
@@ -215,7 +218,6 @@ describe('ToggleButtonGroup tracks a held pointer across its toggles (family:act
         onChange={vi.fn()}
         data-testid="group">
         <ToggleButton label="Bold" value="bold" data-testid="bold" />
-        <ToggleButton label="Italic" value="italic" data-testid="italic" />
         <ToggleButton
           label="Wrap"
           isPressed={false}
@@ -224,28 +226,14 @@ describe('ToggleButtonGroup tracks a held pointer across its toggles (family:act
         />
       </ToggleButtonGroup>,
     );
-    expect(hasOwnBand(view.getByTestId('bold'))).toBe(false);
-    expect(hasOwnBand(view.getByTestId('italic'))).toBe(false);
-    expect(hasOwnBand(view.getByTestId('wrap'))).toBe(true);
-  });
-
-  it('gives the root its hit layer only under a coarse primary pointer, so a desktop root keeps its stacking', () => {
-    const layer = (
-      stylex.props(touchHitAreaStyles.layerBelowChildren).className ?? ''
-    )
-      .split(' ')
-      .filter(Boolean);
-    expect(layer.length).toBeGreaterThan(0);
-    const coarse = mount();
-    expect(layer.filter(name => coarse.group.classList.contains(name))).toEqual(
-      layer,
-    );
-    coarse.unmount();
-    finePrimaryPointer();
-    const fine = mount();
-    expect(layer.filter(name => fine.group.classList.contains(name))).toEqual(
-      [],
-    );
+    for (const id of ['bold', 'wrap']) {
+      const toggle = view.getByTestId(id);
+      expect(hasOwnBand(toggle)).toBe(true);
+      expect(member.every(name => toggle.classList.contains(name))).toBe(true);
+    }
+    expect(
+      band.some(name => view.getByTestId('group').classList.contains(name)),
+    ).toBe(false);
   });
 
   it('a finger slid from Bold across Italic to Underline toggles only Underline (FR4)', () => {
@@ -637,16 +625,10 @@ describe('ToggleButtonGroup tracks a held pointer across its toggles (family:act
     }
   });
 
-  it("passes a caller's ref to the group root, beside the group's own hit layer", () => {
+  it("passes a caller's ref to the group root", () => {
     const ref = createRef<HTMLDivElement>();
     const {group} = mount({ref});
     expect(ref.current).toBe(group);
-    const layer = (
-      stylex.props(touchHitAreaStyles.layerBelowChildren).className ?? ''
-    )
-      .split(' ')
-      .filter(Boolean);
-    expect(layer.filter(name => group.classList.contains(name))).toEqual(layer);
   });
 
   it('a finger just past a small toggle, inside its 44 px target, toggles it (FR5)', () => {

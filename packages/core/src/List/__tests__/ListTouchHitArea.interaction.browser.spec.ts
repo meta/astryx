@@ -39,7 +39,6 @@ interface Row {
     readonly paint: string;
   };
   readonly isolation: string;
-  readonly written: string;
 }
 
 /** The story's rows (Storybook's own hidden error page has list items too). */
@@ -81,18 +80,14 @@ async function rowsOf(page: Page): Promise<Row[]> {
           ].join(' | '),
         },
         isolation: getComputedStyle(el).isolation,
-        written: (el as HTMLElement).style.getPropertyValue(
-          '--astryx-hit-inset-top',
-        ),
       };
     }),
   );
 }
 
 /**
- * The rows once the shared hit area has measured them. Its pass runs in a
- * frame after the rows show, and writes only insets that differ from 0. So
- * wait a few frames, and then until two frames read the same.
+ * The rows once their layout is still: wait a few frames, and then until two
+ * frames read the same.
  */
 async function measuredRowsOf(page: Page): Promise<Row[]> {
   const frames = async (count: number) =>
@@ -276,15 +271,15 @@ test('under a finger, a row’s end control keeps its taps, and the interactive 
       y: own.top + own.height / 2,
     };
   });
-  // The rows beside it grow only to half the gap to the control. The other
-  // half belongs to the control.
-  const [above, , below] = rows;
+  // The rows beside it grow half the List's gap toward the control's row,
+  // the room the List sets between rows.
+  const [above, middle, below] = rows;
   expect(above.layer.bottom, JSON.stringify({rows, control})).toBeCloseTo(
-    (control.top - above.bottom) / 2,
+    (middle.top - above.bottom) / 2,
     1,
   );
   expect(below.layer.top, JSON.stringify({rows, control})).toBeCloseTo(
-    (below.top - control.bottom) / 2,
+    (below.top - middle.bottom) / 2,
     1,
   );
   expect(
@@ -295,11 +290,11 @@ test('under a finger, a row’s end control keeps its taps, and the interactive 
     below.top - below.layer.top,
     JSON.stringify({rows, control}),
   ).toBeGreaterThanOrEqual(control.bottom);
-  // The browser sends a tap in Network's band to Network, over the static
-  // row after it, up to the band's end. A tap in Bluetooth's band goes to
-  // Bluetooth. Network is swipeable, so it is a stacking context at rest, and
-  // its band still wins. These are hit tests, not taps, because a touch
-  // engine may move a tap a few pixels onto a target.
+  // The browser sends a tap in Network's band to Network, up to the band's
+  // end. A tap in Bluetooth's band goes to Bluetooth. Network is swipeable,
+  // so it is a stacking context at rest, and its band still wins. These are
+  // hit tests, not taps, because a touch engine may move a tap a few pixels
+  // onto a target.
   const owner = async (y: number) =>
     page.evaluate(
       ({x, y: at}) => {
@@ -325,9 +320,8 @@ test('under a finger, a row’s end control keeps its taps, and the interactive 
       .first()
       .evaluate(row => getComputedStyle(row).transform),
   ).not.toBe('none');
-  expect(above.layer.bottom, JSON.stringify(rows)).toBeGreaterThan(1);
-  expect(await owner(above.bottom + 0.5)).toBe('Network');
-  expect(await owner(above.bottom + above.layer.bottom - 0.5)).toBe('Network');
+  expect(above.layer.bottom, JSON.stringify(rows)).toBeGreaterThan(0);
+  expect(await owner(above.bottom + above.layer.bottom - 0.25)).toBe('Network');
   expect(await owner(above.bottom + above.layer.bottom + 0.5)).toBe('Wi-Fi');
   expect(await owner(below.top - below.layer.top + 0.5)).toBe('Bluetooth');
   // The browser hit-tests the control there, and a real tap toggles it,
@@ -415,7 +409,7 @@ test('under a finger, a row’s band takes no tap from a control near the list: 
   expect(await hit(edit.x, edit.bottom - 0.5)).toBe('Edit');
 });
 
-test('under a finger, a sticky header above the list keeps its taps over the first row’s band: the list isolates what its rows raise', async ({
+test('under a finger, a sticky header above the list keeps its taps over the first row’s band', async ({
   page,
 }) => {
   await openStory(page, storybook(), 'core-list--compact');
@@ -426,10 +420,7 @@ test('under a finger, a sticky header above the list keeps its taps over the fir
     if (first == null || list == null) {
       throw new Error('no list row');
     }
-    const reach =
-      parseFloat(
-        getComputedStyle(first).getPropertyValue('--astryx-hit-inset-top'),
-      ) || 0;
+    const reach = -parseFloat(getComputedStyle(first, '::after').top) || 0;
     const top = first.getBoundingClientRect().top;
     // A page header before the list in the document, at z-index 1, as
     // AppShell's sticky header is. It ends halfway into the band above the
@@ -453,18 +444,19 @@ test('under a finger, a sticky header above the list keeps its taps over the fir
           ? 'row'
           : String(element?.tagName);
     };
-    const isolated = hit();
-    // The control: without the list's isolation the band, raised above the
-    // rows after it, would also rise above the header and take its tap.
-    list.style.isolation = 'auto';
-    const unisolated = hit();
-    list.style.isolation = '';
+    const covered = hit();
+    // Below the header's end the band keeps its tap.
+    const below = document.elementFromPoint(x, top - reach / 4);
     header.remove();
-    return {reach, isolated, unisolated};
+    return {
+      reach,
+      covered,
+      below: below?.closest('li') != null ? 'row' : String(below?.tagName),
+    };
   });
   expect(result.reach, JSON.stringify(result)).toBeGreaterThan(2);
-  expect(result.isolated, JSON.stringify(result)).toBe('header');
-  expect(result.unisolated, JSON.stringify(result)).toBe('row');
+  expect(result.covered, JSON.stringify(result)).toBe('header');
+  expect(result.below, JSON.stringify(result)).toBe('row');
 });
 
 test('under a finger, an interactive spacious list: its one-line rows, 48px tall, are already past the touch target, so they gain nothing and overlap nothing', async ({
@@ -520,10 +512,10 @@ test('under a finger, a row already as tall as the touch target gains nothing, r
   const borders = await page.locator('#storybook-root li').evaluateAll(rows =>
     rows.map(row => [
       getComputedStyle(row, '::after')
-        .getPropertyValue('--_hit-border-bottom')
+        .getPropertyValue('--_hit-border-block-end')
         .trim(),
       getComputedStyle(row.firstElementChild ?? row)
-        .getPropertyValue('--_hit-border-bottom')
+        .getPropertyValue('--_hit-border-block-end')
         .trim(),
     ]),
   );
@@ -539,15 +531,11 @@ test('under a finger, a row already as tall as the touch target gains nothing, r
   const disabled = await page
     .locator('#storybook-root li[aria-disabled="true"]')
     .evaluateAll(rows =>
-      rows.map(row => [
-        getComputedStyle(row, '::after').content,
-        (row as HTMLElement).style.getPropertyValue('--astryx-hit-inset-top'),
-      ]),
+      rows.map(row => getComputedStyle(row, '::after').content),
     );
   expect(disabled.length).toBeGreaterThan(0);
-  for (const [content, written] of disabled) {
+  for (const content of disabled) {
     expect(content).toBe('none');
-    expect(written).toBe('');
   }
 });
 
@@ -700,7 +688,6 @@ for (const story of [
       // A mouse: no pseudo-element, no stacking context, nothing measured.
       expect(mouse[i].layer.content, summary).toBe('none');
       expect(mouse[i].isolation, summary).toBe('auto');
-      expect(mouse[i].written, summary).toBe('');
     }
   });
 }

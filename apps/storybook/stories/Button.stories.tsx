@@ -10,8 +10,12 @@ import {Heading} from '@astryxdesign/core/Heading';
 import {HStack} from '@astryxdesign/core/HStack';
 import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {InfoTip} from '@astryxdesign/core/InfoTip';
+import {Link} from '@astryxdesign/core/Link';
 import {StackItem} from '@astryxdesign/core/Stack';
+import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
+import {ToggleButton, ToggleButtonGroup} from '@astryxdesign/core/ToggleButton';
 import {VStack} from '@astryxdesign/core/VStack';
 import {Cog6ToothIcon, TrashIcon} from '@heroicons/react/24/outline';
 
@@ -557,6 +561,63 @@ export const TouchTargets: Story = {
           Undo {taps.undo}, Redo {taps.redo}
         </output>
         <TextInput label="Search" value={query} onChange={setQuery} hasClear />
+      </VStack>
+    );
+  },
+};
+
+export const TouchReach: Story = {
+  name: 'Touch reach',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Under a coarse pointer: a lone 24 px button takes taps 10 px past each edge, 44 px in all; the 4 px gap of a ToggleButtonGroup splits at its middle; and an InfoTip right after a link takes no tap on the link, since it grows no room sideways.',
+      },
+    },
+  },
+  render: () => {
+    const [taps, setTaps] = useState({lone: 0, link: 0});
+    const [formats, setFormats] = useState<string[]>([]);
+    return (
+      <VStack gap={6} hAlign="start">
+        <div style={{padding: 40}}>
+          <Button
+            label="Lone"
+            data-testid="lone"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={() =>
+              setTaps(current => ({...current, lone: current.lone + 1}))
+            }
+          />
+        </div>
+        <ToggleButtonGroup
+          type="multiple"
+          label="Format"
+          value={formats}
+          onChange={setFormats}>
+          <ToggleButton label="Bold" value="bold" data-testid="bold" />
+          <ToggleButton label="Italic" value="italic" data-testid="italic" />
+        </ToggleButtonGroup>
+        <Text>
+          See the{' '}
+          <Link
+            href="#pricing"
+            onClick={event => {
+              event.preventDefault();
+              setTaps(current => ({...current, link: current.link + 1}));
+            }}>
+            pricing
+          </Link>
+          <InfoTip content="Billed monthly per seat." label="Pricing help" />{' '}
+          for teams.
+        </Text>
+        <output aria-label="Reach taps">
+          Lone {taps.lone}, Link {taps.link}
+        </output>
       </VStack>
     );
   },

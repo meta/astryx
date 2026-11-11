@@ -24,9 +24,9 @@ export const docs = {
     ],
     vars: [
       {
-        name: '--_hit-border-bottom',
+        name: '--_hit-border-block-end',
         description:
-          "Width of the divider below a divided row, 0 on the last row. The row's touch hit layer adds it to its offset, so its band starts past the divider. ListItem sets it on the row's own ::after from --border-width under hasDividers, so content inside the row never inherits it, and a theme changes the divider through that token.",
+          "Width of the divider below a divided row, 0 on the last row. The row's touch band grows from past it. ListItem sets it on the row's own ::after from --border-width under hasDividers, so content inside the row never inherits it, and a theme changes the divider through that token.",
         default: '0px',
         private: true,
       },

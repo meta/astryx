@@ -28,7 +28,8 @@ import {
 import {lockSelection} from '../gestures/selectionLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {awaitBrowserClick, clickForLift} from '../utils/browserClickWait';
-import {HIT_INSET_PROPERTIES, type HitInsets} from '../utils/hitArea';
+import {isCoarsePointer} from '../utils/coarsePointer';
+import {touchTargetRect} from '../utils/hitArea';
 import {armClickGuard} from '../utils/clickGuard';
 import {cancelPress} from '../utils/pressFeedback';
 import {
@@ -123,37 +124,26 @@ export function liftTargetAt(
 
 const NO_AREA: ReadonlyArray<ControlBounds> = [];
 
-/** A measured hit inset on `element`, px (0 when none is written). */
-function hitInset(element: HTMLElement, side: keyof HitInsets): number {
-  const value = Number.parseFloat(
-    element.style.getPropertyValue(HIT_INSET_PROPERTIES[side]),
-  );
-  return Number.isFinite(value) ? value : 0;
-}
-
 /**
- * The boxes a lift may commit in: the control's own box, and each segment's
- * box grown by its own touch hit band (utils/hitArea), so a tap on a band
- * selects its segment. Each band is kept apart: a band a neighbor clamped
- * stays clamped, though another segment's band reaches further. Under a fine
- * pointer no band is written, and the segments sit inside the control's box.
+ * The boxes a lift may commit in: the control's own box, and under a coarse
+ * pointer each segment's box grown toward 44 px, as its touch band grows, so
+ * a tap on a band selects its segment. Between segments the grown boxes
+ * overlap inside the control's box, where `segmentTargetAt` splits the gap.
+ * Under a fine pointer the segments sit inside the control's box.
  */
 export function measureLiftArea(
   track: HTMLElement,
   segments: ReadonlyArray<SegmentSpan>,
 ): ReadonlyArray<ControlBounds> {
   const {left, top, right, bottom} = track.getBoundingClientRect();
+  if (!isCoarsePointer(track.ownerDocument.defaultView)) {
+    return [{left, top, right, bottom}];
+  }
   return [
     {left, top, right, bottom},
-    ...segments.map(({element}) => {
-      const box = element.getBoundingClientRect();
-      return {
-        left: box.left - hitInset(element, 'left'),
-        top: box.top - hitInset(element, 'top'),
-        right: box.right + hitInset(element, 'right'),
-        bottom: box.bottom + hitInset(element, 'bottom'),
-      };
-    }),
+    ...segments.map(({element}) =>
+      touchTargetRect(element.getBoundingClientRect()),
+    ),
   ];
 }
 

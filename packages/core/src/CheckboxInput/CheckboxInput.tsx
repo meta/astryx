@@ -452,16 +452,14 @@ export function CheckboxInput({
   // checkbox is a marker in another component's row, which keeps its target.
   const hasHitArea = !isLabelHidden && !isDisabled && !isReadOnly;
   const inputRef = useRef<HTMLInputElement>(null);
-  // The band's insets stay live while the row takes taps, and clear when it
-  // stops.
-  const watchRowHitArea = useTouchHitArea(hasHitArea);
+  const rowHitAreaRef = useTouchHitArea(hasHitArea);
   // The disabled-message tooltip listens for hover and focus on the whole
   // row, a larger trigger. It anchors on the checkbox itself (below), so it
   // shows next to the control. Its handlers check isEnabled, so the row
   // always attaches them.
   const rowRef = useMergedRefs(
     disabledMessageTooltip.interactionRef,
-    watchRowHitArea,
+    rowHitAreaRef,
   );
   // Where a press on the row itself began. A browser can move a tap's click
   // onto the row's edge, so the band is judged from the press.

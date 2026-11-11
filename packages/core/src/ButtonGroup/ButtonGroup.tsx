@@ -35,7 +35,6 @@ import {
   useGroupPressTracking,
 } from '../hooks/useGroupPressTracking';
 import {useTouchPresentation} from '../utils/touchPresentation';
-import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {mergeProps, composeEventHandlers} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {ButtonGroupContext} from './ButtonGroupContext';
@@ -102,14 +101,15 @@ const styles = stylex.create({
   group: {
     display: 'inline-flex',
     alignItems: 'stretch',
+    // The buttons touch, so their touch bands have no room between them
+    // (touchHitAreaStyles.member).
+    '--_hit-group-inline': '0px',
+    '--_hit-group-block': '22px',
   },
   vertical: {
     flexDirection: 'column',
-  },
-  // While the group tracks presses, its hit layer is the root's `::before`,
-  // below its buttons, so the root is the layer's containing block.
-  tracking: {
-    position: 'relative',
+    '--_hit-group-inline': '22px',
+    '--_hit-group-block': '0px',
   },
 });
 
@@ -226,20 +226,18 @@ export function ButtonGroup({
   const {isTouch} = useTouchPresentation();
   const tracksPress = !isDisabled && isTouch;
   const groupRef = useRef<HTMLDivElement>(null);
-  const {hitAreaRef} = useGroupPressTracking(groupRef, tracksPress);
+  useGroupPressTracking(groupRef, tracksPress);
 
   return (
     <ButtonGroupContext value={contextValue}>
       <SizeProvider value={size}>
         <div
-          ref={useMergedRefs(ref, listRef, groupRef, hitAreaRef)}
+          ref={useMergedRefs(ref, listRef, groupRef)}
           {...props}
           {...mergeProps(
             themeProps('button-group', {size, orientation, elevation}),
             stylex.props(
               styles.group,
-              tracksPress && styles.tracking,
-              tracksPress && touchHitAreaStyles.layerBelowChildren,
               orientation === 'vertical' && styles.vertical,
               elevationStyles[elevation],
               xstyle,

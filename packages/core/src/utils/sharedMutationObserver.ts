@@ -7,7 +7,7 @@
  * @input MutationObserver API
  * @output Exports observeMutations (one shared observer per set of options),
  *   observeContent, its text-and-children form, and flushMutations
- * @position Internal utility; consumed by useTruncation, hitArea, AppShell's
+ * @position Internal utility; consumed by useTruncation, AppShell's
  *   main-overflow observer, ModalAnnounceProvider's presentation watch and
  *   CheckboxList's required group. The mutation counterpart of sharedResizeObserver:
  *   one observer for every element observed with the same options, so a

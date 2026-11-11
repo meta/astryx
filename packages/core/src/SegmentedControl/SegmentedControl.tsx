@@ -123,6 +123,10 @@ const styles = stylex.create({
       ':has([role="radio"]:not([aria-label]))': 0,
     },
     gap: spacingVars['--spacing-0-5'],
+    // The segments' touch bands meet in the middle of the gap
+    // (touchHitAreaStyles.member).
+    '--_hit-group-inline': `calc(${spacingVars['--spacing-0-5']} / 2)`,
+    '--_hit-group-block': '22px',
     '--_segmented-control-padding': spacingVars['--spacing-0-5'],
     padding: 'var(--_segmented-control-padding)',
     backgroundColor: colorVars['--color-neutral'],

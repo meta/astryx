@@ -70,15 +70,17 @@ async function radioRows(page: Page): Promise<Rect[]> {
 
 const centre = (r: Rect) => ({x: r.x + r.width / 2, y: r.y + r.height / 2});
 
-/** A band's insets on an element, px, as `watchHitArea` writes them. */
+/** How far an element's band reaches past its box on each side, px. */
 async function hitInsets(page: Page, selector: string, index = 0) {
   return page
     .locator(selector)
     .nth(index)
     .evaluate(el => {
-      const style = getComputedStyle(el);
-      const read = (side: string) =>
-        parseFloat(style.getPropertyValue(`--astryx-hit-inset-${side}`)) || 0;
+      const band = getComputedStyle(el, '::after');
+      const read = (side: 'top' | 'right' | 'bottom' | 'left') =>
+        band.position === 'absolute'
+          ? Math.max(0, -(parseFloat(band[side]) || 0))
+          : 0;
       return {
         top: read('top'),
         right: read('right'),
@@ -91,7 +93,7 @@ async function hitInsets(page: Page, selector: string, index = 0) {
 const insetSum = (insets: Awaited<ReturnType<typeof hitInsets>>) =>
   insets.top + insets.right + insets.bottom + insets.left;
 
-/** The insets once the band's first measurement has landed. */
+/** The insets, once the band has grown. */
 async function measuredInsets(page: Page, selector: string, index = 0) {
   await expect
     .poll(async () => insetSum(await hitInsets(page, selector, index)))

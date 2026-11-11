@@ -74,8 +74,8 @@ registerEnglishFallback(english);
 
 /**
  * The handle's side, for every pointer: a small control's size. A finger's
- * 44 px target is an invisible coarse-only hit layer, clamped so it never
- * takes from a neighbour (utils/hitArea.ts), not a bigger handle.
+ * 44 px target is an invisible coarse-only touch band, not a bigger handle. A
+ * tap on the band nearer a neighbour does nothing (utils/touchHitArea.ts).
  */
 const HANDLE_SIZE = 28;
 /** The three lines' height: the handle's share of its row's height. */

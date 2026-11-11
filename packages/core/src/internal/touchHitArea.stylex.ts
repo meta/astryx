@@ -2,69 +2,105 @@
 
 /**
  * @file touchHitArea.stylex.ts
- * @input Uses StyleX and the insets that utils/hitArea.ts writes on a host
- * @output Exports `touchHitAreaStyles.layer`, a host's invisible hit band
- *   under a coarse pointer, and `touchHitAreaStyles.layerBelowChildren`, the
- *   same band drawn below the host's children
+ * @input Uses StyleX, and the room a host or its group declares on each side
+ * @output Exports `touchHitAreaStyles`: `layer`, a host's invisible hit band
+ *   under a coarse pointer; `room` and `band`, its two halves, for a host that
+ *   draws the band on a descendant; `member`, the room of a group's member;
+ *   `inline`, no sideways growth for a control that sits in running text
  * @position Internal styling utility for Button (and so the input clear
- *   button), CheckboxInput, RadioListItem, List rows, InfoTip,
- *   SegmentedControl segments and the press-tracking groups. Each keeps its
- *   insets live with `useTouchHitArea` (utils/touchHitArea.ts).
+ *   button), CheckboxInput, RadioListItem, List rows and reorder handles,
+ *   InfoTip, SegmentedControl segments and Lab's PageControl. Each also
+ *   attaches `useTouchHitArea` (utils/touchHitArea.ts), which checks a tap on
+ *   the band at its click.
  *
- * The band is the host's `::after`, grown past each edge by the measured
- * inset. A clip path cuts out the host's box, so its content keeps its taps.
- * A tap on the band lands on the host. Button draws the band on its content
- * wrapper instead, which leaves its own `::after` to callers. The insets then
- * reach the wrapper by inheritance, a tap on the band lands on that
- * descendant, and the watch has `ownsDescendantTouches` off. A host whose children fill its box,
- * such as a press-tracking group, takes `layerBelowChildren`. That band is its
- * `::before`, so its positioned children paint over the clip path's edge, and
- * the pixels on their own edges stay theirs. SYNC: utils/hitArea.ts
- * HIT_INSET_PROPERTIES, utils/touchHitArea.ts and utils/touchHitArea.test.tsx.
+ * The band is the host's `::after`. Under a coarse pointer each side grows
+ * toward 44 px, centered on the host's box, and no further than that side's
+ * room: 22 px by default, so a lone control reaches 44 px. A group sets half
+ * its gap as the room between its members (`member`), and its end members
+ * keep the default room outward. The band sits below the host's content in
+ * the host's own stacking context, so the content keeps its taps. Outside
+ * the host's box a tap on the band lands on the host. SYNC:
+ * utils/touchHitArea.ts and utils/touchHitArea.test.tsx.
  */
 
 import * as stylex from '@stylexjs/stylex';
 
 // StyleX reads these at build time, so they are spelled out.
 const TOUCH = '@media (pointer: coarse)';
-// The insets are measured in the viewport, so the sides are physical.
-const TOP = 'var(--astryx-hit-inset-top, 0px)';
-const RIGHT = 'var(--astryx-hit-inset-right, 0px)';
-const BOTTOM = 'var(--astryx-hit-inset-bottom, 0px)';
-const LEFT = 'var(--astryx-hit-inset-left, 0px)';
-// The insets start at the host's border box, but the band's offsets start at
-// its padding box. So a host that draws a border declares its width on that
-// side, 0 by default. It declares it on its own `::after`, so content inside
-// the host never inherits it.
-const BORDER_TOP = 'var(--_hit-border-top, 0px)';
-const BORDER_RIGHT = 'var(--_hit-border-right, 0px)';
-const BORDER_BOTTOM = 'var(--_hit-border-bottom, 0px)';
-const BORDER_LEFT = 'var(--_hit-border-left, 0px)';
+const ROOM = '22px';
+// A member's layer can render after it, inside the group, so the last member
+// is the last child that is not a layer. SYNC: Button.tsx IS_LAST_ITEM.
+const LAST = ':nth-last-child(1 of :not([popover]):not(template):not(dialog))';
+// The percentages are of the host's padding box, the band's containing block.
+// A host that draws a divider on its block end declares its width, so the
+// band grows from the host's border box.
+const DIVIDER = 'var(--_hit-border-block-end, 0px)';
+const BLOCK_SHORTFALL = `min(0px, (100% + ${DIVIDER} - 44px) / 2)`;
+const INLINE_SHORTFALL = 'min(0px, (100% - 44px) / 2)';
 
 // The host is the band's containing block, so a host that is not positioned
-// sets `position: relative`. The band has no z-index of its own. Inside a
-// List, which isolates its rows, ListItem raises it. Under a finger the host's
-// `::after`, or `::before` below its children, is this band, so decorate the
-// host with a child.
+// sets `position: relative`. A host decorates itself with a child: under a
+// finger its `::after` is this band.
 const BAND = {
-  content: {default: null, [TOUCH]: '""'},
-  position: {default: null, [TOUCH]: 'absolute'},
-  inset: {
-    default: null,
-    [TOUCH]: `calc((${TOP} + ${BORDER_TOP}) * -1) calc((${RIGHT} + ${BORDER_RIGHT}) * -1) calc((${BOTTOM} + ${BORDER_BOTTOM}) * -1) calc((${LEFT} + ${BORDER_LEFT}) * -1)`,
-  },
-  // The outer rectangle, then the host's box as an even-odd hole.
-  clipPath: {
-    default: null,
-    [TOUCH]: `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${LEFT} ${TOP}, calc(100% - ${RIGHT}) ${TOP}, calc(100% - ${RIGHT}) calc(100% - ${BOTTOM}), ${LEFT} calc(100% - ${BOTTOM}), ${LEFT} ${TOP})`,
+  isolation: {default: null, [TOUCH]: 'isolate'},
+  '::after': {
+    content: {default: null, [TOUCH]: '""'},
+    position: {default: null, [TOUCH]: 'absolute'},
+    zIndex: {default: null, [TOUCH]: -1},
+    insetBlockStart: {
+      default: null,
+      [TOUCH]: `max(calc(var(--_hit-room-block-start) * -1), ${BLOCK_SHORTFALL})`,
+    },
+    insetBlockEnd: {
+      default: null,
+      [TOUCH]: `calc(max(calc(var(--_hit-room-block-end) * -1), ${BLOCK_SHORTFALL}) - ${DIVIDER})`,
+    },
+    insetInlineStart: {
+      default: null,
+      [TOUCH]: `max(calc(var(--_hit-room-inline-start) * -1), ${INLINE_SHORTFALL})`,
+    },
+    insetInlineEnd: {
+      default: null,
+      [TOUCH]: `max(calc(var(--_hit-room-inline-end) * -1), ${INLINE_SHORTFALL})`,
+    },
   },
 } as const;
 
+// Each host sets its own room, so a host inside a group member never takes
+// the member's room.
+const ROOM_SIDES = {
+  '--_hit-room-block-start': ROOM,
+  '--_hit-room-block-end': ROOM,
+  '--_hit-room-inline-start': ROOM,
+  '--_hit-room-inline-end': ROOM,
+} as const;
+
 export const touchHitAreaStyles = stylex.create({
-  layer: {
-    '::after': BAND,
+  layer: {...ROOM_SIDES, ...BAND},
+  room: ROOM_SIDES,
+  band: BAND,
+  // The group sets `--_hit-group-block` and `--_hit-group-inline` on its
+  // root: half its gap on the axis it lays out, the default room on the other.
+  member: {
+    '--_hit-room-block-start': {
+      default: 'var(--_hit-group-block)',
+      ':first-child': ROOM,
+    },
+    '--_hit-room-block-end': {
+      default: 'var(--_hit-group-block)',
+      [LAST]: ROOM,
+    },
+    '--_hit-room-inline-start': {
+      default: 'var(--_hit-group-inline)',
+      ':first-child': ROOM,
+    },
+    '--_hit-room-inline-end': {
+      default: 'var(--_hit-group-inline)',
+      [LAST]: ROOM,
+    },
   },
-  layerBelowChildren: {
-    '::before': BAND,
+  inline: {
+    '--_hit-room-inline-start': '0px',
+    '--_hit-room-inline-end': '0px',
   },
 });

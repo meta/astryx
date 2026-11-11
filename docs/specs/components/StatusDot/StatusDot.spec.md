@@ -163,8 +163,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 ### Performance and resources
 
 - **PR1 — CSS-only motion.** The pulse is a CSS animation; StatusDot registers
-  no listener, observer, or timer of its own beyond the shared hit-area watch
-  AR2 requires for a standalone dot with a tooltip.
+  no listener, observer, or timer of its own. The touch band AR2 requires for
+  a standalone dot with a tooltip is CSS, and reads layout only at a finger's
+  tap on it.
 
 ## Accessibility contract
 
@@ -177,11 +178,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   tab stop of its own. A standalone dot with a tooltip is a button in the tab
   order whose press pins the tooltip (FR5), and a dot inside an interactive
   element never adds a tab stop; today the dot adds no tab stop, which is the
-  FR5 gap. Under a coarse pointer, a standalone dot with a tooltip reaches 44 px
-  through an invisible hit area from the shared hit-area watch where its
-  neighbors leave room: the hit area never overlaps a neighbor's target and is
-  clamped to half the gap between close neighbors (`spec:AST-094` FR42);
-  implementation gap: not yet built. A caller `tabIndex`
+  FR5 gap. Under a coarse pointer, a standalone dot with a tooltip grows
+  toward 44 px up and down through an invisible band. It sits in running text,
+  so the band grows no room sideways, and a tap on the band that lies nearer a
+  neighbor does nothing (`spec:AST-094` FR42). AR2 gap: a standalone dot with
+  a tooltip has no band. A caller `tabIndex`
   passes through (FR6).
 - **AR3 — Decorative icon.** The icon wrapper is `aria-hidden`, so the label
   alone names the status.

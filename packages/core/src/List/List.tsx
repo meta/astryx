@@ -198,6 +198,10 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
+    // The rows' touch bands meet in the middle of the gap
+    // (touchHitAreaStyles.member).
+    '--_hit-group-block': `calc(${spacingVars['--spacing-0-5']} / 2)`,
+    '--_hit-group-inline': '22px',
     // A row dragged aside for its swipe actions (Item.swipeActions) paints
     // past the list's inline edge unless the list clips. `clip`, never
     // `hidden`: hidden makes a scroll container, which fights the list's
@@ -281,6 +285,7 @@ const styles = stylex.create({
   },
   withDividers: {
     gap: 0,
+    '--_hit-group-block': '0px',
   },
   withCounter: {
     counterReset: 'astryx-list',

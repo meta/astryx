@@ -556,18 +556,6 @@ test.describe('with a finger', () => {
     for (const name of names) {
       await expect(page.getByRole('button', {name})).toBeVisible();
     }
-    // The hit layer's insets are written a frame after the hint shows.
-    await expect
-      .poll(async () =>
-        page
-          .getByRole('button', {name: 'Move up'})
-          .evaluate(element =>
-            getComputedStyle(element)
-              .getPropertyValue('--astryx-hit-inset-top')
-              .trim(),
-          ),
-      )
-      .not.toBe('');
     const targets = await page.evaluate(
       list =>
         list.map(name => {
@@ -579,10 +567,9 @@ test.describe('with a finger', () => {
           if (element == null) {
             throw new Error(`no ${name}`);
           }
-          const style = getComputedStyle(element);
-          const inset = (side: string) =>
-            parseFloat(style.getPropertyValue(`--astryx-hit-inset-${side}`)) ||
-            0;
+          const band = getComputedStyle(element, '::after');
+          const inset = (side: 'top' | 'right' | 'bottom' | 'left') =>
+            Math.max(0, -(parseFloat(band[side]) || 0));
           const box = element.getBoundingClientRect();
           const glyph = (
             element.firstElementChild ?? element

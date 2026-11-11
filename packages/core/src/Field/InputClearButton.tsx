@@ -19,9 +19,6 @@
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
-import {BUTTON_HIT_AREA, ButtonHitAreaContext} from '../Button/buttonHitArea';
-import {clampedHitInsets, type HitInsets, type HitRect} from '../utils/hitArea';
-import type {TouchHitAreaOptions} from '../utils/touchHitArea';
 import {Icon} from '../Icon/Icon';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -32,61 +29,19 @@ import english from '../i18n/generated-english/Field/InputClearButton.generated'
 
 registerEnglishFallback(english);
 
-// WebKit moves a tap toward a clickable element near it. The field's other
-// parts, such as the chevron, are not clickable themselves. So a band that
-// comes near one takes a tap on it. Toward a part, the band reaches at most
-// this far, in px.
-const PART_REACH = 2;
-
-/**
- * How far the clear button's band grows on each side. It grows toward the
- * minimum target and stops at half the gap to each of the field's other parts
- * (the chevron, the status icon, the spinner). A tap on a part is the
- * field's. No hit-area neighbour stops the band there, because the parts are
- * not interactive. Toward a part beside it, the band also stops at
- * `PART_REACH`.
- */
-function clearButtonGrowth(
-  target: HitRect,
-  toLayout: (rect: HitRect) => HitRect,
-  element: HTMLElement,
-): HitInsets {
-  const parts: HitRect[] = [];
-  for (const part of element.parentElement?.children ?? []) {
-    const box = part.getBoundingClientRect();
-    if (part !== element && box.width > 0 && box.height > 0) {
-      parts.push(
-        toLayout({
-          left: box.left,
-          top: box.top,
-          right: box.right,
-          bottom: box.bottom,
-        }),
-      );
-    }
-  }
-  const insets = {...clampedHitInsets(target, parts)};
-  for (const rect of parts) {
-    if (rect.top < target.bottom && target.top < rect.bottom) {
-      if (rect.left >= target.right) {
-        insets.right = Math.min(insets.right, PART_REACH);
-      } else if (rect.right <= target.left) {
-        insets.left = Math.min(insets.left, PART_REACH);
-      }
-    }
-  }
-  return insets;
-}
-
-const CLEAR_BUTTON_HIT_AREA: TouchHitAreaOptions = {
-  ...BUTTON_HIT_AREA,
-  growth: clearButtonGrowth,
-};
-
 const styles = stylex.create({
   button: {
     height: '20px',
     flexShrink: 0,
+    // WebKit moves a tap toward a clickable element near it, and the field's
+    // other parts, such as the chevron, are not clickable themselves. So
+    // toward a part beside it the touch band reaches only 2 px, and a tap on
+    // the part stays the field's.
+    '--_hit-room-inline-start': {default: '2px', ':first-child': '22px'},
+    '--_hit-room-inline-end': {
+      default: '2px',
+      ':nth-last-child(1 of :not([popover]):not(template):not(dialog))': '22px',
+    },
   },
 });
 
@@ -124,44 +79,42 @@ function renderInputClearButton({
   const {className: iconTargetClassName} = themeProps('input-clear-icon');
   const {className: buttonTargetClassName} = themeProps('input-clear-button');
   return (
-    <ButtonHitAreaContext value={CLEAR_BUTTON_HIT_AREA}>
-      <Button
-        variant="ghost"
-        size="sm"
-        label={label}
-        // The field's label already sits beside the glyph, so the tooltip names
-        // only the action; repeating a long label reads as awkward copy. The
-        // contextual label stays the accessible name, which still contains
-        // the visible word (WCAG 2.5.3, label in name).
-        tooltip={tooltip}
-        className={buttonTargetClassName}
-        icon={
-          <Icon
-            icon="close"
-            size="sm"
-            color="secondary"
-            className={
-              iconClassName != null
-                ? `${iconTargetClassName} ${iconClassName}`
-                : iconTargetClassName
-            }
-          />
-        }
-        onPointerDown={e => {
-          // WebKit drops the click of a touch whose pointerdown is cancelled.
-          // For touch, the mousedown handler below keeps focus in the field.
-          if (e.pointerType !== 'touch') {
-            e.preventDefault();
+    <Button
+      variant="ghost"
+      size="sm"
+      label={label}
+      // The field's label already sits beside the glyph, so the tooltip names
+      // only the action; repeating a long label reads as awkward copy. The
+      // contextual label stays the accessible name, which still contains
+      // the visible word (WCAG 2.5.3, label in name).
+      tooltip={tooltip}
+      className={buttonTargetClassName}
+      icon={
+        <Icon
+          icon="close"
+          size="sm"
+          color="secondary"
+          className={
+            iconClassName != null
+              ? `${iconTargetClassName} ${iconClassName}`
+              : iconTargetClassName
           }
-          onPointerDown?.(e);
-        }}
-        onMouseDown={e => e.preventDefault()}
-        onClick={onClick}
-        onClickCapture={onClickCapture}
-        isIconOnly
-        xstyle={[styles.button, xstyle]}
-      />
-    </ButtonHitAreaContext>
+        />
+      }
+      onPointerDown={e => {
+        // WebKit drops the click of a touch whose pointerdown is cancelled.
+        // For touch, the mousedown handler below keeps focus in the field.
+        if (e.pointerType !== 'touch') {
+          e.preventDefault();
+        }
+        onPointerDown?.(e);
+      }}
+      onMouseDown={e => e.preventDefault()}
+      onClick={onClick}
+      onClickCapture={onClickCapture}
+      isIconOnly
+      xstyle={[styles.button, xstyle]}
+    />
   );
 }
 

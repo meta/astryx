@@ -206,6 +206,7 @@ export function InfoTip({
             focusOutlineStyles.focusVisible,
             styles.trigger,
             touchHitAreaStyles.layer,
+            touchHitAreaStyles.inline,
             xstyle,
           ),
           className,

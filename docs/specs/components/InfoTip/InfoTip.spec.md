@@ -142,16 +142,16 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - **PR1 — No resource of its own.** InfoTip adds no document listener,
   observer, timer, or layer beyond its button's click and pointer-down
-  handlers and the shared hit-area watch AR1 requires; Tooltip's are the only
-  others it brings.
+  handlers; Tooltip's are the only others it brings. Its touch band (AR1) is
+  CSS, and reads layout only at a finger's tap on it.
 
 ## Accessibility contract
 
 - **AR1 — The trigger is a named button.** The button is in the tab order,
-  named (FR1), and, under a coarse pointer, reaches 44 px through an invisible
-  hit area where its neighbors leave room: the hit area never overlaps a
-  neighbor's target and is clamped to half the gap between close neighbors
-  (`spec:AST-094` FR42).
+  named (FR1), and, under a coarse pointer, grows toward 44 px up and down
+  through an invisible band. It sits in running text, so the band grows no
+  room sideways, and a tap on the band that lies nearer a neighbor, such as
+  a link just before it, does nothing (`spec:AST-094` FR42).
 - **AR2 — The help is a toggletip.** `component:Tooltip` AR6: keyboard and
   touch users pin and close the help without hover, the button reports
   `aria-expanded`, and the help is announced once when it pins.

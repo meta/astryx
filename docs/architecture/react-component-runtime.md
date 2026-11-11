@@ -298,7 +298,7 @@ those contracts.
   (`spec:AST-094` FR4, `spec:AST-108` FR3), a closed-form curve played with
   retargets, a companion on its clock and a chosen start (`spec:AST-094` FR5,
   FR6), and the Reduce Motion substitution for a move, an entrance or an exit
-  (`design:reduced-motion` DR1–DR3); the touch hit-area expansion; and List's
+  (`design:reduced-motion` DR1–DR3); the touch hit area's press-time check; and List's
   reorder session, for a collection that adapts the reorderable object to its
   own values or whose rows are not `ListItem`s (`createReorderable`'s
   plain-element `attach`, `spec:AST-103` FR4b, is not built).

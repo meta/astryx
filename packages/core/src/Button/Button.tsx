@@ -55,7 +55,7 @@ import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {
-  PressGroupBandContext,
+  HitAreaGroupContext,
   PressGroupContext,
   pressGroupItemProps,
 } from '../hooks/pressGroupContext';
@@ -67,8 +67,7 @@ import {
 } from '../InputGroup/groupStyles';
 import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {useTouchHitArea} from '../utils/touchHitArea';
-import {ButtonHitAreaContext} from './buttonHitArea';
+import {BAND_ON_DESCENDANT, useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
@@ -766,11 +765,12 @@ export function Button({
     buttonDisabled && isHydrating && (type === 'submit' || type === 'reset')
       ? 'button'
       : type;
-  // The group draws one band for all its members: a ButtonGroup, or a
-  // tracking group that says so. A disabled or busy-only button takes no tap.
-  const groupDrawsBand = use(PressGroupBandContext);
-  const hasHitArea = buttonGroup == null && !groupDrawsBand && !buttonDisabled;
-  const hitAreaRef = useTouchHitArea(hasHitArea, use(ButtonHitAreaContext));
+  // A disabled or busy-only button takes no tap, so it draws no touch band.
+  // In a group, the group sets the band's room between its members.
+  const isInHitAreaGroup = use(HitAreaGroupContext);
+  const isHitAreaGroupMember = buttonGroup != null || isInHitAreaGroup;
+  const hasHitArea = !buttonDisabled;
+  const hitAreaRef = useTouchHitArea(hasHitArea, BAND_ON_DESCENDANT);
   // isIconOnly prop is the source of truth for icon-only rendering.
   // When false (default), label is always rendered as visible text.
 
@@ -866,6 +866,8 @@ export function Button({
     // by the ButtonGroup so the shared surface lifts as one unit.
     !buttonGroup && elevationStyles[elevation],
     width != null && dynamicStyles.width(width),
+    hasHitArea && touchHitAreaStyles.room,
+    hasHitArea && isHitAreaGroupMember && touchHitAreaStyles.member,
     // AFTER the shared focus outline: the outline supplies width/style/offset
     // for every variant, and `destructive` re-colors just the ring to match
     // its own surface. Ordering is the mechanism — StyleX is last-wins.
@@ -906,7 +908,7 @@ export function Button({
           // The content wrapper's `::after` carries the touch band, so the
           // button's own `::before` (the touch press) and `::after` (a
           // caller's decoration) stay as they are.
-          hasHitArea && touchHitAreaStyles.layer,
+          hasHitArea && touchHitAreaStyles.band,
           isLoadingState &&
             (delaySpinner
               ? loadingStyles.hiddenContentDelayed

@@ -335,19 +335,6 @@ interface OpenSwitch {
   center: {x: number; y: number};
 }
 
-/** Waits for the switch's measured hit insets (utils/hitArea, a frame after mount). */
-async function waitForHitArea(page: Page): Promise<void> {
-  await page.waitForFunction(() => {
-    const surface = document.querySelector<HTMLElement>(
-      '#storybook-root [role="switch"]',
-    )?.parentElement;
-    return (
-      surface?.style.getPropertyValue('--astryx-hit-inset-top') !== '' &&
-      surface?.style.getPropertyValue('--astryx-hit-inset-top') != null
-    );
-  });
-}
-
 async function openSwitch(
   page: Page,
   storyId = 'core-switch--default',
@@ -1003,7 +990,6 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     page,
   }) => {
     const {driver, input, center} = await openSwitch(page);
-    await waitForHitArea(page);
     const boxes = await page.evaluate(() => {
       const i = document.querySelector<HTMLElement>(
         '#storybook-root [role="switch"]',
@@ -1046,14 +1032,13 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     await expect(input).toBeChecked();
   });
 
-  test('under a coarse pointer the hit area stops halfway to a link beside it: a tap on the link is the link’s, a tap nearer the switch toggles it', async ({
+  test('under a coarse pointer a tap on the hit area that lies on a link beside it does nothing, and a tap nearer the switch toggles it', async ({
     page,
   }) => {
     const {driver, input} = await openSwitch(
       page,
       'core-switch--beside-a-link',
     );
-    await waitForHitArea(page);
     const boxes = await page.evaluate(() => {
       const i = document.querySelector<HTMLElement>(
         '#storybook-root [role="switch"]',
@@ -1082,15 +1067,14 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     }
     const gap = boxes.link.left - boxes.switch.right;
     expect(gap).toBeGreaterThan(0);
-    // The right side stops at half the gap; the other sides grow to 44 px.
-    expect(boxes.hit.right).toBeCloseTo(boxes.switch.right + gap / 2, 0);
+    // The hit area grows to 44 px on every side, over the link's start.
+    expect(boxes.hit.right).toBeGreaterThan(boxes.link.left);
     expect(boxes.hit.bottom - boxes.hit.top).toBeCloseTo(44, 0);
     const y = (boxes.switch.top + boxes.switch.bottom) / 2;
-    // 2 px inside the link: the link's. A tap in the gap is the engine's to
-    // adjust: WebKit moves it to the nearest target that takes taps.
+    // 2 px inside the link: the link is nearer, so the tap does nothing.
     await tapForClick(driver, {x: boxes.link.left + 2, y});
     await expect(input).not.toBeChecked();
-    await expect(page).toHaveURL(/#wifi-details$/);
+    await expect(page).not.toHaveURL(/#wifi-details$/);
     // 1.5 px from the switch: the switch's.
     await tapForClick(driver, {x: boxes.switch.right + 1.5, y});
     await expect(input).toBeChecked();
