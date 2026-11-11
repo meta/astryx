@@ -36,6 +36,7 @@ from the monorepo and writes typed TypeScript registries to `src/generated/`.
 | `themeRegistry.ts`            | Installed `@astryxdesign/theme-*` packages         | Built theme objects, keyed by package name                    |
 | `showcaseRegistry.ts`         | Blocks with `isShowcase`                           | Copied showcase source files                                  |
 | `exampleRegistry.ts`          | Blocks with `exampleFor`                           | Copied example blocks per component                           |
+| `searchIndex.ts`              | The CLI's search, run in this site's project       | The candidates the search API ranks                           |
 
 The `src/generated/` directory is gitignored. Pages import from these registries
 and render whatever the pipeline found, with no manual wiring needed.
