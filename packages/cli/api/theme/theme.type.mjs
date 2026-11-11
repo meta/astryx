@@ -101,8 +101,7 @@
  *   added. Omitted for a local theme, and for remove and use.
  * `notes` is present only when the command did more than its change says:
  * it chose between a local and a package theme with one slug, replaced a
- * recorded owner, dropped a recorded theme whose source is gone, or chose a
- * new default.
+ * recorded owner, or dropped a recorded theme whose source is gone.
  * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean}, notes?: string[]}} data
  */
 

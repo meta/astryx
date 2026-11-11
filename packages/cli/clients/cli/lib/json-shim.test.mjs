@@ -152,6 +152,19 @@ describe('help <command words>', () => {
     );
   });
 
+  it('keeps Commander help when the private dispatch method is missing', async () => {
+    const {resolveDeepHelp} = await import('../index.mjs');
+    const withMethod = /** @type {any} */ (new Command());
+    const original = withMethod._dispatchHelpCommand;
+    resolveDeepHelp(withMethod);
+    expect(withMethod._dispatchHelpCommand).not.toBe(original);
+
+    const without = /** @type {any} */ (new Command());
+    without._dispatchHelpCommand = undefined;
+    expect(() => resolveDeepHelp(without)).not.toThrow();
+    expect(without._dispatchHelpCommand).toBeUndefined();
+  });
+
   it('stops at the deepest known word', async () => {
     const {status, stdout} = await runCli(['help', 'theme', 'nope']);
     expect(status).toBe(0);

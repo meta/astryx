@@ -154,6 +154,24 @@ describe('themeUse', () => {
     ).toEqual({ocean: '@acme/themes', reef: '@acme/themes'});
   });
 
+  it('names the reason when an added local theme fails validation', async () => {
+    addLocalTheme('mint');
+    await themeAdd('mint', {cwd: tmpDir});
+    const descriptor = path.join(tmpDir, 'src/themes/mint/mintTheme.doc.mjs');
+    fs.writeFileSync(
+      descriptor,
+      fs
+        .readFileSync(descriptor, 'utf-8')
+        .replace("name:'mint'", "name:'other'"),
+    );
+    await expect(themeUse('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message: expect.stringMatching(
+        /^Local theme "mint" in src\/themes\/mint is broken: .*names "other" but its directory is "mint"/,
+      ),
+    });
+  });
+
   it('keeps refusing when a local theme folder is broken but present', async () => {
     addLocalTheme('mint');
     await themeAdd('mint', {cwd: tmpDir});

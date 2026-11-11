@@ -149,7 +149,28 @@ export async function listAvailableThemeState(cwd = process.cwd()) {
  * @returns {Promise<import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme[]>}
  */
 export async function listAvailableThemes(cwd = process.cwd(), options = {}) {
-  return (await availableThemeState(cwd, options)).themes;
+  const {themes, skipped} = await availableThemeState(cwd, options);
+  skippedLocalThemesOf.set(themes, skipped);
+  return themes;
+}
+
+/**
+ * The broken local folders left out of each list `listAvailableThemes`
+ * returned, so a recorded theme that is only broken reports its reason.
+ * @type {WeakMap<object, SkippedLocalTheme[]>}
+ */
+const skippedLocalThemesOf = new WeakMap();
+
+/**
+ * The error for a local theme folder that fails validation.
+ * @param {SkippedLocalTheme} broken
+ */
+function brokenLocalThemeError(broken) {
+  return new AstryxError(
+    `Local theme "${broken.slug}" in ${broken.path} is broken: ${broken.reason}`,
+    undefined,
+    ERROR_CODES.ERR_THEME_INVALID,
+  );
 }
 
 /** @param {unknown} error */
@@ -614,11 +635,7 @@ export async function findTheme(slug, options = {}) {
     broken &&
     (options.package == null || options.package === LOCAL_THEME_ROOT)
   ) {
-    throw new AstryxError(
-      `Local theme "${broken.slug}" in ${broken.path} is broken: ${broken.reason}`,
-      undefined,
-      ERROR_CODES.ERR_THEME_INVALID,
-    );
+    throw brokenLocalThemeError(broken);
   }
   if (matches.length === 0 && options.package != null) {
     const packageIssue = issues.find(
@@ -706,6 +723,10 @@ export function resolveRecordedThemes(state, available) {
       candidate =>
         candidate.slug === slug && themeImportPackage(candidate) === owner,
     );
+    const broken = isLocalThemeOwner(owner)
+      ? skippedLocalThemesOf.get(available)?.find(entry => entry.slug === slug)
+      : undefined;
+    if (!theme && broken) throw brokenLocalThemeError(broken);
     if (!theme) {
       throw new AstryxError(
         `Added theme "${slug}" from ${owner} is unavailable. Reinstall the package or restore the local theme, or drop it with \`${formatCliCommand(`theme remove ${slug}`, state.projectDir)}\`.`,

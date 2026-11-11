@@ -405,8 +405,10 @@ export function commandsForArgs(program, argv) {
  * for this; the override wraps its help dispatch and falls back to it.
  * @param {import('commander').Command} program
  */
-function resolveDeepHelp(program) {
+export function resolveDeepHelp(program) {
   const root = /** @type {any} */ (program);
+  // A Commander release without this method keeps its own help dispatch.
+  if (typeof root._dispatchHelpCommand !== 'function') return;
   const dispatch = root._dispatchHelpCommand.bind(root);
   root._dispatchHelpCommand = (/** @type {string | undefined} */ name) => {
     const words = (root.args ?? [])
