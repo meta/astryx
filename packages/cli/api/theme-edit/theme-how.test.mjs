@@ -1637,6 +1637,29 @@ const QUESTIONS_3 = [
     {top: /^set q border none --on inputs$/, adds: /\.border=none/},
   ],
   ['swap Inter for Manrope everywhere', {top: /^set q font manrope$/}],
+  // a swap only between two values of one kind; other words are kept
+  [
+    'replace the shadow on cards with a border',
+    {
+      top: /^set q box-shadow none --on card && set q border "1px solid var\(--color-border\)" --on card$/,
+      adds: /card\.base\.boxShadow=none[\s\S]*card\.base\.border=1px solid/,
+    },
+  ],
+  [
+    'switch off the shadow on cards with a border',
+    {
+      top: /^set q box-shadow none --on card && set q border "1px solid var\(--color-border\)" --on card$/,
+      adds: /card\.base\.boxShadow=none/,
+    },
+  ],
+  [
+    'switch the buttons to pill shape with bold text',
+    {
+      top: /^set q corners pill --on button && set q font-weight 700 --on button$/,
+      adds: /button\.base\.fontWeight=700/,
+    },
+  ],
+  ['make the switch green', {top: /^set q background "#16a34a" --on switch$/}],
   [
     'all radius values are 0, it is very sharp',
     {top: /^set q corners square$/, adds: /--radius-element=0px/},

@@ -568,7 +568,11 @@ const PARTS = [
     {on: 'inputs'},
   ],
   [/\b(checkbox(es)?|check ?marks?)\b/, {on: 'checks'}],
-  [/\b(toggles?|switch(es)?)\b/, {on: 'switch'}],
+  // "switch off", "switch the buttons to" are the verb, not the part.
+  [
+    /\b(toggles?|switch(es)?(?! (off|on|to|the|out|it|them|over|back|from)\b))\b/,
+    {on: 'switch'},
+  ],
   [/\b(table rows?|rows?|tables?)\b/, {on: 'table-row'}],
   [/\btabs?\b/, {on: 'tab'}],
   [/\b(badges?|chips?|tags?)\b/, {on: 'badge'}],
@@ -853,6 +857,25 @@ function clausesOf(q) {
 }
 
 /**
+ * Whether a few words name a color or a font, for "swap A for B".
+ * @param {string} words lower-case
+ * @returns {'color' | 'font' | undefined}
+ */
+function valueKind(words) {
+  const w = words.trim();
+  if (parseColor(w) || Object.hasOwn(HUES, w)) return 'color';
+  const slug = w.replace(/\s+/g, '-');
+  if (
+    Object.hasOwn(OPEN_FONTS, slug) ||
+    Object.hasOwn(FONTS, slug) ||
+    Object.values(OPEN_FONTS).some(f => f.family.toLowerCase() === w) ||
+    Object.values(FONTS).some(f => String(f[0]).toLowerCase() === w)
+  )
+    return 'font';
+  return undefined;
+}
+
+/**
  * Answer a plain-words question with drafts of commands.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_how-commands.mjs').HowTheme} env
@@ -928,10 +951,21 @@ export function draftAnswer(ctx, env, question) {
     // A shadow's layers stay one value: the comma between them is not a
     // clause break.
     .replace(/\)\s*,\s*(?=(?:inset\s+)?-?\d)/g, ')\u2e34 ')
-    // "swap Inter for Manrope", "replace X with Y": Y is the ask.
+    // "replace the shadow on cards with a border": no shadow, and a border.
     .replace(
-      /\b(?:swap|replace|switch)\s+(?:out\s+)?[^,;]+?\s+(?:for|with)\s+/g,
-      'use ',
+      /\b(?:replace|swap)\s+(?:out\s+)?(?:the\s+)?((?:shadows?|borders?|gradients?|underlines?|outlines?)\b[^,;]*?)\s+(?:with|for)\s+/g,
+      'no $1 ; ',
+    )
+    // "swap Inter for Manrope", "replace red with #e11d48": B is the ask,
+    // but only when A and B are the same kind of value. "Replace the shadow
+    // with a border" keeps both words.
+    .replace(
+      /\b(?:swap|replace|switch)\s+(?:out\s+)?(?:the\s+)?([^,;]+?)\s+(?:for|with)\s+(?=(#[0-9a-f]{3,8}\b|[a-z][\w-]*(?:\s+[a-z][\w-]*)?))/g,
+      (m, a, b) => {
+        const kind = valueKind(a) ?? null;
+        const bKind = valueKind(b) ?? valueKind(b.split(/\s+/)[0]);
+        return kind && kind === bKind ? 'use ' : m;
+      },
     )
     // "bg #fff text #000": a new color after a color starts a new ask.
     .replace(
