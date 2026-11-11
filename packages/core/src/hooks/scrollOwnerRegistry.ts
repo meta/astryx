@@ -15,8 +15,8 @@ export interface RegisteredScrollOwnerState {
   block: RegisteredScrollAxisState;
 }
 
-// Shared by every copy of Core, so a swizzled AppShell's keyboard delegation
-// yields to a package ScrollableArea inside it, and the reverse.
+// Every copy of Core uses this one map. A copied AppShell then sees the
+// scroll regions that package components register, and the reverse.
 const owners = sharedWeakMap<HTMLElement, RegisteredScrollOwnerState>(
   'hooks/scroll-owner-registry/owners',
   1,

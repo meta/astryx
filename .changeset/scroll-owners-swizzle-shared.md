@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A swizzled AppShell now leaves the keyboard to the package's scrolling regions inside it (ScrollableArea, Table, CodeBlock, Tokenizer, BottomSheet). Before, the copy kept its own record of registered scroll regions, which the package's regions never wrote to, so the copy yielded only to a region the browser reported as overflowing, not to every registered region as the package's AppShell does. No API changes.
+[fix] In a swizzled AppShell, the first Tab into the main region now stops on the region, as in the package's AppShell, when its first link or button sits inside a package scroll region that does not overflow (ScrollableArea, Table, CodeBlock, Tokenizer, BottomSheet), and the reverse. Arrow and Page keys are unchanged. No API changes.
 
 @cixzhang
