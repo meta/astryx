@@ -303,128 +303,130 @@ const SHIPPED_THEMES = [
   'y2k',
 ] as const;
 
+// Close, Previous, Next and the Counter sit on Lightbox's backing, with or
+// without zoom. A white photo the shape of the screen lies under each one.
+const CONTROL_STORIES = [
+  {story: 'gallery', open: ['img', 'Forest path']},
+  {story: 'gallery-with-zoom', open: ['button', 'Open gallery with zoom']},
+  {story: 'default', open: ['button', 'Open lightbox']},
+  {story: 'with-zoom', open: ['button', 'Open with zoom']},
+] as const;
+
 for (const theme of SHIPPED_THEMES) {
-  test(`over a zoomed light photo, Close, Previous, Next and the counter keep their contrast (${theme})`, async ({
-    page,
-  }) => {
-    await page.route('https://picsum.photos/**', async route =>
-      route.fulfill({
-        contentType: 'image/svg+xml',
-        body: '<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="#fff"/></svg>',
-      }),
-    );
-    // Storybook's theme global applies from the story's first render.
-    await page.goto(
-      `${storybook()}/iframe.html?id=core-lightbox--gallery-with-zoom&viewMode=story&globals=astryxTheme:${theme}`,
-    );
-    await page.locator('#storybook-root > *').first().waitFor();
-    await frames(page, 2);
-    const driver = await touchDriver(page);
-    const tapOn = async (locator: Locator) => {
-      const b = await locator.boundingBox();
-      if (b == null) {
-        throw new Error('nothing to tap');
-      }
-      await driver.tap({x: b.x + b.width / 2, y: b.y + b.height / 2});
-    };
-    await tapOn(page.getByRole('button', {name: 'Open gallery with zoom'}));
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
-    // The second photo, so both Previous and Next show. The tap leaves Next
-    // hovered, as a phone does, where a theme may restyle its background.
-    await tapOn(dialog.getByRole('button', {name: 'Next'}));
-    await expect(dialog.getByText('2 / 4')).toBeVisible();
-    const img = dialog.getByRole('img', {name: 'Mountain lake'});
-    // The stage, and whatever moved inside it to show the second photo, rests.
-    await waitForRest(dialog.getByRole('button', {name: 'Zoom'}));
-    const rect = await img.boundingBox();
-    if (rect == null) {
-      throw new Error('no photo');
-    }
-    await driver.play(
-      doubleTap({x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}),
-      DOUBLE_TAP,
-    );
-    await expect
-      .poll(async () =>
-        img.evaluate(el => parseFloat(getComputedStyle(el).scale) || 1),
-      )
-      .toBeGreaterThan(1.5);
-    await waitForRest(img);
-    const zoomed = await img.boundingBox();
-    const controls = [
-      {name: 'Close', locator: dialog.getByRole('button', {name: 'Close'})},
-      {
-        name: 'Previous',
-        locator: dialog.getByRole('button', {name: 'Previous'}),
-      },
-      {name: 'Next', locator: dialog.getByRole('button', {name: 'Next'})},
-    ];
-    const counter = dialog.getByText('2 / 4');
-    const boxes = await Promise.all(
-      [...controls.map(c => c.locator), counter].map(async l =>
-        l.boundingBox(),
-      ),
-    );
-    // Present, painted and over the photo: the zoomed photo covers every box.
-    for (const box of boxes) {
-      expect(box).not.toBeNull();
-      expect(zoomed).not.toBeNull();
-      if (box == null || zoomed == null) {
-        return;
-      }
-      expect(box.width * box.height).toBeGreaterThan(0);
-      expect(zoomed.x).toBeLessThanOrEqual(box.x);
-      expect(zoomed.y).toBeLessThanOrEqual(box.y);
-      expect(zoomed.x + zoomed.width).toBeGreaterThanOrEqual(box.x + box.width);
-      expect(zoomed.y + zoomed.height).toBeGreaterThanOrEqual(
-        box.y + box.height,
+  for (const {story, open} of CONTROL_STORIES) {
+    test(`over a white photo, Close, Previous, Next and the counter keep their contrast (${story}, ${theme})`, async ({
+      page,
+    }) => {
+      const screen = page.viewportSize() ?? {width: 0, height: 0};
+      await page.route('https://picsum.photos/**', async route =>
+        route.fulfill({
+          contentType: 'image/svg+xml',
+          body: `<svg xmlns="http://www.w3.org/2000/svg" width="${screen.width * 3}" height="${screen.height * 3}"><rect width="100%" height="100%" fill="#fff"/></svg>`,
+        }),
       );
-    }
-    const shot = PNG.sync.read(await page.screenshot());
-    const scale = shot.width / (page.viewportSize()?.width ?? shot.width);
-    const ratios: Record<string, number> = {};
-    for (const [i, {name, locator}] of controls.entries()) {
-      const box = boxes[i];
-      if (box == null) {
-        return;
+      // Storybook's theme global applies from the story's first render.
+      await page.goto(
+        `${storybook()}/iframe.html?id=core-lightbox--${story}&viewMode=story&globals=astryxTheme:${theme}`,
+      );
+      await page.locator('#storybook-root > *').first().waitFor();
+      await frames(page, 2);
+      const driver = await touchDriver(page);
+      const tapOn = async (locator: Locator) => {
+        const b = await locator.boundingBox();
+        if (b == null) {
+          throw new Error('nothing to tap');
+        }
+        await driver.tap({x: b.x + b.width / 2, y: b.y + b.height / 2});
+      };
+      await tapOn(page.getByRole(open[0], {name: open[1]}).first());
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      const isGallery = story.startsWith('gallery');
+      if (isGallery) {
+        // The second photo, so both Previous and Next show. The tap leaves
+        // Next hovered, as a phone does, where a theme may restyle its
+        // background.
+        await tapOn(dialog.getByRole('button', {name: 'Next'}));
+        await expect(dialog.getByText('2 / 4')).toBeVisible();
+        await waitForRest(
+          dialog.locator('[data-lightbox-page]').first().locator('..'),
+        );
       }
-      // The icon's own colour: a theme may restyle the button around it.
-      const fg = parseRgb(
-        await locator.evaluate(
-          el => getComputedStyle(el.querySelector('svg') ?? el).color,
+      const img = dialog.getByRole('img', {
+        name: isGallery ? 'Mountain lake' : 'Forest path',
+      });
+      await waitForRest(img);
+      const fitted = await img.boundingBox();
+      const controls = (
+        isGallery ? ['Close', 'Previous', 'Next'] : ['Close']
+      ).map(name => ({name, locator: dialog.getByRole('button', {name})}));
+      const counter = dialog.getByText('2 / 4');
+      const boxes = await Promise.all(
+        [...controls.map(c => c.locator), ...(isGallery ? [counter] : [])].map(
+          async l => l.boundingBox(),
         ),
       );
-      // A ring between the icon and the button's edge: what the icon sits on.
-      const centre = {x: box.x + box.width / 2, y: box.y + box.height / 2};
-      const radius = Math.min(box.width, box.height) * 0.34;
-      const ring = Array.from({length: 8}, (_, k) => ({
-        x: centre.x + radius * Math.cos((k * Math.PI) / 4),
-        y: centre.y + radius * Math.sin((k * Math.PI) / 4),
-      }));
-      ratios[name] = contrast(fg, lightestAt(shot, scale, ring));
-    }
-    const counterBox = boxes[controls.length];
-    if (counterBox == null) {
-      return;
-    }
-    const counterFg = parseRgb(
-      await counter.evaluate(el => getComputedStyle(el).color),
-    );
-    // Just inside the counter's box, beside its text.
-    const beside = [
-      {x: counterBox.x + 2, y: counterBox.y + counterBox.height / 2},
-      {
-        x: counterBox.x + counterBox.width - 2,
-        y: counterBox.y + counterBox.height / 2,
-      },
-    ];
-    ratios.counter = contrast(counterFg, lightestAt(shot, scale, beside));
-    for (const {name} of controls) {
-      expect(ratios[name], name).toBeGreaterThanOrEqual(3);
-    }
-    expect(ratios.counter, 'counter').toBeGreaterThanOrEqual(4.5);
-  });
+      // Present, painted and over the photo: the photo covers every box.
+      for (const box of boxes) {
+        expect(box).not.toBeNull();
+        expect(fitted).not.toBeNull();
+        if (box == null || fitted == null) {
+          return;
+        }
+        expect(box.width * box.height).toBeGreaterThan(0);
+        expect(fitted.x).toBeLessThanOrEqual(box.x);
+        expect(fitted.y).toBeLessThanOrEqual(box.y);
+        expect(fitted.x + fitted.width).toBeGreaterThanOrEqual(
+          box.x + box.width,
+        );
+        expect(fitted.y + fitted.height).toBeGreaterThanOrEqual(
+          box.y + box.height,
+        );
+      }
+      const shot = PNG.sync.read(await page.screenshot());
+      const scale = shot.width / (screen.width || shot.width);
+      const ratios: Record<string, number> = {};
+      for (const [i, {name, locator}] of controls.entries()) {
+        const box = boxes[i];
+        if (box == null) {
+          return;
+        }
+        // The icon's own colour: a theme may restyle the button around it.
+        const fg = parseRgb(
+          await locator.evaluate(
+            el => getComputedStyle(el.querySelector('svg') ?? el).color,
+          ),
+        );
+        // A ring between the icon and the button's edge: what the icon sits on.
+        const centre = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+        const radius = Math.min(box.width, box.height) * 0.34;
+        const ring = Array.from({length: 8}, (_, k) => ({
+          x: centre.x + radius * Math.cos((k * Math.PI) / 4),
+          y: centre.y + radius * Math.sin((k * Math.PI) / 4),
+        }));
+        ratios[name] = contrast(fg, lightestAt(shot, scale, ring));
+      }
+      const counterBox = boxes[controls.length];
+      if (counterBox != null) {
+        const counterFg = parseRgb(
+          await counter.evaluate(el => getComputedStyle(el).color),
+        );
+        // Just inside the counter's box, beside its text.
+        const beside = [
+          {x: counterBox.x + 2, y: counterBox.y + counterBox.height / 2},
+          {
+            x: counterBox.x + counterBox.width - 2,
+            y: counterBox.y + counterBox.height / 2,
+          },
+        ];
+        ratios.counter = contrast(counterFg, lightestAt(shot, scale, beside));
+        expect(ratios.counter, 'counter').toBeGreaterThanOrEqual(4.5);
+      }
+      for (const {name} of controls) {
+        expect(ratios[name], name).toBeGreaterThanOrEqual(3);
+      }
+    });
+  }
 }
 
 test('the stage fills the phone screen and fits the photo', async ({page}) => {
