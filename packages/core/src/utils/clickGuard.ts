@@ -30,9 +30,9 @@
 //
 // The menu press model's arm at a finger's release also cancels that touch's
 // `touchend`, so the browser creates no click and no compatibility mouse
-// events. It names the touch by its identifier, so another finger's
-// `touchend` passes. A busy main thread can otherwise hold that click past the window,
-// when a drill-in has put another row under the finger.
+// events. A busy main thread can otherwise hold that click past the window,
+// when a drill-in has put another row under the finger. The guard names the
+// touch by its identifier, so another finger's `touchend` passes.
 //
 // Some clicks always pass:
 // - a click with `detail` 0: a keyboard's, a screen reader's, or one that the
@@ -160,7 +160,7 @@ export function armClickGuard(
       'touchend',
       event => {
         if (touchIdentifier != null && !endsTouch(event, touchIdentifier)) {
-          // Another finger lifted: its touchend and its click are its own.
+          // Another finger lifted: leave its touchend.
           return;
         }
         stopTouchEnd();
