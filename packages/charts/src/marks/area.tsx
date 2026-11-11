@@ -6,9 +6,8 @@
  *
  * Missing / non-finite values (including gaps in a stacked baseline) become
  * holes via d3's `.defined()` rather than collapsing to zero. The gradient id
- * carries the chart's id plus the series' collision-free `_uid`, so neither
- * overlapping areas in one chart nor two charts over the same dataKey ever
- * share (and steal) each other's fill.
+ * joins the chart id and the series `_uid`, so two areas or two charts over
+ * one key never share a fill.
  */
 
 import {
@@ -107,9 +106,6 @@ export function area(dataKey: string, options: AreaOptions = {}): SeriesDef {
         .curve(curveFactory);
       const strokeD = lineGen(resolved) ?? '';
 
-      // Unique per chart instance (plus per series within it), so neither two
-      // areas over the same dataKey nor two charts over the same key share a
-      // gradient id (which would make one steal the other's fill).
       const seriesToken = (seriesDef._uid ?? dataKey).replace(
         /[^a-zA-Z0-9_-]/g,
         '-',

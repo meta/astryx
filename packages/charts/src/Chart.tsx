@@ -163,10 +163,8 @@ export function Chart({
   const chartId = useId();
   const descId = `${chartId}-desc`;
   // useId() can contain ':' which is invalid in an SVG url(#id) reference.
-  const clipId = `plot-${chartId.replace(/:/g, '')}`;
-  // Same sanitized token for marks that define their own url(#…) ids, so two
-  // charts over the same key never share a def.
   const seriesChartId = chartId.replace(/:/g, '');
+  const clipId = `plot-${seriesChartId}`;
   const containerRef = useRef<HTMLDivElement>(null);
   const mergedContainerRef = useMergedRefs(containerRef, ref);
   const svgRef = useRef<SVGSVGElement>(null);
