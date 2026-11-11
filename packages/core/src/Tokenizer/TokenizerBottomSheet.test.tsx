@@ -1414,10 +1414,9 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(trigger).toHaveAccessibleDescription(/Pick some/);
     expect(ref.current).toBe(trigger);
     // The label points at the trigger.
-    expect(screen.getByText('Tags', {selector: 'label'})).toHaveAttribute(
-      'for',
-      'tags-field',
-    );
+    expect(
+      screen.getByText('Tags', {selector: 'label > span'}).parentElement!,
+    ).toHaveAttribute('for', 'tags-field');
     fireEvent.focus(trigger);
     expect(onFocus).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(trigger, {key: 'ArrowDown'});

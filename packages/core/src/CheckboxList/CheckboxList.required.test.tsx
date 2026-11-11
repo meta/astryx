@@ -68,7 +68,7 @@ describe('CheckboxList isRequired', () => {
       </CheckboxList>,
     );
     expect(
-      within(screen.getByText('Topics')).getByText('Required'),
+      within(screen.getByText('Topics').parentElement!).getByText('Required'),
     ).toBeInTheDocument();
   });
 

@@ -32,7 +32,6 @@ import type {InputStatusType} from '../Field/types';
 import {useEntryAnimation} from '../hooks/useEntryAnimation';
 import {themeProps} from '../utils/themeProps';
 import {textDirectionProps} from '../utils/textDirection';
-import {useDirection} from '../i18n/useDirection';
 import {Icon} from '../Icon/Icon';
 import type {IconName} from '../Icon';
 import type {FieldStatusVariantMap} from './index';
@@ -219,11 +218,10 @@ export function FieldStatus({
   // when a status appears (and whole forms can mount with a server-side
   // validation error already present), and both cases must be heard.
   useFieldStatusAnnouncement(message, type);
-  // On a right-to-left page, plain text with no right-to-left letter keeps its
-  // written order. The direction goes on an inner span, so the box and the
-  // glyph still follow the page. A left-to-right page needs no span.
-  const isRtl = useDirection() === 'rtl';
-  const dir = isRtl ? textDirectionProps(message).dir : undefined;
+  // Plain text with no right-to-left letter keeps its written order on a
+  // right-to-left page. The direction goes on an inner span, so the box and
+  // the glyph still follow the page.
+  const {dir} = textDirectionProps(message);
   const messageText = dir == null ? message : <span dir={dir}>{message}</span>;
 
   return (

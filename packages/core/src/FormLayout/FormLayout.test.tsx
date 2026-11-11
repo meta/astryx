@@ -438,8 +438,8 @@ describe('FormLayout', () => {
 
     // The label and input wrapper should be direct grid-participating children
     // (via display:contents on the Field wrapper)
-    const nameLabel = screen.getByText('Name');
-    const emailLabel = screen.getByText('Email');
+    const nameLabel = screen.getByText('Name').parentElement!;
+    const emailLabel = screen.getByText('Email').parentElement!;
     expect(nameLabel.tagName).toBe('LABEL');
     expect(emailLabel.tagName).toBe('LABEL');
 

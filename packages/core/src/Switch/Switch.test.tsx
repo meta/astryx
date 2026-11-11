@@ -359,7 +359,9 @@ describe('Switch', () => {
       />,
     );
     const switchEl = screen.getByRole('switch');
-    const description = screen.getByText('Enables sync for this row');
+    const description = screen.getByText(
+      'Enables sync for this row',
+    ).parentElement!;
     expect(description.id).not.toBe('');
     expect(switchEl.getAttribute('aria-describedby')).toContain(description.id);
   });
@@ -1107,7 +1109,9 @@ describe('Switch', () => {
         </>,
       );
       const control = screen.getByRole('switch');
-      const description = screen.getByText('Sends a daily digest');
+      const description = screen.getByText(
+        'Sends a daily digest',
+      ).parentElement!;
       expect(control.getAttribute('aria-describedby')?.split(' ')).toEqual([
         'external-hint',
         description.id,

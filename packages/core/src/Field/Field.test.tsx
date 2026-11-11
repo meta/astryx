@@ -15,7 +15,6 @@ import * as stylex from '@stylexjs/stylex';
 import {Field} from './Field';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
-import {InternationalizationProvider} from '../i18n';
 
 const testStyles = stylex.create({
   root: {
@@ -47,7 +46,9 @@ describe('Field', () => {
         </Field>,
       );
 
-      const status = screen.getByText('This username may be taken');
+      const status = screen.getByText(
+        'This username may be taken',
+      ).parentElement!;
       expect(
         getComputedStyle(status.parentElement!).getPropertyValue(
           '--_field-status-overlap',
@@ -66,7 +67,9 @@ describe('Field', () => {
       </Field>,
     );
 
-    const status = screen.getByText('This username may be taken');
+    const status = screen.getByText(
+      'This username may be taken',
+    ).parentElement!;
     const wrapper = status.parentElement!;
 
     expect(getComputedStyle(wrapper).isolation).toBe('isolate');
@@ -108,7 +111,7 @@ describe('Field', () => {
         <input id="email-input" aria-describedby="email-desc" />
       </Field>,
     );
-    const description = screen.getByText('Description text');
+    const description = screen.getByText('Description text').parentElement;
     expect(description).toHaveAttribute('id', 'email-desc');
   });
 
@@ -136,7 +139,7 @@ describe('Field', () => {
       </Field>,
     );
     // Description should still be in the DOM for screen readers
-    const description = screen.getByText('Search for items');
+    const description = screen.getByText('Search for items').parentElement!;
     expect(description).toBeInTheDocument();
     // But should have the visually-hidden styles applied
     expect(description.className).toContain('srOnly');
@@ -158,7 +161,7 @@ describe('Field', () => {
         <input id="email-input" />
       </Field>,
     );
-    const labelEl = screen.getByText('Email');
+    const labelEl = screen.getByText('Email').parentElement!;
     expect(labelEl.tagName).toBe('LABEL');
     expect(labelEl).toHaveAttribute('for', 'email-input');
   });
@@ -173,7 +176,7 @@ describe('Field', () => {
         <div role="radiogroup" aria-labelledby="plan-label" />
       </Field>,
     );
-    const labelEl = screen.getByText('Plan');
+    const labelEl = screen.getByText('Plan').parentElement!;
     // A group's accessible-name element must not be a literal <label>.
     expect(labelEl.tagName).toBe('SPAN');
     expect(labelEl.closest('label')).toBeNull();
@@ -200,7 +203,7 @@ describe('Field', () => {
         <input id="email-input" />
       </Field>,
     );
-    const description = screen.getByText('Description text');
+    const description = screen.getByText('Description text').parentElement;
     expect(description).toBeInTheDocument();
     expect(description).toHaveAttribute('id', 'email-input-desc');
   });
@@ -475,7 +478,7 @@ describe('Field', () => {
         <input id="my-input" />
       </Field>,
     );
-    expect(screen.getByText('Help text')).toHaveAttribute(
+    expect(screen.getByText('Help text').parentElement).toHaveAttribute(
       'id',
       'my-input-desc',
     );
@@ -490,7 +493,7 @@ describe('Field', () => {
         <input id="my-input" />
       </Field>,
     );
-    expect(screen.getByText('Required')).toHaveAttribute(
+    expect(screen.getByText('Required').parentElement).toHaveAttribute(
       'id',
       'my-input-status',
     );
@@ -653,7 +656,7 @@ describe('Field', () => {
       const field = screen.getByTestId('field');
       // With display:contents, the field's children participate in the parent grid.
       // The field should contain: label alignment wrapper + input wrapper div
-      const label = screen.getByText('Name');
+      const label = screen.getByText('Name').parentElement!;
       expect(label.tagName).toBe('LABEL');
       expect(field.contains(label)).toBe(true);
       expect(field.contains(screen.getByTestId('name'))).toBe(true);
@@ -671,7 +674,7 @@ describe('Field', () => {
         </Field>,
         {wrapper: horizontalLabelsWrapper},
       );
-      const descEl = screen.getByText("We won't share it");
+      const descEl = screen.getByText("We won't share it").parentElement!;
       const inputEl = screen.getByTestId('email');
       // Both description and input should be inside the same wrapper div (column 2)
       expect(descEl.parentElement).toBe(inputEl.parentElement);
@@ -688,7 +691,7 @@ describe('Field', () => {
         </Field>,
         {wrapper: horizontalLabelsWrapper},
       );
-      const statusEl = screen.getByText('Required');
+      const statusEl = screen.getByText('Required').parentElement!;
       const inputEl = screen.getByTestId('email');
       // Both status and input should be inside the same wrapper div (column 2)
       expect(statusEl.parentElement).toBe(inputEl.parentElement);
@@ -808,7 +811,7 @@ describe('Field caller text under a right-to-left page', () => {
 
   const renderField = (text: string) =>
     render(
-      <InternationalizationProvider locale="en" dir="rtl">
+      <div dir="rtl">
         <Field
           label={text}
           description={text}
@@ -817,7 +820,7 @@ describe('Field caller text under a right-to-left page', () => {
           statusVariant="detached">
           <input id="mixed" aria-describedby="mixed-desc" />
         </Field>
-      </InternationalizationProvider>,
+      </div>,
     );
 
   it('lays out a label, description and status with no right-to-left letter left to right', () => {
@@ -837,7 +840,7 @@ describe('Field caller text under a right-to-left page', () => {
     ).toHaveTextContent('Prefix https://');
   });
 
-  it('adds no span on a left-to-right page', () => {
+  it('marks plain text the same way on a left-to-right page, where it changes nothing', () => {
     render(
       <Field
         label="Prefix https://"
@@ -846,8 +849,12 @@ describe('Field caller text under a right-to-left page', () => {
         <input id="plain" />
       </Field>,
     );
-    expect(document.querySelector('label[for="plain"] [dir]')).toBeNull();
-    expect(document.querySelector('#plain-desc [dir]')).toBeNull();
+    expect(
+      document.querySelector('label[for="plain"] span[dir="ltr"]'),
+    ).toHaveTextContent('Prefix https://');
+    expect(screen.getByLabelText('Prefix https://')).toHaveAccessibleName(
+      'Prefix https://',
+    );
   });
 
   it('keeps the page direction for text with a right-to-left letter', () => {

@@ -437,7 +437,7 @@ describe('TextInput', () => {
       const describedBy = input.getAttribute('aria-describedby');
       expect(describedBy).toBeTruthy();
       // The status message should be reachable via the described-by ID
-      const messageElement = screen.getByText('Invalid email');
+      const messageElement = screen.getByText('Invalid email').parentElement!;
       expect(messageElement).toHaveAttribute('id');
       expect(describedBy).toContain(messageElement.id);
     });

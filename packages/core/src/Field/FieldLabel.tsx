@@ -33,7 +33,6 @@ import type {IconType} from '../Icon';
 import {InfoTip} from '../InfoTip/InfoTip';
 import {themeProps} from '../utils/themeProps';
 import {textDirectionProps} from '../utils/textDirection';
-import {useDirection} from '../i18n/useDirection';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useResolvedOptionality} from '../hooks/useResolvedRequired';
 import {
@@ -297,15 +296,11 @@ export function FieldLabel({
     disabled: !forwardsDescriptionClick,
   });
 
-  // On a right-to-left page, plain text with no right-to-left letter keeps its
-  // written order. The direction goes on an inner span, so the label's
-  // alignment and its marker still follow the page. A left-to-right page needs
-  // no span.
-  const isRtl = useDirection() === 'rtl';
-  const labelDir = isRtl ? textDirectionProps(label).dir : undefined;
-  const descriptionDir = isRtl
-    ? textDirectionProps(description).dir
-    : undefined;
+  // Plain text with no right-to-left letter keeps its written order on a
+  // right-to-left page. The direction goes on an inner span, so the label's
+  // alignment and its marker still follow the page.
+  const labelDir = textDirectionProps(label).dir;
+  const descriptionDir = textDirectionProps(description).dir;
   const labelContent = (
     <>
       {labelIcon && renderIconSlot(labelIcon, {size: 'sm', color: 'inherit'})}

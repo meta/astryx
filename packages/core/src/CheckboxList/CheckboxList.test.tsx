@@ -155,7 +155,7 @@ describe('CheckboxList', () => {
     // orphaned htmlFor.
     const group = screen.getByRole('group', {name: 'Preferences'});
     expect(group).toBeInTheDocument();
-    const label = screen.getByText('Preferences');
+    const label = screen.getByText('Preferences').parentElement!;
     expect(label.tagName).toBe('SPAN');
     expect(label.closest('label')).toBeNull();
     expect(label).not.toHaveAttribute('for');
@@ -179,7 +179,7 @@ describe('CheckboxList', () => {
         <CheckboxListItem label="Option A" value="a" />
       </CheckboxList>,
     );
-    const label = screen.getByText('Preferences');
+    const label = screen.getByText('Preferences').parentElement!;
     expect(within(label).getByText('Optional')).toBeInTheDocument();
     // A checkbox group has no required state to announce or validate.
     expect(
@@ -338,7 +338,11 @@ describe('CheckboxList', () => {
     ).not.toBeInTheDocument();
     // The text also exists in the checkbox's visually hidden <label>; target
     // the row's label <span> to click the row surface.
-    await user.click(screen.getByText('Option B', {selector: 'span'}));
+    await user.click(
+      screen
+        .getAllByText('Option B', {selector: 'span'})
+        .find(el => el.closest('label') == null)!,
+    );
 
     expect(handleClick).toHaveBeenCalledTimes(1);
     expect(handleChange).toHaveBeenCalledWith(['a', 'b']);
@@ -391,7 +395,11 @@ describe('CheckboxList', () => {
       );
       // The text also exists in the checkbox's visually hidden <label>;
       // target the row's label <span> to click the row surface.
-      await user.click(screen.getByText('Option B', {selector: 'span'}));
+      await user.click(
+        screen
+          .getAllByText('Option B', {selector: 'span'})
+          .find(el => el.closest('label') == null)!,
+      );
       expect(handleChange).toHaveBeenCalledTimes(1);
       expect(handleChange).toHaveBeenCalledWith(['a', 'b']);
     });
@@ -1130,7 +1138,11 @@ describe('CheckboxListItem ARIA props', () => {
     // With an onClick, a row-surface click still delegates to the checkbox.
     // The text also exists in the checkbox's visually hidden <label>; target
     // the row's label <span> to click the row surface.
-    fireEvent.click(within(itemA).getByText('Option A', {selector: 'span'}));
+    fireEvent.click(
+      within(itemA)
+        .getAllByText('Option A', {selector: 'span'})
+        .find(el => el.closest('label') == null)!,
+    );
     expect(onItemClick).toHaveBeenCalledTimes(1);
     fireEvent.click(checkboxA);
     expect(onItemClick).toHaveBeenCalledTimes(2);
@@ -1143,7 +1155,11 @@ describe('CheckboxListItem ARIA props', () => {
     // Without one, the read-only row does not delegate at all.
     const delegated = vi.fn();
     checkboxB.addEventListener('click', delegated);
-    fireEvent.click(within(itemB).getByText('Option B', {selector: 'span'}));
+    fireEvent.click(
+      within(itemB)
+        .getAllByText('Option B', {selector: 'span'})
+        .find(el => el.closest('label') == null)!,
+    );
     expect(delegated).not.toHaveBeenCalled();
     fireEvent.click(checkboxB);
     expect(checkboxB).not.toBeChecked();
