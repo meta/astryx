@@ -38,6 +38,10 @@ export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
   ref?: React.Ref<HTMLTableCellElement>;
   /** Specifies which cells this header relates to. */
   scope?: 'col' | 'row' | 'colgroup' | 'rowgroup';
+  /** Number of columns this header spans. Standard HTML `<th>` attribute. */
+  colSpan?: number;
+  /** Number of rows this header spans. Standard HTML `<th>` attribute. */
+  rowSpan?: number;
   children?: ReactNode;
   /**
    * StyleX styles for layout customization (margins, positioning, sizing).
