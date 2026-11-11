@@ -8,6 +8,7 @@
  */
 import {afterEach, describe, it, expect, vi} from 'vitest';
 import {act, cleanup, render, renderHook, screen} from '@testing-library/react';
+import {Profiler} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import * as TableApi from '@astryxdesign/core/Table';
 import {Table} from '../../Table';
@@ -833,5 +834,46 @@ describe('rows and columns windowing together', () => {
     await viewport.scrollBoth(0, 0);
     expect(document.activeElement).toBe(cell);
     expect(mountedRows(container)[0]).toHaveAttribute('aria-rowindex', '2');
+  });
+});
+
+describe('column range changes', () => {
+  it('renders only the cells of columns that enter the window', async () => {
+    const viewport = controlledViewport();
+    const reads = new Map<string, number>();
+    const items = data.map(item => {
+      const watched: Item = {id: item.id};
+      for (let i = 0; i < COLUMN_COUNT; i++) {
+        Object.defineProperty(watched, `c${i}`, {
+          enumerable: true,
+          get() {
+            reads.set(`c${i}`, (reads.get(`c${i}`) ?? 0) + 1);
+            return String(item[`c${i}`]);
+          },
+        });
+      }
+      return watched;
+    });
+    let commits = 0;
+    const {container} = render(
+      <Profiler id="table" onRender={() => commits++}>
+        <Fixture items={items} />
+      </Profiler>,
+    );
+    await settle();
+    const before = mountedKeys(container);
+    reads.clear();
+    commits = 0;
+    await viewport.scrollTo(300);
+    const after = mountedKeys(container);
+    const entering = after.filter(key => !before.includes(key));
+    expect(entering.length).toBeGreaterThan(0);
+    expect(after.length - entering.length).toBeGreaterThan(0);
+    expect(commits).toBeGreaterThan(0);
+    // One cell render per row for each entering column, none for the others.
+    expect([...reads.keys()].sort()).toEqual([...entering].sort());
+    for (const key of entering) {
+      expect(reads.get(key)).toBe(ROW_COUNT);
+    }
   });
 });

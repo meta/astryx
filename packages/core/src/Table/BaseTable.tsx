@@ -367,16 +367,51 @@ function TableRowInner<T extends Record<string, unknown>>({
       </CellComponent>
     );
   };
-  const cells =
-    columnSegments == null
-      ? columns.map(renderCell)
-      : columnSegments.flatMap(segment =>
-          segment.type === 'gap'
-            ? [renderColumnSpacer(segment)]
-            : columns
-                .slice(segment.start, segment.end)
-                .map((col, offset) => renderCell(col, segment.start + offset)),
-        );
+  // While columns window, a cell's element depends only on these inputs, so
+  // a column range change reuses the elements of cells that stay mounted.
+  // React skips an identical element, so only the cells that enter render.
+  const cellCache = useMemo(
+    () => ({
+      // The inputs the cached cells were built from.
+      inputs: [
+        item,
+        context,
+        plugins,
+        columns,
+        textOverflow,
+        rowHeight,
+        CellComponent,
+      ],
+      cells: new Map<TableColumn<T>, ReactElement>(),
+    }),
+    [item, context, plugins, columns, textOverflow, rowHeight, CellComponent],
+  );
+  const windowedCells = cellCache.cells;
+  let cells: ReactElement[];
+  if (columnSegments == null) {
+    cells = columns.map(renderCell);
+  } else {
+    const mounted = new Set<TableColumn<T>>();
+    cells = columnSegments.flatMap(segment =>
+      segment.type === 'gap'
+        ? [renderColumnSpacer(segment)]
+        : columns.slice(segment.start, segment.end).map((col, offset) => {
+            mounted.add(col);
+            let cell = windowedCells.get(col);
+            if (cell === undefined) {
+              cell = renderCell(col, segment.start + offset);
+              windowedCells.set(col, cell);
+            }
+            return cell;
+          }),
+    );
+    // Columns that left keep no element, so the cache stays bounded.
+    for (const col of windowedCells.keys()) {
+      if (!mounted.has(col)) {
+        windowedCells.delete(col);
+      }
+    }
+  }
 
   // Apply plugin transforms for row (with pre-rendered children).
   // Seed `aria-rowindex` (when the table opts into ARIA row indexing) as a
