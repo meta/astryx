@@ -110,8 +110,17 @@ function DialogClosedAfterSave() {
   );
 }
 
-/** How long after a change the program interrupts it, ms. */
-const INTERRUPT_AFTER_MS = 150;
+/**
+ * How long after the open the program closes it, ms: inside every scale's
+ * entrance.
+ */
+const CLOSE_AFTER_MS = 150;
+
+/**
+ * How long after the close the program reopens it, ms: inside every scale's
+ * exit (100 ms or more).
+ */
+const REOPEN_AFTER_MS = 50;
 
 function Interruptions() {
   const [isOpen, setIsOpen] = useState(false);
@@ -125,11 +134,11 @@ function Interruptions() {
     },
     [],
   );
-  const setOpenSoon = (next: boolean) => {
+  const setOpenSoon = (next: boolean, afterMs: number) => {
     if (timerRef.current != null) {
       clearTimeout(timerRef.current);
     }
-    timerRef.current = setTimeout(() => setIsOpen(next), INTERRUPT_AFTER_MS);
+    timerRef.current = setTimeout(() => setIsOpen(next), afterMs);
   };
   return (
     <Stack gap={2}>
@@ -137,7 +146,7 @@ function Interruptions() {
         label="Open, then close while it enters"
         onClick={() => {
           setIsOpen(true);
-          setOpenSoon(false);
+          setOpenSoon(false, CLOSE_AFTER_MS);
         }}
       />
       <Button label="Delete item" onClick={() => setIsOpen(true)} />
@@ -149,7 +158,7 @@ function Interruptions() {
         actionLabel="Reopen"
         onAction={() => {
           setIsOpen(false);
-          setOpenSoon(true);
+          setOpenSoon(true, REOPEN_AFTER_MS);
         }}
       />
     </Stack>
