@@ -304,26 +304,33 @@ const hoverStyles = `
    The closing band's doors and hand (closing band): two 40px doors —
    the primary told apart by its fill, the other raised in white with a
    soft shadow; the sparks in ink on the copy half. */
-
-@media(min-width:640px){}
-
+.cr11-door{display:flex;height:40px;align-items:center;justify-content:center;border-radius:var(--radius-element);padding-inline:20px;font-size:14px;font-weight:500;cursor:pointer;width:100%;}
+@media(min-width:640px){.cr11-door{width:auto;}}
+.cr11-door--primary{background:var(--color-accent);color:var(--color-on-accent);border:none;transition:background-color var(--duration-fast) var(--ease-standard);}
+.cr11-door--primary:hover{background:color-mix(in srgb,var(--color-accent) 80%,transparent);}
+.cr11-door--card{background:var(--color-background-card);color:var(--color-text-primary);border:none;box-shadow:var(--shadow-low);transition:box-shadow var(--duration-fast) var(--ease-standard);}
+.cr11-door--card:hover{box-shadow:var(--shadow-med);}
+.cr11-door:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:var(--focus-outline-offset);}
 /* the sparks: the large one over the heading's top-left, the small one in
    the strip between the risk line and the photograph */
-
-@media(min-width:640px){}
-@media(min-width:1024px){}
+.cr11-spark{position:absolute;pointer-events:none;fill:var(--color-text-primary);}
+.cr11-spark--lg{width:32px;inset-inline-start:4%;top:12px;}
+.cr11-spark--sm{width:24px;bottom:16px;inset-inline-end:8%;transform:rotate(16deg);}
+@media(min-width:640px){.cr11-spark--lg{width:44px;inset-inline-start:5%;top:20px;}.cr11-spark--sm{width:28px;}}
+@media(min-width:1024px){.cr11-spark--lg{inset-inline-start:4%;top:6%;}.cr11-spark--sm{inset-inline-end:auto;inset-inline-start:17%;bottom:8%;}}
 /* the squiggle over the photograph's edge from xl, the sprout off its top
    corner from lg — the hand's two wide-screen strokes */
-
-@media(min-width:1024px){}
+.cr11-squiggle{display:none;position:absolute;pointer-events:none;width:128px;color:var(--color-text-primary);z-index:1;}
+.cr11-sprout{display:none;position:absolute;pointer-events:none;width:64px;inset-inline-end:4px;top:8px;}
+@media(min-width:1024px){.cr11-sprout{display:block;}}
 @media(min-width:1280px){
-
+  .cr11-squiggle{display:block;inset-inline-start:calc(100% - 110px);top:42%;}
 }
 /* the photograph: the design's own crop ladder — the desk held in from
    the left edge on a phone, the chair's floor kept from sm */
-
-@media(min-width:640px){}
-@media(min-width:1024px){}
+.cr11-photoimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:15% 50%;}
+@media(min-width:640px){.cr11-photoimg{object-position:50% 100%;}}
+@media(min-width:1024px){.cr11-photoimg{object-position:15% 50%;}}
 /* the footer's cells: horizontal rules between them below lg, full-height
    rules and the 1.15/1/1/1.25 columns from it — the design's own cut.
    (Polish: the paddings were written camelCase — paddingInline and kin —
@@ -4502,6 +4509,202 @@ function ReachBar() {
   );
 }
 
+// ─── Closing CTA band (the design's closing band) ─────────────────────
+/** The closing band as the design draws it: a slab of the accent tint
+ *  holding the copy centred on one side and a photograph inset on the other
+ *  (stacked below lg), the two doors at one height — the primary told apart
+ *  by its fill, the other raised in white — and the design's hand: two
+ *  sparks on the copy half, the squiggle and the sprout taking the gap
+ *  along the photograph's edge from lg and xl. */
+const CLOSING_PHOTO = '/template-assets/light-scene-horizontal-1.png';
+
+// The design's spark: tapered rays, each a little longer or shorter than a
+// compass would leave it (the design's own path).
+const SPARKLE =
+  'M26.3 23.9Q24.3 14.7 23.2 2Q23 14.8 21.7 24.1ZM24.1 26.1Q31.6 24.2 42 23.1Q31.5 23 23.9 21.9ZM21.7 24Q23.5 32.8 24.4 45Q24.8 32.8 26.3 24ZM23.9 21.9Q16.8 23.7 7 24.6Q16.9 24.8 24.1 26.1Z';
+
+function ClosingCta() {
+  const sm = !useIsMobile(639);
+  const lg = !useIsMobile(1023);
+
+  // Two doors at one height (40px), stacked at one width on a phone until
+  // they fit side by side.
+  const doors = (
+    <div
+      style={{
+        marginTop: 36,
+        display: 'flex',
+        flexDirection: sm ? 'row' : 'column',
+        justifyContent: 'center',
+        gap: 12,
+        width: '100%',
+        maxWidth: sm ? 'none' : 320,
+      }}>
+      <button
+        type="button"
+        className="cr11-door cr11-door--primary"
+        onClick={() => {}}>
+        Start lesson one free
+      </button>
+      <button
+        type="button"
+        className="cr11-door cr11-door--card"
+        onClick={() => {}}>
+        Enroll for $89
+      </button>
+    </div>
+  );
+
+  return (
+    <section style={{width: '100%'}} aria-labelledby="closing-heading">
+      <div
+        style={{
+          display: 'grid',
+          isolation: 'isolate',
+          overflow: 'hidden',
+          borderRadius: 'var(--radius-container)',
+          // the design's bg-accent is its wash (hsl(30 8% 96.5%)), not
+          // the brand tint — a quiet slab, the photograph's own frame
+          background: 'var(--color-background-wash)',
+          padding: 8,
+          ...(lg ? {gridTemplateColumns: '1fr 1fr', minHeight: 544} : {}),
+        }}>
+        {/* the copy half, centred both ways, and the frame the hand is
+            drawn in */}
+        <div
+          style={{
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingInline: 24,
+            paddingTop: 56,
+            paddingBottom: 56,
+            textAlign: 'center',
+            ...(sm ? {paddingInline: 48} : {}),
+            ...(lg ? {paddingTop: 64, paddingBottom: 64} : {}),
+          }}>
+          {/* the design's hand: the large spark over the heading's
+              top-left, the small one in the strip between the risk line
+              and the photograph */}
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 48 48"
+            className="cr11-spark cr11-spark--lg">
+            <path d={SPARKLE} />
+          </svg>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 48 48"
+            className="cr11-spark cr11-spark--sm">
+            <path d={SPARKLE} />
+          </svg>
+          {/* the squiggle, drawn over the photograph's edge from xl: its
+              dot lands on the picture — the one place the hand touches
+              it — coiling twice round itself down the gap between the copy
+              and the photograph (the design's own path) */}
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 110 210"
+            fill="none"
+            className="cr11-squiggle">
+            <path
+              d="M40 6C58 20 70 40 62 60c-6 16-26 16-24 2 2-14 26-10 28 10 2 24-26 40-32 60-4 16 10 28 22 20 10-8 4-24-8-16-10 8 0 32 22 42 12 6 22 12 28 18"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+            <circle
+              cx="98"
+              cy="196"
+              r="9"
+              style={{fill: 'var(--color-accent)'}}
+            />
+          </svg>
+          {/* the sprout of three curved strokes in the brand hue, fanning
+              off the photograph's top corner from lg */}
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 70 70"
+            fill="none"
+            strokeLinecap="round"
+            className="cr11-sprout">
+            <g
+              strokeWidth="2.2"
+              style={{
+                stroke:
+                  'color-mix(in srgb, var(--color-accent), var(--color-on-accent))',
+              }}>
+              <path
+                d="M58 60C52 48 44 38 34 30"
+                vectorEffect="non-scaling-stroke"
+              />
+              <path
+                d="M62 50C62 38 60 26 56 12"
+                vectorEffect="non-scaling-stroke"
+              />
+              <path
+                d="M50 64C40 62 28 62 14 66"
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
+          </svg>
+
+          <Text
+            as="h2"
+            id="closing-heading"
+            style={sectionHeadingStyle(sm, lg)}>
+            Watch lesson one tonight. Decide in the morning.
+          </Text>
+          <p
+            style={{
+              margin: '20px 0 0',
+              maxWidth: 352,
+              fontSize: 16,
+              color: 'var(--color-text-secondary)',
+            }}>
+            It opens with the tutor beside it and the practice set under it, and
+            asks for no card. The other 9 lessons are $89 once, or part of Plus.
+          </p>
+
+          {doors}
+
+          <p
+            style={{
+              margin: '24px 0 0',
+              fontSize: 14,
+              color: 'var(--color-text-secondary)',
+            }}>
+            Your money back within 30 days.
+          </p>
+        </div>
+
+        {/* The photograph, inset from the band's edge by the band's own
+            padding so it reads as a picture held in it — the design's
+            own closing photograph, cropped per its own object-position
+            ladder. */}
+        <div
+          className="cr11-photo"
+          style={{
+            position: 'relative',
+            overflow: 'hidden',
+            borderRadius: 'calc(var(--radius-container) - 8px)',
+            minHeight: lg ? 0 : sm ? 448 : 288,
+          }}>
+          <img
+            src={CLOSING_PHOTO}
+            alt="A laptop on a white desk by a sunlit window, with shelves of books and plants and an orange armchair beside it"
+            className="cr11-photoimg"
+            loading="lazy"
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ─── FAQ (the design's FaqStepRows) ──────────────────────────────────────
 /** The questions people ask before they enrol: rows a whole container
  *  wide — the group label in caps, the question in the heading face, the
@@ -4871,6 +5074,7 @@ export default function CourseDetailTemplate() {
                   </VStack>
                   <RelatedRail />
                   <FaqStepRows />
+                  <ClosingCta />
                 </VStack>
               </LayoutContent>
             }
