@@ -5,7 +5,9 @@
  *   authored doc file.
  *
  * @input An absolute path to a `.doc.{ts,mjs,js}` (or legacy template) file.
- * @output The module's namespace object: the one a plain import of the file
+ * @output The module's exports: for a doc Astryx ships whose text matches its
+ *   stored exports, a non-extensible, namespace-like object built from them (see
+ *   `storedModule`); otherwise the namespace object a plain import of the file
  *   gives, until the file changes; then the edited file's, read once by each
  *   importer, its own way, and shared until the next change. A long-running
  *   process (a docs site's search, an agent harness) thereby sees an edit to
@@ -22,6 +24,7 @@
  *   whatever the local names; deliberate obfuscation is out of scope.
  */
 
+import * as fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {createJiti} from 'jiti';
 import {importUrl} from '../fs/import-url.mjs';
@@ -31,6 +34,12 @@ import {
   readInTurn,
 } from '../fs/module-loader.mjs';
 import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
+import {
+  readStore,
+  storedKey,
+  SHIPPED_ASSETS,
+  STORED_DOCS_FILE,
+} from './stored-docs.mjs';
 
 /** @type {ReturnType<typeof createJiti> | undefined} */
 let jsxJiti;
@@ -62,14 +71,70 @@ function importCurrent(file, kind, load, loadFresh) {
   let seen = imported.get(file);
   if (!seen) {
     imported.set(file, {stamp, changed: null});
-    return load(file);
+    return loadFirst(file, load);
   }
   if (seen.stamp !== stamp) {
     seen = {stamp, changed: {}};
     imported.set(file, seen);
   }
-  if (!seen.changed) return load(file);
+  if (!seen.changed) return loadFirst(file, load);
   return (seen.changed[kind] ??= loadFresh(file));
+}
+
+/**
+ * A doc file as first imported: a doc Astryx ships answers from its stored
+ * exports (STORED_DOCS_FILE), anything else is imported with `load`.
+ * @param {string} file
+ * @param {(file: string) => Promise<any>} load
+ * @returns {Promise<any>}
+ */
+function loadFirst(file, load) {
+  const stored = storedModule(file);
+  return stored ? Promise.resolve(stored) : load(file);
+}
+
+/**
+ * Each stored doc's module, by file, so every read of an unchanged file gets
+ * the same object, as an import of it does.
+ * @type {Map<string, {key: string, module: Record<string, unknown>}>}
+ */
+const storedModules = new Map();
+
+/**
+ * The module of a shipped doc file whose text has stored exports: an object
+ * shaped as its namespace (no prototype, the export names in order, tagged
+ * `Module`, closed to new names). Null for any other file.
+ * @param {string} file
+ * @returns {Record<string, unknown> | null}
+ */
+function storedModule(file) {
+  if (!file.startsWith(SHIPPED_ASSETS) || !file.endsWith('.doc.mjs')) {
+    return null;
+  }
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf-8');
+  } catch {
+    return null;
+  }
+  const key = storedKey(text);
+  const known = storedModules.get(file);
+  if (known?.key === key) return known.module;
+  const exports = readStore(STORED_DOCS_FILE).get(key);
+  if (!exports) return null;
+  /** @type {Record<string, unknown>} */
+  const module = Object.create(null);
+  for (const name of Object.keys(exports).sort()) {
+    Object.defineProperty(module, name, {
+      value: exports[name],
+      enumerable: true,
+      writable: true,
+    });
+  }
+  Object.defineProperty(module, Symbol.toStringTag, {value: 'Module'});
+  Object.preventExtensions(module);
+  storedModules.set(file, {key, module});
+  return module;
 }
 
 /**

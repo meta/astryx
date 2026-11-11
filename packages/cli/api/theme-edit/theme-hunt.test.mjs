@@ -639,7 +639,7 @@ describe('fix3: links, rollback, locks, paths', () => {
     fs.rmSync(path.join(cwd, 'themes/k3'), {recursive: true, force: true});
   }, 120_000);
 
-  it('a lock folder that cannot be written is refused, naming it', async () => {
+  it('a lock folder that cannot be written is refused, naming it; a read-only command runs without it', async () => {
     const dir = path.join(
       path.dirname(cwd),
       'node_modules/.cache/astryx-theme/locks',
@@ -647,9 +647,12 @@ describe('fix3: links, rollback, locks, paths', () => {
     fs.mkdirSync(dir, {recursive: true});
     fs.chmodSync(dir, 0o555);
     try {
-      const r = await refusal(() => themeEditShow('h', {cwd}));
+      const r = await refusal(() =>
+        themeEditSet('h', 'corners', 'pill', {cwd}),
+      );
       expect(r.code).toBe('ERR_WRITE_FAILED');
       expect(r.message).toContain('astryx-theme');
+      expect((await themeEditShow('h', {cwd})).data.theme).toBe('h');
     } finally {
       fs.chmodSync(dir, 0o755);
     }
@@ -669,5 +672,378 @@ describe('fix3: links, rollback, locks, paths', () => {
       fs.rmSync(path.join(cwd, 'package.json'));
       fs.rmSync(path.join(cwd, 'src'), {recursive: true, force: true});
     }
+  }, 120_000);
+});
+describe('hunt2: order and scope', () => {
+  it('an exact token wins over a later dial, and a changed setting goes last', async () => {
+    await themeEditNew('o1', {cwd});
+    await themeEditSet('o1', '--radius-element', '3px', {cwd});
+    await themeEditSet('o1', 'corners', 'large', {cwd});
+    expect(read('themes/o1/o1.css')).toMatch(/--radius-element: 3px/);
+    await themeEditSet('o1', 'background-color', '#00ff00', {
+      cwd,
+      on: 'button',
+    });
+    const r = await themeEditSet('o1', 'background', '#ff0000', {
+      cwd,
+      on: 'button',
+    });
+    expect(r.data.notes.join(' ')).toContain('comes after background-color');
+    await themeEditSet('o1', 'background-color', '#0000ff', {
+      cwd,
+      on: 'button',
+    });
+    const things = JSON.parse(read('themes/o1/o1.settings.json')).settings.map(
+      (/** @type {any} */ s) => s.thing,
+    );
+    expect(things.at(-1)).toBe('background-color');
+    fs.rmSync(path.join(cwd, 'themes/o1'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('a setting for both modes replaces the one-mode ones; one mode on a part with variants is refused', async () => {
+    await themeEditNew('o2', {cwd});
+    await themeEditSet('o2', '--color-background-surface', '#ff0000', {
+      cwd,
+      mode: 'dark',
+    });
+    const r = await themeEditSet(
+      'o2',
+      '--color-background-surface',
+      '#00ff00',
+      {
+        cwd,
+      },
+    );
+    expect(r.data.notes.join(' ')).toContain('replaces');
+    expect(
+      JSON.parse(read('themes/o2/o2.settings.json')).settings,
+    ).toHaveLength(1);
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('o2', 'background-color', '#00ff00', {
+            cwd,
+            on: 'button',
+            mode: 'light',
+          }),
+        )
+      ).code,
+    ).toBe('ERR_THEME_NO_MODE');
+    fs.rmSync(path.join(cwd, 'themes/o2'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('checks --when shape and group variants', async () => {
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('h', 'font-size', '13px', {
+            cwd,
+            on: 'button',
+            when: 'size:sm:x',
+          }),
+        )
+      ).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('h', 'font-size', '13px', {
+            cwd,
+            on: 'inputs',
+            when: 'nonsense:value',
+          }),
+        )
+      ).code,
+    ).toBe('ERR_THEME_UNKNOWN_VARIANT');
+  });
+
+  it('a step on a part starts from the whole-theme setting', async () => {
+    await themeEditNew('o3', {cwd});
+    await themeEditSet('o3', 'corners', 'large', {cwd});
+    const r = await themeEditSet('o3', 'corners', 'more', {cwd, on: 'card'});
+    expect(r.data.setting.value).toBe('round');
+    const pill = await themeEditSet('o3', 'corners', 'pill', {cwd});
+    expect(pill.data.changedTokens.join(' ')).toContain('--radius-inner');
+    expect(read('themes/o3/o3.css')).toMatch(/--radius-inner: 6px/);
+    fs.rmSync(path.join(cwd, 'themes/o3'), {recursive: true, force: true});
+  }, 240_000);
+});
+
+describe('hunt2: undo', () => {
+  it('names what it removes, refuses scope flags alone, and resets base', async () => {
+    await themeEditNew('u1', {cwd, like: 'neutral'});
+    await themeEditSet('u1', 'corners', 'large', {cwd});
+    expect(
+      (
+        await refusal(() =>
+          themeEditUndo('u1', {cwd, thing: 'corners', value: 'pill'}),
+        )
+      ).code,
+    ).toBe('ERR_THEME_NOT_SET');
+    expect(
+      (await refusal(() => themeEditUndo('u1', {cwd, on: 'card'}))).code,
+    ).toBe('ERR_MISSING_ARGUMENT');
+    const base = await themeEditUndo('u1', {cwd, thing: 'base'});
+    expect(base.data.setting.value).toBe('none');
+    fs.rmSync(path.join(cwd, 'themes/u1'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('removes a stored setting this Core does not know', async () => {
+    await themeEditNew('u2', {cwd});
+    const file = path.join(cwd, 'themes/u2/u2.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.settings.push({
+      thing: 'color',
+      value: 'red',
+      source: 'property',
+      on: 'gone-part',
+    });
+    fs.writeFileSync(file, JSON.stringify(data));
+    await themeEditUndo('u2', {cwd, thing: 'color', on: 'gone-part'});
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).settings).toEqual([]);
+    fs.rmSync(path.join(cwd, 'themes/u2'), {recursive: true, force: true});
+  }, 240_000);
+});
+
+describe('hunt2: files', () => {
+  it('show builds again when the settings were edited by hand', async () => {
+    await themeEditNew('s1', {cwd});
+    await themeEditSet('s1', 'corners', 'small', {cwd});
+    const file = path.join(cwd, 'themes/s1/s1.settings.json');
+    fs.writeFileSync(
+      file,
+      fs.readFileSync(file, 'utf8').replace('"small"', '"large"'),
+    );
+    await themeEditShow('s1', {cwd});
+    expect(read('themes/s1/s1.css')).toMatch(/--radius-element: 12px/);
+    fs.rmSync(path.join(cwd, 'themes/s1'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('reads a settings file with a BOM, refuses a link or a duplicate', async () => {
+    await themeEditNew('s2', {cwd});
+    const file = path.join(cwd, 'themes/s2/s2.settings.json');
+    const text = fs.readFileSync(file, 'utf8');
+    fs.writeFileSync(file, `\uFEFF${text}`);
+    await themeEditShow('s2', {cwd});
+    const data = JSON.parse(text);
+    const one = {thing: 'corners', value: 'small', source: 'dial'};
+    fs.writeFileSync(
+      file,
+      JSON.stringify({...data, settings: [one, {...one, value: 'large'}]}),
+    );
+    expect((await refusal(() => themeEditShow('s2', {cwd}))).message).toContain(
+      'listed twice',
+    );
+    const elsewhere = path.join(cwd, 'elsewhere.json');
+    fs.writeFileSync(elsewhere, text);
+    fs.rmSync(file);
+    fs.symlinkSync(elsewhere, file);
+    expect((await refusal(() => themeEditShow('s2', {cwd}))).code).toBe(
+      'ERR_THEME_INVALID',
+    );
+    fs.rmSync(path.join(cwd, 'themes/s2'), {recursive: true, force: true});
+    fs.rmSync(elsewhere);
+  }, 240_000);
+
+  it('a section of the sheet goes to its own file', async () => {
+    const full = read('themes/h/sheet.html');
+    await themeEditShow('h', {cwd, section: 'Inputs'});
+    expect(exists('themes/h/sheet-inputs.html')).toBe(true);
+    expect(read('themes/h/sheet.html')).toBe(full);
+  }, 120_000);
+});
+
+describe('hunt2: words', () => {
+  it('says when a change shows nothing, and names a typed path or case', async () => {
+    const r = await themeEditSet('h', 'spacing', 'medium', {cwd});
+    expect(r.data.notes.join(' ')).toContain('changes nothing you see');
+    await themeEditUndo('h', {cwd, thing: 'spacing'});
+    expect(
+      (await refusal(() => themeEditShow('themes/h', {cwd}))).run[0],
+    ).toMatch(/show h$/);
+  }, 120_000);
+
+  it('refuses a misspelled token in var(), headings --mode and font --when', async () => {
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('h', '--color-text-primary', 'var(--color-accnt)', {
+            cwd,
+          }),
+        )
+      ).code,
+    ).toBe('ERR_THEME_UNKNOWN_TOKEN');
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('h', 'headings', 'bold', {cwd, mode: 'dark'}),
+        )
+      ).code,
+    ).toBe('ERR_THEME_NO_MODE');
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('h', 'font', 'inter', {cwd, on: 'body', state: 'hover'}),
+        )
+      ).code,
+    ).toBe('ERR_INVALID_ARGUMENT');
+  });
+
+  it('the copied commands name the experimental group in their refusals', async () => {
+    const r = await runCli(['--json', 'experimental', 'theme', 'use', 'nope'], {
+      cwd,
+    });
+    const body = JSON.parse(r.stdout || '{}');
+    expect(JSON.stringify(body)).not.toMatch(/(?<!experimental )theme add/);
+  }, 120_000);
+});
+
+describe('hunt2: type and token rules', () => {
+  it('every token Core reads takes its own default value', async () => {
+    const {context} = await import('./_context.mjs');
+    const {checkSetting} = await import('./_check.mjs');
+    const ctx = await context(cwd);
+    const data = JSON.parse(read('themes/h/h.settings.json'));
+    const refused = [];
+    for (const [token, value] of Object.entries(
+      ctx.project.core.tokenDefaults,
+    )) {
+      if (token.startsWith('--_')) continue;
+      try {
+        checkSetting(ctx, 'h', data, token, String(value), {}, false);
+      } catch (e) {
+        refused.push(`${token}: ${/** @type {any} */ (e).message}`);
+      }
+    }
+    expect(refused).toEqual([]);
+  }, 120_000);
+
+  it('a role font keeps its font whatever the order, and a scale keeps the base heading weights', async () => {
+    await themeEditNew('t1', {cwd});
+    await themeEditSet('t1', 'font', 'serif', {cwd, on: 'heading'});
+    await themeEditSet('t1', 'font', 'mono', {cwd});
+    const ts = read('themes/t1/t1.settings.ts');
+    expect(ts).toMatch(/"heading": \{[^}]*Georgia/);
+    await themeEditSet('t1', 'text-size', 'large', {cwd});
+    // The heading role carries the base weights, so the phone rule keeps
+    // them too.
+    expect(read('themes/t1/t1.settings.ts')).toMatch(/"weights": \{/);
+    fs.rmSync(path.join(cwd, 'themes/t1'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('refuses easings, families, colors and shadows the browser drops, and takes ones it reads', async () => {
+    for (const [token, value] of [
+      ['--ease-standard', 'cubic-bezier(2, 0, 0, 1)'],
+      ['--ease-standard', 'steps(0)'],
+      ['--ease-standard', 'linear(banana)'],
+      ['--font-family-body', '42'],
+      ['--font-family-body', 'url(evil)'],
+      ['--color-text-primary', 'light-dark(banana, red)'],
+      ['--color-text-primary', 'color-mix(in oklch, banana, red)'],
+      ['--shadow-low', '0 1px -2px red'],
+      ['--shadow-low', 'inset inset 0 0 red'],
+      ['--duration-fast', '99999s'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('h', token, value, {cwd}))).code,
+        `${token} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    const {context} = await import('./_context.mjs');
+    const {checkSetting} = await import('./_check.mjs');
+    const ctx = await context(cwd);
+    const data = JSON.parse(read('themes/h/h.settings.json'));
+    for (const [token, value] of [
+      ['--shadow-low', '0 0 0 1px var(--color-border-emphasized)'],
+      ['--shadow-low', '0 0 10px 2pt red'],
+      ['--shadow-low', 'var(--shadow-med), 0 0 0 1px red'],
+      ['--color-text-primary', 'oklch(from var(--color-accent) l c h / 0.5)'],
+      ['--color-text-primary', 'Canvas'],
+      ['--color-text-primary', 'var(--color-accent, #000)'],
+      ['--duration-fast', '150MS'],
+      ['--ease-standard', 'EASE'],
+      ['--font-family-body', '"Noto Sans", 日本語, sans-serif'],
+    ])
+      expect(
+        () => checkSetting(ctx, 'h', data, token, value, {}, false),
+        `${token} ${value}`,
+      ).not.toThrow();
+  }, 240_000);
+
+  it('a font name may hold an apostrophe; var( --x ) with spaces is a cycle', async () => {
+    await themeEditSet('h', 'font', "O'Reilly Sans", {cwd});
+    await themeEditUndo('h', {cwd, thing: 'font'});
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('h', '--spacing-4', 'calc(var( --spacing-4 ) * 2)', {
+            cwd,
+          }),
+        )
+      ).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+  }, 120_000);
+
+  it('a saved token the rules no longer take names its undo; sizes say phones keep theirs', async () => {
+    await themeEditNew('t2', {cwd});
+    const file = path.join(cwd, 'themes/t2/t2.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.settings.push({
+      thing: '--duration-fast',
+      value: 'red',
+      source: 'token',
+    });
+    fs.writeFileSync(file, JSON.stringify(data));
+    const r = await refusal(() =>
+      themeEditSet('t2', 'corners', 'small', {cwd}),
+    );
+    expect(r.code).toBe('ERR_THEME_INVALID');
+    expect(r.run[0]).toMatch(/undo t2 --duration-fast$/);
+    await themeEditUndo('t2', {cwd, thing: '--duration-fast'});
+    const size = await themeEditSet('t2', 'text-size', '10', {cwd});
+    const notes = size.data.notes.join(' ');
+    expect(notes).toContain('phones');
+    expect(notes).toContain('outside reading sizes');
+    fs.rmSync(path.join(cwd, 'themes/t2'), {recursive: true, force: true});
+  }, 240_000);
+});
+
+describe('after #11180', () => {
+  it('a command outside a project takes no lock, even with Core in the home folder', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-home2-'));
+    const saved = process.env.HOME;
+    try {
+      fs.mkdirSync(path.join(home, 'node_modules/@astryxdesign/core'), {
+        recursive: true,
+      });
+      fs.writeFileSync(
+        path.join(home, 'node_modules/@astryxdesign/core/package.json'),
+        '{"name":"@astryxdesign/core","version":"0.0.0"}',
+      );
+      // A folder outside any project: the command is refused, and the
+      // Core in the home folder gets no lock folder.
+      const away = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-away2-'));
+      process.env.HOME = home;
+      expect((await refusal(() => themeEditNew('z', {cwd: away}))).code).toBe(
+        'ERR_PROJECT_REQUIRED',
+      );
+      fs.rmSync(away, {recursive: true, force: true});
+      expect(fs.existsSync(path.join(home, 'node_modules/.cache'))).toBe(false);
+      expect(fs.existsSync(path.join(home, 'themes'))).toBe(false);
+    } finally {
+      process.env.HOME = saved;
+      fs.rmSync(home, {recursive: true, force: true});
+    }
+  });
+
+  it('show names why the build did not match', async () => {
+    await themeEditNew('w9', {cwd});
+    const ts = path.join(cwd, 'themes/w9/w9.settings.ts');
+    fs.writeFileSync(
+      ts,
+      fs.readFileSync(ts, 'utf8').replace(/\(CLI [^)]+\)/, '(CLI 0.0.1)'),
+    );
+    const r = await themeEditShow('w9', {cwd});
+    expect(r.data.notes.join(' ')).toContain('built by CLI 0.0.1');
+    fs.rmSync(path.join(cwd, 'themes/w9'), {recursive: true, force: true});
   }, 120_000);
 });

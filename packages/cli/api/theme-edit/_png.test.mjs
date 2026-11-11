@@ -363,10 +363,10 @@ describe('decodePng: refusals', () => {
     // Corrupt the IHDR color type (byte 9 of the IHDR body at offset 16).
     const badType = Buffer.from(png);
     badType[8 + 8 + 9] = 5;
-    expect(() => decodePng(badType)).toThrow('unsupported PNG color format');
+    expect(() => decodePng(badType)).toThrow('is not a valid PNG format');
     const badDepth = Buffer.from(png);
     badDepth[8 + 8 + 8] = 3;
-    expect(() => decodePng(badDepth)).toThrow('unsupported PNG color format');
+    expect(() => decodePng(badDepth)).toThrow('is not a valid PNG format');
   });
 });
 
@@ -392,10 +392,10 @@ describe('colorsAt', () => {
         {x: 0, y: 0},
       ]),
     ).toEqual([
-      {at: '1,0', color: '#00ff00'},
-      {at: '0,1', color: '#0000ff'},
-      {at: '1,1', color: '#010203'},
-      {at: '0,0', color: '#ff0000'},
+      {at: '1,0', color: '#00ff00', alpha: 1},
+      {at: '0,1', color: '#0000ff', alpha: 1},
+      {at: '1,1', color: '#010203', alpha: 1},
+      {at: '0,0', color: '#ff0000', alpha: 1},
     ]);
   });
 
@@ -408,10 +408,10 @@ describe('colorsAt', () => {
         {x: 0, y: 2},
       ]),
     ).toEqual([
-      {at: '-1,0', color: null},
-      {at: '0,-1', color: null},
-      {at: '2,0', color: null},
-      {at: '0,2', color: null},
+      {at: '-1,0', color: null, alpha: null},
+      {at: '0,-1', color: null, alpha: null},
+      {at: '2,0', color: null, alpha: null},
+      {at: '0,2', color: null, alpha: null},
     ]);
   });
 

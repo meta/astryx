@@ -335,7 +335,13 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     source,
     templateFiles(imports),
   );
-  const out = options.out ?? themeFiles(project.cwd, slug).sheet;
+  // One section goes to its own file, so the full sheet stays whole.
+  const full = themeFiles(project.cwd, slug).sheet;
+  const out =
+    options.out ??
+    (options.group
+      ? path.join(path.dirname(full), `sheet-${options.group}.html`)
+      : full);
   fs.mkdirSync(path.dirname(out), {recursive: true});
   // Written whole and renamed in, never through a link.
   writeWhole(out, html);
@@ -902,7 +908,7 @@ export function colorsPageSource({slug, module, seeds, uses}) {
     `const SEEDS: Record<string, string> = ${JSON.stringify(seeds)};`,
     '// The tokens that use each shade, by color, mode and shade.',
     `const USES: Record<string, Partial<Record<Mode, Record<string, string[]>>>> = ${JSON.stringify(uses)};`,
-    'const COLORS = Object.entries(palette) as Array<[string, Readonly<Record<Mode, Ramp>>]>;',
+    'const COLORS = Object.entries(palette) as Array<[string, Readonly<Partial<Record<Mode, Ramp>>>]>;',
     "const MODES: Mode[] = ['light', 'dark'];",
     '',
     'export default function ColorsPage() {',
@@ -924,11 +930,11 @@ export function colorsPageSource({slug, module, seeds, uses}) {
     '              </span>',
     '            ) : null}',
     '          </h2>',
-    '          {MODES.map(mode => (',
+    '          {MODES.filter(mode => ramps[mode]).map(mode => (',
     "            <div key={mode} style={{display: 'grid', gap: 6}}>",
     "              <div style={{fontSize: 13, fontWeight: 600, textTransform: 'capitalize'}}>{mode}</div>",
     "              <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8}}>",
-    '                {Object.entries(ramps[mode]).map(([shade, hex]) => {',
+    '                {Object.entries(ramps[mode] ?? {}).map(([shade, hex]) => {',
     '                  const tokens = USES[name]?.[mode]?.[shade] ?? [];',
     '                  return (',
     '                    <div',
@@ -971,12 +977,17 @@ export function colorsPageSource({slug, module, seeds, uses}) {
  * preview page, a top bar with the theme name and, with a theme, a
  * light/dark/system switch, and the selected page in the content area. It is a normal page of
  * the app, so it keeps the app's layout, global CSS and providers.
- * @param {{pages: Array<{id: string, label: string, file: string}>, theme: {name: string, module: string, css: string[], mode?: 'system' | 'light' | 'dark'} | null}} spec
+ * @param {{pages: Array<{id: string, label: string, file: string}>, theme: {name: string, module: string, css: string[], mode?: 'system' | 'light' | 'dark'} | null, by?: string}} spec
  *   `file` relative to the route folder, without extension; no theme: the
  *   app's own theme. A theme with one mode starts in it, with no switch.
+ *   `by`: the command that wrote the route, for its header.
  * @returns {string}
  */
-export function previewRouteSource({pages, theme}) {
+export function previewRouteSource({
+  pages,
+  theme,
+  by = 'astryx experimental theme preview add',
+}) {
   const name = theme?.name ?? 'app theme';
   const oneMode = theme?.mode && theme.mode !== 'system' ? theme.mode : null;
   const mode =
@@ -1012,7 +1023,7 @@ export function previewRouteSource({pages, theme}) {
     '      </div>',
   ];
   return [
-    '// Written by `astryx experimental theme preview add`. `preview add`, `preview remove` and',
+    `// Written by \`${by}\`. \`preview add\`, \`preview remove\` and`,
     '// theme-preview.json keep it: edit the list with those commands, not by hand.',
     "'use client';",
     '',

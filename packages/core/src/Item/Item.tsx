@@ -73,6 +73,7 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {isCoarsePointer} from '../utils/coarsePointer';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ItemSwipeBridge} from './ItemSwipeLayer';
 
@@ -280,7 +281,7 @@ export interface ItemProps extends BaseProps<HTMLElement> {
   isSelected?: boolean;
 
   /**
-   * Disabled state.
+   * Disabled state. Interactive rows stay keyboard-reachable but cannot activate.
    * @default false
    */
   isDisabled?: boolean;
@@ -893,7 +894,7 @@ export function Item({
         <RowAnchor
           ref={anchorRef}
           {...(isDisabled
-            ? {role: 'link', 'aria-disabled': true, tabIndex: -1}
+            ? {role: 'link', 'aria-disabled': true, tabIndex: 0}
             : {href, target, rel})}
           {...stylex.props(
             styles.invisibleAnchor,
@@ -907,7 +908,10 @@ export function Item({
           ref={actionButtonRef}
           type="button"
           onClick={onClick}
-          disabled={isDisabled}
+          aria-disabled={isDisabled || undefined}
+          {...(isDisabled
+            ? disabledInteractionProps<HTMLButtonElement>()
+            : null)}
           {...stylex.props(
             styles.invisibleButton,
             isInline && styles.inlineContent,

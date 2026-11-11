@@ -51,7 +51,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -83,6 +82,7 @@ import {matchesMediaQuery} from '../utils/coarsePointer';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isRtlElement} from '../hooks/isRtlElement';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 import {
@@ -299,10 +299,6 @@ export const MAX_CLOSE_DELAY_MS = 250;
  */
 export const MAX_EXIT_MS = 550;
 /** Fraction of the hold to close at, so the close never lands on its boundary. */
-const subscribeToNothing = () => () => {};
-const canReadDomOnClient = () => true;
-const canReadDomOnServer = () => false;
-
 const CLOSE_WITHIN_HOLD = 0.6;
 
 /**
@@ -562,21 +558,16 @@ export function MobileNav({
   // the wrong edge before jumping. An explicit `side` is used directly.
   const [autoSide, setAutoSide] = useState<'start' | 'end'>('end');
   const [wasOpen, setWasOpen] = useState(false);
-  // False on the server and in the hydrating render, true after: a drawer that
-  // is already open when it hydrates reads no focus or layout in that render
-  // (the server did not), and resolves in the render right after it.
-  const canReadDom = useSyncExternalStore(
-    subscribeToNothing,
-    canReadDomOnClient,
-    canReadDomOnServer,
-  );
+  // A drawer open on the server reads no focus or layout while it hydrates. It
+  // resolves in the render after hydration.
+  const canReadDom = !useIsHydrating();
   if (canReadDom && isOpen !== wasOpen) {
     setWasOpen(isOpen);
     if (isOpen && side === 'auto') {
-      // The opener is the focused element. With none (a tap does not focus a
-      // button in every mobile browser), it is the element whose
-      // `aria-controls` names this dialog; a caller `id` replaces the
-      // dialog's own id.
+      // The opener is the focused element. A tap does not focus a button in
+      // some mobile browsers. Then the opener is the element whose
+      // `aria-controls` names this dialog. A caller `id` replaces the dialog's
+      // own id.
       const active = document.activeElement as HTMLElement | null;
       const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
       const trigger =
