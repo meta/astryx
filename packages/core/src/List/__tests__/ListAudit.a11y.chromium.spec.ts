@@ -366,52 +366,90 @@ for (const density of ['compact', 'spacious'] as const) {
   });
 }
 
-cases.push({
-  key: 'reorder-mode-light',
-  story: 'core-list--reorderable',
-  ready: '#storybook-root ul li',
-  mode: 'light',
-  direction: 'ltr',
-  viewport: SMALL,
-  run: async (page, check, frame) => {
-    const order = async () =>
-      page.evaluate(() =>
-        Array.from(document.querySelectorAll('#storybook-root ul > li')).map(
-          li => li.textContent?.trim() ?? '',
-        ),
+for (const direction of ['ltr', 'rtl'] as const) {
+  cases.push({
+    key: `reorder-mode-${direction === 'rtl' ? 'rtl-' : ''}light`,
+    story: 'core-list--reorderable',
+    ready: '#storybook-root ul li',
+    mode: 'light',
+    direction,
+    viewport: SMALL,
+    run: async (page, check, frame) => {
+      const order = async () =>
+        page.evaluate(() =>
+          Array.from(document.querySelectorAll('#storybook-root ul > li')).map(
+            li => li.textContent?.trim() ?? '',
+          ),
+        );
+      const before = await order();
+      await frame('rest', {order: before});
+      const handle = page
+        .locator('#storybook-root ul > li', {hasText: before[0]})
+        .getByRole('button');
+      await handle.focus();
+      await page.keyboard.press('Space');
+      await settle(page);
+      const mode = await handle.evaluate(el => ({
+        pressed: el.getAttribute('aria-pressed'),
+        name: el.getAttribute('aria-label') ?? el.textContent,
+        focused: document.activeElement === el,
+        hintOpen: document.querySelector(':popover-open') != null,
+      }));
+      // The handle sits at its row's inline end, and the hint opens below it,
+      // over the handle and inside the viewport, in either direction.
+      const placement = await handle.evaluate(el => {
+        const row = el.closest('li') as HTMLElement;
+        const hint = document.querySelector(':popover-open');
+        const box = (node: Element) => {
+          const r = node.getBoundingClientRect();
+          return {left: r.left, right: r.right, top: r.top, bottom: r.bottom};
+        };
+        return {
+          row: box(row),
+          handle: box(el),
+          hint: hint ? box(hint) : null,
+          viewport: innerWidth,
+        };
+      });
+      const handleCenter = (placement.handle.left + placement.handle.right) / 2;
+      const rowCenter = (placement.row.left + placement.row.right) / 2;
+      check(
+        direction === 'rtl'
+          ? handleCenter < rowCenter
+          : handleCenter > rowCenter,
+        `handle at ${handleCenter} is not at the row's inline end (row center ${rowCenter})`,
       );
-    const before = await order();
-    await frame('rest', {order: before});
-    const handle = page
-      .locator('#storybook-root ul > li', {hasText: before[0]})
-      .getByRole('button');
-    await handle.focus();
-    await page.keyboard.press('Space');
-    await settle(page);
-    const mode = await handle.evaluate(el => ({
-      pressed: el.getAttribute('aria-pressed'),
-      name: el.getAttribute('aria-label') ?? el.textContent,
-      focused: document.activeElement === el,
-      hintOpen: document.querySelector(':popover-open') != null,
-    }));
-    check(mode.pressed === 'true', `handle aria-pressed ${mode.pressed}`);
-    check(mode.focused, 'focus left the handle when reorder mode started');
-    check(mode.hintOpen, 'no reorder hint is open');
-    await frame('reorder-mode', {mode});
-    await page.keyboard.press('ArrowDown');
-    await settle(page);
-    const after = await order();
-    check(
-      after[1] === before[0] && after[0] === before[1],
-      `ArrowDown order ${after.join(',')}`,
-    );
-    await page.keyboard.press('Escape');
-    await settle(page);
-    const ended = await handle.evaluate(el => el.getAttribute('aria-pressed'));
-    check(ended === 'false', `after Escape aria-pressed ${ended}`);
-    await frame('moved', {order: after, ended});
-  },
-});
+      const hint = placement.hint;
+      check(
+        hint != null &&
+          hint.top >= placement.handle.bottom - 1 &&
+          hint.left < placement.handle.right &&
+          hint.right > placement.handle.left &&
+          hint.left >= 0 &&
+          hint.right <= placement.viewport,
+        `hint ${JSON.stringify(hint)} is not below the handle and inside the viewport`,
+      );
+      check(mode.pressed === 'true', `handle aria-pressed ${mode.pressed}`);
+      check(mode.focused, 'focus left the handle when reorder mode started');
+      check(mode.hintOpen, 'no reorder hint is open');
+      await frame('reorder-mode', {mode, placement});
+      await page.keyboard.press('ArrowDown');
+      await settle(page);
+      const after = await order();
+      check(
+        after[1] === before[0] && after[0] === before[1],
+        `ArrowDown order ${after.join(',')}`,
+      );
+      await page.keyboard.press('Escape');
+      await settle(page);
+      const ended = await handle.evaluate(el =>
+        el.getAttribute('aria-pressed'),
+      );
+      check(ended === 'false', `after Escape aria-pressed ${ended}`);
+      await frame('moved', {order: after, ended});
+    },
+  });
+}
 
 const DIALOG_ROWS = '#storybook-root [role="list"] > li';
 
