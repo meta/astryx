@@ -1159,6 +1159,32 @@ describe('Button tooltip description (FR12)', () => {
 });
 
 describe('Button tooltip mount on the first interaction', () => {
+  it('opens on the first tap of a disabled Button that swapped in after load, though the tap focuses it first (Android)', async () => {
+    const showPopover = withPopover();
+    const {rerender} = render(
+      <Button label="Docs" href="/docs" tooltip="Read the docs" />,
+    );
+    await settle();
+    rerender(
+      <Button label="Docs" href="/docs" tooltip="Read the docs" isDisabled />,
+    );
+    await settle();
+    const button = screen.getByRole('button', {name: 'Docs'});
+    // Chrome on Android focuses a button between the press and its click. A
+    // pointer focus is not :focus-visible; jsdom treats every focus as one.
+    const realMatches = button.matches.bind(button);
+    vi.spyOn(button, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? false : realMatches(selector),
+    );
+    fireEvent.pointerDown(button, {pointerType: 'touch'});
+    fireEvent.pointerUp(button, {pointerType: 'touch'});
+    act(() => button.focus());
+    fireEvent.click(button);
+    await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
+      timeout: 8000,
+    });
+  }, 20000);
+
   it('keeps the element and its focus when tooltip turns off and on', async () => {
     const {rerender} = render(
       <Button label="Previous" tooltip="Go to the previous page" />,
@@ -1249,20 +1275,36 @@ describe('Button tooltip mount on the first interaction', () => {
     });
   }, 15000);
 
-  it('keyboard focus mounts the tooltip', async () => {
+  it('a keyboard Tab opens the tooltip', async () => {
+    const showPopover = withPopover();
+    render(<Button label="Save" tooltip="Save your changes" />);
+    await settle();
+    const button = screen.getByRole('button', {name: 'Save'});
+    // Tab focus matches :focus-visible.
+    const realMatches = button.matches.bind(button);
+    vi.spyOn(button, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+    await userEvent.tab();
+    expect(document.activeElement).toBe(button);
+    await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
+      timeout: 8000,
+    });
+  }, 15000);
+
+  it('a pointer focus (not :focus-visible) mounts nothing by itself', async () => {
     withPopover();
     render(<Button label="Save" tooltip="Save your changes" />);
     await settle();
     const button = screen.getByRole('button', {name: 'Save'});
-    await userEvent.tab();
-    expect(document.activeElement).toBe(button);
-    // Whether focus opens it follows :focus-visible, which the browser
-    // specs check; jsdom does not model it.
-    await waitFor(
-      () => expect(document.querySelector('[role="tooltip"]')).not.toBeNull(),
-      {timeout: 8000},
+    const realMatches = button.matches.bind(button);
+    vi.spyOn(button, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? false : realMatches(selector),
     );
-  }, 15000);
+    act(() => button.focus());
+    await settle();
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  });
 
   it('a pointer that leaves before the tooltip mounts opens nothing', async () => {
     const showPopover = withPopover();

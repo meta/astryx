@@ -48,10 +48,12 @@ export interface DeferredTooltipInterest<T> {
 /**
  * Holds the latest interaction that wants an element's tooltip, while
  * `isEnabled`, until the loaded tooltip reads it. A mouse or pen hover and
- * focus are held as they come and mount the tooltip. A touch or pen press
- * starts the load and mounts nothing: the browser's `click` for it is a tap,
- * which is held and mounts the tooltip, and its `pointercancel` (a scroll) or
- * a key press drops it. A leave or a blur drops a held hover or focus.
+ * a :focus-visible focus are held as they come and mount the tooltip. A
+ * pointer's focus is not held, as a mounted tooltip does not open on it. A
+ * touch or pen press starts the load and mounts nothing: the browser's `click`
+ * for it is a tap, which is held and mounts the tooltip, and its
+ * `pointercancel` (a scroll) or a key press drops it. A leave or a blur drops
+ * a held hover or focus.
  */
 export function useDeferredTooltipInterest<T>(
   isEnabled: boolean,
@@ -173,7 +175,21 @@ export function useDeferredTooltipInterest<T>(
     },
     [isEnabled, drop, load, want],
   );
-  const onFocus = useCallback(() => hold('focus'), [hold]);
+  // Only a focus that opens a mounted tooltip is held: one that matches
+  // :focus-visible. A press focuses a focusable element before its click on
+  // some browsers (Chrome on Android); holding that focus would mount the
+  // tooltip too late to see the press, and the press's tap would open nothing.
+  const onFocus = useCallback(
+    (event: FocusEvent<HTMLElement>) => {
+      if (
+        event.target instanceof Element &&
+        event.target.matches(':focus-visible')
+      ) {
+        hold('focus');
+      }
+    },
+    [hold],
+  );
   const onBlur = useCallback(() => drop('focus'), [drop]);
   return {
     isWanted,
