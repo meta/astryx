@@ -72,7 +72,7 @@ describe('DateTimeInput typed date entry with a calendar', () => {
     expect(screen.getByRole('combobox')).toHaveValue('1 Adar II 5784 AM');
   });
 
-  it('rejects a date the calendar does not have and names a calendar that differs from the provider', () => {
+  it('rejects a date the calendar does not have and names the calendar', () => {
     const {input, onChange, container} = renderField('en', {
       calendar: 'hebrew',
       status: {type: 'warning', message: 'Check the date'},

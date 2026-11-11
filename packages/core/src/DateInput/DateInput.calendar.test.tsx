@@ -395,6 +395,8 @@ describe('DateInput onChange while typing a Gregorian date', () => {
       fireEvent.blur(input);
       expect(input).toHaveValue(text);
       expectShown(input, container, 'Enter a real date');
+      // The default calendar is not named.
+      expect(input).toHaveAccessibleDescription('Enter a real date');
       expect(onChange).not.toHaveBeenCalled();
     },
   );
@@ -409,9 +411,7 @@ describe('DateInput onChange while typing a Gregorian date', () => {
     const input = screen.getByRole('combobox');
     fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
     expectShown(input, container, 'Enter a real date');
-    expect(input).not.toHaveAccessibleDescription(
-      expect.stringContaining('Persian Calendar'),
-    );
+    expect(input).toHaveAccessibleDescription('Enter a real date');
   });
 
   it('asks for an available date when a date constraint rules the day out', () => {
