@@ -579,6 +579,17 @@ function resolveToolVersions(cwd) {
 }
 
 /**
+ * The command a stale check names, in the words of the group that ran it
+ * (`experimental theme compile`); the generated headers keep `theme build`.
+ * @param {string} command
+ * @param {{group: string, build: string}} [words]
+ */
+function rebuildLine(command, words) {
+  if (!words || words.group === 'theme') return command;
+  return command.replace(/\btheme build\b/, `${words.group} ${words.build}`);
+}
+
+/**
  * Build a @generated attribution header for generated files.
  * @param {string} sourceFile - Relative path to the source theme file
  * @param {'css'|'js'|'ts'} lang - File language (determines comment syntax)
@@ -3156,7 +3167,7 @@ function validateHeadingTypeAugmentationSupport(themeDef) {
  * `logger` (silent by default).
  *
  * @param {string} file - Theme file path, resolved against `cwd`.
- * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>}} [options] -
+ * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __commandWords?: {group: string, build: string}}} [options] -
  *   `out` overrides the output CSS path, or names the folder for it; `check` compares against on-disk outputs
  *   instead of writing. `__claimedOutputs` records the outputs earlier builds
  *   in one run wrote, so a later theme cannot replace them. `__writeRoot` replaces `cwd` as the directory every
@@ -3863,7 +3874,10 @@ async function themeBuildInternal(
       // prettier-ignore
       const remedy = outsideCheckRemedy(writes, [filePath], writeRoot, relative => [relative(filePath), ...(options.out ? ['--out', relative(outPath)] : []), ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])]);
       if (remedy) logger.error(`\n  ${remedy.join('\n  ')}`);
-      else logger.error(`\n  Rebuild with: ${buildCommand}`);
+      else
+        logger.error(
+          `\n  Rebuild with: ${rebuildLine(buildCommand, options.__commandWords)}`,
+        );
     }
     return {
       type: 'theme.build.check',
@@ -4260,7 +4274,7 @@ async function preloadFamilySource(filePath, loader, interception) {
   finally { patch.undo(); }
 }
 
-/** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string, __onPrivateVarError?: () => void}} options @param {{cwd?: string}} [ctx] */
+/** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string, __onPrivateVarError?: () => void, __commandWords?: {group: string, build: string}}} options @param {{cwd?: string}} [ctx] */
 export async function themeBuildFamily(
   files,
   options,
@@ -4518,7 +4532,10 @@ export async function themeBuildFamily(
       // prettier-ignore
       const remedy = outsideCheckRemedy(writes, members.map(member => member.filePath), cwd, relative => ['--family', ...members.map(member => relative(member.filePath)), '--family-key', baseName, ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])]);
       if (remedy) logger.error(`\n  ${remedy.join('\n  ')}`);
-      else logger.error(`\n  Rebuild with: ${buildCommand}`);
+      else
+        logger.error(
+          `\n  Rebuild with: ${rebuildLine(buildCommand, options.__commandWords)}`,
+        );
     }
     return {
       type: 'theme.build.check',
