@@ -3369,7 +3369,7 @@ test('a finger holding the selected segment lifts its surface by 24 × 16 px, as
     // The theme's low elevation, as the browser resolves it.
     const probe = group.ownerDocument.createElement('div');
     probe.style.boxShadow = getComputedStyle(group)
-      .getPropertyValue('--_segmented-lifted-shadow')
+      .getPropertyValue('--shadow-low')
       .trim();
     group.ownerDocument.body.append(probe);
     const resolved = getComputedStyle(probe).boxShadow;
@@ -3488,7 +3488,7 @@ test('a drag that commits another segment keeps the lifted edge until the surfac
   expect(shown.length).toBeGreaterThan(0);
   // From the lift to the hand-back, the commit's repaint included, the lens
   // always wears the theme's elevation.
-  expect(
-    shown.filter(state => state !== 'visible|var(--_segmented-lifted-shadow)'),
-  ).toEqual([]);
+  expect(shown.filter(state => state !== 'visible|var(--shadow-low)')).toEqual(
+    [],
+  );
 });

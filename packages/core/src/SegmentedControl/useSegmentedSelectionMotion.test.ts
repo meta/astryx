@@ -17,6 +17,7 @@ import {createMotionEngine, type Animator} from '../motion/animator';
 import {solveSpring, toSpring} from '../motion/spring';
 import {cubicBezier} from '../motion/bezier';
 import {segmentedControl, springs} from '../motion/uikit';
+import {shadowVars} from '../theme/tokens.stylex';
 import {measureSegments, segmentTargetAt} from './useSegmentedTouchTracking';
 import {
   SegmentedSelectionMotion,
@@ -667,9 +668,7 @@ describe('under a finger', () => {
     expect(ctx.layer('lens', 'height')).toBe('27px');
     expect(ctx.layer('after', 'visibility')).toBe('');
     // Lifted, it carries the theme's elevation, so the track stays visible.
-    expect(ctx.layer('lens', 'box-shadow')).toBe(
-      'var(--_segmented-lifted-shadow)',
-    );
+    expect(ctx.layer('lens', 'box-shadow')).toBe(shadowVars['--shadow-low']);
     // It grows without overshoot: UIKit's lift is critically damped.
     let width = 96;
     for (let t = 0; t < 600; t += 25) {
@@ -718,13 +717,9 @@ describe('under a finger', () => {
     // The new value repaints the lens from List's surface; the edge stays.
     select(ctx, 'grid', 'list');
     expect(ctx.motion.isSliding).toBe(true);
-    expect(ctx.layer('lens', 'box-shadow')).toBe(
-      'var(--_segmented-lifted-shadow)',
-    );
+    expect(ctx.layer('lens', 'box-shadow')).toBe(shadowVars['--shadow-low']);
     await advance(100);
-    expect(ctx.layer('lens', 'box-shadow')).toBe(
-      'var(--_segmented-lifted-shadow)',
-    );
+    expect(ctx.layer('lens', 'box-shadow')).toBe(shadowVars['--shadow-low']);
     await advance(3000);
     expect(ctx.motion.isSliding).toBe(false);
     expect(ctx.layer('lens', 'box-shadow')).toBe('');

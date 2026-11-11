@@ -42,6 +42,7 @@ import {observeResize} from '../utils/sharedResizeObserver';
 import {titleOfSegment} from '../privateAttributes/segmentTitle.stylex';
 import {mapProgress, mapRange} from '../motion/progress';
 import {easedProgress, readThemeTiming} from '../motion/themeTiming';
+import {shadowVars} from '../theme/tokens.stylex';
 import {useSegmentedTouchTracking} from './useSegmentedTouchTracking';
 
 /** The segments, in DOM order. */
@@ -101,10 +102,11 @@ export const LAYER_GEOMETRY: ReadonlyArray<string> = [
 ];
 
 /**
- * The lifted lens's shadow: the theme's low elevation, which SegmentedControl's
- * styles define on the radiogroup.
+ * The lifted lens's edge: the theme's low elevation, as on Switch's lifted
+ * thumb. The lens copies the selected surface, which can match the page.
+ * Without an edge, a lifted lens hides the track around it.
  */
-const LIFTED_SHADOW = 'var(--_segmented-lifted-shadow)';
+const LIFTED_SHADOW = shadowVars['--shadow-low'];
 
 /** The custom property on the radiogroup that sets `property` of `layer`. */
 export function layerVariable(layer: Layer, property: string): string {
