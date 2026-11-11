@@ -51,7 +51,7 @@ function resolvedSide() {
   return document.querySelector('[data-side]')?.getAttribute('data-side');
 }
 
-function openFrom(dir: 'ltr' | 'rtl', opts: {focused: boolean}) {
+function openFrom(dir: 'ltr' | 'rtl', opts: {focused: boolean; id?: string}) {
   document.documentElement.setAttribute('dir', dir);
   vi.stubGlobal('innerWidth', 400);
   const opener = document.createElement('button');
@@ -64,7 +64,12 @@ function openFrom(dir: 'ltr' | 'rtl', opts: {focused: boolean}) {
     opener.focus();
   }
   const view = render(
-    <MobileNav isOpen={false} onOpenChange={() => {}} side="auto" label="Nav">
+    <MobileNav
+      isOpen={false}
+      onOpenChange={() => {}}
+      side="auto"
+      label="Nav"
+      {...(opts.id ? {id: opts.id} : {})}>
       <div>Content</div>
     </MobileNav>,
   );
@@ -74,7 +79,12 @@ function openFrom(dir: 'ltr' | 'rtl', opts: {focused: boolean}) {
   );
   act(() => {
     view.rerender(
-      <MobileNav isOpen onOpenChange={() => {}} side="auto" label="Nav">
+      <MobileNav
+        isOpen
+        onOpenChange={() => {}}
+        side="auto"
+        label="Nav"
+        {...(opts.id ? {id: opts.id} : {})}>
         <div>Content</div>
       </MobileNav>,
     );
@@ -98,4 +108,20 @@ describe('MobileNav side="auto"', () => {
       expect(resolvedSide()).toBe('start');
     },
   );
+
+  it('finds the controlling toggle when a caller id replaces the dialog id', () => {
+    openFrom('rtl', {focused: false, id: 'my-nav'});
+    expect(document.querySelector('dialog')?.id).toBe('my-nav');
+    expect(resolvedSide()).toBe('start');
+  });
+
+  it('has the resolved side in the commit that opens the drawer, not one later', () => {
+    const sideAtShow: Array<string | null | undefined> = [];
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      sideAtShow.push(this.getAttribute('data-side'));
+      this.setAttribute('open', '');
+    };
+    openFrom('rtl', {focused: true});
+    expect(sideAtShow[0]).toBe('start');
+  });
 });

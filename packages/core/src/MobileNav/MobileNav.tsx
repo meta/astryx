@@ -81,6 +81,7 @@ import {themeProps} from '../utils/themeProps';
 import {matchesMediaQuery} from '../utils/coarsePointer';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {isRtlElement} from '../hooks/isRtlElement';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 import {
@@ -550,47 +551,41 @@ export function MobileNav({
   // showModal() can hide the scrollbar.
   useScrollLock(isOpen);
   // Resolved side — computed from trigger position when side='auto'
-  const [resolvedSide, setResolvedSide] = useState<'start' | 'end'>(
-    side === 'auto' ? 'end' : side,
-  );
-
-  // Resolve which edge the drawer slides from. Deliberately its own effect,
-  // declared before the open/close effect below so the trigger is still the
-  // active element when `side='auto'` reads it. Keeping it out of that effect
-  // is what stops a `side` change during a close from re-arming the delay: the
-  // CSS hold runs from the commit that started the slide-out and does not
-  // restart, so a fresh full delay could land after the drawer had already
-  // stopped being rendered — #4290 again.
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    if (side === 'auto') {
-      // The opener is the focused element. A touch tap does not focus a button
-      // in every mobile browser, so on the first open nothing may be focused;
-      // the Toggle that controls this drawer is the opener then.
+  // The `side='auto'` edge, resolved while rendering the closed-to-open
+  // transition so the first open frame already has the right edge. An Effect
+  // would commit the default `end` first and the drawer would slide in from
+  // the wrong edge before jumping. An explicit `side` is used directly.
+  const [autoSide, setAutoSide] = useState<'start' | 'end'>('end');
+  const [wasOpen, setWasOpen] = useState(false);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen && side === 'auto' && typeof document !== 'undefined') {
+      // The opener is the focused element. When nothing is focused (a tap does
+      // not focus a button in every mobile browser), the Toggle that controls
+      // this drawer is the opener; it names the dialog's rendered id, which a
+      // caller `id` replaces.
       const active = document.activeElement as HTMLElement | null;
+      const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
       const trigger =
         active && active !== document.body
           ? active
           : Array.from(
               document.querySelectorAll<HTMLElement>('[aria-controls]'),
-            ).find(el => el.getAttribute('aria-controls') === dialogId);
+            ).find(el =>
+              (el.getAttribute('aria-controls') ?? '')
+                .split(/\s+/)
+                .some(token => token !== '' && dialogIds.includes(token)),
+            );
       if (trigger) {
         const rect = trigger.getBoundingClientRect();
         const triggerCenter = rect.left + rect.width / 2;
         // The left half is the inline start in LTR and the inline end in RTL.
-        const isRtl = getComputedStyle(trigger).direction === 'rtl';
         const isInLeftHalf = triggerCenter < window.innerWidth / 2;
-        // eslint-disable-next-line @eslint-react/set-state-in-effect -- side is resolved from trigger layout immediately before showModal()
-        setResolvedSide(isInLeftHalf !== isRtl ? 'start' : 'end');
+        setAutoSide(isInLeftHalf !== isRtlElement(trigger) ? 'start' : 'end');
       }
-    } else {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- side prop changes must update the open dialog placement
-      setResolvedSide(side);
     }
-  }, [isOpen, side, dialogId]);
+  }
+  const resolvedSide = side === 'auto' ? autoSide : side;
 
   // Open/close the dialog via showModal()/close()
   // close() is delayed so the slide-out transition can play.
