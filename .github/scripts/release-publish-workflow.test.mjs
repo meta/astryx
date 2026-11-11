@@ -165,7 +165,7 @@ async function runCanaryPublish({
           ...publisherEnv,
           FAIL_ONCE: failOnce,
           FAIL_PACKAGE: failingPackage,
-          CANARY_VERSION: '0.7.4-canary.abcdef1',
+          CANARY_VERSION: '0.7.4-canary.gabcdef1',
           PATH: `${path.join(root, 'bin')}:${process.env.PATH}`,
           PUBLISH_LOG: publishLog,
           RUNNER_TEMP: runnerTemp,
@@ -337,7 +337,7 @@ server.listen(0, '127.0.0.1', () => console.log(server.address().port));`,
     );
     expect(result.status).toBe(0);
     const output = fs.readFileSync(githubOutput, 'utf8');
-    expect(output).toContain('version=0.7.8-canary.abcdef1');
+    expect(output).toContain('version=0.7.8-canary.gabcdef1');
     return output.match(/^publish=\w+$/mu)[0];
   } finally {
     server.kill();
@@ -345,8 +345,8 @@ server.listen(0, '127.0.0.1', () => console.log(server.address().port));`,
   }
 }
 
-const CORE_CANARY = '/@astryxdesign/core/0.7.8-canary.abcdef1';
-const NATIVE_CANARY = '/@astryxdesign/native/0.7.8-canary.abcdef1';
+const CORE_CANARY = '/@astryxdesign/core/0.7.8-canary.gabcdef1';
+const NATIVE_CANARY = '/@astryxdesign/native/0.7.8-canary.gabcdef1';
 const NATIVE_LATEST = '/@astryxdesign/native/latest';
 
 /** A registry verifier stand-in that exits with `code`. */
@@ -628,7 +628,7 @@ describe('stable and canary publication authority', () => {
     // The canary version is computed once and handed to the publish step.
     const fresh = step(canary, 'Skip a tip whose canaries are all published');
     expect(fresh.run).toContain(
-      'CANARY_VERSION="$(node -p "require(\'./packages/core/package.json\').version")-canary.${GITHUB_SHA:0:7}"',
+      'CANARY_VERSION="$(node -p "require(\'./packages/core/package.json\').version")-canary.g${GITHUB_SHA:0:7}"',
     );
     expect(fresh.run).toContain('echo "version=${CANARY_VERSION}"');
     expect(step(canary, 'Publish canary versions').env.CANARY_VERSION).toBe(
@@ -641,6 +641,46 @@ describe('stable and canary publication authority', () => {
     const canaryText = JSON.stringify(canary);
     expect(canaryText).not.toContain('.release/active.json');
     expect(canaryText).not.toContain('release-publish-receipt');
+  });
+
+  it('computes a canary version that is valid semver for every short SHA', () => {
+    const fresh = step(canary, 'Skip a tip whose canaries are all published');
+    const line = fresh.run
+      .split('\n')
+      .find(each => each.trim().startsWith('CANARY_VERSION='));
+    const versionFor = (sha, computation = line) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'canary-version-'));
+      fs.mkdirSync(path.join(dir, 'packages/core'), {recursive: true});
+      fs.writeFileSync(
+        path.join(dir, 'packages/core/package.json'),
+        JSON.stringify({version: '0.7.13'}),
+      );
+      try {
+        return spawnSync(
+          'bash',
+          ['-c', `set -eu\n${computation}\nprintf '%s' "$CANARY_VERSION"`],
+          {cwd: dir, env: {...process.env, GITHUB_SHA: sha}, encoding: 'utf8'},
+        ).stdout;
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    };
+    // SemVer 2.0.0's grammar (semver.org), which `semver.valid` applies: a
+    // numeric pre-release identifier has no leading zero.
+    const SEMVER =
+      /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
+    // A short SHA of digits only, with a leading zero.
+    const digits = `0964008${'1'.repeat(33)}`;
+    expect(versionFor(digits)).toBe('0.7.13-canary.g0964008');
+    expect(versionFor(digits)).toMatch(SEMVER);
+    // The format without the g is not valid semver for that SHA.
+    const old = line.replace('-canary.g$', '-canary.$');
+    expect(versionFor(digits, old)).toBe('0.7.13-canary.0964008');
+    expect(versionFor(digits, old)).not.toMatch(SEMVER);
+    // An ordinary hex short SHA.
+    const hex = `a1b2c3d${'e'.repeat(33)}`;
+    expect(versionFor(hex)).toBe('0.7.13-canary.ga1b2c3d');
+    expect(versionFor(hex)).toMatch(SEMVER);
   });
 
   it('skips only an absent package that was private and canary-only', async () => {

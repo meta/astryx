@@ -120,8 +120,10 @@ describe('the weekly full WebKit run', () => {
 
   it('waits in a group of its own, so a release-check never replaces it', () => {
     const group = ci.concurrency.group;
+    // Only a run on main takes the group, so a dispatch from another branch
+    // never replaces a waiting run on main.
     const weekly =
-      "(github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && 'webkit-weekly')";
+      "(github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && github.ref == 'refs/heads/main' && 'webkit-weekly')";
     expect(group).toContain(weekly);
     expect(group.indexOf(weekly)).toBeLessThan(
       group.indexOf("'main-heavy-lanes'"),
@@ -179,6 +181,19 @@ describe('the weekly full WebKit run', () => {
     );
     for (const id of ['interaction-legs', 'pr-interaction-webkit'])
       expect(ci.jobs[id].needs, id).toContain('webkit-weekly-request');
+  });
+
+  it('builds no Storybook for a dispatch from another branch', () => {
+    const fromBranch = {
+      ...weeklyDispatch,
+      github: {
+        ...weeklyDispatch.github,
+        ref: 'refs/heads/feature',
+        ref_name: 'feature',
+      },
+    };
+    expect(starts('build-storybook', weeklyDispatch)).toBe(true);
+    expect(starts('build-storybook', fromBranch)).toBe(false);
   });
 
   it('builds and uploads the Storybook the WebKit legs download', () => {

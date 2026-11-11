@@ -29,7 +29,7 @@ import {
   radiusVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {Link} from '../Link';
 import {Icon} from '../Icon';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -383,7 +383,9 @@ export function TopNavHeading({
 
   const rootRef = useRef<HTMLElement>(null);
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     dialogLabel: t('@astryx.topNav.heading.dialogLabel'),
     // The popup exposes its own role="menu" semantics; a role="dialog"
     // aria-modal wrapper would announce "dialog, Navigation menu" around a
