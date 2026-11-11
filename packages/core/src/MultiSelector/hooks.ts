@@ -19,6 +19,7 @@ import {isRtlElement} from '../hooks/isRtlElement';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import type {MultiSelectorOptionData} from './types';
 import {useTypeahead} from '../hooks/useTypeahead';
+import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 
 interface UseMultiComboboxOptions {
   selectableItems: MultiSelectorOptionData[];
@@ -139,6 +140,12 @@ export function useMultiCombobox({
       .filter(i => i >= 0);
   }, [selectableItems]);
 
+  /** Opening never lands on a disabled option; -1 when none is enabled. */
+  const findOpeningIndex = useCallback(
+    (fromEnd: boolean) => enabledEdgeIndex(selectableItems, fromEnd),
+    [selectableItems],
+  );
+
   const closeAndReset = useCallback(() => {
     // Clear the typed prefix on close. Otherwise the next key extends it.
     resetTypeahead();
@@ -155,7 +162,7 @@ export function useMultiCombobox({
     } else {
       const didOpen = onOpen() !== false;
       if (didOpen && !hasSearch) {
-        setHighlightedIndex(0);
+        setHighlightedIndex(findOpeningIndex(false));
       }
     }
   }, [
@@ -165,6 +172,7 @@ export function useMultiCombobox({
     closeAndReset,
     hasSearch,
     setHighlightedIndex,
+    findOpeningIndex,
   ]);
 
   // The scroll effect lives here, the highlight owner, so the hover/keyboard
@@ -243,7 +251,7 @@ export function useMultiCombobox({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -259,7 +267,7 @@ export function useMultiCombobox({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(selectableItems.length - 1);
+              setHighlightedIndex(findOpeningIndex(true));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -289,7 +297,7 @@ export function useMultiCombobox({
           } else if (!isOpen) {
             const didOpen = onOpen() !== false;
             if (didOpen && !hasSearch) {
-              setHighlightedIndex(0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           }
           break;
@@ -365,6 +373,7 @@ export function useMultiCombobox({
       setHighlightedIndex,
       onToggle,
       getEnabledIndices,
+      findOpeningIndex,
       hasSearch,
       typeahead,
       onClear,
