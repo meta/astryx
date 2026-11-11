@@ -34,19 +34,24 @@ export const docs = {
     {
       label: 'Master-detail rows',
       code: `const [activeKey, setActiveKey] = useState(null);
+const handleActivate = useCallback(
+  (item, key) => setActiveKey(key),
+  [],
+);
 const activation = useTableActivation({
   activeKey,
-  onActivate: (item, key) => setActiveKey(key),
+  onActivate: handleActivate,
 });
 
 <Table data={orders} columns={columns} idKey="id" plugins={{activation}} />;`,
     },
     {
       label: 'Locking system rows out of activation',
-      code: `const activation = useTableActivation({
+      code: `const isActivatable = useCallback(item => !item.isSystemRow, []);
+const activation = useTableActivation({
   activeKey,
-  onActivate: (item, key) => setActiveKey(key),
-  getIsItemActivatable: item => !item.isSystemRow,
+  onActivate: handleActivate,
+  getIsItemActivatable: isActivatable,
 });`,
     },
   ],

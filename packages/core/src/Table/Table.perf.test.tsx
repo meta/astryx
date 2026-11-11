@@ -979,4 +979,41 @@ describe('activation key-only updates', () => {
       view.unmount();
     }
   });
+
+  it('re-resolves each row once per render with inline callbacks', async () => {
+    const count = 20;
+    const data = createTestData(count);
+    const predicateCalls: Array<string> = [];
+    function Harness({activeKey}: {activeKey: string}) {
+      // New identities every render, as the documented inline usage does.
+      const plugin = useTableActivation<TestRow>({
+        activeKey,
+        onActivate: () => {},
+        getIsItemActivatable: item => {
+          predicateCalls.push(item.id as string);
+          return true;
+        },
+      });
+      return (
+        <Table
+          data={data}
+          columns={testColumns}
+          idKey="id"
+          plugins={{plugin}}
+        />
+      );
+    }
+    const view = render(<Harness activeKey="row-0" />);
+    const mountedCalls = predicateCalls.length;
+    await act(async () => {
+      // Same key, fresh inline identities: the predicate identity change
+      // re-resolves every row exactly once, with no row re-render, so the
+      // cost stays one evaluation per row, not per row per render path.
+      view.rerender(<Harness activeKey="row-0" />);
+    });
+    expect(predicateCalls.length - mountedCalls).toBe(count);
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows[0].getAttribute('data-active')).toBe('true');
+    view.unmount();
+  });
 });

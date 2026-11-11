@@ -56,7 +56,9 @@ const LARGE_STORY_URL =
  * into the row locators below.
  */
 function storyTable(page: Page) {
-  return page.locator('table:has(tbody tr[data-activation-eligible])').first();
+  return page
+    .locator('table:has(tbody tr[style*="--_table-activation-cursor"])')
+    .first();
 }
 
 type AxNode = {
@@ -199,7 +201,7 @@ test('the active row is the single current-state owner', async ({page}) => {
       current: await read('this.getAttribute("aria-current")'),
       active: await read('this.getAttribute("data-active")'),
       inStory: await read(
-        'this.closest("table")?.querySelector("tbody tr[data-activation-eligible]") != null',
+        'this.closest("table")?.querySelector("tbody tr[style*=--_table-activation-cursor]") != null',
       ),
     });
   }
