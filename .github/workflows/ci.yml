@@ -2645,6 +2645,7 @@ jobs:
     outputs:
       chromium: ${{ steps.matrix.outputs.chromium }}
       webkit: ${{ steps.matrix.outputs.webkit }}
+      chromium_specs: ${{ steps.select-chromium.outputs.specs }}
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
@@ -2705,32 +2706,12 @@ jobs:
           cp .test-scope/.github/scripts/merge-base.sh "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/interaction-legs/.github/"
 
-      - name: Count the Chromium legs
-        id: count-chromium
-        if: steps.scope-chromium.outputs.applies == 'true'
-        continue-on-error: true
-        env:
-          LAB_SPECS: ${{ steps.scope-chromium.outputs.lab_specs_path }}
-        run: |
-          # A Lab-only change runs only the interaction specs it edits.
-          FILTERS=()
-          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
-          git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
-          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
-            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
-            --tests-out "$RUNNER_TEMP/interaction-legs/tests.json" \
-            --key interaction-chromium --fallback-key interaction-webkit \
-            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
-            --setup-seconds 90 --max-seconds 600 \
-            --leg 1 --max-legs 10 \
-            "${FILTERS[@]}"
-
-      # The Chromium selection (spec:AST-030 FR31) runs in shadow: this step
-      # computes it, reports it and keeps it as an artifact, and the lane
-      # still runs every spec until a replay of recent pull requests shows the
-      # selection catches what the full runs caught. Its import graphs read
-      # the merge commit's package, harness and Storybook sources.
-      - name: Select the Chromium proofs, in shadow
+      # The Chromium selection (spec:AST-030 FR31): the specs a pull request
+      # reaches, or `full`. Its import graphs read the merge commit's package,
+      # harness and Storybook sources. The leg count and every leg read its
+      # output; an empty output (a failed or skipped step) runs the full
+      # suite. The artifact feeds the escape log.
+      - name: Select the Chromium proofs
         id: select-chromium
         if: github.event_name == 'pull_request' && steps.scope-chromium.outputs.applies == 'true' && steps.scope-chromium.outputs.lab_specs_path == ''
         continue-on-error: true
@@ -2753,6 +2734,8 @@ jobs:
             --selection .test-scope/.github/interaction-selection.json \
             --primitives .test-scope/.github/a11y-shared-primitives.json \
             --out "$RUNNER_TEMP/interaction-legs/chromium-selection.json" | tee -a "$GITHUB_STEP_SUMMARY"
+          node -e 'const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")); console.log(`specs=${r.full ? "full" : JSON.stringify(r.specs)}`)' \
+            "$RUNNER_TEMP/interaction-legs/chromium-selection.json" >> "$GITHUB_OUTPUT"
 
       - name: Keep the Chromium selection
         if: steps.select-chromium.outcome == 'success'
@@ -2761,6 +2744,42 @@ jobs:
           name: interaction-selection-${{ github.run_attempt }}
           path: ${{ runner.temp }}/interaction-legs/chromium-selection.json
           retention-days: 90
+
+      - name: Count the Chromium legs
+        id: count-chromium
+        if: steps.scope-chromium.outputs.applies == 'true'
+        continue-on-error: true
+        env:
+          LAB_SPECS: ${{ steps.scope-chromium.outputs.lab_specs_path }}
+          CHROMIUM_SPECS: ${{ steps.select-chromium.outputs.specs }}
+        run: |
+          # A Lab-only change runs only the interaction specs it edits; any
+          # other pull request runs the Chromium selection, and `full` or no
+          # selection runs every spec.
+          FILTERS=()
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}")
+          elif [ -n "${CHROMIUM_SPECS:-}" ] && [ "$CHROMIUM_SPECS" != full ]; then
+            # A selection that does not parse runs every spec.
+            if ! PICKED_LINES=$(node -e 'for (const file of JSON.parse(process.env.CHROMIUM_SPECS)) console.log(file)'); then
+              echo "::warning::The Chromium selection does not parse, so every spec runs."
+            elif [ -z "$PICKED_LINES" ]; then
+              echo "No Chromium interaction proof covers this change: it touches no proof, no component folder that holds one or renders one, and no shared code."
+              printf 'count=0\nruns=false\nleg=1\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            else
+              mapfile -t PICKED <<< "$PICKED_LINES"
+              FILTERS=(-- "${PICKED[@]}")
+            fi
+          fi
+          git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
+            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
+            --tests-out "$RUNNER_TEMP/interaction-legs/tests.json" \
+            --key interaction-chromium --fallback-key interaction-webkit \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
+            --setup-seconds 90 --max-seconds 600 \
+            --leg 1 --max-legs 10 \
+            "${FILTERS[@]}"
 
       # The full WebKit suite on the weekly run; for a release check, the
       # last full weekly run's verdict and the release version decide; every
@@ -2948,10 +2967,26 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         env:
           LAB_SPECS: ${{ steps.scope.outputs.lab_specs_path }}
+          CHROMIUM_SPECS: ${{ needs.interaction-legs.outputs.chromium_specs }}
         run: |
-          # A Lab-only change runs only the interaction specs it edits.
+          # A Lab-only change runs only the interaction specs it edits; any
+          # other pull request runs the Chromium selection, and `full` or no
+          # selection runs every spec.
           FILTERS=()
-          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}")
+          elif [ -n "${CHROMIUM_SPECS:-}" ] && [ "$CHROMIUM_SPECS" != full ]; then
+            # A selection that does not parse runs every spec.
+            if ! PICKED_LINES=$(node -e 'for (const file of JSON.parse(process.env.CHROMIUM_SPECS)) console.log(file)'); then
+              echo "::warning::The Chromium selection does not parse, so every spec runs."
+            elif [ -z "$PICKED_LINES" ]; then
+              echo "No Chromium interaction proof covers this change: it touches no proof, no component folder that holds one or renders one, and no shared code."
+              printf 'count=0\nruns=false\nleg=1\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            else
+              mapfile -t PICKED <<< "$PICKED_LINES"
+              FILTERS=(-- "${PICKED[@]}")
+            fi
+          fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
@@ -3041,10 +3076,26 @@ jobs:
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         env:
           LAB_SPECS: ${{ steps.scope.outputs.lab_specs_path }}
+          CHROMIUM_SPECS: ${{ needs.interaction-legs.outputs.chromium_specs }}
         run: |
-          # A Lab-only change runs only the interaction specs it edits.
+          # A Lab-only change runs only the interaction specs it edits; any
+          # other pull request runs the Chromium selection, and `full` or no
+          # selection runs every spec.
           FILTERS=()
-          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}")
+          elif [ -n "${CHROMIUM_SPECS:-}" ] && [ "$CHROMIUM_SPECS" != full ]; then
+            # A selection that does not parse runs every spec.
+            if ! PICKED_LINES=$(node -e 'for (const file of JSON.parse(process.env.CHROMIUM_SPECS)) console.log(file)'); then
+              echo "::warning::The Chromium selection does not parse, so every spec runs."
+            elif [ -z "$PICKED_LINES" ]; then
+              echo "No Chromium interaction proof covers this change: it touches no proof, no component folder that holds one or renders one, and no shared code."
+              printf 'count=0\nruns=false\nleg=1\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            else
+              mapfile -t PICKED <<< "$PICKED_LINES"
+              FILTERS=(-- "${PICKED[@]}")
+            fi
+          fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
             --key interaction-chromium --fallback-key interaction-webkit --tests "$RUNNER_TEMP/interaction-legs/tests.json" \
             --config playwright.interaction.config.ts --project chromium \
