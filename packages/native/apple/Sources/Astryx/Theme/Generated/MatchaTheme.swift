@@ -173,7 +173,7 @@ extension Theme {
         textPrimary: Color(.sRGB, red: 0.24313725490196078, green: 0.2823529411764706, blue: 0.11372549019607843, opacity: 1),
         textPurple: Color(.sRGB, red: 0.3333333333333333, green: 0.22745098039215686, blue: 0.4392156862745098, opacity: 1),
         textRed: Color(.sRGB, red: 0.8, green: 0, blue: 0, opacity: 1),
-        textSecondary: Color(.sRGB, red: 0.4392156862745098, green: 0.49411764705882355, blue: 0.27450980392156865, opacity: 1),
+        textSecondary: Color(.sRGB, red: 0.35294117647058826, green: 0.4196078431372549, blue: 0.16470588235294117, opacity: 1),
         textSuccess: Color(.sRGB, red: 0.23921568627450981, green: 0.47843137254901963, blue: 0, opacity: 1),
         textTeal: Color(.sRGB, red: 0.1411764705882353, green: 0.3333333333333333, blue: 0.27450980392156865, opacity: 1),
         textWarning: Color(.sRGB, red: 0.5137254901960784, green: 0.403921568627451, blue: 0, opacity: 1),

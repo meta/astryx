@@ -27,6 +27,9 @@ export const meta = {
     '`presentation={x}`; Tokenizer no longer reads `experimental`. Leaves a ' +
     'TODO where the experimental value is not an object literal, where the ' +
     'Tokenizer already passes presentation, and where it spreads props.',
+  // A file can change only through a JSX `experimental` prop, so a file whose text
+  // never says `experimental` is left as it is (assets/codemods/run-codemod.mjs).
+  mentions: ['experimental'],
 };
 
 const CORE_IMPORT_RE = /^@(astryxdesign|xds)\/core(?:\/|$)/;

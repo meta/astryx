@@ -123,8 +123,8 @@ pnpm review:pre --pr 1234             # read the description with gh
 The report reads only the local repository, and the description when you pass
 one. It prints:
 
-- each changed file and its class: record, owner-gated record, API report,
-  published package code, other package file, Lab, or repository;
+- each changed file and its class: record, owner-gated record, published
+  package code, other package file, Lab, or repository;
 - the current records that govern those files, and the claims that the files
   cite or that the added lines route;
 - the global baseline claims that the linked components' review triggers route,
@@ -154,13 +154,20 @@ specifications last. Then check each item that the report lists. Item d applies
 to every pull request. The report checks items h to l automatically and lists
 each finding at its file and line.
 
-- **a. API delta.** A current record decides each added or changed row of a
-  package's `api-report.md`. The record is current at the merge base or changes
-  in the same pull request. After a public API change, run `pnpm api:report`
-  and commit the report. A row that no record decides goes to an owner for a
+- **a. API delta.** A current record decides each added or changed row of the
+  pull request's API delta, which the review bot posts at the start of its
+  summary notes. The record is current at the merge base or changes in the
+  same pull request. A row that no record decides goes to an owner for a
   decision; review does not ask you to remove it
   ([`architecture:public-component-api`](../architecture/public-component-api.md#boundaries-and-invariants)
   INV24 and INV25).
+  A new internal module or hook that another component can import (a package
+  `internal/` export, or a hook used outside the component that owns it) and
+  that no record defines gets REQUEST_CHANGES:
+  it needs an owner API decision, with the delta as usage, why it is needed,
+  and why existing modules are not enough
+  ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#contract-before-escalation)
+  step 5 and DEC-22).
 - **b. Behavior.** Each observable behavior change in a published package
   cites the current record and clause that settle it. If nothing changes
   behavior, write "No behavior change" in the description. A clause settles
@@ -185,8 +192,8 @@ each finding at its file and line.
   ([Public repository boundary](#public-repository-boundary)).
 - **e. New public hook.** Each public hook has a minimal, runnable example: a
   live template block that names the hook in `exampleFor` or `alsoExampleFor`.
-  A public hook is a hook that a package's API report lists, so a new Hooks row
-  or a new export from a published entry point makes one. Motion and gesture
+  A public hook is a hook that a package exports from a published entry point,
+  so a new hook export makes one. Motion and gesture
   hooks count. A public hook without a conforming example is a docs gap that an
   issue tracks
   ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#consumer-docs)
