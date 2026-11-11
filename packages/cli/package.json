@@ -119,7 +119,8 @@
     "sync:api-types": "node scripts/sync-api-types.mjs",
     "readme": "node scripts/generate-cli-readme.mjs",
     "readme:check": "node scripts/generate-cli-readme.mjs --check",
-    "prepack": "pnpm sync:api-types"
+    "postpack": "node scripts/generate-template-components.mjs --clean && node scripts/generate-stored-docs.mjs --clean && node scripts/generate-command-list.mjs --clean",
+    "prepack": "pnpm sync:api-types && node scripts/generate-template-components.mjs && node scripts/generate-stored-docs.mjs && node scripts/generate-command-list.mjs"
   },
   "dependencies": {
     "@babel/core": "7.29.7",
