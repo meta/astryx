@@ -10,6 +10,7 @@
  */
 
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** Only these token types may differ between light and dark. */
 export const MODAL = new Set(['color', 'shadow']);
@@ -238,9 +239,6 @@ export function makeCompiler(project, parts) {
       .slice(0, 4)
       .join(', ');
 
-  /** @param {string} v */
-  const quote = v => (/[\s"#(]/.test(v) ? `"${v.replace(/"/g, '\\"')}"` : v);
-
   /**
    * Whether a token set on a part can take effect there: the part, or a part
    * inside it, must read it. A part with no record is checked through the
@@ -279,7 +277,7 @@ export function makeCompiler(project, parts) {
       return null;
     }
     const reads = g ? partReads(target, g) : [];
-    const v = quote(value);
+    const v = quoteCommandArgument(value);
     /** @type {string[]} */
     const run = [];
     if (reads.length)
@@ -354,7 +352,7 @@ export function makeCompiler(project, parts) {
       : [];
     return {
       message: `No component reads ${token}, so setting it changes nothing.${near.length ? ` Tokens components do read for ${g}: ${near.join(', ')}.` : ''}`,
-      run: [`${HOW} ${quote(token)}`],
+      run: [`${HOW} ${quoteCommandArgument(token)}`],
       also: [],
     };
   }

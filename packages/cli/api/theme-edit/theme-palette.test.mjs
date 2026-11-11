@@ -334,14 +334,14 @@ describe('color dials through the palette generator', () => {
       themeEditSet('p', 'accent', '#7c3aed', {cwd, mode: 'dark'}),
     );
     expect(mode.run[0]).toBe(
-      'astryx experimental theme editor set p --color-accent "#7c3aed" --mode dark',
+      "astryx experimental theme editor set p --color-accent '#7c3aed' --mode dark",
     );
     const on = await refusal(() =>
       themeEditSet('p', 'info', '#0284c7', {cwd, on: 'button'}),
     );
     // The button reads no --color-info, so the part's own route leads.
     expect(on.run[0]).toBe(
-      'astryx experimental theme editor set p background-color "#0284c7" --on button',
+      "astryx experimental theme editor set p background-color '#0284c7' --on button",
     );
     expect(read('p.settings.json')).toBe(before);
     expect(fs.existsSync(file('palette.config.json'))).toBe(false);
@@ -454,7 +454,7 @@ describe('color dials through the palette generator', () => {
     expect(brand.commands).toContain('how accent');
     expect(brand.commands).not.toMatch(/ set |<theme>|set my /);
     expect((await ask('brand color #7c3aed')).commands).toContain(
-      `set ${theme} accent "#7c3aed"`,
+      `set ${theme} accent '#7c3aed'`,
     );
     const more = await ask('make it more colorful');
     expect(more.commands).toContain(`set ${theme} vibrancy more`);
@@ -1135,13 +1135,13 @@ describe('color settings, refused well', () => {
     /** @param {string} v */
     const why = v => refusal(() => themeEditSet('p', 'accent', v, {cwd}));
     expect((await why('7c3aed')).run[0]).toBe(
-      'astryx experimental theme editor set p accent "#7c3aed"',
+      "astryx experimental theme editor set p accent '#7c3aed'",
     );
     expect((await why('"#16a34a"')).run[0]).toBe(
-      'astryx experimental theme editor set p accent "#16a34a"',
+      "astryx experimental theme editor set p accent '#16a34a'",
     );
     expect((await why('#16a34a;')).run[0]).toBe(
-      'astryx experimental theme editor set p accent "#16a34a"',
+      "astryx experimental theme editor set p accent '#16a34a'",
     );
     expect((await why('purpel')).run[0]).toBe(
       'astryx experimental theme editor set p accent purple',
@@ -1156,7 +1156,7 @@ describe('color settings, refused well', () => {
     const clear = await why('rgba(255, 0, 0, 0.5)');
     expect(clear.message).toContain('see-through');
     expect(clear.run[0]).toBe(
-      'astryx experimental theme editor set p accent "#ff0000"',
+      "astryx experimental theme editor set p accent '#ff0000'",
     );
     expect((await why('#0000')).message).toContain('see-through');
     expect(read('p.settings.json')).toBe(before);
@@ -1165,11 +1165,11 @@ describe('color settings, refused well', () => {
   it('suggests the dial for another name, a part route for a part, and the nearest vibrancy', async () => {
     // The value carries over only to a dial that takes it.
     for (const [thing, rest] of [
-      ['Accent', 'accent "#64748b"'],
-      ['gray', 'neutral "#64748b"'],
+      ['Accent', "accent '#64748b'"],
+      ['gray', "neutral '#64748b'"],
       ['saturation', 'vibrancy 60'],
-      ['destructive', 'danger "#64748b"'],
-      ['brand', 'accent "#64748b"'],
+      ['destructive', "danger '#64748b'"],
+      ['brand', "accent '#64748b'"],
     ]) {
       const r = await refusal(() => themeEditSet('p', thing, '#64748b', {cwd}));
       expect(r.code, thing).toBe('ERR_THEME_UNKNOWN_THING');
@@ -1180,7 +1180,7 @@ describe('color settings, refused well', () => {
     expect(
       (await refusal(() => themeEditSet('p', 'accent', '#ff000', {cwd})))
         .run[0],
-    ).toBe('astryx experimental theme editor set p accent "#ff0000"');
+    ).toBe("astryx experimental theme editor set p accent '#ff0000'");
     const inputs = await refusal(() =>
       themeEditSet('p', 'info', 'blue', {cwd, on: 'inputs'}),
     );

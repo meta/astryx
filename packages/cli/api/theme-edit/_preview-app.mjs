@@ -22,13 +22,15 @@ import {
 } from '../../foundation/fs/path-safety.mjs';
 import {baseResolved, openProject} from './_project.mjs';
 import {
+  buildTheme,
+  editedThemes,
+  fontPackages,
   loadTheme,
+  modesOf,
   nearest,
   refuse,
   shown,
   themeFiles,
-  buildTheme,
-  fontPackages,
 } from './_settings.mjs';
 import {
   colorsPageSource,
@@ -53,6 +55,10 @@ import {
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {requireProject, context} from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {
+  detectPackageManager,
+  quoteCommandArgument,
+} from '../../foundation/env/package-manager.mjs';
 
 const E = ERROR_CODES;
 
@@ -84,16 +90,6 @@ const MAX_WORDS = 40;
 /** A project-relative folder for messages: `.` for the project root. */
 const shownDir = (/** @type {string} */ cwd, /** @type {string} */ dir) =>
   shown(cwd, dir) || '.';
-
-/**
- * A value as one shell word: single quotes whenever a character could mean
- * something to a shell, so a suggested command is safe to paste.
- * @param {unknown} v
- */
-const shq = v =>
-  /^[\w./@:=+-]+$/.test(String(v))
-    ? String(v)
-    : `'${String(v).replace(/'/g, `'\\''`)}'`;
 
 /**
  * Refuse a folder name that this platform would take literally in a way the
@@ -325,7 +321,7 @@ function checkPlacement(cwd, dir, where, retry) {
       damaged
         ? `${where} holds the app itself, and an older, damaged ${PREVIEW_DATA}.`
         : fs.existsSync(record)
-          ? `${where} holds an older theme preview, in a folder that holds the app itself; remove it, then add the preview in its own folder.`
+          ? `${where} holds an older theme preview, in a folder that holds the app itself; move its files into a folder of their own, then add the preview there.`
           : `${where} is no place for the preview: the folder holds the app itself (its root, src/, a routes folder or a package.json), and the app does not serve a preview there.`,
       damaged
         ? {
@@ -333,7 +329,9 @@ function checkPlacement(cwd, dir, where, retry) {
           }
         : {
             run: fs.existsSync(record)
-              ? [`${PREVIEW} remove --path ${shq(shownDir(cwd, dir))}`]
+              ? [
+                  `${PREVIEW} remove --path ${quoteCommandArgument(shownDir(cwd, dir))}`,
+                ]
               : [fallback],
           },
     );
@@ -370,7 +368,9 @@ function checkPlacement(cwd, dir, where, retry) {
       `${where} is in ${shown(cwd, app)}/, and Next serves ${shown(cwd, served)}/ instead when both are there.`,
       {
         run: fs.existsSync(path.join(dir, PREVIEW_DATA))
-          ? [`${PREVIEW} remove --path ${shq(shownDir(cwd, dir))}`]
+          ? [
+              `${PREVIEW} remove --path ${quoteCommandArgument(shownDir(cwd, dir))}`,
+            ]
           : [fallback],
       },
     );
@@ -419,7 +419,8 @@ function checkPlacement(cwd, dir, where, retry) {
 function previewDir(cwd, where, opts = {}) {
   const retry =
     opts.retry ??
-    (p => `${PREVIEW} list${p == null ? '' : ` --path ${shq(p)}`}`);
+    (p =>
+      `${PREVIEW} list${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`);
   const routes = ['app', path.join('src', 'app')]
     .map(r => path.join(cwd, r))
     .filter(r => fs.existsSync(r) && fs.statSync(r).isDirectory());
@@ -575,7 +576,7 @@ export default function Home() {
  */
 function planStarterApp(cwd, where, extra, dependencies, slug = null) {
   const again = (/** @type {string | null} */ p) =>
-    `${PREVIEW} app ${shq(p ?? 'theme-app')}${slug == null ? '' : ` --theme ${shq(slug)}`}`;
+    `${PREVIEW} app ${quoteCommandArgument(p ?? 'theme-app')}${slug == null ? '' : ` --theme ${quoteCommandArgument(slug)}`}`;
   checkFolderName(where, 'The app folder', again);
   /** @type {string} */
   let root;
@@ -1092,7 +1093,7 @@ const keptNote = (name, why) =>
   why === 'not-preview'
     ? `${name} is kept: theme-preview.json lists it, but the preview only writes page.tsx and page files in ${PAGES_DIR}/`
     : why === 'no-hash'
-      ? `${name} is kept: theme-preview.json has no record of how the preview wrote it, so it may hold your changes; delete it yourself if it is the preview's`
+      ? `${name} is kept: theme-preview.json has no record of how the preview wrote it, so it may hold your changes; it stays until you remove it yourself`
       : `${name} was changed by hand after the preview wrote it, so it is kept`;
 
 /**
@@ -1144,7 +1145,7 @@ function checkWrite(cwd, dir, data, w, elsewhere) {
       E.ERR_FILE_EXISTS,
       `${name} was changed by hand after the preview wrote it, so it is not replaced.`,
       {
-        fix: `copy your changes out of ${name}, then delete it or give it another name, and run the command again`,
+        fix: `copy your changes out of ${name}, then give it another name, and run the command again`,
       },
     );
   return 'replace';
@@ -1487,17 +1488,6 @@ function tidyPageFolders(dir) {
     }
 }
 
-/** The themes this command made, by name. @param {string} cwd */
-function editedThemes(cwd) {
-  const root = path.join(cwd, 'themes');
-  return fs.existsSync(root)
-    ? fs
-        .readdirSync(root)
-        .filter(d => fs.existsSync(themeFiles(cwd, d).settings))
-        .sort()
-    : [];
-}
-
 /**
  * The theme the route imports; null for the app's own theme. A theme that
  * does not load is refused here, before the route or any page is written.
@@ -1524,6 +1514,19 @@ async function routeTheme(cwd, dir, data, opts = {}) {
     mode: ti.mode,
     ...(unbuilt && opts.build === false ? {unbuilt: true} : {}),
   };
+}
+
+/**
+ * Run `fn` under a theme's lock when the command was given one (the
+ * adapter's `lockTheme`), else as it is.
+ * @param {any} options
+ * @param {string} slug
+ * @param {() => unknown} fn
+ */
+async function themeLocked(options, slug, fn) {
+  if (typeof options?.lockTheme === 'function')
+    await options.lockTheme(slug, async () => fn());
+  else fn();
 }
 
 /**
@@ -1597,13 +1600,7 @@ async function colorsPage(cwd, dir, slug) {
   const uses = {};
   // Only the theme's own modes have shades; text on a fill is marked on
   // the neutral shade it uses, and pure black or white on no shade.
-  const modes = /** @type {Array<'light' | 'dark'>} */ (
-    data.mode === 'light-only'
-      ? ['light']
-      : data.mode === 'dark-only'
-        ? ['dark']
-        : ['light', 'dark']
-  );
+  const modes = modesOf(data);
   for (const [token, v] of Object.entries(pal.tokens)) {
     for (const m of modes) {
       if (exact(token, m)) continue;
@@ -2118,14 +2115,9 @@ function pageNeeds(cwd, source) {
 
 /** The command that installs what the package.json names. @param {string} cwd */
 function installCommandOf(cwd) {
-  for (const [lock, pm] of /** @type {const} */ ([
-    ['pnpm-lock.yaml', 'pnpm'],
-    ['yarn.lock', 'yarn'],
-    ['bun.lockb', 'bun'],
-    ['bun.lock', 'bun'],
-  ]))
-    if (fs.existsSync(path.join(cwd, lock))) return `${pm} install`;
-  return 'npm install';
+  // The package manager the app uses, as every command finds it
+  // (workspaces, the packageManager field, lock files).
+  return `${detectPackageManager(cwd)} install`;
 }
 
 /**
@@ -2312,8 +2304,12 @@ export async function themeEditPreviewAdd(description, options = {}) {
         ],
       },
     );
-  const pf = options.path != null ? ` --path ${shq(options.path)}` : '';
-  const tf = options.theme != null ? ` --theme ${shq(options.theme)}` : '';
+  const pf =
+    options.path != null ? ` --path ${quoteCommandArgument(options.path)}` : '';
+  const tf =
+    options.theme != null
+      ? ` --theme ${quoteCommandArgument(options.theme)}`
+      : '';
   const said = (description ?? '').trim();
   const named =
     options.template == null ? null : String(options.template).trim();
@@ -2330,8 +2326,8 @@ export async function themeEditPreviewAdd(description, options = {}) {
       '--template names the page; a description asks the ranking to pick one, so drop one of them.',
       {
         run: [
-          `${PREVIEW} add --template ${shq(named)}${tf}${pf}`,
-          `${PREVIEW} add ${shq(said)}${tf}${pf}`,
+          `${PREVIEW} add --template ${quoteCommandArgument(named)}${tf}${pf}`,
+          `${PREVIEW} add ${quoteCommandArgument(said)}${tf}${pf}`,
         ],
       },
     );
@@ -2342,7 +2338,7 @@ export async function themeEditPreviewAdd(description, options = {}) {
       `--top takes 1, 2 or 3, not "${String(options.top)}".`,
       {
         run: [
-          `${PREVIEW} add ${shq(said || 'a sales dashboard')} --top 2${tf}${pf}`,
+          `${PREVIEW} add ${quoteCommandArgument(said || 'a sales dashboard')} --top 2${tf}${pf}`,
         ],
       },
     );
@@ -2355,7 +2351,7 @@ export async function themeEditPreviewAdd(description, options = {}) {
       {
         run: [
           named != null
-            ? `${PREVIEW} add --template ${shq(named)}${tf}${pf}`
+            ? `${PREVIEW} add --template ${quoteCommandArgument(named)}${tf}${pf}`
             : `${PREVIEW} add 'a sales dashboard' --top ${String(options.top)}${tf}${pf}`,
         ],
       },
@@ -2380,7 +2376,7 @@ export async function themeEditPreviewAdd(description, options = {}) {
     );
   }
   const retry = (/** @type {string | null} */ p) =>
-    `${PREVIEW} add${said ? ` ${shq(said)}` : ''}${named != null ? ` --template ${shq(named)}` : ''}${tf}${p == null ? '' : ` --path ${shq(p)}`}`;
+    `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${tf}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
   const at = previewDir(cwd, options.path, {write: true, retry});
   const recovered = recoverPreview(cwd, at.dir);
   if (recovered) notes.push(recovered);
@@ -2389,7 +2385,7 @@ export async function themeEditPreviewAdd(description, options = {}) {
   const data = existing ?? {version: 1, theme: null, pages: [], files: []};
   const wore = data.theme;
   const againWith = (/** @type {string | null} */ t) =>
-    `${PREVIEW} add${said ? ` ${shq(said)}` : ''}${named != null ? ` --template ${shq(named)}` : ''}${t == null ? '' : ` --theme ${t}`}${pf}`;
+    `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${t == null ? '' : ` --theme ${t}`}${pf}`;
   const without = "leave out --theme and the pages wear the app's own theme";
   if (options.theme != null) {
     wornTheme(cwd, options.theme, againWith, without);
@@ -2621,8 +2617,15 @@ export async function themeEditPreviewAdd(description, options = {}) {
     notes.push(
       `moved ${move.moved.join(', ')} from ${LEGACY_PAGES_DIR}/ to ${PAGES_DIR}/, a folder Next never serves as a route`,
     );
-  if (wore && wore !== data.theme) recordPreview(cwd, wore, at.dir, false);
-  if (data.theme) recordPreview(cwd, data.theme, at.dir);
+  // previews.json is a theme file: written under that theme's lock, so a
+  // change running on the theme never takes it back.
+  if (wore && wore !== data.theme)
+    await themeLocked(options, wore, () =>
+      recordPreview(cwd, wore, at.dir, false),
+    );
+  const worn = data.theme;
+  if (worn)
+    await themeLocked(options, worn, () => recordPreview(cwd, worn, at.dir));
   return {
     type: 'themeEdit.previewAdd',
     data: {
@@ -2666,7 +2669,8 @@ export async function themeEditPreviewApp(dir, options = {}) {
       : wornTheme(
           cwd,
           slug,
-          t => `${PREVIEW} app ${shq(dir)}${t == null ? '' : ` --theme ${t}`}`,
+          t =>
+            `${PREVIEW} app ${quoteCommandArgument(dir)}${t == null ? '' : ` --theme ${t}`}`,
           'leave out --theme and the app wears the neutral theme',
         );
   // A new app has no Core installed yet: its pages come from this CLI's own
@@ -2812,7 +2816,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
     cwd,
     plan,
     d =>
-      `${PREVIEW} app ${shq(d)}${slug == null ? '' : ` --theme ${shq(slug)}`}`,
+      `${PREVIEW} app ${quoteCommandArgument(d)}${slug == null ? '' : ` --theme ${quoteCommandArgument(slug)}`}`,
   );
   const folder = shownDir(cwd, plan.root);
   if (
@@ -2831,7 +2835,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
       pages: data.pages.map(x => x.id),
       files,
       notes,
-      open: `cd ${shq(folder)} && npm install && npm run dev, then open /theme-preview`,
+      open: `cd ${quoteCommandArgument(folder)} && npm install && npm run dev, then open /theme-preview`,
     },
   };
 }
@@ -2866,10 +2870,12 @@ function readVersion(project, pkg) {
 export async function themeEditPreviewList(options = {}) {
   const {cwd = process.cwd()} = options;
   requireProject(cwd);
-  const pf = options.path != null ? ` --path ${shq(options.path)}` : '';
+  const pf =
+    options.path != null ? ` --path ${quoteCommandArgument(options.path)}` : '';
   const at = previewDir(cwd, options.path, {
     optional: true,
-    retry: p => `${PREVIEW} list${p == null ? '' : ` --path ${shq(p)}`}`,
+    retry: p =>
+      `${PREVIEW} list${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`,
   });
   const data = at && readPreview(cwd, at.dir, pf);
   /** @type {string[]} */
@@ -2904,9 +2910,10 @@ export async function themeEditPreviewList(options = {}) {
 export async function themeEditPreviewRemove(page, options = {}) {
   const {cwd = process.cwd()} = options;
   requireProject(cwd);
-  const pf = options.path != null ? ` --path ${shq(options.path)}` : '';
+  const pf =
+    options.path != null ? ` --path ${quoteCommandArgument(options.path)}` : '';
   const retry = (/** @type {string | null} */ p) =>
-    `${PREVIEW} remove${page != null ? ` ${shq(page)}` : ''}${p == null ? '' : ` --path ${shq(p)}`}`;
+    `${PREVIEW} remove${page != null ? ` ${quoteCommandArgument(page)}` : ''}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
   const at = previewDir(cwd, options.path, {retry});
   const recovered = recoverPreview(cwd, at.dir);
   const data = readPreview(cwd, at.dir, pf);
@@ -3045,7 +3052,10 @@ export async function themeEditPreviewRemove(page, options = {}) {
       retry(options.path ?? null),
     );
     tidyPageFolders(at.dir);
-    if (gone) recordPreview(cwd, gone, at.dir, false);
+    if (gone)
+      await themeLocked(options, gone, () =>
+        recordPreview(cwd, gone, at.dir, false),
+      );
     return {
       type: 'themeEdit.previewRemove',
       data: {
@@ -3068,7 +3078,7 @@ export async function themeEditPreviewRemove(page, options = {}) {
       E.ERR_FILE_EXISTS,
       `${shown(cwd, path.join(at.dir, 'page.tsx'))} was changed by hand after the preview wrote it. It imports the preview pages, so removing them would leave a route that does not build.`,
       {
-        fix: `copy your changes out of ${shown(cwd, path.join(at.dir, 'page.tsx'))}, delete it or give it another name, then run ${PREVIEW} remove${pf} again`,
+        fix: `copy your changes out of ${shown(cwd, path.join(at.dir, 'page.tsx'))}, give it another name, then run ${PREVIEW} remove${pf} again`,
       },
     );
   const ids = new Set(data.pages.map(p => p.id));
@@ -3149,7 +3159,11 @@ export async function themeEditPreviewRemove(page, options = {}) {
   } catch {
     // Not empty: something there is not the preview's.
   }
-  if (data.theme) recordPreview(cwd, data.theme, at.dir, false);
+  const worn = data.theme;
+  if (worn)
+    await themeLocked(options, worn, () =>
+      recordPreview(cwd, worn, at.dir, false),
+    );
   return {
     type: 'themeEdit.previewRemove',
     data: {folder, removed, kept, missing, rewritten: [], notes, pages: []},

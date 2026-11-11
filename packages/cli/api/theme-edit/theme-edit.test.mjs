@@ -134,7 +134,7 @@ describe('refusals', () => {
     expect(r.message).toContain('card never reads --color-on-info-muted');
     expect(r.message).toContain('Nothing was changed.');
     expect(r.run).toContain(
-      'astryx experimental theme editor set t color "#ffffff" --on card',
+      "astryx experimental theme editor set t color '#ffffff' --on card",
     );
     expect(settingsOf('t')).toBe(before);
   });
@@ -241,8 +241,9 @@ describe('colors', () => {
       'var(--brand-ink)',
       {cwd},
     );
-    expect(r.data.problems.join(' ')).toContain('not checked');
-    expect(r.data.problems.join(' ')).toContain('var(--brand-ink)');
+    // What cannot be measured is a note, not a problem.
+    expect(r.data.notes.join(' ')).toContain('not checked');
+    expect(r.data.notes.join(' ')).toContain('var(--brand-ink)');
     await themeEditUndo('t', {cwd, thing: '--color-text-primary'});
   });
 
@@ -396,7 +397,7 @@ describe('typed modes', () => {
     );
     expect(r.code).toBe('ERR_THEME_NO_MODE');
     expect(r.run).toEqual([
-      'astryx experimental theme editor set night --color-accent "#ff0000"',
+      "astryx experimental theme editor set night --color-accent '#ff0000'",
     ]);
   });
 });
@@ -552,7 +553,7 @@ describe('how on real parts, questions and settings', () => {
     const commands = r.data.results.flatMap(x => x.commands);
     expect(
       commands.some(c =>
-        c.endsWith('editor set t color "#ffffff" --on banner'),
+        c.endsWith("editor set t color '#ffffff' --on banner"),
       ),
     ).toBe(true);
     expect(
@@ -564,7 +565,7 @@ describe('how on real parts, questions and settings', () => {
   it('a question about soft shadows is answered with box-shadow on the part', async () => {
     const r = await themeEditHow('card soft shadow', {cwd});
     expect(r.data.results[0].commands[0]).toMatch(
-      /editor set t box-shadow "var\(--shadow-low\)" --on card$/,
+      /editor set t box-shadow 'var\(--shadow-low\)' --on card$/,
     );
   });
 
@@ -693,7 +694,7 @@ describe('the command', () => {
     expect(out.code).toBe('ERR_THEME_NO_EFFECT');
     // The same prefix the text output uses.
     expect(out.suggestions[0].name).toMatch(
-      /^(astryx|(?:npx|pnpm dlx|yarn dlx|bunx) \S+) experimental theme editor set t color "#ffffff" --on card$/,
+      /^(astryx|(?:npx|pnpm dlx|yarn dlx|bunx) \S+) experimental theme editor set t color '#ffffff' --on card$/,
     );
   });
 

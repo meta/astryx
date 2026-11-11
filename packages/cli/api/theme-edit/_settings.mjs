@@ -43,7 +43,6 @@ import {
   compositeOver,
   isColorValue,
   isSafeValue,
-  isSize,
   parseColor,
   ratio,
 } from './_color.mjs';
@@ -51,6 +50,8 @@ import {
   PALETTE_DIALS,
   assertNoPlaceholder,
   LIFT_PARTS,
+  modesOf,
+  paletteFiles,
   paletteImport,
   paletteMapping,
   syncPalette,
@@ -59,6 +60,7 @@ import {
 } from './_palette.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {baseResolved, baseThemeFile} from './_project.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /**
  * One setting the CLI owns.
@@ -107,9 +109,6 @@ export const kebab = s =>
  */
 export const camel = s =>
   s.replace(/-+([a-z0-9])?/g, (_, c) => (c ? c.toUpperCase() : ''));
-/** Quote a value for a suggested command. @param {unknown} v */
-export const q = v =>
-  /[\s"#(]/.test(String(v)) ? `"${String(v).replace(/"/g, '\\"')}"` : String(v);
 
 /**
  * The files of one theme, absolute.
@@ -132,6 +131,36 @@ export function themeFiles(cwd, slug) {
     previewPng: path.join(dir, 'preview.png'),
     sheetPng: path.join(dir, 'sheet.png'),
   };
+}
+
+/**
+ * The themes the editor made in the app (a settings file of its own), by
+ * name, or with `changed` the one an editor command changed last first: the
+ * undo history is written only by an editor command, so its time is the
+ * last change made there.
+ * @param {string} cwd
+ * @param {'name' | 'changed'} [order]
+ * @returns {string[]}
+ */
+export function editedThemes(cwd, order = 'name') {
+  const root = path.join(cwd, 'themes');
+  if (!fs.existsSync(root)) return [];
+  const names = fs
+    .readdirSync(root)
+    .filter(d => fs.existsSync(themeFiles(cwd, d).settings))
+    .sort();
+  if (order === 'name') return names;
+  const when = (/** @type {string} */ d) => {
+    const f = themeFiles(cwd, d);
+    const t =
+      [f.history, f.settingsTs, f.settings].find(x => fs.existsSync(x)) ??
+      f.settings;
+    return fs.statSync(t).mtimeMs;
+  };
+  return names
+    .map(d => ({d, t: when(d)}))
+    .sort((a, b) => b.t - a.t || a.d.localeCompare(b.d))
+    .map(x => x.d);
 }
 
 /** A path as the person sees it: relative to cwd. @param {string} cwd @param {string} f */
@@ -196,11 +225,16 @@ export function refuse(code, message, extra = {}) {
  * The settings of a theme, or a refusal naming the command that makes it.
  * @param {string} cwd
  * @param {string} slug
- * @param {string} [skip] the thing a command changes or removes: its value
- *   is not checked, so a value made under looser rules can be fixed
+ * @param {string | Partial<Setting>} [skip] the thing (or the one setting)
+ *   a command changes or removes: its value is not checked, so a value made
+ *   under looser rules can be fixed
  * @returns {ThemeData}
  */
-export function loadTheme(cwd, slug, skip = '') {
+export function loadTheme(
+  cwd,
+  slug,
+  skip = /** @type {string | Partial<Setting>} */ (''),
+) {
   if (!slugOk(slug)) {
     // A path or a capital letter typed for a theme that exists names it.
     const plain = String(slug ?? '')
@@ -232,6 +266,22 @@ export function loadTheme(cwd, slug, skip = '') {
       .replace(/^.*themes[\\/]/, '')
       .replace(/[\\/].*$/, '');
     const same = have.includes(plain) ? plain : null;
+    // A theme written by hand, ejected or built in: not one the editor
+    // made, and `new` with its name would be refused.
+    const other = [
+      [f.dir, `themes/${slug}`],
+      [path.join(cwd, 'src', 'themes', slug), `src/themes/${slug}`],
+    ].find(([d]) => fs.existsSync(d));
+    if (!same && (other || LIKE.includes(slug)))
+      refuse(
+        ERROR_CODES.ERR_UNKNOWN_THEME,
+        `${other ? `${other[1]} is a theme the editor did not make (written by hand, or ejected)` : `${slug} is a built-in theme`}, so the editor does not change it. Make an editor theme with its own name instead${LIKE.includes(slug) ? `, on top of ${slug}` : ''}.`,
+        {
+          run: [
+            `${P} new my-${slug}${LIKE.includes(slug) ? ` --like ${slug}` : ''}`,
+          ],
+        },
+      );
     refuse(
       ERROR_CODES.ERR_UNKNOWN_THEME,
       `There is no theme "${slug}" made by this command (no themes/${slug}/${slug}.settings.json).`,
@@ -265,7 +315,45 @@ export function loadTheme(cwd, slug, skip = '') {
   }
   const problem = settingsProblem(data, skip);
   // A value made under looser rules is not damage: the command that
-  // changes or removes that setting still works.
+  // changes or removes that setting still works, with the other bad ones
+  // left out of the build, so each listed fix runs on its own.
+  const all = problem ? badSettings(data) : [];
+  if (
+    problem &&
+    skip &&
+    all.some(s => skips(s, skip)) &&
+    !settingsProblem({
+      ...data,
+      settings: data.settings.filter(
+        (/** @type {any} */ s) => !all.includes(s),
+      ),
+    })
+  )
+    return data;
+  if (
+    problem &&
+    all.length &&
+    !settingsProblem({
+      ...data,
+      settings: data.settings.filter(
+        (/** @type {any} */ s) => !all.includes(s),
+      ),
+    }) &&
+    all.length > 1
+  )
+    throw new AstryxError(
+      `themes/${slug}/${slug}.settings.json holds ${all.length} settings the editor no longer accepts: ${all
+        .slice(0, 6)
+        .map(s => valueProblem(s))
+        .join(
+          '; ',
+        )}${all.length > 6 ? `; and ${all.length - 6} more` : ''}. Remove or change each; nothing else needs to change. Nothing was changed.`,
+      all.slice(0, 6).map(s => ({
+        name: `${P} undo ${slug} ${undoArgs(s)}`,
+        reason: 'do this instead',
+      })),
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
   const bad = problem ? badSetting(data) : null;
   if (problem && bad && settingsProblem(data, bad.thing) !== problem) {
     // A value it takes, for a dial; a color for a color token.
@@ -281,7 +369,7 @@ export function loadTheme(cwd, slug, skip = '') {
         ...(example
           ? [
               {
-                name: `${P} set ${slug} ${undoArgs(bad).replace(bad.thing, `${bad.thing} ${q(example)}`)}`,
+                name: `${P} set ${slug} ${undoArgs(bad).replace(bad.thing, `${bad.thing} ${quoteCommandArgument(example)}`)}`,
                 reason: 'or give it a value it takes',
               },
             ]
@@ -304,11 +392,14 @@ export function loadTheme(cwd, slug, skip = '') {
  * the same rules `set` checks it by (without the installed Core), so a value
  * edited by hand never reaches the build.
  * @param {any} data
- * @param {string} [skip] a thing whose value is not checked (the one a
+ * @param {string | Partial<Setting>} [skip] a thing or setting whose value is not checked (the one a
  *   command is about to change or remove)
  * @returns {string | null}
  */
-export function settingsProblem(data, skip = '') {
+export function settingsProblem(
+  data,
+  skip = /** @type {string | Partial<Setting>} */ (''),
+) {
   if (!data || typeof data !== 'object' || Array.isArray(data))
     return 'the file is not a settings object';
   if (!['both', 'light-only', 'dark-only'].includes(data.mode))
@@ -330,11 +421,42 @@ export function settingsProblem(data, skip = '') {
     const key = keyOf(s);
     if (keys.has(key)) return `${describe(s)} is listed twice`;
     keys.add(key);
-    if (s.thing === skip) continue;
+    if (skips(s, skip)) continue;
     const problem = valueProblem(s);
     if (problem) return problem;
   }
   return null;
+}
+
+/**
+ * Whether a setting is the one a command changes or removes: by thing, or
+ * by the whole identity (part, variant, state, mode) when one is given.
+ * @param {any} s
+ * @param {string | Partial<Setting> | undefined} skip
+ */
+function skips(s, skip) {
+  if (!skip) return false;
+  if (typeof skip === 'string') return s.thing === skip;
+  return (
+    s.thing === skip.thing &&
+    (s.on ?? '') === (skip.on ?? '') &&
+    (s.when ?? '') === (skip.when ?? '') &&
+    (s.state ?? '') === (skip.state ?? '') &&
+    (s.mode ?? '') === (skip.mode ?? '')
+  );
+}
+
+/**
+ * Every setting whose only problem is its value or scope, each with the
+ * command that removes it.
+ * @param {any} data
+ * @returns {Setting[]}
+ */
+export function badSettings(data) {
+  return (Array.isArray(data?.settings) ? data.settings : []).filter(
+    (/** @type {any} */ s) =>
+      s && typeof s.thing === 'string' && valueProblem(s),
+  );
 }
 
 /**
@@ -384,6 +506,8 @@ export function withoutBadValues(data) {
  * @returns {string | null}
  */
 function valueProblem(s) {
+  const scope = scopeProblem(s);
+  if (scope) return scope;
   {
     const bad = `${s.thing} "${s.value}"`;
     if (!isSafeValue(s.value)) return `${bad} cannot be a CSS value`;
@@ -399,7 +523,7 @@ function valueProblem(s) {
     const words = d.values.split('|').filter(w => !w.startsWith('<'));
     const ok =
       s.thing === 'corners'
-        ? words.includes(s.value) || isSize(s.value, '--radius')
+        ? words.includes(s.value) || /^\d+(\.\d+)?px$/.test(s.value)
         : s.thing === 'text-size'
           ? words.includes(s.value) ||
             (/^\d+(\.\d+)?$/.test(s.value) &&
@@ -413,8 +537,26 @@ function valueProblem(s) {
                 ? s.value.trim() !== ''
                 : words.includes(s.value);
     if (!ok || s.value === 'more' || s.value === 'less')
-      return `${bad} is not a value ${s.thing} takes (${d.values})`;
+      return `${bad} is not a value ${s.thing} takes (${d.values.replace('|more|less', '')})`;
   }
+  return null;
+}
+
+/**
+ * What is wrong with where a setting applies, or null: names only, as
+ * `set` takes them.
+ * @param {any} s
+ * @returns {string | null}
+ */
+function scopeProblem(s) {
+  if (s.on != null && !/^[a-z][a-z0-9-]*$/.test(s.on))
+    return `${s.thing} is set on "${s.on}", which is not a part or group name`;
+  if (s.state != null && !/^[a-z][a-z-]*$/.test(s.state))
+    return `${s.thing} has state "${s.state}", which is not a state name`;
+  if (s.when != null && !/^[\w-]+:[\w.-]+$/.test(s.when))
+    return `${s.thing} has --when "${s.when}", which is not prop:value`;
+  if ((s.when != null || s.state != null) && s.on == null)
+    return `${s.thing} has a variant or state but no part`;
   return null;
 }
 
@@ -456,13 +598,7 @@ export function partsOf(ctx, s) {
   return [s.on];
 }
 
-/** @param {ThemeData} d @returns {Array<'light' | 'dark'>} */
-export const modesOf = d =>
-  d.mode === 'light-only'
-    ? ['light']
-    : d.mode === 'dark-only'
-      ? ['dark']
-      : ['light', 'dark'];
+export {modesOf};
 
 /** @param {string} v */
 export const cornerPx = v =>
@@ -554,6 +690,8 @@ function partDefault(ctx, target, prop, when) {
  * @returns {any}
  */
 export function compileTheme(ctx, data, base) {
+  // A setting the editor no longer accepts never reaches the build.
+  data = {...data, settings: data.settings.filter(s => !valueProblem(s))};
   const TOKENS = ctx.project.core.tokenDefaults;
   // The base theme's type scale, read back from its sizes: base text, and
   // the ratio (2xl is three steps above base).
@@ -945,13 +1083,32 @@ export function findOverrides(cssText, theme) {
       `\\.astryx-${target.replace(/-/g, '\\-')}\\[data-([a-z-]+)="([^"]+)"\\]\\s*\\{([^}]*)\\}`,
       'g',
     );
+    // A shorthand and its longhands are one property: the last one set
+    // (background after background-color) is the one in effect.
+    // border-radius, border-collapse and border-spacing are not part of
+    // border.
+    const NOT_LONGHAND =
+      /^border-(radius|collapse|spacing)|^border-[a-z]+-radius$/;
+    /** @param {string} a @param {string} b */
+    const sameProperty = (a, b) => {
+      const [x, y] = [kebab(a), kebab(b)];
+      if (NOT_LONGHAND.test(x) || NOT_LONGHAND.test(y)) return x === y;
+      return x.startsWith(`${y}-`) || y.startsWith(`${x}-`) || x === y;
+    };
+    const last = props.filter(
+      (p, i) => !props.slice(i + 1).some(later => sameProperty(later, p)),
+    );
     for (const m of cssText.matchAll(re)) {
-      for (const prop of props) {
+      for (const prop of last) {
         // A prop named for the property itself (weight for font-weight,
         // color for color) is the author's own choice: it keeps winning.
         const css = kebab(prop);
         if (css === m[1] || css.endsWith(`-${m[1]}`)) continue;
-        if (new RegExp(`(^|[;\\s])${kebab(prop)}\\s*:`).test(m[3]))
+        // The override may set the property or one of its longhands.
+        const declared = [...m[3].matchAll(/(?:^|[;\s])([a-z-]+)\s*:/g)].map(
+          d => d[1],
+        );
+        if (declared.some(d => sameProperty(d, css)))
           extra.push({
             target,
             key: `${m[1]}:${m[2]}`,
@@ -1102,6 +1259,52 @@ function themeModuleSource(slug) {
   ].join('\n');
 }
 
+/** The theme source as the editor first writes it. @param {string} slug */
+export const themeSource = slug => themeModuleSource(slug);
+
+/**
+ * Why `<slug>.theme.ts` cannot carry the settings, or null: it must import
+ * `./<slug>.settings`, extend `<camel>Settings` and keep the name, or no
+ * setting takes effect.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+export function themeSourceProblem(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  if (!fs.existsSync(f.ts)) return null;
+  const code = fs
+    .readFileSync(f.ts, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '');
+  const settings = `${camel(slug)}Settings`;
+  if (
+    !new RegExp(`from\\s+['"]\\./${slug}\\.settings(\\.[jt]s)?['"]`).test(code)
+  )
+    return `${slug}.theme.ts does not import ./${slug}.settings`;
+  if (!new RegExp(`extends\\s*:\\s*${settings}\\b`).test(code))
+    return `${slug}.theme.ts no longer extends ${settings}`;
+  if (!new RegExp(`name\\s*:\\s*(['"\`])${slug}\\1`).test(code))
+    return `${slug}.theme.ts no longer names the theme '${slug}'`;
+  return null;
+}
+
+/**
+ * Refuse a build whose theme source cannot carry the settings, naming the
+ * lines that put it back.
+ * @param {string} cwd
+ * @param {string} slug
+ */
+export function refuseThemeSource(cwd, slug) {
+  const why = themeSourceProblem(cwd, slug);
+  if (why)
+    throw new AstryxError(
+      `${why}, so settings cannot take effect. Put back the import of ${camel(slug)}Settings from './${slug}.settings', extends: ${camel(slug)}Settings and name: '${slug}' in themes/${slug}/${slug}.theme.ts (your own changes stay below them). Nothing was changed.`,
+      [{name: `${P} show ${slug}`, reason: 'see the theme as it is'}],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+}
+
 /**
  * Generate the theme source, build it with the theme build, then repeat any
  * part setting a more specific rule would beat and build again.
@@ -1113,6 +1316,7 @@ function themeModuleSource(slug) {
 export async function buildTheme(ctx, slug, data) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
+  refuseThemeSource(cwd, slug);
   if (data.like) baseThemeFile(ctx.project, data.like);
   const base = await baseResolved(ctx.project, data.like);
   const theme = compileTheme(ctx, data, base);
@@ -1134,6 +1338,20 @@ export async function buildTheme(ctx, slug, data) {
     writeAtomic(f.settingsTs, settingsSource(slug, data, theme, pal));
     syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
     if (!fs.existsSync(f.ts)) writeAtomic(f.ts, themeModuleSource(slug));
+  });
+  // Files an earlier build wrote that this one may not: the variants types
+  // of an older base, and section sheets of an older look.
+  await step(() => {
+    for (const file of [
+      path.join(f.dir, `${slug}.variants.d.ts`),
+      ...(fs.existsSync(f.dir)
+        ? fs
+            .readdirSync(f.dir)
+            .filter(n => /^sheet-[a-z-]+\.(html|png)$/.test(n))
+            .map(n => path.join(f.dir, n))
+        : []),
+    ])
+      fs.rmSync(file, {force: true});
   });
   let receipt = await step(() => runBuild(ctx, slug));
   const found = findOverrides(fs.readFileSync(f.css, 'utf8'), theme).filter(
@@ -1173,9 +1391,12 @@ async function runBuild(ctx, slug) {
   const silent = logger.silent;
   logger.setSilent(true);
   try {
+    // No --out: the theme's name is its slug, so the build writes
+    // <slug>.css beside the source, and the generated headers read as a
+    // plain `compile themes/<slug>/<slug>.theme.ts` writes them.
     const {receipt} = await themeBuildForReport(
       shown(cwd, f.ts),
-      {out: shown(cwd, f.css)},
+      {},
       {cwd},
       {compact: true},
     );
@@ -1389,20 +1610,39 @@ function parseSettings(text) {
 function hashDir(dir) {
   /** @type {Map<string, string>} */
   const out = new Map();
-  if (!fs.lstatSync(dir, {throwIfNoEntry: false})?.isDirectory()) return out;
-  /** @param {string} d */
-  const walk = d => {
-    for (const e of fs.readdirSync(d, {withFileTypes: true})) {
-      const p = path.join(d, e.name);
-      if (e.isDirectory()) walk(p);
-      else if (e.isFile())
-        out.set(
-          p,
-          createHash('sha256').update(fs.readFileSync(p)).digest('hex'),
-        );
-    }
-  };
-  walk(dir);
+  for (const p of ownFiles(dir))
+    out.set(p, createHash('sha256').update(fs.readFileSync(p)).digest('hex'));
+  return out;
+}
+
+/**
+ * The files in a theme folder that the editor writes, by name: the
+ * theme's generated files, its settings, history and pages, and its color
+ * files. Anything else there (notes, a designer's source file, the
+ * person's own tokens) is never read, hashed or put back.
+ * `<slug>.theme.ts` is the person's file: it is listed only while it does
+ * not exist yet, so the run that creates it can take it back.
+ * @param {string} dir
+ * @returns {string[]}
+ */
+function ownFiles(dir) {
+  if (!fs.lstatSync(dir, {throwIfNoEntry: false})?.isDirectory()) return [];
+  const slug = path.basename(dir);
+  const mine = (/** @type {string} */ n) =>
+    n !== `${slug}.theme.ts` &&
+    (n.startsWith(`${slug}.`) ||
+      /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config(\.damaged)?\.json)$/.test(
+        n,
+      ));
+  /** @type {string[]} */
+  const out = [];
+  for (const e of fs.readdirSync(dir, {withFileTypes: true}))
+    if (e.isFile() && mine(e.name)) out.push(path.join(dir, e.name));
+  const tokens = path.join(dir, 'tokens');
+  if (fs.lstatSync(tokens, {throwIfNoEntry: false})?.isDirectory())
+    for (const e of fs.readdirSync(tokens, {withFileTypes: true}))
+      if (e.isFile() && e.name.startsWith(`${slug}.palette`))
+        out.push(path.join(tokens, e.name));
   return out;
 }
 
@@ -1418,10 +1658,18 @@ function hashDir(dir) {
  */
 async function track(dir, wrote, fn) {
   const before = hashDir(dir);
+  const theme = path.join(dir, `${path.basename(dir)}.theme.ts`);
+  const themeWasThere = fs.existsSync(theme);
   try {
     return await fn();
   } finally {
     const after = hashDir(dir);
+    // The theme source this run made is its own to take back.
+    if (!themeWasThere && fs.existsSync(theme))
+      after.set(
+        theme,
+        createHash('sha256').update(fs.readFileSync(theme)).digest('hex'),
+      );
     for (const [p, h] of after) if (before.get(p) !== h) wrote.set(p, h);
     for (const p of before.keys()) if (!after.has(p)) wrote.set(p, null);
   }
@@ -1495,7 +1743,7 @@ export function refuseLinks(cwd, slug) {
         `${path.relative(cwd, p) || p} is a link; the editor writes a theme's own files only, never through a link. Replace the link with a copy of what it points to. Nothing was changed.`,
         [
           {
-            name: `cp -rL ${q(path.relative(cwd, p))} ${q(`${path.relative(cwd, p)}.copy`)}`,
+            name: `cp -rL ${quoteCommandArgument(path.relative(cwd, p))} ${quoteCommandArgument(`${path.relative(cwd, p)}.copy`)}`,
             reason: 'copy what it points to, then put the copy in its place',
           },
         ],
@@ -1558,8 +1806,16 @@ export function buildCurrent(cwd, slug, data) {
  */
 export function staleBuild(cwd, slug, data) {
   const f = themeFiles(cwd, slug);
-  const missing = [f.js, f.css, f.settingsTs].find(p => !fs.existsSync(p));
-  if (missing) return `${path.basename(missing)} was missing`;
+  // The generated colors are part of the build when a color dial is set.
+  const colors = data.settings.some(
+    s => s.source === 'dial' && PALETTE_DIALS.includes(s.thing),
+  )
+    ? [path.join(cwd, paletteFiles(slug).palette)]
+    : [];
+  const missing = [f.js, f.css, f.settingsTs, ...colors].find(
+    p => !fs.existsSync(p),
+  );
+  if (missing) return `${path.relative(f.dir, missing)} was missing`;
   const ts = fs.readFileSync(f.settingsTs, 'utf8');
   const stamp =
     /\/\/ Built from settings ([0-9a-f]{16}) \(CLI ([^)]+)\)\./.exec(ts);
@@ -1567,7 +1823,7 @@ export function staleBuild(cwd, slug, data) {
   if (stamp && stamp[1] === hash && stamp[2] !== cliVersion())
     return `it was built by CLI ${stamp[2]}, and this is ${cliVersion()}`;
   if (!stamp || stamp[1] !== hash)
-    return `${slug}.settings.json changed after the build (edited by hand, or by another tool)`;
+    return `${slug}.settings.json does not match the build (a command stopped part way, a hand edit, or another tool)`;
   if (
     !ts.trimEnd().endsWith('});') ||
     fs.statSync(f.css).mtimeMs < fs.statSync(f.settingsTs).mtimeMs - 1000
@@ -1648,6 +1904,7 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   refuseLinks(cwd, slug);
+  refuseThemeSource(cwd, slug);
   const snapBefore = fs.existsSync(f.settings)
     ? fs.readFileSync(f.settings, 'utf8')
     : null;
@@ -1682,7 +1939,14 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
     };
   const resBefore =
     snapBefore && fs.existsSync(f.js)
-      ? await resolvedTokens(ctx, slug).catch(() => null)
+      ? await resolvedTokens(ctx, slug).catch(() => {
+          // The last build is damaged: the change still stands, and the
+          // result says why it lists no token changes.
+          notes.push(
+            `the last build (${path.basename(f.js)}) could not be read, so the token changes are not listed; the theme is built again`,
+          );
+          return null;
+        })
       : null;
   const before = parseSettings(snapBefore);
   const liftedBefore = new Set(before?.lifted ?? []);
@@ -1701,8 +1965,12 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
     built = await buildTheme(ctx, slug, data);
     data.lifted = built.lifted;
     // The undo step and the settings are part of the change: written whole,
-    // inside the rollback, the history before the settings.
+    // inside the rollback, the settings first. A command stopped between
+    // the two leaves the change saved with the history one step short (or,
+    // for an undo, a top step equal to the settings, which undo skips),
+    // never a step that undoes nothing or a lost step.
     await track(f.dir, wrote, () => {
+      writeAtomic(f.settings, `${JSON.stringify(data, null, 2)}\n`);
       if (historyAfter)
         writeAtomic(
           f.history,
@@ -1713,7 +1981,6 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
           f.history,
           JSON.stringify([...past, snapBefore].slice(-HISTORY_STEPS)),
         );
-      writeAtomic(f.settings, `${JSON.stringify(data, null, 2)}\n`);
     });
   } catch (e) {
     const {failed, skipped} = restoreWritten(was, wrote);
@@ -1775,7 +2042,12 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
     if (resBefore) {
       for (const m of modes) {
         for (const k of Object.keys(res[m])) {
-          if (resBefore[m][k] === res[m][k]) continue;
+          // A change of letter case alone (#FFFFFF, #ffffff) is no change.
+          if (
+            String(resBefore[m][k]).toLowerCase() ===
+            String(res[m][k]).toLowerCase()
+          )
+            continue;
           const modal = MODAL.has(ctx.C.typeOf(k));
           if (!modal && m === 'dark' && modes.length > 1) continue;
           changed.push(
@@ -1785,6 +2057,9 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
       }
     }
     problems = await contrastProblems(ctx, data, res);
+    // What cannot be measured is a note, not a problem.
+    notes.push(...problems.filter(x => x.startsWith('not checked')));
+    problems = problems.filter(x => !x.startsWith('not checked'));
   } catch (e) {
     ctx.unchecked ??= `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }

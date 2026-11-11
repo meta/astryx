@@ -174,7 +174,7 @@ describe('new takes its flags as set does', () => {
       themeEditNew('v1', {cwd, settings: {vibrancy: '60'}}),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/new v1 --vibrancy 60 --accent "#7c3aed"$/);
+    expect(r.run[0]).toMatch(/new v1 --vibrancy 60 --accent '#7c3aed'$/);
   });
 
   it('refuses a font or text size that would not build', async () => {
@@ -783,8 +783,10 @@ describe('hunt2: undo', () => {
     expect(
       (await refusal(() => themeEditUndo('u1', {cwd, on: 'card'}))).code,
     ).toBe('ERR_MISSING_ARGUMENT');
-    const base = await themeEditUndo('u1', {cwd, thing: 'base'});
-    expect(base.data.setting.value).toBe('none');
+    // base was never changed: it stays as the theme was made.
+    expect(
+      (await refusal(() => themeEditUndo('u1', {cwd, thing: 'base'}))).code,
+    ).toBe('ERR_THEME_NOT_SET');
     fs.rmSync(path.join(cwd, 'themes/u1'), {recursive: true, force: true});
   }, 240_000);
 

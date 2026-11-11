@@ -65,8 +65,10 @@ const bare = c => c.replace(/^.*? experimental theme (editor )?/, '');
 
 /** The words of a command, as a shell splits them. @param {string} c */
 const words = c =>
-  [...c.matchAll(/"((?:[^"\\]|\\.)*)"|(\S+)/g)].map(m =>
-    m[1] != null ? m[1].replace(/\\(.)/g, '$1') : m[2],
+  [...c.matchAll(/(?:'[^']*'|"(?:[^"\\]|\\.)*"|[^\s'"]+)+/g)].map(m =>
+    [...m[0].matchAll(/'([^']*)'|"((?:[^"\\]|\\.)*)"|([^\s'"]+)/g)]
+      .map(x => x[1] ?? x[2]?.replace(/\\(.)/g, '$1') ?? x[3])
+      .join(''),
   );
 
 /** Every line of a compiled theme, as `path=value`. @param {any} o @returns {string[]} */
@@ -131,7 +133,7 @@ const QUESTIONS = [
     {
       parts: ['button'],
       aspects: ['background'],
-      top: /^set q background "#7c3aed" --on button --when variant:primary$/,
+      top: /^set q background '#7c3aed' --on button --when variant:primary$/,
       adds: /button\.variant:primary\.background=#7c3aed/,
     },
   ],
@@ -139,24 +141,24 @@ const QUESTIONS = [
     'change the brand color to #ff6600',
     {
       aspects: ['colors'],
-      top: /^set q accent "#ff6600"$/,
+      top: /^set q accent '#ff6600'$/,
       adds: /--color-accent(\.0)?=#ff6600/,
     },
   ],
   [
     'use our brand orange',
-    {top: /^set q accent "#f97316"$/, adds: /--color-accent(\.0)?=#f97316/},
+    {top: /^set q accent '#f97316'$/, adds: /--color-accent(\.0)?=#f97316/},
   ],
   [
     'make the error red darker',
     {
-      top: /^set q danger "#[0-9a-f]{6}"$/,
+      top: /^set q danger '#[0-9a-f]{6}'$/,
       adds: /--color-error(\.0)?=#[0-9a-f]{6}/,
     },
   ],
   [
     'success green should be more minty',
-    {top: /^set q success "#34d399"$/, adds: /--color-success(\.0)?=#34d399/},
+    {top: /^set q success '#34d399'$/, adds: /--color-success(\.0)?=#34d399/},
   ],
   [
     // The fixture theme's colors are grays: nothing to take out.
@@ -170,12 +172,12 @@ const QUESTIONS = [
   ],
   [
     'warm gray neutrals',
-    {top: /^set q neutral "#78716c"$/, adds: /--color-background-surface/},
+    {top: /^set q neutral '#78716c'$/, adds: /--color-background-surface/},
   ],
   [
     'make the page background white',
     {
-      top: /^set q --color-background-body "#ffffff"$/,
+      top: /^set q --color-background-body '#ffffff'$/,
       adds: /--color-background-body=#ffffff/,
     },
   ],
@@ -183,7 +185,7 @@ const QUESTIONS = [
     'card background light gray',
     {
       parts: ['card'],
-      top: /^set q background "#e5e7eb" --on card$/,
+      top: /^set q background '#e5e7eb' --on card$/,
       adds: /card\.base\.background=#e5e7eb/,
     },
   ],
@@ -191,7 +193,7 @@ const QUESTIONS = [
     'header background navy',
     {
       parts: ['app-shell-header'],
-      top: /^set q background "#1e3a8a" --on app-shell-header$/,
+      top: /^set q background '#1e3a8a' --on app-shell-header$/,
       adds: /app-shell-header\.base\.background=#1e3a8a/,
     },
   ],
@@ -200,7 +202,7 @@ const QUESTIONS = [
     {
       parts: ['app-shell-header'],
       aspects: ['text'],
-      top: /^set q color "#ffffff" --on app-shell-header$/,
+      top: /^set q color '#ffffff' --on app-shell-header$/,
       adds: /app-shell-header\.base\.color=#ffffff/,
     },
   ],
@@ -208,8 +210,9 @@ const QUESTIONS = [
     'links should be accent colored',
     {
       parts: ['link'],
-      top: /^set q color "var\(--color-text-accent\)" --on link$/,
-      adds: /link\.base\.color=var\(--color-text-accent\)/,
+      // A color on link loses to the color prop's own rule, so no command
+      // is offered; the refusal says why.
+      top: null,
     },
   ],
   [
@@ -220,14 +223,14 @@ const QUESTIONS = [
   [
     "secondary text is too light, can't read it",
     {
-      top: /^set q --color-text-secondary "#[0-9a-f]{6}" --mode light && set q --color-text-secondary "#[0-9a-f]{6}" --mode dark$/,
+      top: /^set q --color-text-secondary '#[0-9a-f]{6}' --mode light && set q --color-text-secondary '#[0-9a-f]{6}' --mode dark$/,
       adds: /--color-text-secondary/,
     },
   ],
   [
     'change the focus ring color to orange',
     {
-      top: /^set q --focus-outline-color "#f97316"$/,
+      top: /^set q --focus-outline-color '#f97316'$/,
       adds: /--focus-outline-color=#f97316/,
     },
   ],
@@ -243,7 +246,7 @@ const QUESTIONS = [
     'make the toggle switch blue when on',
     {
       parts: ['switch'],
-      top: /^set q background "#2563eb" --on switch --state checked$/,
+      top: /^set q background '#2563eb' --on switch --state checked$/,
       adds: /switch\.checked\.background=#2563eb/,
     },
   ],
@@ -265,7 +268,7 @@ const QUESTIONS = [
   [
     'dark mode background should be pure black',
     {
-      top: /^set q --color-background-body "#000000" --mode dark$/,
+      top: /^set q --color-background-body '#000000' --mode dark$/,
       adds: /--color-background-body\.1=#000000/,
     },
   ],
@@ -281,7 +284,7 @@ const QUESTIONS = [
     'tooltip black with white text',
     {
       parts: ['tooltip'],
-      top: /background "#000000" --on tooltip && set q color "#ffffff" --on tooltip$/,
+      top: /background '#000000' --on tooltip && set q color '#ffffff' --on tooltip$/,
       adds: /tooltip\.base\.color=#ffffff/,
     },
   ],
@@ -308,14 +311,14 @@ const QUESTIONS = [
   [
     'danger button should be orange not red',
     {
-      top: /^set q background "#f97316" --on button --when variant:destructive$/,
+      top: /^set q background '#f97316' --on button --when variant:destructive$/,
       adds: /button\.variant:destructive\.background=#f97316/,
     },
   ],
   [
     'glossy gradient header',
     {
-      top: /^set q background "linear-gradient\(.*\)" --on app-shell-header$/,
+      top: /^set q background 'linear-gradient\(.*\)' --on app-shell-header$/,
       adds: /app-shell-header\.base\.background=linear-gradient/,
     },
   ],
@@ -324,7 +327,7 @@ const QUESTIONS = [
     'add a border to cards',
     {
       aspects: ['border'],
-      top: /^set q border "1px solid var\(--color-border\)" --on card$/,
+      top: /^set q border '1px solid var\(--color-border\)' --on card$/,
       adds: /card\.base\.border=1px solid/,
     },
   ],
@@ -342,14 +345,14 @@ const QUESTIONS = [
   [
     'border color of inputs should be gray',
     {
-      top: /^set q border-color "#9ca3af" --on inputs$/,
+      top: /^set q border-color '#9ca3af' --on inputs$/,
       adds: /text-input\.base\.borderColor=#9ca3af/,
     },
   ],
   [
     'dashed border around the banner',
     {
-      top: /^set q border "1px dashed var\(--color-border\)" --on banner$/,
+      top: /^set q border '1px dashed var\(--color-border\)' --on banner$/,
       adds: /banner\.base\.border=1px dashed/,
     },
   ],
@@ -367,7 +370,7 @@ const QUESTIONS = [
   [
     'input border turns blue on focus',
     {
-      top: /^set q border-color "#2563eb" --on inputs --state focus-within$/,
+      top: /^set q border-color '#2563eb' --on inputs --state focus-within$/,
       adds: /:focus-within\.borderColor=#2563eb/,
     },
   ],
@@ -397,14 +400,14 @@ const QUESTIONS = [
   [
     'stronger shadow on dialogs',
     {
-      top: /^set q box-shadow "var\(--shadow-high\)" --on dialog$/,
+      top: /^set q box-shadow 'var\(--shadow-high\)' --on dialog$/,
       adds: /dialog\.base\.boxShadow=var\(--shadow-high\)/,
     },
   ],
   [
     'subtle shadow on buttons',
     {
-      top: /box-shadow "var\(--shadow-low\)" --on button$/,
+      top: /box-shadow 'var\(--shadow-low\)' --on button$/,
       adds: /button\.base\.boxShadow=var\(--shadow-low\)/,
     },
   ],
@@ -415,7 +418,7 @@ const QUESTIONS = [
   [
     'bevel the buttons',
     {
-      top: /box-shadow "inset .*" --on button$/,
+      top: /box-shadow 'inset .*' --on button$/,
       adds: /button\.base\.boxShadow=inset/,
     },
   ],
@@ -426,14 +429,14 @@ const QUESTIONS = [
   [
     'make shadows softer',
     {
-      top: /^set q --shadow-low "[^"]+" && set q --shadow-med/,
+      top: /^set q --shadow-low '[^']+' && set q --shadow-med/,
       adds: /--shadow-low=/,
     },
   ],
   [
     'box-shadow: 0 0 10px red on button',
     {
-      top: /^set q box-shadow "0 0 10px red" --on button$/,
+      top: /^set q box-shadow '0 0 10px red' --on button$/,
       adds: /button\.base\.boxShadow=0 0 10px red/,
     },
   ],
@@ -622,7 +625,7 @@ const QUESTIONS = [
   [
     'pressed button scales down',
     {
-      top: /^set q transform "scale\(0\.97\)" --on button --state active$/,
+      top: /^set q transform 'scale\(0\.97\)' --on button --state active$/,
       adds: /:active\.transform=scale/,
     },
   ],
@@ -631,21 +634,21 @@ const QUESTIONS = [
   [
     'make dark mode text less bright',
     {
-      top: /--color-text-primary "#[0-9a-f]{6}" --mode dark$/,
+      top: /--color-text-primary '#[0-9a-f]{6}' --mode dark$/,
       adds: /--color-text-primary\.1=/,
     },
   ],
   [
     'dark mode accent lighter',
     {
-      top: /--color-accent "#[0-9a-f]{6}" --mode dark$/,
+      top: /--color-accent '#[0-9a-f]{6}' --mode dark$/,
       adds: /--color-accent\.1=/,
     },
   ],
   [
     'dialog wider',
     {
-      top: /^set q width "min\(720px, 100%\)" --on dialog$/,
+      top: /^set q width 'min\(720px, 100%\)' --on dialog$/,
       adds: /dialog\.base\.width=/,
     },
   ],
@@ -660,20 +663,20 @@ const QUESTIONS = [
   [
     'rounded cards with a soft shadow and no border',
     {
-      top: /--on card && set q box-shadow "var\(--shadow-low\)" --on card && set q border none --on card$/,
+      top: /--on card && set q box-shadow 'var\(--shadow-low\)' --on card && set q border none --on card$/,
       adds: /card\.base\.border=none/,
     },
   ],
   [
     'make the header dark with white text and a bottom border',
     {
-      top: /background "#1f2937" --on app-shell-header && set q color "#ffffff"/,
+      top: /background '#1f2937' --on app-shell-header && set q color '#ffffff'/,
       adds: /borderBottom=/,
     },
   ],
   [
     'not blue, make the accent green',
-    {top: /^set q accent "#16a34a"$/, adds: /--color-accent(\.0)?=#16a34a/},
+    {top: /^set q accent '#16a34a'$/, adds: /--color-accent(\.0)?=#16a34a/},
   ],
   [
     'make the buttns rounder',
@@ -720,20 +723,20 @@ const QUESTIONS = [
   [
     'кнопки синие',
     {
-      top: /^set q background "#2563eb" --on button$/,
+      top: /^set q background '#2563eb' --on button$/,
       adds: /button\.base\.background=#2563eb/,
     },
   ],
   [
     'set button background to rgb(255 0 0)',
     {
-      top: /^set q background "rgb\(255 0 0\)" --on button$/,
+      top: /^set q background 'rgb\(255 0 0\)' --on button$/,
       adds: /button\.base\.background=rgb\(255 0 0\)/,
     },
   ],
   [
     'use #123 for borders',
-    {top: /^set q --color-border "#123"$/, adds: /--color-border=#123/},
+    {top: /^set q --color-border '#123'$/, adds: /--color-border=#123/},
   ],
   [
     'make primary button 10px radius',
@@ -1006,7 +1009,7 @@ const QUESTIONS_2 = [
   [
     'never use pure black for text',
     {
-      top: /^set q --color-text-primary "#1f2937" --mode light$/,
+      top: /^set q --color-text-primary '#1f2937' --mode light$/,
       adds: /--color-text-primary.*#1f2937/,
     },
   ],
@@ -1045,7 +1048,7 @@ const QUESTIONS_2 = [
   [
     'all buttons blue except the danger one',
     {
-      top: /--on button && set q background "var\(--color-error\)" --on button --when variant:destructive$/,
+      top: /--on button && set q background 'var\(--color-error\)' --on button --when variant:destructive$/,
       adds: /variant:destructive\.background=var\(--color-error\)/,
     },
   ],
@@ -1074,19 +1077,19 @@ const QUESTIONS_2 = [
   // typed values
   [
     'the client wants their brand blue, #0057ff',
-    {top: /^set q accent "#0057ff"$/, adds: /--color-accent(\.0)?=#0057ff/},
+    {top: /^set q accent '#0057ff'$/, adds: /--color-accent(\.0)?=#0057ff/},
   ],
   [
     'like Linear: dark only, purple accent #5e6ad2',
     {
-      top: /^set q mode dark-only && set q accent "#5e6ad2"$/,
+      top: /^set q mode dark-only && set q accent '#5e6ad2'$/,
       adds: /mode=dark-only/,
     },
   ],
   [
     'gray text color #555',
     {
-      top: /^set q --color-text-primary "#555"$/,
+      top: /^set q --color-text-primary '#555'$/,
       adds: /--color-text-primary=#555/,
     },
   ],
@@ -1094,14 +1097,14 @@ const QUESTIONS_2 = [
   [
     'primary #5E6AD2, radius 6px, font Inter',
     {
-      top: /^set q accent "#5e6ad2" && set q corners 6px && set q font inter$/,
+      top: /^set q accent '#5e6ad2' && set q corners 6px && set q font inter$/,
       adds: /--radius-element=6px/,
     },
   ],
   [
     '{"accent":"#3b82f6","radius":"8px"}',
     {
-      top: /^set q accent "#3b82f6" && set q corners 8px$/,
+      top: /^set q accent '#3b82f6' && set q corners 8px$/,
       adds: /--radius-element=8px/,
     },
   ],
@@ -1123,14 +1126,14 @@ const QUESTIONS_2 = [
   [
     'button padding 12px 20px',
     {
-      top: /^set q padding "12px 20px" --on button$/,
+      top: /^set q padding '12px 20px' --on button$/,
       adds: /button\.base\.padding=12px 20px/,
     },
   ],
   [
     'card shadow: 0 1px 3px rgb(0 0 0 / 0.1)',
     {
-      top: /^set q box-shadow "0 1px 3px rgb\(0 0 0 \/ 0\.1\)" --on card$/,
+      top: /^set q box-shadow '0 1px 3px rgb\(0 0 0 \/ 0\.1\)' --on card$/,
       adds: /card\.base\.boxShadow=0 1px 3px/,
     },
   ],
@@ -1152,7 +1155,7 @@ const QUESTIONS_2 = [
   [
     'in dark mode, cards should be #1c1c1e',
     {
-      top: /^set q background "#1c1c1e" --on card --mode dark$/,
+      top: /^set q background '#1c1c1e' --on card --mode dark$/,
       adds: /card\.base\.background=light-dark\(/,
     },
   ],
@@ -1163,7 +1166,7 @@ const QUESTIONS_2 = [
   [
     'make dark mode borders subtler',
     {
-      top: /^set q --color-border "#[0-9a-f]{6,8}" --mode dark$/,
+      top: /^set q --color-border '#[0-9a-f]{6,8}' --mode dark$/,
       adds: /--color-border\.1=/,
     },
   ],
@@ -1178,28 +1181,28 @@ const QUESTIONS_2 = [
   [
     'the sidebar is #111827 and nav items are #9ca3af',
     {
-      top: /--on side-nav && set q background "#9ca3af" --on side-nav-item$/,
+      top: /--on side-nav && set q background '#9ca3af' --on side-nav-item$/,
       adds: /side-nav-item\.base\.background=#9ca3af/,
     },
   ],
   [
     'focus-visible ring on buttons orange',
     {
-      top: /^set q outline-color "#f97316" --on button --state focus-visible$/,
+      top: /^set q outline-color '#f97316' --on button --state focus-visible$/,
       adds: /:focus-visible\.outlineColor=#f97316/,
     },
   ],
   [
     'tabs: selected tab has a 2px #6366f1 underline',
     {
-      top: /^set q background "#6366f1" --on tab-indicator --state selected && set q height 2px --on tab-indicator$/,
+      top: /^set q background '#6366f1' --on tab-indicator --state selected && set q height 2px --on tab-indicator$/,
       adds: /tab-indicator\.selected\.background=#6366f1/,
     },
   ],
   [
     'cards lift on hover',
     {
-      top: /^set q box-shadow "var\(--shadow-high\)" --on card --state hover$/,
+      top: /^set q box-shadow 'var\(--shadow-high\)' --on card --state hover$/,
       adds: /card\.base\.:hover\.boxShadow/,
     },
   ],
@@ -1220,14 +1223,14 @@ const QUESTIONS_2 = [
   [
     'icons should be the accent color',
     {
-      top: /^set q --color-icon-primary "var\(--color-accent\)"$/,
+      top: /^set q --color-icon-primary 'var\(--color-accent\)'$/,
       adds: /--color-icon-primary=var\(--color-accent\)/,
     },
   ],
   [
     'darker borders',
     {
-      top: /^set q --color-border "#[0-9a-f]+" --mode light && set q --color-border "#[0-9a-f]+" --mode dark$/,
+      top: /^set q --color-border '#[0-9a-f]+' --mode light && set q --color-border '#[0-9a-f]+' --mode dark$/,
       adds: /--color-border/,
     },
   ],
@@ -1245,7 +1248,7 @@ const QUESTIONS_2 = [
   [
     'make the modal overlay darker',
     {
-      top: /^set q --color-overlay "#[0-9a-f]+" --mode light && set q --color-overlay "#[0-9a-f]+" --mode dark$/,
+      top: /^set q --color-overlay '#[0-9a-f]+' --mode light && set q --color-overlay '#[0-9a-f]+' --mode dark$/,
       adds: /--color-overlay/,
     },
   ],
@@ -1273,12 +1276,12 @@ const QUESTIONS_2 = [
   ],
   [
     'make the app feel warmer',
-    {top: /^set q neutral "#78716c"$/, adds: /--color-background-surface/},
+    {top: /^set q neutral '#78716c'$/, adds: /--color-background-surface/},
   ],
   [
     'swap the accent and the danger colors',
     {
-      top: /^set q accent "#[0-9a-f]{6}" && set q danger "#[0-9a-f]{6}"$/i,
+      top: /^set q accent '#[0-9a-f]{6}' && set q danger '#[0-9a-f]{6}'$/i,
       adds: /--color-accent/,
     },
   ],
@@ -1299,7 +1302,7 @@ const QUESTIONS_2 = [
   ],
   [
     'acent color #ff6600',
-    {top: /^set q accent "#ff6600"$/, adds: /--color-accent(\.0)?=#ff6600/},
+    {top: /^set q accent '#ff6600'$/, adds: /--color-accent(\.0)?=#ff6600/},
   ],
   [
     'rounder crads',
@@ -1315,7 +1318,7 @@ const QUESTIONS_2 = [
   [
     'dialgo shadow stronger',
     {
-      top: /^set q box-shadow "var\(--shadow-high\)" --on dialog$/,
+      top: /^set q box-shadow 'var\(--shadow-high\)' --on dialog$/,
       adds: /dialog\.base\.boxShadow/,
     },
   ],
@@ -1334,7 +1337,7 @@ const QUESTIONS_2 = [
   [
     'ボタンを青く',
     {
-      top: /^set q background "#2563eb" --on button$/,
+      top: /^set q background '#2563eb' --on button$/,
       adds: /button\.base\.background=#2563eb/,
     },
   ],
@@ -1529,77 +1532,77 @@ const QUESTIONS_3 = [
   [
     'accent #0ea5e9; danger #ef4444; success #22c55e',
     {
-      top: /^set q accent "#0ea5e9" && set q danger "#ef4444" && set q success "#22c55e"$/,
+      top: /^set q accent '#0ea5e9' && set q danger '#ef4444' && set q success '#22c55e'$/,
       adds: /--color-accent[^\n]*=#0ea5e9[\s\S]*--color-error[^\n]*=#ef4444[\s\S]*--color-success[^\n]*=#22c55e|--color-success[^\n]*=#22c55e/,
     },
   ],
   [
     'like Bootstrap 5: #0d6efd primary, 6px radius',
     {
-      top: /^set q accent "#0d6efd" && set q corners 6px$/,
+      top: /^set q accent '#0d6efd' && set q corners 6px$/,
       adds: /--color-accent[^\n]*=#0d6efd/,
     },
   ],
   [
     'make it look like Google: Roboto font, accent #1a73e8',
     {
-      top: /^set q font roboto && set q accent "#1a73e8"$/,
+      top: /^set q font roboto && set q accent '#1a73e8'$/,
       adds: /--color-accent[^\n]*=#1a73e8/,
     },
   ],
   [
     'brand colors: primary #ff5a1f, secondary #1f2937',
     {
-      top: /^set q accent "#ff5a1f" && set q background "#1f2937" --on button --when variant:secondary$/,
+      top: /^set q accent '#ff5a1f' && set q background '#1f2937' --on button --when variant:secondary$/,
       adds: /--color-accent[^\n]*=#ff5a1f/,
     },
   ],
   [
     'colors: bg=#fff text=#000 accent=#ff0080',
     {
-      top: /^set q --color-background-body "#fff" && set q --color-text-primary "#000" && set q accent "#ff0080"$/,
+      top: /^set q --color-background-body '#fff' && set q --color-text-primary '#000' && set q accent '#ff0080'$/,
       adds: /--color-background-body=#fff/,
     },
   ],
   [
     'hex values in the mock: #FAFAFA bg, #171717 text, #E5E5E5 border, #0070F3 accent',
     {
-      top: /^set q --color-background-body "#fafafa" && set q --color-text-primary "#171717" && set q --color-border "#e5e5e5" && set q accent "#0070f3"$/,
+      top: /^set q --color-background-body '#fafafa' && set q --color-text-primary '#171717' && set q --color-border '#e5e5e5' && set q accent '#0070f3'$/,
       adds: /--color-border=#e5e5e5/,
     },
   ],
   [
     'LGTM except the accent, make it #6d28d9',
-    {top: /^set q accent "#6d28d9"$/, adds: /--color-accent[^\n]*=#6d28d9/},
+    {top: /^set q accent '#6d28d9'$/, adds: /--color-accent[^\n]*=#6d28d9/},
   ],
   [
     'not a fan of the purple, can we go back to blue?',
-    {top: /^set q accent "#2563eb"$/},
+    {top: /^set q accent '#2563eb'$/},
   ],
   [
     'Airbnb: accent #ff385c, rounded 12px cards, Circular font',
     {
-      top: /^set q accent "#ff385c" && set q border-radius 12px --on card && set q font Circular$/,
+      top: /^set q accent '#ff385c' && set q border-radius 12px --on card && set q font Circular$/,
     },
   ],
   // colors how works out are per mode
   [
     'more contrast',
     {
-      top: /^set q --color-text-secondary "#[0-9a-f]+" --mode light && set q --color-text-secondary "#[0-9a-f]+" --mode dark && set q --color-border "#[0-9a-f]+" --mode light && set q --color-border "#[0-9a-f]+" --mode dark$/,
+      top: /^set q --color-text-secondary '#[0-9a-f]+' --mode light && set q --color-text-secondary '#[0-9a-f]+' --mode dark && set q --color-border '#[0-9a-f]+' --mode light && set q --color-border '#[0-9a-f]+' --mode dark$/,
       text: /in light and in dark mode/,
     },
   ],
   [
     'a11y audit: secondary text fails contrast on white',
     {
-      top: /^set q --color-text-secondary "#[0-9a-f]{6}" --mode light && set q --color-text-secondary "#[0-9a-f]{6}" --mode dark$/,
+      top: /^set q --color-text-secondary '#[0-9a-f]{6}' --mode light && set q --color-text-secondary '#[0-9a-f]{6}' --mode dark$/,
     },
   ],
   [
     'make the page background lighter',
     {
-      top: /--mode light && set q --color-background-body "#[0-9a-f]+" --mode dark$/,
+      top: /--mode light && set q --color-background-body '#[0-9a-f]+' --mode dark$/,
     },
   ],
   // CSS property names
@@ -1628,7 +1631,7 @@ const QUESTIONS_3 = [
   [
     'drop shadow: x 0, y 4, blur 6, spread -1, rgba(0,0,0,0.1)',
     {
-      top: /^set q --shadow-med "0 4px 6px -1px rgba\(0,0,0,0\.1\)"$/,
+      top: /^set q --shadow-med '0 4px 6px -1px rgba\(0,0,0,0\.1\)'$/,
       adds: /--shadow-med=0 4px 6px -1px/,
     },
   ],
@@ -1641,14 +1644,14 @@ const QUESTIONS_3 = [
   [
     'replace the shadow on cards with a border',
     {
-      top: /^set q box-shadow none --on card && set q border "1px solid var\(--color-border\)" --on card$/,
+      top: /^set q box-shadow none --on card && set q border '1px solid var\(--color-border\)' --on card$/,
       adds: /card\.base\.boxShadow=none[\s\S]*card\.base\.border=1px solid/,
     },
   ],
   [
     'switch off the shadow on cards with a border',
     {
-      top: /^set q box-shadow none --on card && set q border "1px solid var\(--color-border\)" --on card$/,
+      top: /^set q box-shadow none --on card && set q border '1px solid var\(--color-border\)' --on card$/,
       adds: /card\.base\.boxShadow=none/,
     },
   ],
@@ -1659,7 +1662,7 @@ const QUESTIONS_3 = [
       adds: /button\.base\.fontWeight=700/,
     },
   ],
-  ['make the switch green', {top: /^set q background "#16a34a" --on switch$/}],
+  ['make the switch green', {top: /^set q background '#16a34a' --on switch$/}],
   [
     'all radius values are 0, it is very sharp',
     {top: /^set q corners square$/, adds: /--radius-element=0px/},
@@ -1674,7 +1677,7 @@ const QUESTIONS_3 = [
   [
     'Can you please make the tooltip darker? Thanks!',
     {
-      top: /^set q filter "brightness\(0\.85\)" --on tooltip$/,
+      top: /^set q filter 'brightness\(0\.85\)' --on tooltip$/,
       adds: /tooltip\.base\.filter/,
     },
   ],
@@ -1684,62 +1687,62 @@ const QUESTIONS_3 = [
   ],
   [
     'stakeholders think the grays are too warm',
-    {top: /^set q neutral "#64748b"$/},
+    {top: /^set q neutral '#64748b'$/},
   ],
   // typed values kept
   [
     'cards have a gradient background from #ffffff to #f8fafc',
     {
-      top: /^set q background "linear-gradient\(#ffffff, #f8fafc\)" --on card$/,
+      top: /^set q background 'linear-gradient\(#ffffff, #f8fafc\)' --on card$/,
       adds: /card\.base\.background=linear-gradient\(#ffffff, #f8fafc\)/,
     },
   ],
   [
     'shadow on dialogs is 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
     {
-      top: /^set q box-shadow "0 20px 25px -5px rgb\(0 0 0 \/ 0\.1\), 0 8px 10px -6px rgb\(0 0 0 \/ 0\.1\)" --on dialog$/,
+      top: /^set q box-shadow '0 20px 25px -5px rgb\(0 0 0 \/ 0\.1\), 0 8px 10px -6px rgb\(0 0 0 \/ 0\.1\)' --on dialog$/,
     },
   ],
   [
     'shadows are very soft and large, like 0 10px 40px rgba(0,0,0,0.05)',
-    {top: /^set q --shadow-med "0 10px 40px rgba\(0,0,0,0\.05\)"$/},
+    {top: /^set q --shadow-med '0 10px 40px rgba\(0,0,0,0\.05\)'$/},
   ],
   [
     'headings use "Playfair Display", body uses "Source Sans 3"',
     {
-      top: /^set q font "Playfair Display" --on heading && set q --font-family-body /,
+      top: /^set q font 'Playfair Display' --on heading && set q --font-family-body /,
     },
   ],
   [
     'border width is 2px everywhere, color #000',
-    {top: /^set q --border-width 2px && set q --color-border "#000"$/},
+    {top: /^set q --border-width 2px && set q --color-border '#000'$/},
   ],
   // parts
   [
     'the table has zebra rows #f9fafb and a header #f3f4f6',
-    {top: /^set q background "#f3f4f6" --on table-header-cell$/},
+    {top: /^set q background '#f3f4f6' --on table-header-cell$/},
   ],
   [
     'the error banner is #fef2f2 with #991b1b text',
     {
-      top: /^set q background "#fef2f2" --on banner --when status:error && set q color "#991b1b" --on banner --when status:error$/,
+      top: /^set q background '#fef2f2' --on banner --when status:error && set q color '#991b1b' --on banner --when status:error$/,
     },
   ],
-  ['button color #fff', {top: /^set q color "#fff" --on button$/}],
+  ['button color #fff', {top: /^set q color '#fff' --on button$/}],
   [
     'accent #ff0000 */ body{display:none} /*',
-    {top: /^set q accent "#ff0000"$/},
+    {top: /^set q accent '#ff0000'$/},
   ],
   // other languages
   ['pulsanti senza ombra', {top: /^set q box-shadow none --on button$/}],
-  ['цвет акцента #00aa55', {top: /^set q accent "#00aa55"$/}],
+  ['цвет акцента #00aa55', {top: /^set q accent '#00aa55'$/}],
   ['카드 그림자 없애줘', {top: /^set q box-shadow none --on card$/}],
   ['الأزرار مستديرة', {top: /^set q corners round --on button$/}],
   ['बटन गोल करो', {top: /^set q corners round --on button$/}],
   [
     'cards sin sombra y botones azules',
     {
-      top: /^set q box-shadow none --on card && set q background "#2563eb" --on button$/,
+      top: /^set q box-shadow none --on card && set q background '#2563eb' --on button$/,
     },
   ],
   // a refusal says why
@@ -1780,7 +1783,7 @@ describe('how answers pass-3 questions', () => {
     });
     const cmds = data.results[0].commands.map(bare);
     expect(cmds.join(' ')).toMatch(/--mode light/);
-    const dark = cmds.join(' ').match(/"(#[0-9a-f]{6})" --mode dark/)?.[1];
+    const dark = cmds.join(' ').match(/'(#[0-9a-f]{6})' --mode dark/)?.[1];
     expect(dark).toBeTruthy();
     // Light text on the dark page: every channel above the middle.
     for (const i of [1, 3, 5])
@@ -1890,7 +1893,7 @@ describe('how lookups', () => {
     expect(data.recorded).toBe(false);
     expect(data.unrecorded.reason).toMatch(/what tooltip reads is unknown/);
     expect(data.unrecorded.examples.map(bare)).toContain(
-      'set q background "#f3f4f6" --on tooltip',
+      "set q background '#f3f4f6' --on tooltip",
     );
   });
 

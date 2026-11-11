@@ -303,11 +303,11 @@ function sameColor(a, b) {
 }
 
 /**
- * The modes a theme has.
+ * The modes a theme has: one for a one-mode theme, else light and dark.
  * @param {{mode?: string}} data
  * @returns {Mode[]}
  */
-function themeModes(data) {
+export function modesOf(data) {
   return data.mode === 'light-only'
     ? ['light']
     : data.mode === 'dark-only'
@@ -337,12 +337,13 @@ function readConfig(file) {
   if (!fs.existsSync(file)) return null;
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
-  } catch (e) {
-    throw new AstryxError(
-      `${path.basename(path.dirname(file))}/palette.config.json is not valid JSON (${e instanceof Error ? e.message : String(e)}). Fix it by hand. Nothing was changed.`,
-      [],
-      ERROR_CODES.ERR_THEME_INVALID,
-    );
+  } catch {
+    // A file that does not parse holds nothing the editor can keep: it is
+    // made again from the settings, and the damaged text is kept beside it
+    // (palette.config.damaged.json) for any hand edit worth copying back.
+    const kept = path.join(path.dirname(file), 'palette.config.damaged.json');
+    if (!fs.existsSync(kept)) fs.copyFileSync(file, kept);
+    return null;
   }
 }
 
@@ -677,7 +678,7 @@ function planPalette(cwd, slug, data, base) {
       ? {...existing}
       : {};
   const {settings: saved, mode: savedMode} = savedSettings(cwd, slug);
-  const modes = themeModes(data);
+  const modes = modesOf(data);
 
   const vibrancy = dialVibrancy(data.settings);
   const savedVibrancy = dialVibrancy(saved);
@@ -700,7 +701,7 @@ function planPalette(cwd, slug, data, base) {
   const strategy = strategyOf(modes);
   // Only a value the editor did not write is a hand edit worth naming: the
   // one it wrote follows the theme's mode as it was saved.
-  const wrote = savedMode ? strategyOf(themeModes({mode: savedMode})) : null;
+  const wrote = savedMode ? strategyOf(modesOf({mode: savedMode})) : null;
   if (
     config.modeStrategy != null &&
     config.modeStrategy !== strategy &&
@@ -1414,7 +1415,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   const candidate = generate(config, paletteFiles(slug).config);
   const t = tools(candidate, data, base);
   const {stops, at, ref, exactOf, surfaces} = t;
-  const modes = themeModes(data);
+  const modes = modesOf(data);
   /** @type {PaletteMapping['tokens']} */
   const tokens = {};
   /** @type {ContrastCheck[]} */

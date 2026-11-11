@@ -251,6 +251,7 @@
  * @property {string} [theme] - The theme the suggested commands are for, checked against its settings (default: the only theme the editor made in the app; with several, the one an editor command changed last; with none, `my-theme`, which the answer makes first). An empty name is refused.
  * @property {string[]} [at] - With a PNG picture: pixel points x,y, whole numbers inside the picture ("40,20;300,180", "40,20 300,180", several entries, or a flat "40,20,300,180").
  * @property {number} [count] - With a PNG picture: how many main colors (default 14).
+ * @property {string[]} [words] - The words as typed after `how`: a picture first takes only a count after it (the count is read from the words); anything else is one question. Replaces `subject`.
  */
 
 /**
