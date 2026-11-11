@@ -25,6 +25,11 @@ import {
 } from '../../../foundation/fs/paths.mjs';
 import {printIntegrationCheckResponse, registerDoctor} from './doctor.mjs';
 import {expectRecordsCarry} from '../../../test-utils/text-projection.mjs';
+import {warmIntegrationChecks} from '../../../test-utils/warm-integration-checks.mjs';
+
+// The checks' one-time start in this file (TypeScript and its lib files) runs
+// here, while the file is collected, so no test carries it.
+await warmIntegrationChecks();
 
 let tmpDir;
 let previousCwd;
@@ -115,6 +120,14 @@ beforeEach(() => {
   process.exitCode = undefined;
   tmpDir = fs.mkdtempSync(
     path.join(previousCwd, '.astryx-doctor-integration-'),
+  );
+  // The fixture's own TypeScript config, scoped to its own files: a package
+  // with none in a folder inside the repository gets the repository's root
+  // config, as `tsc` reads it, and the props comparison compiles every file
+  // in the repository.
+  fs.writeFileSync(
+    path.join(tmpDir, 'tsconfig.json'),
+    `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
   );
   logCalls = [];
   vi.spyOn(console, 'log').mockImplementation((...args) => {

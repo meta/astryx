@@ -4,9 +4,9 @@
 
 /**
  * @file DocsShell.tsx
- * @input Route metadata, component registry, and the rendered AppShell header
+ * @input Route metadata, the server-built docs nav model, and the AppShell header
  * @output Docs navigation with a stable sidebar offset before hydration
- * @position Docsite-only shell and first-paint header measurement
+ * @position Docsite-only shell
  */
 
 import {useState, useMemo} from 'react';
@@ -18,19 +18,20 @@ import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Icon} from '@astryxdesign/core/Icon';
 import {SharedTopNav} from './SharedTopNav';
+import {HeaderHeightSeed} from './HeaderHeightSeed';
 import {DocsBanner} from './InternalDocsPrompt';
-import type {PackageMeta} from '../generated/packageRegistry';
-import type {DocTopic} from '../generated/docsRegistry';
-import {
-  getComponentSidebarData,
-  type ComponentSidebarEntry,
-  type ComponentSidebarItem,
-} from './componentSidebarData';
+import type {
+  DocsNav,
+  DocsNavEntry,
+  DocsNavItem,
+  DocsNavPackage,
+} from './docsNav';
+import {docsSidebarGroups} from './docsSidebarData';
+import {DocsSidebarItems} from './DocsSidebarItems';
 
 interface DocsShellProps {
   children: React.ReactNode;
-  packages: PackageMeta[];
-  docTopics: DocTopic[];
+  nav: DocsNav;
 }
 
 const styles = stylex.create({
@@ -51,49 +52,20 @@ function CanaryCategoryMarker() {
   );
 }
 
-/** Foundations: tokens first, then alphabetical */
-const foundationsSort = (a: DocTopic, b: DocTopic) => {
-  if (a.topic === 'tokens') {
-    return -1;
-  }
-  if (b.topic === 'tokens') {
-    return 1;
-  }
-  return a.title.localeCompare(b.title);
-};
-
-// Seed the full header height while parsing, before restored scroll can put
-// the sidebar under it, and refresh once its fonts settle. CSSOM leaves React's
-// DOM unchanged; the existing observer's inline value takes over after hydration.
-const initialHeaderHeightScript = `(() => {
-  const script = document.currentScript;
-  const header = script?.closest('.astryx-app-shell-header');
-  const style = script?.previousElementSibling;
-  const sheet = style?.sheet;
-  const publish = () => {
-    if (!header?.isConnected || !style?.isConnected || !sheet) return;
-    if (sheet.cssRules.length === 0) sheet.insertRule(':root {}');
-    sheet.cssRules[0].style.setProperty('--appshell-header-height',
-      header.getBoundingClientRect().height + 'px');
-  };
-  publish();
-  document.fonts.ready.then(publish);
-})();`;
-
 // ── Shell ──────────────────────────────────────────────────────────────
 
-export function DocsShell({children, packages, docTopics}: DocsShellProps) {
+export function DocsShell({children, nav}: DocsShellProps) {
   const pathname = usePathname();
   const [componentQuery, setComponentQuery] = useState('');
 
-  const {componentItems, utilities, canaryCategories} =
-    getComponentSidebarData();
+  const {packages, docTopics, componentItems, utilities, canaryCategories} =
+    nav;
 
   const q = componentQuery.trim().toLowerCase();
 
   // When searching, flatten every readiness category to individual entries so
   // results are all at the same level with no nesting.
-  const flatSearchResults = useMemo<ComponentSidebarEntry[]>(() => {
+  const flatSearchResults = useMemo<DocsNavEntry[]>(() => {
     if (!q) {
       return [];
     }
@@ -120,18 +92,13 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
   }, [canaryCategories, utilities, q]);
 
   // Classify packages
-  const isTheme = (p: PackageMeta) => p.name.includes('theme-');
+  const isTheme = (p: DocsNavPackage) => p.name.includes('theme-');
   const libraryPackages = packages.filter(p => !isTheme(p) && !p.canaryOnly);
   const canaryPackages = packages.filter(p => !isTheme(p) && p.canaryOnly);
 
-  // Classify doc topics by category (from data). Getting Started is promoted
-  // to a top-level nav item, so it is excluded from the Guide section.
-  const guideTopics = docTopics
-    .filter(d => d.category === 'guide' && d.topic !== 'getting-started')
-    .sort((a, b) => a.title.localeCompare(b.title));
-  const foundationTopics = docTopics
-    .filter(d => d.category === 'foundations')
-    .sort(foundationsSort);
+  // Classify doc topics by category (from data).
+  const {guide: guideItems, foundations: foundationItems} =
+    docsSidebarGroups(docTopics);
 
   // True for the /components index AND every /components/[name] detail page.
   // On these routes we hide every non-Components section so the sidebar is
@@ -151,7 +118,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
     />
   );
 
-  const renderComponentItems = (items: ComponentSidebarItem[]) =>
+  const renderComponentItems = (items: DocsNavItem[]) =>
     items.map(item =>
       item.type === 'entry' ? (
         <SideNavItem
@@ -188,12 +155,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
       topNav={
         <>
           <SharedTopNav />
-          {/* Parser-blocking measurement precedes all sidebar markup, including
-              when the response is streamed. Stylesheets above it are loaded. */}
-          <style />
-          <script
-            dangerouslySetInnerHTML={{__html: initialHeaderHeightScript}}
-          />
+          <HeaderHeightSeed />
         </>
       }
       sideNav={
@@ -219,14 +181,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                 <SideNavItem
                   label="Guide"
                   collapsible={{defaultIsCollapsed: false}}>
-                  {guideTopics.map(d => (
-                    <SideNavItem
-                      key={d.topic}
-                      label={d.title}
-                      href={`/docs/${d.topic}`}
-                      isSelected={pathname === `/docs/${d.topic}`}
-                    />
-                  ))}
+                  <DocsSidebarItems items={guideItems} pathname={pathname} />
                 </SideNavItem>
               </SideNavSection>
 
@@ -235,14 +190,10 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                 <SideNavItem
                   label="Foundations"
                   collapsible={{defaultIsCollapsed: false}}>
-                  {foundationTopics.map(d => (
-                    <SideNavItem
-                      key={d.topic}
-                      label={d.title}
-                      href={`/docs/${d.topic}`}
-                      isSelected={pathname === `/docs/${d.topic}`}
-                    />
-                  ))}
+                  <DocsSidebarItems
+                    items={foundationItems}
+                    pathname={pathname}
+                  />
                 </SideNavItem>
               </SideNavSection>
 

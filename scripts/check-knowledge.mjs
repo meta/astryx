@@ -2,7 +2,8 @@
 
 /**
  * @file Knowledge-record validation.
- * @input Versioned schemas, records, and current ENGOWNERS/DESIGNOWNERS.
+ * @input Versioned schemas, records, and current ENGOWNERS/DESIGNOWNERS of
+ *   this repository, or of the checkout `--root` names.
  * @output Structural, relationship, and approval-eligibility problems.
  * @position Repository knowledge guardrail; schemas do not grant approval rights.
  */
@@ -15,6 +16,11 @@ import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {collectThemingTargets} from '../packages/cli/foundation/discovery/theming-targets.mjs';
+import {readObjects} from './lib/git-objects.mjs';
+import {
+  findStatusPhrases,
+  isStatusCheckedPath,
+} from './lib/knowledge-status-phrases.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -39,6 +45,7 @@ const {
   isIgnoredComponentKnowledgeSegment,
   isKnowledgeRecordPath,
   isPlatformComponentSpecPath,
+  isValidatedRecordPath,
   locateComponentKnowledgePath,
 } = require('../.github/scripts/knowledge-paths.cjs');
 
@@ -792,21 +799,36 @@ export function readKnowledgeRecordsAtAuthority(
   authorityCommit,
   reviewHead,
 ) {
-  const resolvedCommit = execFileSync(
+  // One process resolves both commits, and fails when either does not.
+  const resolved = execFileSync(
     'git',
-    ['-C', root, 'rev-parse', '--verify', `${authorityCommit}^{commit}`],
+    [
+      '-C',
+      root,
+      'rev-parse',
+      `${authorityCommit}^{commit}`,
+      `${reviewHead}^{commit}`,
+    ],
     {encoding: 'utf8'},
-  ).trim();
+  )
+    .trim()
+    .split('\n');
+  // Without --verify, rev-parse echoes an option and expands a range, so
+  // only two object ids count as a resolution.
+  if (
+    resolved.length !== 2 ||
+    !resolved.every(line => /^[0-9a-f]{40,64}$/.test(line))
+  ) {
+    throw new Error(
+      `cannot resolve ${authorityCommit} and ${reviewHead} to two commits.`,
+    );
+  }
+  const [resolvedCommit, resolvedHead] = resolved;
   if (resolvedCommit !== authorityCommit) {
     throw new Error(
       `authority commit must be the full resolved commit ${resolvedCommit}.`,
     );
   }
-  const resolvedHead = execFileSync(
-    'git',
-    ['-C', root, 'rev-parse', '--verify', `${reviewHead}^{commit}`],
-    {encoding: 'utf8'},
-  ).trim();
   if (resolvedHead !== reviewHead) {
     throw new Error(
       `review head must be the full resolved commit ${resolvedHead}.`,
@@ -825,6 +847,17 @@ export function readKnowledgeRecordsAtAuthority(
       `authority commit must equal the review head's origin/main merge base ${expectedBase}.`,
     );
   }
+  return {
+    records: readKnowledgeRecordsAtRevision(root, resolvedCommit),
+    authority: resolvedCommit,
+  };
+}
+
+function readKnowledgeRecordsAtRevision(
+  root,
+  revision,
+  isRecord = isKnowledgeRecordPath,
+) {
   const paths = execFileSync(
     'git',
     [
@@ -833,7 +866,7 @@ export function readKnowledgeRecordsAtAuthority(
       'ls-tree',
       '-r',
       '--name-only',
-      resolvedCommit,
+      revision,
       '--',
       'docs/architecture',
       'docs/design',
@@ -844,16 +877,148 @@ export function readKnowledgeRecordsAtAuthority(
     {encoding: 'utf8'},
   )
     .split(/\r?\n/)
-    .filter(isKnowledgeRecordPath);
-  const records = paths.map(filePath => ({
-    path: filePath,
-    content: execFileSync(
-      'git',
-      ['-C', root, 'show', `${resolvedCommit}:${filePath}`],
-      {encoding: 'utf8'},
-    ),
-  }));
-  return {records, authority: resolvedCommit};
+    .filter(isRecord);
+  const objects = readObjects(
+    root,
+    paths.map(filePath => `${revision}:${filePath}`),
+  );
+  return paths.map(filePath => {
+    const content = objects.get(`${revision}:${filePath}`);
+    if (!content) {
+      throw new Error(`cannot read ${filePath} at ${revision}.`);
+    }
+    return {path: filePath, content: content.toString('utf8')};
+  });
+}
+
+// A decision starts at a `DEC-n` or `Amendment` heading, or at a
+// `- **DEC-n …**` list item. Its Decider line may share a line with its
+// Reference, and may name several deciders.
+const DECISION_HEADING = /^#{2,4} (DEC-[0-9]+[a-z]?)\b/;
+const AMENDMENT_HEADING = /^#{2,4} (Amendment\b.*?)\s*$/;
+const DECISION_ITEM = /^\s*[-*] \*\*(DEC-[0-9]+[a-z]?)\b/;
+const ANY_HEADING = /^#{1,4} /;
+// Any bold label that ends in "decider" or "deciders" (a decision may name
+// several, such as a system-boundary and an adoption decider), except a
+// proposed one, which approves nothing.
+const DECIDER_LINE =
+  /\*\*((?:[^*]*?\s)?[Dd]eciders?|Direction owners?):?\*\*:?\s*(.*)$/;
+const PROPOSED_DECIDER = /^proposed\b/i;
+const PLACEHOLDER_DECIDER = /pending|<[^>]*>/i;
+
+function deciderLines(content) {
+  const deciders = new Map();
+  let decision = null;
+  for (const line of content.split(/\r?\n/)) {
+    const heading =
+      line.match(DECISION_HEADING) ?? line.match(AMENDMENT_HEADING);
+    if (heading || ANY_HEADING.test(line)) decision = heading?.[1] ?? null;
+    const item = line.match(DECISION_ITEM);
+    if (item) decision = item[1];
+    const decider = decision && line.match(DECIDER_LINE);
+    if (!decider || PROPOSED_DECIDER.test(decider[1])) continue;
+    const label = decider[1].trim();
+    const key = /^(deciders?|direction owners?)$/i.test(label)
+      ? decision
+      : `${decision} (${label})`;
+    if (!deciders.has(key)) {
+      deciders.set(key, decider[2].replace(/\s+/g, ' ').trim());
+    }
+  }
+  return deciders;
+}
+
+function approvers(document) {
+  const value = document.frontmatter.get('approved_by');
+  if (value == null) return [];
+  return Array.isArray(value) ? value.map(String) : [String(value)];
+}
+
+function originalDecider(line) {
+  return line
+    .split(';')[0]
+    .split(',')
+    .map(field => field.replace(/[`@]/g, '').replace(/\.$/, '').trim())
+    .filter(field => field && !/^\d{4}-\d{2}-\d{2}/.test(field))
+    .join(', ');
+}
+
+// Only the decider and date fields can hold a placeholder. The rest of the
+// line is free text, such as a decision's subject.
+function hasPlaceholderDecider(line) {
+  const [decider = '', date = ''] = line.split(';')[0].split(',');
+  return (
+    PROPOSED_DECIDER.test(decider.replace(/[`@]/g, '').trim()) ||
+    PLACEHOLDER_DECIDER.test(decider) ||
+    PLACEHOLDER_DECIDER.test(date.split('(')[0])
+  );
+}
+
+/**
+ * The approval lines a pull request changes or removes, with the account whose
+ * approval each change needs (INV31). Records pair by id, so a moved record or
+ * a moved line is not a change.
+ */
+export function findApprovalLineRewrites(baseRecords, currentRecords) {
+  const byId = records =>
+    new Map(
+      records.map(record => {
+        const document = parseKnowledgeDocument(record.content, record.path);
+        return [
+          document.frontmatter.get('id') ?? record.path,
+          {record, document},
+        ];
+      }),
+    );
+  const current = byId(currentRecords);
+  const changes = [];
+  for (const [id, base] of byId(baseRecords)) {
+    const head = current.get(id);
+    const headApprovers = head ? approvers(head.document) : [];
+    const path = head?.record.path ?? base.record.path;
+    const baseApprovers = approvers(base.document);
+    for (const login of baseApprovers) {
+      if (headApprovers.includes(login)) continue;
+      const from = baseApprovers.join(', ');
+      const to = headApprovers.join(', ') || null;
+      changes.push({path, claim: 'approved_by', from, to, decider: login});
+    }
+    const headDeciders = head ? deciderLines(head.record.content) : new Map();
+    for (const [decision, from] of deciderLines(base.record.content)) {
+      if (hasPlaceholderDecider(from)) continue;
+      const to = headDeciders.get(decision) ?? null;
+      if (to?.startsWith(from)) continue;
+      changes.push({
+        path,
+        claim: decision,
+        from,
+        to,
+        decider: originalDecider(from),
+      });
+    }
+  }
+  return changes;
+}
+
+function currentValidatedRecords(root, repositoryFiles) {
+  return repositoryFiles
+    .filter(isValidatedRecordPath)
+    .filter(filePath => fs.existsSync(path.join(root, filePath)))
+    .map(filePath => ({
+      path: filePath,
+      content: fs.readFileSync(path.join(root, filePath), 'utf8'),
+    }));
+}
+
+/**
+ * The approval lines the working tree changes since `baseRevision`, in every
+ * validated record: knowledge records and platform component records.
+ */
+export function approvalLineRewritesSince(root, baseRevision, repositoryFiles) {
+  return findApprovalLineRewrites(
+    readKnowledgeRecordsAtRevision(root, baseRevision, isValidatedRecordPath),
+    currentValidatedRecords(root, repositoryFiles),
+  );
 }
 
 function immediateDirectories(directory) {
@@ -2441,23 +2606,75 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
   return problems;
 }
 
+/**
+ * Warn on temporary project status in spec and architecture records. A
+ * warning never fails the check.
+ */
+export function statusPhraseWarnings(root = DEFAULT_ROOT) {
+  const warnings = [];
+  for (const absolutePath of discoverKnowledgeRecords(root)) {
+    const filePath = path
+      .relative(root, absolutePath)
+      .split(path.sep)
+      .join('/');
+    if (!isStatusCheckedPath(filePath)) continue;
+    for (const hit of findStatusPhrases(fs.readFileSync(absolutePath, 'utf8')))
+      warnings.push({filePath, ...hit});
+  }
+  return warnings;
+}
+
+function printStatusPhraseWarnings(root) {
+  const warnings = statusPhraseWarnings(root);
+  if (!warnings.length) return;
+  console.warn(
+    `Records state temporary project status (${warnings.length}; warning only). Describe the system, or keep one Status line:`,
+  );
+  for (const {filePath, line, phrase} of warnings)
+    console.warn(
+      process.env.GITHUB_ACTIONS === 'true'
+        ? `::warning file=${filePath},line=${line},title=Project status in a record::"${phrase}"`
+        : `- ${filePath}:${line}: "${phrase}"`,
+    );
+}
+
+/** The checkout `--root` names, or this repository. */
+function rootArgument() {
+  const rootIndex = process.argv.indexOf('--root');
+  if (rootIndex === -1) return DEFAULT_ROOT;
+  const root = process.argv[rootIndex + 1];
+  if (!root) throw new Error('--root requires a directory.');
+  return path.resolve(root);
+}
+
 async function main() {
-  if (!repositoryFileList(DEFAULT_ROOT)) {
+  const root = rootArgument();
+  if (!repositoryFileList(root)) {
     console.warn(
       'Skipped the INV25 reachability and path-pattern match checks: `git ls-files` is unavailable here.',
     );
   }
-  const problems = await validateKnowledgeRoot();
+  const problems = await validateKnowledgeRoot(root);
+  printStatusPhraseWarnings(root);
   const baseIndex = process.argv.indexOf('--base');
   if (baseIndex !== -1) {
     const baseRevision = process.argv[baseIndex + 1];
     if (!baseRevision) throw new Error('--base requires a revision.');
     problems.push(
       ...validateSchemaEvolution(
-        schemaFilesAtRevision(DEFAULT_ROOT, baseRevision),
-        currentSchemaFiles(DEFAULT_ROOT),
+        schemaFilesAtRevision(root, baseRevision),
+        currentSchemaFiles(root),
       ),
     );
+    const repositoryFiles = repositoryFileList(root);
+    const changes = repositoryFiles
+      ? approvalLineRewritesSince(root, baseRevision, repositoryFiles)
+      : [];
+    for (const change of changes) {
+      console.warn(
+        `${change.path}: ${change.claim} changes from "${change.from}" to "${change.to ?? 'removed'}"; it needs ${change.decider}'s approval at the exact head (INV31).`,
+      );
+    }
   }
   if (problems.length) {
     console.error(`Knowledge validation failed (${problems.length}):\n`);

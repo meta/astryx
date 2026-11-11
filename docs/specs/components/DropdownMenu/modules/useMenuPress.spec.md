@@ -206,8 +206,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - **AR1 — Highlight is focus in a menu.** In a menu the highlighted row is the
   focused row, moved with `preventScroll`, so keyboard, mouse and finger share
-  one highlight and one paint; a row whose root takes no focus is highlighted
-  through the control inside it.
+  one highlight and one paint; in Core's menus, a held finger or pen paints its
+  lit row with the pressed overlay (a public `useMenuPress` caller gets the
+  highlight, the lit row's focus, and styles it itself); a row whose root takes
+  no focus is highlighted through the control inside it.
 - **AR2 — A picker keeps its combobox focus.** In a Selector listbox the model
   drives `highlightedIndex` and `aria-activedescendant`; DOM focus never moves
   into the listbox.
@@ -230,7 +232,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 No visual representation is introduced. FR6 keeps a finger's row press on
 `spec:AST-094` FR11's cell profile so the single focus highlight is the only
 lit row under a finger; the highlight paint itself is the existing focus overlay
-owned by the item components.
+owned by the item components, and in Core's menus a held finger or pen paints the
+lit row with the pressed overlay instead (AR1).
 
 ## Parent and system relationships
 
@@ -242,10 +245,17 @@ owned by the item components.
   visibility; this module reads them and adds no modality definition.
 - `architecture:layer-runtime` owns native light dismiss, which this module
   leaves in place: a press outside a `popover="auto"` menu still dismisses it
-  through the browser. Proposed FR8 holds the trigger as the popover's
-  invoker for the extent of a press-open so the release over the trigger is
-  not read as a dismissal, the same mechanism the layer runtime's keep-open
-  props use.
+  through the browser. The press that opens the menu is claimed when its show is
+  accepted at once (`component:DropdownMenu` FR8, `spec:AST-003` FR11–FR13).
+  Wherever that press is released, the browser's light dismiss does not read the
+  release as a dismissal, and the press model decides what it does. The trigger
+  stays the popover's invoker for the extent of the press, the same mechanism
+  the layer runtime's keep-open props use. Under a mouse, the trigger holds the
+  pointer while the pointer is over it. The menu's layer holds it while the
+  pointer is outside both. When the show waits for another popover operation,
+  the press model no longer tracks that press, so only the invoker hold applies
+  and a release off the trigger dismisses (a gap against
+  `component:DropdownMenu` FR8).
 - `family:overlay-dismissal` owns Escape ordering; unchanged here.
 
 ## Verification map
@@ -259,6 +269,7 @@ owned by the item components.
 | FR4 (scroll)           | `MenuPress.a11y.chromium.spec.ts` (real Chromium)                                                                                                                                                               | Chromium touch pan in an overflowing menu; touch-action by overflow; finger slide and its stray click                                                                               | Not provable in jsdom; a pan that acts on a row, or a slide that acts on the press row, fails                                                       |
 | FR4 (pinch)            | `MenuPinchZoom.a11y.chromium.spec.ts` (real Chromium, phone emulation)                                                                                                                                          | two-finger pinch over a menu whose rows fit, over one that scrolls, and over a picker listbox                                                                                       | Not provable in jsdom; a pinch that leaves the page at scale 1, or acts on a row, fails                                                             |
 | FR8 (proposed), FR9    | `menuPressGesture.test.ts` trigger states; `useMenuPress.test.tsx` trigger suite; `DropdownMenu.test.tsx` press-open cases                                                                                      | mouse opens at once, settle before/after, cancel; finger opening per `spec:AST-094` FR29; press-open + drag-release, unsettled release, trigger toggle, held touch, tap             | A menu that does not open on a mouse press, an unsettled release that acts, or a trigger that reopens in the same gesture fails                     |
+| FR8 (proposed)         | `DropdownMenuOpeningRelease.interaction.browser.spec.ts`, Chromium and WebKit                                                                                                                                   | opening release off the trigger, under a trigger that moved away, and after a show that waited; settled release outside                                                             | An unsettled opening release that the browser's light dismiss closes fails                                                                          |
 | FR10, FR11, AR5        | `DropdownMenuSubMenu.test.tsx` press cases and a real-browser finger case for the resting row; `useMenuPress.test.tsx` continuation suite plus a real-browser handoff case; open and close event counts for AR5 | a finger released on and resting on a sub-menu row; a continued finger, the distance from the first sample, a lift before it, a mouse; the menu's open and close each observed once | A sub-menu that opens on a resting finger, a continued finger that picks before the handoff, or an open withdrawn, or opened or closed twice, fails |
 | ORD1a (proposed)       | `DropdownMenuSubMenu.test.tsx` press cases; `SubMenuHeaderFooter.a11y.chromium.spec.ts` press-drag case                                                                                                         | a mouse press on a menu row released on a row of a sub-menu rendered beside the menu; the same press released on that sub-menu's header field                                       | A release on such a row that acts on nothing or closes the menu, or a release on its header field that acts, fails.                                 |
 
@@ -293,7 +304,8 @@ opens under the pointer would pick a row nobody chose.
 
 Menus already keep one highlight by moving focus on hover; the finger moves
 the same focus with `preventScroll`, so keyboard, mouse and touch share one
-state and one paint. A picker's list belongs to a combobox and must not take
+state and one paint; in Core's menus a held finger or pen paints that row with
+the pressed overlay (AR1). A picker's list belongs to a combobox and must not take
 focus from it. A row a finger left keeps no pressed paint, because it
 would light a second row (FR6). This record does not decide where
 focus goes after a pick.

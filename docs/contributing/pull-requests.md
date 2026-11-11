@@ -116,19 +116,26 @@ pnpm review:pre                       # the working tree against origin/main
 pnpm review:pre --base upstream/main  # a fork whose main remote is upstream
 pnpm review:pre --head HEAD           # committed work only
 pnpm review:pre --json                # the same report as JSON
+pnpm review:pre --body-file body.md   # also read the description for item h
+pnpm review:pre --pr 1234             # read the description with gh
 ```
 
-The report reads only the local repository. It prints:
+The report reads only the local repository, and the description when you pass
+one. It prints:
 
-- each changed file and its class: record, owner-gated record, API report,
-  published package code, other package file, Lab, or repository;
+- each changed file and its class: record, owner-gated record, published
+  package code, other package file, Lab, or repository;
 - the current records that govern those files, and the claims that the files
   cite or that the added lines route;
 - the global baseline claims that the linked components' review triggers route,
   read at the merge base;
+- the authored line count, and whether the change merges into the base;
+- the findings for items h to l, each with its file and line, the rule, and
+  the fix;
 - the checklist items that apply to this change, each with its reason.
 
-The report is a lookup. The records decide acceptance, not the report.
+The report is a lookup. The records decide acceptance, not the report. A
+finding is a lead to check, not a verdict.
 
 ### Find the governing records by hand
 
@@ -144,12 +151,13 @@ The report is a lookup. The records decide acceptance, not the report.
 
 First apply the protocol above: one primary intent, no tagalongs, and
 specifications last. Then check each item that the report lists. Item d applies
-to every pull request.
+to every pull request. The report checks items h to l automatically and lists
+each finding at its file and line.
 
-- **a. API delta.** A current record decides each added or changed row of a
-  package's `api-report.md`. The record is current at the merge base or changes
-  in the same pull request. After a public API change, run `pnpm api:report`
-  and commit the report. A row that no record decides goes to an owner for a
+- **a. API delta.** A current record decides each added or changed row of the
+  pull request's API delta, which the review bot posts at the start of its
+  summary notes. The record is current at the merge base or changes in the
+  same pull request. A row that no record decides goes to an owner for a
   decision; review does not ask you to remove it
   ([`architecture:public-component-api`](../architecture/public-component-api.md#boundaries-and-invariants)
   INV24 and INV25).
@@ -177,8 +185,8 @@ to every pull request.
   ([Public repository boundary](#public-repository-boundary)).
 - **e. New public hook.** Each public hook has a minimal, runnable example: a
   live template block that names the hook in `exampleFor` or `alsoExampleFor`.
-  A public hook is a hook that a package's API report lists, so a new Hooks row
-  or a new export from a published entry point makes one. Motion and gesture
+  A public hook is a hook that a package exports from a published entry point,
+  so a new hook export makes one. Motion and gesture
   hooks count. A public hook without a conforming example is a docs gap that an
   issue tracks
   ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#consumer-docs)
@@ -199,6 +207,30 @@ to every pull request.
   ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#dec-14--one-owner-approval-binds-a-pull-requests-spec-content)
   DEC-14). The description also reports `## Writing rubric results`
   ([Writing specification records](spec-writing.md)).
+- **h. Size (automatic).** More than 2,000 authored lines, without lockfiles,
+  snapshots, or generated files, is a finding. A description line that declares
+  a behavior-module pull request and names the module (`Behavior module: <name>`)
+  removes the limit. A `Batch:` row raises it to 8,000. For a stacked pull
+  request, pass `--base` the branch below it, so the count covers only its own
+  lines.
+- **i. Shared owners (automatic).** In Core source, an added resize observer,
+  document or window listener, module-level warn-once set, or parent walk
+  across shadow roots is a finding: call `observeResize`,
+  `subscribeInput`, `useDevWarning`, or `parentAcrossShadow`
+  ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
+  INV16).
+- **j. Effects (automatic).** An added Effect with no comment that names the
+  system it syncs, an Effect that only copies a value into a ref, and a DOM node
+  in React state are findings
+  ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
+  INV1 and INV3).
+- **k. Release notes and records (automatic).** A package that ships a change
+  with no Changeset, a `[fix]`, `[feat]`, or `[perf]` Changeset for a package
+  where nothing that ships changes, such as a change to tests or tooling only,
+  and a gap row left in a record for a claim this change builds are findings.
+- **l. Mergeable (automatic).** A conflict with the base branch is a finding.
+  For the working tree, the check merges the last commit. It writes nothing to
+  the repository.
 
 ### Use a fresh session for an agent's change
 

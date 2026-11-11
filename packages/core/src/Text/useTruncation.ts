@@ -13,7 +13,7 @@
  */
 
 import {useCallback, useRef, useState, type RefCallback} from 'react';
-import {observeResize} from '../utils/sharedResizeObserver';
+import {isResizeObserved, observeResize} from '../utils/sharedResizeObserver';
 import {observeContent} from '../utils/sharedMutationObserver';
 
 export interface UseTruncationOptions {
@@ -123,17 +123,17 @@ export function useTruncation(
       elementRef.current = element;
 
       if (element && maxLines > 0) {
-        // Observe via shared singleton (if available). The first measurement
-        // runs after the commit, in a microtask, instead of in the call
-        // observeResize makes on registration: that call runs inside React's
-        // commit, after other components' DOM writes, and forced a style and
-        // layout pass per text on a page that mounts many. Every text
-        // registered in one commit then reads layout once, together, and a
-        // text whose element another subscriber already observes is measured
-        // too. The truncated state only decides whether to compose the
-        // tooltip, so nothing paints differently.
+        // Observe via the shared singleton, if available. The call that
+        // observeResize makes on registration runs inside React's commit, so
+        // it measures nothing. The observer's first notification measures a
+        // new element. The browser sends it after its own layout, so mounting
+        // text forces no layout pass. An element another subscriber already
+        // observes gets no new first notification, so a microtask after the
+        // commit measures it. The truncated state only decides whether to
+        // compose the tooltip, so nothing paints differently.
         if (typeof ResizeObserver !== 'undefined') {
           let registered = false;
+          const wasObserved = isResizeObserved(element);
           const unobserve = observeResize(element, () => {
             if (registered) {
               checkTruncation(element);
@@ -143,11 +143,13 @@ export function useTruncation(
           unobserveRef.current = unobserve;
           // Skipped when this registration has ended by then (measuring
           // turned off, or the element replaced, in the same task).
-          queueMicrotask(() => {
-            if (unobserveRef.current === unobserve) {
-              checkTruncation(element);
-            }
-          });
+          if (wasObserved) {
+            queueMicrotask(() => {
+              if (unobserveRef.current === unobserve) {
+                checkTruncation(element);
+              }
+            });
+          }
         } else {
           checkTruncation(element);
         }

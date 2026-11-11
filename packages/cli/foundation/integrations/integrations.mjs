@@ -32,6 +32,9 @@ import {
   unknownIntegrationKeys,
 } from '../../authoring/integration/schema.mjs';
 import {importUserModule, findPresentFiles} from '../fs/module-loader.mjs';
+import {findManifestPaths, MANIFEST_BASENAMES} from './manifest-paths.mjs';
+
+export {findManifestPaths, MANIFEST_BASENAMES};
 import {parseGapReportHandler} from '../../authoring/gap-report/parse.mjs';
 import {parseDiscoverSource} from '../../authoring/discover/parse.mjs';
 import {resolveProviders} from './provider-resolution.mjs';
@@ -102,12 +105,6 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} [__discoverError] isolated discover-source validation error.
  */
 
-/** Conventional manifest basenames, in load-precedence order. */
-export const MANIFEST_BASENAMES = [
-  'astryx.integration.ts',
-  'astryx.integration.mjs',
-  'astryx.integration.js',
-];
 
 /**
  * Normalize a package-owned provider ID without rejecting legacy unnamed local
@@ -153,16 +150,6 @@ export function markProviderConflicts(integrations) {
   ).integrations;
 }
 
-/**
- * Return the conventional root manifest paths present in `dir`, in
- * load-precedence order. Unlike {@link resolveManifestPath} this never throws —
- * callers (for example Doctor integration validation) decide how to treat zero / multiple.
- * @param {string} dir
- * @returns {string[]} absolute manifest paths
- */
-export function findManifestPaths(dir) {
-  return findPresentFiles(dir, MANIFEST_BASENAMES);
-}
 
 /**
  * Parse the optional named gap-report handler without making it part of the

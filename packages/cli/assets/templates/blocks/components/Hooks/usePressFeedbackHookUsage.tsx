@@ -9,7 +9,7 @@ import {
   focusOutlineStyles,
   interactionOverlayStyles,
 } from '@astryxdesign/core/utils';
-import {PlayingCardContents} from '@astryx-docs/demo-content';
+import {DemoHint, PlayingCardContents} from '@astryx-docs/demo-content';
 
 export default function UsePressFeedbackHookUsage() {
   const pressable = usePressFeedback();
@@ -17,25 +17,28 @@ export default function UsePressFeedbackHookUsage() {
   const flip = () => setIsFaceUp(faceUp => !faceUp);
 
   return (
-    <Card
-      {...pressable}
-      xstyle={[
-        interactionOverlayStyles.backgroundImage,
-        focusOutlineStyles.focusVisible,
-      ]}
-      width={160}
-      role="button"
-      tabIndex={0}
-      aria-label="Flip card"
-      aria-pressed={!isFaceUp}
-      onClick={flip}
-      onKeyDown={event => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          flip();
-        }
-      }}>
-      <PlayingCardContents rank="Q" suit="hearts" faceDown={!isFaceUp} />
-    </Card>
+    <DemoHint text="Press and hold the card to see the press; tap, click, Enter or Space to flip it.">
+      <Card
+        {...pressable}
+        xstyle={[
+          interactionOverlayStyles.backgroundImage,
+          focusOutlineStyles.focusVisible,
+        ]}
+        width={120}
+        padding={1}
+        role="button"
+        tabIndex={0}
+        aria-label="Flip card"
+        aria-pressed={!isFaceUp}
+        onClick={flip}
+        onKeyDown={event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            flip();
+          }
+        }}>
+        <PlayingCardContents rank="Q" suit="hearts" faceDown={!isFaceUp} />
+      </Card>
+    </DemoHint>
   );
 }

@@ -49,5 +49,39 @@ describe('levenshteinDistance', () => {
     // so a real 5-away typo isn't dropped by the short-circuit.
     expect(d('use', 'useMedia')).toBe(5); // 5 pure insertions
   });
+
+  it('answers max + 1 past an optional bound, and the distance within it', () => {
+    const words = ['kitten', 'sitting', 'mitten', 'kitchen', 'knitting', 'kit'];
+    for (const a of words) {
+      for (const b of words) {
+        const full = d(a, b);
+        for (let max = 0; max <= 5; max++) {
+          const within = full <= max ? full : max + 1;
+          expect(d(a, b, max), `${a} ${b} ${max}`).toBe(within);
+        }
+      }
+    }
+  });
 });
 
+describe('levenshteinDistance with swaps', () => {
+  it('counts two adjacent letters swapped as one edit', () => {
+    expect(d('gorup', 'group', 2, {swaps: true})).toBe(1);
+    expect(d('gorup', 'group', 2)).toBe(2);
+  });
+
+  it('agrees with the plain distance when nothing is swapped', () => {
+    for (const [a, b] of [
+      ['button', 'buton'],
+      ['dashboard', 'dashbord'],
+      ['card', 'cart'],
+      ['abc', 'xyz'],
+    ]) {
+      expect(d(a, b, 3, {swaps: true})).toBe(d(a, b, 3));
+    }
+  });
+
+  it('answers max + 1 past the cap', () => {
+    expect(d('abcdef', 'badcfe', 2, {swaps: true})).toBe(3);
+  });
+});

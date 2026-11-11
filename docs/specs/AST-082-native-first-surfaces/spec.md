@@ -85,7 +85,7 @@ depends only on runtimes it can maintain.
   announcements). It is the same on every platform that offers the component.
   - A platform honors a prop when the prop behaves the way core already defines
     for that platform's input type. `tooltip` stays in the core: core defines
-    what a tooltip does where there is no hover (Tooltip `triggerBehavior`), and a
+    what a tooltip does where there is no hover (Tooltip `touchTrigger`), and a
     touch platform behaves that way.
   - A prop leaves the core only when a platform that offers the component cannot
     match core's defined behavior for its input type. Such a prop belongs to the
@@ -575,6 +575,9 @@ release never waits on a native platform. Core keeps the core and web contracts;
 bindings, native theme configuration, and native implementations, and reads core
 only through the portable entry, apart from the build-time reads FR16 lists
 until that entry ships.
+The React Native candidate's native code lives in the platform layer of
+`@astryxdesign/react-native` (`spec:AST-112` FR4), and `@astryxdesign/native` stays the single cross-platform
+contracts package.
 
 Rejected: native types and implementations inside `@astryxdesign/core`, because
 every web consumer would carry them and core's API would grow with each platform.

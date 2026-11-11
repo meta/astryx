@@ -10,7 +10,7 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {act} from 'react';
+import {act, type ReactNode} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {focusOutlineStyles} from '@astryxdesign/core/utils';
@@ -19,6 +19,7 @@ import UsePressFeedbackHookUsage from './usePressFeedbackHookUsage';
 // The docs-only card is not what this checks; stand it in with a plain
 // element so the test needs no StyleX compilation.
 vi.mock('@astryx-docs/demo-content', () => ({
+  DemoHint: ({children}: {children: ReactNode}) => children,
   PlayingCardContents: ({faceDown}: {faceDown?: boolean}) => (
     <span>{faceDown === true ? 'back' : 'face'}</span>
   ),

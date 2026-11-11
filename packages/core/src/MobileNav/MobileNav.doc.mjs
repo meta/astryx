@@ -98,7 +98,7 @@ export const docs = {
           name: 'onOpenChange',
           type: '(isOpen: boolean) => void',
           description:
-            'Called when the drawer visibility changes (backdrop click, Escape key, or close button). Inside AppShell, this is managed automatically via context.',
+            'Called when the drawer visibility changes (backdrop click, Escape key, or close button). Inside AppShell, this is managed automatically via context. On a phone or tablet (a coarse primary pointer), the drawer takes no tap or drag while it slides in; keys and assistive technology still act. After a close, focus returns to the element that opened it once its dialog closes.',
         },
         {
           name: 'children',
@@ -203,7 +203,7 @@ export const docsZh = {
       name: 'onOpenChange',
       type: '(isOpen: boolean) => void',
       description:
-        '当抽屉可见性变化时调用（点击背景遮罩、按 Escape 键或点击关闭按钮）。',
+        '当抽屉可见性变化时调用（点击背景遮罩、按 Escape 键或点击关闭按钮）。在手机或平板上（主指针为粗指针时），抽屉滑入期间不接受点按或拖动；键盘和辅助技术仍可操作。关闭后，焦点会在对话框关闭时回到打开它的元素。',
       required: true,
     },
     {
@@ -311,7 +311,7 @@ export const docsDense = {
   propDescriptions: {
     isOpen: 'whether drawer is open',
     onOpenChange:
-      'called when drawer visibility changes (backdrop click, Escape, close button)',
+      'called when drawer visibility changes (backdrop click, Escape, close button); under a coarse primary pointer the drawer takes no tap or drag while it slides in (keys still act)',
     children:
       'drawer content; typically SideNavSection/SideNavItem or any ReactNode',
     header:
