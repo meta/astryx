@@ -235,14 +235,19 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   the first set in the project's list that has one for it: the icon that
   names it in an `exact` or `strong` match, else the icon that set's `map`
   names for the definition. One icon never mixes sets, and the list order
-  decides between two sets that both have it. When no set in the list has an
-  icon for a declared definition, the template's import of that icon is
+  decides between two sets that both have it. An import from the library a
+  set in the list wraps (the package its data names as `source`, or a
+  subpath of it) is an icon the project chose: when the main set wraps it,
+  the icon keeps its import as written; when another set in the list wraps
+  it and no set in the list has an icon for its definition, it keeps its
+  import too. When no set in the list has an icon for a declared definition,
+  and no set in the list wraps its library, the template's import of that icon is
   removed and the file declares a local placeholder component once, above
   its first statement that is not an import: `MissingIcon`, or `MissingIcon2`
   and up when the file already uses that name (FR19). Each reference to the
   icon renders the placeholder, with a comment that names the definition
   (`MissingIcon /* missing icon: cut */`). The copied file imports nothing
-  new and keeps no import that no set in the list has. Every reference uses the mapped export,
+  new and keeps no import from a library that no set in the list has or wraps. Every reference uses the mapped export,
   under an alias when the name is taken; a mapped default import becomes the
   set's named import aliased to its local name. Nothing is guessed from names,
   and a `likely` match is only suggested. One key covers a name imported from
@@ -263,8 +268,8 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   and `sets`, each set the mapped icons come from with its license. With a
   set, every declared key is mapped, a placeholder, or kept: a key bound only
   by a namespace import, a type-only import, a re-export, or an import from
-  an Astryx package or a set in the list, or by no import at all (`module`
-  null), is kept with the reason, and so is an icon that draws no definition
+  an Astryx package, a set in the list, or the library a set in the list
+  wraps, or by no import at all (`module` null), is kept with the reason, and so is an icon that draws no definition
   and has no match; a side-effect import binds nothing. Text output prints a
   line per placeholder that names the definition and both fixes. Printed
   source keeps the report on stderr. Without the opt-in there is no `icons`
@@ -285,7 +290,9 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   not checked. The note is marked `next` (`architecture:cli-surface` DEC-11):
   it fails `--strict --next`, and `--strict` does not fail on it. A package
   whose templates declare no `icons` gets no such note. Every icon a bundled Core template imports is
-  declared.
+  declared, and two different icons in one bundled template never declare
+  the same definition: a set draws one icon for each definition, so they
+  would draw the same icon.
 - **FR11 — Search stays stable.** `astryx search` has no icon domain and no
   `--type icon`, and returns no experimental doc, with or without the opt-in.
   Icons join it only at promotion.
@@ -601,8 +608,10 @@ message}`) names each template or namespace doc that sets `stability`, and
   `DOCSITE_ICON_SET`, experimental, names a main set and optional backups,
   separated by commas. Set, a build-time loader runs each template and block
   preview source through the FR9 rewrite with the sets installed in the docs
-  site; a main set that is not usable fails the build. Unset, no loader is
-  added and previews keep their templates' icons.
+  site; a main set that is not usable fails the build. The rewritten imports
+  resolve from the docs site, where the sets are installed, and the build
+  cache keys on the setting, so a changed setting rebuilds the previews.
+  Unset, no loader is added and previews keep their templates' icons.
 
 ### Supporting pieces
 
@@ -646,7 +655,7 @@ message}`) names each template or namespace doc that sets `stability`, and
 | FR0, FR11 | experimental-isolation tests against the output of the CLI without the feature            | help; the manifest; every stable docs topic and tree node, the `cli` listings, and every stable `cli` docs node; search for `delete`, `close`, `icon`, `trash can`, `search`, `experimental`, and `icon set`, with no set and with a set opted in; template printed and copied; discover, Doctor, and `doctor integration validate <package>` with a set and no opt-in; stderr of every command that prints the integration-issue nudge, with a set and no opt-in. Goldens hold identities, structure, counts, every `stability`, and every sentence or link that names an experimental surface, an icon set, or an icon definition, not prose | a stable output gains a result, field, section, count, `stability`, or a sentence or link naming an experimental surface that the CLI without the feature lacks (apart from FR18's `stability` field); or a stable command gains an icon-set subcommand or kind |
 | FR1–FR5   | descriptor, data-file, and definition parser and discovery tests                          | valid set; invalid data; definitions Astryx and the set both have                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | an invalid set answers, or a definition file is not read                                                                                                                                                                                                        |
 | FR6–FR8   | `experimental icon` text and JSON tests                                                   | definition, name, and meaning matches; `<set>/<id>`; `--list` with an order and with two sets and none chosen; `use` with backups; two sets of one name; `--definitions` in an icon-set package, in a project with a main set, with `--set`, and with no set; the `use` fix with a set written as `<package>/<set>` and with a name two packages ship                                                                                                                                                                                                                                                                                          | ranking or tie order changes, or a bare ambiguous name answers                                                                                                                                                                                                  |
-| FR9–FR10  | template mapping tests; `integration check` tests; the bundled-template declarations test | mapped by match and by definition; a main set and a backup; one placeholder declaration shared by two meanings, under a free name when `MissingIcon` is taken; a missing look; kept with a suggestion; an undeclared icon; no opt-in                                                                                                                                                                                                                                                                                                                                                                                                           | a name is guessed, an icon keeps a library import no set has, sets mix within one icon, or a project without the opt-in gets a rewrite                                                                                                                          |
+| FR9–FR10  | template mapping tests; `integration check` tests; the bundled-template declarations test | mapped by match and by definition; a main set and a backup; one placeholder declaration shared by two meanings, under a free name when `MissingIcon` is taken; a missing look; kept with a suggestion; a set that wraps the template's library, as the main set and as a backup; an undeclared icon; two different icons in one bundled template with one definition; no opt-in                                                                                                                                                                                                                                                                | a name is guessed, an icon keeps a library import no set has or wraps, sets mix within one icon, or a project without the opt-in gets a rewrite                                                                                                                 |
 | FR12–FR14 | writer and command tests                                                                  | wrap and refresh; adapter; generated types and theme map; a receipt for a set that leaves template meanings unmapped and for one that maps them all; a dry run; the first wrap into a set with no icons; `--adapter` on a new set, on a set with no icons, and malformed or missing; `add --all` with more than ten missing; suggestions for an id with other words, a shared word, and `bank`                                                                                                                                                                                                                                                 | a write is left half done, or the theme map drifts from `map`                                                                                                                                                                                                   |
 | FR15      | `integration check` tests, with and without `--strict`                                    | every code; unmapped optional definitions; unmapped template meanings under `--strict`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | an export the module lacks passes, or the optional list fails a check                                                                                                                                                                                           |
 | FR16      | validate tests; a scratch project on published CLI 0.7.3                                  | `stability` on a template and namespace doc; template `icons`; peer range from 0.7.4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a note fails a check, or a dropped descriptor goes unnoted                                                                                                                                                                                                      |
@@ -684,10 +693,12 @@ A project chooses its icons. An icon from a library the project never chose
 is a stray dependency and a mismatched look, so an icon with a meaning that
 no set in the project's list has becomes a placeholder, with a note and
 the two commands that fix it, and Doctor lists each one left in the
-project's code.
+project's code. An icon from the library a set in the list wraps is one the
+project chose, so it keeps its import.
 
-Rejected: keeping the template's original library import, which leaves a
-dependency and an icon the project did not choose.
+Rejected: keeping the original import from a library that no set in the
+list has or wraps, which leaves a dependency and an icon the project did not
+choose.
 
 ### DEC-4 — Astryx owns the definitions; sets map to them
 

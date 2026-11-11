@@ -19,7 +19,7 @@ import {
   assertWithin,
   PathSafetyError,
 } from '../../foundation/fs/path-safety.mjs';
-import {openProject} from './_project.mjs';
+import {baseResolved, openProject} from './_project.mjs';
 import {
   loadTheme,
   nearest,
@@ -30,11 +30,13 @@ import {
   fontPackages,
 } from './_settings.mjs';
 import {
+  colorsPageSource,
   componentsPageSource,
   overviewPageSource,
   previewRouteSource,
   themeImports,
 } from './_preview.mjs';
+import {paletteFiles, paletteMapping} from './_palette.mjs';
 import {build} from '../build/build.mjs';
 import {template} from '../template/template.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
@@ -341,6 +343,84 @@ async function routeTheme(cwd, dir, data) {
   return {name: data.theme, module: ti.module, css: ti.css};
 }
 
+/** The Colors page: its id and file, relative to the route folder. */
+const COLORS_PAGE = {id: 'colors', label: 'Colors', file: 'pages/colors'};
+
+/**
+ * The Colors page source of a theme, and whether the theme has generated
+ * colors. The page imports the generated color module, so it follows every
+ * change; the tokens that use each shade are written into it.
+ * @param {string} cwd
+ * @param {string} dir the route folder
+ * @param {string} slug
+ * @returns {Promise<{source: string, colors: boolean}>}
+ */
+async function colorsPage(cwd, dir, slug) {
+  const data = loadTheme(cwd, slug);
+  const ctx = await context(cwd);
+  const pal = paletteMapping(
+    cwd,
+    slug,
+    data,
+    await baseResolved(ctx.project, data.like),
+    ctx.project.core.tokenDefaults,
+  );
+  const file = path.join(cwd, paletteFiles(slug).palette);
+  if (!pal || !fs.existsSync(file))
+    return {
+      source: colorsPageSource({slug, module: null, seeds: {}, uses: {}}),
+      colors: false,
+    };
+  const exact = new Set(
+    data.settings.filter(s => s.source === 'token' && !s.on).map(s => s.thing),
+  );
+  /** @type {Record<string, Record<'light' | 'dark', Record<string, string[]>>>} */
+  const uses = {};
+  for (const [token, v] of Object.entries(pal.tokens)) {
+    if (exact.has(token)) continue;
+    const byMode = (uses[v.family] ??= {light: {}, dark: {}});
+    for (const m of /** @type {const} */ (['light', 'dark'])) {
+      const r = v[m];
+      (byMode[m][r.stop] ??= []).push(
+        r.alpha ? `${token} (opacity ${r.alpha})` : token,
+      );
+    }
+  }
+  const pageDir = path.join(dir, path.dirname(COLORS_PAGE.file));
+  const rel = path
+    .relative(pageDir, file.replace(/\.ts$/, ''))
+    .split(path.sep)
+    .join('/');
+  return {
+    source: colorsPageSource({
+      slug,
+      module: rel.startsWith('.') ? rel : `./${rel}`,
+      seeds: Object.fromEntries(pal.families.map(f => [f.id, f.seed])),
+      uses,
+    }),
+    colors: true,
+  };
+}
+
+/**
+ * Rewrite the Colors page when the preview has one, so it names the shades
+ * the theme's tokens use now, or says the theme has no color left.
+ * @param {string} cwd
+ * @param {string} dir
+ * @param {PreviewData} data
+ * @returns {Promise<boolean>} whether it was rewritten
+ */
+async function refreshColorsPage(cwd, dir, data) {
+  const rel = `${COLORS_PAGE.file}.tsx`;
+  if (!data.theme || !data.files.includes(rel)) return false;
+  const file = previewFile(cwd, dir, data, rel);
+  const {source} = await colorsPage(cwd, dir, data.theme);
+  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === source)
+    return false;
+  fs.writeFileSync(file, source);
+  return true;
+}
+
 /**
  * Write the route and the data file from the page list.
  * @param {string} cwd
@@ -350,6 +430,7 @@ async function routeTheme(cwd, dir, data) {
  */
 async function writeRoute(cwd, dir, data, theme) {
   if (theme === undefined) theme = await routeTheme(cwd, dir, data);
+  await refreshColorsPage(cwd, dir, data);
   writePreviewFile(
     cwd,
     dir,
@@ -365,28 +446,82 @@ async function writeRoute(cwd, dir, data, theme) {
 }
 
 /**
- * Rewrite the in-app preview route of a theme when its imports changed, so
- * a font package installed after `set` loads on the next change or `show`.
- * Only the preview in the usual place (app/ or src/app/theme-preview) is
- * kept this way; a preview elsewhere follows on its next `preview add`.
+ * Rewrite the in-app preview routes of a theme when their imports changed, so
+ * a font package installed after `set` loads on the next change or `show`,
+ * and its Colors page, so it names the shades the tokens use now.
+ * The preview in the usual place (app/ or src/app/theme-preview) and every
+ * preview added with --path for the theme are kept this way.
  * @param {string} cwd
  * @param {string} slug
- * @returns {Promise<boolean>} whether the route was rewritten
+ * @returns {Promise<boolean>} whether the route or the Colors page was rewritten
  */
 export async function refreshPreviewRoute(cwd, slug) {
   const at = previewDir(cwd, undefined, {optional: true});
-  const data = at && readPreview(at.dir);
-  if (!data || data.theme !== slug || !data.files.includes('page.tsx'))
-    return false;
-  const file = previewFile(cwd, at.dir, data, 'page.tsx');
-  const text = previewRouteSource({
-    pages: data.pages,
-    theme: await routeTheme(cwd, at.dir, data),
-  });
-  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text)
-    return false;
-  fs.writeFileSync(file, text);
-  return true;
+  const dirs = [
+    ...new Set([...(at ? [at.dir] : []), ...recordedPreviews(cwd, slug)]),
+  ];
+  let changed = false;
+  for (const dir of dirs) {
+    const data = readPreview(dir);
+    if (!data || data.theme !== slug || !data.files.includes('page.tsx'))
+      continue;
+    if (await refreshColorsPage(cwd, dir, data)) changed = true;
+    const file = previewFile(cwd, dir, data, 'page.tsx');
+    const text = previewRouteSource({
+      pages: data.pages,
+      theme: await routeTheme(cwd, dir, data),
+    });
+    if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text) continue;
+    fs.writeFileSync(file, text);
+    changed = true;
+  }
+  return changed;
+}
+
+/**
+ * Where a theme's previews are, so a preview added with --path is kept in
+ * step too: themes/<theme>/previews.json, project-relative folders.
+ * @param {string} cwd
+ * @param {string} slug
+ */
+const previewsFile = (cwd, slug) =>
+  path.join(themeFiles(cwd, slug).dir, 'previews.json');
+
+/**
+ * The preview folders recorded for a theme that are still inside the
+ * project.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string[]}
+ */
+function recordedPreviews(cwd, slug) {
+  try {
+    const list = JSON.parse(fs.readFileSync(previewsFile(cwd, slug), 'utf8'));
+    return (Array.isArray(list) ? list : [])
+      .map(rel => path.resolve(cwd, String(rel)))
+      .filter(dir => !path.relative(cwd, dir).startsWith('..'));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Record a preview folder for a theme, or with `keep` false forget it.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} dir
+ * @param {boolean} [keep]
+ */
+function recordPreview(cwd, slug, dir, keep = true) {
+  if (!fs.existsSync(themeFiles(cwd, slug).dir)) return;
+  const rel = path.relative(cwd, dir).split(path.sep).join('/');
+  const list = recordedPreviews(cwd, slug)
+    .map(d => path.relative(cwd, d).split(path.sep).join('/'))
+    .filter(x => x !== rel);
+  if (keep) list.push(rel);
+  const file = previewsFile(cwd, slug);
+  if (list.length) fs.writeFileSync(file, `${JSON.stringify(list, null, 2)}\n`);
+  else fs.rmSync(file, {force: true});
 }
 
 /**
@@ -420,10 +555,77 @@ function skipReason(s) {
 }
 
 /**
+ * The page templates the build ranking picks for a description, best first,
+ * each with why. App frames (the Shell templates) are left out: the preview
+ * is an app shell already, and `--template` can still name one. When the
+ * ranking says no page is really this one, it refuses with the closest
+ * pages to name instead, and nothing is written.
+ * @param {string} words
+ * @param {string} cwd
+ * @param {string[]} notes skipped frames are noted here
+ * @returns {Promise<Array<{name: string, displayName: string, why: string}>>}
+ */
+async function rankedPages(words, cwd, notes) {
+  const kit =
+    /** @type {import('../build/build.type.mjs').BuildKitResponse} */ (
+      await build(words, {cwd})
+    );
+  const start = kit.data.start;
+  const all = start ? [start, ...start.alternatives] : [];
+  const listed = /** @type {Array<{id: string, category?: string}>} */ (
+    (await template(undefined, {list: true, type: 'page', cwd})).data
+  );
+  const frames = new Set(
+    listed.filter(t => /^Shell\b/.test(t.category ?? '')).map(t => t.id),
+  );
+  const pages = all.filter(p => !frames.has(p.name));
+  const skippedFrames = all.filter(p => frames.has(p.name)).map(p => p.name);
+  if (!pages.length)
+    refuse(
+      E.ERR_NOT_FOUND,
+      `No page template to show for "${words}": ${all.length ? `the ranking found only app frames (${skippedFrames.join(', ')}), and the preview is a frame already` : 'this project has none'}. Nothing was written.`,
+      {
+        run: skippedFrames
+          .slice(0, 3)
+          .map(n => `${PREVIEW} add --template ${n}`),
+      },
+    );
+  // The ranking's own verdict: a closest page that is not this one, or a
+  // frame it fell back to because no page matched, adds nothing unrelated.
+  const unmatched =
+    start &&
+    ((start.basis === 'closest' && !frames.has(start.name)) ||
+      (start.basis === 'fallback' &&
+        frames.has(start.name) &&
+        !kit.data.directMatch));
+  if (unmatched)
+    refuse(
+      E.ERR_NOT_FOUND,
+      `No page template really matches "${words}"${start.basis === 'closest' ? `: the closest is ${start.name}, and none is exactly this page` : ''}. Nothing was written. Name one of the closest pages to add it anyway.`,
+      {run: pages.slice(0, 3).map(p => `${PREVIEW} add --template ${p.name}`)},
+    );
+  if (skippedFrames.length)
+    notes.push(
+      `left out ${skippedFrames.join(', ')}: app frames, not pages (add one with --template <id>)`,
+    );
+  return pages.map((p, i) => ({
+    name: p.name,
+    displayName: p.displayName,
+    why:
+      i === 0 && p === start
+        ? (start.reason ?? 'the best match')
+        : i === 0
+          ? 'the best match after leaving out app frames'
+          : 'the next best match',
+  }));
+}
+
+/**
  * Add pages to the in-app theme preview, and write the preview route the
  * first time. With a description, the build ranking picks the template
  * pages that fit it best (`top` of them); `template` names one instead.
- * With neither, the default pages: the sample app page and every component.
+ * With neither, the default pages: the sample app page, every component,
+ * and the theme's generated colors when it has any.
  * Every check runs before the first write, so a refusal changes nothing.
  * @experimental
  * @param {string} [description]
@@ -471,37 +673,50 @@ export async function themeEditPreviewAdd(description, options = {}) {
   const project = await openProject(cwd);
   /** @type {Array<{id: string, label: string, source?: string, template?: string}>} */
   const add = [];
-  /** @type {Array<{page: string, missingPackages: string[], installCommand: string | null, stylexCompiler: boolean}>} */
+  /** @type {Array<{page: string, reason: string, installCommand: string | null}>} */
   const skipped = [];
+  /** @type {Array<{page: string, why: string}>} */
+  const matched = [];
   if (!words && options.template == null) {
     add.push(
-      {id: 'overview', label: 'Overview', source: overviewPageSource(project)},
+      {
+        id: 'overview',
+        label: 'Overview',
+        source: overviewPageSource(project, {theme: data.theme}),
+      },
       {
         id: 'components',
         label: 'Components',
-        source: componentsPageSource(project).source,
+        source: componentsPageSource(project, {
+          theme: data.theme,
+          C: (await context(cwd)).C,
+        }).source,
       },
     );
-  } else {
-    /** @type {Array<{name: string, displayName: string}>} */
-    let picks;
-    if (options.template != null)
-      picks = [{name: options.template, displayName: options.template}];
-    else {
-      const kit =
-        /** @type {import('../build/build.type.mjs').BuildKitResponse} */ (
-          await build(words, {cwd})
-        );
-      const start = kit.data.start;
-      picks = start ? [start, ...start.alternatives].slice(0, top) : [];
-      if (!picks.length)
-        refuse(
-          E.ERR_NOT_FOUND,
-          `No page template to show for "${words}": this project has none.`,
-          {run: [`${PREVIEW} add`]},
-        );
+    if (data.theme) {
+      const colors = await colorsPage(cwd, at.dir, data.theme);
+      if (colors.colors)
+        add.push({
+          id: COLORS_PAGE.id,
+          label: COLORS_PAGE.label,
+          source: colors.source,
+        });
     }
+  } else {
+    /** @type {Array<{name: string, displayName: string, why: string}>} */
+    let picks;
+    const explicit = options.template != null;
+    if (explicit)
+      picks = [
+        {
+          name: /** @type {string} */ (options.template),
+          displayName: /** @type {string} */ (options.template),
+          why: 'named with --template',
+        },
+      ];
+    else picks = await rankedPages(words, cwd, notes);
     for (const pick of picks) {
+      if (add.length >= (explicit ? 1 : top)) break;
       const shownTemplate =
         /** @type {import('../template/template.type.mjs').TemplateShowResponse} */ (
           await template(pick.name, {cwd, type: 'page'})
@@ -515,23 +730,26 @@ export async function themeEditPreviewAdd(description, options = {}) {
       if (needs.missingPackages.length || needsCompiler) {
         skipped.push({
           page: pick.name,
-          missingPackages: needs.missingPackages,
+          reason: skipReason({
+            missingPackages: needs.missingPackages,
+            stylexCompiler: needsCompiler,
+          }),
           installCommand: needs.installCommand,
-          stylexCompiler: needsCompiler,
         });
         continue;
       }
       add.push({id: pick.name, label: pick.displayName, template: pick.name});
+      matched.push({page: pick.name, why: pick.why});
     }
   }
   for (const s of skipped)
     notes.push(
-      `the ${s.page} page was not added: ${skipReason(s)}${s.installCommand ? `; ${s.installCommand}, then add it again` : ''}`,
+      `the ${s.page} page was not added: it ${s.reason}${s.installCommand ? `; ${s.installCommand}, then add it again` : ''}${add.length ? `; added ${add.map(a => a.id).join(', ')} instead` : ''}`,
     );
   if (!add.length)
     refuse(
       E.ERR_DEP_MISSING,
-      `No page was added: ${skipped.map(s => `the ${s.page} page ${skipReason(s)}`).join('; ')}. Nothing was written.`,
+      `No page was added: ${skipped.map(s => `the ${s.page} page ${s.reason}`).join('; ')}. Nothing was written.`,
       {
         run: skipped.flatMap(s => (s.installCommand ? [s.installCommand] : [])),
       },
@@ -569,12 +787,14 @@ export async function themeEditPreviewAdd(description, options = {}) {
     }
   }
   await writeRoute(cwd, at.dir, data, theme);
+  if (data.theme) recordPreview(cwd, data.theme, at.dir);
   return {
     type: 'themeEdit.previewAdd',
     data: {
       folder: shown(cwd, at.dir),
       theme: data.theme,
       added,
+      matched,
       skipped,
       notes,
       pages: data.pages.map(x => x.id),
@@ -627,6 +847,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
     const skip = new Set(
       [
         from.history,
+        previewsFile(cwd, slug),
         from.preview,
         from.sheet,
         from.previewPng,
@@ -662,8 +883,12 @@ export async function themeEditPreviewApp(dir, options = {}) {
   /** @type {Array<{rel: string, text: string}>} */
   const preview = [];
   for (const [id, label, source] of /** @type {const} */ ([
-    ['overview', 'Overview', overviewPageSource(project)],
-    ['components', 'Components', componentsPageSource(project).source],
+    ['overview', 'Overview', overviewPageSource(project, {theme: slug})],
+    [
+      'components',
+      'Components',
+      componentsPageSource(project, {theme: slug}).source,
+    ],
   ])) {
     data.pages.push({id, label, file: `pages/${id}`});
     preview.push({rel: `pages/${id}.tsx`, text: source});
@@ -810,6 +1035,7 @@ export async function themeEditPreviewRemove(page, options = {}) {
     } catch {
       // Not empty: something there is not the preview's.
     }
+  if (data.theme) recordPreview(cwd, data.theme, at.dir, false);
   return {
     type: 'themeEdit.previewRemove',
     data: {folder: shown(cwd, at.dir), removed, pages: []},

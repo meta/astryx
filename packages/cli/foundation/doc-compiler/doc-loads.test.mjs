@@ -153,8 +153,6 @@ const RUNNERS = {
       'import ../experimental-theme-editor.doc.mjs',
       'import ../experimental-theme-eject.doc.mjs',
       'import ../experimental-theme-list.doc.mjs',
-      'import ../experimental-theme-palette-generate.doc.mjs',
-      'import ../experimental-theme-palette.doc.mjs',
       'import ../experimental-theme-preview-add.doc.mjs',
       'import ../experimental-theme-preview-app.doc.mjs',
       'import ../experimental-theme-preview-list.doc.mjs',

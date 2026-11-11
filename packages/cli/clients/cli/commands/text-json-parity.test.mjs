@@ -660,12 +660,6 @@ const CASES = [
     skipFieldChecks: true,
   },
   {
-    name: 'experimental theme palette generate',
-    args: ['experimental', 'theme', 'palette', 'generate', 'nonexistent.json'],
-    errorExpected: true,
-    skipFieldChecks: true,
-  },
-  {
     name: 'experimental theme targets',
     args: ['experimental', 'theme', 'targets'],
     jsonFieldAllowlist: [
@@ -695,6 +689,12 @@ const CASES = [
     args: ['experimental', 'theme', 'editor', 'new', 'fresh', '--like', 'neutral'],
     prepare: themeProject,
     beforeEachRun: async cwd => fs.rmSync(path.join(cwd, 'themes', 'fresh'), {recursive: true, force: true}),
+  },
+  {
+    name: 'experimental theme editor new',
+    args: ['experimental', 'theme', 'editor', 'new', 'flagged', '--like', 'neutral', '--accent', '#7c3aed', '--corners', 'round'],
+    prepare: themeProject,
+    beforeEachRun: async cwd => fs.rmSync(path.join(cwd, 'themes', 'flagged'), {recursive: true, force: true}),
   },
   {
     name: 'experimental theme editor set',

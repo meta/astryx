@@ -2,7 +2,7 @@
 
 /**
  * @file The experimental copies of `astryx theme list`, `add`, `remove`,
- * `use`, `targets`, `template` and `palette generate`: this suite runs each
+ * `use`, `targets` and `template`: this suite runs each
  * stable suite again with the experimental words, so the copies keep the
  * same behavior without copied test files.
  */
@@ -39,6 +39,5 @@ afterAll(() => {
 
 await import('./theme-add-lifecycle.test.mjs');
 await import('./theme-list.behavior.test.mjs');
-await import('./theme-palette-generate.test.mjs');
 await import('./theme-targets.behavior.test.mjs');
 await import('./theme-template.behavior.test.mjs');
