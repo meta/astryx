@@ -302,13 +302,18 @@ async function run(program, call, render, answer) {
     jsonOut(/** @type {any} */ (result));
     return answered;
   }
-  // --detail compact|brief (and --dense) print the status line alone.
+  // --detail compact|brief (and --dense) print a change's status line
+  // alone; an answer (how, show, list) is the answer, and prints whole.
   const o = program.opts();
+  const change = ['themeEdit.set', 'themeEdit.undo', 'themeEdit.new'].includes(
+    /** @type {any} */ (result)?.type,
+  );
   const short =
-    o.detail === 'compact' ||
-    o.detail === 'brief' ||
-    o.dense ||
-    o.lang === 'dense';
+    change &&
+    (o.detail === 'compact' ||
+      o.detail === 'brief' ||
+      o.dense ||
+      o.lang === 'dense');
   const lines = [...notCheckedLine(result), ...render(result)];
   print(short ? lines.slice(0, notCheckedLine(result).length + 1) : lines);
   return answered;

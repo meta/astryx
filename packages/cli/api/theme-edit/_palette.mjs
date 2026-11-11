@@ -332,6 +332,9 @@ function dialFamilies(data) {
   return out;
 }
 
+/** Notes for damaged color configs kept aside during one sync. @type {string[]} */
+const keptDamaged = [];
+
 /** @param {string} file */
 function readConfig(file) {
   if (!fs.existsSync(file)) return null;
@@ -340,9 +343,20 @@ function readConfig(file) {
   } catch {
     // A file that does not parse holds nothing the editor can keep: it is
     // made again from the settings, and the damaged text is kept beside it
-    // (palette.config.damaged.json) for any hand edit worth copying back.
-    const kept = path.join(path.dirname(file), 'palette.config.damaged.json');
-    if (!fs.existsSync(kept)) fs.copyFileSync(file, kept);
+    // (palette.config.damaged.json, then -2, -3 …), every damaged copy,
+    // for any hand edit worth copying back; the result names it.
+    const text = fs.readFileSync(file);
+    let n = 1;
+    const name = (/** @type {number} */ k) =>
+      `palette.config.damaged${k > 1 ? `-${k}` : ''}.json`;
+    const at = (/** @type {number} */ k) =>
+      path.join(path.dirname(file), name(k));
+    // The same damaged text is kept once.
+    while (fs.existsSync(at(n)) && !fs.readFileSync(at(n)).equals(text)) n++;
+    if (!fs.existsSync(at(n))) fs.copyFileSync(file, at(n));
+    keptDamaged.push(
+      `palette.config.json was damaged, so it was made again from the settings; its text is kept in ${name(n)}`,
+    );
     return null;
   }
 }
@@ -951,6 +965,19 @@ const sha256 = text => createHash('sha256').update(text).digest('hex');
  * @returns {string[]}
  */
 export function syncPalette(cwd, slug, data, base) {
+  keptDamaged.length = 0;
+  const notes = syncPaletteFiles(cwd, slug, data, base);
+  return [...keptDamaged.splice(0), ...notes];
+}
+
+/**
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {any} data
+ * @param {any} base
+ * @returns {string[]}
+ */
+function syncPaletteFiles(cwd, slug, data, base) {
   const f = paletteFiles(slug);
   const abs = (/** @type {string} */ p) => path.join(cwd, p);
   const plan = planPalette(cwd, slug, data, base);

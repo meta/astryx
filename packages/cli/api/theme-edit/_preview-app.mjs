@@ -30,6 +30,7 @@ import {
   nearest,
   refuse,
   shown,
+  staleBuild,
   themeFiles,
 } from './_settings.mjs';
 import {
@@ -2869,7 +2870,18 @@ export async function themeEditPreviewApp(dir, options = {}) {
     const built = Math.min(mtime(from.js), mtime(from.css));
     // The editor writes the settings a moment after the build, so only a
     // settings file clearly newer than the build means the build is stale.
-    if (built < 0 || mtime(from.settings) > built + 2000) {
+    // Without the theme's lock (it cannot be taken), a change may be in
+    // progress: nothing is built, and only a build that matches its
+    // settings is copied.
+    if (/** @type {any} */ (options).readOnly) {
+      const why = staleBuild(cwd, slug, theme);
+      if (why)
+        refuse(
+          E.ERR_THEME_BUSY,
+          `The lock for ${slug} could not be taken, and its build is not current (${why}), so it is not copied. Nothing was changed.`,
+          {run: [`astryx experimental theme editor show ${slug}`]},
+        );
+    } else if (built < 0 || mtime(from.settings) > built + 2000) {
       await buildTheme(ctx, slug, theme);
       notes.push(
         `built ${shown(cwd, from.dir)}/ first: its build was ${built < 0 ? 'missing' : 'older than its settings'}, and the app gets a current copy`,

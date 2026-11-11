@@ -272,6 +272,13 @@ export function loadTheme(
       [f.dir, `themes/${slug}`],
       [path.join(cwd, 'src', 'themes', slug), `src/themes/${slug}`],
     ].find(([d]) => fs.existsSync(d));
+    // A `new` that was stopped part way left its marker: `new` finishes it.
+    if (!same && fs.existsSync(path.join(f.dir, '.astryx-new.json')))
+      refuse(
+        ERROR_CODES.ERR_UNKNOWN_THEME,
+        `themes/${slug} was left by a \`new\` that was stopped part way, so it has no settings yet. Run new again to finish it.`,
+        {run: [`${P} new ${slug}`]},
+      );
     if (!same && (other || LIKE.includes(slug)))
       refuse(
         ERROR_CODES.ERR_UNKNOWN_THEME,
@@ -409,13 +416,12 @@ export function settingsProblem(
   if (!Array.isArray(data.settings)) return 'settings is not a list';
   const keys = new Set();
   for (const s of data.settings) {
-    if (!s || typeof s.thing !== 'string' || typeof s.value !== 'string')
+    // A value or scope that is not text is a bad setting `undo` removes;
+    // a setting with no name is damage.
+    if (!s || typeof s.thing !== 'string' || !('value' in s))
       return 'a setting has no thing or value';
     if (!['dial', 'token', 'property'].includes(s.source))
       return `${s.thing} has no source (dial, token or property)`;
-    for (const k of ['on', 'when', 'state'])
-      if (s[k] != null && typeof s[k] !== 'string')
-        return `${s.thing} has a ${k} that is not a word`;
     if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
       return `${s.thing} has mode "${s.mode}"`;
     const key = keyOf(s);
@@ -465,11 +471,11 @@ export function badSettings(data) {
  */
 export function undoArgs(x) {
   return [
-    x.thing,
-    ...(x.on ? [`--on ${x.on}`] : []),
-    ...(x.when ? [`--when ${x.when}`] : []),
-    ...(x.state ? [`--state ${x.state}`] : []),
-    ...(x.mode ? [`--mode ${x.mode}`] : []),
+    quoteCommandArgument(String(x.thing)),
+    ...(x.on ? [`--on ${quoteCommandArgument(String(x.on))}`] : []),
+    ...(x.when ? [`--when ${quoteCommandArgument(String(x.when))}`] : []),
+    ...(x.state ? [`--state ${quoteCommandArgument(String(x.state))}`] : []),
+    ...(x.mode ? [`--mode ${quoteCommandArgument(String(x.mode))}`] : []),
     ...(x.only ? ['--only'] : []),
   ].join(' ');
 }
@@ -506,11 +512,22 @@ export function withoutBadValues(data) {
  * @returns {string | null}
  */
 function valueProblem(s) {
+  if (typeof s.value !== 'string')
+    return `${s.thing} has a value that is not text (${JSON.stringify(s.value)})`;
+  for (const k of ['on', 'when', 'state', 'mode'])
+    if (s[k] != null && typeof s[k] !== 'string')
+      return `${s.thing} has a ${k} that is not text`;
   const scope = scopeProblem(s);
   if (scope) return scope;
   {
     const bad = `${s.thing} "${s.value}"`;
-    if (!isSafeValue(s.value)) return `${bad} cannot be a CSS value`;
+    // A font family name may hold an apostrophe (O'Reilly Sans): Core
+    // quotes the family itself.
+    const checked =
+      s.source === 'dial' && s.thing === 'font'
+        ? s.value.replace(/'/g, '')
+        : s.value;
+    if (!isSafeValue(checked)) return `${bad} cannot be a CSS value`;
     if (s.source === 'token') {
       if (s.mode && !isColorToken(s.thing))
         return `${s.thing} is set for ${s.mode} only, but only colors differ by mode`;
@@ -664,8 +681,9 @@ export function fontOf(value) {
  * @param {string} target
  * @param {string} prop camelCase or kebab-case
  * @param {string | undefined} when
+ * @param {string} [state] a state (hover): that state's own value
  */
-function partDefault(ctx, target, prop, when) {
+function partDefault(ctx, target, prop, when, state) {
   const k = kebab(prop);
   const g = ctx.C.groupOfProp(k === 'background' ? 'background-color' : k);
   const want = (/** @type {import('./_compiler.mjs').Read} */ x) =>
@@ -674,6 +692,15 @@ function partDefault(ctx, target, prop, when) {
     );
   const reads = g ? ctx.C.partReads(target, g).filter(want) : [];
   const wv = when ? when.replace(':', '=') : null;
+  // With a state, that state's own value (for the variant, if named);
+  // when the state does not change this property, the plain value is what
+  // shows in that state too.
+  if (state) {
+    const sr = reads.find(x =>
+      x.when.some(w => w.includes(`:${state}`) && (!wv || w.includes(wv))),
+    );
+    if (sr) return `var(${sr.token})`;
+  }
   const r =
     (wv && reads.find(x => x.when.some(w => w === wv))) ||
     reads.find(x => x.when.includes('')) ||
@@ -752,7 +779,10 @@ export function compileTheme(ctx, data, base) {
     const b = block(s, target);
     if (s.mode && !modeOnly) {
       const prev = b[prop];
-      const other = prev ?? partDefault(ctx, target, prop, s.when) ?? v;
+      // The other mode keeps exactly what it had; the check refuses a mode
+      // setting that has nothing to keep there.
+      const other =
+        prev ?? partDefault(ctx, target, prop, s.when, s.state) ?? 'inherit';
       const split = (/** @type {string} */ x, /** @type {1 | 2} */ side) =>
         x.replace(/^light-dark\((.*),\s*(.*)\)$/, `$${side}`);
       b[prop] =
@@ -1347,7 +1377,12 @@ export async function buildTheme(ctx, slug, data) {
       ...(fs.existsSync(f.dir)
         ? fs
             .readdirSync(f.dir)
-            .filter(n => /^sheet-[a-z-]+\.(html|png)$/.test(n))
+            // Section sheets, and every picture: all show the look before
+            // this build. The full sheet and the preview page are written
+            // again by the commands that make them.
+            .filter(n =>
+              /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?\.png)$/.test(n),
+            )
             .map(n => path.join(f.dir, n))
         : []),
     ])
@@ -1631,7 +1666,7 @@ function ownFiles(dir) {
   const mine = (/** @type {string} */ n) =>
     n !== `${slug}.theme.ts` &&
     (n.startsWith(`${slug}.`) ||
-      /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config(\.damaged)?\.json)$/.test(
+      /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config(\.damaged(-\d+)?)?\.json)$/.test(
         n,
       ));
   /** @type {string[]} */

@@ -659,12 +659,13 @@ export function checkSetting(
         E.ERR_THEME_UNKNOWN_PART,
         `"${s.on}" is not a part you can style.`,
         {
-          didYouMean: nearest(s.on, [
+          // A plural or another case names the part it means.
+          didYouMean: nearest(s.on.toLowerCase().replace(/s$/, ''), [
             ...TARGET.keys(),
             ...Object.keys(FAMILIES),
           ]),
           run: [
-            `${HOW} --list parts ${s.on.split('-')[0]}`,
+            `${HOW} --list parts ${s.on.toLowerCase().replace(/s$/, '').split('-')[0]}`,
             `${HOW} ${quoteCommandArgument(s.on)}`,
           ],
         },
@@ -1331,7 +1332,10 @@ export function checkSetting(
     }
     // One mode on a part whose variants each read their own value: the
     // other mode cannot keep each variant's value in one rule.
-    if (s.mode && !s.when && !s.state) {
+    // With a state, the other mode would take one variant's value for
+    // every variant, so any part whose variants read their own value needs
+    // the variant named.
+    if (s.mode && !s.when) {
       const g = C.groupOfProp(
         prop === 'background' ? 'background-color' : prop,
       );
@@ -1339,21 +1343,25 @@ export function checkSetting(
         const reads = g
           ? C.partReads(t, g).filter(r => r.props.includes(prop))
           : [];
-        // Only a read keyed by the variant alone names a variant to use.
-        const variants = reads
-          .flatMap(r => r.when)
-          .filter(w => /^variant=[\w-]+$/.test(w));
+        const variants = [
+          ...new Set(
+            reads
+              .flatMap(r => r.when)
+              .map(w => /(?:^|,)variant=([\w-]+)/.exec(w)?.[1])
+              .filter(Boolean),
+          ),
+        ];
         if (
           reads.length &&
-          !reads.some(r => r.when.includes('')) &&
-          variants.length
+          variants.length &&
+          (s.state || !reads.some(r => r.when.includes('')))
         )
           refuse(
             E.ERR_THEME_NO_MODE,
-            `Each variant of ${t} has its own ${prop}, so one mode cannot be set for all of them at once; name the variant.`,
+            `Each variant of ${t} has its own ${prop}${s.state ? ` when ${s.state}` : ''}, so one mode cannot be set for all of them at once: the other mode would take one variant's color for every variant. Name the variant.`,
             {
               run: [
-                `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on} --when ${variants[0].split(',')[0].replace('=', ':')} --mode ${s.mode}`,
+                `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on} --when variant:${variants[0]}${s.state ? ` --state ${s.state}` : ''} --mode ${s.mode}`,
               ],
             },
           );
@@ -1411,11 +1419,32 @@ export function checkSetting(
         },
       );
     }
+    // The other mode keeps the part's own value there; with none to keep,
+    // the setting would change that mode too.
     if (
       s.mode &&
-      !partsOf(ctx, s).some(t => partDefault(ctx, t, camel(prop), s.when))
+      !partsOf(ctx, s).every(t =>
+        partDefault(ctx, t, camel(prop), s.when, s.state),
+      ) &&
+      !data.settings.some(
+        x =>
+          x.thing === prop &&
+          x.on === s.on &&
+          x.when === s.when &&
+          x.state === s.state &&
+          x.mode &&
+          x.mode !== s.mode,
+      )
     )
-      s.note = `the ${s.mode === 'light' ? 'dark' : 'light'} side keeps the part's current ${prop}`;
+      refuse(
+        E.ERR_THEME_NO_MODE,
+        `${s.on} has no ${prop}${s.state ? ` when ${s.state}` : ''}${s.when ? ` for ${s.when}` : ''} of its own for the ${s.mode === 'light' ? 'dark' : 'light'} mode to keep, so a ${s.mode}-only value would change it too. Set it for both modes.`,
+        {
+          run: [
+            `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
+          ],
+        },
+      );
     return s;
   }
   // A property written with _ or spaces, a trailing colon, or in camel
@@ -1460,8 +1489,22 @@ export function checkSetting(
     E.ERR_THEME_UNKNOWN_THING,
     `"${thing}" is not a dial, a token, or a CSS property.`,
     {
+      // A hint names this theme and the part (card when none is given),
+      // and a corners value corners takes.
       run: hint
-        ? hint(v, s.on)
+        ? hint(
+            /corners/.test(String(hint('', '')))
+              ? CORNERS.some(([n]) => n === v) || /^\d+(\.\d+)?px$/.test(v)
+                ? v
+                : ''
+              : v,
+            s.on,
+          ).map(x =>
+            x
+              .replace(/<theme>/g, slug)
+              .replace(/<part>/g, 'card')
+              .replace(/"([^"]*)"/g, (_, q) => quoteCommandArgument(q)),
+          )
         : [`${HOW} "${thing}${s.on ? ` on ${s.on}` : ''}"`],
       didYouMean: hint
         ? []

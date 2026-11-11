@@ -112,10 +112,11 @@ describe('names', () => {
       expect(exists(`themes/${name}/${name}.js`), name).toBe(true);
       fs.rmSync(path.join(cwd, 'themes', name), {recursive: true, force: true});
     }
+    // A folder of only system files counts as empty.
     fs.mkdirSync(path.join(cwd, 'themes/zz'));
     fs.writeFileSync(path.join(cwd, 'themes/zz/.DS_Store'), '');
-    const r = await refusal(() => themeEditNew('zz', {cwd}));
-    expect(r.run[0]).toMatch(/new zz-copy$/);
+    await themeEditNew('zz', {cwd});
+    expect(exists('themes/zz/zz.js')).toBe(true);
     fs.rmSync(path.join(cwd, 'themes/zz'), {recursive: true, force: true});
   }, 240_000);
 
@@ -313,7 +314,17 @@ describe('exact tokens', () => {
       'node_modules/.cache/astryx-theme/locks',
     );
     const {createHash} = await import('node:crypto');
-    const key = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+    // The lock is named for the project as seen from the lock folder.
+    fs.mkdirSync(dir, {recursive: true});
+    const key = createHash('sha256')
+      .update(
+        path
+          .relative(fs.realpathSync(dir), fs.realpathSync(cwd))
+          .split(path.sep)
+          .join('/'),
+      )
+      .digest('hex')
+      .slice(0, 16);
     fs.mkdirSync(path.join(dir, `${key}-theme-h.lock`), {recursive: true});
     fs.writeFileSync(
       path.join(dir, `${key}-theme-h.lock`, 'owner.json'),

@@ -195,7 +195,7 @@ describe('refusals', () => {
     );
     expect(r.code).toBe('ERR_THEME_UNKNOWN_THING');
     expect(r.run[0]).toContain(
-      'background "linear-gradient(#fff, #000)" --on card',
+      "background 'linear-gradient(#fff, #000)' --on card",
     );
   });
 

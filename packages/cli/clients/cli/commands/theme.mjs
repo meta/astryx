@@ -109,6 +109,43 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
 const THEME_WORDS = {group: 'theme', build: 'build'};
 
 /**
+ * Text as the group that ran the command words it: under `experimental
+ * theme`, the commands it names are that group's own (`build` is `compile`
+ * there). Only a command the CLI wrote is reworded: one after the CLI's
+ * name, or in backticks; text a person typed (a path, a name) stays as
+ * typed. Under `theme`, the text is unchanged.
+ * @param {string} text
+ * @param {ThemeCommandWords} words
+ */
+function inGroupWords(text, words) {
+  return words.group === THEME_WORDS.group
+    ? text
+    : text.replace(
+        /((?:\bastryx|@astryxdesign\/cli@[\w.-]+) |`)theme (add|use|remove|list|build|eject|template|targets)\b/g,
+        (_, lead, sub) =>
+          `${lead}${words.group} ${sub === 'build' ? words.build : sub}`,
+      );
+}
+
+/**
+ * A theme app result with its notes in the words of the group that ran it.
+ * @template {{data: {notes?: string[]}}} R
+ * @param {R} result
+ * @param {ThemeCommandWords} words
+ * @returns {R}
+ */
+function inGroupNotes(result, words) {
+  if (!result?.data?.notes || words.group === THEME_WORDS.group) return result;
+  return {
+    ...result,
+    data: {
+      ...result.data,
+      notes: result.data.notes.map(n => inGroupWords(n, words)),
+    },
+  };
+}
+
+/**
  * A theme API refusal as the group that ran it words it: under
  * `experimental theme`, the commands it names are that group's own (`build`
  * is `compile` there). Under `theme`, the text is unchanged.
@@ -117,17 +154,8 @@ const THEME_WORDS = {group: 'theme', build: 'build'};
  */
 function themeError(err, words = THEME_WORDS) {
   err = words.explain?.(err, process.cwd()) ?? err;
-  // Only a command the CLI wrote is reworded: one after the CLI's name, or
-  // in backticks; text a person typed (a path, a name) stays as typed.
   /** @param {string} text */
-  const local = text =>
-    words.group === THEME_WORDS.group
-      ? text
-      : text.replace(
-          /((?:\bastryx|@astryxdesign\/cli@[\w.-]+) |`)theme (add|use|remove|list|build|eject|template|targets)\b/g,
-          (_, lead, sub) =>
-            `${lead}${words.group} ${sub === 'build' ? words.build : sub}`,
-        );
+  const local = text => inGroupWords(text, words);
   return cliError(local(err.message), {
     suggestions: (err.suggestions || []).map(x => ({
       ...x,
@@ -1067,6 +1095,10 @@ function registerThemeCommands(theme, program, docs, words) {
           ? resultSet({count: result.data.length, resultKind: 'theme'})
           : NO_RESULT_SET;
 
+      if (result.type !== 'theme.list')
+        result = /** @type {any} */ (
+          inGroupNotes(/** @type {any} */ (result), words)
+        );
       if (json) {
         jsonOut(result);
         return answered;
@@ -1096,6 +1128,7 @@ function registerThemeCommands(theme, program, docs, words) {
         return themeError(err, words);
       }
       await warnOnThemeIntegrationIssues(json);
+      result = inGroupNotes(result, words);
       if (json) jsonOut(result);
       else printThemeApp(result);
       return NO_RESULT_SET;
@@ -1116,6 +1149,7 @@ function registerThemeCommands(theme, program, docs, words) {
         return themeError(err, words);
       }
       await warnOnThemeIntegrationIssues(json);
+      result = inGroupNotes(result, words);
       if (json) jsonOut(result);
       else printThemeApp(result);
       return NO_RESULT_SET;

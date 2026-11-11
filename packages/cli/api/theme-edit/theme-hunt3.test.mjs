@@ -361,6 +361,11 @@ describe('builds that stay the same', () => {
     expect(r.data.setting.value).toBe('pill');
     expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toBeTruthy();
     expect(read('themes/pc/palette.config.damaged.json')).toBe('{"x":');
+    expect(r.data.notes.join(' ')).toContain('palette.config.damaged.json');
+    // A second damage keeps its own copy.
+    fs.writeFileSync(file, '{"y":');
+    await themeEditSet('pc', 'corners', 'square', {cwd});
+    expect(read('themes/pc/palette.config.damaged-2.json')).toBe('{"y":');
     drop('pc');
   }, 240_000);
 
@@ -426,27 +431,69 @@ describe('data safety, pass 3', () => {
     drop('d1');
   }, 240_000);
 
-  it('new clears what a stopped new left and makes the theme', async () => {
+  it('new clears only what a stopped new left beside its marker, after every check', async () => {
     const {themeSource} = await import('./_settings.mjs');
     const dir = path.join(cwd, 'themes/kn');
     fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, '.astryx-new.json'), '{}');
     fs.writeFileSync(path.join(dir, 'kn.theme.ts'), themeSource('kn'));
     fs.writeFileSync(path.join(dir, 'kn.settings.ts'), '// half');
     fs.writeFileSync(path.join(dir, '.kn.css.tmp-abc'), 'x');
-    const r = await themeEditNew('kn', {cwd});
-    expect(r.data.notes.join(' ')).toContain('a stopped command left');
-    expect(fs.existsSync(path.join(dir, '.kn.css.tmp-abc'))).toBe(false);
-    // A file the editor does not write is never cleared.
-    drop('kn');
-    fs.mkdirSync(dir, {recursive: true});
-    fs.writeFileSync(path.join(dir, 'NOTES.md'), 'mine');
-    expect((await refusal(() => themeEditNew('kn', {cwd}))).code).toBe(
-      'ERR_FILE_EXISTS',
+    // A stopped new: show names the way back.
+    expect((await refusal(() => themeEditShow('kn', {cwd}))).run[0]).toMatch(
+      /new kn$/,
     );
+    // A refused new writes nothing, the leftovers included.
+    await refusal(() =>
+      themeEditNew('kn', {cwd, settings: {corners: 'banana'}}),
+    );
+    expect(fs.existsSync(path.join(dir, '.kn.css.tmp-abc'))).toBe(true);
+    const r = await themeEditNew('kn', {cwd});
+    expect(r.data.notes.join(' ')).toContain('a stopped `new` left');
+    expect(fs.existsSync(path.join(dir, '.kn.css.tmp-abc'))).toBe(false);
+    expect(fs.existsSync(path.join(dir, '.astryx-new.json'))).toBe(false);
     drop('kn');
   }, 240_000);
 
-  it('undo skips a step that equals the settings now', async () => {
+  it('new never touches hand-written files named like the theme', async () => {
+    const dir = path.join(cwd, 'themes/acme');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, 'acme.css'), ':root{--my-brand:#f00}');
+    fs.writeFileSync(path.join(dir, 'acme.ts'), 'export const acme = {};');
+    for (const settings of [{corners: 'banana'}, {}])
+      expect(
+        (await refusal(() => themeEditNew('acme', {cwd, settings}))).code,
+      ).toMatch(/ERR_FILE_EXISTS|ERR_THEME_BAD_VALUE/);
+    expect(read('themes/acme/acme.css')).toBe(':root{--my-brand:#f00}');
+    expect(read('themes/acme/acme.ts')).toBe('export const acme = {};');
+    drop('acme');
+  }, 120_000);
+
+  it('a folder of only system files counts as empty; a name in another case names the theme', async () => {
+    fs.mkdirSync(path.join(cwd, 'themes/e2'), {recursive: true});
+    fs.writeFileSync(path.join(cwd, 'themes/e2/.DS_Store'), '');
+    await themeEditNew('e2', {cwd});
+    expect((await refusal(() => themeEditNew('E2', {cwd}))).run[0]).toMatch(
+      /show e2$/,
+    );
+    drop('e2');
+  }, 240_000);
+
+  it('a saved value that is not text is a bad setting with a quoted undo', async () => {
+    await themeEditNew('nv', {cwd});
+    writeSettings('nv', [
+      {thing: 'corners', value: 12, source: 'dial'},
+      {thing: 'color', value: 'red', source: 'property', on: 'button, body'},
+    ]);
+    const r = await refusal(() => themeEditShow('nv', {cwd}));
+    expect(r.code).toBe('ERR_THEME_INVALID');
+    expect(r.run).toContain(
+      "astryx experimental theme editor undo nv color --on 'button, body'",
+    );
+    drop('nv');
+  }, 240_000);
+
+  it('undo skips a step that equals the settings now, and says when none is left', async () => {
     await themeEditNew('d2', {cwd});
     await themeEditSet('d2', 'corners', 'pill', {cwd});
     const f = path.join(cwd, 'themes/d2');
@@ -462,6 +509,13 @@ describe('data safety, pass 3', () => {
     );
     await themeEditUndo('d2', {cwd});
     expect(JSON.parse(read('themes/d2/d2.settings.json')).settings).toEqual([]);
+    fs.writeFileSync(
+      `${f}/d2.history.json`,
+      JSON.stringify([fs.readFileSync(`${f}/d2.settings.json`, 'utf8')]),
+    );
+    expect((await refusal(() => themeEditUndo('d2', {cwd}))).code).toBe(
+      'ERR_THEME_NOTHING_TO_UNDO',
+    );
     drop('d2');
   }, 240_000);
 
@@ -477,5 +531,56 @@ describe('data safety, pass 3', () => {
     expect(r.data.notes.join(' ')).toContain('nothing was written');
     expect(fs.statSync(preview).mtimeMs).toBe(before);
     drop('d3');
+  }, 240_000);
+});
+
+describe('fonts', () => {
+  it('a family name with an apostrophe builds, and the theme stays readable', async () => {
+    await themeEditNew('fo', {cwd});
+    await themeEditSet('fo', 'font', "O'Reilly Sans", {cwd});
+    await themeEditShow('fo', {cwd});
+    await themeEditSet('fo', 'corners', 'more', {cwd});
+    expect(read('themes/fo/fo.css')).toContain('"O\'Reilly Sans"');
+    drop('fo');
+  }, 240_000);
+});
+
+describe('one mode with a state', () => {
+  it('never changes the other mode: variants are named, and a part with nothing to keep is refused', async () => {
+    await themeEditNew('sm', {cwd, like: 'neutral'});
+    const r = await refusal(() =>
+      themeEditSet('sm', 'background-color', '#00ff00', {
+        cwd,
+        on: 'button',
+        state: 'hover',
+        mode: 'dark',
+      }),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_MODE');
+    expect(r.run[0]).toMatch(/--when variant:\w+ --state hover --mode dark$/);
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('sm', 'background-color', '#00ff00', {
+            cwd,
+            on: 'tab',
+            state: 'hover',
+            mode: 'light',
+          }),
+        )
+      ).code,
+    ).toBe('ERR_THEME_NO_MODE');
+    await themeEditSet('sm', 'background-color', '#00ff00', {
+      cwd,
+      on: 'button',
+      when: 'variant:ghost',
+      state: 'hover',
+      mode: 'dark',
+    });
+    // Light keeps the ghost button's own color.
+    expect(read('themes/sm/sm.css')).toMatch(
+      /light-dark\(var\(--color-[a-z-]+\), #00ff00\)/,
+    );
+    drop('sm');
   }, 240_000);
 });

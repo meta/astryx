@@ -81,20 +81,38 @@ const E = ERROR_CODES;
 /**
  * @typedef {import('./theme-edit.type.mjs').ThemeEditChangeOptions} ChangeOptions
  */
+/** The marker a `new` writes first and removes last. */
+const NEW_MARKER = '.astryx-new.json';
+
+/** Files a system or a tool puts in any folder; a folder of only these is empty. */
+const FOLDER_JUNK = new Set(['.DS_Store', '.gitkeep', 'Thumbs.db']);
+
 /**
- * The files in a theme folder with no settings, when every one is a file
- * the editor writes for that name (its generated files, its source as the
- * editor wrote it, its pages, colors and temp files); null when anything
- * else is there.
+ * What a stopped `new` left, when the folder holds its marker and only
+ * files the editor writes for that name (its generated files, the source
+ * exactly as it writes it, its pages, colors and temp files); null when
+ * there is no marker or anything else is there. System files (.DS_Store)
+ * stay.
  * @param {string} dir
  * @param {string} slug
  * @returns {string[] | null}
  */
 function editorLeftovers(dir, slug) {
+  if (!fs.existsSync(path.join(dir, NEW_MARKER))) return null;
   /** @type {string[]} */
   const files = [];
   const named = (/** @type {string} */ n) =>
-    (n.startsWith(`${slug}.`) && n !== `${slug}.theme.ts`) ||
+    n === NEW_MARKER ||
+    [
+      'settings.ts',
+      'settings.json',
+      'css',
+      'css.d.ts',
+      'js',
+      'd.ts',
+      'variants.d.ts',
+      'history.json',
+    ].some(x => n === `${slug}.${x}`) ||
     /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config\.json)$/.test(
       n,
     ) ||
@@ -103,6 +121,7 @@ function editorLeftovers(dir, slug) {
     /^\..+\.(astryx-\d+-[a-z0-9]+\.tmp|tmp-[\w-]+)$/.test(n);
   for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
     const p = path.join(dir, e.name);
+    if (FOLDER_JUNK.has(e.name)) continue;
     if (e.isDirectory() && e.name === 'tokens') {
       for (const t of fs.readdirSync(p, {withFileTypes: true})) {
         if (!t.isFile() || !t.name.startsWith(`${slug}.palette`)) return null;
@@ -143,10 +162,12 @@ export async function themeEditNew(name, options = {}) {
         .replace(/^[^a-z]+/, '')
         .replace(/-+$/, '')
         .slice(0, 64) || 'my-theme';
+    // The name as typed may be a theme that exists in another case.
+    const exists = fs.existsSync(themeFiles(cwd, fixed).settings);
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}).`,
-      {run: [`${P} new ${fixed}`]},
+      `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.`,
+      {run: exists ? [`${P} show ${fixed}`] : [`${P} new ${fixed}`]},
     );
   }
   // A built-in theme's name would collide with the theme of that name the
@@ -176,28 +197,16 @@ export async function themeEditNew(name, options = {}) {
     refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.`, {
       run: [`${P} show ${name}`, `${P} set ${name} base neutral`],
     });
-  // A `new` stopped part way (killed, out of memory) leaves only files the
-  // editor writes for this name, and no settings: they are cleared and
-  // the theme is made again.
-  /** @type {string[]} */
-  const leftNotes = [];
+  // A `new` stopped part way (killed, out of memory) leaves its own marker
+  // beside the files it wrote: only such a folder is cleared, and only
+  // after every argument is checked. Anything else in the folder, or a
+  // folder without the marker, is never touched.
   const left = fs.existsSync(f.dir) ? editorLeftovers(f.dir, name) : null;
-  if (left && left.length) {
-    for (const p of left) fs.rmSync(p, {force: true});
-    for (const d of [path.join(f.dir, 'tokens')])
-      try {
-        fs.rmdirSync(d);
-      } catch {
-        // Not there, or it holds something else.
-      }
-    leftNotes.push(
-      `cleared ${left.length} file${left.length === 1 ? '' : 's'} a stopped command left in themes/${name}/ (${left
-        .slice(0, 4)
-        .map(p => path.relative(f.dir, p))
-        .join(', ')}${left.length > 4 ? ', …' : ''}), then made the theme`,
-    );
-  }
-  if (fs.existsSync(f.dir) && fs.readdirSync(f.dir).length)
+  const holdsOther =
+    fs.existsSync(f.dir) &&
+    !left &&
+    fs.readdirSync(f.dir).some(n => !FOLDER_JUNK.has(n));
+  if (holdsOther)
     refuse(
       E.ERR_FILE_EXISTS,
       `themes/${name}/ already holds files this command did not make; choose another name.`,
@@ -220,7 +229,47 @@ export async function themeEditNew(name, options = {}) {
     data.like,
   );
   applyNewSettings(ctx, name, data, settings);
-  const r = await commitTheme(ctx, name, data, {history: false});
+  /** @type {string[]} */
+  const leftNotes = [];
+  if (left && left.length) {
+    for (const p of left) fs.rmSync(p, {force: true});
+    try {
+      fs.rmdirSync(path.join(f.dir, 'tokens'));
+    } catch {
+      // Not there, or it holds something else.
+    }
+    const shownLeft = left.filter(p => path.basename(p) !== NEW_MARKER);
+    leftNotes.push(
+      `cleared ${shownLeft.length} file${shownLeft.length === 1 ? '' : 's'} a stopped \`new\` left in themes/${name}/ (${shownLeft
+        .slice(0, 4)
+        .map(p => path.relative(f.dir, p))
+        .join(', ')}${shownLeft.length > 4 ? ', …' : ''}), then made the theme`,
+    );
+  }
+  // The marker goes first and comes off last: a `new` stopped between
+  // leaves a folder the next `new` can prove it made.
+  const dirMade = !fs.existsSync(f.dir);
+  fs.mkdirSync(f.dir, {recursive: true});
+  const marker = path.join(f.dir, NEW_MARKER);
+  fs.writeFileSync(
+    marker,
+    JSON.stringify({pid: process.pid, started: Date.now()}),
+  );
+  /** @type {Awaited<ReturnType<typeof commitTheme>>} */
+  let r;
+  try {
+    r = await commitTheme(ctx, name, data, {history: false});
+  } catch (e) {
+    fs.rmSync(marker, {force: true});
+    if (dirMade)
+      try {
+        fs.rmdirSync(f.dir);
+      } catch {
+        // It holds something else now.
+      }
+    throw e;
+  }
+  fs.rmSync(marker, {force: true});
   const p = await previewAndRoute(ctx, name, data, png);
   /** @type {string[]} */
   const notes = [
@@ -1309,8 +1358,14 @@ export async function themeEditUndo(theme, options = {}) {
       return false;
     }
   };
-  while (history.length > 1 && same(history[history.length - 1], nowText))
+  while (history.length && same(history[history.length - 1], nowText))
     history.pop();
+  if (!history.length)
+    refuse(
+      E.ERR_THEME_NOTHING_TO_UNDO,
+      `Nothing to undo: ${theme} has no earlier change (the last step equals the settings now).`,
+      {run: [`${P} show ${theme}`]},
+    );
   const ctx = await context(cwd);
   const prevText = /** @type {string} */ (history.pop());
   let prev = /** @type {import('./_settings.mjs').ThemeData} */ (

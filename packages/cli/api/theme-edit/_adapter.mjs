@@ -33,7 +33,6 @@
 
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import * as edit from './_edit.mjs';
 import * as preview from './_preview-app.mjs';
@@ -168,7 +167,22 @@ async function withLock(root, name, fn, bestEffort = false) {
     throw e;
   }
   if (!dir) return fn(true);
-  const key = createHash('sha256').update(root).digest('hex').slice(0, 16);
+  // The lock is named for the project as seen from the lock folder (which
+  // lives in the project's own node_modules), not by the path this command
+  // was given: one project reached through two paths (a bind mount, a
+  // devcontainer) has one lock.
+  /** @param {string} p */
+  const real = p => {
+    try {
+      return fs.realpathSync(p);
+    } catch {
+      return path.resolve(p);
+    }
+  };
+  const key = createHash('sha256')
+    .update(path.relative(real(dir), real(root)).split(path.sep).join('/'))
+    .digest('hex')
+    .slice(0, 16);
   const lock = path.join(dir, `${key}-${name}.lock`);
   const ownerFile = path.join(lock, 'owner.json');
   /** @returns {any} */
@@ -179,20 +193,9 @@ async function withLock(root, name, fn, bestEffort = false) {
       return null;
     }
   };
-  // A lock naming this very pid on this computer, that this process does
-  // not hold, is left from a process that had this pid before (a container
-  // restarted) only when it was taken before this process started. Two
-  // containers on one checkout can both be pid 1: a lock taken since this
-  // process started is a live sibling's.
-  const held = owner();
-  const started = Date.now() - process.uptime() * 1000;
-  if (
-    held?.pid === process.pid &&
-    held?.host === os.hostname() &&
-    !HELD.has(lock) &&
-    Number(held?.at) < started
-  )
-    fs.rmSync(lock, {recursive: true, force: true});
+  // A lock naming this pid is never taken over on that ground alone: two
+  // containers on one checkout can both be pid 1. The release cache's
+  // rules decide when a holder has stopped.
   /** @returns {number | null} seconds since the lock was taken or renewed */
   const age = () => {
     try {
@@ -261,9 +264,9 @@ async function withLock(root, name, fn, bestEffort = false) {
     // A folder that cannot be written (no permission, a full or read-only
     // disk) is a documented refusal, not a crash.
     const code = /** @type {any} */ (e)?.code;
-    if (['EACCES', 'EPERM', 'ENOSPC', 'EROFS'].includes(code))
+    if (['EACCES', 'EPERM', 'ENOSPC', 'EROFS', 'EIO'].includes(code))
       throw new AstryxError(
-        `Could not write ${path.relative(root, /** @type {any} */ (e).path ?? '') || 'the theme files'}: ${code === 'ENOSPC' ? 'the disk is full' : code === 'EROFS' ? 'the disk is read-only' : 'no permission'}. Free the space or fix the permission, then run the command again; a refused change is undone.`,
+        `Could not write ${path.relative(root, /** @type {any} */ (e).path ?? '') || 'the theme files'}: ${code === 'ENOSPC' ? 'the disk is full' : code === 'EROFS' ? 'the disk is read-only' : code === 'EIO' ? 'the disk could not be read or written' : 'no permission'}. ${code === 'EROFS' ? 'Make the folder writable' : code === 'EIO' ? 'Check the disk' : 'Free the space or fix the permission'}, then run the command again; a refused change is undone.`,
         [],
         ERROR_CODES.ERR_WRITE_FAILED,
       );
@@ -555,12 +558,25 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         ],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
-    if (check) {
+    {
       // A check waits for a change in progress, so it never reads one half
-      // written.
+      // written. A plain compile builds the theme source, which reads the
+      // generated settings: when those no longer match the settings, it
+      // would report ok without them.
       const why = await withLock(root, lockName(slug), () =>
         edit.editorStale(root, slug),
       );
+      if (why && !check)
+        return new AstryxError(
+          `${slug}'s generated settings do not match its settings (${why}), so compile would build the old ones. The editor builds it from its settings.`,
+          [
+            {
+              name: `astryx experimental theme editor show ${slug}`,
+              reason: 'do this instead',
+            },
+          ],
+          ERROR_CODES.ERR_THEME_INVALID,
+        );
       if (why)
         return new AstryxError(
           `${slug} is not up to date: ${why}. The editor builds it again from its settings.`,
