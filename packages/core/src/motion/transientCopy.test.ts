@@ -2,14 +2,15 @@
 
 /**
  * @file transientCopy.test.ts
- * @input vitest, inertCopy
- * @output Unit coverage for the inert copy's form and anchor-name exclusion
+ * @input vitest, inertCopy, keepInherited
+ * @output Unit coverage for the inert copy's form and anchor-name exclusion,
+ *   and for the inherited values it reads, by default or not at all
  * @position Unit coverage for transientCopy.ts; the exit copy's own cases
  *   are in Layer/layerExitCopy.test.ts
  */
 
 import {afterEach, describe, expect, it} from 'vitest';
-import {inertCopy} from './transientCopy';
+import {inertCopy, keepInherited} from './transientCopy';
 
 class CopyField extends HTMLElement {
   static formAssociated = true;
@@ -48,6 +49,33 @@ describe('inertCopy', () => {
     expect(
       element.querySelector('input')?.style.getPropertyValue('anchor-name'),
     ).toBe('--field-anchor');
+  });
+
+  it('reads the inherited values keepInherited writes by default, and none for a copy that goes beside its element', () => {
+    const sheet = document.createElement('style');
+    sheet.textContent = '.toned { --tone: rgb(1, 2, 3); color-scheme: dark; }';
+    document.head.append(sheet);
+    const element = document.createElement('div');
+    element.className = 'toned';
+    element.textContent = 'Old';
+    const elsewhere = document.createElement('section');
+    document.body.append(element, elsewhere);
+    const read = inertCopy(element);
+    const beside = inertCopy(element, {isBesideElement: true});
+    if (read == null || beside == null) {
+      throw new Error('no copy');
+    }
+    // The copies carry no class rule's values of their own: inline values
+    // are all keepInherited can write.
+    read.className = '';
+    beside.className = '';
+    keepInherited(read, elsewhere);
+    keepInherited(beside, elsewhere);
+    sheet.remove();
+    expect(read.style.getPropertyValue('--tone')).toBe('rgb(1, 2, 3)');
+    expect(read.style.getPropertyValue('color-scheme')).toBe('dark');
+    expect(beside.style.getPropertyValue('--tone')).toBe('');
+    expect(beside.style.getPropertyValue('color-scheme')).toBe('');
   });
 
   it('joins no form when it is laid inside one, nor does a form-associated custom element', () => {

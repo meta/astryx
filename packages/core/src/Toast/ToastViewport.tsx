@@ -49,6 +49,7 @@ import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {
   getActiveModalOutlet,
+  markModalOutletHost,
   subscribeModalOutlets,
   type ModalOutletChange,
 } from '../Layer/modalOutlet';
@@ -811,10 +812,13 @@ export function ToastViewport({
     }
     const element = document.createElement('div');
     element.style.display = 'contents';
+    // A modal's input hold leaves the host live.
+    const unmark = markModalOutletHost(element);
     hostRef.current = element;
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- the host exists only on the client, so server and hydration markup carry no portal
     setHost(element);
     return () => {
+      unmark();
       element.remove();
       hostRef.current = null;
       setHost(null);

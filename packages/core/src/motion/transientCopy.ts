@@ -3,9 +3,10 @@
 /**
  * @file transientCopy.ts
  * @input The DOM
- * @output Exports `isCopyable`, `inertCopy`, `restoreScrollOffsets`,
- *   `visiblePartCopy`, `placeOver` and `wrapText`: how Core makes, lays out
- *   and fades one transient copy of old content, on inertClone.ts's clone
+ * @output Exports `isCopyable`, `inertCopy`, `InertCopyOptions`,
+ *   `restoreScrollOffsets`, `visiblePartCopy`, `placeOver` and `wrapText`:
+ *   how Core makes, lays out and fades one transient copy of old content, on
+ *   inertClone.ts's clone
  * @position Motion foundation, internal to core; the copy mechanism the
  *   in-place swap uses (`spec:AST-105` FR8,
  *   `architecture:component-style-authoring` INV7). It also makes the
@@ -144,6 +145,16 @@ const carriedMotion = new WeakMap<
   {saved: SavedAnimations; copyOf: ReadonlyMap<Element, Element>}
 >();
 
+/** How `inertCopy` makes a copy. */
+export interface InertCopyOptions {
+  /**
+   * The copy goes beside its element, under the same parent, so it inherits
+   * what the element inherits. The element's inherited values are then not
+   * read, and `keepInherited` has nothing to write. By default they are read.
+   */
+  readonly isBesideElement?: boolean;
+}
+
 /**
  * A copy that takes no part: no ids or test ids, no form or radio group (a
  * copied checked radio would uncheck the live one), no label for a live
@@ -152,7 +163,10 @@ const carriedMotion = new WeakMap<
  * and transitions running in it carry on from where they were, once the copy
  * is laid out (`placeOver`).
  */
-export function inertCopy(element: HTMLElement): HTMLElement | null {
+export function inertCopy(
+  element: HTMLElement,
+  {isBesideElement = false}: InertCopyOptions = {},
+): HTMLElement | null {
   const copy = inertClone(element);
   if (copy == null) {
     return null;
@@ -166,7 +180,9 @@ export function inertCopy(element: HTMLElement): HTMLElement | null {
     }
   });
   scrollOffsets.set(copy, offsets);
-  inheritedValues.set(copy, readInherited(element));
+  if (!isBesideElement) {
+    inheritedValues.set(copy, readInherited(element));
+  }
   carriedMotion.set(copy, {
     saved: saveAnimations(element),
     copyOf: new Map(sourceNodes.map((node, index) => [node, copyNodes[index]])),

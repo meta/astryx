@@ -18,6 +18,7 @@ import {
   isInputShield,
   type InputHoldScope,
 } from './inputHold';
+import {markModalOutletHost, subscribeModalOutlets} from './modalOutlet';
 
 function deferred() {
   let resolve: () => void = () => {};
@@ -167,6 +168,101 @@ describe('holdInput', () => {
     expect(already.hasAttribute('inert')).toBe(true);
     expect(shield.isConnected).toBe(false);
     expect(isInHeldLayer(child)).toBe(false);
+  });
+
+  it('leaves a live region with nothing focusable in a dismissing layer live: it takes no input, and inert would drop its words (spec:AST-086 FR2)', async () => {
+    const {layer, child} = mountLayer();
+    const polite = document.createElement('div');
+    polite.setAttribute('aria-live', 'polite');
+    const status = document.createElement('div');
+    status.setAttribute('role', 'status');
+    const off = document.createElement('div');
+    off.setAttribute('role', 'status');
+    off.setAttribute('aria-live', 'off');
+    layer.append(polite, status, off);
+    const end = deferred();
+    holdInput(layer, {until: end.promise, scope: 'layer'});
+    expect(child.hasAttribute('inert')).toBe(true);
+    expect(polite.hasAttribute('inert')).toBe(false);
+    expect(status.hasAttribute('inert')).toBe(false);
+    expect(off.hasAttribute('inert')).toBe(true);
+    end.resolve();
+    await flush();
+    expect(off.hasAttribute('inert')).toBe(false);
+  });
+
+  it('keeps a live region that holds something focusable in a dismissing layer inert, so the hold still keeps input away from it', async () => {
+    const {layer} = mountLayer();
+    const region = document.createElement('div');
+    region.setAttribute('role', 'status');
+    const button = document.createElement('button');
+    region.append(button);
+    const tabStop = document.createElement('div');
+    tabStop.setAttribute('aria-live', 'assertive');
+    tabStop.tabIndex = 0;
+    layer.append(region, tabStop);
+    const end = deferred();
+    holdInput(layer, {until: end.promise, scope: 'layer'});
+    expect(region.hasAttribute('inert')).toBe(true);
+    expect(tabStop.hasAttribute('inert')).toBe(true);
+    end.resolve();
+    await flush();
+    expect(region.hasAttribute('inert')).toBe(false);
+  });
+
+  it('leaves a global host in a dismissing layer live, and puts it back above the shield (spec:AST-003 FR16)', async () => {
+    const {layer, child} = mountLayer();
+    const host = document.createElement('div');
+    layer.append(host);
+    const unmark = markModalOutletHost(host);
+    // The last child of the layer when the hosts are told to re-enter.
+    let lastAtEntry: Element | null = null;
+    const unsubscribe = subscribeModalOutlets(change => {
+      if (change === 'entry') {
+        lastAtEntry = layer.lastElementChild;
+      }
+    });
+    const end = deferred();
+    holdInput(layer, {until: end.promise, scope: 'layer'});
+    const shield = layer.lastElementChild as HTMLElement;
+    expect(isInputShield(shield)).toBe(true);
+    expect(child.hasAttribute('inert')).toBe(true);
+    expect(host.hasAttribute('inert')).toBe(false);
+    // The hosts re-enter the top layer after the shield went up, so they
+    // paint above it.
+    expect(lastAtEntry).toBe(shield);
+    end.resolve();
+    await flush();
+    expect(child.hasAttribute('inert')).toBe(false);
+    expect(host.hasAttribute('inert')).toBe(false);
+    unsubscribe();
+    unmark();
+  });
+
+  it('leaves a global host deeper in a dismissing layer live with the elements around it, whose other children go inert', async () => {
+    const {layer, child} = mountLayer();
+    // The host sits two levels down, beside other content at each level.
+    const outer = document.createElement('div');
+    const outerSibling = document.createElement('button');
+    const inner = document.createElement('div');
+    const innerSibling = document.createElement('button');
+    const host = document.createElement('div');
+    inner.append(innerSibling, host);
+    outer.append(outerSibling, inner);
+    layer.append(outer);
+    const unmark = markModalOutletHost(host);
+    const end = deferred();
+    holdInput(layer, {until: end.promise, scope: 'layer'});
+    expect(child.hasAttribute('inert')).toBe(true);
+    expect(outerSibling.hasAttribute('inert')).toBe(true);
+    expect(innerSibling.hasAttribute('inert')).toBe(true);
+    for (const live of [outer, inner, host]) {
+      expect(live.closest('[inert]')).toBeNull();
+    }
+    end.resolve();
+    await flush();
+    expect(layer.querySelector('[inert]')).toBeNull();
+    unmark();
   });
 
   it('names a live hold’s shield, and only it, so a hit test can skip it', () => {
@@ -439,6 +535,78 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     tap(onLayer.button, 'touch', 2);
     expect(onLayer.reached).toEqual([]);
     expect(holdsTouch(onLayer.button)).toBe(true);
+  });
+
+  it("leaves a finger's press on a global host in a dismissing layer alone, and holds it under a presentation", () => {
+    const {layer} = mountLayer();
+    const host = document.createElement('div');
+    layer.append(host);
+    const unmark = markModalOutletHost(host);
+    const onHost = recorder(host);
+    const onLayer = recorder(layer);
+    hold(layer, 'layer');
+    // A toast in the leaving layer takes the tap.
+    tap(onHost.button, 'touch', 3);
+    expect(onHost.reached).toEqual(['pointerdown', 'pointerup', 'click']);
+    expect(holdsTouch(onHost.button)).toBe(false);
+    // The layer's own content stays held.
+    tap(onLayer.button, 'touch', 4);
+    expect(onLayer.reached).toEqual([]);
+    expect(holdsTouch(onLayer.button)).toBe(true);
+    // A presentation's hold still holds a press anywhere.
+    hold(layer, 'viewport');
+    tap(onHost.button, 'touch', 5);
+    expect(onHost.reached).toEqual(['pointerdown', 'pointerup', 'click']);
+    expect(holdsTouch(onHost.button)).toBe(true);
+    unmark();
+  });
+
+  it("leaves a finger's press on a global host in a dismissing layer alone in a same-origin iframe too", () => {
+    // A same-origin iframe's document, as a component rendered into another
+    // window's document has: its nodes and events belong to that window.
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument as Document;
+    const view = doc.defaultView as Window & typeof globalThis;
+    const layer = doc.createElement('div');
+    const host = doc.createElement('div');
+    const onHost = doc.createElement('button');
+    const onLayer = doc.createElement('button');
+    host.append(onHost);
+    layer.append(host, onLayer);
+    doc.body.append(layer);
+    // Another realm: this window's classes do not match the iframe's nodes.
+    expect(onHost instanceof Element).toBe(false);
+    const reached: string[] = [];
+    for (const type of ['pointerdown', 'pointerup', 'click']) {
+      onHost.addEventListener(type, () => reached.push(type));
+    }
+    const send = (target: Element, type: string, pointerType: string) =>
+      target.dispatchEvent(
+        new view.PointerEvent(type, {
+          ...INIT,
+          pointerId: 7,
+          pointerType,
+        }),
+      );
+    const unmark = markModalOutletHost(host);
+    const release = holdInput(layer, {
+      until: new Promise(() => {}),
+      scope: 'layer',
+    });
+    // A toast in the leaving layer takes the tap.
+    send(onHost, 'pointerdown', 'touch');
+    send(onHost, 'pointerup', 'touch');
+    send(onHost, 'click', 'touch');
+    expect(reached).toEqual(['pointerdown', 'pointerup', 'click']);
+    expect(holdsTouch(onHost)).toBe(false);
+    // The layer's own content stays held.
+    expect(holdsTouch(onLayer)).toBe(true);
+    release();
+    unmark();
+    // A new press ends the released hold's click window in that document.
+    send(doc.body, 'pointerdown', 'mouse');
+    send(doc.body, 'pointerup', 'mouse');
   });
 
   it("holds a pen's press as a finger's", () => {

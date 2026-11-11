@@ -329,6 +329,10 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // publication beside container().
   '--_container-corner-block-start',
   '--_container-corner-block-end',
+  // AlertDialog FR6: the alert's exit timing, from the theme's exit tokens or
+  // Reduce Motion's. The fade of its exit copy reads it.
+  '--_alert-exit-duration',
+  '--_alert-exit-easing',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {

@@ -25,6 +25,7 @@ import {BottomSheet, BottomSheetSwitcher} from '../BottomSheet';
 import {Dialog} from '../Dialog';
 import {Drawer} from '../Drawer/Drawer';
 import {getActiveModalOutlet} from '../Layer/modalOutlet';
+import {holdInput} from '../Layer/inputHold';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {ToastDismissReason} from './types';
 
@@ -427,6 +428,42 @@ describe('ToastViewport modal hosting', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Toggle Filters'}));
     expect(onViewport(hidePopover)).toBe(1);
     expect(onViewport(showPopover)).toBe(2);
+  });
+
+  it("stays live while the open Dialog's content is held inert, and re-enters the top layer above the hold's shield (spec:AST-003 FR16)", () => {
+    // A dismissing alert holds its dialog's input until its fade ends.
+    const {showPopover} = trackPopoverState();
+    render(
+      <ToastViewport>
+        <DialogFixture label="Edit">
+          <ToastButton label="Show toast from dialog" />
+        </DialogFixture>
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Toggle Edit'}));
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Show toast from dialog'}),
+    );
+    const dialog = getDialog('Edit');
+    const viewport = getViewport();
+    expect(dialog.contains(viewport)).toBe(true);
+    const release = holdInput(dialog, {
+      until: new Promise(() => {}),
+      scope: 'layer',
+    });
+    // The dialog's own content is inert; the toast viewport is not.
+    expect(
+      screen.getByRole('button', {name: 'Close Edit'}).closest('[inert]'),
+    ).not.toBeNull();
+    expect(viewport.closest('[inert]')).toBeNull();
+    expect(screen.getByText('Saved').closest('[inert]')).toBeNull();
+    // The viewport is shown again after the hold's shield.
+    const shield = dialog.lastElementChild;
+    const shieldShow = showPopover.mock.contexts.indexOf(shield);
+    const viewportReshow = showPopover.mock.contexts.lastIndexOf(viewport);
+    expect(shieldShow).toBeGreaterThan(-1);
+    expect(viewportReshow).toBeGreaterThan(shieldShow);
+    release();
   });
 
   it('keeps focus inside the viewport across a re-entry', () => {
