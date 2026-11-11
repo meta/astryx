@@ -997,7 +997,9 @@ function toIdentifier(name) {
  * @returns {string}
  */
 export function importSpecifier(relDir, base) {
-  const normalized = relDir === '.' ? '' : relDir;
+  // An import specifier always uses `/`. On Windows the cwd-relative dir comes
+  // from path.relative with `\`, which would print `./\themes\ocean/ocean`.
+  const normalized = relDir === '.' ? '' : relDir.split(path.sep).join('/');
   const withinSrc = normalized.replace(/^src\/?/, '').replace(/\/+$/, '');
   return withinSrc ? `./${withinSrc}/${base}` : `./${base}`;
 }
