@@ -19,6 +19,7 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  armHold,
   blockMainThread,
   busyWindowProof,
   compareCurve,
@@ -26,7 +27,6 @@ import {
   curveOf,
   drag,
   frames,
-  holdAnimations,
   markElement,
   MARKER_RGB,
   openStory,
@@ -40,7 +40,6 @@ import {
   type TouchScript,
   touchStoryboard,
   trackMarkers,
-  waitForAnimation,
   waitForRest,
   withStorybook,
   writeEvidence,
@@ -180,17 +179,23 @@ function pullThenReturn(
 }
 
 /**
- * The held return's translateY and scale curves, and how long it runs. The
- * hold judges the motions the test reads.
+ * Plays `script` and returns the return it starts: its translateY and scale
+ * curves, and how long it runs. The hold judges the motions the test reads.
+ * The return runs half a second. A hold sent after the lift can arrive after
+ * it ends on a busy machine. So the page holds it itself as it starts.
  */
 async function heldReturn(
   page: Page,
-  photo: Locator,
+  v: Viewer,
+  script: TouchScript,
   judged: ReadonlyArray<'translate' | 'scale'>,
 ) {
-  const held = await holdAnimations(page, photo, {
+  const {photo} = v;
+  const hold = await armHold(page, photo, {
     judges: judged.map(property => ({target: photo, property})),
   });
+  await v.driver.play(script);
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = await sampleCurve(photo, timeline(duration));
   await releaseAnimations(page);
@@ -215,9 +220,10 @@ test('released moving up, the photo springs back on springs.settle and the viewe
   page,
 }, testInfo) => {
   const v = await openViewer(page);
-  await v.driver.play(pullThenFlickUp(v.centre, 150, 60));
-  const [ret] = await waitForAnimation(v.photo);
-  const back = await heldReturn(page, v.photo, ['translate', 'scale']);
+  const back = await heldReturn(page, v, pullThenFlickUp(v.centre, 150, 60), [
+    'translate',
+    'scale',
+  ]);
   // The size returns from rest. The position carries the finger's upward
   // velocity, read from the first two samples as one unknown. The rest of the
   // curve must follow springs.settle.
@@ -240,7 +246,7 @@ test('released moving up, the photo springs back on springs.settle and the viewe
     'curves/lightbox-dismiss-cancel-up',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {ret, back, v0, size, position},
+        {back, v0, size, position},
         null,
         1,
       ),
@@ -260,9 +266,9 @@ test('brought back within 10 pt of the start and held still, it springs back fro
   page,
 }, testInfo) => {
   const v = await openViewer(page);
-  await v.driver.play(pullThenReturn(v.centre, 120, 4));
-  const [ret] = await waitForAnimation(v.photo);
-  const back = await heldReturn(page, v.photo, ['translate']);
+  const back = await heldReturn(page, v, pullThenReturn(v.centre, 120, 4), [
+    'translate',
+  ]);
   const position = compareCurve(
     back.y,
     criticallyDamped(SETTLE_K, back.y[0].value),
@@ -272,7 +278,7 @@ test('brought back within 10 pt of the start and held still, it springs back fro
     'curves/lightbox-dismiss-cancel-return',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {ret, back, position},
+        {back, position},
         null,
         1,
       ),
@@ -376,15 +382,16 @@ test('a slow short drag released below the threshold springs back', async ({
   const v = await openViewer(page);
   // 8 pt past the pan's threshold, slowly, held still: below the 10 pt a
   // release needs to dismiss.
-  await v.driver.play(
+  const back = await heldReturn(
+    page,
+    v,
     drag(
       v.centre,
       {x: v.centre.x, y: v.centre.y + THRESHOLD + 8},
       {durationMs: 600, restMs: 150},
     ),
+    ['translate'],
   );
-  const [ret] = await waitForAnimation(v.photo);
-  const back = await heldReturn(page, v.photo, ['translate']);
   const position = compareCurve(
     back.y,
     criticallyDamped(SETTLE_K, back.y[0].value),
@@ -394,7 +401,7 @@ test('a slow short drag released below the threshold springs back', async ({
     'curves/lightbox-dismiss-cancel-short',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {ret, back, position},
+        {back, position},
         null,
         1,
       ),
@@ -415,11 +422,13 @@ test('under Reduce Motion a cancelled drag returns by a fade of 200 ms or less, 
   // moves or scales on its way back.
   await page.emulateMedia({reducedMotion: 'reduce'});
   const v = await openViewer(page);
-  await v.driver.play(pullThenFlickUp(v.centre, 150, 60));
-  await waitForAnimation(v.photo);
-  const held = await holdAnimations(page, v.photo, {
+  // The fade runs 200 ms. A hold sent after the lift can arrive after it ends
+  // on a busy machine. So the page holds it itself as it starts.
+  const hold = await armHold(page, v.photo, {
     judges: {target: v.photo, property: 'opacity'},
   });
+  await v.driver.play(pullThenFlickUp(v.centre, 150, 60));
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = await sampleCurve(v.photo, timeline(duration));
   await releaseAnimations(page);
@@ -496,13 +505,18 @@ test(
   async ({page}, testInfo) => {
     const v = await openViewer(page);
     const down = {x: v.centre.x, y: v.centre.y + 150};
+    // A storyboard plays the script at its own pace, and WebKit reads each
+    // event at the time it arrives. So a release's velocity is not the
+    // script's there. The drag comes back to 4 pt past the pan's threshold,
+    // short of the 10 pt commit point, so its place alone cancels it.
+    const back = {x: down.x, y: v.centre.y + THRESHOLD + 4};
     const script: TouchScript = drag(v.centre, down, {
       durationMs: 300,
       hz: 20,
     })
       .slice(0, -1)
       .concat(
-        drag(down, {x: down.x, y: down.y - 120}, {durationMs: 150, hz: 20})
+        drag(down, back, {durationMs: 150, hz: 20})
           .slice(1)
           .map(f => ({...f, t: f.t + 320})),
       );

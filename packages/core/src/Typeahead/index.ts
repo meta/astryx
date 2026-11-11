@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Typeahead components and types
@@ -20,7 +18,13 @@ export type {CreateStaticSourceOptions} from './createStaticSource';
 
 // Base (unstyled) typeahead
 export {BaseTypeahead} from './BaseTypeahead';
-export type {BaseTypeaheadProps} from './BaseTypeahead';
+export type {
+  BaseTypeaheadProps,
+  BaseTypeaheadMenu,
+  BaseTypeaheadHandle,
+  BaseTypeaheadListboxMenuInfo,
+  BaseTypeaheadDialogMenuInfo,
+} from './BaseTypeahead';
 
 // Styled typeahead
 export {Typeahead} from './Typeahead';
