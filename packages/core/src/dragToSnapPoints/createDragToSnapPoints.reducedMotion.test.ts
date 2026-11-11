@@ -3,7 +3,7 @@
 /**
  * @file createDragToSnapPoints.reducedMotion.test.ts
  * @input vitest (jsdom, fake clock) and a recording stand-in for
- *   Element.animate. A stand-in for the drag's pan (gestures/createPan.ts)
+ *   Element.animate. A stand-in for the drag's pan (createPan, gestures/createPanGesture.ts)
  *   hands its events to the test. Each event names the input that drives
  *   it. Reduce Motion is on, with a fine primary pointer.
  * @output Checks `design:reduced-motion` DR2 and DR3 for the snap-point
@@ -14,11 +14,11 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import type {PanEvent, PanOptions} from '../gestures/createPan';
+import type {PanEvent, PanOptions} from '../gestures/createPanGesture';
 
 let onPan: ((event: PanEvent) => void) | null = null;
 
-vi.mock('../gestures/createPan', () => ({
+vi.mock('../gestures/createPanGesture', () => ({
   createPan: (_element: Element, options: PanOptions) => {
     onPan = options.onPan;
     return {destroy: () => {}};

@@ -1244,13 +1244,6 @@ const REDUCED_TRANSITION: SpringTransition = {
 };
 
 /**
- * Custom properties registered so far, once per module on the global `CSS`.
- * A second document, such as a Picture-in-Picture window, gets no
- * registration.
- */
-const registeredProperties = new Set<string>();
-
-/**
  * Registers `name` as an inherited `<length>` (initially 0px) or `<number>`
  * (initially 0) so keyframes interpolate it; an unregistered custom property
  * animates in steps. A property the page already registered is left as it
@@ -1261,13 +1254,11 @@ function registerCustomProperty(
   syntax: '<length>' | '<number>',
 ): void {
   if (
-    registeredProperties.has(name) ||
     typeof CSS === 'undefined' ||
     typeof CSS.registerProperty !== 'function'
   ) {
     return;
   }
-  registeredProperties.add(name);
   try {
     CSS.registerProperty({
       name,
@@ -1275,8 +1266,14 @@ function registerCustomProperty(
       inherits: true,
       initialValue: syntax === '<length>' ? '0px' : '0',
     });
-  } catch {
-    // Already registered, by the page or an earlier bundle.
+  } catch (error) {
+    // A name registered before, by the page or an earlier call, throws this.
+    if (
+      !(error instanceof DOMException) ||
+      error.name !== 'InvalidModificationError'
+    ) {
+      throw error;
+    }
   }
 }
 

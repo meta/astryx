@@ -26,7 +26,7 @@ import {
   type PanGestureEvent,
   type PanGestureOptions,
 } from '../createPanGesture';
-import {createPan, type PanInput} from '../createPan';
+import {createPan, type PanInput} from '../createPanGesture';
 import {usePanGesture} from '../../hooks/usePanGesture';
 import {armClickGuard, disarmClickGuard} from '../../utils/clickGuard';
 import {coarsePrimaryPointer} from './harness';
