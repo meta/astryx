@@ -354,7 +354,7 @@ export const DIALS = {
       'accent brand primary main color colour key highlight link selection seed',
   },
   neutral: {
-    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background stays the base theme\'s, so a tinted gray never tints the page; set --color-background-body for it. From the one color the editor generates light and dark shades (its hue and how much of it shows), and the surface, text, icon, border, skeleton and overlay tokens point at them. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
+    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background stays the base theme\'s (often a light gray), so a tinted gray never tints the page; the result names it, and for a white or off-white page set --color-background-body "#ffffff" (with --mode light in a theme with both modes). From the one color the editor generates light and dark shades (its hue and how much of it shows), and the surface, text, icon, border, skeleton and overlay tokens point at them. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
     values: '<color>',
     examples: ['set my neutral "#64748b"', 'set my neutral "#78716c"'],
     words:

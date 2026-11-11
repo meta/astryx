@@ -18,12 +18,14 @@ import {
   KEY_TOKENS,
   LIKE,
   P,
+  SPACING,
   TYPE_STYLES,
   familyOf,
 } from './_tables.mjs';
 import {
   commitTheme,
   compileTheme,
+  cornerPx,
   contrastProblems,
   describe,
   keyOf,
@@ -311,12 +313,19 @@ async function change(sub, slug, thing, value, options) {
         paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults),
         s.thing,
         slug,
+        modesOf(data),
       ),
     );
   if (PALETTE_DIALS.includes(s.thing) && sub === 'undo')
     notes.push(
       `the ${s.thing} color is no longer generated, and the tokens it fed go back to the base theme's values`,
     );
+  if (s.thing === 'neutral' && sub === 'set') {
+    const page = base.light['--color-background-body'];
+    notes.push(
+      `the page background stays the base theme's${page ? ` (${page} in light${base.dark['--color-background-body'] ? `, ${base.dark['--color-background-body']} in dark` : ''})` : ''}; for a white or off-white page: ${P} set ${slug} --color-background-body "#ffffff"${data.mode === 'both' ? ' --mode light' : ''}`,
+    );
+  }
   if (s.thing === 'vibrancy') {
     notes.push(
       sub === 'set'
@@ -329,7 +338,7 @@ async function change(sub, slug, thing, value, options) {
     notes.unshift(...fontNotes(ctx, {...data, settings: [s]}));
   if (s.thing === 'type' || s.thing === 'headings')
     for (const [m, why] of maskedSettings(data))
-      notes.push(`${describe(m)} is partly hidden: ${why}`);
+      notes.push(`${describe(m)}: ${why}`);
   if (s.thing === 'type' && sub === 'set' && TYPE_STYLES[s.value].ratio > 1.2)
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
@@ -344,6 +353,8 @@ async function change(sub, slug, thing, value, options) {
         sub === 'set'
           ? s
           : /** @type {import('./_settings.mjs').Setting} */ (prev),
+      // On undo, the setting above is the one removed, named as such.
+      ...(sub === 'undo' && prev ? {removed: prev} : {}),
       replaced: sub === 'set' ? prev : null,
       was: null,
       notes,
@@ -453,6 +464,7 @@ export async function themeEditShow(theme, options = {}) {
             : (res[modes[0]][k] ?? null),
         ]),
       ),
+      partValues: partValues(ctx, data, res, modes[0]),
       ...colorsReport(pal, data),
       problems,
       preview,
@@ -464,6 +476,40 @@ export async function themeEditShow(theme, options = {}) {
       colorFiles: pal ? colorFiles(theme) : null,
     },
   };
+}
+
+/**
+ * Each corners or spacing dial set on a part or group, with what its parts
+ * get, beside the whole-theme value: `corners large on containers ->
+ * border-radius 12px on card, dialog, ... (whole theme: --radius-container
+ * 10px)`.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @param {'light' | 'dark'} mode
+ * @returns {string[]}
+ */
+function partValues(ctx, data, res, mode) {
+  return data.settings
+    .filter(
+      s =>
+        s.source === 'dial' && s.on && ['corners', 'spacing'].includes(s.thing),
+    )
+    .map(s => {
+      const parts = partsOf(ctx, s);
+      const listed = `${parts.slice(0, 4).join(', ')}${parts.length > 4 ? `, and ${parts.length - 4} more` : ''}`;
+      if (s.thing === 'corners') {
+        const px = cornerPx(s.value);
+        const token = FAMILIES[s.on ?? '']
+          ? s.on === 'containers'
+            ? '--radius-container'
+            : '--radius-element'
+          : '--radius-element';
+        return `${describe(s)} -> border-radius ${px >= 9999 ? 'fully round' : `${px}px`} on ${listed} (whole theme: ${token} ${res[mode][token] ?? 'unset'})`;
+      }
+      const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
+      return `${describe(s)} -> spacing x${f} inside ${listed} (whole theme: --spacing-4 ${res[mode]['--spacing-4'] ?? 'unset'})`;
+    });
 }
 
 /**
@@ -490,6 +536,10 @@ function colorsReport(pal, data) {
         ...(exactValue[s.thing] ? [exactValue[s.thing]] : []),
         s.mode ? `${s.mode} ${s.value}` : s.value,
       ].join(', ');
+  // A theme with one mode lists only that mode's shades.
+  const modes = modesOf(data);
+  /** @param {{light: import('./_palette.mjs').StopRef, dark: import('./_palette.mjs').StopRef}} v */
+  const shades = v => modes.map(m => `${m} ${shade(v[m])}`).join(', ');
   return {
     vibrancy: pal.vibrancy,
     colors: pal.families.map(fam => ({
@@ -501,12 +551,13 @@ function colorsReport(pal, data) {
           .map(([k, v]) => [
             k,
             exact.has(k)
-              ? `${exactValue[k]} (your exact setting wins over the generated light ${shade(v.light)}, dark ${shade(v.dark)})`
-              : `light ${shade(v.light)}, dark ${shade(v.dark)}`,
+              ? `${exactValue[k]} (your exact setting wins over the generated ${shades(v)})`
+              : shades(v),
           ]),
       ),
     })),
     colorNotes: pal.contrast
+      .filter(c => modes.includes(c.mode))
       .filter(c => !c.pass || c.stop !== c.preferred)
       .map(c =>
         c.against.startsWith('the text on it')

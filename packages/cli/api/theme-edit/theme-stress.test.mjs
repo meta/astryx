@@ -85,7 +85,7 @@ describe('dial precedence', () => {
     await themeEditSet('s', 'headings', 'light', {cwd});
     const r = await themeEditSet('s', 'type', 'display', {cwd});
     expect(r.data.notes.join(' ')).toContain(
-      'heading weight comes from headings, not type',
+      'type still sets the heading sizes and line heights; heading weight comes from headings',
     );
     expect(read('themes/s/s.settings.ts')).toMatch(
       /"--text-heading-1-weight": "300"/,
@@ -340,7 +340,7 @@ describe('preview picker refusals', () => {
 describe('round 3', () => {
   it('skips a page the app cannot show and takes the next match', async () => {
     const r = await themeEditPreviewAdd(
-      'dark issue tracker app: left sidebar navigation, issue detail with title, description, activity feed and a properties panel',
+      'a work item detail page with title, description, activity feed and a properties panel',
       {cwd, theme: 's', path: 'src/app/r3'},
     );
     expect(r.data.skipped.map(x => x.page)).toContain('work-item-detail');
@@ -436,4 +436,166 @@ describe('round 3', () => {
       for (const tag of tags) expect(tag, page).toContain('onChange={() =>');
     }
   });
+});
+
+describe('round 4', () => {
+  it('prefers an app page the description names, a side hero when asked, and notes the nav', async () => {
+    const app = await themeEditPreviewAdd(
+      'dark product marketing landing page with big hero headline, top nav, and an issue-tracker app screenshot',
+      {cwd, theme: 's', path: 'src/app/r4'},
+    );
+    expect(app.data.added).toEqual(['table-grouped']);
+    expect(app.data.matched[0].why).toContain('names issue-tracker');
+    expect(app.data.notes.join(' ')).toContain('no page has a top nav');
+    const side = await themeEditPreviewAdd(
+      'marketing landing page with a left-aligned hero headline and two CTA buttons',
+      {cwd, theme: 's', path: 'src/app/r4'},
+    );
+    expect(side.data.added).toEqual(['side-gallery']);
+    const again = await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 's',
+      path: 'src/app/r4',
+    });
+    expect(again.data.added).toEqual(
+      expect.arrayContaining(['overview', 'components']),
+    );
+    const twice = await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 's',
+      path: 'src/app/r4',
+    });
+    expect(twice.data.added).toEqual([]);
+    expect(twice.data.refreshed).toEqual(
+      expect.arrayContaining(['overview', 'components']),
+    );
+  }, 300_000);
+
+  it('gives each token a value of its own type, and keeps a named tint', async () => {
+    const border = /** @type {any} */ (
+      (await themeEditHow('border color of cards and dividers', {cwd})).data
+    );
+    const commands = border.results
+      .flatMap((/** @type {any} */ x) => x.commands)
+      .join('\n');
+    expect(border.understood.aspects).toEqual(['border']);
+    expect(commands).toContain('--color-border "<color>"');
+    expect(commands).toContain('--border-width 1px');
+    expect(commands).not.toMatch(/--(color-border|border-width) "1px solid/);
+    const tint = /** @type {any} */ (
+      (
+        await themeEditHow('secondary button light blue tint with blue text', {
+          cwd,
+        })
+      ).data
+    );
+    expect(tint.understood.aspects).toEqual(['text', 'background']);
+  });
+
+  it('names the removed setting on undo, never as the value in effect', async () => {
+    await themeEditSet('s', 'corners', 'large', {cwd, on: 'containers'});
+    const show = await themeEditShow('s', {cwd});
+    expect(show.data.partValues[0]).toMatch(
+      /^corners = large on containers -> border-radius 12px on card, .*\(whole theme: --radius-container \d+px\)$/,
+    );
+    const r = await themeEditUndo('s', {
+      cwd,
+      thing: 'corners',
+      on: 'containers',
+    });
+    expect(r.data.removed).toMatchObject({thing: 'corners', value: 'large'});
+  }, 120_000);
+
+  it('says what type still sets, keeps text-size as the scale base, and names the page background', async () => {
+    await themeEditSet('s', 'text-size', 'larger', {cwd});
+    await themeEditSet('s', 'headings', 'bold', {cwd});
+    const t = await themeEditSet('s', 'type', 'editorial', {cwd});
+    expect(t.data.notes.join(' ')).toContain(
+      'type still sets the heading sizes and line heights',
+    );
+    expect(read('themes/s/s.settings.ts')).toMatch(
+      /"scale": \{\s*"base": 16,\s*"ratio": 1\.3/,
+    );
+    for (const thing of ['type', 'headings', 'text-size'])
+      await themeEditUndo('s', {cwd, thing});
+    const n = await themeEditSet('s', 'neutral', '#64748b', {cwd});
+    expect(n.data.notes.join(' ')).toMatch(
+      /the page background stays the base theme's \(#[0-9a-fA-F]{6} in light.*--color-background-body "#ffffff" --mode light/,
+    );
+    await themeEditUndo('s', {cwd, thing: 'neutral'});
+  }, 240_000);
+
+  it('says which tokens a token feeds instead of claiming it changes nothing', async () => {
+    const r = await themeEditSet('s', '--color-success-muted', '#dcfce7', {
+      cwd,
+    });
+    expect(r.data.notes.join(' ')).toContain('--color-syntax-added');
+    await themeEditUndo('s', {cwd, thing: '--color-success-muted'});
+  }, 120_000);
+
+  it('a single-mode theme shows only its mode', async () => {
+    await themeEditNew('one', {
+      cwd,
+      like: 'neutral',
+      settings: {mode: 'light-only', accent: '#7c3aed'},
+    });
+    const show = await themeEditShow('one', {cwd});
+    for (const shades of Object.values(show.data.colors[0].tokens))
+      expect(shades).not.toContain('dark');
+    expect(show.data.colorNotes.join(' ')).not.toContain(' dark:');
+    fs.rmSync(path.join(cwd, 'themes/one'), {recursive: true, force: true});
+  }, 120_000);
+});
+
+describe('round 4 follow-ups', () => {
+  it('gives token lines a color or width when the resting border reads a token', async () => {
+    const r = /** @type {any} */ (
+      (await themeEditHow('thin gray border on inputs', {cwd})).data
+    );
+    const lines = r.results.flatMap((/** @type {any} */ x) => x.commands);
+    const tokenLines = lines.filter((/** @type {string} */ c) =>
+      c.includes('# via the token'),
+    );
+    expect(tokenLines.length).toBeGreaterThan(0);
+    for (const c of tokenLines) expect(c).not.toContain('solid');
+    expect(tokenLines.join('\n')).toMatch(/--color-border\S* "<color>"/);
+    expect(lines.join('\n')).toContain(
+      'set <theme> border "1px solid <color>" --on inputs   # direct',
+    );
+  });
+
+  it('moves the dark fill off an exact color that disappears on the dark page', async () => {
+    const r = await themeEditSet('s', 'accent', '#1e3a8a', {cwd});
+    expect(r.data.notes.join(' ')).toContain(
+      'stands out from the dark page at only',
+    );
+    const show = await themeEditShow('s', {cwd});
+    expect(show.data.resolved['--color-accent']).toMatchObject({
+      light: '#1e3a8a',
+    });
+    expect(
+      /** @type {any} */ (show.data.resolved['--color-accent']).dark,
+    ).not.toBe('#1e3a8a');
+  }, 120_000);
+
+  it('marks an exact dark fill under the light shade on the Colors page', async () => {
+    await themeEditSet('s', 'accent', '#5e6ad2', {cwd});
+    await themeEditPreviewAdd(undefined, {cwd, theme: 's', path: 'src/app/r4'});
+    expect(read('src/app/r4/pages/colors.tsx')).toContain(
+      '"--color-accent (dark mode too)"',
+    );
+    await themeEditUndo('s', {cwd, thing: 'accent'});
+  }, 240_000);
+
+  it('quotes the options it repeats in a suggestion', async () => {
+    fs.mkdirSync(path.join(cwd, 'src/app/my preview'), {recursive: true});
+    const r = await refusal(() =>
+      themeEditPreviewAdd('a weather widget', {
+        cwd,
+        theme: 's',
+        path: 'src/app/my preview',
+      }),
+    );
+    expect(r.run[0]).toMatch(/--theme s --path "src\/app\/my preview"$/);
+  }, 120_000);
 });

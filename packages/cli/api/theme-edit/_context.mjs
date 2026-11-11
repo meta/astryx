@@ -162,7 +162,7 @@ export function fontNotes(ctx, data) {
         : 'system';
     notes.push(
       installed
-        ? `the app loads this font with one import: import '${pkg}';`
+        ? `${family} is installed (${pkg}), so the previews load it; the app loads it with one import: import '${pkg}';`
         : `${family} is not installed, so it does not load: the previews and the app show the next font in the stack. Install it: ${installLine(ctx.project.cwd, [pkg])}. Then the preview imports it on the next set or show, and the app imports it once: import '${pkg}'; Until then, the closest font that needs no install is ${near}: ${P} set ${data.name} font ${near}`,
     );
   }
