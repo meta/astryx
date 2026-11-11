@@ -5,9 +5,9 @@
  * @input The built "Default" DateInput story, shown in a bottom sheet, the
  *   arrows clicked from the page, real mouse and trackpad input and the
  *   interaction harness
- * @output Interaction proofs for the month scroller's steps: after the month
- *   and year wheels close, a trackpad scroll still pages to the next month and
- *   Reset from four months on still rests on today's month; an arrow step
+ * @output Interaction proofs for the month scroller's steps. After the month
+ *   and year wheels close, a trackpad scroll still pages to the next month.
+ *   Reset from four months on still rests on today's month. An arrow step
  *   through a stalled frame moves exactly one month. Under a primary finger
  *   the calendar is MonthPager (MonthPager.interaction.browser.spec.ts).
  *   (A second arrow step late in the first one's scroll, which WebKit cuts

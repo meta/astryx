@@ -4,9 +4,10 @@
  * @file MonthPager.interaction.browser.spec.ts
  * @input The built "Bottom Sheet Calendar" DateInput story and the MonthPager
  *   proof story, real touch and trackpad input, and the interaction harness
- * @output Interaction proofs that the sheet's calendar pages like UIDatePicker
- *   under a finger, in Chromium and WebKit: releases, flicks, the title, the
- *   arrows, the sheet split, the rubber band, RTL and Reduced Motion
+ * @output Interaction proofs, in Chromium and WebKit, that the sheet's
+ *   calendar pages like UIDatePicker under a finger. They cover releases,
+ *   flicks, the title, the arrows, the sheet split, the rubber band, RTL and
+ *   Reduced Motion
  * @position Interaction tests of MonthPager.tsx (`*.interaction.browser.spec.ts`,
  *   run by `pnpm test:interaction`)
  */
@@ -283,8 +284,8 @@ test('a flick released before half a month turns the title as the settle crosses
       flick(center, {velocity: {x: -2500, y: 0}, durationMs: 40, hz: 120}),
     ),
   );
-  // Hold the page's frames right after the lift: the title must not have
-  // changed at the lift itself (UIDatePicker's title follows the content).
+  // Hold the page's frames right after the lift. UIDatePicker's title follows
+  // the content, so the title must not change at the lift itself.
   await freezeTimers(page);
   await page.waitForTimeout(80);
   expect(await title.textContent()).toBe('October 2026');
@@ -562,7 +563,7 @@ test('Reduced Motion: a release and the arrow step change the month through an o
 }) => {
   // design:reduced-motion DR2: a transition a touch release or a tap starts
   // changes opacity only, in at most 200 ms. The settle and the step come
-  // from usePager's animator default (C23's #8146 on F1's #8076).
+  // from usePager's animator default.
   await page.emulateMedia({reducedMotion: 'reduce'});
   const {driver, viewport, title, width, center} = await openCalendar(page);
   await driver.play(slowDrag(center, -0.7 * width));

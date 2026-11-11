@@ -148,9 +148,9 @@ export type OwnScrollGestureOptions = {
  * reinterpret them as its own drag.
  *
  * @param ref - the scroll container
- * @param axis - `'all'` to take every touch, `'inline'` to take only the
- *   horizontal ones and leave vertical drags to the sheet, `'pager'` to split
- *   as UIKit does in a sheet
+ * @param axis - which touches to take. `'all'` takes every touch. `'inline'`
+ *   takes only the horizontal ones and leaves vertical drags to the sheet.
+ *   `'pager'` splits as UIKit does in a sheet
  * @param options - see {@link OwnScrollGestureOptions}
  */
 export function useOwnScrollGesture(

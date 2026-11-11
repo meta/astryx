@@ -5,8 +5,8 @@
  * @input Nothing; data only
  * @output Exports `datePicker`: the rules UIDatePicker adds to its calendar
  *   and wheels. The calendar's month grid pages like a paging scroll view.
- *   The month/year wheels change the date, the AM/PM column follows the hour,
- *   a column turns back onto a bound, and a day clamps to its month.
+ *   The month/year wheels change the date, and the AM/PM column follows the
+ *   hour. A column turns back onto a bound, and a day clamps to its month.
  * @position The date picker domain of the UIKit constants table
  *   (motion/uikit), for the date and time touch sheets. Every leaf names its
  *   source, which uikit.test.ts checks.
