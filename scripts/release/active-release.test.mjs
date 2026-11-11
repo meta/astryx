@@ -734,7 +734,7 @@ describe('active release branch authority', () => {
     );
   });
 
-  it('proves the real git patch against current main before the CLI admits it', () => {
+  it('proves the real git patch against current main without reading a mixed oversized commit', () => {
     const root = fs.mkdtempSync(
       path.join(os.tmpdir(), 'astryx-release-test-repair-'),
     );
@@ -789,7 +789,7 @@ describe('active release branch authority', () => {
         parent: 'mainRepair',
         files: {
           [testFile]: `${after}// later main context\n`,
-          'large-unrelated.txt': 'x'.repeat(2 * 1024 * 1024),
+          'large-unrelated.txt': 'x'.repeat(65 * 1024 * 1024),
         },
       },
       {

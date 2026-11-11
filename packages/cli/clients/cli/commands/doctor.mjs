@@ -47,6 +47,7 @@ import {cliError} from '../lib/cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
+import {templateMeaningsLine} from '../../../foundation/text/template-meanings-line.mjs';
 
 const STATUS = {
   pass: '[ok]',
@@ -274,7 +275,9 @@ function printIntegrationValidation(data, seen) {
       : [text('[ok] No integration issues found.')]),
     ...(data.notes ?? []).map(note =>
       // A note marked next fails --strict from the next minor release.
-      text(`note (${note.code}): ${note.next ? '[next minor] ' : ''}${note.message}`),
+      text(
+        `note (${note.code}): ${note.next ? '[next minor] ' : ''}${note.message}`,
+      ),
     ),
     text(
       `Summary: ${errors} error${errors === 1 ? '' : 's'}, ` +
@@ -340,6 +343,31 @@ function iconSetCoverageBlocks(sets) {
         ]
       : []),
     ...unmappedBlocks(listed),
+    ...templateMeaningBlocks(sets ?? []),
+  ];
+}
+
+/**
+ * The template meanings each set leaves unmapped: one line per set. Listed,
+ * never counted.
+ * @param {import('../../../api/integration/validate-integration.type.mjs').IconSetCoverage[]} sets
+ * @returns {import('../formatters/index.mjs').Block[]}
+ */
+function templateMeaningBlocks(sets) {
+  const lines = sets.flatMap(each => {
+    const line = templateMeaningsLine(
+      each.templateMeanings?.unmapped ?? [],
+      each.set,
+    );
+    return line ? [`${each.set}: ${line}`] : [];
+  });
+  if (lines.length === 0) return [];
+  return [
+    section('Template icon meanings not mapped'),
+    list(lines),
+    text(
+      "A copied template shows a placeholder for each meaning the project's sets do not map. This list never fails a check.",
+    ),
   ];
 }
 
@@ -868,7 +896,8 @@ export function registerDoctor(program) {
       : null;
   defineCommand(integrationCmd, doctorIntegrationValidateCommand, {
     fn: validateIntegrationFn,
-    action: async pkg => refuseBuilt() ?? runIntegrationValidation(program, pkg),
+    action: async pkg =>
+      refuseBuilt() ?? runIntegrationValidation(program, pkg),
   });
   defineCommand(integrationCmd, doctorIntegrationTemplatesCommand, {
     fn: integrationTemplateConflictsFn,
@@ -882,6 +911,7 @@ export function registerDoctor(program) {
   });
   defineCommand(integrationCmd, doctorIntegrationDocsCommand, {
     fn: integrationDocConflictsFn,
-    action: async pkg => refuseBuilt() ?? runAuthoringCheck(program, pkg, 'docs'),
+    action: async pkg =>
+      refuseBuilt() ?? runAuthoringCheck(program, pkg, 'docs'),
   });
 }

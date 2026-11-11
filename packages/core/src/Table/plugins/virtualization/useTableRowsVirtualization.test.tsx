@@ -7,7 +7,7 @@
  * @position Colocated Table virtualization runtime coverage
  */
 import {describe, it, expect, vi} from 'vitest';
-import {cleanup, render, renderHook, screen} from '@testing-library/react';
+import {act, cleanup, render, renderHook, screen} from '@testing-library/react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import * as TableApi from '@astryxdesign/core/Table';
 import {Table} from '../../Table';
@@ -29,17 +29,17 @@ const data: Item[] = Array.from({length: 100}, (_, i) => ({
 function Fixture({
   items = data,
   rowHeight = 48,
-  viewportHeight = 240,
+  initialViewportHeight = 240,
   tableColumns = columns,
 }: {
   items?: Item[];
   rowHeight?: number;
-  viewportHeight?: number;
+  initialViewportHeight?: number;
   tableColumns?: TableColumn<Item>[];
 }) {
   const virtualization = useTableRowsVirtualization({
     rowHeight,
-    viewportHeight,
+    initialViewportHeight,
   });
   return (
     <Table
@@ -60,9 +60,9 @@ describe('Table virtualization capability', () => {
   });
   it('is immutable geometry intent with stable identity and no public payload or knobs', () => {
     const {result, rerender} = renderHook(
-      ({rowHeight, viewportHeight}) =>
-        useTableRowsVirtualization({rowHeight, viewportHeight}),
-      {initialProps: {rowHeight: 48, viewportHeight: 240}},
+      ({rowHeight, initialViewportHeight}) =>
+        useTableRowsVirtualization({rowHeight, initialViewportHeight}),
+      {initialProps: {rowHeight: 48, initialViewportHeight: 240}},
     );
     const original = result.current;
     expect(Object.keys(original)).toEqual([]);
@@ -70,14 +70,14 @@ describe('Table virtualization capability', () => {
     expect(Object.isFrozen(getTableVirtualizationConfig(original))).toBe(true);
     expect(getTableVirtualizationConfig(original)).toEqual({
       rowHeight: 48,
-      viewportHeight: 240,
+      initialViewportHeight: 240,
     });
     expect(
-      getTableVirtualizationConfig({rowHeight: 48, viewportHeight: 240}),
+      getTableVirtualizationConfig({rowHeight: 48, initialViewportHeight: 240}),
     ).toBeUndefined();
-    rerender({rowHeight: 48, viewportHeight: 240});
+    rerender({rowHeight: 48, initialViewportHeight: 240});
     expect(result.current).toBe(original);
-    rerender({rowHeight: 50, viewportHeight: 240});
+    rerender({rowHeight: 50, initialViewportHeight: 240});
     expect(result.current).not.toBe(original);
   });
 });
@@ -127,6 +127,69 @@ describe('actual Table virtualization', () => {
     );
     cleanup();
   });
+  it('seeds the first frame from initialViewportHeight, which sizes nothing', () => {
+    const {container} = render(<Fixture initialViewportHeight={240} />);
+    const bodyRows = Array.from(
+      container.querySelectorAll('tbody > tr'),
+    ).filter(row => row.getAttribute('aria-hidden') !== 'true');
+    // ceil(240 / 48) rows plus four of overscan.
+    expect(bodyRows).toHaveLength(9);
+    // The scroll area takes its height from its parent, not from the prop.
+    const viewport = screen.getByRole('table').closest('[role="group"]');
+    expect(viewport).not.toBeNull();
+    expect(viewport?.getAttribute('style') ?? '').not.toContain('240px');
+    expect(getComputedStyle(viewport as Element).height).toContain('100%');
+    cleanup();
+  });
+  it('takes its height from its parent: a sized parent windows, and a parent with no height renders every row', async () => {
+    // jsdom has no layout, so the scroll area's measured sizes are set here.
+    // A sized parent gives a 240px scroll area; a parent with no height makes
+    // the scroll area as tall as its content.
+    function measure(viewport: number) {
+      const isArea = (el: Element) => el.matches('[role="group"]');
+      const client = vi
+        .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return isArea(this) ? viewport : 0;
+        });
+      const scroll = vi
+        .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return isArea(this) ? Math.max(viewport, 101 * 48) : 0;
+        });
+      return () => {
+        client.mockRestore();
+        scroll.mockRestore();
+      };
+    }
+    async function mountedRows(): Promise<number> {
+      const {container} = render(<Fixture />);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      const count = Array.from(container.querySelectorAll('tbody > tr')).filter(
+        row => row.getAttribute('aria-hidden') !== 'true',
+      ).length;
+      cleanup();
+      return count;
+    }
+    let restore = measure(240);
+    expect(await mountedRows()).toBeLessThan(data.length);
+    restore();
+    restore = measure(101 * 48);
+    expect(await mountedRows()).toBe(data.length);
+    restore();
+  });
+  it('falls back for an initialViewportHeight that is not a positive finite size', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const {container} = render(<Fixture initialViewportHeight={0} />);
+    const bodyRows = Array.from(
+      container.querySelectorAll('tbody > tr'),
+    ).filter(row => row.getAttribute('aria-hidden') !== 'true');
+    expect(bodyRows).toHaveLength(data.length);
+    warn.mockRestore();
+    cleanup();
+  });
   it('falls back before rendering unsupported custom content or duplicate identity', () => {
     const renderCell = vi.fn((item: Item) => <span>{item.label}</span>);
     const {container} = render(
@@ -162,7 +225,7 @@ describe('actual Table virtualization', () => {
     }) {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 48,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       return (
         <Table

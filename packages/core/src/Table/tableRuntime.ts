@@ -23,7 +23,7 @@ export interface TableGeometrySnapshot {
   readonly viewportHeight: number;
   readonly scrollTop: number;
   readonly scrollHeight: number;
-  readonly bodyOffset: number;
+  readonly startOffset: number;
   readonly isMeasured: boolean;
   /** Increments on each content or layout invalidation; a scroll keeps it. */
   readonly revision: number;
@@ -34,7 +34,7 @@ const EMPTY_GEOMETRY: TableGeometrySnapshot = {
   viewportHeight: 0,
   scrollTop: 0,
   scrollHeight: 0,
-  bodyOffset: 0,
+  startOffset: 0,
   isMeasured: false,
   revision: 0,
   layoutRevision: 0,
@@ -90,7 +90,7 @@ export function createTableRuntime() {
       viewportHeight,
       scrollTop,
       scrollHeight: el.scrollHeight,
-      bodyOffset:
+      startOffset:
         section.getBoundingClientRect().top -
         el.getBoundingClientRect().top +
         scrollTop -
@@ -108,7 +108,7 @@ export function createTableRuntime() {
       snapshot.viewportHeight === next.viewportHeight &&
       snapshot.scrollTop === next.scrollTop &&
       snapshot.scrollHeight === next.scrollHeight &&
-      snapshot.bodyOffset === next.bodyOffset &&
+      snapshot.startOffset === next.startOffset &&
       snapshot.isMeasured
     ) {
       return;

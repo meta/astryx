@@ -262,6 +262,21 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: pnpm check:repo
 
+      # A static import from an entry into a surface revealed by interaction
+      # or into an opt-in capability fails, unless the import-boundaries
+      # record lists it. A pull request also prints each entry's eager size
+      # at its base branch.
+      - name: Check component import boundaries
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            pnpm -s check:component-import-boundaries --base-ref "origin/$BASE_REF"
+          else
+            pnpm -s check:component-import-boundaries
+          fi
+
       # The probe theme is generated from the component docs, so the visual
       # gate probes every documented theming target and state. A target or
       # state added without regenerating is one the gate never sees.
