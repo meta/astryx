@@ -64,7 +64,7 @@ import {
   usePopoverInternal,
   type PopoverOutsidePressEvent,
 } from './usePopover';
-import {resolvePopoverAnchor, type PopoverAnchor} from './popoverAnchor';
+import {resolveElementAnchor, type PopoverAnchor} from './popoverAnchor';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {usePresentationHold} from '../Layer/presentationHold';
 import {usePopoverSurfaceMotion} from './PopoverTouch';
@@ -238,8 +238,10 @@ export interface PopoverProps extends Pick<
 
   /**
    * The element the popover sits on, when it is not the trigger: a ref to any
-   * element (a card, a table cell, a chart region), or a function that
-   * returns the element (or `null`) and is read again when the page changes.
+   * element (a card, a table cell, a chart region), a function that returns
+   * the element (or `null`) and is read again when the page changes, or a
+   * rectangle (`getBoundingClientRect` and an optional `contextElement`)
+   * placed as a box inside `contextElement` when the popover opens.
    *
    * The trigger (`children` or `anchorRef`) keeps its toggle and ARIA; the
    * anchor gets neither. With `anchor` and no trigger, the popover opens and
@@ -657,7 +659,7 @@ export function Popover({
   // The layer's show handler calls this as the popover opens. It reads the
   // surface and the anchor when it runs, so a render-time store is safe.
   presentSurfaceRef.current = () => {
-    const separateAnchor = anchor == null ? null : resolvePopoverAnchor(anchor);
+    const separateAnchor = anchor == null ? null : resolveElementAnchor(anchor);
     surfaceMotion.present(
       surfaceRef.current?.closest<HTMLElement>('[popover]') ?? null,
       separateAnchor instanceof HTMLElement

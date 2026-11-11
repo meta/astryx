@@ -28,7 +28,13 @@ import React, {
 import * as stylex from '@stylexjs/stylex';
 import {useLayerInternal, type ContextRenderProps} from '../Layer/useLayer';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {resolvePopoverAnchor, type PopoverAnchor} from './popoverAnchor';
+import {
+  createRectAnchorBox,
+  isRectAnchor,
+  resolveElementAnchor,
+  type PopoverAnchor,
+  type RectAnchorBox,
+} from './popoverAnchor';
 import {useOutsidePress} from '../Layer/outsidePress';
 import {isElement} from '../utils/nodeType';
 import {useFocusTrapInternal} from '../hooks/useFocusTrap';
@@ -160,7 +166,10 @@ const styles = stylex.create({
 export interface UsePopoverOptions {
   /**
    * The element the popover sits on, when it is not the trigger: a ref to any
-   * element, or a function that returns the element (or `null`).
+   * element, a function that returns the element (or `null`), or a rectangle
+   * (`getBoundingClientRect` and an optional `contextElement`), which is
+   * placed as a box inside `contextElement` when the popover opens or the
+   * rectangle object changes.
    *
    * The trigger keeps its toggle and ARIA; the anchor gets neither. A
    * function is read again when the popover opens, after each commit while it
@@ -673,22 +682,34 @@ function usePopoverImplementation(
     },
     [layerRef],
   );
-  const bindAnchor = useCallback(() => {
-    const option = anchorOptionRef.current;
-    if (option == null) {
-      return;
-    }
-    const element = resolvePopoverAnchor(option);
-    if (!isAnchorBoundRef.current || element !== boundAnchorRef.current) {
-      isAnchorBoundRef.current = true;
-      boundAnchorRef.current = element;
-      // The layer's ref reads only the element's style and box; any element
-      // with a box can carry an anchor name.
-      layerRef(element as HTMLElement | null);
-    }
-    // eslint-disable-next-line @eslint-react/set-state-in-effect -- whether the caller's anchor exists is a DOM fact; it hides the surface until it does
-    setIsAnchorMissing(element == null);
-  }, [layerRef]);
+  // The box that stands for a rectangle anchor, created on first use.
+  const rectBoxRef = useRef<RectAnchorBox | null>(null);
+  const bindAnchor = useCallback(
+    (isOpening = false) => {
+      const option = anchorOptionRef.current;
+      if (option == null) {
+        return;
+      }
+      let element: Element | null;
+      if (isRectAnchor(option)) {
+        rectBoxRef.current ??= createRectAnchorBox();
+        element = rectBoxRef.current.place(option, isOpening);
+      } else {
+        rectBoxRef.current?.remove();
+        element = resolveElementAnchor(option);
+      }
+      if (!isAnchorBoundRef.current || element !== boundAnchorRef.current) {
+        isAnchorBoundRef.current = true;
+        boundAnchorRef.current = element;
+        // The layer's ref reads only the element's style and box; any element
+        // with a box can carry an anchor name.
+        layerRef(element as HTMLElement | null);
+      }
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- whether the caller's anchor exists is a DOM fact; it hides the surface until it does
+      setIsAnchorMissing(element == null);
+    },
+    [layerRef],
+  );
 
   // A function anchor can return another element after any render of the
   // caller, so the binding is checked after every commit. A ref anchor is
@@ -702,6 +723,7 @@ function usePopoverImplementation(
       // The caller dropped its anchor: the trigger anchors again.
       isAnchorBoundRef.current = false;
       boundAnchorRef.current = null;
+      rectBoxRef.current?.remove();
 
       setIsAnchorMissing(false);
       layerRef(triggerElementRef.current);
@@ -733,6 +755,10 @@ function usePopoverImplementation(
     observer.observe(doc.documentElement, {childList: true, subtree: true});
     return () => observer.disconnect();
   }, [hasSeparateAnchor, isLayerOpen, bindAnchor]);
+
+  // The rectangle anchor's box is the hook's own element; it leaves the
+  // document with the hook.
+  useEffect(() => () => rectBoxRef.current?.remove(), []);
 
   const onOutsidePressRef = useRef(onOutsidePress);
   onOutsidePressRef.current = onOutsidePress;
@@ -780,8 +806,9 @@ function usePopoverImplementation(
       const opener = getOpenerRef.current?.() ?? activeElement;
       openerRef.current =
         opener != null && !contentRef.current?.contains(opener) ? opener : null;
-      // The first frame is anchored: the anchor is read as the popover opens.
-      bindAnchor();
+      // The first frame is anchored: the anchor is read as the popover opens,
+      // and a rectangle anchor is placed again, since it may have moved.
+      bindAnchor(true);
       layer.show();
       // When the content is already mounted, the layer shows it within this
       // call, so initial focus lands within the event that opened it: iOS

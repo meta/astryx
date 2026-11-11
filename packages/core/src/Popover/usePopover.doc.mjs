@@ -18,9 +18,9 @@ export const docs = {
   params: [
     {
       name: 'anchor',
-      type: 'React.RefObject<Element | null> | (() => Element | null)',
+      type: 'React.RefObject<Element | null> | (() => Element | null) | PopoverRectAnchor',
       description:
-        'The element the popover sits on when it is not the trigger: a ref to any element or a function returning one. A function is read when the popover opens, after each commit while open, and when its element leaves the document. The trigger keeps its toggle and ARIA. Omit it and the trigger is the anchor.',
+        'The element the popover sits on when it is not the trigger: a ref to any element, a function returning one, or a rectangle ({getBoundingClientRect, contextElement?}) placed as a box inside contextElement when the popover opens or the rectangle object changes. A function is read when the popover opens, after each commit while open, and when its element leaves the document. The trigger keeps its toggle and ARIA. Omit it and the trigger is the anchor.',
     },
     {
       name: 'anchorOutOfView',
@@ -224,7 +224,7 @@ export const docsDense = {
     'Headless click-triggered popovers w/ focus trap, auto-focus, light dismiss, Escape, optional hidden close button. Every surface emits the canonical popover target. Custom compositions needing a distinct seam pass/document an owned surfaceTarget.',
   paramDescriptions: {
     anchor:
-      'element popover sits on when not the trigger: ref or function; re-read on open, commits, and when its element leaves.',
+      'element popover sits on when not the trigger: ref, function, or rect {getBoundingClientRect, contextElement?}; re-read on open, commits, and when its element leaves.',
     anchorOutOfView:
       "while anchor out of view: 'hold' (default) or 'hide' (hidden, still open).",
     onOutsidePress:

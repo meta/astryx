@@ -41,9 +41,9 @@ export const docs = {
         },
         {
           name: 'anchor',
-          type: 'React.RefObject<Element | null> | (() => Element | null)',
+          type: 'React.RefObject<Element | null> | (() => Element | null) | PopoverRectAnchor',
           description:
-            'The element the popover sits on when it is not the trigger: a ref to any element (a card, a table cell, a chart region) or a function returning one, read again when the page changes. The trigger keeps its toggle and ARIA; the anchor gets neither. With no trigger, the popover opens only through isOpen. While it resolves to nothing, an open popover shows no surface.',
+            'The element the popover sits on when it is not the trigger: a ref to any element (a card, a table cell, a chart region), a function returning one (read again when the page changes), or a rectangle ({getBoundingClientRect, contextElement?}) placed as a box inside contextElement when the popover opens. The trigger keeps its toggle and ARIA; the anchor gets neither. With no trigger, the popover opens only through isOpen. While it resolves to nothing, an open popover shows no surface.',
         },
         {
           name: 'anchorOutOfView',
@@ -330,9 +330,9 @@ export const docsZh = {
         },
         {
           name: 'anchor',
-          type: 'React.RefObject<Element | null> | (() => Element | null)',
+          type: 'React.RefObject<Element | null> | (() => Element | null) | PopoverRectAnchor',
           description:
-            '弹出框所依附的元素（当它不是触发器时）：任意元素的 ref，或返回元素的函数，页面变化时会重新读取。触发器保留其切换行为和 ARIA；锚点两者都不获得。没有触发器时，弹出框只能通过 isOpen 打开。解析不到元素时，打开的弹出框不显示表面。',
+            '弹出框所依附的元素（当它不是触发器时）：任意元素的 ref、返回元素的函数（页面变化时会重新读取），或矩形（{getBoundingClientRect, contextElement?}），弹出框打开时在 contextElement 内放置一个盒子。触发器保留其切换行为和 ARIA；锚点两者都不获得。没有触发器时，弹出框只能通过 isOpen 打开。解析不到元素时，打开的弹出框不显示表面。',
         },
         {
           name: 'anchorOutOfView',
@@ -626,7 +626,7 @@ export const docsDense = {
           'Trigger element. Must contain <button> or [role="button"] element.',
         anchorRef: 'External ref for popover anchor in sibling mode.',
         anchor:
-          'Element the popover sits on when not the trigger: ref or function returning one; no trigger ARIA on it; trigger-less needs isOpen.',
+          'Element the popover sits on when not the trigger: ref, function returning one, or rect {getBoundingClientRect, contextElement?}; no trigger ARIA on it; trigger-less needs isOpen.',
         anchorOutOfView:
           "While anchor out of view: 'hold' (default) keeps place; 'hide' hides without closing until it returns.",
         onOutsidePress:
