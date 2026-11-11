@@ -46,6 +46,7 @@ describe('search ordering invariants', () => {
       const lexical = await searchCore(q, {
         cwd,
         limit: Number.MAX_SAFE_INTEGER,
+        ownKeywords: true,
       });
       expect(ours.data.matchCount).toBe(lexical.data.matchCount);
       expect(ours.data.results.length).toBeLessThanOrEqual(

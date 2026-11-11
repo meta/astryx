@@ -149,15 +149,17 @@ describe('rewriteTemplatePreview', () => {
 });
 
 describe('next.config', () => {
-  /** The module rules the config's webpack hook leaves. */
-  async function rulesWith(value: string | undefined) {
+  type Rule = {test?: RegExp; use?: unknown; resolve?: {modules?: string[]}};
+  /** The webpack config the config's webpack hook leaves. */
+  async function configWith(value: string | undefined) {
     vi.resetModules();
     vi.stubEnv('DOCSITE_ICON_SET', value ?? '');
     const {default: nextConfig} = await import('../../next.config.mjs');
     const config = {
-      module: {rules: [] as Array<{test?: RegExp; use?: unknown}>},
-      resolve: {alias: {}},
+      module: {rules: [] as Rule[]},
+      resolve: {alias: {}, modules: ['node_modules']},
       plugins: [],
+      cache: {type: 'filesystem', version: 'next'},
     };
     (
       nextConfig as unknown as {
@@ -167,7 +169,11 @@ describe('next.config', () => {
       isServer: true,
       webpack: {BannerPlugin: class {}},
     });
-    return config.module.rules;
+    return config;
+  }
+  /** The module rules the config's webpack hook leaves. */
+  async function rulesWith(value: string | undefined) {
+    return (await configWith(value)).module.rules;
   }
 
   it('adds no loader when the setting is unset', async () => {
@@ -182,5 +188,25 @@ describe('next.config', () => {
       test.test('/repo/packages/cli/assets/templates/pages/ai-chat/page.tsx'),
     ).toBe(true);
     expect(test.test('/repo/apps/docsite/src/app/page.tsx')).toBe(false);
+  });
+
+  it("resolves a template's rewritten imports from the docsite too, where the sets are installed", async () => {
+    const [rule] = await rulesWith('glyphs');
+    // Template sources live outside the docsite: after the folders above the
+    // template, a package resolves from the docsite's own node_modules.
+    expect(rule.resolve?.modules).toEqual([
+      'node_modules',
+      path.resolve(__dirname, '../../node_modules'),
+    ]);
+  });
+
+  it('keys the build cache on the setting, and leaves it alone when unset', async () => {
+    expect((await configWith(undefined)).cache.version).toBe('next');
+    expect((await configWith('glyphs')).cache.version).toBe(
+      'next|DOCSITE_ICON_SET=glyphs',
+    );
+    expect((await configWith('lines,glyphs')).cache.version).toBe(
+      'next|DOCSITE_ICON_SET=lines,glyphs',
+    );
   });
 });

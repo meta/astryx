@@ -24,6 +24,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
@@ -219,11 +220,13 @@ const BLOCKS_DIR = path.join(TEMPLATES_DIR, 'blocks');
 /**
  * Inline placeholder swapped in for demo imagery when scaffolding a template,
  * so scaffolded pages render with zero setup (see stripTemplateAssetRefs).
- * Neutral hex colors (not design tokens) so it renders in any project, themed
- * or not. Mirrors apps/docsite/public/template-assets/placeholder.svg.
+ * A gray at low opacity, not design tokens, so it renders in any project,
+ * themed or not, and takes its tone from the surface behind it: light on a
+ * light page, dark in dark mode. Mirrors
+ * apps/docsite/public/template-assets/placeholder.svg.
  */
 const PLACEHOLDER_IMAGE =
-  'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20400%20300%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Crect%20width%3D%22400%22%20height%3D%22300%22%20fill%3D%22%23f5f6f8%22%2F%3E%3Cg%20transform%3D%22translate%28200%20150%29%22%20fill%3D%22none%22%20stroke%3D%22%23c2cad6%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%22-44%22%20y%3D%22-44%22%20width%3D%2288%22%20height%3D%2288%22%20rx%3D%2216%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%22-18%22%20r%3D%222.5%22%20fill%3D%22%23c2cad6%22%20stroke%3D%22none%22%2F%3E%3Cpath%20d%3D%22M-34%2030%20L-8%200%20L10%2018%20L20%208%20L34%2024%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E';
+  'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20400%20300%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Crect%20width%3D%22400%22%20height%3D%22300%22%20fill%3D%22%23808080%22%20fill-opacity%3D%220.12%22%2F%3E%3Cg%20transform%3D%22translate%28200%20150%29%22%20fill%3D%22none%22%20stroke%3D%22%23808080%22%20stroke-opacity%3D%220.55%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%22-44%22%20y%3D%22-44%22%20width%3D%2288%22%20height%3D%2288%22%20rx%3D%2216%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%22-18%22%20r%3D%222.5%22%20fill%3D%22%23808080%22%20fill-opacity%3D%220.55%22%20stroke%3D%22none%22%2F%3E%3Cpath%20d%3D%22M-34%2030%20L-8%200%20L10%2018%20L20%208%20L34%2024%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E';
 
 /**
  * Extensions that need a video-safe placeholder rather than the image data
@@ -2094,11 +2097,67 @@ export function extractComponents(pagePath) {
 /**
  * The components a template source composes. A surface that returns rewritten
  * source lists the components of that source, so a component the rewrite
- * removed is not listed.
+ * removed is not listed. A template Astryx ships answers from its stored list
+ * (TEMPLATE_COMPONENTS_FILE), which holds what parsing it returns; any other
+ * source, such as an integration's template, is parsed.
  * @param {string} src
  * @returns {string[]}
  */
 export function componentsInSource(src) {
+  const known = shippedTemplateComponents().get(sourceKey(src));
+  if (known) return [...known];
+  return parsedComponents(src);
+}
+
+/** Where the component lists of the templates Astryx ships are stored. */
+export const TEMPLATE_COMPONENTS_FILE = path.join(
+  CLI_ROOT,
+  'assets',
+  'templates',
+  'components.generated.json',
+);
+
+/**
+ * The key of a template source in TEMPLATE_COMPONENTS_FILE: a hash of its
+ * text, so an edited or unknown source is never answered from the file.
+ * @param {string} src
+ * @returns {string}
+ */
+export function sourceKey(src) {
+  return createHash('sha256').update(src).digest('hex').slice(0, 32);
+}
+
+/** @type {Map<string, string[]> | undefined} */
+let shippedComponents;
+
+/**
+ * The component lists of the templates Astryx ships, by source key, read
+ * once. Each is what parsedComponents returns for that source; parsing a
+ * source costs far more than reading its list. A missing or unreadable file
+ * leaves the map empty, so every source is parsed.
+ * @returns {Map<string, string[]>}
+ */
+function shippedTemplateComponents() {
+  if (shippedComponents) return shippedComponents;
+  try {
+    shippedComponents = new Map(
+      Object.entries(
+        JSON.parse(fs.readFileSync(TEMPLATE_COMPONENTS_FILE, 'utf-8')),
+      ),
+    );
+  } catch {
+    shippedComponents = new Map();
+  }
+  return shippedComponents;
+}
+
+/**
+ * The components a template source composes, read from its syntax tree (see
+ * componentsInSource).
+ * @param {string} src
+ * @returns {string[]}
+ */
+export function parsedComponents(src) {
   // Match JSX opening tags, e.g. `<Section` or the legacy `<XDSSection`.
   // Templates author bare component names post un-prefix migration,
   // so the `XDS` prefix is optional. Anchoring on the `<`
