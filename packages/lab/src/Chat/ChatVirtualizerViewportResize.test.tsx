@@ -4,9 +4,11 @@
  * @file ChatVirtualizerViewportResize.test.tsx
  * @input ChatVirtualizer attached to the page scroller, a stand-in window
  *   width, and ResizeObserver entries delivered by hand
- * @output How many correction passes one window resize runs
- * @position Unit coverage for the page scroller's resize path; jsdom has no
- *   layout and no ResizeObserver, so the test delivers the entries
+ * @output How many correction passes, and how many window reads, a viewport
+ *   change causes
+ * @position Unit coverage for the page scroller's viewport path; jsdom has no
+ *   layout and no ResizeObserver, so the test delivers the entries a browser
+ *   sends with each resize
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
@@ -45,23 +47,27 @@ const nextFrame = (): Promise<void> =>
       }),
   );
 
-describe('ChatVirtualizer on the page scroller: window resize', () => {
+describe('ChatVirtualizer on the page scroller: viewport changes', () => {
   let el: HTMLElement;
   let passes = 0;
+  let widthReads = 0;
   let width = 1000;
+  let height = 400;
   let scrolling: PropertyDescriptor | undefined;
   let innerWidth: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     passes = 0;
+    widthReads = 0;
     width = 1000;
+    height = 400;
     el = document.createElement('div');
     // Each correction pass reads the scroller's size once.
     Object.defineProperty(el, 'clientHeight', {
       configurable: true,
       get: () => {
         passes++;
-        return 400;
+        return height;
       },
     });
     Object.defineProperty(el, 'scrollHeight', {
@@ -80,7 +86,10 @@ describe('ChatVirtualizer on the page scroller: window resize', () => {
     innerWidth = Object.getOwnPropertyDescriptor(window, 'innerWidth');
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
-      get: () => width,
+      get: () => {
+        widthReads++;
+        return width;
+      },
     });
   });
 
@@ -109,92 +118,135 @@ describe('ChatVirtualizer on the page scroller: window resize', () => {
       await new Promise(resolve => setTimeout(resolve, 40));
     });
     passes = 0;
+    widthReads = 0;
   }
 
-  /** The scroller's own ResizeObserver entry, as the browser sends it. */
-  function deliverScrollerEntry(): void {
+  /** The hidden viewport-sized box the page scroller observes, if any. */
+  function viewportProbe(): Element | undefined {
+    return [...observed.keys()].find(
+      target =>
+        target !== el &&
+        (target as HTMLElement).dataset.pkey === undefined &&
+        target.getAttribute('aria-hidden') === 'true',
+    );
+  }
+
+  /** One ResizeObserver delivery, as the browser sends it after layout. */
+  function deliver(targets: (Element | undefined)[]): void {
     act(() => {
-      observed.get(el)?.({
-        target: el,
-        borderBoxSize: [{blockSize: 6000, inlineSize: width}],
-        contentRect: {height: 6000, width},
-      } as unknown as ResizeObserverEntry);
+      for (const target of targets) {
+        if (target === undefined) {
+          continue;
+        }
+        observed.get(target)?.({
+          target,
+          borderBoxSize: [{blockSize: height, inlineSize: width}],
+          contentRect: {height, width},
+        } as unknown as ResizeObserverEntry);
+      }
     });
   }
 
-  it('runs one correction pass for a width drag, whose scroller entry also arrives', async () => {
+  /**
+   * One frame of a viewport change: the window fires resize, then the
+   * observer reports the boxes that changed size. A width change resizes the
+   * scroller's box too; a height-only change, as an iOS toolbar sends,
+   * resizes only the viewport.
+   */
+  async function viewportFrame(change: {
+    width?: number;
+    height?: number;
+  }): Promise<number> {
+    passes = 0;
+    const widthChanged = change.width !== undefined && change.width !== width;
+    width = change.width ?? width;
+    height = change.height ?? height;
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    await nextFrame();
+    deliver(widthChanged ? [el, viewportProbe()] : [viewportProbe()]);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await nextFrame();
+    return passes;
+  }
+
+  it('observes a hidden viewport-sized box while attached to the page scroller', async () => {
     await mounted();
-    // One frame of a drag: the width changes, so the window fires resize and
-    // the page scroller's box resizes too.
+    expect(viewportProbe()).toBeDefined();
+  });
+
+  it('runs one correction pass for a width drag', async () => {
+    await mounted();
+    expect(await viewportFrame({width: 900})).toBe(1);
+  });
+
+  it('runs one correction pass for a height-only change', async () => {
+    await mounted();
+    expect(await viewportFrame({height: 360})).toBe(1);
+  });
+
+  it('runs one correction pass for a height-only change in the frame right after a width change', async () => {
+    await mounted();
     width = 900;
     act(() => {
       window.dispatchEvent(new Event('resize'));
     });
     await nextFrame();
-    deliverScrollerEntry();
+    deliver([el, viewportProbe()]);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const widthPasses = passes;
+    passes = 0;
+    // The next frame: only the viewport's height changes.
+    height = 360;
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    await nextFrame();
+    deliver([viewportProbe()]);
     await act(async () => {
       await Promise.resolve();
     });
     await nextFrame();
     await nextFrame();
-    expect(passes).toBe(1);
-  });
-
-  it('runs one correction pass for a height-only change, which gives the scroller no entry', async () => {
-    await mounted();
-    act(() => {
-      window.dispatchEvent(new Event('resize'));
-    });
-    await nextFrame();
-    await nextFrame();
-    expect(passes).toBe(1);
+    expect([widthPasses, passes]).toEqual([1, 1]);
   });
 
   it('runs one correction pass in each frame of a height-only, width, then height-only sequence', async () => {
     await mounted();
-    const counts: number[] = [];
-
-    act(() => {
-      window.dispatchEvent(new Event('resize'));
-    });
-    await nextFrame();
-    await nextFrame();
-    counts.push(passes);
-    passes = 0;
-
-    width = 900;
-    act(() => {
-      window.dispatchEvent(new Event('resize'));
-    });
-    await nextFrame();
-    deliverScrollerEntry();
-    await act(async () => {
-      await Promise.resolve();
-    });
-    await nextFrame();
-    await nextFrame();
-    counts.push(passes);
-    passes = 0;
-
-    act(() => {
-      window.dispatchEvent(new Event('resize'));
-    });
-    await nextFrame();
-    await nextFrame();
-    counts.push(passes);
-
+    const counts = [
+      await viewportFrame({height: 360}),
+      await viewportFrame({width: 900}),
+      await viewportFrame({height: 400}),
+    ];
     expect(counts).toEqual([1, 1, 1]);
   });
 
-  it('runs one correction pass, one frame late, when a width change gives the scroller no entry', async () => {
+  it('reads no window size during a viewport change', async () => {
     await mounted();
-    width = 900;
+    await viewportFrame({width: 900});
+    await viewportFrame({height: 360});
+    expect(widthReads).toBe(0);
+  });
+
+  it('runs one correction pass when a toolbar change fires several resizes in one frame', async () => {
+    await mounted();
+    passes = 0;
+    height = 360;
     act(() => {
-      window.dispatchEvent(new Event('resize'));
+      for (let i = 0; i < 3; i++) {
+        window.dispatchEvent(new Event('resize'));
+      }
     });
     await nextFrame();
-    expect(passes).toBe(0);
-    await nextFrame();
+    deliver([viewportProbe()]);
+    await act(async () => {
+      await Promise.resolve();
+    });
     await nextFrame();
     expect(passes).toBe(1);
   });
