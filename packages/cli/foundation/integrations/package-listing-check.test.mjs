@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
 import {loadLocalIntegration} from './integrations.mjs';
 import {
+  componentExamplesCheck,
   isListingImage,
   packageListingCheck,
 } from './validate-contributions.mjs';
@@ -47,7 +48,9 @@ const packageJson = extra =>
 
 async function check(/** @type {string} */ dir) {
   const loaded = await loadLocalIntegration(dir, {fresh: true});
-  return packageListingCheck(/** @type {any} */ (loaded.integration ?? loaded));
+  const integration = /** @type {any} */ (loaded.integration ?? loaded);
+  const {examples} = await componentExamplesCheck(integration);
+  return packageListingCheck(integration, examples);
 }
 
 const codes = (/** @type {{notes: {code: string}[]}} */ result) =>
@@ -67,6 +70,60 @@ describe('isListingImage', () => {
     ).toBe(false);
     expect(isListingImage(Buffer.from('not an image'))).toBe(false);
     expect(isListingImage(Buffer.alloc(512 * 1024 + 1, 137))).toBe(false);
+  });
+
+  it.each([
+    [
+      'an XML declaration and a comment',
+      `<?xml version="1.0" encoding="UTF-8"?>\n<!-- logo -->\n${SVG}`,
+    ],
+    [
+      'a gradient fill by fragment',
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><defs><linearGradient id="g"><stop offset="0" stop-color="#06f"/></linearGradient></defs><rect width="8" height="8" fill="url(#g)"/></svg>',
+    ],
+    [
+      'a use of a local symbol',
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 8 8"><defs><circle id="c" r="2"/></defs><use href="#c"/><use xlink:href="#c" x="4"/></svg>',
+    ],
+    [
+      'a title',
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><title>Acme &amp; Co</title><rect width="8" height="8"/></svg>',
+    ],
+  ])('accepts a shapes-only SVG with %s', (_label, svg) => {
+    expect(isListingImage(Buffer.from(svg))).toBe(true);
+  });
+
+  it.each([
+    [
+      'an event set by animation',
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect width="8" height="8"><set attributeName="onmouseover" to="alert(1)"/></rect></svg>',
+    ],
+    [
+      'an href set by animation',
+      '<svg xmlns="http://www.w3.org/2000/svg"><a><animate attributeName="href" to="javascript:alert(1)"/></a></svg>',
+    ],
+    [
+      'an outside use',
+      '<svg xmlns="http://www.w3.org/2000/svg"><use href="https://e.x/a.svg#c"/></svg>',
+    ],
+    [
+      'an outside fill',
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="url(https://e.x/p)"/></svg>',
+    ],
+    [
+      'a style attribute',
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect style="fill:red"/></svg>',
+    ],
+    [
+      'a doctype',
+      '<!DOCTYPE svg [<!ENTITY x "y">]><svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>',
+    ],
+    [
+      'text outside a title',
+      '<svg xmlns="http://www.w3.org/2000/svg"><g>hi</g></svg>',
+    ],
+  ])('refuses an SVG with %s', (_label, svg) => {
+    expect(isListingImage(Buffer.from(svg))).toBe(false);
   });
 });
 
@@ -234,7 +291,7 @@ describe('packageListingCheck', () => {
 
   it('draws no listing note for a package of icon sets alone', async () => {
     const dir = makePackage({'package.json': packageJson({})});
-    const result = await packageListingCheck(
+    const result = packageListingCheck(
       /** @type {any} */ ({
         __packageDir: dir,
         experimental: {iconSets: path.join(dir, 'icon-sets')},

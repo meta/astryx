@@ -1468,6 +1468,38 @@ function readModule(source, builtins) {
 }
 
 /**
+ * Whether npm packs one file (or, with `folder`, anything inside one
+ * folder) of the package at `base`. `cache` holds what npm packs, asked at
+ * most once per cache. With no `files` field and no ignore file on the
+ * path, npm packs everything, so nothing is asked. Without npm's answer, a
+ * path no `files` entry can reach is left out, and any other is unknown.
+ * @param {string} base package root
+ * @param {string} rel path relative to `base`, with forward slashes
+ * @param {unknown} packedFiles package.json `files`
+ * @param {{packed?: {paths: Set<string>} | {error: string}}} cache
+ * @param {{folder?: boolean}} [options]
+ * @returns {{packed: true} | {packed: false, by: 'npm' | 'files'} | {packed: 'unknown', error: string}}
+ */
+function packState(base, rel, packedFiles, cache, {folder = false} = {}) {
+  if (!Array.isArray(packedFiles) && ignoreFilesFor(base, rel).length === 0) {
+    return {packed: true};
+  }
+  cache.packed ??= npmPackedPaths(base);
+  const packed = cache.packed;
+  if ('paths' in packed) {
+    if (packed.paths.has(rel)) return {packed: true};
+    if (folder && [...packed.paths].some(each => each.startsWith(`${rel}/`))) {
+      return {packed: true};
+    }
+    return {packed: false, by: 'npm'};
+  }
+  if (Array.isArray(packedFiles) && outsideFiles(rel, packedFiles)) {
+    return {packed: false, by: 'files'};
+  }
+  return {packed: 'unknown', error: packed.error};
+}
+
+/**
  * What a package's examples need to work everywhere they are shown: template
  * lists, docs pages and catalog cards, which render each block alone from
  * the packed package. Four `next` notes, each with a fix to paste
@@ -1492,8 +1524,12 @@ function readModule(source, builtins) {
  *   package (`npm pack --dry-run`). When npm cannot answer, an asset no
  *   `files` entry can reach is still a note, and any other is returned in
  *   `unchecked`.
+ * It also returns `examples`, what the package-level listing note needs:
+ * whether any block is a showcase, and, when none is, how many components
+ * need an example (the exemptions above apply). It is absent when the
+ * templates or components cannot be read, so no listing note is drawn.
  * @param {LoadedIntegration} integration
- * @returns {Promise<{notes: Note[], unchecked: Array<{file: string, asset: string, reason: string}>}>}
+ * @returns {Promise<{notes: Note[], unchecked: Array<{file: string, asset: string, reason: string}>, examples?: ExampleSummary}>}
  */
 export async function componentExamplesCheck(integration) {
   /** @type {Note[]} */
@@ -1531,8 +1567,8 @@ export async function componentExamplesCheck(integration) {
   } catch {
     packedFiles = undefined;
   }
-  /** @type {{paths: Set<string>} | {error: string} | undefined} what npm packs, read once */
-  let packed;
+  /** @type {{packed?: {paths: Set<string>} | {error: string}}} what npm packs, read once */
+  const npm = {};
   /** @type {Array<{file: string, asset: string, reason: string}>} */
   const unchecked = [];
   // A bare builtin name the package installs from npm (`buffer`, `events`)
@@ -1601,36 +1637,19 @@ export async function componentExamplesCheck(integration) {
       // A folder URL is packed when npm packs anything inside it.
       const isFolder = exists && fs.statSync(asset).isDirectory();
       if (exists) {
-        // With no `files` field npm packs everything but what an ignore file
-        // drops, in the package root or any folder down to the asset, so
-        // with no ignore file on that path there is nothing to ask.
-        if (
-          !Array.isArray(packedFiles) &&
-          ignoreFilesFor(base, assetRel).length === 0
-        ) {
-          continue;
-        }
         // What npm packs decides. Without npm's answer, an asset no entry
         // can reach is reported, and any other is listed as not checked.
-        packed ??= npmPackedPaths(base);
-        if ('paths' in packed) {
-          if (packed.paths.has(assetRel)) continue;
-          if (
-            isFolder &&
-            [...packed.paths].some(each => each.startsWith(`${assetRel}/`))
-          ) {
-            continue;
-          }
-        } else if (
-          !Array.isArray(packedFiles) ||
-          !outsideFiles(assetRel, packedFiles)
-        ) {
+        const state = packState(base, assetRel, packedFiles, npm, {
+          folder: isFolder,
+        });
+        if (state.packed === true) continue;
+        if (state.packed === 'unknown') {
           unchecked.push({
             file: rel(template.filePath),
             asset: assetRel,
             reason: Array.isArray(packedFiles)
-              ? `${packed.error}, and a \`files\` entry may reach it`
-              : `${packed.error}, and ${ignoreFilesFor(base, assetRel).at(-1) ?? '.npmignore'} may drop it`,
+              ? `${state.error}, and a \`files\` entry may reach it`
+              : `${state.error}, and ${ignoreFilesFor(base, assetRel).at(-1) ?? '.npmignore'} may drop it`,
           });
           continue;
         }
@@ -1660,7 +1679,7 @@ export async function componentExamplesCheck(integration) {
     }
   }
   if (!integration.components || rootProblem(integration.components)) {
-    return {notes, unchecked};
+    return {notes, unchecked, examples: {needed: 0, showcase: shown.size > 0}};
   }
   /** @type {any[]} */
   let records;
@@ -1703,6 +1722,8 @@ export async function componentExamplesCheck(integration) {
     );
     if (owner) ownerOf.set(template, owner);
   }
+  /** components that need an example and have none */
+  let needed = 0;
   for (const record of records) {
     if (componentDiscovery.isIntegrationMember(record)) continue;
     if (shown.has(record.name)) continue;
@@ -1714,6 +1735,7 @@ export async function componentExamplesCheck(integration) {
     }
     if (doc?.hidden === true || doc?.isHiddenFromOverview === true) continue;
     if (doc?.category === 'Utility') continue;
+    needed++;
     const name = record.name;
     const stem = `${name.replace(/([a-z0-9])([A-Z])/gu, '$1-$2').toLowerCase()}-showcase`;
     // A block that already composes the component only needs the fields.
@@ -1809,7 +1831,7 @@ export async function componentExamplesCheck(integration) {
         ' A doc set to `hidden`, `isHiddenFromOverview` or category `Utility` needs no example.',
     });
   }
-  return {notes, unchecked};
+  return {notes, unchecked, examples: {needed, showcase: shown.size > 0}};
 }
 
 /**
@@ -2486,10 +2508,180 @@ function listingLogo(integration, pkg) {
 /** The largest logo a catalog shows, in bytes. */
 const LOGO_MAX_BYTES = 512 * 1024;
 
+/** SVG elements a logo may use: shapes, groups, paint servers and text alternatives. */
+const SVG_ELEMENTS = new Set([
+  'svg',
+  'g',
+  'defs',
+  'symbol',
+  'use',
+  'path',
+  'rect',
+  'circle',
+  'ellipse',
+  'line',
+  'polyline',
+  'polygon',
+  'lineargradient',
+  'radialgradient',
+  'stop',
+  'clippath',
+  'mask',
+  'title',
+  'desc',
+]);
+
+/** SVG attributes a logo may use: geometry, paint and labels, no events or styles. */
+const SVG_ATTRIBUTES = new Set([
+  'xmlns',
+  'xmlns:xlink',
+  'version',
+  'id',
+  'class',
+  'role',
+  'aria-label',
+  'aria-hidden',
+  'focusable',
+  'viewbox',
+  'preserveaspectratio',
+  'width',
+  'height',
+  'x',
+  'y',
+  'x1',
+  'y1',
+  'x2',
+  'y2',
+  'cx',
+  'cy',
+  'r',
+  'rx',
+  'ry',
+  'fx',
+  'fy',
+  'd',
+  'points',
+  'pathlength',
+  'transform',
+  'opacity',
+  'color',
+  'display',
+  'visibility',
+  'overflow',
+  'fill',
+  'fill-opacity',
+  'fill-rule',
+  'stroke',
+  'stroke-width',
+  'stroke-opacity',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'stroke-miterlimit',
+  'stroke-dasharray',
+  'stroke-dashoffset',
+  'vector-effect',
+  'shape-rendering',
+  'clip-path',
+  'clip-rule',
+  'mask',
+  'offset',
+  'stop-color',
+  'stop-opacity',
+  'gradientunits',
+  'gradienttransform',
+  'spreadmethod',
+  'clippathunits',
+  'maskunits',
+  'maskcontentunits',
+  'href',
+  'xlink:href',
+]);
+
+const SVG_TAG =
+  /^<(\/?)([A-Za-z][\w:.-]*)((?:\s+[^\s"'=<>/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'))?)*)\s*(\/?)>/u;
+const SVG_ATTRIBUTE = /([^\s"'=<>/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'))?/gu;
+
+/**
+ * Whether an attribute value stays inside the image: a reference is only to
+ * an element of the same file (`#id`, `url(#id)`).
+ * @param {string} name lower-case attribute name
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isLocalSvgValue(name, value) {
+  if (name === 'xmlns' || name === 'xmlns:xlink') return true;
+  if (name === 'href' || name === 'xlink:href') {
+    return /^#[\w.-]+$/u.test(value.trim());
+  }
+  const urls = value.match(/url\s*\([^)]*\)/giu) ?? [];
+  if (!urls.every(url => /^url\s*\(\s*(["']?)#[\w.-]+\1\s*\)$/iu.test(url))) {
+    return false;
+  }
+  return !/[<>]|javascript:|data:|\/\//iu.test(
+    value.replace(/url\s*\([^)]*\)/giu, ''),
+  );
+}
+
+/**
+ * Whether `source` is an SVG drawn only with shapes: after an optional XML
+ * declaration, every element and attribute is on the allowlists above, every
+ * reference points inside the file, and only `title` and `desc` hold text.
+ * Comments are skipped; a doctype, CDATA or processing instruction is refused.
+ * @param {string} source
+ * @returns {boolean}
+ */
+function isShapesOnlySvg(source) {
+  let rest = source
+    .replace(/^\uFEFF/u, '')
+    .replace(/^\s*<\?xml\s[^?]*\?>/u, '')
+    .replace(/<!--[\s\S]*?-->/gu, '')
+    .trim();
+  if (!rest.startsWith('<svg')) return false;
+  /** @type {string[]} */
+  const open = [];
+  let rootClosed = false;
+  while (rest.length > 0) {
+    if (rest.startsWith('<')) {
+      const tag = SVG_TAG.exec(rest);
+      if (tag == null || rootClosed) return false;
+      const [whole, closing, rawName, attributes, selfClosing] = tag;
+      const name = rawName.toLowerCase();
+      if (!SVG_ELEMENTS.has(name)) return false;
+      if (closing) {
+        if (attributes.trim() !== '' || open.pop() !== name) return false;
+        if (open.length === 0) rootClosed = true;
+      } else {
+        if (open.length === 0 && name !== 'svg') return false;
+        for (const match of attributes.matchAll(SVG_ATTRIBUTE)) {
+          const attribute = match[1].toLowerCase();
+          if (!SVG_ATTRIBUTES.has(attribute)) return false;
+          if (!isLocalSvgValue(attribute, match[2] ?? match[3] ?? '')) {
+            return false;
+          }
+        }
+        if (selfClosing) {
+          if (open.length === 0) rootClosed = true;
+        } else {
+          open.push(name);
+        }
+      }
+      rest = rest.slice(whole.length);
+      continue;
+    }
+    const end = rest.indexOf('<');
+    const text = end === -1 ? rest : rest.slice(0, end);
+    const parent = open.at(-1);
+    if (text.trim() !== '' && parent !== 'title' && parent !== 'desc') {
+      return false;
+    }
+    rest = end === -1 ? '' : rest.slice(end);
+  }
+  return rootClosed && open.length === 0;
+}
+
 /**
  * Whether these bytes are an image a catalog can show as a logo: PNG, JPEG,
- * WebP, or an SVG drawn only with shapes (no script, style, link, embedded
- * document, event handler or outside reference).
+ * WebP, or an SVG drawn only with shapes, at most 512 KB.
  * @param {Buffer} bytes
  * @returns {boolean}
  */
@@ -2504,36 +2696,36 @@ export function isListingImage(bytes) {
   ) {
     return true;
   }
-  const source = bytes.toString('utf8').trim();
-  if (!source.startsWith('<svg') || !source.endsWith('</svg>')) return false;
-  const withoutNamespaces = source.replace(
-    /\sxmlns(?::[\w-]+)?\s*=\s*(["'])[^"']*\1/giu,
-    '',
-  );
-  return !/<(?:script|foreignObject|iframe|object|embed|link|style)\b|\son[a-z]+\s*=|\b(?:href|src)\s*=|url\s*\(|@import|(?:https?:|ftp:|data:|\/\/)/iu.test(
-    withoutNamespaces,
-  );
+  return isShapesOnlySvg(bytes.toString('utf8'));
 }
 
 /**
- * What a catalog needs to list the package well, as two `next` notes
- * (architecture:cli-surface INV35), each with its fix:
+ * What `componentExamplesCheck` found that the package-level note needs.
+ * @typedef {object} ExampleSummary
+ * @property {number} needed components that need an example and have none
+ * @property {boolean} showcase whether any block template is a showcase
+ */
+
+/**
+ * What a catalog needs to list the package well, as two information-only
+ * notes that fail no check under any flag, each with its fix:
  * - `package_without_logo`: the integration file's `logo.light` (or, when
  *   the integration file has no `logo`, package.json `marketplace.logo.light`)
  *   names no image the package ships: missing, outside the package, not a
  *   file, not a PNG, JPEG, WebP or shapes-only SVG of at most 512 KB, or left
  *   out of the packed files. `dark`, when set, is checked the same way.
- * - `package_without_example`: the package contributes components but no
- *   block template is an example (`isShowcase: true` with `exampleFor`, or
- *   `alsoShowcaseFor`). A package of themes, docs, codemods or agent docs
- *   alone needs none: a catalog shows a theme from the theme itself. The
- *   components `component_without_example` exempts are not counted.
- * When npm cannot say whether a logo is packed, it is returned in `unchecked`,
- * listed with the template assets npm could not place.
+ * - `package_without_example`: from `examples`, the summary
+ *   `componentExamplesCheck` returns: the package has components that need
+ *   an example and no block template is a showcase. A package of themes,
+ *   docs, codemods or agent docs alone needs none.
+ * A package of icon sets alone draws neither note. When npm cannot say
+ * whether a logo is packed, it is returned in `unchecked`, listed with the
+ * template assets npm could not place.
  * @param {LoadedIntegration} integration
- * @returns {Promise<{notes: Note[], unchecked: Array<{file: string, asset: string, reason: string}>}>}
+ * @param {ExampleSummary} [examples]
+ * @returns {{notes: Note[], unchecked: Array<{file: string, asset: string, reason: string}>}}
  */
-export async function packageListingCheck(integration) {
+export function packageListingCheck(integration, examples) {
   /** @type {Note[]} */
   const notes = [];
   /** @type {Array<{file: string, asset: string, reason: string}>} */
@@ -2562,45 +2754,40 @@ export async function packageListingCheck(integration) {
   }
   const logo = listingLogo(integration, pkg);
   const fix = `Fix: add a square logo inside the package, such as \`marketplace/logo.svg\` (an SVG drawn only with shapes, or a PNG, JPEG or WebP, at most 512 KB), make sure \`files\` packs it, and set \`logo: {light: './marketplace/logo.svg'}\` in ${logo.file === 'package.json' ? 'the integration file' : logo.file}; add \`dark\` for a version drawn for dark backgrounds.`;
-  /** @type {{paths: Set<string>} | {error: string} | undefined} */
-  let packed;
+  /** @type {{packed?: {paths: Set<string>} | {error: string}}} */
+  const npm = {};
   /**
-   * Why the image at `value` cannot be shown, or null when it can, or
-   * 'unchecked' when only npm could tell.
+   * Why the image at `value` cannot be shown, or null when it can (or when
+   * only npm could tell, which adds it to `unchecked`).
    * @param {unknown} value
    * @param {string} field
    * @returns {string | null}
    */
   const problem = (value, field) => {
+    const where = `${logo.file} \`${field}\``;
     if (typeof value !== 'string' || value.trim() === '') {
-      return `${logo.file} \`${field}\` is ${value === undefined ? 'not set' : 'not a path'}`;
+      return `${where} is ${value === undefined ? 'not set' : 'not a path'}`;
     }
     const rel = slash(path.normalize(value.trim())).replace(/^\.\//u, '');
     if (path.isAbsolute(value) || rel === '..' || rel.startsWith('../')) {
-      return `${logo.file} \`${field}\` "${value}" points outside the package`;
+      return `${where} "${value}" points outside the package`;
     }
     const file = path.join(base, rel);
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
-      return `${logo.file} \`${field}\` names ${rel}, which does not exist`;
+      return `${where} names ${rel}, which does not exist`;
     }
     if (!isListingImage(fs.readFileSync(file))) {
-      return `${logo.file} \`${field}\` names ${rel}, which is not a PNG, JPEG, WebP or shapes-only SVG of at most 512 KB`;
+      return `${where} names ${rel}, which is not a PNG, JPEG, WebP or shapes-only SVG of at most 512 KB`;
     }
-    const files = pkg.files;
-    if (!Array.isArray(files) && ignoreFilesFor(base, rel).length === 0) {
+    const state = packState(base, rel, pkg.files, npm);
+    if (state.packed === true) return null;
+    if (state.packed === 'unknown') {
+      unchecked.push({file: logo.file, asset: rel, reason: state.error});
       return null;
     }
-    packed ??= npmPackedPaths(base);
-    if ('paths' in packed) {
-      return packed.paths.has(rel)
-        ? null
-        : `${logo.file} \`${field}\` names ${rel}, which npm leaves out of the package`;
-    }
-    if (Array.isArray(files) && outsideFiles(rel, files)) {
-      return `${logo.file} \`${field}\` names ${rel}, which no \`files\` entry packs`;
-    }
-    unchecked.push({file: logo.file, asset: rel, reason: packed.error});
-    return null;
+    return state.by === 'npm'
+      ? `${where} names ${rel}, which npm leaves out of the package`
+      : `${where} names ${rel}, which no \`files\` entry packs`;
   };
   const light = problem(logo.light, `${logo.field}.light`);
   if (light != null) {
@@ -2617,52 +2804,11 @@ export async function packageListingCheck(integration) {
       });
     }
   }
-  if (!integration.components || rootProblem(integration.components)) {
-    return {notes, unchecked};
-  }
-  /** @type {any[]} */
-  let records;
-  try {
-    records = componentDiscovery.discoverIntegrationComponents(integration);
-  } catch {
-    return {notes, unchecked};
-  }
-  /** @type {any[]} */
-  let templates = [];
-  const root = integration.templates;
-  if (root && !rootProblem(root)) {
-    try {
-      ({templates} = await discoverIntegrationTemplatesForOne(integration));
-    } catch {
-      // Templates that cannot be read are reported by the template check.
-      return {notes, unchecked};
-    }
-  }
-  const hasExample = templates.some(
-    template =>
-      template.type === 'block' &&
-      ((typeof template.exampleFor === 'string' && template.isShowcase) ||
-        (Array.isArray(template.alsoShowcaseFor) &&
-          template.alsoShowcaseFor.length > 0)),
-  );
-  if (hasExample) return {notes, unchecked};
-  let needsExample = 0;
-  for (const record of records) {
-    if (componentDiscovery.isIntegrationMember(record)) continue;
-    let doc;
-    try {
-      doc = await loadComponentDoc(record.docPath);
-    } catch {
-      continue;
-    }
-    if (doc?.hidden === true || doc?.isHiddenFromOverview === true) continue;
-    if (doc?.category === 'Utility') continue;
-    needsExample++;
-  }
-  if (needsExample > 0) {
+  if (examples != null && !examples.showcase && examples.needed > 0) {
+    const {needed} = examples;
     notes.push({
       code: 'package_without_example',
-      message: `The package contributes ${needsExample} component${needsExample === 1 ? '' : 's'} but no example block, so a catalog that lists it has nothing to preview. Fix: add a block template that renders one of them, with \`exampleFor: '<Component>'\` and \`isShowcase: true\` in its .doc.mjs; each \`component_without_example\` note gives the files to add.`,
+      message: `The package contributes ${needed} component${needed === 1 ? '' : 's'} but no example block, so a catalog that lists it has nothing to preview. Fix: add a block template that renders one of them, with \`exampleFor: '<Component>'\` and \`isShowcase: true\` in its .doc.mjs; each \`component_without_example\` note gives the files to add.`,
     });
   }
   return {notes, unchecked};

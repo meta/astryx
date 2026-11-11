@@ -894,7 +894,7 @@ export async function validateIntegration(pkg, options = {}) {
   // What a catalog needs to list the package: a logo, and an example of
   // its components.
   const listing = integration
-    ? await packageListingCheck(integration)
+    ? packageListingCheck(integration, examples?.examples)
     : undefined;
   const docNames = names?.[0].report;
   const blockComponents = names?.[1].report;
