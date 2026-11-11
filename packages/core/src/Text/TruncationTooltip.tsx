@@ -28,6 +28,8 @@ import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
 import {useTapRecognizer} from '../Layer/useTouchTrigger';
+import {currentGesture} from '../Layer/gestureCounter';
+import {isElement} from '../utils/nodeType';
 import {
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
@@ -121,6 +123,10 @@ export function useTruncationTooltipInterest(
     [want],
   );
   const onPointerLeave = useCallback(() => forget('hover'), [forget]);
+  // A touch or pen press's own focus is not held: Chrome on Android focuses a
+  // tapped child before the tap's click, and holding that focus would take
+  // the tap. A key press after the press makes a new gesture.
+  const touchPressGestureRef = useRef<number | null>(null);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (!isEnabled || interestRef.current.isRead) {
@@ -132,6 +138,7 @@ export function useTruncationTooltipInterest(
         event.currentTarget,
         tapEvent => want('tap', tapEvent),
       );
+      touchPressGestureRef.current = isTouch ? currentGesture() : null;
       // A mouse press cancels a hover show, as a mounted tooltip does. A pen
       // press waits for its tap.
       if (!isTouch) {
@@ -140,15 +147,13 @@ export function useTruncationTooltipInterest(
     },
     [isEnabled, tapRecognizer, want, forget],
   );
-  // Only a focus a mounted tooltip opens on is held: one that matches
-  // :focus-visible. A press focuses a focusable child before its click on
-  // some browsers (Chrome on Android); holding that focus would mount the
-  // tooltip too late to see the press, and the tap would open nothing.
   const onFocus = useCallback(
     (event: FocusEvent<HTMLElement>) => {
+      const target = event.target;
       if (
-        event.target instanceof Element &&
-        event.target.matches(':focus-visible')
+        isElement(target) &&
+        target.matches(':focus-visible') &&
+        touchPressGestureRef.current !== currentGesture()
       ) {
         want('focus');
       }

@@ -701,33 +701,34 @@ describe('the truncation tooltip mounts on the first interaction', () => {
   // Chrome on Android focuses a focusable element between a press and its
   // click. That focus is not :focus-visible, so it must not take the tap.
   it.each([
-    ['loaded', false],
-    ['still loading', true],
-  ])(
-    'opens on the first tap on a focusable child, though the tap focuses it first (Tooltip %s)',
-    async (_state, isFresh) => {
+    ['a button', <button type="button">Edit</button>, 'button', 'Edit', false],
+    // A tapped text field matches :focus-visible, unlike a tapped button.
+    ['a text field', <input aria-label="Note" />, 'textbox', 'Note', true],
+  ] as const)(
+    'opens on the first tap on %s inside truncated text, though the tap focuses it first',
+    async (_name, child, role, name, isFocusVisible) => {
       const {showPopover, restore} = withOverflowAndPopover();
       try {
         render(
           <Text type="body" maxLines={1}>
-            {LABEL} <button type="button">Edit</button>
+            {LABEL} {child}
           </Text>,
         );
-        if (!isFresh) {
-          // Let the Tooltip module load, as it does once text is truncated.
-          await act(async () => {
-            await new Promise(resolve => setTimeout(resolve, 300));
-          });
-        }
-        const child = screen.getByRole('button', {name: 'Edit'});
-        const realMatches = child.matches.bind(child);
-        vi.spyOn(child, 'matches').mockImplementation((selector: string) =>
-          selector === ':focus-visible' ? false : realMatches(selector),
+        // Let the Tooltip module load, as it does once text is truncated.
+        await act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        });
+        const target = screen.getByRole(role, {name});
+        const realMatches = target.matches.bind(target);
+        vi.spyOn(target, 'matches').mockImplementation((selector: string) =>
+          selector === ':focus-visible'
+            ? isFocusVisible
+            : realMatches(selector),
         );
-        fireEvent.pointerDown(child, {pointerType: 'touch'});
-        fireEvent.pointerUp(child, {pointerType: 'touch'});
-        act(() => child.focus());
-        fireEvent.click(child);
+        fireEvent.pointerDown(target, {pointerType: 'touch'});
+        fireEvent.pointerUp(target, {pointerType: 'touch'});
+        act(() => target.focus());
+        fireEvent.click(target);
         await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
           timeout: 3000,
         });
