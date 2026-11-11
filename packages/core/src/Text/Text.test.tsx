@@ -703,7 +703,9 @@ describe('the truncation tooltip mounts on the first interaction', () => {
   it.each([
     [
       'opens on the first tap on a button inside truncated text, though the tap focuses it first',
-      <button type="button">Edit</button>,
+      <button key="edit" type="button">
+        Edit
+      </button>,
       'button',
       'Edit',
       false,
@@ -712,7 +714,7 @@ describe('the truncation tooltip mounts on the first interaction', () => {
     // A tapped text field matches :focus-visible, unlike a tapped button.
     [
       'opens nothing on a tap on a text field inside truncated text; the tap only focuses it',
-      <input aria-label="Note" />,
+      <input key="note" aria-label="Note" />,
       'textbox',
       'Note',
       true,
@@ -750,6 +752,45 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         expect(showPopover).not.toHaveBeenCalled();
         expect(target).toHaveFocus();
       }
+    } finally {
+      restore();
+    }
+  });
+
+  it('with the tooltip mounted, a tap on a text field opens nothing and focuses it; a tap on the text still toggles', async () => {
+    const {showPopover, hidePopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          <span>{LABEL}</span> <input aria-label="Note" />
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerEnter(text, {pointerType: 'touch'});
+      tap(text);
+      await waitFor(() => expect(showPopover).toHaveBeenCalledTimes(1), {
+        timeout: 3000,
+      });
+      tap(text);
+      await waitFor(() => expect(hidePopover).toHaveBeenCalled(), {
+        timeout: 3000,
+      });
+
+      const field = screen.getByRole('textbox', {name: 'Note'});
+      fireEvent.pointerDown(field, {pointerType: 'touch'});
+      fireEvent.pointerUp(field, {pointerType: 'touch'});
+      act(() => field.focus());
+      fireEvent.click(field);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      });
+      expect(showPopover).toHaveBeenCalledTimes(1);
+      expect(field).toHaveFocus();
+
+      tap(text);
+      await waitFor(() => expect(showPopover).toHaveBeenCalledTimes(2), {
+        timeout: 3000,
+      });
     } finally {
       restore();
     }

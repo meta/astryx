@@ -165,7 +165,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   Only a keyboard focus counts as focus interest for mounting the tooltip
   (`:focus-visible`, not a touch or pen press's own focus); a tap counts and
   opens it, including a tap that focuses a focusable child, except a tap on a
-  text-entry control, which only focuses it.
+  text-entry control, which only focuses it (Tooltip FR5).
 
 ## Design relationships
 

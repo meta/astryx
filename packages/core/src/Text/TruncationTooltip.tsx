@@ -29,7 +29,6 @@ import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
 import {useTapRecognizer} from '../Layer/useTouchTrigger';
 import {isElement} from '../utils/nodeType';
-import {isTextEntryControl} from '../keyboard/keyboardHeight';
 import {
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
@@ -134,17 +133,6 @@ export function useTruncationTooltipInterest(
         event.currentTarget,
         tapEvent => want('tap', tapEvent),
       );
-      // A finger or pen on a text-entry control only focuses it: no tooltip
-      // covers text the person starts to type.
-      const target = event.target;
-      if (
-        isTouch &&
-        isElement(target) &&
-        isTextEntryControl(target.closest('input, textarea, [contenteditable]'))
-      ) {
-        tapRecognizer.forget();
-        return;
-      }
       // A mouse press cancels a hover show, as a mounted tooltip does. A pen
       // press waits for its tap.
       if (!isTouch) {
@@ -159,9 +147,8 @@ export function useTruncationTooltipInterest(
       if (
         isElement(target) &&
         target.matches(':focus-visible') &&
-        // A touch or pen press's own focus is not held: Chrome on Android
-        // focuses a tapped child before the tap's click, and holding that
-        // focus would take the tap.
+        // Chrome on Android focuses a tapped child before the tap's click.
+        // Skip that focus, so the click still opens the tooltip.
         !tapRecognizer.isTouchPressCurrent()
       ) {
         want('focus');
