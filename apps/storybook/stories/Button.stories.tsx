@@ -5,6 +5,8 @@ import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {DateInput} from '@astryxdesign/core/DateInput';
+import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Card} from '@astryxdesign/core/Card';
 import {Heading} from '@astryxdesign/core/Heading';
@@ -589,7 +591,9 @@ export const TouchReach: Story = {
       mark: 0,
       go: 0,
       clear: 0,
+      apply: 0,
     });
+    const [day, setDay] = useState<ISODateString | undefined>(undefined);
     const [query, setQuery] = useState('');
     const [agree, setAgree] = useState(false);
     const [sync, setSync] = useState(false);
@@ -697,6 +701,24 @@ export const TouchReach: Story = {
           />
         </div>
         <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
+          <DateInput
+            label="Pick"
+            isLabelHidden
+            nativePicker="always"
+            value={day}
+            onChange={setDay}
+          />
+          <Button
+            label="Apply"
+            data-testid="apply"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('apply')}
+          />
+        </div>
+        <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
           <CheckboxInput
             label="Agree"
             isLabelHidden
@@ -752,7 +774,8 @@ export const TouchReach: Story = {
           Lone {taps.lone}, Link {taps.link}, Cut {taps.cut}, Copy {taps.copy}
         </output>
         <output aria-label="Field taps">
-          Go {taps.go}, Clear {taps.clear}, Agree {agree ? 'on' : 'off'}
+          Go {taps.go}, Clear {taps.clear}, Agree {agree ? 'on' : 'off'}, Apply{' '}
+          {taps.apply}, Pick {day ?? 'none'}
         </output>
         <output aria-label="Overhang taps">
           Pin {taps.pin}, Mark {taps.mark}

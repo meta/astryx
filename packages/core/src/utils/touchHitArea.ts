@@ -57,8 +57,8 @@ function shownBy(target: Element): Element {
 }
 
 // The text entry a field's frame holds as a direct child.
-const FIELD_ENTRY =
-  ':scope > :is(input:not([type="hidden"]), textarea, [contenteditable="true"])';
+const TEXT_TYPES = 'text search email url tel password number'.split(' ');
+const FIELD_ENTRY = `:scope > :is(textarea, [contenteditable="true"], input:not([type]), ${TEXT_TYPES.map(t => `input[type="${t}"]`).join()})`;
 
 /**
  * Where a tap on `host`'s band at (x, y) goes, or null for the host: a visible

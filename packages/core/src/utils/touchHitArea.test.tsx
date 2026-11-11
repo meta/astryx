@@ -329,6 +329,32 @@ describe('at a tap', () => {
     expect(document.activeElement).toBe(entry);
   });
 
+  it('never gives a tap on a container’s own text to a checkbox the container holds', () => {
+    const onA = vi.fn();
+    const onBox = vi.fn();
+    render(
+      <div data-testid="container">
+        <Host id="a" onClick={onA} />
+        <div id="holder">
+          <input id="box" type="checkbox" aria-label="Agree" onClick={onBox} />
+          Terms and conditions
+        </div>
+      </div>,
+    );
+    const a = document.getElementById('a') as HTMLElement;
+    const holder = document.getElementById('holder') as HTMLElement;
+    const box = document.getElementById('box') as HTMLElement;
+    const container = screen.getByTestId('container');
+    a.getBoundingClientRect = () => rect(100, 100, 24, 24);
+    holder.getBoundingClientRect = () => rect(128, 100, 160, 24);
+    box.getBoundingClientRect = () => rect(260, 104, 16, 16);
+    // On the holder's text, under the control's band: not a text entry.
+    elementsAtPoint = [a, holder, container, document.body];
+    expect(tap(a, 130)).toBe(false);
+    expect(onA).toHaveBeenCalledTimes(1);
+    expect(onBox).not.toHaveBeenCalled();
+  });
+
   it('stops at the control’s own container: what paints below it, such as the page under a layer, is not beside it', () => {
     const {a, b, container, onA} = setUp();
     elementsAtPoint = [a, container, b, document.body];

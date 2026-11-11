@@ -383,7 +383,9 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
       y: Math.round((edge.top + edge.bottom) / 2),
     });
     await expect(field).toBeFocused();
-    await expect(output).toHaveText('Go 0, Clear 0, Agree off');
+    await expect(output).toHaveText(
+      'Go 0, Clear 0, Agree off, Apply 0, Pick none',
+    );
   });
 
   test('a tap on a checkbox’s edge under a neighbour’s band toggles it once, and the neighbour gets no click', async ({
@@ -403,7 +405,9 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
       x: Math.floor(box.right) - 1,
       y: Math.round((box.top + box.bottom) / 2),
     });
-    await expect(output).toHaveText('Go 0, Clear 0, Agree on');
+    await expect(output).toHaveText(
+      'Go 0, Clear 0, Agree on, Apply 0, Pick none',
+    );
   });
 
   test('a NavigationStack push reads no layout and writes no hit size on either screen’s rows, through the frames after it lands', async ({
