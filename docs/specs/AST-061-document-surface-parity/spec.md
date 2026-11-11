@@ -317,7 +317,8 @@ export format, not the value: `markdownToEditorStateJSON` and
 what that conversion returns. RichText is not a document host:
 collaboration, persistence, and document hosting stay with the product, which
 brings them around the editor or through `plugins`. RichText offers the opt-in
-document affordances that `spec:AST-106` admits; with none turned on, it is the
+document affordances that `spec:AST-106` admits, each as a plugin through
+`plugins`; with none turned on, it is the
 form field this decision describes. This record stays the one visual contract
 that RichText and `Markdown` share.
 

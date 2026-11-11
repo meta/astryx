@@ -26,9 +26,10 @@ A person writing in `RichTextEditor` can do the document work they expect of a
 writing surface: size a table's columns, mention someone or insert a block from
 a menu they type, change a link where it sits, add an image, write a formula,
 fold a long section away, and format on a phone. A product turns each of these
-on. With none turned on, `RichTextEditor` is the form field that
-`spec:AST-061/DEC-7` describes. Content an affordance adds reads the same in
-`RichTextView`, and in core `Markdown` wherever Markdown can express it.
+on by passing its plugin to the existing `plugins` prop. With none turned on,
+`RichTextEditor` is the form field that `spec:AST-061/DEC-7` describes. Content
+an affordance adds reads the same in `RichTextView`, and in core `Markdown`
+wherever Markdown can express it.
 
 ## Non-goals
 
@@ -36,15 +37,17 @@ on. With none turned on, `RichTextEditor` is the form field that
   (`spec:AST-061/DEC-7`).
 - The services behind an affordance: who a mention can name, what a typed menu
   searches, where an image's bytes are kept, and how a formula is drawn.
-- Each affordance's exact props, events, and visuals. A decision in this record
-  or the owning component spec settles them before the affordance ships.
+- Each affordance plugin's exact options, events, and visuals. A decision in
+  this record or the owning component spec settles them before the affordance
+  ships.
 - The Markdown dialect and its conversion, which `spec:AST-062` owns.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 
 ## Requirements
 
-- **FR1 — Off by default.** An affordance is off until the caller turns it on.
+- **FR1 — Off by default.** An affordance is off until the caller passes its
+  plugin.
   With every affordance off, `RichTextEditor` and `RichTextView` behave, store,
   and render as `spec:AST-061` and `spec:AST-062` describe.
 - **FR2 — The value stays editor state.** Content an affordance adds is part of
@@ -74,12 +77,17 @@ on. With none turned on, `RichTextEditor` is the form field that
   WAI-ARIA combobox pattern, resizing a table column has a keyboard equivalent,
   and a fold control is a button that exposes `aria-expanded`.
 - **FR8 — The product supplies the services.** Search, people lookup, uploads,
-  and formula drawing come from the caller as functions or renderers. RichText
-  owns the editing interaction and its accessibility, and makes no network
-  request of its own.
+  and formula drawing come from the caller as functions or renderers in the
+  affordance plugin's options. RichText owns the editing interaction and its
+  accessibility, and makes no network request of its own.
 - **FR9 — One on-screen keyboard model.** An affordance that responds to a
   phone's on-screen keyboard measures and avoids it as `spec:AST-099`
   describes.
+- **FR10 — Every affordance is a plugin.** Each affordance in the table below
+  ships as a Lexical plugin, with any Lexical nodes it adds, that the caller
+  passes through the existing `plugins` and `nodes` props of `RichTextEditor`
+  and `RichTextView` (`spec:AST-061/DEC-8`). Neither component gains a prop for
+  any affordance (DEC-1).
 
 The admitted affordances:
 
@@ -107,37 +115,43 @@ The admitted affordances:
 - `spec:AST-061/DEC-7` names this record as the owner of RichText's opt-in
   document affordances.
 - Existing behavior is unchanged while every affordance is off (FR1).
-- The `RichTextEditor` and `RichTextView` consumer docs gain each affordance's
-  props when it ships.
+- The `RichTextEditor` and `RichTextView` consumer docs gain each affordance
+  plugin's usage when it ships; their props tables do not change (FR10).
 
 ## Verification
 
-| Contract | Verification                                                         | Representative states                              | Mutation or failure expectation                       |
-| -------- | -------------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------- |
-| FR1      | The `spec:AST-061` parity fixture and `spec:AST-062` corpus, all off | Default editor and view                            | An affordance that is on by default fails             |
-| FR2, FR3 | Serialized-state tests per affordance                                | A mention, an image, a folded section              | A stored name, image bytes, or fold state fails       |
-| FR4      | Export tests per affordance                                          | Each row of the affordance table                   | An export that drops more than the table states fails |
-| FR5      | Parity fixture rows per affordance                                   | Light and dark, left-to-right and right-to-left    | A view that draws the content differently fails       |
-| FR6      | Reading and editing geometry with the affordance's chrome open       | Phone and desktop widths                           | A reflowed block fails                                |
-| FR7      | Keyboard-only runs and accessibility-tree assertions                 | An open menu, a resize, a fold                     | An action reachable only by pointer fails             |
-| FR8      | Tests with caller services replaced by fakes                         | Slow, failing, and empty sources                   | A network request made by RichText fails              |
-| FR9      | The `spec:AST-099` verification states with the keyboard bar shown   | On-screen keyboards opening, resizing, and closing | A second keyboard measurement fails                   |
+| Contract | Verification                                                                                                                   | Representative states                              | Mutation or failure expectation                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- | ----------------------------------------------------- |
+| FR1      | The `spec:AST-061` parity fixture and `spec:AST-062` corpus, all off                                                           | Default editor and view                            | An affordance that is on by default fails             |
+| FR2, FR3 | Serialized-state tests per affordance                                                                                          | A mention, an image, a folded section              | A stored name, image bytes, or fold state fails       |
+| FR4      | Export tests per affordance                                                                                                    | Each row of the affordance table                   | An export that drops more than the table states fails |
+| FR5      | Parity fixture rows per affordance                                                                                             | Light and dark, left-to-right and right-to-left    | A view that draws the content differently fails       |
+| FR6      | Reading and editing geometry with the affordance's chrome open                                                                 | Phone and desktop widths                           | A reflowed block fails                                |
+| FR7      | Keyboard-only runs and accessibility-tree assertions                                                                           | An open menu, a resize, a fold                     | An action reachable only by pointer fails             |
+| FR8      | Tests with caller services replaced by fakes                                                                                   | Slow, failing, and empty sources                   | A network request made by RichText fails              |
+| FR9      | The `spec:AST-099` verification states with the keyboard bar shown                                                             | On-screen keyboards opening, resizing, and closing | A second keyboard measurement fails                   |
+| FR10     | The exhaustive props-list tests of both components, and each affordance's tests mounting it through `plugins` and `nodes` only | Every affordance on, one at a time and together    | A new component prop for an affordance fails          |
 
 ## Decision log
 
-### DEC-1 — RichText offers opt-in document affordances
+### DEC-1 — Every document affordance is a plugin
 
 **Reference:** `spec:AST-106/DEC-1`
-**Decider:** `ernestt`, `2026-10-26`
+**Decider:** `cixzhang`, `2026-11-11`
 
-Writers expect these affordances from a writing surface, and a product that
-needs one otherwise builds its own editor and re-earns the parity and
-accessibility RichText already provides. Each affordance's editing interaction
-is generic while its data and services stay with the product, so each belongs in
-RichText behind an opt-in.
+The owner chose: "Adopt AST-106, every feature as a plugin". Writers expect
+these affordances from a writing surface, and a product that needs one
+otherwise builds its own editor and re-earns the parity and accessibility
+RichText already provides. Each affordance's editing interaction is generic
+while its data and services stay with the product, so each belongs with
+RichText. Each one ships as a plugin through the existing `plugins` and `nodes`
+props, so RichText's public surface stays Lexical's and stays small
+(`spec:AST-061/DEC-8`), and a product takes only the affordances it passes.
 
-Rejected: a separate document-editor package, because two editors would each owe
-the parity contract.
+Rejected: a separate document-editor package, because two editors would each
+owe the parity contract. Rejected: one prop per affordance, which grows the
+props table by about seven entries. Rejected: one grouped configuration prop,
+which adds a nested shape beside `plugins` for the same job.
 
 ### DEC-2 — The value holds references, not looked-up data
 
@@ -164,8 +178,4 @@ out as `spec:AST-061/FR4` describes on every surface.
 
 ## Open questions
 
-- **OQ1 — One prop per affordance, or one grouped prop?** (`human-api`)
-  - One prop each, such as `hasTableSizing`, `typeahead`, and `images`, follows
-    the existing `has*` props and grows the props table by about seven entries.
-  - One grouped prop keeps the top-level surface small (`spec:AST-061/DEC-8`) at
-    the cost of a nested configuration shape.
+- None.
