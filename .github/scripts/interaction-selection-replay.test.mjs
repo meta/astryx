@@ -170,13 +170,18 @@ describe('failedInteractionJobs', () => {
 
 describe('the replay selects as the lane does', () => {
   const source = fs.readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), 'interaction-selection-replay.mjs'),
+    path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      'interaction-selection-replay.mjs',
+    ),
     'utf8',
   );
 
   it("passes the lane's story rule, so a story-only change replays its narrow selection", () => {
     expect(source).toContain('storyScope: storyScopeFor({listed, read})');
     // The stories the rule reads are in the replayed tree.
-    expect(source).toMatch(/git -C "\$\{ROOT\}" archive [^`]*apps\/storybook\/stories/);
+    expect(source).toMatch(
+      /git -C "\$\{ROOT\}" archive [^`]*apps\/storybook\/stories/,
+    );
   });
 });

@@ -232,7 +232,7 @@ describe('storyComponentFolders', () => {
   it('runs the full suite for a story with no id, or a whole-prefix template that could name it', () => {
     const menu = {
       'packages/core/src/Menu/Menu.tsx': 'export const Menu = 1;\n',
-      [SPEC]: "await page.goto('/iframe.html?id=core-menu--default');\n",
+      [SPEC]: "await page.goto('/iframe.html?id=lab-chat-x--default');\n",
     };
     const story = meta =>
       `import {Menu} from '@astryxdesign/core/Menu';\n${meta}\n`;
@@ -243,7 +243,7 @@ describe('storyComponentFolders', () => {
           "export default {title: 'Lab/Chat X'};",
         ),
       }),
-    ).toEqual({folders: ['core/Menu'], specs: []});
+    ).toEqual({folders: ['core/Menu'], specs: [SPEC]});
     expect(
       scoped({
         ...menu,
