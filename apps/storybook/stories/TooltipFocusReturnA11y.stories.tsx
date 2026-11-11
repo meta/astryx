@@ -2,9 +2,10 @@
 
 /**
  * @file TooltipFocusReturnA11y.stories.tsx
- * @input Uses Popover, Tooltip and Button from core
- * @output The fixture the tooltip focus-return regression spec drives in a
- *   real browser: a popover whose trigger also carries a tooltip.
+ * @input Uses Popover, Dialog, TextInput, Tooltip and Button from core
+ * @output The fixtures the tooltip focus-return regression spec drives in a
+ *   real browser: a popover whose trigger also carries a tooltip, and a
+ *   dialog with a text field whose trigger carries a tooltip.
  * @position The reproduction path for
  *   `packages/core/src/Tooltip/__tests__/TooltipFocusReturn.a11y.chromium.spec.ts`
  *   (`docs/specs/AST-009/spec.md` FR30: a browser claim is checked against a
@@ -20,9 +21,12 @@
  *   catches a renamed export — the Chromium spec does, when it finds no story.
  */
 
+import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Button} from '@astryxdesign/core/Button';
+import {Dialog} from '@astryxdesign/core/Dialog';
 import {Popover} from '@astryxdesign/core/Popover';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 
 const meta: Meta = {
@@ -59,4 +63,36 @@ export const PopoverTriggerWithTooltip: StoryObj = {
       </Tooltip>
     </Popover>
   ),
+};
+
+function DialogTriggerWithTooltipExample() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [name, setName] = useState('report.pdf');
+  return (
+    <>
+      <Tooltip content="Rename this file">
+        <Button label="Rename" onClick={() => setIsOpen(true)} />
+      </Tooltip>
+      <Dialog isOpen={isOpen} onOpenChange={setIsOpen} aria-label="Rename">
+        <form
+          onSubmit={event => {
+            event.preventDefault();
+            setIsOpen(false);
+          }}>
+          <TextInput label="File name" value={name} onChange={setName} />
+        </form>
+      </Dialog>
+    </>
+  );
+}
+
+/**
+ * A dialog trigger that carries a tooltip, with a text field in the dialog.
+ * On a touch screen, keys typed into the field are text entry: the focus the
+ * dialog returns after Enter submits the form shows no tooltip. Escape is
+ * keyboard navigation, so the focus it returns shows the tooltip.
+ */
+export const DialogTriggerWithTooltip: StoryObj = {
+  name: 'dialog trigger that carries a tooltip, with a text field',
+  render: () => <DialogTriggerWithTooltipExample />,
 };

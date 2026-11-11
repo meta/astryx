@@ -97,7 +97,7 @@ export const matchaTheme = defineTheme({
 
     // Text
     '--color-text-primary': [neutral.light[20], neutral.dark[75]],
-    '--color-text-secondary': [neutral.light[40], neutral.dark[60]],
+    '--color-text-secondary': [neutral.light[30], neutral.dark[60]],
     '--color-text-disabled': [neutral.light[75], neutral.dark[30]],
     '--color-text-accent': [neutral.light[20], neutral.dark[75]],
     '--color-on-dark': neutral.light[100],

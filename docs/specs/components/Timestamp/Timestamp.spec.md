@@ -219,9 +219,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### `spec:AST-013` FR12 exception — calendars that need `Temporal`
 
-- **Capability:** date-bearing output in calendars other than `gregory`,
-  `iso8601`, `buddhist`, `roc`, and `japanese`, which need the runtime's
-  `Temporal`.
+- **Capability:** date-bearing output in calendars other than the Gregorian,
+  Buddhist, Minguo, and Japanese calendars, which need the runtime's `Temporal`.
 - **Reduction:** where `Temporal` is missing or does not support the calendar,
   as in Safari on macOS and iOS, such a calendar resolves to `gregory` before
   the first render and warns once in development, on the server and in the
@@ -232,9 +231,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   browser with `Temporal` does not match, so a server-rendered application
   loads `Temporal` on the server too.
 - **Preserved obligations:** `spec:AST-013` FR7 and FR8, and FR9 whenever the
-  server and the browser resolve the calendar the same way, outside the
-  `chinese` and `dangi` case of `spec:AST-111` FR19. The Gregorian output keeps
-  the instant, its accessible name, the hover card, and copying; nothing
+  server and the browser resolve the calendar the same way, outside the case of
+  the Chinese and Dangi calendars in `spec:AST-111` FR19. The Gregorian output
+  keeps the instant, its accessible name, the hover card, and copying; nothing
   throws.
 - **Evidence:** `Timestamp.test.tsx` calendar-system tests with a `Temporal`
   polyfill and with `Temporal` removed, and "hydrates a clock format rendered

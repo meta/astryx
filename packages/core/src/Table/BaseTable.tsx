@@ -656,8 +656,8 @@ function BaseTableInner<T extends Record<string, unknown>>({
       config == null ||
       !Number.isFinite(config.rowHeight) ||
       config.rowHeight <= 0 ||
-      !Number.isFinite(config.viewportHeight) ||
-      config.viewportHeight <= 0
+      !Number.isFinite(config.initialViewportHeight) ||
+      config.initialViewportHeight <= 0
     ) {
       return 'row and viewport geometry must be positive finite CSS pixels';
     }
@@ -1071,10 +1071,10 @@ function BaseTableInner<T extends Record<string, unknown>>({
     () => ({
       ...runtime,
       viewportHeight: windowPlan.isWindowed
-        ? config?.viewportHeight
+        ? config?.initialViewportHeight
         : undefined,
     }),
-    [runtime, windowPlan.isWindowed, config?.viewportHeight],
+    [runtime, windowPlan.isWindowed, config?.initialViewportHeight],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>
