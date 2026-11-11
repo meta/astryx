@@ -36,6 +36,7 @@ import {
 } from './_tables.mjs';
 import {isColorValue, isNumber, isSize} from './_color.mjs';
 import {MODAL} from './_compiler.mjs';
+import {PALETTE_DIALS, paletteToken, seedOf} from './_palette.mjs';
 import {
   camel,
   kebab,
@@ -291,7 +292,19 @@ export function checkSetting(
         Math.max(0, Math.min(L.length - 1, i + (v === 'more' ? 1 : -1)))
       ][0];
     };
-    if (s.mode && thing !== 'accent')
+    if (PALETTE_DIALS.includes(thing) && (s.on || s.mode)) {
+      const token = paletteToken(thing);
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${thing} grows one palette for the whole theme, light and dark from one color; drop ${s.on ? '--on' : '--mode'}. For an exact color on one part or in one mode, set the token itself.`,
+        {
+          run: [
+            `${P} set ${slug} ${token} ${q(v || '#7c3aed')}${onFlag}${s.mode ? ` --mode ${s.mode}` : ''}`,
+          ],
+        },
+      );
+    }
+    if (s.mode)
       refuse(
         E.ERR_THEME_NO_MODE,
         `${thing} is not a color, so it is the same in light and dark; drop --mode.`,
@@ -337,15 +350,23 @@ export function checkSetting(
           E.ERR_THEME_BAD_VALUE,
           `text-size takes ${DIALS['text-size'].values}, not "${v}".`,
         );
-    } else if (thing === 'accent') {
+    } else if (PALETTE_DIALS.includes(thing)) {
       if (step)
-        refuse(E.ERR_THEME_BAD_VALUE, 'accent takes a color, not a step.', {
-          run: [`${P} set ${slug} accent "#7c3aed"`],
+        refuse(E.ERR_THEME_BAD_VALUE, `${thing} takes a color, not a step.`, {
+          run: [`${P} set ${slug} ${thing} "#7c3aed"`],
         });
       if (!isColorValue(v))
         refuse(E.ERR_THEME_BAD_VALUE, `"${v}" is not a CSS color.`, {
           fix: 'give one like "#7c3aed"',
         });
+      if (!seedOf(v))
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${v}" has no fixed color, so the palette cannot grow from it.`,
+          {
+            fix: 'give a hex, a color name, or an rgb(), hsl(), hwb(), lab(), lch(), oklab() or oklch() color',
+          },
+        );
     } else if (thing === 'font') {
       if (s.on && !isRole)
         refuse(
@@ -661,8 +682,8 @@ export function answerHow(ctx, question) {
     for (const g of intents.slice(0, 3)) {
       if (g === null) {
         results.push({
-          text: `what ${one} reads:`,
-          commands: C.explain(one, P).slice(1),
+          text: `what ${one} reads`,
+          commands: [`${HOW} ${one}`],
         });
         continue;
       }

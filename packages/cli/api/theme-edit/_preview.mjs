@@ -112,17 +112,25 @@ export function showcaseItems(project, group) {
     const g = groupFor(name);
     if (!g || !defaults || typeof defaults !== 'object' || extraNames.has(name))
       continue;
+    const inParent = inParentOf(project, name);
+    if (inParent === null) continue;
     const values = info.targets[0]?.values ?? {};
-    /** @type {Array<Record<string, string>>} */
-    const variants = [{}];
+    /** @type {Array<{label: string, props: Record<string, unknown>}>} */
+    const variants = [{label: '', props: {}}];
     for (const p of ['variant', 'status', 'color'])
-      for (const v of values[p] ?? []) variants.push({[p]: v});
+      for (const v of values[p] ?? [])
+        variants.push({
+          label: v,
+          // A status like `{type: 'error', message?: string}` takes the
+          // value as its `type`; the bare string breaks the component.
+          props: {[p]: info.props?.[p]?.type.startsWith('{') ? {type: v} : v},
+        });
     for (const v of variants.slice(0, 12))
       items.push({
         group: g,
         name,
-        label: Object.values(v).join(' '),
-        tree: {__element: name, props: {...defaults, ...v}},
+        label: v.label,
+        tree: inParent({__element: name, props: {...defaults, ...v.props}}),
       });
   }
   items.push({
@@ -190,6 +198,29 @@ export function showcaseItems(project, group) {
     imports,
     skipped: !group || group === 'pages' ? skipped : [],
   };
+}
+
+/** Wrapper props that open a layer. A part shown on the page stays closed. */
+const OPEN_PROPS = ['isOpen', 'isMenuOpen', 'defaultOpen', 'defaultIsOpen'];
+
+/**
+ * How a component renders on its own: unchanged for a whole component; for
+ * a part of another, inside the parent its playground names. Null for a part
+ * with no such parent, or whose parent needs a parent of its own: the part
+ * only works inside its parent, and the parent's own item shows it.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @returns {((tree: import('./_catalog.mjs').Tree) => import('./_catalog.mjs').Tree) | null}
+ */
+function inParentOf(project, name) {
+  const info = project.components[name];
+  if (!info?.subComponentOf) return tree => tree;
+  const wrapper = info.wrapper;
+  if (!wrapper || project.components[wrapper.component]?.wrapper) return null;
+  const props = Object.fromEntries(
+    Object.entries(wrapper.props).filter(([k]) => !OPEN_PROPS.includes(k)),
+  );
+  return tree => ({__element: wrapper.component, props, children: [tree]});
 }
 
 /** @param {import('./_project.mjs').ThemeProject} project @param {string} spec */
@@ -369,9 +400,21 @@ function withCoreNames(project, v) {
 const holdsElement = v =>
   isElement(v) || (Array.isArray(v) && v.some(holdsElement));
 
+/**
+ * A prop value that is source code, such as the name of a constant the page
+ * defines. @param {unknown} v @returns {v is {__code: string}}
+ */
+const isCode = v =>
+  Boolean(
+    v &&
+    typeof v === 'object' &&
+    typeof (/** @type {any} */ (v).__code) === 'string',
+  );
+
 /** @param {unknown} v @param {number} depth @returns {string} */
 function jsxValue(v, depth) {
   if (isElement(v)) return jsx(v, depth);
+  if (isCode(v)) return v.__code;
   if (Array.isArray(v) && v.some(holdsElement))
     return `[${v
       .map((x, i) =>
@@ -445,17 +488,86 @@ function componentTable(project, trees) {
 }
 
 const SAFE = [
-  '/** Shows nothing for a component that throws, so the rest of the page renders. */',
-  'class Safe extends React.Component<{children: React.ReactNode}, {failed: boolean}> {',
+  '/** Shows a short note for a component that throws, so the rest of the page renders. */',
+  'class Safe extends React.Component<{name: string, children: React.ReactNode}, {failed: boolean}> {',
   '  state = {failed: false};',
   '  static getDerivedStateFromError() {',
   '    return {failed: true};',
   '  }',
   '  render() {',
-  '    return this.state.failed ? null : this.props.children;',
+  '    return this.state.failed ? <div className="tp-note">{this.props.name} could not render here</div> : this.props.children;',
   '  }',
   '}',
 ];
+
+/** The search source the page hands a part that needs one: a few fixed items. */
+const SAMPLE_SOURCE = [
+  'const SAMPLE_ITEMS = [',
+  "  {id: 'design', label: 'Design'},",
+  "  {id: 'engineering', label: 'Engineering'},",
+  "  {id: 'research', label: 'Research'},",
+  "  {id: 'marketing', label: 'Marketing'},",
+  '];',
+  'const SAMPLE_SOURCE = {',
+  '  search: (query: string) => SAMPLE_ITEMS.filter(item => item.label.toLowerCase().includes(query.toLowerCase())),',
+  '  bootstrap: () => SAMPLE_ITEMS,',
+  '  cancel: () => {},',
+  '};',
+];
+
+/**
+ * A copy of an element tree in which every part that requires a search
+ * source and has none gets the page's sample source. A typeahead without a
+ * source throws when it unmounts, and that error leaves the boundary around
+ * it, so leaving the page would crash the whole route.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withSources(project, v) {
+  if (Array.isArray(v)) return v.map(x => withSources(project, x));
+  if (isElement(v)) {
+    const props = Object.fromEntries(
+      Object.entries(v.props ?? {}).map(([k, x]) => [
+        k,
+        withSources(project, x),
+      ]),
+    );
+    for (const [k, p] of Object.entries(
+      project.components[v.__element]?.props ?? {},
+    ))
+      if (p.required && p.type.startsWith('SearchSource') && !(k in props))
+        props[k] = {__code: 'SAMPLE_SOURCE'};
+    return {
+      ...v,
+      props,
+      ...(v.children === undefined
+        ? {}
+        : {children: withSources(project, v.children)}),
+    };
+  }
+  return v;
+}
+
+/**
+ * Whether an element tree uses the page's sample search source.
+ * @param {unknown} v
+ * @returns {boolean}
+ */
+const usesSource = v =>
+  isCode(v)
+    ? v.__code === 'SAMPLE_SOURCE'
+    : Boolean(v && typeof v === 'object') &&
+      Object.values(/** @type {object} */ (v)).some(usesSource);
+
+/** Layers that stay closed until a person opens them, and a frame with no content: on the page they show nothing. */
+const PAGE_SKIP = new Set([
+  'AspectRatio',
+  'BottomSheet',
+  'BottomSheetSwitcher',
+  'Drawer',
+  'Lightbox',
+]);
 
 /**
  * The source of the preview's components page: every component grouped,
@@ -466,8 +578,11 @@ const SAFE = [
  */
 export function componentsPageSource(project) {
   const items = showcaseItems(project, undefined)
-    .items.filter(it => it.group !== 'pages')
-    .map(it => ({...it, tree: withCoreNames(project, it.tree)}))
+    .items.filter(it => it.group !== 'pages' && !PAGE_SKIP.has(it.name))
+    .map(it => ({
+      ...it,
+      tree: withSources(project, withCoreNames(project, it.tree)),
+    }))
     .filter(it => it.tree !== undefined);
   /** @type {Map<string, Map<string, import('./_catalog.mjs').CatalogItem[]>>} */
   const groups = new Map();
@@ -487,7 +602,7 @@ export function componentsPageSource(project) {
           const body = list
             .map(
               it =>
-                `          <div className="tp-item">${it.label ? `\n            <div className="tp-label">${it.label}</div>` : ''}\n            <Safe>\n              ${jsx(/** @type {any} */ (it.tree), 7)}\n            </Safe>\n          </div>`,
+                `          <div className="tp-item">${it.label ? `\n            <div className="tp-label">${it.label}</div>` : ''}\n            <Safe name=${JSON.stringify(name)}>\n              ${jsx(/** @type {any} */ (it.tree), 7)}\n            </Safe>\n          </div>`,
             )
             .join('\n');
           return `        <div className="tp-cell">\n          <div className="tp-name">${name}</div>\n          <div className="tp-row">\n${body}\n          </div>\n        </div>`;
@@ -496,7 +611,7 @@ export function componentsPageSource(project) {
       return `      <section>\n        <h2 className="tp-group">${g}</h2>\n        <div className="tp-grid">\n${cells}\n        </div>\n      </section>`;
     })
     .join('\n');
-  const css = `.tp-group{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}.tp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}.tp-cell{border:1px dashed #8885;padding:10px;overflow:hidden}.tp-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}.tp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.tp-label{font:10px ui-monospace,monospace;opacity:.5}`;
+  const css = `.tp-group{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}.tp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}.tp-cell{border:1px dashed #8885;padding:10px;overflow:hidden}.tp-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}.tp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.tp-label{font:10px ui-monospace,monospace;opacity:.5}.tp-note{font:11px ui-monospace,monospace;opacity:.6;padding:6px 8px;border:1px dashed #8886}`;
   const source = [
     '// Written by `astryx experimental theme preview add`: every component grouped, each variant side by side, overlays open.',
     "'use client';",
@@ -509,6 +624,7 @@ export function componentsPageSource(project) {
     '',
     ...SAFE,
     '',
+    ...(usesSource(items) ? [...SAMPLE_SOURCE, ''] : []),
     'export default function ComponentsPage() {',
     '  return (',
     '    <div>',
@@ -523,12 +639,24 @@ export function componentsPageSource(project) {
 }
 
 /**
- * The source of the preview's overview page: the sample app page.
+ * The source of the preview's overview page: the content of the sample app
+ * page. The preview route is the app shell, so the page has no shell of its
+ * own.
  * @param {import('./_project.mjs').ThemeProject} project
  * @returns {string}
  */
 export function overviewPageSource(project) {
-  const page = withCoreNames(project, SAMPLE_PAGE);
+  const content = /** @type {unknown[]} */ (SAMPLE_PAGE.children)[0];
+  const page = withCoreNames(project, {
+    __element: 'Layout',
+    props: {
+      content: {
+        __element: 'LayoutContent',
+        props: {padding: 4},
+        children: [content],
+      },
+    },
+  });
   return [
     '// Written by `astryx experimental theme preview add`: a sample app page.',
     "'use client';",
