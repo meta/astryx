@@ -48,6 +48,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -553,6 +554,7 @@ export function MobileNav({
   const [resolvedSide, setResolvedSide] = useState<'start' | 'end'>(
     side === 'auto' ? 'end' : side,
   );
+  const [autoSideResolved, setAutoSideResolved] = useState(side !== 'auto');
 
   // Resolve which edge the drawer slides from. Deliberately its own effect,
   // declared before the open/close effect below so the trigger is still the
@@ -561,8 +563,11 @@ export function MobileNav({
   // CSS hold runs from the commit that started the slide-out and does not
   // restart, so a fresh full delay could land after the drawer had already
   // stopped being rendered — #4290 again.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isOpen) {
+      if (side === 'auto') {
+        setAutoSideResolved(false);
+      }
       return;
     }
 
@@ -571,14 +576,21 @@ export function MobileNav({
       if (trigger && trigger !== document.body) {
         const rect = trigger.getBoundingClientRect();
         const triggerCenter = rect.left + rect.width / 2;
+        const direction = window.getComputedStyle(trigger).direction;
+        const isRtl =
+          direction === 'rtl' ||
+          trigger.closest('[dir="rtl"]') != null ||
+          document.documentElement.dir === 'rtl';
         // eslint-disable-next-line @eslint-react/set-state-in-effect -- side is resolved from trigger layout immediately before showModal()
         setResolvedSide(
-          triggerCenter < window.innerWidth / 2 ? 'start' : 'end',
+          triggerCenter < window.innerWidth / 2 !== isRtl ? 'start' : 'end',
         );
       }
+      setAutoSideResolved(true);
     } else {
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- side prop changes must update the open dialog placement
       setResolvedSide(side);
+      setAutoSideResolved(true);
     }
   }, [isOpen, side]);
 
@@ -590,7 +602,7 @@ export function MobileNav({
       return;
     }
 
-    if (isOpen) {
+    if (isOpen && autoSideResolved) {
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
       if (!dialog.open) {
@@ -609,7 +621,7 @@ export function MobileNav({
         entrance: drawerRef.current,
         capMs: MAX_EXIT_MS,
       });
-    } else if (dialog.open) {
+    } else if (!isOpen && dialog.open) {
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
       closeTimeoutRef.current = setTimeout(() => {
@@ -632,7 +644,7 @@ export function MobileNav({
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
     };
-  }, [isOpen, releasePresentation]);
+  }, [autoSideResolved, isOpen, releasePresentation]);
 
   // Close the native dialog on unmount if it's still open. Inside AppShell the
   // drawer is mounted in an <Activity> that switches to mode="hidden" when the

@@ -11,6 +11,7 @@
 
 import {describe, it, expect, vi, beforeAll} from 'vitest';
 import {render, screen, within, fireEvent} from '@testing-library/react';
+import {useState} from 'react';
 import {MobileNav} from './MobileNav';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 
@@ -329,6 +330,78 @@ describe('MobileNav', () => {
 
     expect(dialog).toHaveAttribute('open');
   });
+
+  it.each([
+    ['ltr', 'end'],
+    ['rtl', 'start'],
+  ] as const)(
+    'resolves auto side before the first modal open in %s',
+    (direction, expectedSide) => {
+      const previousDirection = document.documentElement.dir;
+      const previousWidth = window.innerWidth;
+      document.documentElement.dir = direction;
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: 1000,
+      });
+      const shownSides: (string | null)[] = [];
+      const showModal = vi
+        .spyOn(HTMLDialogElement.prototype, 'showModal')
+        .mockImplementation(function (this: HTMLDialogElement) {
+          shownSides.push(this.getAttribute('data-side'));
+          this.setAttribute('open', '');
+        });
+
+      function Harness() {
+        const [isOpen, setIsOpen] = useState(false);
+        return (
+          <>
+            <button type="button" onClick={() => setIsOpen(true)}>
+              Open navigation
+            </button>
+            <MobileNav
+              isOpen={isOpen}
+              onOpenChange={setIsOpen}
+              side="auto"
+              data-testid="mobile-nav">
+              <span>Content</span>
+            </MobileNav>
+          </>
+        );
+      }
+
+      try {
+        render(<Harness />);
+        const trigger = screen.getByRole('button', {name: 'Open navigation'});
+        vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+          left: 700,
+          width: 100,
+          top: 0,
+          right: 800,
+          bottom: 40,
+          height: 40,
+          x: 700,
+          y: 0,
+          toJSON: () => ({}),
+        });
+        trigger.focus();
+        fireEvent.click(trigger);
+
+        expect(shownSides).toEqual([expectedSide]);
+        expect(screen.getByTestId('mobile-nav')).toHaveAttribute(
+          'data-side',
+          expectedSide,
+        );
+      } finally {
+        showModal.mockRestore();
+        document.documentElement.dir = previousDirection;
+        Object.defineProperty(window, 'innerWidth', {
+          configurable: true,
+          value: previousWidth,
+        });
+      }
+    },
+  );
 
   it('caps the drawer at 85 % of the viewport, as its docs promise', () => {
     // On a 320 px phone a 320 px drawer used to cover the whole screen and
