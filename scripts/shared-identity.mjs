@@ -330,3 +330,78 @@ export function findInSource(file, code) {
 export function findAll() {
   return sourceFiles().flatMap(findInFile);
 }
+
+/** The helpers that name a shared slot, and the prefix each puts before the name. */
+const SLOT_HELPERS = {
+  sharedKey: '',
+  sharedState: '',
+  sharedMap: '',
+  sharedWeakMap: '',
+  sharedWeakSet: '',
+  sharedStore: '',
+  sharedBrand: '',
+  sharedSequence: '',
+  createSharedContext: 'context/',
+  sharedForReact: 'react/',
+  createLayerScopedContext: 'context/',
+};
+/** Files that define a slot helper, where the name is the caller's parameter. */
+const HELPER_FILES = new Set([
+  'packages/core/src/utils/sharedRealm.ts',
+  'packages/core/src/utils/sharedContext.ts',
+  'packages/core/src/utils/sharedForReact.ts',
+  'packages/core/src/Layer/layerScopedContext.tsx',
+]);
+
+/**
+ * Every call that names a shared slot. A slot's name and version are its
+ * identity, so each call must spell both as literals.
+ * @returns {Array<{file: string, line: number, helper: string, slot: string|null}>}
+ *   `slot` is `<prefix><name>/v<version>`, or null when either is not a literal
+ */
+export function sharedSlots() {
+  /** @type {Array<{file: string, line: number, helper: string, slot: string|null}>} */
+  const slots = [];
+  for (const file of sourceFiles()) {
+    if (HELPER_FILES.has(file)) continue;
+    const code = fs.readFileSync(path.join(REPO, file), 'utf8');
+    if (
+      !/\b(?:shared[A-Z]\w*|create(?:Shared|LayerScoped)Context)\b/.test(code)
+    ) {
+      continue;
+    }
+    const source = ts.createSourceFile(
+      file,
+      code,
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const visit = node => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        Object.hasOwn(SLOT_HELPERS, node.expression.text)
+      ) {
+        const helper = node.expression.text;
+        const [name, version] = node.arguments;
+        const literal =
+          name &&
+          version &&
+          (ts.isStringLiteral(name) ||
+            ts.isNoSubstitutionTemplateLiteral(name)) &&
+          ts.isNumericLiteral(version);
+        slots.push({
+          file,
+          line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+          helper,
+          slot: literal
+            ? `${SLOT_HELPERS[helper]}${name.text}/v${version.text}`
+            : null,
+        });
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return slots;
+}

@@ -53,6 +53,7 @@ describe('docsite-build', () => {
     for (const name of [
       'Build docsite workspace dependencies',
       'Build the docsite',
+      "Write the docsite's API surface",
       'test-docsite (data tests)',
       'Verify the hidden production registry gate',
     ]) {
@@ -62,6 +63,17 @@ describe('docsite-build', () => {
     expect(step(build, 'test-docsite (data tests)').run).toBe(
       'pnpm -F @astryxdesign/docsite test',
     );
+    // The data tests read the API surface written just before them.
+    const names = build.steps.map(s => s.name);
+    expect(names.indexOf('test-docsite (data tests)')).toBe(
+      names.indexOf("Write the docsite's API surface") + 1,
+    );
+    expect(step(build, "Write the docsite's API surface").run).toBe(
+      'node scripts/api-report/cli.mjs --surface .api-surface-docsite',
+    );
+    expect(step(build, 'test-docsite (data tests)').env).toEqual({
+      ASTRYX_API_SURFACE: '.api-surface-docsite',
+    });
   });
 
   it('builds and tests the docs prompt with placeholder origins only', () => {

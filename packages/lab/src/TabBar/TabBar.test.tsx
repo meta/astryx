@@ -16,6 +16,7 @@ import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {TOUCH_QUERY} from '@astryxdesign/core/internal/touch';
 import {TabBar, TabBarItem, type TabBarProps} from './TabBar';
+import {TabBarMoreList} from '../TabBarMoreList/TabBarMoreList';
 
 function Glyph({name}: {name: string}) {
   return <svg data-testid={`icon-${name}`} />;
@@ -26,11 +27,15 @@ function Bar({
   onReselect,
   onChange,
   badges = {},
+  hasPanels = false,
   ...props
 }: Partial<TabBarProps> & {
   initial?: string;
   badges?: Record<string, string | number | undefined>;
+  /** Each tab names a panel, `panel-<value>`. */
+  hasPanels?: boolean;
 }) {
+  const panelOf = (tab: string) => (hasPanels ? `panel-${tab}` : undefined);
   const [value, setValue] = useState(initial);
   return (
     <TabBar
@@ -43,12 +48,18 @@ function Bar({
       label="Sections"
       data-testid="bar"
       {...props}>
-      <TabBarItem value="home" label="Home" icon={<Glyph name="home" />} />
+      <TabBarItem
+        value="home"
+        label="Home"
+        icon={<Glyph name="home" />}
+        panelId={panelOf('home')}
+      />
       <TabBarItem
         value="library"
         label="Library"
         icon={<Glyph name="library" />}
         badge={badges.library}
+        panelId={panelOf('library')}
       />
       <TabBarItem
         value="browse"
@@ -86,6 +97,54 @@ function coarsePrimaryPointer(): () => void {
   } as unknown as MediaQueryList;
   window.matchMedia = (media: string) =>
     media.trim() === TOUCH_QUERY ? query : matchMedia(media);
+  return () => {
+    window.matchMedia = matchMedia;
+  };
+}
+
+/**
+ * A scroll area scrolled to `top`, with its `scrollTo` recorded: jsdom lays
+ * nothing out, so the offset and the sizes are set by hand. Its content is
+ * `content` px tall in a box `box` px tall and 400 px wide.
+ */
+function scrolledArea(
+  element: HTMLElement,
+  top: number,
+  content = 2000,
+  box = 600,
+) {
+  const scrollTo = vi.fn();
+  Object.defineProperty(element, 'scrollTop', {value: top, configurable: true});
+  Object.defineProperty(element, 'clientHeight', {
+    value: box,
+    configurable: true,
+  });
+  Object.defineProperty(element, 'clientWidth', {
+    value: 400,
+    configurable: true,
+  });
+  Object.defineProperty(element, 'scrollHeight', {
+    value: content,
+    configurable: true,
+  });
+  element.scrollTo = scrollTo as unknown as typeof element.scrollTo;
+  return scrollTo;
+}
+
+/** Reduce Motion on, until the restore runs. */
+function reducedMotion(): () => void {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (media: string) =>
+    ({
+      matches: media.includes('prefers-reduced-motion: reduce'),
+      media,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as unknown as MediaQueryList;
   return () => {
     window.matchMedia = matchMedia;
   };
@@ -188,6 +247,120 @@ describe('TabBar', () => {
     fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
     expect(onReselect).toHaveBeenCalledWith('home');
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('scrolls the selected tab’s panel to its top when it is chosen again, gliding there', () => {
+    render(
+      <>
+        <div id="panel-home">
+          <div data-testid="area" style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels />
+      </>,
+    );
+    const scrollTo = scrolledArea(screen.getByTestId('area'), 120);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+  });
+
+  it('skips a row that scrolls only sideways and scrolls the list below it', () => {
+    render(
+      <>
+        <div id="panel-home">
+          <div data-testid="chips" style={{overflowY: 'auto'}} />
+          <div data-testid="list" style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels />
+      </>,
+    );
+    // A row with overflow-x: auto computes overflow-y: auto too; its content
+    // is no taller than the row.
+    const chips = scrolledArea(screen.getByTestId('chips'), 0, 600);
+    const list = scrolledArea(screen.getByTestId('list'), 120);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(chips).not.toHaveBeenCalled();
+    expect(list).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+  });
+
+  it('skips a row whose content overflows it by a pixel or less, as Core’s scroll test does', () => {
+    render(
+      <>
+        <div id="panel-home">
+          <div data-testid="chips" style={{overflowY: 'auto'}} />
+          <div data-testid="list" style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels />
+      </>,
+    );
+    // Chips 1 px taller than their row: 48 px of content in a 47 px box.
+    const chips = scrolledArea(screen.getByTestId('chips'), 0, 48, 47);
+    const list = scrolledArea(screen.getByTestId('list'), 120);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(chips).not.toHaveBeenCalled();
+    expect(list).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+  });
+
+  it('scrolls the panel itself when it is the scroll area, and jumps under Reduce Motion', () => {
+    restorePointer.push(reducedMotion());
+    render(
+      <>
+        <div id="panel-home" data-testid="panel" style={{overflowY: 'scroll'}}>
+          <div style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels />
+      </>,
+    );
+    const scrollTo = scrolledArea(screen.getByTestId('panel'), 40);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'instant'});
+  });
+
+  it('scrolls nothing when the panel is at its top, has no scroll area, or the tab names none', () => {
+    const onReselect = vi.fn();
+    const {unmount} = render(
+      <>
+        <div id="panel-home">
+          <div data-testid="area" style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels onReselect={onReselect} />
+      </>,
+    );
+    const atTop = scrolledArea(screen.getByTestId('area'), 0);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(atTop).not.toHaveBeenCalled();
+    unmount();
+    render(
+      <>
+        <div id="panel-home" data-testid="panel">
+          <p>Not a scroll area</p>
+        </div>
+        <Bar hasPanels onReselect={onReselect} />
+      </>,
+    );
+    const panel = scrolledArea(screen.getByTestId('panel'), 80);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(panel).not.toHaveBeenCalled();
+    // The reselect is still reported each time.
+    expect(onReselect).toHaveBeenCalledTimes(2);
+  });
+
+  it('scrolls nothing when another tab is chosen', () => {
+    render(
+      <>
+        <div id="panel-home">
+          <div data-testid="home" style={{overflowY: 'auto'}} />
+        </div>
+        <div id="panel-library">
+          <div data-testid="library" style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels />
+      </>,
+    );
+    const home = scrolledArea(screen.getByTestId('home'), 120);
+    const library = scrolledArea(screen.getByTestId('library'), 60);
+    fireEvent.click(screen.getByRole('tab', {name: 'Library'}));
+    expect(home).not.toHaveBeenCalled();
+    expect(library).not.toHaveBeenCalled();
   });
 
   it('has one tab stop, on the selected tab, and arrow keys move between tabs', () => {
@@ -389,5 +562,165 @@ describe('TabBar disabled tab', () => {
     render(<Disabled onChange={onChange} />);
     fireEvent.click(screen.getByRole('tab', {name: 'Profile'}));
     expect(onChange).toHaveBeenCalledWith('profile');
+  });
+});
+
+describe('TabBar More tab', () => {
+  const SIX = ['home', 'library', 'browse', 'profile', 'settings', 'help'];
+  const tabs = SIX.map(value => (
+    <TabBarItem
+      key={value}
+      value={value}
+      label={value[0].toUpperCase() + value.slice(1)}
+      icon={<Glyph name={value} />}
+    />
+  ));
+
+  it('shows the first four tabs and More when there are more than five', () => {
+    render(
+      <TabBar value="home" onChange={() => {}} label="Sections">
+        {tabs}
+      </TabBar>,
+    );
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual([
+      'Home',
+      'Library',
+      'Browse',
+      'Profile',
+      'More',
+    ]);
+  });
+
+  it('names the More tab and its list with one catalog message, so a translation can change it', () => {
+    render(
+      <InternationalizationProvider
+        locale="en"
+        overrides={{en: {'@astryx.tabBar.more': 'Others'}}}>
+        <TabBar value="more" onChange={() => {}} label="Sections">
+          {tabs}
+        </TabBar>
+        <TabBarMoreList onChange={() => {}}>{tabs}</TabBarMoreList>
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('tab', {name: 'Others'})).toBeInTheDocument();
+    expect(screen.getByRole('list', {name: 'Others'})).toBeInTheDocument();
+  });
+
+  it('selects More for a tab it holds, and chooses More with its value', () => {
+    const onChange = vi.fn();
+    const {rerender} = render(
+      <TabBar value="settings" onChange={onChange} label="Sections">
+        {tabs}
+      </TabBar>,
+    );
+    expect(screen.getByRole('tab', {name: 'More'})).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    rerender(
+      <TabBar value="home" onChange={onChange} label="Sections">
+        {tabs}
+      </TabBar>,
+    );
+    fireEvent.click(screen.getByRole('tab', {name: 'More'}));
+    expect(onChange).toHaveBeenCalledWith('more');
+  });
+
+  it('More again while it holds a tab is a reselect, back to its list', () => {
+    const onChange = vi.fn();
+    const onReselect = vi.fn();
+    render(
+      <TabBar
+        value="help"
+        onChange={onChange}
+        onReselect={onReselect}
+        label="Sections">
+        {tabs}
+      </TabBar>,
+    );
+    fireEvent.click(screen.getByRole('tab', {name: 'More'}));
+    expect(onReselect).toHaveBeenCalledWith('more');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('shows a tab’s badge in its More row, spoken with the row', () => {
+    render(
+      <TabBarMoreList onChange={() => {}}>
+        {[
+          ...tabs.slice(0, 4),
+          <TabBarItem
+            key="settings"
+            value="settings"
+            label="Settings"
+            icon={<Glyph name="settings" />}
+          />,
+          <TabBarItem
+            key="help"
+            value="help"
+            label="Help"
+            icon={<Glyph name="help" />}
+            badge={2}
+          />,
+        ]}
+      </TabBarMoreList>,
+    );
+    expect(screen.getByRole('button', {name: /Help, 2/})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: /Help/})).toHaveTextContent('2');
+  });
+
+  it('lists the tabs past the fourth, and a row chooses its tab', () => {
+    const onChange = vi.fn();
+    render(
+      <TabBarMoreList value="help" onChange={onChange}>
+        {tabs}
+      </TabBarMoreList>,
+    );
+    const list = screen.getByRole('list', {name: 'More'});
+    expect(list).toHaveTextContent('Settings');
+    expect(list).toHaveTextContent('Help');
+    expect(list).not.toHaveTextContent('Profile');
+    fireEvent.click(screen.getByRole('button', {name: /Settings/}));
+    expect(onChange).toHaveBeenCalledWith('settings');
+  });
+
+  it('reads the selected tab’s More row as selected, and no other row', () => {
+    render(
+      <TabBarMoreList value="help" onChange={() => {}}>
+        {tabs}
+      </TabBarMoreList>,
+    );
+    const rows = screen.getAllByRole('listitem');
+    const help = rows.find(row => row.textContent?.includes('Help'));
+    const settings = rows.find(row => row.textContent?.includes('Settings'));
+    expect(help).toHaveAttribute('aria-current', 'true');
+    expect(settings).not.toHaveAttribute('aria-current');
+  });
+
+  it('keeps a disabled tab past the fourth disabled in its More row, which a tap never chooses (spec:AST-085 FR2)', () => {
+    const onChange = vi.fn();
+    render(
+      <TabBarMoreList onChange={onChange}>
+        {[
+          ...tabs.slice(0, 5),
+          <TabBarItem
+            key="help"
+            value="help"
+            label="Help"
+            icon={<Glyph name="help" />}
+            aria-disabled
+          />,
+        ]}
+      </TabBarMoreList>,
+    );
+    const help = screen.getByRole('button', {name: /Help/});
+    // Core's disabled row: `aria-disabled` on the row, its button inert.
+    expect(help.closest('.astryx-item')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    fireEvent.click(help);
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', {name: /Settings/}));
+    expect(onChange).toHaveBeenCalledWith('settings');
   });
 });

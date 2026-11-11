@@ -4,8 +4,9 @@
 
 /**
  * @file useChatStreamScroll.ts
- * @input Uses React refs, state, callbacks, useMediaQuery, and the input
- *   stream's document scroll events when the page itself scrolls
+ * @input Uses React refs, state, callbacks, useMediaQuery, the page-scroller
+ *   rules, and the input stream's document scroll events when the page itself
+ *   scrolls
  * @output Exports useChatStreamScroll hook for AI chat scroll behavior
  * @position Utility hook — used by ChatLayout, also usable standalone
  *
@@ -36,6 +37,11 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 import {subscribeInput} from '../utils/inputStream';
+import {
+  scrollEventTarget,
+  scrollportTop,
+  scrollsPage,
+} from '../utils/pageScroller';
 
 // =============================================================================
 // Types
@@ -152,13 +158,6 @@ function markFollowing(el: Element, locked: boolean): void {
   } else {
     following.delete(el);
   }
-}
-
-// The page's scroll fires at the document. The root's box moves up by that
-// scroll.
-function scrollsPage(el: HTMLElement): boolean {
-  const doc = el.ownerDocument;
-  return el === doc.scrollingElement || el === doc.documentElement;
 }
 
 export function useChatStreamScroll({
@@ -314,11 +313,7 @@ export function useChatStreamScroll({
       if (!container) {
         return;
       }
-      // The page's visible area starts at the viewport's top, not at the
-      // root's box.
-      const top = scrollsPage(container)
-        ? 0
-        : container.getBoundingClientRect().top;
+      const top = scrollportTop(container);
       const offset = el.getBoundingClientRect().top - top + container.scrollTop;
       container.scrollTo({top: offset, behavior: 'instant'});
       lastScrollTopRef.current = container.scrollTop;
@@ -421,11 +416,12 @@ export function useChatStreamScroll({
     };
 
     // A scroll of the page fires at the document, not at its root element.
-    const view = isPage ? doc.defaultView : null;
+    const eventTarget = scrollEventTarget(el);
+    const view = eventTarget === doc ? doc.defaultView : null;
     const stopPageListeners: (() => void)[] = [];
     if (view != null) {
       const atDocument = (listener: () => void) => (event: Event) => {
-        if (event.target === doc) {
+        if (event.target === eventTarget) {
           listener();
         }
       };

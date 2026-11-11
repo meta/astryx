@@ -192,6 +192,10 @@ export default defineConfig(
       // Canonical consumer fixtures are validated and built in copied,
       // standalone sandboxes rather than linted as workspace source.
       'internal/vibe-tests/fixtures/**',
+      // Vibe eval starter apps and reference solutions build inside copied
+      // consumer apps outside the workspace, with their own dependencies.
+      'internal/vibe-tests/eval/arms/**',
+      'internal/vibe-tests/eval/tasks/*/reference/**',
       // Changesets tooling (custom changelog module + config) is CommonJS
       // build/release glue, not shipped source — keep it out of the TS/ESM
       // lint pass (consistent with scripts/** above).

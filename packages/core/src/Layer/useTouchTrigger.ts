@@ -61,7 +61,10 @@ import {
   matchesInteractiveSelectors,
 } from '../hooks/useClickableContainer';
 import {isDisabledControl} from '../utils/pressDisabled';
-import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
+import {
+  isTextEntrySincePointer,
+  useInteractionModalityTrackingFor,
+} from '../utils/interactionModality';
 
 /**
  * How a hover layer behaves on a touch pointer.
@@ -356,8 +359,10 @@ export interface UseTouchTriggerReturn {
 
   /**
    * Whether the interaction in flight is a touch one. Unlike the raw ref this
-   * goes false again as soon as the user reaches for the keyboard, so
-   * focus-driven triggers stay available after a tap.
+   * goes false again as soon as the user navigates with the keyboard, so
+   * focus-driven triggers stay available after a tap. Typing into a
+   * text-entry field after the tap, as on an on-screen keyboard, keeps it
+   * true.
    */
   isTouchInteraction: () => boolean;
 
@@ -484,7 +489,7 @@ export function useTouchTriggerInternal(
   const outsideDocumentsRef = useRef<Document[]>([]);
   const tapRecognizer = useTapRecognizer();
 
-  const readModality = useInteractionModalityTrackingFor(triggerRef);
+  useInteractionModalityTrackingFor(triggerRef);
 
   const disarmOutsideDismiss = useCallback(() => {
     isTapOpenRef.current = false;
@@ -555,8 +560,9 @@ export function useTouchTriggerInternal(
   // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
   const isTouchInteraction = useCallback(
-    () => isTouchPointerRef.current && readModality() === 'pointer',
-    [readModality],
+    () =>
+      isTouchPointerRef.current && isTextEntrySincePointer(triggerRef.current),
+    [triggerRef],
   );
 
   const handlePointerEnter = useCallback((event: PointerEvent) => {

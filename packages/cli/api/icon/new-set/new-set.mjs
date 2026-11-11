@@ -9,7 +9,12 @@
  *   command
  */
 
-import {addIconSet, authoring, refuseOutsideProject} from '../_adapter.mjs';
+import {
+  addIconSet,
+  authoring,
+  refuseOutsideProject,
+  templateMeaningsOf,
+} from '../_adapter.mjs';
 import {refuseOtherOptions} from '../_options.mjs';
 
 /**
@@ -28,5 +33,12 @@ export async function iconNewSet(name, options = {}) {
     'the integration package',
   );
   const {data} = await authoring(() => addIconSet(name, options));
-  return {type: 'icon.newSet', data};
+  // A dry run writes nothing, so the set's map is not yet what it says.
+  const templateMeanings = data.dryRun
+    ? null
+    : await templateMeaningsOf(options.cwd ?? process.cwd(), name);
+  return {
+    type: 'icon.newSet',
+    data: templateMeanings ? {...data, templateMeanings} : data,
+  };
 }
