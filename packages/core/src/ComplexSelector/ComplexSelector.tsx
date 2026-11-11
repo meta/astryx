@@ -42,7 +42,7 @@ import {Field, inputWrapperStyles} from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip/useTooltip';
-import {LabelTooltipSuppressionContext} from '../Tooltip/labelTooltipSuppression';
+import {LabelTooltipSuppressionContext} from '../utils/labelTooltipSuppression';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {usePopover} from '../Popover/usePopover';

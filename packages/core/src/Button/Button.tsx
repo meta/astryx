@@ -31,7 +31,7 @@ import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {useTooltip} from '../Tooltip/useTooltip';
-import {LabelTooltipSuppressionContext} from '../Tooltip/labelTooltipSuppression';
+import {LabelTooltipSuppressionContext} from '../utils/labelTooltipSuppression';
 import {
   colorVars,
   sizeVars,
