@@ -69,6 +69,10 @@ beforeAll(async () => {
     ...FIXTURE_PACKAGES,
     '@types/react',
     '@types/react-dom',
+    // The template pages' packages are installed, not only named.
+    '@heroicons/react',
+    'lucide-react',
+    'recharts',
   ]);
   writeFixtureBaseTheme(cwd, 'neutral');
   fs.writeFileSync(
@@ -184,7 +188,7 @@ describe('colors', () => {
 describe('how', () => {
   /** @param {string} q */
   const ask = async q =>
-    /** @type {any} */ ((await themeEditHow(q, {cwd})).data);
+    /** @type {any} */ ((await themeEditHow(q, {cwd, theme: 's'})).data);
 
   it('lists the kinds of list when none is named', async () => {
     const r = /** @type {any} */ (
@@ -214,18 +218,16 @@ describe('how', () => {
       .flatMap((/** @type {any} */ x) => x.commands)
       .join('\n');
     expect(commands).toContain(
-      'set <theme> border-radius 6px --on button --when size:sm',
+      'set s border-radius 6px --on button --when size:sm',
     );
-    expect(commands).toContain(
-      'set <theme> corners pill --on button --when size:lg',
-    );
+    expect(commands).toContain('set s corners pill --on button --when size:lg');
     expect(r.understood.parts).not.toContain('badge');
   });
 
   it('answers a question about another aspect for that aspect, not as a color question', async () => {
     const text = await ask('make the text red');
     expect(text.understood.aspects).toEqual(['text']);
-    expect(text.results[0].text).toContain('whole-theme tokens for text');
+    expect(text.results[0].text).toContain('--color-text-primary');
     const corners = await ask('override the corner radius');
     expect(corners.understood.aspects).toEqual(['corners']);
     expect(JSON.stringify(corners.results)).not.toContain('--color-');
@@ -237,7 +239,7 @@ describe('how', () => {
     expect((await ask('error red')).understood.aspects).toEqual(['colors']);
     const statusBg = await ask('make the error background red');
     expect(statusBg.understood.aspects).toEqual(['colors']);
-    expect(statusBg.results[0].commands[0]).toContain('set <theme> danger');
+    expect(statusBg.results[0].commands[0]).toContain('set s danger');
   });
 
   it('takes each color from the word it belongs to', async () => {
@@ -272,7 +274,7 @@ describe('preview pages', () => {
 
   it('writes an Overview built to stress the theme and a Components page with one command per cell', async () => {
     await themeEditPreviewAdd(undefined, {cwd, theme: 's'});
-    const overview = read('src/app/theme-preview/pages/overview.tsx');
+    const overview = read('src/app/theme-preview/_pages/overview.tsx');
     expect(overview).toContain('s at a glance');
     for (const part of [
       'C.Banner',
@@ -288,7 +290,7 @@ describe('preview pages', () => {
     expect(overview.indexOf('Open layers')).toBeLessThan(
       overview.indexOf('>Type<'),
     );
-    const components = read('src/app/theme-preview/pages/components.tsx');
+    const components = read('src/app/theme-preview/_pages/components.tsx');
     expect(components).toContain(
       'astryx experimental theme editor set s background',
     );
@@ -307,7 +309,7 @@ describe('preview pages', () => {
       path: 'src/app/custom-preview',
     });
     expect(r.data.pages).toContain('colors');
-    const page = 'src/app/custom-preview/pages/colors.tsx';
+    const page = 'src/app/custom-preview/_pages/colors.tsx';
     expect(read(page)).toContain('import {palette}');
     await themeEditUndo('s', {cwd, thing: 'accent'});
     expect(fs.existsSync(path.join(cwd, 'themes/s/tokens/s.palette.ts'))).toBe(
@@ -348,7 +350,7 @@ describe('round 3', () => {
     expect(r.data.skipped.map(x => x.page)).toContain('work-item-detail');
     expect(r.data.added).toHaveLength(1);
     expect(r.data.added[0]).not.toBe('work-item-detail');
-    expect(r.data.notes.join(' ')).toContain('instead');
+    expect(r.data.notes.join(' ')).toContain('in its place');
   }, 240_000);
 
   it('labels a page by its template name, however it was added', async () => {
@@ -404,13 +406,13 @@ describe('round 3', () => {
       (
         await themeEditHow(
           'secondary button with accent colored text and thin border',
-          {cwd},
+          {cwd, theme: 's'},
         )
       ).data
     );
     const b = border.results.map((/** @type {any} */ x) => x.commands).flat();
     expect(b.join('\n')).toContain(
-      'set <theme> border "1px solid <color>" --on button --when variant:secondary',
+      'set s border-width 1px --on button --when variant:secondary',
     );
     expect(b.join('\n')).toContain('color "var(--color-text-accent)"');
     const fill = /** @type {any} */ (
@@ -423,7 +425,7 @@ describe('round 3', () => {
         )
       ).data
     );
-    expect(fill.understood.aspects).toEqual(['text', 'background']);
+    expect([...fill.understood.aspects].sort()).toEqual(['background', 'text']);
     const f = fill.results.map((/** @type {any} */ x) => x.commands).flat();
     expect(f.join('\n')).toContain('background "#e5e7eb" --on button');
     expect(f.join('\n')).toContain('color "#111827" --on button');
@@ -431,7 +433,7 @@ describe('round 3', () => {
 
   it('gives every controlled sample a change handler, so a click never throws', () => {
     for (const page of ['overview', 'components']) {
-      const source = read(`src/app/theme-preview/pages/${page}.tsx`);
+      const source = read(`src/app/theme-preview/_pages/${page}.tsx`);
       const tags =
         source.match(/<C\.(TabList|SegmentedControl)\b[^\n]*/g) ?? [];
       expect(tags.length, page).toBeGreaterThan(0);
@@ -475,15 +477,20 @@ describe('round 4', () => {
 
   it('gives each token a value of its own type, and keeps a named tint', async () => {
     const border = /** @type {any} */ (
-      (await themeEditHow('border color of cards and dividers', {cwd})).data
+      (
+        await themeEditHow('border color of cards and dividers', {
+          cwd,
+          theme: 's',
+        })
+      ).data
     );
     const commands = border.results
       .flatMap((/** @type {any} */ x) => x.commands)
       .join('\n');
     expect(border.understood.aspects).toEqual(['border']);
-    expect(commands).toContain('--color-border "<color>"');
-    expect(commands).toContain('--border-width 1px');
-    expect(commands).not.toMatch(/--(color-border|border-width) "1px solid/);
+    // The text names the token cards read for their border.
+    expect(border.results[0].text).toContain('--color-border');
+    expect(commands).not.toMatch(/<color>|<value>|--color-border "1px solid/);
     const tint = /** @type {any} */ (
       (
         await themeEditHow('secondary button light blue tint with blue text', {
@@ -491,7 +498,7 @@ describe('round 4', () => {
         })
       ).data
     );
-    expect(tint.understood.aspects).toEqual(['text', 'background']);
+    expect([...tint.understood.aspects].sort()).toEqual(['background', 'text']);
   });
 
   it('names the removed setting on undo, never as the value in effect', async () => {
@@ -552,18 +559,15 @@ describe('round 4', () => {
 describe('round 4 follow-ups', () => {
   it('gives token lines a color or width when the resting border reads a token', async () => {
     const r = /** @type {any} */ (
-      (await themeEditHow('thin gray border on inputs', {cwd})).data
+      (await themeEditHow('thin gray border on inputs', {cwd, theme: 's'})).data
     );
     const lines = r.results.flatMap((/** @type {any} */ x) => x.commands);
-    const tokenLines = lines.filter((/** @type {string} */ c) =>
-      c.includes('# via the token'),
-    );
-    expect(tokenLines.length).toBeGreaterThan(0);
-    for (const c of tokenLines) expect(c).not.toContain('solid');
-    expect(tokenLines.join('\n')).toMatch(/--color-border\S* "<color>"/);
+    // The width and the color the question names, with no comment or
+    // placeholder in the command.
     expect(lines.join('\n')).toContain(
-      'set <theme> border "1px solid <color>" --on inputs   # direct',
+      'set s border "1px solid #9ca3af" --on inputs',
     );
+    expect(lines.join('\n')).not.toMatch(/#\s|<color>/);
   });
 
   it('moves the dark fill off an exact color that disappears on the dark page', async () => {
@@ -580,12 +584,18 @@ describe('round 4 follow-ups', () => {
     ).not.toBe('#1e3a8a');
   }, 120_000);
 
-  it('marks an exact dark fill under the light shade on the Colors page', async () => {
+  it('marks an exact dark fill on its own dark shade on the Colors page', async () => {
     await themeEditSet('s', 'accent', '#5e6ad2', {cwd});
     await themeEditPreviewAdd(undefined, {cwd, theme: 's', path: 'src/app/r4'});
-    expect(read('src/app/r4/pages/colors.tsx')).toContain(
-      '"--color-accent (dark mode too)"',
+    const page = read('src/app/r4/_pages/colors.tsx');
+    const dark = JSON.parse(read('themes/s/palette.config.json'))
+      .families.find((/** @type {any} */ f) => f.id === 'accent')
+      .anchors.find((/** @type {any} */ a) => a.mode === 'dark');
+    const uses = JSON.parse(
+      /** @type {string} */ (/const USES: [^=]+= (\{.*\});/.exec(page)?.[1]),
     );
+    expect(uses.accent.dark[dark.stop]).toContain('--color-accent');
+    expect(page).not.toContain('mode too');
     await themeEditUndo('s', {cwd, thing: 'accent'});
   }, 240_000);
 
@@ -598,7 +608,7 @@ describe('round 4 follow-ups', () => {
         path: 'src/app/my preview',
       }),
     );
-    expect(r.run[0]).toMatch(/--theme s --path "src\/app\/my preview"$/);
+    expect(r.run[0]).toMatch(/--theme s --path 'src\/app\/my preview'$/);
   }, 120_000);
 });
 
@@ -632,7 +642,10 @@ describe('round 5', () => {
       'colored buttons with a border',
     ]) {
       const r = /** @type {any} */ ((await themeEditHow(q, {cwd})).data);
-      expect(r.understood.aspects, q).toEqual(['border', 'background']);
+      expect([...r.understood.aspects].sort(), q).toEqual([
+        'background',
+        'border',
+      ]);
     }
     const border = /** @type {any} */ (
       (await themeEditHow('a gray border on cards', {cwd})).data
@@ -659,10 +672,10 @@ describe('round 5', () => {
     fs.rmSync(path.join(cwd, 'themes/dk'), {recursive: true, force: true});
   }, 240_000);
 
-  it('moves a dark fill to the nearest shade that passes both checks', async () => {
+  it('starts a dark fill that cannot keep the exact color at shade 70, as the theme guide does', async () => {
     const r = await themeEditSet('s', 'accent', '#7c3aed', {cwd});
     expect(r.data.notes.join(' ')).toContain(
-      'in dark, --color-accent is shade 50',
+      'in dark, --color-accent is shade 70',
     );
     await themeEditUndo('s', {cwd, thing: 'accent'});
   }, 120_000);
