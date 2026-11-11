@@ -2,19 +2,21 @@
 
 /**
  * @file The theme-edit subject's adapter: the work behind `astryx experimental
- * theme`, and its only access to the environment (files, the installed Core,
+ * theme editor`, and its only access to the environment (files, the installed Core,
  * the renderer). theme-edit.mjs is the public API over it.
  *
  *   themeEditNew('brand', {like: 'neutral'})           themeEdit.new
  *   themeEditSet('brand', 'corners', 'pill')            themeEdit.set
- *   themeEditReset('brand', 'corners')                  themeEdit.reset
+ *   themeEditUndo('brand')                              themeEdit.undo (one step)
+ *   themeEditUndo('brand', {thing: 'corners'})          themeEdit.undo (one setting)
  *   themeEditShow('brand')                              themeEdit.show
- *   themeEditUndo('brand')                              themeEdit.undo
- *   themeEditPreview('brand', {write: 'src/app/theme'}) themeEdit.preview
- *   themeEditExplain('banner')                          themeEdit.explain
- *   themeEditExplain('white text in the banner')        themeEdit.explain (a question)
- *   themeEditExplain('target.png', {at: ['4,8']})        themeEdit.explain (a picture)
- *   themeEditExplain('accent', {list: 'tokens'})        themeEdit.explain (a list)
+ *   themeEditPreviewAdd('a sales dashboard')            themeEdit.previewAdd
+ *   themeEditPreviewList()                              themeEdit.previewList
+ *   themeEditPreviewRemove('components')                themeEdit.previewRemove
+ *   themeEditHow('banner')                              themeEdit.how
+ *   themeEditHow('white text in the banner')            themeEdit.how (a question)
+ *   themeEditHow('target.png', {at: ['4,8']})           themeEdit.how (a picture)
+ *   themeEditHow('accent', {list: 'tokens'})            themeEdit.how (a list)
  *
  * Every change is checked first against what the installed Core's parts
  * really read; a change that cannot take effect is refused and nothing is
@@ -28,7 +30,9 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {AstryxError} from '../error.mjs';
+import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -46,6 +50,7 @@ import {
   KEY_TOKENS,
   LIKE,
   OPEN_FONTS,
+  HOW,
   P,
   SYSTEM_FONTS,
   familyOf,
@@ -78,11 +83,18 @@ import {ASPECTS, answerHow, checkSetting, wholeThemeTokens} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {
   SHOWCASE_GROUPS,
+  componentsPageSource,
+  overviewPageSource,
+  previewRouteSource,
   renderPreview,
   renderSheet,
   screenshot,
-  writeShowcase,
+  themeImports,
 } from './_preview.mjs';
+import {build} from '../build/build.mjs';
+import {template} from '../template/template.mjs';
+import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
+import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {baseResolved} from './_project.mjs';
 
 const E = ERROR_CODES;
@@ -351,21 +363,7 @@ export async function themeEditSet(theme, thing, value, options = {}) {
 }
 
 /**
- * Return one setting to the base theme's value: the setting is removed,
- * and the theme is rebuilt and previewed.
- * @experimental
- * @param {string} theme
- * @param {string} thing
- * @param {ChangeOptions & {value?: string}} [options] `value` names which half of
- *   the `headings` dial to reset (`weight` or `tracking`)
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
- */
-export async function themeEditReset(theme, thing, options = {}) {
-  return change('reset', theme, thing, options.value, options);
-}
-
-/**
- * @param {'set' | 'reset'} sub
+ * @param {'set' | 'undo'} sub
  * @param {string} slug
  * @param {string} thing
  * @param {string | undefined} value
@@ -384,7 +382,7 @@ async function change(sub, slug, thing, value, options) {
     mode: options.mode,
     only: options.only,
   };
-  const s = checkSetting(ctx, slug, data, thing, value, flags, sub === 'reset');
+  const s = checkSetting(ctx, slug, data, thing, value, flags, sub === 'undo');
   const base = await baseResolved(ctx.project, data.like);
   const compiledBefore = compileTheme(ctx, data, base);
   if (sub === 'set' && (s.thing === 'base' || s.thing === 'mode')) {
@@ -420,7 +418,7 @@ async function change(sub, slug, thing, value, options) {
   const k = keyOf(s);
   const prevIdx = data.settings.findIndex(x => keyOf(x) === k);
   const prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
-  if (sub === 'reset') {
+  if (sub === 'undo') {
     if (!prev) {
       const near = data.settings.filter(x => x.thing === s.thing).map(describe);
       refuse(
@@ -462,7 +460,7 @@ async function change(sub, slug, thing, value, options) {
     notes.push(...fontNotes(ctx, {...data, settings: [s]}));
   const p = await previewAfter(ctx, slug, data, png);
   return {
-    type: sub === 'set' ? 'themeEdit.set' : 'themeEdit.reset',
+    type: sub === 'set' ? 'themeEdit.set' : 'themeEdit.undo',
     data: {
       theme: slug,
       action: sub,
@@ -497,7 +495,7 @@ async function change(sub, slug, thing, value, options) {
  * sample page and the theme-building page with every component.
  * @experimental
  * @param {string} theme
- * @param {{cwd?: string, png?: boolean, group?: string}} [options]
+ * @param {import('./theme-edit.type.mjs').ThemeEditShowOptions} [options]
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditShowResponse>}
  */
 export async function themeEditShow(theme, options = {}) {
@@ -549,16 +547,28 @@ export async function themeEditShow(theme, options = {}) {
 }
 
 /**
- * Put the theme back as it was before its last change.
+ * Put the theme back as it was before its last change. With `thing`, remove
+ * that one setting instead, wherever it is in the settings: it goes back to
+ * the base theme's value.
  * @experimental
  * @param {string} theme
- * @param {{cwd?: string, png?: boolean}} [options]
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditUndoResponse>}
+ * @param {import('./theme-edit.type.mjs').ThemeEditUndoOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditUndoResponse | import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 export async function themeEditUndo(theme, options = {}) {
-  const {cwd = process.cwd(), png = false} = options;
+  const {cwd = process.cwd(), png = false, thing} = options;
+  if (thing != null)
+    return change('undo', theme, thing, options.value, options);
   requireProject(cwd);
-  const current = loadTheme(cwd, theme);
+  // A damaged settings file is what undo recovers from: the last history
+  // entry replaces it without the current file being read.
+  /** @type {import('./_settings.mjs').ThemeData | null} */
+  let current = null;
+  try {
+    current = loadTheme(cwd, theme);
+  } catch (e) {
+    if (!(e instanceof AstryxError && e.code === E.ERR_THEME_INVALID)) throw e;
+  }
   const f = themeFiles(cwd, theme);
   const history = fs.existsSync(f.history)
     ? JSON.parse(fs.readFileSync(f.history, 'utf8'))
@@ -577,28 +587,34 @@ export async function themeEditUndo(theme, options = {}) {
   await commitTheme(ctx, theme, prev, {history: false});
   fs.writeFileSync(f.history, JSON.stringify(history));
   /** @type {string[]} */
-  const undone = [];
+  const undone = current
+    ? []
+    : [
+        `the damaged ${theme}.settings.json is replaced by the settings before the last change`,
+      ];
   const now = new Map(prev.settings.map(s => [keyOf(s), s]));
-  const was = new Map(current.settings.map(s => [keyOf(s), s]));
+  const was = new Map((current?.settings ?? []).map(s => [keyOf(s), s]));
   for (const [k, s] of was) {
     const back = now.get(k);
     if (!back) undone.push(`removed ${describe(s)}`);
     else if (back.value !== s.value)
       undone.push(`${describe(s)} is back to ${back.value}`);
   }
-  for (const [k, s] of now)
-    if (!was.has(k)) undone.push(`put back ${describe(s)}`);
-  if ((current.like ?? 'none') !== (prev.like ?? 'none'))
+  if (current)
+    for (const [k, s] of now)
+      if (!was.has(k)) undone.push(`put back ${describe(s)}`);
+  if (current && (current.like ?? 'none') !== (prev.like ?? 'none'))
     undone.push(
       `base ${current.like ?? 'none'} is back to ${prev.like ?? 'none'}`,
     );
-  if (current.mode !== prev.mode)
+  if (current && current.mode !== prev.mode)
     undone.push(`mode ${current.mode} is back to ${prev.mode}`);
   const p = await previewAfter(ctx, theme, prev, png);
   return {
     type: 'themeEdit.undo',
     data: {
       theme,
+      action: 'step',
       undone,
       settings: prev.settings.length,
       stepsLeft: history.length,
@@ -617,87 +633,715 @@ function checkGroup(group) {
     );
 }
 
+/** The preview's data file: the pages it shows and the files it wrote. */
+const PREVIEW_DATA = 'theme-preview.json';
+const PREVIEW = 'astryx experimental theme preview';
+
 /**
- * The theme-building page: every component grouped, each variant side by
- * side, overlays open, and full template pages. Rendered to one HTML file,
- * or with `write` written into the app as a page module.
- * @experimental
- * @param {string} theme
- * @param {{cwd?: string, write?: string, group?: string, png?: boolean}} [options]
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewResponse>}
+ * @typedef {{id: string, label: string, file: string}} PreviewPage
+ * @typedef {{version: 1, theme: string | null, pages: PreviewPage[], files: string[]}} PreviewData
  */
-export async function themeEditPreview(theme, options = {}) {
-  const {cwd = process.cwd(), write, group, png = false} = options;
-  requireProject(cwd);
-  checkGroup(group);
-  if (write != null && png)
-    refuse(
-      E.ERR_INVALID_ARGUMENT,
-      '--png pictures the rendered HTML page; with --write the page runs in your app instead, so drop one of them.',
-    );
-  const data = loadTheme(cwd, theme);
-  const ctx = await context(cwd);
-  const f = themeFiles(cwd, theme);
-  if (!fs.existsSync(f.js)) await buildTheme(ctx, theme, data);
-  if (write != null) {
-    /** @type {string} */
-    let dir;
+
+/**
+ * Where the preview route lives. `--path` names it (inside the project);
+ * else an existing preview in the app's routes folder; else the routes
+ * folder of a Next app router (`app/` or `src/app/`); else
+ * `./theme-preview/` at the project root, with no app around it.
+ * @param {string} cwd
+ * @param {string | undefined} where
+ * @param {{optional?: boolean}} [opts] `optional`: null instead of a refusal when there is no routes folder
+ * @returns {{dir: string, app: string | null}} `app`: the routes folder, when the route is in one
+ */
+function previewDir(cwd, where, opts = {}) {
+  const routes = ['app', path.join('src', 'app')]
+    .map(r => path.join(cwd, r))
+    .filter(r => fs.existsSync(r) && fs.statSync(r).isDirectory());
+  const appOf = (/** @type {string} */ dir) =>
+    routes.find(r => dir.startsWith(r + path.sep)) ?? null;
+  if (where != null) {
     try {
-      dir = assertWithin(path.resolve(cwd, write), cwd, {
+      const dir = assertWithin(path.resolve(cwd, where), cwd, {
         allowAbsolute: true,
-        label: '--write',
+        label: '--path',
       });
+      return {dir, app: appOf(dir)};
     } catch (e) {
       if (e instanceof PathSafetyError)
         refuse(
           E.ERR_PATH_TRAVERSAL,
-          `--write ${write} is outside the current folder; write inside the folder you run the command from.`,
+          `--path ${where} is outside the project; put the preview inside the folder you run the command from.`,
         );
       throw e;
     }
-    const r = writeShowcase(ctx, theme, data, dir, group);
-    return {
-      type: 'themeEdit.preview',
-      data: {
-        theme,
-        group: group ?? null,
-        mode: 'page',
-        files: r.files,
-        html: null,
-        components: r.components,
-        skipped: r.skipped,
-        pictures: [],
-        pictureProblem: null,
-      },
-    };
   }
-  const out = group ? path.join(f.dir, `sheet-${group}.html`) : f.sheet;
-  const sheet = await renderSheet(ctx, theme, data, {group, out});
-  const shots = png
-    ? await pictures(
-        ctx.project,
-        [{html: out, png: out.replace(/\.html$/, '.png')}],
-        modesOf(data),
-      )
-    : {files: [], problem: null};
+  const candidates = routes.map(r => path.join(r, 'theme-preview'));
+  const known = candidates.find(d => fs.existsSync(path.join(d, PREVIEW_DATA)));
+  const dir = known ?? candidates[0];
+  if (!dir && opts.optional) return /** @type {any} */ (null);
+  if (!dir)
+    refuse(
+      E.ERR_NOT_FOUND,
+      'No app routes folder here (app/ or src/app/), so there is no app to put the preview in.',
+      {
+        run: [
+          `${PREVIEW} add --path <dir>   (a folder inside your app's routes)`,
+          `${PREVIEW} app <dir>          (a new starter app with the preview in it)`,
+        ],
+      },
+    );
+  return {dir, app: appOf(dir)};
+}
+
+const CLI_PACKAGE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../..',
+);
+const STARTER = path.join(CLI_PACKAGE, 'assets', 'preview-app');
+/** Starter files a folder may already have: they are the app's own, so never replaced. */
+const STARTER_KEEP = new Set(['package.json', '.gitignore']);
+/** What the starter's own package.json depends on. */
+const STARTER_DEPENDENCIES = Object.keys(
+  JSON.parse(fs.readFileSync(path.join(STARTER, 'package.json'), 'utf8'))
+    .dependencies,
+);
+
+/**
+ * `file` when it is inside `root`, also through links; else a refusal.
+ * @param {string} file absolute
+ * @param {string} root absolute
+ * @param {string} what what the path is, for the refusal
+ * @returns {string}
+ */
+function confined(file, root, what) {
+  try {
+    return assertWithin(file, root, {allowAbsolute: true, label: what});
+  } catch (e) {
+    if (e instanceof PathSafetyError)
+      refuse(
+        E.ERR_PATH_TRAVERSAL,
+        `${what} ${file} is outside ${root}; nothing was written or removed.`,
+      );
+    throw e;
+  }
+}
+
+/**
+ * The files a new starter app (Next.js app router, Core and the neutral
+ * theme) writes into `where`, with `extra` files beside them, checked before
+ * anything is written: every file stays inside the folder, also through
+ * links; with `overwrite`, a protected file there is refused and the app's
+ * own package.json and .gitignore are kept.
+ * @param {string} cwd
+ * @param {string} where
+ * @param {boolean} overwrite
+ * @param {(root: string) => Array<{rel: string, text: string}>} extra files relative to the app folder
+ * @param {Record<string, string>} dependencies added to the starter's package.json
+ * @returns {{root: string, writes: Array<{file: string, text: string}>, kept: string[]}}
+ */
+function planStarterApp(cwd, where, overwrite, extra, dependencies) {
+  /** @type {string} */
+  let root;
+  try {
+    root = assertWithin(path.resolve(cwd, where), cwd, {
+      allowAbsolute: true,
+      label: 'the app folder',
+    });
+  } catch (e) {
+    if (e instanceof PathSafetyError)
+      refuse(
+        E.ERR_PATH_TRAVERSAL,
+        `${where} is outside the current folder; make the app inside the folder you run the command from.`,
+      );
+    throw e;
+  }
+  if (fs.existsSync(root) && fs.readdirSync(root).length && !overwrite)
+    refuse(
+      E.ERR_FILE_EXISTS,
+      `${shown(cwd, root) || '.'} exists and is not empty; a starter app goes into a new or empty folder (--overwrite replaces its files).`,
+    );
+  /** @type {Array<{file: string, text: string}>} */
+  const writes = [];
+  /** @type {string[]} */
+  const kept = [];
+  /** @param {string} from */
+  const walk = from => {
+    for (const entry of fs.readdirSync(from, {withFileTypes: true})) {
+      const src = path.join(from, entry.name);
+      if (entry.isDirectory()) walk(src);
+      else if (entry.name !== 'README.md') {
+        const rel = path.relative(STARTER, src);
+        const name = rel === 'gitignore' ? '.gitignore' : rel;
+        const file = confined(
+          path.join(root, name),
+          root,
+          'a starter app file',
+        );
+        if (STARTER_KEEP.has(name) && fs.existsSync(file)) {
+          kept.push(shown(cwd, file));
+          continue;
+        }
+        const text = fs.readFileSync(src, 'utf8');
+        writes.push({
+          file,
+          text:
+            rel === 'package.json'
+              ? starterPackageJson(text, dependencies)
+              : text,
+        });
+      }
+    }
+  };
+  walk(STARTER);
+  for (const x of extra(root))
+    writes.push({
+      file: confined(path.join(root, x.rel), root, 'an app file'),
+      text: x.text,
+    });
+  const existing = writes.map(w => w.file).filter(f => fs.existsSync(f));
+  if (existing.length) {
+    /** @type {ReturnType<typeof createFileProtectionResolver>} */
+    let resolver;
+    try {
+      resolver = createFileProtectionResolver(cwd);
+    } catch (e) {
+      refuse(
+        E.ERR_FILE_EXISTS,
+        `Could not read this project's file protection (${e instanceof Error ? e.message : String(e)}), so no existing file is replaced; nothing was written.`,
+      );
+    }
+    const blocked = existing.flatMap(f => {
+      const protection = resolver.classify(f)[0];
+      return protection ? [`${shown(cwd, f)} (${protection.declaration})`] : [];
+    });
+    if (blocked.length)
+      refuse(
+        E.ERR_FILE_EXISTS,
+        `${blocked.join(', ')} ${blocked.length === 1 ? 'is' : 'are'} protected, so never replaced, even with --overwrite; nothing was written. Choose another app folder.`,
+      );
+  }
+  return {root, writes, kept: kept.sort()};
+}
+
+/**
+ * The starter's package.json with the Astryx packages pinned to this CLI's
+ * release, and `dependencies` added.
+ * @param {string} text
+ * @param {Record<string, string>} dependencies
+ */
+function starterPackageJson(text, dependencies) {
+  const pinned = text.replaceAll('{{astryxVersion}}', cliVersion());
+  if (!Object.keys(dependencies).length) return pinned;
+  const pkg = JSON.parse(pinned);
+  pkg.dependencies = Object.fromEntries(
+    Object.entries({...pkg.dependencies, ...dependencies}).sort(([a], [b]) =>
+      a.localeCompare(b),
+    ),
+  );
+  return `${JSON.stringify(pkg, null, 2)}\n`;
+}
+
+/**
+ * Write a planned starter app. No install runs here.
+ * @param {string} cwd
+ * @param {{writes: Array<{file: string, text: string}>}} plan
+ * @returns {string[]} the files written
+ */
+function writeStarterApp(cwd, plan) {
+  for (const w of plan.writes) {
+    fs.mkdirSync(path.dirname(w.file), {recursive: true});
+    fs.writeFileSync(w.file, w.text);
+  }
+  return plan.writes.map(w => shown(cwd, w.file)).sort();
+}
+
+/** @param {string} dir @returns {PreviewData | null} */
+function readPreview(dir) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, PREVIEW_DATA), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A preview file, checked: inside the route folder, also through links, and
+ * not a file there that the preview did not write, which is never replaced.
+ * @param {string} cwd
+ * @param {string} dir
+ * @param {PreviewData} data
+ * @param {string} rel relative to dir
+ * @returns {string} the absolute file
+ */
+function previewFile(cwd, dir, data, rel) {
+  const file = confined(path.join(dir, rel), dir, 'a preview file');
+  const key = rel.split(path.sep).join('/');
+  if (fs.existsSync(file) && !data.files.includes(key))
+    refuse(
+      E.ERR_FILE_EXISTS,
+      `${shown(cwd, file)} exists and the preview did not write it; it is never replaced. Move it, or put the preview elsewhere with --path.`,
+    );
+  return file;
+}
+
+/**
+ * Write one file of the preview, checked as {@link previewFile} checks it.
+ * @param {string} cwd
+ * @param {string} dir
+ * @param {PreviewData} data
+ * @param {string} rel relative to dir
+ * @param {string} text
+ */
+function writePreviewFile(cwd, dir, data, rel, text) {
+  const file = previewFile(cwd, dir, data, rel);
+  fs.mkdirSync(path.dirname(file), {recursive: true});
+  fs.writeFileSync(file, text);
+  const key = rel.split(path.sep).join('/');
+  if (!data.files.includes(key)) data.files.push(key);
+}
+
+/** The themes this command made, by name. @param {string} cwd */
+function editedThemes(cwd) {
+  const root = path.join(cwd, 'themes');
+  return fs.existsSync(root)
+    ? fs
+        .readdirSync(root)
+        .filter(d => fs.existsSync(themeFiles(cwd, d).settings))
+        .sort()
+    : [];
+}
+
+/**
+ * Write the route and the data file from the page list.
+ * @param {string} cwd
+ * @param {string} dir
+ * @param {PreviewData} data
+ */
+async function writeRoute(cwd, dir, data) {
+  /** @type {{name: string, module: string, css: string[]} | null} */
+  let theme = null;
+  if (data.theme) {
+    const t = loadTheme(cwd, data.theme);
+    const ctx = await context(cwd);
+    if (!fs.existsSync(themeFiles(cwd, data.theme).js))
+      await buildTheme(ctx, data.theme, t);
+    const ti = themeImports(ctx, data.theme, t, dir);
+    theme = {name: data.theme, module: ti.module, css: ti.css};
+  }
+  writePreviewFile(
+    cwd,
+    dir,
+    data,
+    'page.tsx',
+    previewRouteSource({pages: data.pages, theme}),
+  );
+  if (!data.files.includes(PREVIEW_DATA)) data.files.push(PREVIEW_DATA);
+  fs.writeFileSync(
+    path.join(dir, PREVIEW_DATA),
+    `${JSON.stringify(data, null, 2)}\n`,
+  );
+}
+
+/**
+ * How to open the preview, from where it is.
+ * @param {string} cwd
+ * @param {{dir: string, app: string | null}} at
+ */
+function openLine(cwd, at) {
+  if (at.app)
+    return `open /${path.relative(at.app, at.dir).split(path.sep).join('/')} in the running app`;
+  return `no app routes folder (app/ or src/app/) was found, so the preview is in ${shown(cwd, at.dir)}/; a starter app around it is not set up yet: serve page.tsx from a route of your app, or move it there with --path`;
+}
+
+/**
+ * Add pages to the in-app theme preview, and write the preview route the
+ * first time. With a description, the build ranking picks the template
+ * pages that fit it best (`top` of them); `template` names one instead.
+ * With neither, the default pages: the sample app page and every component.
+ * Every check runs before the first write, so a refusal changes nothing.
+ * @experimental
+ * @param {string} [description]
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewAddOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAddResponse>}
+ */
+export async function themeEditPreviewAdd(description, options = {}) {
+  const {cwd = process.cwd(), top = 1} = options;
+  if (isOutsideProject(cwd))
+    refuse(
+      E.ERR_PROJECT_REQUIRED,
+      'No package.json here, so there is no app to put the preview in.',
+      {
+        run: [
+          `${PREVIEW} add --path <dir>   (run in your app: a folder inside its routes)`,
+          `${PREVIEW} app <dir>          (a new starter app with the preview in it)`,
+        ],
+      },
+    );
+  const words = (description ?? '').trim();
+  if (words && options.template != null)
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      '--template names the page; a description asks the ranking to pick one, so drop one of them.',
+    );
+  if (!Number.isInteger(top) || top < 1 || top > 3)
+    refuse(E.ERR_INVALID_ARGUMENT, `--top takes 1, 2 or 3, not "${top}".`);
+  const at = previewDir(cwd, options.path);
+  const data = readPreview(at.dir) ?? {
+    version: 1,
+    theme: null,
+    pages: [],
+    files: [],
+  };
+  /** @type {string[]} */
+  const notes = [];
+  if (options.theme != null) {
+    loadTheme(cwd, options.theme);
+    data.theme = options.theme;
+  } else if (!data.theme) {
+    const themes = editedThemes(cwd);
+    data.theme = themes.length === 1 ? themes[0] : null;
+  }
+  if (data.theme) loadTheme(cwd, data.theme);
+  const project = await openProject(cwd);
+  /** @type {Array<{id: string, label: string, source?: string, template?: string}>} */
+  const add = [];
+  /** @type {Array<{page: string, missingPackages: string[], installCommand: string | null}>} */
+  const skipped = [];
+  if (!words && options.template == null) {
+    add.push(
+      {id: 'overview', label: 'Overview', source: overviewPageSource(project)},
+      {
+        id: 'components',
+        label: 'Components',
+        source: componentsPageSource(project).source,
+      },
+    );
+  } else {
+    /** @type {Array<{name: string, displayName: string}>} */
+    let picks;
+    if (options.template != null)
+      picks = [{name: options.template, displayName: options.template}];
+    else {
+      const kit =
+        /** @type {import('../build/build.type.mjs').BuildKitResponse} */ (
+          await build(words, {cwd})
+        );
+      const start = kit.data.start;
+      picks = start ? [start, ...start.alternatives].slice(0, top) : [];
+      if (!picks.length)
+        refuse(
+          E.ERR_NOT_FOUND,
+          `No page template to show for "${words}": this project has none.`,
+          {run: [`${PREVIEW} add`]},
+        );
+    }
+    for (const pick of picks) {
+      const shownTemplate =
+        /** @type {import('../template/template.type.mjs').TemplateShowResponse} */ (
+          await template(pick.name, {cwd, type: 'page'})
+        );
+      const needs = analyzeTemplateNeeds(shownTemplate.data.source, cwd);
+      if (needs.missingPackages.length) {
+        skipped.push({
+          page: pick.name,
+          missingPackages: needs.missingPackages,
+          installCommand: needs.installCommand,
+        });
+        continue;
+      }
+      add.push({id: pick.name, label: pick.displayName, template: pick.name});
+    }
+  }
+  for (const s of skipped)
+    notes.push(
+      `the ${s.page} page needs ${s.missingPackages.join(', ')}, so it was not added${s.installCommand ? `: ${s.installCommand}, then add it again` : ''}`,
+    );
+  if (!add.length)
+    refuse(
+      E.ERR_DEP_MISSING,
+      `No page was added: ${skipped.map(s => `the ${s.page} page needs ${s.missingPackages.join(', ')}`).join('; ')}. Nothing was written.`,
+      {
+        run: skipped.flatMap(s => (s.installCommand ? [s.installCommand] : [])),
+      },
+    );
+  for (const page of add)
+    previewFile(cwd, at.dir, data, `pages/${page.id}.tsx`);
+  previewFile(cwd, at.dir, data, 'page.tsx');
+  previewFile(cwd, at.dir, data, PREVIEW_DATA);
+
+  /** @type {string[]} */
+  const added = [];
+  for (const page of add) {
+    const file = `pages/${page.id}`;
+    if (page.template != null) {
+      const target = previewFile(cwd, at.dir, data, `${file}.tsx`);
+      await template(page.template, {
+        cwd,
+        type: 'page',
+        targetPath: path.relative(cwd, target),
+        overwrite: true,
+      });
+      if (!data.files.includes(`${file}.tsx`)) data.files.push(`${file}.tsx`);
+    } else
+      writePreviewFile(
+        cwd,
+        at.dir,
+        data,
+        `${file}.tsx`,
+        /** @type {string} */ (page.source),
+      );
+    if (!data.pages.some(x => x.id === page.id)) {
+      data.pages.push({id: page.id, label: page.label, file});
+      added.push(page.id);
+    }
+  }
+  await writeRoute(cwd, at.dir, data);
   return {
-    type: 'themeEdit.preview',
+    type: 'themeEdit.previewAdd',
     data: {
-      theme,
-      group: group ?? null,
-      mode: 'html',
-      files: [sheet.file],
-      html: sheet.file,
-      components: sheet.components,
-      skipped: sheet.skipped,
-      pictures: shots.files,
-      pictureProblem: shots.problem,
+      folder: shown(cwd, at.dir),
+      theme: data.theme,
+      added,
+      skipped,
+      notes,
+      pages: data.pages.map(x => x.id),
+      files: data.files.map(f => shown(cwd, path.join(at.dir, f))),
+      open: openLine(cwd, at),
     },
   };
 }
 
-/** What `explain --list` takes. */
-const EXPLAIN_LISTS = ['dials', 'tokens', 'parts', 'families', 'properties'];
+/**
+ * Make a new starter app (Next.js app router, Core and the neutral theme,
+ * with the Astryx packages pinned to this CLI's release) in `dir`, with the
+ * theme preview route and its default pages inside. With `theme`, the theme
+ * folder is copied into the app and the pages wear it. No install runs.
+ * Every check runs before the first write, so a refusal changes nothing.
+ * @experimental
+ * @param {string} dir
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewAppOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAppResponse>}
+ */
+export async function themeEditPreviewApp(dir, options = {}) {
+  const {cwd = process.cwd(), overwrite = false} = options;
+  if (typeof dir !== 'string' || !dir.trim())
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      'Name the folder for the new app: a new or empty folder inside the current one.',
+      {run: [`${PREVIEW} app <dir>`]},
+    );
+  const slug = options.theme ?? null;
+  const theme = slug == null ? null : loadTheme(cwd, slug);
+  // A new app has no Core installed yet: its pages come from this CLI's own
+  // Core when the current folder has none.
+  const project = await openProject(cwd).catch(() => openProject(CLI_PACKAGE));
+  /** @type {Record<string, string>} */
+  const dependencies = {};
+  /** @type {Array<{rel: string, text: string}>} */
+  const themeCopy = [];
+  /** @type {{name: string, module: string, css: string[]} | null} */
+  let routeTheme = null;
+  const routeDir = path.join('src', 'app', 'theme-preview');
+  if (slug != null && theme) {
+    const from = themeFiles(cwd, slug);
+    if (!fs.existsSync(from.js) || !fs.existsSync(from.css))
+      await buildTheme(await context(cwd), slug, theme);
+    const to = themeFiles('', slug);
+    // The theme and its build, with the type declarations the build writes;
+    // not its history, preview pages or pictures.
+    const skip = new Set(
+      [
+        from.history,
+        from.preview,
+        from.sheet,
+        from.previewPng,
+        from.sheetPng,
+      ].map(f => path.basename(f)),
+    );
+    for (const entry of fs.readdirSync(from.dir, {withFileTypes: true}))
+      if (entry.isFile() && !skip.has(entry.name))
+        themeCopy.push({
+          rel: path.join(to.dir, entry.name),
+          text: fs.readFileSync(path.join(from.dir, entry.name), 'utf8'),
+        });
+    if (theme.like && theme.like !== 'neutral')
+      dependencies[`@astryxdesign/theme-${theme.like}`] = cliVersion();
+    /** @param {string} rel */
+    const fromRoute = rel => {
+      const r = path.relative(routeDir, rel).split(path.sep).join('/');
+      return r.startsWith('.') ? r : `./${r}`;
+    };
+    const fonts = fontPackages(await context(cwd), theme).filter(
+      x => x.installed,
+    );
+    for (const font of fonts)
+      dependencies[font.pkg] = readVersion(project, font.pkg) ?? 'latest';
+    routeTheme = {
+      name: slug,
+      module: fromRoute(to.js),
+      css: [fromRoute(to.css), ...fonts.map(x => `${x.pkg}/index.css`)],
+    };
+  }
+  /** @type {PreviewData} */
+  const data = {version: 1, theme: slug, pages: [], files: []};
+  /** @type {Array<{rel: string, text: string}>} */
+  const preview = [];
+  for (const [id, label, source] of /** @type {const} */ ([
+    ['overview', 'Overview', overviewPageSource(project)],
+    ['components', 'Components', componentsPageSource(project).source],
+  ])) {
+    data.pages.push({id, label, file: `pages/${id}`});
+    preview.push({rel: `pages/${id}.tsx`, text: source});
+  }
+  preview.push({
+    rel: 'page.tsx',
+    text: previewRouteSource({pages: data.pages, theme: routeTheme}),
+  });
+  data.files = [...preview.map(x => x.rel), PREVIEW_DATA];
+  preview.push({rel: PREVIEW_DATA, text: `${JSON.stringify(data, null, 2)}\n`});
+  const plan = planStarterApp(
+    cwd,
+    dir,
+    overwrite,
+    () => [
+      ...themeCopy,
+      ...preview.map(x => ({rel: path.join(routeDir, x.rel), text: x.text})),
+    ],
+    dependencies,
+  );
+  const files = writeStarterApp(cwd, plan);
+  const folder = shown(cwd, plan.root) || '.';
+  /** @type {string[]} */
+  const notes = [];
+  if (plan.kept.length)
+    notes.push(
+      `kept the app's own ${plan.kept.join(', ')}: the starter needs ${[...STARTER_DEPENDENCIES, ...Object.keys(dependencies)].join(', ')} in package.json`,
+    );
+  return {
+    type: 'themeEdit.previewApp',
+    data: {
+      folder,
+      theme: slug,
+      pages: data.pages.map(x => x.id),
+      files,
+      notes,
+      open: `cd ${folder} && npm install && npm run dev, then open /theme-preview`,
+    },
+  };
+}
+
+/**
+ * The installed version of a package, as the project resolves it.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} pkg
+ * @returns {string | null}
+ */
+function readVersion(project, pkg) {
+  try {
+    return JSON.parse(
+      fs.readFileSync(project.req.resolve(`${pkg}/package.json`), 'utf8'),
+    ).version;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The pages of the in-app theme preview. With no preview, and with no
+ * routes folder for one, the list is empty.
+ * @experimental
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewListOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewListResponse>}
+ */
+export async function themeEditPreviewList(options = {}) {
+  const {cwd = process.cwd()} = options;
+  requireProject(cwd);
+  const at = previewDir(cwd, options.path, {optional: true});
+  const data = at && readPreview(at.dir);
+  return {
+    type: 'themeEdit.previewList',
+    data: {
+      folder: at && data ? shown(cwd, at.dir) : null,
+      theme: data?.theme ?? null,
+      pages: (data?.pages ?? []).map(x => ({id: x.id, label: x.label})),
+    },
+  };
+}
+
+/**
+ * Remove one page from the in-app theme preview, or with no page the whole
+ * preview: only the files it wrote are deleted, and only inside the route
+ * folder.
+ * @experimental
+ * @param {string} [page]
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewListOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewRemoveResponse>}
+ */
+export async function themeEditPreviewRemove(page, options = {}) {
+  const {cwd = process.cwd()} = options;
+  requireProject(cwd);
+  const at = previewDir(cwd, options.path);
+  const data = readPreview(at.dir);
+  if (!data)
+    refuse(
+      E.ERR_NOT_FOUND,
+      `There is no theme preview in ${shown(cwd, at.dir)}/ (no ${PREVIEW_DATA}).`,
+      {run: [`${PREVIEW} add`]},
+    );
+  // theme-preview.json is a file anyone can edit: every path in it must
+  // stay in the route folder before anything is removed.
+  const inside = (/** @type {string} */ rel) =>
+    confined(path.join(at.dir, rel), at.dir, `${PREVIEW_DATA} names`);
+  for (const rel of data.files) inside(rel);
+  for (const p of data.pages) inside(`${p.file}.tsx`);
+  /** @param {string} rel */
+  const drop = rel => {
+    const file = inside(rel);
+    fs.rmSync(file, {force: true});
+    return shown(cwd, file);
+  };
+  if (page != null && data.pages.length > 1) {
+    const one = data.pages.find(x => x.id === page);
+    if (!one)
+      refuse(E.ERR_NOT_FOUND, `The preview has no page "${page}".`, {
+        didYouMean: nearest(
+          page,
+          data.pages.map(x => x.id),
+        ),
+        run: [`${PREVIEW} list`],
+      });
+    data.pages = data.pages.filter(x => x !== one);
+    const rel = `${one.file}.tsx`;
+    data.files = data.files.filter(f => f !== rel);
+    const removed = [drop(rel)];
+    await writeRoute(cwd, at.dir, data);
+    return {
+      type: 'themeEdit.previewRemove',
+      data: {
+        folder: shown(cwd, at.dir),
+        removed,
+        pages: data.pages.map(x => x.id),
+      },
+    };
+  }
+  if (page != null && !data.pages.some(x => x.id === page))
+    refuse(E.ERR_NOT_FOUND, `The preview has no page "${page}".`, {
+      run: [`${PREVIEW} list`],
+    });
+  const removed = data.files.map(drop);
+  for (const sub of [path.join(at.dir, 'pages'), at.dir])
+    try {
+      fs.rmdirSync(sub);
+    } catch {
+      // Not empty: something there is not the preview's.
+    }
+  return {
+    type: 'themeEdit.previewRemove',
+    data: {folder: shown(cwd, at.dir), removed, pages: []},
+  };
+}
+
+/** What `how --list` takes. */
+const HOW_LISTS = ['dials', 'tokens', 'parts', 'families', 'properties'];
 
 /**
  * Explain anything a theme change can name, or answer a question about one:
@@ -709,10 +1353,10 @@ const EXPLAIN_LISTS = ['dials', 'tokens', 'parts', 'families', 'properties'];
  * list of dials, tokens, parts, families or CSS properties.
  * @experimental
  * @param {string} subject a part, family, setting, aspect, question, or PNG file; with `list`, a filter
- * @param {import('./theme-edit.type.mjs').ThemeEditExplainOptions} [options]
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditExplainResponse>}
+ * @param {import('./theme-edit.type.mjs').ThemeEditHowOptions} [options]
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditHowResponse>}
  */
-export async function themeEditExplain(subject, options = {}) {
+export async function themeEditHow(subject, options = {}) {
   const {cwd = process.cwd(), list, at = [], count} = options;
   requireProject(cwd);
   const t = (subject ?? '').trim();
@@ -723,24 +1367,24 @@ export async function themeEditExplain(subject, options = {}) {
         '--at reads a picture; --list lists names, so drop one of them.',
       );
     return {
-      type: 'themeEdit.explain',
+      type: 'themeEdit.how',
       data: {kind: 'list', subject: t, ...(await listItems(list, t, cwd))},
     };
   }
   if (/\.png$/i.test(t))
     return {
-      type: 'themeEdit.explain',
+      type: 'themeEdit.how',
       data: {kind: 'picture', subject: t, ...pictureColors(t, cwd, at, count)},
     };
   if (at.length)
     refuse(
       E.ERR_INVALID_ARGUMENT,
       '--at reads the color at points of a PNG picture; name the picture first.',
-      {run: [`${P} explain picture.png --at "40,20"`]},
+      {run: [`${HOW} picture.png --at "40,20"`]},
     );
   if (count != null)
     refuse(E.ERR_INVALID_ARGUMENT, 'A count applies only to a picture.', {
-      run: [`${P} explain picture.png ${count}`],
+      run: [`${HOW} picture.png ${count}`],
     });
   if (!t) {
     refuse(
@@ -748,9 +1392,9 @@ export async function themeEditExplain(subject, options = {}) {
       'Name a part, a family, a setting, an aspect, a question in quotes, or a PNG picture.',
       {
         run: [
-          `${P} explain card`,
-          `${P} explain "white text in the banner"`,
-          `${P} explain --list dials`,
+          `${HOW} card`,
+          `${HOW} "white text in the banner"`,
+          `${HOW} --list dials`,
         ],
       },
     );
@@ -759,7 +1403,7 @@ export async function themeEditExplain(subject, options = {}) {
   const {C} = ctx;
   if (FAMILIES[t]) {
     return {
-      type: 'themeEdit.explain',
+      type: 'themeEdit.how',
       data: {
         kind: 'family',
         subject: t,
@@ -769,7 +1413,7 @@ export async function themeEditExplain(subject, options = {}) {
         lines: [
           `${t} (family): ${FAMILIES[t].join(', ')}`,
           AUTO_SPREAD.includes(t)
-            ? `  styling one of them styles all (--only to opt out); ${P} explain <one of them> for details`
+            ? `  styling one of them styles all (--only to opt out); ${HOW} <one of them> for details`
             : `  --on ${t} styles all of them; --on <one of them> styles just that one`,
         ],
       },
@@ -785,7 +1429,7 @@ export async function themeEditExplain(subject, options = {}) {
           : `  family: ${fam} (--on ${fam} styles all of: ${FAMILIES[fam].join(', ')})`,
       );
     return {
-      type: 'themeEdit.explain',
+      type: 'themeEdit.how',
       data: {
         kind: 'part',
         subject: t,
@@ -820,18 +1464,18 @@ export async function themeEditExplain(subject, options = {}) {
         commands: DIALS[dial].examples.map(e => `${P} ${e}`),
       });
     results.push({
-      text: `for one part: ${P} explain <part> lists what it reads for ${t}`,
-      commands: [`${P} explain button`],
+      text: `for one part: ${HOW} <part> lists what it reads for ${t}`,
+      commands: [`${HOW} button`],
     });
     return {
-      type: 'themeEdit.explain',
+      type: 'themeEdit.how',
       data: {kind: 'aspect', subject: t, results, lines: []},
     };
   }
   if (DIALS[t]) {
     const d = DIALS[t];
     return {
-      type: 'themeEdit.explain',
+      type: 'themeEdit.how',
       data: {
         kind: 'setting',
         subject: t,
@@ -849,7 +1493,7 @@ export async function themeEditExplain(subject, options = {}) {
     const readers = C.anyReader(t);
     const type = C.typeOf(t);
     return {
-      type: 'themeEdit.explain',
+      type: 'themeEdit.how',
       data: {
         kind: 'setting',
         subject: t,
@@ -868,7 +1512,7 @@ export async function themeEditExplain(subject, options = {}) {
   if (CSS_PROPERTIES.has(t)) {
     const setters = Object.keys(C.MAP).filter(p => t in C.MAP[p].own);
     return {
-      type: 'themeEdit.explain',
+      type: 'themeEdit.how',
       data: {
         kind: 'setting',
         subject: t,
@@ -884,7 +1528,7 @@ export async function themeEditExplain(subject, options = {}) {
   }
   const h = answerHow(ctx, t);
   return {
-    type: 'themeEdit.explain',
+    type: 'themeEdit.how',
     data: {
       kind: 'question',
       subject: t,
@@ -896,20 +1540,20 @@ export async function themeEditExplain(subject, options = {}) {
 }
 
 /**
- * The items of `explain --list`.
+ * The items of `how --list`.
  * @param {string} kind
  * @param {string} filter
  * @param {string} cwd
  * @returns {Promise<{list: string, items: Array<Record<string, unknown>>, common?: boolean}>}
  */
 async function listItems(kind, filter, cwd) {
-  if (!EXPLAIN_LISTS.includes(kind))
+  if (!HOW_LISTS.includes(kind))
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `--list takes ${EXPLAIN_LISTS.join(', ')}${kind ? `, not "${kind}"` : ''}.`,
+      `--list takes ${HOW_LISTS.join(', ')}${kind ? `, not "${kind}"` : ''}.`,
       {
-        didYouMean: kind ? nearest(kind, EXPLAIN_LISTS) : [],
-        run: [`${P} explain --list dials`],
+        didYouMean: kind ? nearest(kind, HOW_LISTS) : [],
+        run: [`${HOW} --list dials`],
       },
     );
   const f = (/** @type {string} */ x) =>
@@ -985,7 +1629,7 @@ export function parsePoints(at) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `--at takes x,y pairs; "${at.join(' ')}" has an odd count of numbers.`,
-      {run: [`${P} colors picture.png --at "40,20;300,180"`]},
+      {run: [`${HOW} picture.png --at "40,20;300,180"`]},
     );
   /** @type {Array<{x: number, y: number}>} */
   const points = [];

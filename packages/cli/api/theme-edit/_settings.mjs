@@ -752,6 +752,20 @@ export async function contrastProblems(ctx, data, res) {
 }
 
 /**
+ * Settings file text as data, or null when there is none or it is damaged.
+ * @param {string | null} text
+ * @returns {ThemeData | null}
+ */
+function parseSettings(text) {
+  if (text == null) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Write the settings, build, and on a failed build put back what was there.
  * Returns what changed in the resolved tokens and the lifted keys that are
  * new since the last build.
@@ -770,9 +784,8 @@ export async function commitTheme(ctx, slug, data, {history}) {
     snapBefore && fs.existsSync(f.js)
       ? await resolvedTokens(ctx, slug).catch(() => null)
       : null;
-  const liftedBefore = new Set(
-    snapBefore ? (JSON.parse(snapBefore).lifted ?? []) : [],
-  );
+  const before = parseSettings(snapBefore);
+  const liftedBefore = new Set(before?.lifted ?? []);
   fs.mkdirSync(f.dir, {recursive: true});
   /** @type {{warnings: string[], lifted: string[]}} */
   let built;
@@ -781,7 +794,7 @@ export async function commitTheme(ctx, slug, data, {history}) {
   } catch (e) {
     if (snapBefore) {
       fs.writeFileSync(f.settings, snapBefore);
-      await buildTheme(ctx, slug, JSON.parse(snapBefore)).catch(() => null);
+      if (before) await buildTheme(ctx, slug, before).catch(() => null);
     } else fs.rmSync(f.dir, {recursive: true, force: true});
     if (e instanceof AstryxError && e.code === ERROR_CODES.ERR_UNKNOWN_THEME)
       throw e;

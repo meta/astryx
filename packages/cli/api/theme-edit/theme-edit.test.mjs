@@ -3,24 +3,17 @@
 /**
  * @file Tests for `astryx experimental theme` (the theme-edit API): refusals
  * with the command that works, families, typed modes, the lift pass, the
- * settings round trip, `how` and `explain` on real parts, and `colors`.
- * Every check runs against the Core and Neutral theme this repository builds.
+ * settings round trip, `how` on real parts, and `colors`.
+ * Every check runs against the Core this repository builds.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
-import {execFileSync} from 'node:child_process';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {
-  coreBuildLockDir,
-  ensureBuiltOnce,
-} from '../../clients/cli/commands/ensure-core-built.mjs';
-import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
-import {
-  themeEditExplain,
+  themeEditHow,
   themeEditNew,
-  themeEditReset,
   themeEditSet,
   themeEditShow,
   themeEditUndo,
@@ -31,6 +24,10 @@ import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
+import {
+  FIXTURE_PACKAGES,
+  writeFixtureBaseTheme,
+} from '../../test-utils/base-theme-fixture.mjs';
 
 /** @type {string} */
 let cwd;
@@ -70,23 +67,9 @@ const sourceOf = slug =>
   fs.readFileSync(path.join(cwd, 'themes', slug, `${slug}.theme.ts`), 'utf8');
 
 beforeAll(async () => {
-  ensureBuiltOnce({
-    isBuilt: () =>
-      fs.existsSync(
-        path.join(REPO_ROOT, 'packages/themes/neutral/dist/neutral.js'),
-      ),
-    build: () =>
-      execFileSync('pnpm', ['-F', '@astryxdesign/theme-neutral', 'build'], {
-        cwd: REPO_ROOT,
-        stdio: 'pipe',
-      }),
-    lockDir: `${coreBuildLockDir(REPO_ROOT)}.neutral`,
-  });
-  cwd = makeLinkedFixture('astryx-theme-edit-', [
-    '@astryxdesign',
-    'react',
-    'react-dom',
-  ]);
+  cwd = makeLinkedFixture('astryx-theme-edit-', FIXTURE_PACKAGES);
+  // CI builds only Core, so the base theme is a fixture, not a built package.
+  writeFixtureBaseTheme(cwd, 'neutral');
   await themeEditNew('t', {cwd, like: 'neutral'});
 }, 120_000);
 
@@ -135,7 +118,7 @@ describe('new', () => {
   it('refuses a theme that exists, naming what to run instead', async () => {
     const r = await refusal(() => themeEditNew('t', {cwd}));
     expect(r.code).toBe('ERR_FILE_EXISTS');
-    expect(r.run).toContain('astryx experimental theme show t');
+    expect(r.run).toContain('astryx experimental theme editor show t');
   });
 });
 
@@ -149,7 +132,7 @@ describe('refusals', () => {
     expect(r.message).toContain('card never reads --color-on-info-muted');
     expect(r.message).toContain('Nothing was changed.');
     expect(r.run).toContain(
-      'astryx experimental theme set t color "#ffffff" --on card',
+      'astryx experimental theme editor set t color "#ffffff" --on card',
     );
     expect(settingsOf('t')).toBe(before);
   });
@@ -228,8 +211,51 @@ describe('refusals', () => {
     );
     expect(r.code).toBe('ERR_MISSING_ARGUMENT');
     expect(r.run[0]).toBe(
-      'astryx experimental theme set t box-shadow none --on <part>',
+      'astryx experimental theme editor set t box-shadow none --on <part>',
     );
+  });
+});
+
+describe('colors', () => {
+  it('refuses a word that is not a CSS color, for a dial and for a token', async () => {
+    const before = settingsOf('t');
+    expect(
+      (await refusal(() => themeEditSet('t', 'accent', 'banana', {cwd}))).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('t', '--color-text-primary', 'notacolor', {cwd}),
+        )
+      ).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+    expect(settingsOf('t')).toBe(before);
+  });
+
+  it('takes a CSS named color and derives the accent from it', async () => {
+    const r = await themeEditSet('t', 'accent', 'rebeccapurple', {cwd});
+    expect(r.data.changedTokens.join(' ')).toContain('--color-text-accent');
+    await themeEditUndo('t', {cwd, thing: 'accent'});
+  });
+});
+
+describe('undo recovery', () => {
+  it('restores the last history entry when the settings file is damaged', async () => {
+    await themeEditSet('t', 'corners', 'pill', {cwd});
+    const good = settingsOf('t');
+    await themeEditSet('t', 'spacing', 'roomy', {cwd});
+    const file = path.join(cwd, 'themes', 't', 't.settings.json');
+    fs.writeFileSync(file, '{ not json');
+    const broken = await refusal(() => themeEditShow('t', {cwd}));
+    expect(broken.code).toBe('ERR_THEME_INVALID');
+    expect(broken.message).toContain('undo t');
+    const r = await themeEditUndo('t', {cwd});
+    expect(r.data.action).toBe('step');
+    expect(r.data.undone[0]).toContain('damaged');
+    expect(JSON.parse(settingsOf('t')).settings).toEqual(
+      JSON.parse(good).settings,
+    );
+    await themeEditUndo('t', {cwd, thing: 'corners'});
   });
 });
 
@@ -240,7 +266,7 @@ describe('typed modes', () => {
     );
     expect(r.code).toBe('ERR_THEME_NO_MODE');
     expect(r.run).toEqual([
-      'astryx experimental theme set t --radius-element 4px',
+      'astryx experimental theme editor set t --radius-element 4px',
     ]);
   });
 
@@ -262,7 +288,11 @@ describe('typed modes', () => {
     expect(settingsSourceOf('t')).toMatch(
       /"--color-background-body": \[\s*"[^"]+",\s*"#101010"\s*\]/,
     );
-    await themeEditReset('t', '--color-background-body', {cwd, mode: 'dark'});
+    await themeEditUndo('t', {
+      thing: '--color-background-body',
+      cwd,
+      mode: 'dark',
+    });
   });
 
   it('refuses --mode on a one-mode theme', async () => {
@@ -273,7 +303,7 @@ describe('typed modes', () => {
     );
     expect(r.code).toBe('ERR_THEME_NO_MODE');
     expect(r.run).toEqual([
-      'astryx experimental theme set night --color-accent "#ff0000"',
+      'astryx experimental theme editor set night --color-accent "#ff0000"',
     ]);
   });
 });
@@ -294,8 +324,9 @@ describe('families', () => {
       only: true,
     });
     expect(one.data.parts).toEqual(['text-area']);
-    await themeEditReset('t', 'border', {cwd, on: 'text-input'});
-    await themeEditReset('t', 'border-color', {
+    await themeEditUndo('t', {thing: 'border', cwd, on: 'text-input'});
+    await themeEditUndo('t', {
+      thing: 'border-color',
       cwd,
       on: 'text-area',
       only: true,
@@ -316,8 +347,8 @@ describe('families', () => {
     expect(all.data.parts).toEqual(
       expect.arrayContaining(['card', 'dialog', 'popover']),
     );
-    await themeEditReset('t', 'box-shadow', {cwd, on: 'card'});
-    await themeEditReset('t', 'box-shadow', {cwd, on: 'containers'});
+    await themeEditUndo('t', {thing: 'box-shadow', cwd, on: 'card'});
+    await themeEditUndo('t', {thing: 'box-shadow', cwd, on: 'containers'});
   });
 
   it('--only is refused for a family that does not spread', async () => {
@@ -326,7 +357,7 @@ describe('families', () => {
     );
     expect(r.code).toBe('ERR_INVALID_ARGUMENT');
     expect(r.run).toEqual([
-      'astryx experimental theme set t box-shadow none --on card',
+      'astryx experimental theme editor set t box-shadow none --on card',
     ]);
   });
 });
@@ -348,8 +379,8 @@ describe('lift pass', () => {
     expect(JSON.parse(settingsOf('t')).lifted).toEqual(first.data.lifted);
     const next = await themeEditSet('t', 'corners', 'large', {cwd});
     expect(next.data.lifted).toEqual([]);
-    await themeEditReset('t', 'corners', {cwd});
-    await themeEditReset('t', 'font-weight', {cwd, on: 'heading'});
+    await themeEditUndo('t', {thing: 'corners', cwd});
+    await themeEditUndo('t', {thing: 'font-weight', cwd, on: 'heading'});
   });
 });
 
@@ -367,10 +398,10 @@ describe('the theme module is yours', () => {
     expect(
       fs.readFileSync(path.join(cwd, 'themes', 't', 't.css'), 'utf8'),
     ).toContain('#123456');
-    await themeEditReset('t', 'corners', {cwd});
+    await themeEditUndo('t', {thing: 'corners', cwd});
     fs.writeFileSync(file, before);
     await themeEditSet('t', 'corners', 'small', {cwd});
-    await themeEditReset('t', 'corners', {cwd});
+    await themeEditUndo('t', {thing: 'corners', cwd});
   });
 
   it('writes font families without quotes, so Core quotes them once', async () => {
@@ -379,7 +410,7 @@ describe('the theme module is yours', () => {
     expect(
       fs.readFileSync(path.join(cwd, 'themes', 't', 't.css'), 'utf8'),
     ).not.toContain('""Mona Sans""');
-    await themeEditReset('t', 'font', {cwd});
+    await themeEditUndo('t', {thing: 'font', cwd});
   });
 });
 
@@ -400,11 +431,11 @@ describe('settings round trip', () => {
     expect(step.data.setting.value).toBe('roomy');
     const undo = await themeEditUndo('t', {cwd});
     expect(undo.data.undone).toEqual(['removed spacing = roomy (whole theme)']);
-    await themeEditReset('t', 'accent', {cwd});
+    await themeEditUndo('t', {thing: 'accent', cwd});
     expect(JSON.parse(settingsOf('t')).settings).toEqual(
       JSON.parse(start).settings,
     );
-    const r = await refusal(() => themeEditReset('t', 'accent', {cwd}));
+    const r = await refusal(() => themeEditUndo('t', {thing: 'accent', cwd}));
     expect(r.code).toBe('ERR_THEME_NOT_SET');
   });
 
@@ -416,18 +447,18 @@ describe('settings round trip', () => {
       'astryx-button',
     );
     expect(r.data.sheetComponents).toBeGreaterThan(1);
-    await themeEditReset('t', 'surfaces', {cwd});
+    await themeEditUndo('t', {thing: 'surfaces', cwd});
   });
 });
 
-describe('explain on real parts, questions and settings', () => {
+describe('how on real parts, questions and settings', () => {
   it('a question names the banner text token, the direct property, and --when', async () => {
-    const r = await themeEditExplain('white text in the banner', {cwd});
+    const r = await themeEditHow('white text in the banner', {cwd});
     expect(r.data.kind).toBe('question');
     expect(r.data.understood.parts).toContain('banner');
     const commands = r.data.results.flatMap(x => x.commands);
     expect(commands).toContain(
-      'astryx experimental theme set <theme> color "#ffffff" --on banner   # direct: always works',
+      'astryx experimental theme editor set <theme> color "#ffffff" --on banner   # direct: always works',
     );
     expect(
       r.data.results.some(x => x.text.includes('--when status:<value>')),
@@ -435,27 +466,27 @@ describe('explain on real parts, questions and settings', () => {
   });
 
   it('a question about soft shadows is answered with box-shadow and the shadow tokens', async () => {
-    const r = await themeEditExplain('card soft shadow', {cwd});
+    const r = await themeEditHow('card soft shadow', {cwd});
     expect(r.data.results[0].commands[0]).toContain(
       'box-shadow "var(--shadow-low)" --on containers',
     );
   });
 
-  it('explain lists what a part reads and its variants', async () => {
-    const r = await themeEditExplain('banner', {cwd});
+  it('how lists what a part reads and its variants', async () => {
+    const r = await themeEditHow('banner', {cwd});
     const lines = /** @type {string[]} */ (r.data.lines).join('\n');
     expect(lines).toContain('--when status:');
     expect(lines).toMatch(/background +--color-info-muted/);
   });
 
-  it('explain answers an aspect at the whole-theme level', async () => {
-    const r = await themeEditExplain('colors', {cwd});
+  it('how answers an aspect at the whole-theme level', async () => {
+    const r = await themeEditHow('colors', {cwd});
     expect(r.data.kind).toBe('aspect');
     expect(JSON.stringify(r.data)).toContain('--color-text-primary');
   });
 
-  it('explains a token setting with its type and readers', async () => {
-    const r = await themeEditExplain('--radius-element', {cwd});
+  it('how explains a token setting with its type and readers', async () => {
+    const r = await themeEditHow('--radius-element', {cwd});
     expect(r.data).toMatchObject({
       kind: 'setting',
       source: 'token',
@@ -464,14 +495,14 @@ describe('explain on real parts, questions and settings', () => {
   });
 
   it('--list tokens gives each token its type', async () => {
-    const r = await themeEditExplain('radius-element', {cwd, list: 'tokens'});
+    const r = await themeEditHow('radius-element', {cwd, list: 'tokens'});
     expect(r.data.items).toContainEqual(
       expect.objectContaining({name: '--radius-element', type: 'size'}),
     );
   });
 });
 
-describe('explain a picture', () => {
+describe('how on a picture', () => {
   /** A 4x2 RGB PNG: red, green, blue, white on top; black below. */
   function png() {
     const rows = [
@@ -504,7 +535,7 @@ describe('explain a picture', () => {
 
   it('reads the exact color at points in plain Node', async () => {
     fs.writeFileSync(path.join(cwd, 'p.png'), png());
-    const r = await themeEditExplain('p.png', {cwd, at: ['0,0;2,0', '3,1']});
+    const r = await themeEditHow('p.png', {cwd, at: ['0,0;2,0', '3,1']});
     expect(r.data.points).toEqual([
       {at: '0,0', color: '#ff0000'},
       {at: '2,0', color: '#0000ff'},
@@ -529,7 +560,7 @@ describe('explain a picture', () => {
 
   it('refuses a file that is not a PNG', async () => {
     fs.writeFileSync(path.join(cwd, 'x.png'), 'nope');
-    expect((await refusal(() => themeEditExplain('x.png', {cwd}))).code).toBe(
+    expect((await refusal(() => themeEditHow('x.png', {cwd}))).code).toBe(
       'ERR_INVALID_ARGUMENT',
     );
   });
@@ -542,6 +573,7 @@ describe('the command', () => {
         '--json',
         'experimental',
         'theme',
+        'editor',
         'set',
         't',
         '--color-on-info-muted',
@@ -555,15 +587,115 @@ describe('the command', () => {
     const out = JSON.parse(r.stdout);
     expect(out.code).toBe('ERR_THEME_NO_EFFECT');
     expect(out.suggestions[0].name).toBe(
-      'astryx experimental theme set t color "#ffffff" --on card',
+      'astryx experimental theme editor set t color "#ffffff" --on card',
     );
   });
 
   it('explains every subcommand in its help', async () => {
-    const r = await runCli(['experimental', 'theme', 'set', '--help'], {cwd});
+    const r = await runCli(
+      ['experimental', 'theme', 'editor', 'set', '--help'],
+      {cwd},
+    );
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('REFUSED');
     expect(r.stdout).toContain('--when <prop:value>');
+  });
+
+  it('how with nothing named prints its usage and examples', async () => {
+    const r = await runCli(['experimental', 'theme', 'editor', 'how'], {cwd});
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(
+      'experimental theme editor how [<part|setting|"question"|picture.png>]',
+    );
+    expect(r.stdout).toContain('experimental theme editor how banner');
+  });
+
+  it('bare editor prints the group help with its five commands', async () => {
+    const r = await runCli(['experimental', 'theme', 'editor'], {cwd});
+    expect(r.status).toBe(0);
+    for (const c of ['new', 'set', 'undo', 'show', 'how'])
+      expect(r.stdout).toMatch(new RegExp(`^  ${c} `, 'm'));
+    expect(r.stdout).not.toMatch(/^ {2}(reset|preview|help) /m);
+  });
+
+  it('undo with a thing removes that one setting', async () => {
+    await themeEditSet('t', 'corners', 'pill', {cwd});
+    await themeEditSet('t', 'spacing', 'roomy', {cwd});
+    const r = await themeEditUndo('t', {cwd, thing: 'corners'});
+    expect(r.type).toBe('themeEdit.undo');
+    expect(r.data.action).toBe('undo');
+    expect(settingsOf('t')).not.toContain('"corners"');
+    expect(settingsOf('t')).toContain('"spacing"');
+    await themeEditUndo('t', {cwd, thing: 'spacing'});
+  });
+
+  it('refuses an unknown option on undo and removes nothing', async () => {
+    await themeEditSet('t', 'corners', 'pill', {cwd});
+    const before = settingsOf('t');
+    const r = await runCli(
+      [
+        '--json',
+        'experimental',
+        'theme',
+        'editor',
+        'undo',
+        't',
+        'corners',
+        '--onn',
+        'card',
+      ],
+      {cwd},
+    );
+    expect(r.status).toBe(1);
+    expect(JSON.parse(r.stdout).code).toBe('ERR_INVALID_OPTION');
+    expect(settingsOf('t')).toBe(before);
+    await themeEditUndo('t', {cwd, thing: 'corners'});
+  });
+
+  it('refuses an unknown option on set and on how, and writes nothing', async () => {
+    const before = settingsOf('t');
+    const set = await runCli(
+      [
+        '--json',
+        'experimental',
+        'theme',
+        'editor',
+        'set',
+        't',
+        'accent',
+        '#7c3aed',
+        '--mdoe',
+        'dark',
+      ],
+      {cwd},
+    );
+    expect(set.status).toBe(1);
+    expect(JSON.parse(set.stdout).code).toBe('ERR_INVALID_OPTION');
+    expect(settingsOf('t')).toBe(before);
+    const how = await runCli(
+      [
+        '--json',
+        'experimental',
+        'theme',
+        'editor',
+        'how',
+        'card',
+        '--lst',
+        'parts',
+      ],
+      {cwd},
+    );
+    expect(how.status).toBe(1);
+    expect(JSON.parse(how.stdout).code).toBe('ERR_INVALID_OPTION');
+  });
+
+  it('still takes a design token as the thing', async () => {
+    const r = await runCli(
+      ['--json', 'experimental', 'theme', 'editor', 'how', '--color-accent'],
+      {cwd},
+    );
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout).data.kind).toBe('setting');
   });
 
   it('names the stable command each experimental copy will replace', async () => {
@@ -572,9 +704,12 @@ describe('the command', () => {
       {cwd},
     );
     expect(compile.stdout).toContain('Will replace: astryx theme build');
-    const fresh = await runCli(['experimental', 'theme', 'new', '--help'], {
-      cwd,
-    });
+    const fresh = await runCli(
+      ['experimental', 'theme', 'editor', 'new', '--help'],
+      {
+        cwd,
+      },
+    );
     expect(fresh.stdout).toContain(
       'Will replace: astryx theme template, astryx theme eject',
     );
