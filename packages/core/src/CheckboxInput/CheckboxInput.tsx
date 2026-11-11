@@ -536,9 +536,15 @@ export function CheckboxInput({
             styles.checkboxWrapper,
             wrapperSizeStyles[size],
             !isDisabled && styles.indicatorPressOverlay,
-            !isDisabled && indicatorPressPaintStyles.activeFill,
-            !isDisabled && indicatorPressPaintStyles.image,
-            !isDisabled && isRowPressSurface && styles.indicatorRowPressOverlay,
+            // Under a row that owns the press, the row's own overlay paints
+            // instead of the owner's press paint.
+            !isDisabled &&
+              (isRowPressSurface
+                ? styles.indicatorRowPressOverlay
+                : [
+                    indicatorPressPaintStyles.activeFill,
+                    indicatorPressPaintStyles.image,
+                  ]),
           )}
           {...focusProps}>
           <input

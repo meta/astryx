@@ -418,9 +418,10 @@ export const rowPressPaintStyles = stylex.create({
 });
 
 /**
- * The press paint of the layer over a selection control's own box:
- * CheckboxInput's box and a RadioList option's circle. Each reads the press
- * attribute off the indicator scope marker, as the hover tint does.
+ * Ready-made press paint for a selection control. `handDown` goes on
+ * CheckboxInput's row. `activeFill` and `image` go on the layer over the box
+ * or a RadioList option's circle. They read the press attribute off the
+ * indicator scope marker, as the hover tint does.
  */
 export const indicatorPressPaintStyles = stylex.create({
   // A row hands its press image down to an indicator that paints its own
