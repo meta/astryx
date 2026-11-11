@@ -2243,7 +2243,7 @@ describe('integrationPackCheck', () => {
     const marker = path.join(process.cwd(), 'astryx-pack-check-injected');
     fs.rmSync(marker, {force: true});
     const weirdDir = fs.mkdtempSync(
-      path.join(REPO_ROOT, '.astryx-;touch astryx-pack-check-injected;#-'),
+      path.join(os.tmpdir(), '.astryx-;touch astryx-pack-check-injected;#-'),
     );
     try {
       const pkg = {name: 'safe-pkg', version: '1.0.0'};
