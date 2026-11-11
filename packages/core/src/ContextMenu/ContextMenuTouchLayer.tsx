@@ -100,6 +100,14 @@ function heldPointerOf(
   return pointerId == null ? null : {pointerId, pointerType: touch.pointerType};
 }
 
+/** Preview only: the page's `?lift=L2` switch turns the lift off. */
+function isLiftOffForPreview(): boolean {
+  return (
+    (globalThis as {__astryxPreviewLiftShape?: unknown})
+      .__astryxPreviewLiftShape === 'L2'
+  );
+}
+
 /**
  * UIContextMenuInteraction's long press. iOS Safari never fires `contextmenu`
  * for a held finger. So the trigger runs its own recognizer on UIKit's
@@ -228,7 +236,9 @@ export function ContextMenuTouchLayer({
       isTracking: () => recognizer.numberOfTouches > 0,
       lift: onLayerShown => {
         const trigger = triggerRef.current;
-        if (trigger == null) {
+        // Preview only: `?lift=L2` on the preview page shows the menu with no
+        // lift, where the finger landed, as without the lift.
+        if (trigger == null || isLiftOffForPreview()) {
           return null;
         }
         // The lift grows on from the rect the press feedback left on the

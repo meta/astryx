@@ -188,6 +188,12 @@ export const categories: SandboxCategory[] = [
         description:
           'ContextMenus on list rows, cards, table cells and pictures, at the page edges and in clipping boxes, on a bare page that scrolls',
       },
+      {
+        name: 'ContextMenu Lift Preview',
+        href: '/pages/context-menu-lift-shapes/',
+        description:
+          'Preview only: one list of rows with the same ContextMenu, with the lift on or off',
+      },
     ],
   },
   {

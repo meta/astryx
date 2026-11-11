@@ -140,7 +140,8 @@ window.__lift = {
       press,
     );
   },
-  dismissMenu: () => lift.dismissSurface(element('menu')),
+  // Preview only: the lift has no surface dismissal to call.
+  dismissMenu: () => {},
   closeMenu: () => element('menu').hidePopover(),
   drop: () => lift.drop(),
   dispose: () => lift.dispose(),
