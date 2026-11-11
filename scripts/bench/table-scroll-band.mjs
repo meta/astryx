@@ -9,7 +9,9 @@
  *
  * Usage:
  *   node scripts/bench/table-scroll-band.mjs --variant baseline=<dist> \
- *     --variant band=<dist> [--runs 5] [--out results.json]
+ *     --variant band=<dist>[:abcde] [--runs 5] [--only rows] [--out results.json]
+ *
+ * A variant's optional `:letters` limits it to those patterns.
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -24,8 +26,13 @@ let only = null;
 for (let index = 0; index < args.length; index++) {
   const arg = args[index];
   if (arg === '--variant') {
-    const [name, dir] = args[++index].split('=');
-    variants.push({name, dir: path.resolve(dir)});
+    const [name, spec] = args[++index].split('=');
+    const [dir, letters] = spec.split(':');
+    variants.push({
+      name,
+      dir: path.resolve(dir),
+      patterns: letters == null ? null : new Set(letters.split('')),
+    });
   } else if (arg === '--runs') {
     runs = Number(args[++index]);
   } else if (arg === '--out') {
@@ -94,14 +101,43 @@ function serve(dir) {
 }
 
 // Counts React commits through the DevTools global hook, which React's
-// production build also calls.
+// production build also calls. In a counting pass it also counts body cells
+// that rendered: a re-rendered cell gets a new props object, and a skipped
+// one keeps the object it had.
 const HOOK = `
 window.__commits = 0;
+window.__cellRenders = 0;
+window.__countCells = false;
+const seenProps = new WeakSet();
+const fiberRoots = new Set();
+// Walks the committed tree; returns the body cells whose props are new.
+window.__markCells = () => {
+  let rendered = 0;
+  const stack = [...fiberRoots].map(root => root.current);
+  while (stack.length > 0) {
+    const fiber = stack.pop();
+    const props = fiber.memoizedProps;
+    if (fiber.tag === 5 && fiber.type === 'td' && props != null &&
+        props['aria-hidden'] !== 'true' && !seenProps.has(props)) {
+      seenProps.add(props);
+      rendered++;
+    }
+    if (fiber.sibling) stack.push(fiber.sibling);
+    if (fiber.child) stack.push(fiber.child);
+  }
+  return rendered;
+};
 window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
   supportsFiber: true,
   renderers: new Map(),
   inject() { return 1; },
-  onCommitFiberRoot() { window.__commits++; },
+  onCommitFiberRoot(id, root) {
+    window.__commits++;
+    fiberRoots.add(root);
+    if (window.__countCells) {
+      window.__cellRenders += window.__markCells();
+    }
+  },
   onCommitFiberUnmount() {},
   onPostCommitFiberRoot() {},
   checkDCE() {},
@@ -214,6 +250,8 @@ async function runPattern(page, pattern, checkBlank) {
       const middleLeft = (region.scrollWidth - region.clientWidth) / 2;
       const canBlock = region.scrollHeight > region.clientHeight + 1;
       const canInline = region.scrollWidth > region.clientWidth + 1;
+      window.__countCells = checkBlank;
+      const cellRendersBefore = window.__cellRenders;
       const commitsBefore = window.__commits;
       const stamps = [];
       const rowSamples = [];
@@ -250,8 +288,10 @@ async function runPattern(page, pattern, checkBlank) {
         gaps[Math.min(gaps.length - 1, Math.floor(gaps.length * q))];
       const mean = values =>
         values.reduce((sum, value) => sum + value, 0) / values.length;
+      window.__countCells = false;
       return {
         commits: window.__commits - commitsBefore,
+        cellRenders: checkBlank ? window.__cellRenders - cellRendersBefore : null,
         frameP50: at(0.5),
         frameP95: at(0.95),
         frameMax: gaps[gaps.length - 1],
@@ -304,6 +344,10 @@ async function measure(
   await page.goto(`${origin}/iframe.html?id=${storyId}&viewMode=story`);
   await page.locator('#storybook-root table').first().waitFor();
   await page.waitForTimeout(500);
+  if (checkBlank) {
+    // The cells mounted so far count as already rendered.
+    await page.evaluate(() => window.__markCells());
+  }
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Performance.enable');
   await cdp.send('Emulation.setCPUThrottlingRate', {rate: throttle});
@@ -345,11 +389,19 @@ try {
     }
     for (const patternKey of story.patterns) {
       const pattern = PATTERNS[patternKey];
+      const active = variants.filter(
+        variant => variant.patterns == null || variant.patterns.has(patternKey),
+      );
+      if (active.length === 0) {
+        continue;
+      }
       for (const throttle of THROTTLES) {
-        const byVariant = Object.fromEntries(variants.map(v => [v.name, []]));
+        const byVariant = Object.fromEntries(active.map(v => [v.name, []]));
         for (let run = 0; run < runs; run++) {
-          // Alternate the order so neither build always runs first.
-          const order = run % 2 === 0 ? variants : [...variants].reverse();
+          // Rotate the order so no build always runs first.
+          const order = active.map(
+            (_, index) => active[(index + run) % active.length],
+          );
           for (const variant of order) {
             const index = variants.indexOf(variant);
             const result = await measure(
@@ -371,8 +423,10 @@ try {
             });
           }
         }
-        // A separate pass checks coverage, whose layout reads would skew timing.
-        for (const [index, variant] of variants.entries()) {
+        // A separate pass checks coverage and counts cell renders, whose reads
+        // would skew timing.
+        for (const variant of active) {
+          const index = variants.indexOf(variant);
           const result = await measure(
             browser,
             servers[index].origin,
@@ -390,8 +444,9 @@ try {
             ...result,
           });
           byVariant[variant.name].blankFrames = result.blankFrames;
+          byVariant[variant.name].cellRenders = result.cellRenders;
         }
-        for (const variant of variants) {
+        for (const variant of active) {
           const results = byVariant[variant.name];
           const keys = Object.keys(results[0]).filter(
             key => typeof results[0][key] === 'number',
@@ -403,6 +458,7 @@ try {
             throttle,
             variant: variant.name,
             blankFrames: results.blankFrames,
+            cellRenders: results.cellRenders,
           };
           for (const key of keys) {
             row[key] = median(results.map(result => result[key]));
