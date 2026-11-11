@@ -37,7 +37,11 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 import {subscribeInput} from '../utils/inputStream';
-import {scrollportTop, scrollsPage} from '../utils/pageScroller';
+import {
+  scrollEventTarget,
+  scrollportTop,
+  scrollsPage,
+} from '../utils/pageScroller';
 
 // =============================================================================
 // Types
@@ -412,11 +416,12 @@ export function useChatStreamScroll({
     };
 
     // A scroll of the page fires at the document, not at its root element.
-    const view = isPage ? doc.defaultView : null;
+    const eventTarget = scrollEventTarget(el);
+    const view = eventTarget === doc ? doc.defaultView : null;
     const stopPageListeners: (() => void)[] = [];
     if (view != null) {
       const atDocument = (listener: () => void) => (event: Event) => {
-        if (event.target === doc) {
+        if (event.target === eventTarget) {
           listener();
         }
       };
