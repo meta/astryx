@@ -348,7 +348,8 @@ presses nothing.
   as a held stepper; never plain buttons, links, cards or list cells) gets
   one: once its press is delivered its finger's moves are cancelled, so the
   browser's pan never takes the held control (UIKit's
-  `touchesShouldCancel(in:)` is false for a tracking control). Its element
+  `touchesShouldCancel(in:)` is false for a tracking control). With a second
+  finger down, the moves stay the browser's, for its pinch (FR10). Its element
   also gets `touch-action: manipulation`, for every pointer, as a tap
   recognizer's does (`spec:AST-094` FR18), so taps in quick succession
   never zoom. Where the primary pointer is fine the blocking listener comes
