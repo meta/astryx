@@ -24,6 +24,7 @@ const ci = yaml.parse(
 );
 const plan = ci.jobs['release-specs-plan'];
 const job = ci.jobs['release-specs'];
+const join = ci.jobs['release-specs-changed'];
 const contracts = ci.jobs['a11y-contracts-shard'];
 const stepOf = (owner, name) => owner.steps.find(each => each.name === name);
 const run = stepOf(job, 'Run the planned release specs');
@@ -76,8 +77,57 @@ function runStep(specs, files) {
 }
 
 describe('release-specs (changed)', () => {
-  it('is a job of its own, under the name merge-guard waits for', () => {
-    expect(job.name).toBe('release-specs (changed)');
+  it('joins its shards under the name merge-guard waits for', () => {
+    expect(join.name).toBe('release-specs (changed)');
+    expect(job.name).toBe(
+      'release-specs (shard ${{ matrix.shard }}/${{ matrix.of }})',
+    );
+    expect(join['runs-on']).toBe('ubuntu-slim');
+    expect(join.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'release-specs-plan',
+      'release-specs',
+    ]);
+    // It starts exactly when the shards do, and it starts after a failed
+    // shard too: the gate holds always().
+    expect(join.if).toBe(job.if);
+    expect(join.if).toContain('always()');
+    const step = join.steps.at(-1);
+    for (const [result, status] of [
+      ['success', 0],
+      ['failure', 1],
+      ['cancelled', 1],
+      ['skipped', 1],
+    ])
+      expect(
+        spawnSync('bash', ['-e', '-c', step.run], {
+          env: {...process.env, SHARDS: result},
+        }).status,
+        result,
+      ).toBe(status);
+    expect(step.env.SHARDS).toBe('${{ needs.release-specs.result }}');
+  });
+
+  it('runs each shard the plan names, all of them even when one fails', () => {
+    expect(plan.outputs.shards).toBe('${{ steps.plan.outputs.shards }}');
+    expect(job.strategy['fail-fast']).toBe(false);
+    expect(job.strategy.matrix.include).toBe(
+      '${{ fromJSON(needs.release-specs-plan.outputs.shards) }}',
+    );
+    expect(job['timeout-minutes']).toBe(15);
+  });
+
+  it('plans a Lab-only pull request from its changed files', () => {
+    const scope = plan.steps.find(each => each.id === 'scope');
+    expect(scope.with['lab-only-specs']).toBe('.');
+    expect(stepOf(plan, 'Plan the release specs').env.FILES_PATH).toBe(
+      '${{ steps.scope.outputs.changed_files_path || steps.scope.outputs.lab_specs_path }}',
+    );
+    expect(stepOf(plan, 'Require a complete changed-file list').if).toBe(
+      "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.lab_specs_path == ''",
+    );
   });
 
   it('plans on a slim runner, behind the same gate as the other contract jobs', () => {
@@ -108,7 +158,7 @@ describe('release-specs (changed)', () => {
       ),
     );
     expect(plan.outputs.has_specs).toBe('${{ steps.plan.outputs.has_specs }}');
-    expect(run.env.SPECS).toBe('${{ needs.release-specs-plan.outputs.specs }}');
+    expect(run.env.SPECS).toBe('${{ toJSON(matrix.specs) }}');
   });
 
   it('plans from the package and harness sources and the release specs', () => {
@@ -134,11 +184,29 @@ describe('release-specs (changed)', () => {
     const sparse = checkout.with['sparse-checkout'].trim().split('\n');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-plan-'));
     const copy = path.join(dir, '.plan');
-    // The script folders the job checks out; the planner reads no others.
-    for (const folder of sparse.filter(each => /(^|\/)scripts/.test(each)))
-      fs.cpSync(path.join(root, folder), path.join(copy, folder), {
+    // The scripts, visit map and recorded times the job checks out; the
+    // planner reads no others.
+    expect(sparse).toEqual(
+      expect.arrayContaining([
+        '.github',
+        'scripts/lib',
+        'apps/storybook/stories',
+      ]),
+    );
+    for (const file of [
+      '.github/scripts',
+      '.github/release-spec-visits.json',
+      '.github/a11y-contract-durations.json',
+      'scripts/lib',
+    ]) {
+      expect(
+        sparse.some(each => file === each || file.startsWith(`${each}/`)),
+        file,
+      ).toBe(true);
+      fs.cpSync(path.join(root, file), path.join(copy, file), {
         recursive: true,
       });
+    }
     const spec =
       'packages/core/src/Table/__tests__/Table.release.a11y.chromium.spec.ts';
     fs.mkdirSync(path.join(copy, path.dirname(spec)), {recursive: true});
