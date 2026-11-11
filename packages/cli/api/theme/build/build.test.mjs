@@ -1366,6 +1366,39 @@ describe('themeBuild() — outputs it may replace', () => {
     expect(error.suggestions[0].name).toMatch(/theme build ocean\.mjs$/);
   });
 
+  it.each(['ocean.css', 'ocean.d.ts', 'ocean.css.d.ts'])(
+    'refuses its output %s as input before loading it, and names the source',
+    async output => {
+      await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
+      let error;
+      try {
+        await themeBuild(output, {}, {cwd: tmpDir});
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toMatchObject({code: 'ERR_THEME_INVALID'});
+      expect(error.message).toBe(
+        `${output} is an output of \`theme build\`, not a theme source. It was built from ocean.mjs.`,
+      );
+      expect(error.suggestions[0].name).toMatch(/theme build ocean\.mjs$/);
+    },
+  );
+
+  it('refuses a file of a kind no theme module has, and names a theme source beside it', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'site.css'), 'body {}\n');
+    fs.writeFileSync(path.join(tmpDir, 'ocean.theme.ts'), theme);
+    let error;
+    try {
+      await themeBuild('site.css', {}, {cwd: tmpDir});
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({code: 'ERR_THEME_INVALID'});
+    expect(error.message).toMatch(/^site\.css is not a theme module\./);
+    expect(error.message).not.toContain(tmpDir);
+    expect(error.suggestions[0].name).toMatch(/theme build ocean\.theme\.ts$/);
+  });
+
   it('refuses a folder as its input', async () => {
     fs.mkdirSync(path.join(tmpDir, 'themes'));
     await expect(themeBuild('themes', {}, {cwd: tmpDir})).rejects.toMatchObject(

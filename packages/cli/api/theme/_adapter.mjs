@@ -472,17 +472,29 @@ function themeDescriptorName(file) {
  * @returns {string} project-relative output directory
  */
 export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
+  // The fork lands in the project, as list and add read it: the default root
+  // is the project's, and a relative [path] is read from the working folder
+  // but must stay inside the project.
+  const projectDir = findPackageRoot(cwd) ?? path.resolve(cwd);
+  const target = !targetPath
+    ? defaultEjectTarget(theme.slug)
+    : path.isAbsolute(targetPath)
+      ? targetPath
+      : path.relative(projectDir, path.resolve(cwd, targetPath)) || '.';
   let resolvedDir;
   try {
-    resolvedDir = assertWithin(
-      targetPath || defaultEjectTarget(theme.slug),
-      cwd,
-      {label: 'theme target path'},
-    );
+    resolvedDir = assertWithin(target, projectDir, {
+      label: 'theme target path',
+    });
   } catch (error) {
     if (error instanceof PathSafetyError) {
       throw new AstryxError(
-        error.message,
+        targetPath
+          ? error.message.replace(
+              JSON.stringify(target),
+              JSON.stringify(targetPath),
+            )
+          : error.message,
         undefined,
         ERROR_CODES.ERR_PATH_TRAVERSAL,
       );

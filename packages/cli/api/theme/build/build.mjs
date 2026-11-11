@@ -840,6 +840,51 @@ function themeFilesIn(dir) {
 }
 
 /**
+ * Refuse a file that is not a theme source before loading it: an output of a
+ * build (it carries the `@generated` header, whatever its extension, and
+ * names the source it was built from), or a file of a kind no theme module
+ * has, such as `.css` or `.json`.
+ * @param {string} filePath
+ * @param {string} cwd
+ */
+function assertThemeSourceFile(filePath, cwd) {
+  const rel = (/** @type {string} */ file) => path.relative(cwd, file);
+  const sourceHead = fileHead(filePath);
+  if (sourceHead.includes(GENERATED_MARKER)) {
+    const from = /Source: (.+)/.exec(sourceHead)?.[1]?.trim();
+    throw new AstryxError(
+      `${rel(filePath)} is an output of \`theme build\`, not a theme source.${from ? ` It was built from ${from}.` : ''}`,
+      from
+        ? [
+            {
+              name: formatCliCommand(`theme build ${shellWord(from)}`, cwd),
+              reason: 'build the theme source',
+            },
+          ]
+        : undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+  if (!THEME_MODULE_EXTENSIONS.includes(path.extname(filePath).toLowerCase())) {
+    throw new AstryxError(
+      `${rel(filePath)} is not a theme module. A theme source is a .ts, .tsx, .mjs or .js file that exports defineTheme(...).`,
+      themeFilesIn(path.dirname(filePath)).map(name => ({
+        name: formatCliCommand(
+          `theme build ${shellWord(
+            rel(path.join(path.dirname(filePath), name))
+              .split(path.sep)
+              .join('/'),
+          )}`,
+          cwd,
+        ),
+        reason: 'a theme source in that folder',
+      })),
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+}
+
+/**
  * Refuse a build that would replace a file it does not own. A build never
  * writes over its input, two of its own outputs at one path, or an output
  * another theme in the same run already wrote. With `refuseUnmarked`, it also
@@ -861,22 +906,6 @@ function assertOutputsReplaceable(
 ) {
   const rel = (/** @type {string} */ file) => path.relative(cwd, file);
   const sourceKey = outputKey(filePath);
-  const sourceHead = fileHead(filePath);
-  if (sourceHead.includes(GENERATED_MARKER)) {
-    const from = /Source: (.+)/.exec(sourceHead)?.[1]?.trim();
-    throw new AstryxError(
-      `${rel(filePath)} is an output of \`theme build\`, not a theme source.${from ? ` It was built from ${from}.` : ''}`,
-      from
-        ? [
-            {
-              name: formatCliCommand(`theme build ${shellWord(from)}`, cwd),
-              reason: 'build the theme source',
-            },
-          ]
-        : undefined,
-      ERROR_CODES.ERR_THEME_INVALID,
-    );
-  }
   const seen = new Set();
   for (const write of writes) {
     const key = outputKey(write.dest);
@@ -3207,6 +3236,8 @@ async function themeBuildInternal(
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
+
+  assertThemeSourceFile(filePath, cwd);
 
   if (!report.compact) {
     logger.log(`\nBuilding theme from ${path.relative(cwd, filePath)}...`);

@@ -34,6 +34,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {findPackageRoot} from '../../../foundation/fs/paths.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
@@ -118,13 +119,27 @@ const THEME_WORDS = {group: 'theme', build: 'build'};
  * @param {ThemeCommandWords} words
  */
 function inGroupWords(text, words) {
-  return words.group === THEME_WORDS.group
-    ? text
-    : text.replace(
-        /((?:\bastryx|@astryxdesign\/cli@[\w.-]+) |`)theme (add|use|remove|list|build|eject|template|targets)\b/g,
-        (_, lead, sub) =>
-          `${lead}${words.group} ${sub === 'build' ? words.build : sub}`,
-      );
+  if (words.group === THEME_WORDS.group) return text;
+  // An argument the person typed can hold the same words (a filter of
+  // `astryx theme list`); it is echoed as typed. Only an argument with a
+  // space or a backtick can match, so only those are set aside.
+  const typed = [...new Set(process.argv.slice(2))]
+    .filter(arg => /[\s`]/.test(arg))
+    .sort((a, b) => b.length - a.length);
+  /** @type {string[]} */
+  const kept = [];
+  let masked = String(text);
+  for (const arg of typed) {
+    masked = masked.split(arg).join(`\uE000${kept.length}\uE001`);
+    kept.push(arg);
+  }
+  return masked
+    .replace(
+      /((?:\bastryx|@astryxdesign\/cli@[\w.-]+) |`)theme (add|use|remove|list|build|eject|template|targets)\b/g,
+      (_, lead, sub) =>
+        `${lead}${words.group} ${sub === 'build' ? words.build : sub}`,
+    )
+    .replace(/\uE000(\d+)\uE001/g, (_, i) => kept[Number(i)]);
 }
 
 /**
@@ -328,6 +343,53 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
   });
+}
+
+/** A theme source file: `<slug>.theme.ts` (theme editor) or `<name>Theme.ts`. */
+const THEME_SOURCE_FILE = /(?:\.theme|Theme)\.(?:[cm]?[jt]sx?)$/;
+
+/**
+ * Theme sources a missing build input probably meant, relative to the working
+ * folder: the same path with `/` for `\`, or for a bare theme name the theme
+ * source in `themes/<name>/` or `src/themes/<name>/`, or `<name>` with a module
+ * extension.
+ * @param {string} file the input as given
+ * @returns {string[]}
+ */
+function themeFileGuesses(file) {
+  const cwd = process.cwd();
+  const exists = (/** @type {string} */ candidate) =>
+    fs.existsSync(path.resolve(cwd, candidate));
+  if (file.includes('\\')) {
+    const forward = file.replace(/\\/g, '/');
+    return exists(forward) ? [forward] : [];
+  }
+  if (/[/.]/.test(file)) return [];
+  const root = findPackageRoot(cwd) ?? cwd;
+  /** @type {string[]} */
+  const guesses = [];
+  for (const folder of [
+    path.join(root, 'themes', file),
+    path.join(root, 'src', 'themes', file),
+  ]) {
+    let names;
+    try {
+      names = fs.readdirSync(folder);
+    } catch {
+      continue;
+    }
+    for (const name of names.sort()) {
+      if (THEME_SOURCE_FILE.test(name) && !name.endsWith('.d.ts')) {
+        guesses.push(
+          path.relative(cwd, path.join(folder, name)).split(path.sep).join('/'),
+        );
+      }
+    }
+  }
+  for (const extension of ['.ts', '.tsx', '.mjs', '.js']) {
+    if (exists(`${file}${extension}`)) guesses.push(`${file}${extension}`);
+  }
+  return guesses.slice(0, 3);
 }
 
 /**
@@ -788,6 +850,7 @@ function registerThemeCommands(theme, program, docs, words) {
         // A quoted glob reaches us unexpanded: say so rather than reporting a
         // literal `themes/*.ts` as a missing file.
         const looksGlobby = /[*?[\]{}]/.test(entry.file);
+        const guesses = looksGlobby ? [] : themeFileGuesses(entry.file);
         return cliError(`File not found: ${entry.filePath}`, {
           code: ERROR_CODES.ERR_FILE_NOT_FOUND,
           suggestions: looksGlobby
@@ -798,7 +861,12 @@ function registerThemeCommands(theme, program, docs, words) {
                     'globs are expanded by your shell; pass the pattern unquoted, or list the files',
                 },
               ]
-            : undefined,
+            : guesses.length > 0
+              ? guesses.map(guess => ({
+                  name: `astryx ${words.group} ${words.build} ${guess}`,
+                  reason: 'a theme source that exists',
+                }))
+              : undefined,
         });
       }
 

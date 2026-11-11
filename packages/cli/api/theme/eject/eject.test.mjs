@@ -225,4 +225,40 @@ describe('themeEject (api/theme/eject)', () => {
       message: expect.not.stringMatching(/EEXIST|ENOTDIR/),
     });
   });
+
+  it('forks into the project root from a subfolder, and reports the path from the working folder', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+
+    const result = await themeEject('neutral', {cwd: sub});
+
+    expect(result.data.outputDir).toBe(path.join('..', 'themes', 'neutral'));
+    expect(
+      fs.existsSync(path.join(tmpDir, 'src/themes/neutral/neutralTheme.ts')),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(sub, 'src'))).toBe(false);
+  });
+
+  it('reads a relative path from the working folder and keeps it inside the project', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+
+    const result = await themeEject('neutral', {
+      cwd: sub,
+      targetPath: '../../custom/n',
+    });
+    expect(result.data.outputDir).toBe(path.join('..', '..', 'custom', 'n'));
+    expect(fs.existsSync(path.join(tmpDir, 'custom/n/neutralTheme.ts'))).toBe(
+      true,
+    );
+
+    await expect(
+      themeEject('neutral', {cwd: sub, targetPath: '../../../outside'}),
+    ).rejects.toMatchObject({
+      code: 'ERR_PATH_TRAVERSAL',
+      message: expect.stringContaining('"../../../outside"'),
+    });
+  });
 });

@@ -49,7 +49,10 @@ export async function themeTargets(filter, {cwd = process.cwd()} = {}) {
   const coreDir = coreDirOrThrow(requireThemeCoreDir, cwd);
 
   const all = await collectThemingTargets(path.join(coreDir, 'src'));
-  const needle = filter ? String(filter).toLowerCase() : null;
+  // A class copied from the output (`.astryx-switch`) reads as its name.
+  const needle = filter
+    ? String(filter).trim().replace(/^\./, '').toLowerCase() || null
+    : null;
   let targets = all;
   if (needle) {
     const named = all.filter(t => t.component.toLowerCase() === needle);
