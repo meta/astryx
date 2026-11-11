@@ -282,12 +282,61 @@ describe('exact tokens', () => {
     expect(r.run[0]).toMatch(/how --list tokens accnt$/);
   });
 
-  it('an exact type token reaches phones too', async () => {
+  it('accepts Core own shadows and a negative offset, and undo removes a shadow saved for one mode', async () => {
+    const shadow =
+      '0px 1px 1px light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.2)), 0px 2px 8px light-dark(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.2))';
+    await themeEditSet('h', '--shadow-low', shadow, {cwd});
+    await themeEditUndo('h', {cwd, thing: '--shadow-low'});
+    await themeEditSet('h', '--focus-outline-offset', '-2px', {cwd});
+    await themeEditUndo('h', {cwd, thing: '--focus-outline-offset'});
+    const file = path.join(cwd, 'themes/h/h.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.settings.push({
+      thing: '--shadow-low',
+      value: '0 0 0 red',
+      source: 'token',
+      mode: 'light',
+    });
+    fs.writeFileSync(file, JSON.stringify(data));
+    await themeEditUndo('h', {cwd, thing: '--shadow-low', mode: 'light'});
+    expect(
+      JSON.parse(fs.readFileSync(file, 'utf8')).settings.some(
+        (/** @type {any} */ s) => s.thing === '--shadow-low',
+      ),
+    ).toBe(false);
+  }, 240_000);
+
+  it('takes over a lock left by a command that stopped', async () => {
+    const dir = path.join(cwd, 'node_modules/.cache/astryx-theme/locks');
+    const {createHash} = await import('node:crypto');
+    const key = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, `${key}-theme-h.lock`),
+      JSON.stringify({
+        pid: 2 ** 22 + 7,
+        host: os.hostname(),
+        started: Date.now(),
+        token: 'x',
+      }),
+    );
+    const started = Date.now();
+    await themeEditShow('h', {cwd});
+    expect(Date.now() - started).toBeLessThan(25_000);
+    expect(fs.existsSync(path.join(dir, `${key}-theme-h.lock`))).toBe(false);
+  }, 120_000);
+
+  it('an exact font family reaches phones too, and sizes do not', async () => {
     await themeEditSet('h', '--font-family-body', 'Georgia, serif', {cwd});
     const css = read('themes/h/h.css');
     const phone = css.slice(css.lastIndexOf('(pointer: coarse)'));
     expect(phone).toContain('--font-family-body: Georgia, serif');
     await themeEditUndo('h', {cwd, thing: '--font-family-body'});
+    await themeEditSet('h', '--font-size-base', '1.25rem', {cwd});
+    expect(read('themes/h/h.settings.ts')).not.toMatch(
+      /adaptations[\s\S]*--font-size-base/,
+    );
+    await themeEditUndo('h', {cwd, thing: '--font-size-base'});
   }, 120_000);
 
   it('undo names the dial still writing the token', async () => {
@@ -303,6 +352,11 @@ describe('type dials', () => {
   it('a text size keeps the base theme heading weights', async () => {
     const r = await themeEditSet('h', 'text-size', 'large', {cwd});
     expect(r.data.changedTokens.filter(x => /weight/.test(x))).toEqual([]);
+    // The weights are written with the new scale, so Core never falls back
+    // to its own.
+    expect(read('themes/h/h.settings.ts')).toMatch(
+      /"--text-heading-3-weight":/,
+    );
     await themeEditUndo('h', {cwd, thing: 'text-size'});
   }, 120_000);
 });

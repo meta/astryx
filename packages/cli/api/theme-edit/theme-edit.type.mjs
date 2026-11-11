@@ -26,7 +26,7 @@
 /**
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditNewOptions
- * @property {string} [cwd] - The app folder (default: process.cwd()).
+ * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [like] - A built-in theme to build on: neutral, stone, matcha, y2k, gothic, chocolate, or butter.
  * @property {boolean} [png] - Also take PNG pictures of the preview with a Playwright or Chrome found on the machine.
  * @property {Record<string, string | string[] | undefined>} [settings] - Dial settings to start with, by dial name (`{accent: '#7c3aed', corners: 'round', vibrancy: '60'}`), each checked as `set` checks it; every dial but `base` (use `like`). `headings` takes a list for a weight and a tracking.
@@ -35,11 +35,11 @@
 /**
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditChangeOptions
- * @property {string} [cwd] - The app folder (default: process.cwd()).
+ * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [on] - A part (`button`), a group (`inputs`), or for `font` a role (`heading`).
  * @property {string} [when] - `<prop>:<value>`: only that variant, such as `variant:primary`.
  * @property {string} [state] - Only that state, such as `hover`.
- * @property {string} [mode] - `light` or `dark`: only that color mode (colors and shadows only).
+ * @property {string} [mode] - `light` or `dark`: only that color mode (colors only; a shadow is one value for both modes).
  * @property {boolean} [only] - With a member of an always-alike group (inputs, checks), style just that part.
  * @property {boolean} [png] - Also take PNG pictures of the preview.
  */
@@ -98,7 +98,7 @@
 /**
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditShowOptions
- * @property {string} [cwd] - The app folder (default: process.cwd()).
+ * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [section] - Only one section of the sheet: actions, inputs, selection, navigation, feedback, data, containers, overlays, or pages.
  * @property {boolean} [png] - Also take PNG pictures of the previews.
  */
@@ -141,7 +141,7 @@
 /**
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoOptions
- * @property {string} [cwd] - The app folder (default: process.cwd()).
+ * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [thing] - Remove this one setting (a dial, a token, or a CSS property) instead of stepping back one change; the result's `now` says what applies instead.
  * @property {string} [value] - With `thing` `headings`: which half to remove, `weight` or `tracking`.
  * @property {string} [on] - With `thing`: the part, group or role it was set on.
@@ -164,7 +164,7 @@
 /**
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditPreviewAddOptions
- * @property {string} [cwd] - The project folder (default: process.cwd()).
+ * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [theme] - The theme the pages wear: a theme made by `experimental theme editor` (default: the only one under themes/; with none or several, the app's own theme).
  * @property {string} [template] - Add this page template instead of ranking one from a description.
  * @property {number} [top] - With a description: how many of the best-fitting page templates to add, 1 to 3 (default 1).
@@ -213,7 +213,7 @@
 /**
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditPreviewListOptions
- * @property {string} [cwd] - The project folder (default: process.cwd()).
+ * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [path] - The folder of the preview route, when it is not in the default place.
  */
 
@@ -236,7 +236,7 @@
 /**
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditHowOptions
- * @property {string} [cwd] - The app folder (default: process.cwd()).
+ * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [list] - List what a change can name: dials, tokens, parts, groups, or properties; the subject filters it. An empty string lists the kinds.
  * @property {string[]} [at] - With a PNG picture: pixel points x,y ("40,20;300,180", "40,20 300,180", several entries, or a flat "40,20,300,180").
  * @property {number} [count] - With a PNG picture: how many main colors (default 14).

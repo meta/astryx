@@ -398,7 +398,7 @@ export const isColorValue = v => {
 /**
  * Whether a value reads as one CSS size for the token: a length in any CSS
  * unit, 0, a variable, env(), or calc()/min()/max()/clamp() with a length
- * inside; never below zero for a radius or a width.
+ * inside; below zero only where the property takes it (an offset).
  * @param {unknown} v
  * @param {string} [name]
  */
@@ -407,7 +407,12 @@ export const isSize = (v, name = '') => {
   const length =
     /^-?(\d+\.?\d*|\.\d+)(e-?\d+)?(px|rem|em|ex|ch|lh|rlh|cap|ic|pt|pc|cm|mm|in|q|%|vh|vw|vmin|vmax|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|cqi|cqb)$/i;
   if (s === '0') return true;
-  if (length.test(s)) return !s.startsWith('-') || /^--spacing/.test(name);
+  // Only a property that takes a negative length gets one: an offset, a
+  // letter spacing, an indent.
+  if (length.test(s))
+    return (
+      !s.startsWith('-') || /offset|tracking|letter-spacing|indent/.test(name)
+    );
   if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
   if (/^env\([a-z-]+(,.*)?\)$/i.test(s)) return true;
   return /^(calc|min|max|clamp)\(.*(\d|var\().*\)$/i.test(s);

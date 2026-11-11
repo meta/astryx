@@ -39,44 +39,91 @@ import * as edit from './_edit.mjs';
 import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {findAstryxProject} from '../../foundation/fs/paths.mjs';
 
 export {themeEditHow, parsePoints} from './_how.mjs';
 export const {themeEditPreviewApp} = preview;
 
 /**
- * The project a command acts on: the nearest folder at or above `cwd` whose
- * package.json depends on Core, else `cwd` itself. Run from a subfolder of
- * an app, a command still finds the app's themes; it never moves to a
- * folder that does not declare Core.
+ * The project a command acts on: the Astryx project at or above `cwd` (the
+ * same walk `upgrade` uses), else `cwd` itself. Run from a subfolder of an
+ * app, a command still finds the app's themes.
  * @param {string} cwd
  */
 export function projectRoot(cwd) {
-  for (let d = path.resolve(cwd); ; d = path.dirname(d)) {
-    const pkg = path.join(d, 'package.json');
-    if (fs.existsSync(pkg)) {
-      try {
-        const json = JSON.parse(fs.readFileSync(pkg, 'utf8'));
-        if (
-          json.dependencies?.['@astryxdesign/core'] ||
-          json.devDependencies?.['@astryxdesign/core']
-        )
-          return d;
-      } catch {
-        // A damaged package.json is not the project.
-      }
-    }
-    if (path.dirname(d) === d) return path.resolve(cwd);
-  }
+  return findAstryxProject(cwd) ?? path.resolve(cwd);
 }
 
 /** @param {number} ms */
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
+ * Where a project's locks are: in its own `node_modules/.cache` (shared by
+ * every shell, outside the source tree), else in a temp folder of this
+ * user's own (made private), when node_modules cannot be written.
+ * @param {string} root
+ */
+function lockDir(root) {
+  const own = path.join(
+    root,
+    'node_modules',
+    '.cache',
+    'astryx-theme',
+    'locks',
+  );
+  try {
+    if (fs.existsSync(path.join(root, 'node_modules'))) {
+      fs.mkdirSync(own, {recursive: true});
+      fs.accessSync(own, fs.constants.W_OK);
+      return own;
+    }
+  } catch {
+    // Read-only: the temp folder below.
+  }
+  const user =
+    typeof process.getuid === 'function'
+      ? String(process.getuid())
+      : os.userInfo().username;
+  const dir = path.join(os.tmpdir(), `astryx-theme-locks-${user}`);
+  fs.mkdirSync(dir, {recursive: true, mode: 0o700});
+  fs.chmodSync(dir, 0o700);
+  return dir;
+}
+
+/**
+ * Whether a lock was left by a command that is no longer running on this
+ * machine. A lock from another machine (a shared folder) is taken over
+ * only after ten minutes.
+ * @param {string} file
+ */
+function stale(file) {
+  try {
+    const lock = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (lock.host !== os.hostname())
+      return Date.now() - Number(lock.started) > 600_000;
+    process.kill(Number(lock.pid), 0);
+    return false;
+  } catch (e) {
+    const code = /** @type {any} */ (e)?.code;
+    // ESRCH: no such process. EPERM: another user's live process.
+    if (code === 'ESRCH') return true;
+    if (code === 'EPERM') return false;
+    // A lock that cannot be read is being written now, or was left by a
+    // command stopped while writing it.
+    try {
+      return Date.now() - fs.statSync(file).mtimeMs > 1000;
+    } catch {
+      return true;
+    }
+  }
+}
+
+/**
  * Run `fn` holding a lock named `name` for the project at `root`, so two
  * commands on one theme (or one preview) run one after the other: each one
- * reads what the other wrote. The lock is a file in the system temp folder,
- * never in the project; one older than two minutes is left over from a stopped command and is taken over.
+ * reads what the other wrote. The lock is a file in the project's
+ * node_modules/.cache (or a private temp folder); a lock left by a command
+ * that is no longer running is taken over.
  * @template T
  * @param {string} root
  * @param {string} name
@@ -84,37 +131,66 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
  * @returns {Promise<T>}
  */
 async function withLock(root, name, fn) {
-  const dir = path.join(os.tmpdir(), 'astryx-theme-locks');
-  fs.mkdirSync(dir, {recursive: true});
+  const dir = lockDir(root);
   const key = createHash('sha256').update(root).digest('hex').slice(0, 16);
   const file = path.join(dir, `${key}-${name}.lock`);
-  for (let waited = 0; ; waited += 50) {
-    try {
-      fs.writeFileSync(file, String(process.pid), {flag: 'wx'});
-      break;
-    } catch (e) {
-      if (/** @type {any} */ (e).code !== 'EEXIST') throw e;
+  const owner = JSON.stringify({
+    pid: process.pid,
+    host: os.hostname(),
+    started: Date.now(),
+    token: Math.random().toString(36).slice(2),
+  });
+  try {
+    for (let waited = 0; ; waited += 50) {
       try {
-        if (Date.now() - fs.statSync(file).mtimeMs > 120_000) fs.rmSync(file);
-      } catch {
-        // Released meanwhile.
+        fs.writeFileSync(file, owner, {flag: 'wx', mode: 0o600});
+        break;
+      } catch (e) {
+        if (/** @type {any} */ (e).code !== 'EEXIST') throw e;
+        if (stale(file)) {
+          fs.rmSync(file, {force: true});
+          continue;
+        }
+        if (waited > 30_000)
+          throw new AstryxError(
+            `Another command is changing ${name.replace(/^theme-/, '')} and did not finish within 30 seconds. Nothing was changed; run this command again.`,
+            [],
+            ERROR_CODES.ERR_THEME_BUSY,
+          );
+        await sleep(50);
       }
-      if (waited > 30_000)
-        throw new AstryxError(
-          `Another command is changing ${name.replace(/^theme-/, '')} and did not finish within 30 seconds. Nothing was changed; run this command again.`,
-          [],
-          ERROR_CODES.ERR_THEME_BUSY,
-        );
-      await sleep(50);
     }
+  } catch (e) {
+    if (e instanceof AstryxError) throw e;
+    throw new AstryxError(
+      `Could not take the lock that keeps two commands on one theme apart (${/** @type {any} */ (e).code ?? String(e)} in ${dir}). Nothing was changed; check that folder, then run the command again.`,
+      [],
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
   }
-  const release = () => fs.rmSync(file, {force: true});
+  // Only this command's own lock is removed, never one another command took.
+  const release = () => {
+    try {
+      if (fs.readFileSync(file, 'utf8') === owner) fs.rmSync(file);
+    } catch {
+      // Gone already.
+    }
+  };
+  // Stopped by a signal, the lock still goes.
+  const onSignal = (/** @type {NodeJS.Signals} */ sig) => {
+    release();
+    process.kill(process.pid, sig);
+  };
   process.once('exit', release);
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
   try {
     return await fn();
   } finally {
     release();
     process.removeListener('exit', release);
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
   }
 }
 

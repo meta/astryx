@@ -619,19 +619,19 @@ export function compileTheme(ctx, data, base) {
         !data.settings.some(x => x.source === 'token' && x.thing === k && !x.on)
       )
         putTok(k, `${Math.round(scale.base * STANDARD_RATIO ** step) / 16}rem`);
-  for (const [k, {light, dark}] of Object.entries(tok)) {
-    const l = light ?? base.light[k] ?? TOKENS[k];
-    const d = dark ?? base.dark[k] ?? TOKENS[k];
-    theme.tokens[k] = l === d ? l : [l, d];
-  }
   // A scale written here replaces the base theme's: its heading weights
   // stay as the base theme set them, unless a dial or token sets them.
   if (theme.typography?.scale)
     for (const k of headingWeightTokens)
       if (!tok[k] && base.light[k] != null) putTok(k, base.light[k]);
+  for (const [k, {light, dark}] of Object.entries(tok)) {
+    const l = light ?? base.light[k] ?? TOKENS[k];
+    const d = dark ?? base.dark[k] ?? TOKENS[k];
+    theme.tokens[k] = l === d ? l : [l, d];
+  }
   // Base themes set the type tokens again for phones (a coarse pointer
-  // below the lg width); an exact type token is written there too, so it
-  // applies on every screen.
+  // below the lg width); an exact font family is written there too, so it
+  // applies on every screen. Sizes are not: phones keep their reading base.
   const phone = Object.fromEntries(
     data.settings
       .filter(
@@ -639,7 +639,8 @@ export function compileTheme(ctx, data, base) {
           x.source === 'token' &&
           !x.on &&
           !x.mode &&
-          /^--(font-family|font-size|text-)/.test(x.thing) &&
+          // Families only: phones keep their own reading sizes.
+          /^--font-family/.test(x.thing) &&
           !(modeOnly && x.mode && x.mode !== modeOnly),
       )
       .map(x => [x.thing, x.value]),

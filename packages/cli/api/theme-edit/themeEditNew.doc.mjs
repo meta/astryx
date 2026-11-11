@@ -48,7 +48,8 @@ export const doc = {
     {
       name: 'options.cwd',
       type: 'string',
-      description: 'The app folder (default: the current directory).',
+      description:
+        'The folder to start from (default: the current directory): commands act on the Astryx project at or above it, so a subfolder of an app works.',
     },
   ],
   returns: [

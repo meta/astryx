@@ -158,10 +158,11 @@ function isFixedColor(value) {
 function isShadow(value) {
   const v = value.trim();
   if (v === 'none') return true;
-  if (/^light-dark\(/i.test(v)) return false;
-  const layers = v.split(/,(?![^(]*\))/);
+  const layers = splitTop(v, ',');
+  // light-dark() takes colors: a whole shadow per mode inside it is dropped.
+  if (layers.length === 1 && splitTop(v, ' ').length === 1) return false;
   return layers.every(layer => {
-    const words = layer.trim().split(/\s+(?![^(]*\))/);
+    const words = splitTop(layer.trim(), ' ');
     const lengths = words.filter(w =>
       /^-?\d*\.?\d+(px|rem|em)?$|^0$|^var\(--[a-z0-9-]+\)$|^calc\(/.test(w),
     );
@@ -173,6 +174,30 @@ function isShadow(value) {
       rest.every(w => isColorValue(w))
     );
   });
+}
+
+/**
+ * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
+ * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
+ * @param {string} v
+ * @param {',' | ' '} sep
+ * @returns {string[]}
+ */
+function splitTop(v, sep) {
+  /** @type {string[]} */
+  const out = [];
+  let depth = 0;
+  let cur = '';
+  for (const c of v) {
+    if (c === '(') depth++;
+    if (c === ')') depth--;
+    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
+      if (cur.trim() || sep === ',') out.push(cur);
+      cur = '';
+    } else cur += c;
+  }
+  if (cur.trim() || sep === ',') out.push(cur);
+  return out.filter(x => sep === ',' || x.trim());
 }
 
 /**
@@ -649,7 +674,8 @@ export function checkSetting(
     const type = C.typeOf(thing);
     // Only colors differ by mode: a shadow list cannot sit inside
     // light-dark(), so a shadow per mode would remove it in both.
-    if (s.mode && type !== 'color')
+    // undo still removes a setting an earlier release saved for one mode.
+    if (s.mode && type !== 'color' && !unset)
       refuse(
         E.ERR_THEME_NO_MODE,
         `${thing} is ${/^[aeiou]/.test(type) ? 'an' : 'a'} ${type === 'other' ? 'value of its own kind' : type}, so it is the same in light and dark; drop --mode. Only colors differ by mode.`,
