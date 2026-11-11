@@ -21,6 +21,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from '../Button/Button';
+import {IconButton} from '../IconButton/IconButton';
 import * as stylex from '@stylexjs/stylex';
 import {focusVars} from '../theme/tokens.stylex';
 import {ComplexSelector, type ComplexSelectorHandle} from './ComplexSelector';
@@ -2006,15 +2007,15 @@ describe('ComplexSelector disabledMessage', () => {
     });
   });
 
-  it('warns in development that disabledMessage has no effect with renderTrigger', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
+  describe('with renderTrigger', () => {
+    const renderCallerTrigger = (extra?: {describedBy?: string}) =>
       render(
         <ComplexSelector
           label="Assign"
           value={null}
           isDisabled
           disabledMessage="You need the Editor role"
+          aria-describedby={extra?.describedBy}
           renderTrigger={props => (
             <button type="button" {...props}>
               Assign
@@ -2023,16 +2024,85 @@ describe('ComplexSelector disabledMessage', () => {
           {() => <button type="button">Apply</button>}
         </ComplexSelector>,
       );
-      expect(screen.queryByRole('tooltip', h)).not.toBeInTheDocument();
-      expect(
-        warn.mock.calls.some(([message]) =>
-          String(message).includes(
-            '`disabledMessage` has no effect with `renderTrigger`',
-          ),
-        ),
-      ).toBe(true);
-    } finally {
-      warn.mockRestore();
-    }
+
+    it('reveals the reason on hover of the caller control', async () => {
+      renderCallerTrigger();
+      const tooltip = screen.getByRole('tooltip', h);
+      expect(tooltip).toHaveTextContent('You need the Editor role');
+      fireEvent.mouseEnter(screen.getByRole('combobox', {name: 'Assign'}));
+      await waitFor(() => {
+        expect(tooltip).toHaveAttribute('popover-open');
+      });
+    });
+
+    it('reveals the reason on keyboard focus of the caller control', async () => {
+      const user = userEvent.setup();
+      renderCallerTrigger();
+      const tooltip = screen.getByRole('tooltip', h);
+      await user.tab();
+      expect(screen.getByRole('combobox', {name: 'Assign'})).toHaveFocus();
+      await waitFor(() => {
+        expect(tooltip).toHaveAttribute('popover-open');
+      });
+    });
+
+    it('reveals the reason on a touch tap without opening the popup', () => {
+      renderCallerTrigger();
+      const trigger = screen.getByRole('combobox', {name: 'Assign'});
+      const tooltip = screen.getByRole('tooltip', h);
+      fireEvent.pointerEnter(trigger, {pointerType: 'touch'});
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      fireEvent.pointerUp(trigger, {pointerType: 'touch'});
+      fireEvent.click(trigger);
+      expect(tooltip).toHaveAttribute('popover-open');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
+    });
+
+    it("adds the reason after the caller's description", () => {
+      renderCallerTrigger({describedBy: 'assign-hint'});
+      const trigger = screen.getByRole('combobox', {name: 'Assign'});
+      const ids = (trigger.getAttribute('aria-describedby') ?? '').split(' ');
+      expect(ids).toHaveLength(2);
+      expect(ids[0]).toBe('assign-hint');
+      expect(document.getElementById(ids[1])).toHaveTextContent(
+        'You need the Editor role',
+      );
+    });
+
+    it('shows the reason instead of an IconButton label tooltip while disabled, and the label again when enabled', async () => {
+      const renderAssign = (isDisabled: boolean) => (
+        <ComplexSelector
+          label="Assign"
+          value={null}
+          isDisabled={isDisabled}
+          disabledMessage="You need the Editor role"
+          renderTrigger={props => (
+            <IconButton
+              label="Assign"
+              tooltip="Assign a reviewer"
+              icon={<span aria-hidden="true">+</span>}
+              {...props}
+            />
+          )}>
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>
+      );
+      const {rerender} = render(renderAssign(true));
+      const tooltips = () =>
+        screen.queryAllByRole('tooltip', h).map(tip => tip.textContent);
+      expect(tooltips()).toEqual(['You need the Editor role']);
+      const trigger = screen.getByRole('combobox', {name: 'Assign'});
+      expect(trigger.getAttribute('aria-describedby') ?? '').not.toContain(
+        'Assign a reviewer',
+      );
+
+      rerender(renderAssign(false));
+      expect(tooltips()).toEqual(['Assign a reviewer']);
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => {
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
+      });
+    });
   });
 });

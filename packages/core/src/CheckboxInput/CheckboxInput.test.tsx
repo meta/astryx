@@ -989,10 +989,16 @@ describe('pressed state', () => {
 });
 
 describe('an indicator that paints its own press', () => {
-  it('keeps its marker internal: no public entry exports it, and the API report has no row', () => {
+  it('keeps its marker internal: no public entry exports it', () => {
     expect(Object.keys(publicMarkers)).not.toContain('indicatorPressScope');
-    const report = readFileSync('packages/core/api-report.md', 'utf8');
-    expect(report).not.toContain('indicatorPressScope');
+    // The marker's module is under src/internal, which the API surface leaves
+    // out, and the package barrel does not name it.
+    expect(
+      readFileSync('packages/core/src/CheckboxInput/CheckboxInput.tsx', 'utf8'),
+    ).toContain("from '../internal/indicatorPress.stylex'");
+    expect(readFileSync('packages/core/src/index.ts', 'utf8')).not.toContain(
+      'indicatorPress',
+    );
   });
 
   const partsOf = (container: HTMLElement) => {

@@ -1323,11 +1323,12 @@ describe('useSheetGestures', () => {
       id = 1,
       touchType = 'direct',
       time?: number,
+      x = 0,
     ) {
       const ev = new Event(type, {bubbles: true, cancelable: true});
       // jsdom lacks TouchEvent; attach the fields the handler reads.
       Object.defineProperty(ev, 'changedTouches', {
-        value: [{identifier: id, clientY: y, touchType}],
+        value: [{identifier: id, clientX: x, clientY: y, touchType}],
       });
       if (time != null) {
         Object.defineProperty(ev, 'timeStamp', {value: time});
@@ -1336,7 +1337,7 @@ describe('useSheetGestures', () => {
         value:
           type === 'touchend' || type === 'touchcancel'
             ? []
-            : [{identifier: id, clientY: y, touchType}],
+            : [{identifier: id, clientX: x, clientY: y, touchType}],
       });
       Object.defineProperty(ev, 'currentTarget', {value: el});
       el.dispatchEvent(ev);
@@ -1355,6 +1356,132 @@ describe('useSheetGestures', () => {
       act(() => {
         touch(el, 'touchstart', 0);
         touch(el, 'touchmove', 50);
+      });
+      expect(hook.result.current.isDragging).toBe(true);
+    });
+
+    it('cancels the native pan of a top pull-down past a tap wobble, before the drag begins', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      let wobble!: Event;
+      let pull!: Event;
+      let promoted!: Event;
+      act(() => {
+        touch(el, 'touchstart', 0);
+        wobble = touch(el, 'touchmove', 3);
+      });
+      // A tap's wobble keeps its click: nothing is cancelled yet.
+      expect(wobble.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+      act(() => {
+        pull = touch(el, 'touchmove', 6);
+      });
+      // Past the wobble the pan is cancelled while the drag waits for its slop.
+      expect(pull.defaultPrevented).toBe(true);
+      expect(hook.result.current.isDragging).toBe(false);
+      act(() => {
+        promoted = touch(el, 'touchmove', 9);
+      });
+      expect(promoted.defaultPrevented).toBe(true);
+      expect(hook.result.current.isDragging).toBe(true);
+    });
+
+    it('cancels the native pan of a top pull-down whose first move is exactly the wobble distance', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      let under!: Event;
+      act(() => {
+        touch(el, 'touchstart', 0);
+        under = touch(el, 'touchmove', 4);
+      });
+      expect(under.defaultPrevented).toBe(false);
+      let first!: Event;
+      act(() => {
+        touch(el, 'touchend', 4);
+        touch(el, 'touchstart', 0, 2);
+        // iOS Safari commits a kept first move of 5 px to the rows' pan.
+        first = touch(el, 'touchmove', 5, 2);
+      });
+      expect(first.defaultPrevented).toBe(true);
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+
+    it('leaves a mostly sideways move at the top to a horizontal scroll, cancelling nothing', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      let sideways!: Event;
+      act(() => {
+        touch(el, 'touchstart', 0, 1, 'direct', undefined, 0);
+        // A swipe along a row of chips that drifts 7 px down.
+        sideways = touch(el, 'touchmove', 7, 1, 'direct', undefined, 30);
+      });
+      expect(sideways.defaultPrevented).toBe(false);
+    });
+
+    it('leaves an upward move from the top to the scroll, cancelling nothing', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      let scroll!: Event;
+      act(() => {
+        touch(el, 'touchstart', 100);
+        scroll = touch(el, 'touchmove', 94);
+      });
+      expect(scroll.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+
+    it('cancels the native pan of a bottom pull-up past a tap wobble, before the drag begins', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 600,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      // Settle at the lower detent first, so expanding has somewhere to go.
+      down(hook, 0, 0, el);
+      move(hook, 180, 700, el);
+      up(hook, 180, 1100, el);
+      expect(hook.result.current.settledOffset).toBe(200);
+      let wobble!: Event;
+      let pull!: Event;
+      act(() => {
+        touch(el, 'touchstart', 300);
+        wobble = touch(el, 'touchmove', 297);
+      });
+      expect(wobble.defaultPrevented).toBe(false);
+      act(() => {
+        pull = touch(el, 'touchmove', 294);
+      });
+      expect(pull.defaultPrevented).toBe(true);
+      expect(hook.result.current.isDragging).toBe(false);
+      act(() => {
+        touch(el, 'touchmove', 291);
       });
       expect(hook.result.current.isDragging).toBe(true);
     });
@@ -1743,13 +1870,13 @@ describe('useSheetGestures', () => {
     ) {
       const ev = new Event(type, {bubbles: true, cancelable: true});
       Object.defineProperty(ev, 'changedTouches', {
-        value: [{identifier: id, clientY: y}],
+        value: [{identifier: id, clientX: 0, clientY: y}],
       });
       Object.defineProperty(ev, 'touches', {
         value:
           type === 'touchend' || type === 'touchcancel'
             ? []
-            : [{identifier: id, clientY: y}],
+            : [{identifier: id, clientX: 0, clientY: y}],
       });
       Object.defineProperty(ev, 'currentTarget', {value: listener});
       target.dispatchEvent(ev);
@@ -1914,13 +2041,13 @@ describe('useSheetGestures', () => {
     function touch(el: HTMLElement, type: string, y: number, id = 1) {
       const ev = new Event(type, {bubbles: true, cancelable: true});
       Object.defineProperty(ev, 'changedTouches', {
-        value: [{identifier: id, clientY: y}],
+        value: [{identifier: id, clientX: 0, clientY: y}],
       });
       Object.defineProperty(ev, 'touches', {
         value:
           type === 'touchend' || type === 'touchcancel'
             ? []
-            : [{identifier: id, clientY: y}],
+            : [{identifier: id, clientX: 0, clientY: y}],
       });
       Object.defineProperty(ev, 'currentTarget', {value: el});
       el.dispatchEvent(ev);

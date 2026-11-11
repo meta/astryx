@@ -42,6 +42,7 @@ import {Field, inputWrapperStyles} from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip/useTooltip';
+import {LabelTooltipSuppressionContext} from '../Tooltip/labelTooltipSuppression';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {usePopover} from '../Popover/usePopover';
@@ -270,11 +271,6 @@ const RENDER_TRIGGER_PARTS_MESSAGE =
   '`container*` and `control*` styling props have no effect with `renderTrigger`: ' +
   'no Field box or control box renders. Style the control you render instead.';
 
-const RENDER_TRIGGER_DISABLED_MESSAGE =
-  '`disabledMessage` has no effect with `renderTrigger`: the caller owns the ' +
-  'control, so no reason tooltip renders. Explain the disabled state on the ' +
-  'control you render instead.';
-
 /**
  * Props the `renderTrigger` render prop hands to the control the caller
  * renders.
@@ -426,8 +422,9 @@ export interface ComplexSelectorProps<Value> extends Omit<
    * Explains why the selector is disabled. With `isDisabled`, a tooltip shows
    * this text on hover and keyboard focus, and the text describes the trigger
    * through `aria-describedby`. The disabled trigger keeps its tab stop and
-   * still cannot open. Has no effect with `renderTrigger`, where the caller
-   * owns the control; a development warning says so.
+   * still cannot open. With `renderTrigger`, the tooltip and the description
+   * go to the control you render, and while the reason shows it replaces that
+   * control's own label tooltip.
    *
    * Use this instead of wrapping a disabled selector in `Tooltip`, whose text
    * would not describe the trigger.
@@ -609,11 +606,6 @@ export function ComplexSelector<Value>({
         controlXstyle != null ||
         controlClassName != null ||
         controlStyle != null),
-  );
-  useDevWarning(
-    'ComplexSelector',
-    RENDER_TRIGGER_DISABLED_MESSAGE,
-    renderTrigger != null && disabledMessage != null,
   );
   const t = useComponentTranslator();
   const pressable = usePressFeedback();
@@ -862,16 +854,27 @@ export function ComplexSelector<Value>({
   if (renderTrigger != null) {
     // Anchor-only mode: the caller renders the opener and spreads these props
     // on it. No Field, no status, no chevron — the caller owns the control;
-    // the selector owns the popup, its anchor, and focus return.
+    // the selector owns the popup, its anchor, focus return, and the disabled
+    // reason's tooltip.
     const triggerProps: ComplexSelectorRenderTriggerProps = {
       // Base props reach the caller's control, the primary semantic control
       // in this mode; the selector's own wiring below wins over them.
       ...rest,
-      'aria-describedby': ariaDescribedByProp,
-      ref: mergeRefs<HTMLElement>(el => {
-        popover.triggerRef(el);
-        triggerRef.current = el;
-      }, ref),
+      'aria-describedby':
+        [
+          ariaDescribedByProp,
+          showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
+        ]
+          .filter(Boolean)
+          .join(' ') || undefined,
+      ref: mergeRefs<HTMLElement>(
+        el => {
+          popover.triggerRef(el);
+          triggerRef.current = el;
+        },
+        disabledMessageTooltip.ref,
+        ref,
+      ),
       id: triggerId,
       // This path never forwarded caller handlers before, so the newly
       // forwarded ones compose component first and cannot cancel opening.
@@ -899,10 +902,16 @@ export function ComplexSelector<Value>({
       'aria-required': isEffectivelyRequired ? 'true' : undefined,
       'aria-disabled': isDisabled ? 'true' : undefined,
     };
+    // While the reason shows, the control's own label tooltip stays off, so
+    // the control never shows two tooltips.
     return (
       <>
-        {renderTrigger(triggerProps)}
+        <LabelTooltipSuppressionContext value={showsDisabledMessage}>
+          {renderTrigger(triggerProps)}
+        </LabelTooltipSuppressionContext>
         {popup}
+        {showsDisabledMessage &&
+          disabledMessageTooltip.renderTooltip(disabledMessage)}
       </>
     );
   }

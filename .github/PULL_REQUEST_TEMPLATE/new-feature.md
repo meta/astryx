@@ -26,6 +26,8 @@
 
 ## Scope
 
+Components: <!-- the components and modules this PR changes, comma-separated -->
+
 - [ ] One capability is added.
 - [ ] Unrelated fixes, cleanup, and policy changes were removed or split.
 - [ ] Consumer docs, focused tests, and migration evidence ship with the feature.

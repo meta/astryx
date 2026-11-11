@@ -20,7 +20,7 @@ const bodyModifier: TablePlugin<Item> = {transformBodyRow: props => props};
 function Fixture({reason}: {reason: string}) {
   const virtualization = useTableRowsVirtualization({
     rowHeight: reason === 'geometry' ? 0 : 56,
-    viewportHeight: 240,
+    initialViewportHeight: 240,
   });
   return (
     <Table
@@ -48,7 +48,7 @@ describe('Table windowing admission diagnostics', () => {
     function StatusFixture() {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       const rowStatus = useTableRowStatus<Item>({
         getStatus: () => ({status: 'success', label: 'Ready'}),
@@ -78,6 +78,28 @@ describe('Table windowing admission diagnostics', () => {
     view.rerender(<StatusFixture />);
     expect(warning).toHaveBeenCalledTimes(1);
   });
+  it('names a virtualization value the hook did not make', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const foreign = Object.freeze({rowHeight: 56, viewportHeight: 240});
+    const view = render(
+      <Table
+        data={data}
+        columns={columns}
+        idKey="id"
+        virtualization={
+          foreign as unknown as BaseTableProps<Item>['virtualization']
+        }
+      />,
+    );
+    expect(view.container.querySelectorAll('tbody > tr')).toHaveLength(
+      data.length,
+    );
+    expect(warning).toHaveBeenCalledTimes(1);
+    expect(warning.mock.calls[0].join(' ')).toContain(
+      'not a value from useTableRowsVirtualization',
+    );
+  });
+
   it('renders fully with one diagnostic when a caller replaces the owned scroll wrapper', () => {
     const CallerWrapper: NonNullable<BaseTableProps<Item>['scrollWrapper']> = ({
       children,
@@ -93,7 +115,7 @@ describe('Table windowing admission diagnostics', () => {
     function CallerFixture() {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       return (
         <Table
@@ -159,7 +181,7 @@ describe('Table windowing admission diagnostics', () => {
     function FocusFixture({fallback}: {fallback: boolean}) {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       const selection = useTableSelection({
         getIsItemSelected: () => false,
@@ -211,7 +233,7 @@ describe('Table windowing admission diagnostics', () => {
     function DuplicateFixture() {
       const virtualization = useTableRowsVirtualization({
         rowHeight: 56,
-        viewportHeight: 240,
+        initialViewportHeight: 240,
       });
       return (
         <Table

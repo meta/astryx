@@ -16,7 +16,7 @@
  */
 
 /**
- * Curated alias table (from the XLE research, paste P2376666892 §2).
+ * Curated alias table (from the XLE alias research, section 2).
  * Single letters reserved for the highest-frequency structural set.
  * Collision policy: case-only pairs forbidden; HTML mnemonics win the
  * Table family; form-frequency wins contested pairs (CB, NI).
