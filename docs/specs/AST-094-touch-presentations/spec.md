@@ -814,7 +814,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   overlap, the target whose box is nearest the finger takes the tap. A target
   that takes a tap this way takes it as a native tap does: it takes the
   focus, so a text field raises the keyboard, and a picker opens. A field's
-  frame around its text entry shows the entry's box (owner
+  frame shows its entry's box, where the entry renders as a field: a text,
+  date, time or colour entry, or a select. A checkbox, radio, file or submit
+  input is not such an entry (owner
   decision, 2026-11-10; DEC-32). A hit area a component or module
   record sets on purpose, such as `component:Thumbnail` AR4's, is unaffected.
   Mobile size increases belong to theme adaptations (DEC-20). Implementation

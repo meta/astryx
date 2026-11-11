@@ -388,6 +388,54 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
     );
   });
 
+  test('a tap 1 to 5 px inside a native date field’s edge under a neighbour’s band focuses the date field and asks for its picker, and the neighbour gets no click', async ({
+    page,
+  }) => {
+    // Counts the picker requests; the headless browser draws no picker.
+    await page.addInitScript(() => {
+      const calls = {count: 0};
+      Object.defineProperty(window, '__pickerCalls', {value: calls});
+      const original = HTMLInputElement.prototype.showPicker;
+      HTMLInputElement.prototype.showPicker = function () {
+        calls.count += 1;
+        try {
+          original.call(this);
+        } catch {
+          // No picker in a headless browser.
+        }
+      };
+    });
+    await openStory(page, storybook(), STORY);
+    const root = page.locator('#storybook-root');
+    const entry = root.locator('input[type="date"]');
+    const output = root.locator('output[aria-label="Field taps"]');
+    // The field's frame: the box around the slot that holds the entry.
+    const frame = await entry.evaluate(element => {
+      const r = element.parentElement!.parentElement!.getBoundingClientRect();
+      return {right: r.right, top: r.top, bottom: r.bottom};
+    });
+    const apply = await boxOf(page, 'apply');
+    // Apply's band lies over the frame's last pixels.
+    expect(apply.left - frame.right).toBeLessThan(10);
+    const y = Math.round((frame.top + frame.bottom) / 2);
+    const driver = await touchDriver(page);
+    for (const inset of [1, 3, 5]) {
+      await page.evaluate(() =>
+        (document.activeElement as HTMLElement)?.blur(),
+      );
+      await tapAt(driver, {x: Math.floor(frame.right) - inset, y});
+      await expect(entry, `${inset} px inside`).toBeFocused();
+    }
+    expect(
+      await page.evaluate(
+        () =>
+          (window as unknown as {__pickerCalls: {count: number}}).__pickerCalls
+            .count,
+      ),
+    ).toBe(3);
+    await expect(output).toContainText('Apply 0');
+  });
+
   test('a tap on a checkbox’s edge under a neighbour’s band toggles it once, and the neighbour gets no click', async ({
     page,
   }) => {

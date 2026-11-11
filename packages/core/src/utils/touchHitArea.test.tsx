@@ -355,6 +355,62 @@ describe('at a tap', () => {
     expect(onBox).not.toHaveBeenCalled();
   });
 
+  it('gives a tap on a date field’s frame, whose entry sits inset in a slot, to the date entry: focus and picker', () => {
+    const onA = vi.fn();
+    render(
+      <div data-testid="container">
+        <Host id="a" onClick={onA} />
+        <div id="frame">
+          <button type="button" tabIndex={-1} aria-label="Open calendar" />
+          <span id="slot">
+            <input id="day" type="date" aria-label="Pick" />
+          </span>
+        </div>
+      </div>,
+    );
+    const a = document.getElementById('a') as HTMLElement;
+    const frame = document.getElementById('frame') as HTMLElement;
+    const day = document.getElementById('day') as HTMLInputElement;
+    const showPicker = vi.fn();
+    day.showPicker = showPicker;
+    const container = screen.getByTestId('container');
+    // The control ends at 124; the field's frame starts at 128, and its
+    // entry sits 10 px inside it.
+    a.getBoundingClientRect = () => rect(100, 100, 24, 24);
+    frame.getBoundingClientRect = () => rect(128, 100, 140, 24);
+    day.getBoundingClientRect = () => rect(160, 104, 98, 16);
+    elementsAtPoint = [a, frame, container, document.body];
+    expect(tap(a, 130)).toBe(true);
+    expect(onA).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(day);
+    expect(showPicker).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives a tap on a select under the band to the select: focus and picker', () => {
+    const onA = vi.fn();
+    render(
+      <div data-testid="container">
+        <Host id="a" onClick={onA} />
+        <select id="size" aria-label="Size">
+          <option>S</option>
+          <option>M</option>
+        </select>
+      </div>,
+    );
+    const a = document.getElementById('a') as HTMLElement;
+    const size = document.getElementById('size') as HTMLSelectElement;
+    const showPicker = vi.fn();
+    size.showPicker = showPicker;
+    const container = screen.getByTestId('container');
+    a.getBoundingClientRect = () => rect(100, 100, 24, 24);
+    size.getBoundingClientRect = () => rect(128, 100, 80, 24);
+    elementsAtPoint = [a, size, container, document.body];
+    expect(tap(a, 130)).toBe(true);
+    expect(onA).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(size);
+    expect(showPicker).toHaveBeenCalledTimes(1);
+  });
+
   it('stops at the control’s own container: what paints below it, such as the page under a layer, is not beside it', () => {
     const {a, b, container, onA} = setUp();
     elementsAtPoint = [a, container, b, document.body];

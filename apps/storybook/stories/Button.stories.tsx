@@ -704,7 +704,7 @@ export const TouchReach: Story = {
           <DateInput
             label="Pick"
             isLabelHidden
-            nativePicker="always"
+            presentation="native"
             value={day}
             onChange={setDay}
           />
