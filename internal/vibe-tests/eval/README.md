@@ -174,6 +174,10 @@ what the eval measures, so compare results only within one arm version.
 ## Known gaps
 
 - Chromium only. WebKit and real touch devices are not covered.
+- The integrity audit reads the commands in the transcript; it is not a
+  sandbox. A read hidden behind a variable, an encoded path or a script file
+  that the transcript does not show can pass. Running each agent in an
+  isolated filesystem would close this.
 - One agent harness. Results describe that harness and model, not agents in
   general.
 - This folder writes its own record schema (`schemaVersion: 1` in `meta.json`).

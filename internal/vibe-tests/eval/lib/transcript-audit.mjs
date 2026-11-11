@@ -86,8 +86,19 @@ function relativeWords(segment, outside) {
 }
 
 /** Commands that read every file below their target, not only the names. */
+const SEARCHER = /(?:^|[\s|;&(])(rg|ag|ack|[efz]?grep)(?=\s|$)/;
 const RECURSIVE_READER =
-  /(?:^|[\s|;&(])(?:rg|ag|ack|grep\s+(?:[^|]*\s)?-[A-Za-z]*[rR][A-Za-z]*|zgrep\s+-[A-Za-z]*[rR][A-Za-z]*)(?=\s|$)|\$\(\s*find\s|\bfind\s[^|]*(?:-exec|-execdir|-ok)\b|\bfind\s[^|]*\|\s*xargs\b/;
+  /(?:^|[\s|;&(])(?:rg|ag|ack|[efz]?grep\s+(?:[^|]*\s)?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive))(?=\s|$)|(?:\$\(|`)\s*find\s|\bfind\s[^|]*(?:-exec|-execdir|-ok)\b|\bfind\s[^|]*\|\s*xargs\b/;
+
+/** The search pattern of a grep-like command, which is text, not a path it reads. */
+function searchPattern(segment) {
+  const match = SEARCHER.exec(segment);
+  if (!match) return null;
+  const words = segment.slice(match.index + match[0].length).trim().split(/\s+/);
+  if (words.some(word => word === '-e' || word.startsWith('--regexp') || word === '-f')) return null;
+  const pattern = words.find(word => word && !word.startsWith('-'));
+  return pattern ? pattern.replace(/^['"]|['"]$/g, '') : null;
+}
 
 /** Resolves a raw path from the shell folder, expanding the home folder forms. */
 export function resolveRaw(raw, cwd, home) {
@@ -100,7 +111,7 @@ export function resolveRaw(raw, cwd, home) {
  * at that point. `cd` moves that folder for the segments after it. The agent's
  * shell keeps its folder between commands, but returns to the workspace when a
  * command leaves it.
- * @returns {{found: {raw: string, resolved: string, relative?: boolean, recursive?: boolean}[], cwd: string}}
+ * @returns {{found: {raw: string, resolved: string | null, relative?: boolean, recursive?: boolean, unknown?: boolean}[], cwd: string}}
  */
 export function resolveCommandPaths(command, workspace, startCwd = workspace, home = os.homedir()) {
   let cwd = startCwd;
@@ -109,15 +120,21 @@ export function resolveCommandPaths(command, workspace, startCwd = workspace, ho
   for (const segment of shell.split(/&&|\|\||;|\n/)) {
     const trimmed = segment.trim();
     const recursive = RECURSIVE_READER.test(trimmed);
-    for (const raw of pathsInCommand(trimmed)) found.push({raw, resolved: resolveRaw(raw, cwd, home), recursive});
-    for (const raw of relativeWords(trimmed, !isInside(cwd, workspace))) {
-      found.push({raw, resolved: path.resolve(cwd, raw), relative: true, recursive});
+    const pattern = recursive ? searchPattern(trimmed) : null;
+    for (const raw of pathsInCommand(trimmed)) {
+      found.push({raw, resolved: resolveRaw(raw, cwd, home), recursive: recursive && raw !== pattern});
     }
+    for (const raw of relativeWords(trimmed, !isInside(cwd, workspace))) {
+      if (raw !== pattern) found.push({raw, resolved: path.resolve(cwd, raw), relative: true, recursive});
+    }
+    // A recursive reader with no path searches the shell folder.
+    if (recursive) found.push({raw: '.', resolved: cwd, relative: true, recursive});
     const cd = /^cd(?:\s+(['"]?)([^'"\s]+)\1)?\s*$/.exec(trimmed);
     if (!cd) continue;
     const target = cd[2] ?? '~';
-    // Other variables are unknown, so the folder stays where it was.
     if (!target.startsWith('$') || HOME_PREFIX.test(target)) cwd = resolveRaw(target, cwd, home);
+    // Another variable is unknown, so the folder stays where it was and a person reviews the move.
+    else found.push({raw: target, resolved: null, unknown: true});
   }
   for (const body of code) {
     for (const match of body.matchAll(CODE_PATH_PATTERN)) found.push({raw: match[2], resolved: resolveRaw(match[2], cwd, home)});
@@ -178,7 +195,10 @@ export function auditTranscript(lines, workspace, sensitiveRoots = [], home = os
     }
     if (typeof input.command === 'string') {
       const {found, cwd} = resolveCommandPaths(input.command, workspace, shellCwd, home);
-      for (const {raw, resolved, relative, recursive} of found) check(raw, use.name, resolved, {relative, recursive});
+      for (const {raw, resolved, relative, recursive, unknown} of found) {
+        if (unknown) warnings.push({tool: use.name, path: raw});
+        else check(raw, use.name, resolved, {relative, recursive});
+      }
       shellCwd = cwd;
       if (/\b(astryx|shadcn)\b/.test(input.command)) docsCommands.push(input.command.slice(0, 200));
     }

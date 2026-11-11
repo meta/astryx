@@ -130,6 +130,12 @@ describe('reads the review found unaudited', () => {
     'cat $(find / -name x.probe.mjs)',
     "find /repo -name '*.mjs' | xargs cat",
     'cd ~ && cat notes',
+    'grep --recursive getByRole /repo',
+    'egrep -r getByRole /repo',
+    'fgrep -r getByRole /repo',
+    'cat `find / -name x.probe.mjs`',
+    'cd / && rg -l getByRole',
+    'cd /runs && grep -rl getByRole',
   ])('fails %j', command => {
     expect(audit(command).violations.length).toBeGreaterThan(0);
   });
@@ -146,8 +152,16 @@ describe('reads the review found unaudited', () => {
     "python3 - <<'EOF'\nprint('/'.join(['a', 'b']))\nEOF",
     'echo $HOME',
     'expr 6 / 2',
+    'grep -rn "/tmp" src',
+    'rg "/home" src',
+    'grep -rn Button .',
   ])('passes %j', command => {
     expect(audit(command).violations).toEqual([]);
+  });
+
+  it('warns when the shell moves to an unknown folder', () => {
+    const result = audit('cd $TMPDIR && cat x/App.tsx');
+    expect(result.warnings).toContainEqual({tool: 'Bash', path: '$TMPDIR'});
   });
 
   it('fails a Grep tool call over the repository', () => {
