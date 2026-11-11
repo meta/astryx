@@ -28,7 +28,6 @@ import type {CheckboxInputProps} from '../CheckboxInput/CheckboxInput';
 import type {InputStatus} from '../Field/types';
 import {CheckboxRowPressContext} from '../CheckboxInput/CheckboxRowPressContext';
 import {rowPressPaintStyles} from '../privateAttributes/press.stylex';
-import {pressFinePointerProps} from '../privateAttributes/pressFinePointer.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {ListItem} from '../List/ListItem';
 import {ListContext} from '../List/ListContext';
@@ -359,9 +358,6 @@ export function CheckboxListItem({
     <ListItem
       {...restProps}
       {...themeDataAttributes({selected: isCheckedRow ? 'selected' : null})}
-      // A mouse's or a pen's press on the row paints through the press
-      // controller too, so the row and its box fade on release together.
-      {...pressFinePointerProps(rowOwnsPress)}
       ref={ref}
       label={namesFromVisibleLabel ? <span id={labelID}>{label}</span> : label}
       description={description}

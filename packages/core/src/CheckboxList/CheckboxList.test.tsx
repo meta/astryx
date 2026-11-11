@@ -1734,9 +1734,9 @@ describe('CheckboxListItem press surface', () => {
 
   it('makes the row the one press surface on a fine-pointer page too', () => {
     // On a fine-pointer page, a mouse or a pen presses the row wherever it
-    // lands, as a finger does. The box carries no press marker, and the row
-    // declares the fine-pointer press, so the controller paints the row and
-    // its box at once.
+    // lands, as a finger does. The box carries no press marker, so the row
+    // owns it and takes the fine-pointer press. The controller paints the row
+    // and its box at once.
     stubMatchMedia({matches: false});
     render(
       <CheckboxList label="Notifications" value={['email']} onChange={() => {}}>
@@ -1746,7 +1746,11 @@ describe('CheckboxListItem press surface', () => {
     const row = rowOf('Email');
     const {wrapper, control} = parts(row);
     expect(row).toHaveAttribute('data-astryx-pressable');
-    expect(row).toHaveAttribute('data-astryx-press-fine-pointer');
+    expect(
+      row
+        .querySelector('[data-astryx-press-box]')
+        ?.closest('[data-astryx-pressable]'),
+    ).toBe(row);
     expect(control).not.toHaveAttribute('data-astryx-pressable');
     expect(declaresRowPressPaint(row)).toBe(true);
     expect(readsRowPressPaint(wrapper)).toBe(true);

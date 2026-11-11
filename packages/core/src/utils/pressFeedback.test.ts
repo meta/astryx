@@ -43,11 +43,20 @@ import {
   PRESS_SLOP_PX,
 } from './pressGesture';
 import {pointerQuery} from '../gestures/__tests__/pointerQuery';
-import {pressFinePointerProps} from '../privateAttributes/pressFinePointer.stylex';
+import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
 import {registerFinePress} from './finePress';
 
 // The components that mark fine-pointer surfaces load this rule as they load.
 registerFinePress();
+
+/** Gives `surface` a control's box, so it takes the fine-pointer press. */
+function ownBox(surface: HTMLElement): void {
+  const box = document.createElement('span');
+  for (const [name, value] of Object.entries(pressBoxProps)) {
+    box.setAttribute(name, value);
+  }
+  surface.appendChild(box);
+}
 
 let release: () => void = () => undefined;
 let scroller: HTMLElement;
@@ -275,11 +284,9 @@ describe('the press reaches the surface the finger landed on', () => {
     expect(pressedRow()).toBe(-1);
   });
 
-  it('paints a mouse press at once on a surface that declares the fine-pointer press, and fades it on release', () => {
+  it("paints a mouse press at once on a surface that owns a control's box, and fades it on release", () => {
     expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
-    for (const [name, value] of Object.entries(pressFinePointerProps(true))) {
-      rows[0].setAttribute(name, value);
-    }
+    ownBox(rows[0]);
     // No delay, though the row sits in a scroller: a mouse press is not a
     // scroll.
     press(rows[0], 'pointerdown', 10, 10, 'mouse');
@@ -291,10 +298,22 @@ describe('the press reaches the surface the finger landed on', () => {
     expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
+  it("leaves a mouse press to `:active` on a surface around another pressable surface's box", () => {
+    // A ClickableCard around a checkbox: the box is the checkbox's.
+    const inner = pressable();
+    ownBox(inner);
+    rows[1].appendChild(inner);
+    press(rows[1], 'pointerdown', 10, 10, 'mouse');
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(rows[1], 'pointerup', 10, 10, 'mouse');
+    press(inner, 'pointerdown', 10, 10, 'mouse');
+    expect(inner.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(inner, 'pointerup', 10, 10, 'mouse');
+  });
+
   it('leaves a right click to CSS on a fine-pointer surface, and a link nested in it takes its own press for every pointer', () => {
-    for (const [name, value] of Object.entries(pressFinePointerProps(true))) {
-      rows[0].setAttribute(name, value);
-    }
+    ownBox(rows[0]);
     const rightClick = new Event('pointerdown', {
       bubbles: true,
       cancelable: true,
@@ -324,9 +343,7 @@ describe('the press reaches the surface the finger landed on', () => {
   });
 
   it('ends a mouse press on a fine-pointer surface at once on release under Reduce Motion', () => {
-    for (const [name, value] of Object.entries(pressFinePointerProps(true))) {
-      rows[0].setAttribute(name, value);
-    }
+    ownBox(rows[0]);
     const matchMedia = window.matchMedia;
     window.matchMedia = (query: string) => ({
       ...matchMedia(query),
@@ -345,9 +362,7 @@ describe('the press reaches the surface the finger landed on', () => {
   });
 
   it('presses at once for a pen on a fine-pointer surface, in a scroller too, and not for its barrel button', () => {
-    for (const [name, value] of Object.entries(pressFinePointerProps(true))) {
-      rows[0].setAttribute(name, value);
-    }
+    ownBox(rows[0]);
     // A finger in the scroller waits out its scroll first.
     press(rows[1], 'pointerdown', 10, 10, 'pen');
     expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);

@@ -32,7 +32,6 @@ import {rtlStyles} from '../utils/rtlStyles';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {pressFinePointerProps} from '../privateAttributes/pressFinePointer.stylex';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
@@ -413,9 +412,6 @@ export function RadioListItem({
     <Item
       ref={mergedRowRef}
       {...(isDisabled ? undefined : pressable)}
-      // A mouse's press paints through the controller too, so it fades on
-      // release as a finger's does.
-      {...pressFinePointerProps(!isDisabled)}
       startContent={mediaContent}
       // Delegate row-surface clicks (label text, description, and the empty
       // hover area) to the radio input. The input stays the option's sole

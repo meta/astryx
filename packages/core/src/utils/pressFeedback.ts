@@ -23,11 +23,12 @@
 // costs one attribute write and no React render.
 //
 // Where the primary pointer is fine, the controller ignores the mouse and the
-// keyboard, and CSS `:active` keeps their press. A surface that declares the
-// fine-pointer press (pressFinePointer.stylex.ts) is the exception. There
-// the controller paints a mouse's or a pen's press at once and fades it on
-// release, as it does a finger's. The surface's `:active` arm yields while
-// it does, and a link or a button nested in it takes its own press.
+// keyboard, and CSS `:active` keeps their press. A surface that owns a
+// control's box (pressBox.stylex.ts), as a checkbox or a radio row does, is
+// the exception. There the controller paints a mouse's or a pen's press at
+// once and fades it on release, as it does a finger's. The surface's `:active`
+// arm yields while it does, and a link or a button nested in it takes its own
+// press.
 // Under a coarse primary pointer the CSS drops `:active`, so the controller
 // paints every press. A mouse, trackpad or Space press paints at once. The
 // controller reads the same query as the stylesheet, so they agree.
@@ -61,7 +62,7 @@ import {subscribeInput} from './inputStream';
 import {isInsideScrollView} from './scrollView';
 import {msSinceInput} from './inputAge';
 import {TOUCH_QUERY} from './touchPresentation';
-import {paintsFinePointerPress} from '../privateAttributes/pressFinePointer.stylex';
+import {pressBoxesIn} from '../privateAttributes/pressBox.stylex';
 import {sharedState} from './sharedRealm';
 import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
@@ -423,7 +424,7 @@ function surfaceAt(target: EventTarget | null): HTMLElement | null {
   if (!(found instanceof HTMLElement) || found.matches(DISABLED)) {
     return null;
   }
-  if (paintsFinePointerPress(found) && nestedControlTakesPress(target, found)) {
+  if (nestedControlTakesPress(target, found) && paintsFinePointerPress(found)) {
     return null;
   }
   return found;
@@ -544,6 +545,16 @@ function stylesheetDroppedActive(): boolean {
 function paintsFinePress(target: EventTarget | null): boolean {
   const surface = surfaceAt(target);
   return surface != null && paintsFinePointerPress(surface);
+}
+
+/**
+ * Whether `surface` takes the fine-pointer press. It does when it owns a
+ * control's box, with no other pressable surface between the two.
+ */
+function paintsFinePointerPress(surface: Element): boolean {
+  return pressBoxesIn(surface).some(
+    box => box.closest(`[${PRESSABLE_ATTRIBUTE}]`) === surface,
+  );
 }
 
 /**

@@ -6,9 +6,9 @@
  * @output registerFinePress, which installs that rule into the shared press
  *   controller (utils/pressFeedback.ts)
  * @position CheckboxInput and RadioListItem call registerFinePress as they
- *   load, and CheckboxListItem loads it with CheckboxInput. They mark the
- *   fine-pointer surfaces (pressFinePointer.stylex.ts). A page without them,
- *   such as a Carousel's, bundles none of the rule's code.
+ *   load, and CheckboxListItem loads it with CheckboxInput. Their surfaces own
+ *   control boxes (pressBox.stylex.ts) and take the fine-pointer press. A page
+ *   without them, such as a Carousel's, bundles none of the rule's code.
  */
 
 import {installFinePress} from './pressFeedback';

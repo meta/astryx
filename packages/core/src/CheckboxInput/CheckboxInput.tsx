@@ -56,7 +56,6 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {pressFinePointerProps} from '../privateAttributes/pressFinePointer.stylex';
 import {useIndicator} from '../Indicator/useIndicator';
 import {themeProps} from '../utils/themeProps';
 
@@ -560,9 +559,6 @@ export function CheckboxInput({
         onPointerDown={hasHitArea ? handleRowPointerDown : undefined}
         onClick={hasHitArea ? handleRowClick : undefined}
         {...(ownsPress ? pressable : undefined)}
-        // A mouse's press paints through the controller too, so it fades on
-        // release as a finger's does.
-        {...pressFinePointerProps(ownsPress)}
         {...stylex.props(
           styles.container,
           isLabelHidden && styles.containerLabelHidden,
