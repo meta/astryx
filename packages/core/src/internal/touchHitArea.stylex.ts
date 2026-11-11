@@ -24,6 +24,7 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
+import {spacingVars} from '../theme/tokens.stylex';
 
 // StyleX reads these at build time, so they are spelled out.
 const TOUCH = '@media (pointer: coarse)';
@@ -79,8 +80,8 @@ export const touchHitAreaStyles = stylex.create({
   layer: {...ROOM_SIDES, ...BAND},
   room: ROOM_SIDES,
   band: BAND,
-  // The group sets `--_hit-group-block` and `--_hit-group-inline` on its
-  // root: half its gap on the axis it lays out, the default room on the other.
+  // A group's member. Its root takes the group style of its axis and gap
+  // token below: half the gap on that axis, the default room on the other.
   member: {
     '--_hit-room-block-start': {
       default: 'var(--_hit-group-block)',
@@ -102,5 +103,38 @@ export const touchHitAreaStyles = stylex.create({
   inline: {
     '--_hit-room-inline-start': '0px',
     '--_hit-room-inline-end': '0px',
+  },
+  // WebKit moves a tap toward a clickable element near it, and a field's
+  // other parts, such as a chevron, are not clickable. So toward a part
+  // beside it, the band of a control inside a field reaches only 2 px.
+  besideParts: {
+    '--_hit-room-inline-start': {default: '2px', ':first-child': ROOM},
+    '--_hit-room-inline-end': {default: '2px', [LAST]: ROOM},
+  },
+  inlineGroup0: {'--_hit-group-inline': '0px', '--_hit-group-block': ROOM},
+  blockGroup0: {'--_hit-group-block': '0px', '--_hit-group-inline': ROOM},
+  inlineGroupSpacing05: {
+    '--_hit-group-inline': `calc(${spacingVars['--spacing-0-5']} / 2)`,
+    '--_hit-group-block': ROOM,
+  },
+  blockGroupSpacing05: {
+    '--_hit-group-block': `calc(${spacingVars['--spacing-0-5']} / 2)`,
+    '--_hit-group-inline': ROOM,
+  },
+  inlineGroupSpacing1: {
+    '--_hit-group-inline': `calc(${spacingVars['--spacing-1']} / 2)`,
+    '--_hit-group-block': ROOM,
+  },
+  blockGroupSpacing1: {
+    '--_hit-group-block': `calc(${spacingVars['--spacing-1']} / 2)`,
+    '--_hit-group-inline': ROOM,
+  },
+  blockGroupSpacing2: {
+    '--_hit-group-block': `calc(${spacingVars['--spacing-2']} / 2)`,
+    '--_hit-group-inline': ROOM,
+  },
+  inlineGroupSpacing5: {
+    '--_hit-group-inline': `calc(${spacingVars['--spacing-5']} / 2)`,
+    '--_hit-group-block': ROOM,
   },
 });

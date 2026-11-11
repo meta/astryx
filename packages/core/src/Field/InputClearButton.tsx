@@ -20,6 +20,7 @@ import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
 import {Icon} from '../Icon/Icon';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {themeProps} from '../utils/themeProps';
 import {
   registerEnglishFallback,
@@ -33,15 +34,6 @@ const styles = stylex.create({
   button: {
     height: '20px',
     flexShrink: 0,
-    // WebKit moves a tap toward a clickable element near it, and the field's
-    // other parts, such as the chevron, are not clickable themselves. So
-    // toward a part beside it the touch band reaches only 2 px, and a tap on
-    // the part stays the field's.
-    '--_hit-room-inline-start': {default: '2px', ':first-child': '22px'},
-    '--_hit-room-inline-end': {
-      default: '2px',
-      ':nth-last-child(1 of :not([popover]):not(template):not(dialog))': '22px',
-    },
   },
 });
 
@@ -113,7 +105,14 @@ function renderInputClearButton({
       onClick={onClick}
       onClickCapture={onClickCapture}
       isIconOnly
-      xstyle={[styles.button, xstyle]}
+      // StyleX's xstyle type has no custom properties under a condition.
+      xstyle={
+        [
+          styles.button,
+          touchHitAreaStyles.besideParts,
+          xstyle,
+        ] as stylex.StyleXStyles
+      }
     />
   );
 }

@@ -26,6 +26,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {Field} from '../Field/Field';
 import type {InputStatus} from '../Field/types';
@@ -75,19 +76,13 @@ const styles = stylex.create({
   radiogroup: {
     display: 'flex',
   },
-  // The options' touch bands meet in the middle of the gap
-  // (touchHitAreaStyles.member).
   vertical: {
     flexDirection: 'column',
     gap: spacingVars['--spacing-2'],
-    '--_hit-group-block': `calc(${spacingVars['--spacing-2']} / 2)`,
-    '--_hit-group-inline': '22px',
   },
   horizontal: {
     flexDirection: 'row',
     gap: spacingVars['--spacing-5'],
-    '--_hit-group-block': '22px',
-    '--_hit-group-inline': `calc(${spacingVars['--spacing-5']} / 2)`,
   },
 });
 
@@ -437,6 +432,10 @@ export function RadioList({
           stylex.props(
             styles.radiogroup,
             orientation === 'vertical' ? styles.vertical : styles.horizontal,
+            // Half the gap is each option's touch room toward the next.
+            orientation === 'vertical'
+              ? touchHitAreaStyles.blockGroupSpacing2
+              : touchHitAreaStyles.inlineGroupSpacing5,
             controlXstyle,
           ),
           controlClassName,

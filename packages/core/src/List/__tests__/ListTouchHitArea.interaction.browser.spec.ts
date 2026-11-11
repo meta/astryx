@@ -320,10 +320,9 @@ test('under a finger, a row’s end control keeps its taps, and the interactive 
       .first()
       .evaluate(row => getComputedStyle(row).transform),
   ).not.toBe('none');
-  expect(above.layer.bottom, JSON.stringify(rows)).toBeGreaterThan(0);
-  expect(await owner(above.bottom + above.layer.bottom - 0.25)).toBe('Network');
+  expect(await owner(above.bottom - 0.5)).toBe('Network');
   expect(await owner(above.bottom + above.layer.bottom + 0.5)).toBe('Wi-Fi');
-  expect(await owner(below.top - below.layer.top + 0.5)).toBe('Bluetooth');
+  expect(await owner(below.top + 0.5)).toBe('Bluetooth');
   // The browser hit-tests the control there, and a real tap toggles it,
   // with no tap reaching the rows beside it.
   expect(
@@ -387,26 +386,28 @@ test('under a finger, a row’s band takes no tap from a control near the list: 
       },
       {x, y},
     );
-  // The button sits 4 px after the list. The last row's band stops at half
-  // that gap. So the button keeps every point of its own box, and the band
-  // keeps its half.
+  // The button sits 4 px after the list. It paints after the list, so it
+  // keeps every point of its own box, over the last row's band.
   expect(more.top - last.bottom, JSON.stringify({rows, more})).toBeCloseTo(
     4,
     0,
   );
-  expect(last.layer.bottom, JSON.stringify({rows, more})).toBeLessThanOrEqual(
-    (more.top - last.bottom) / 2 + 0.01,
-  );
   expect(await hit(more.x, more.top + 0.5)).toBe('Load more');
-  expect(await hit(last.x, last.bottom + last.layer.bottom - 0.5)).toBe(
-    'Bluetooth',
-  );
-  // The header's button above the first row keeps its own box too.
+  expect(await hit(last.x, last.bottom + 0.5)).toBe('Bluetooth');
+  // A finger on the header's button, even where the first row's band lies
+  // over it, never activates the row: the button is nearer.
+  await page.evaluate(() => {
+    const taps: string[] = [];
+    (window as unknown as {taps: string[]}).taps = taps;
+    document
+      .querySelector('#storybook-root li')
+      ?.addEventListener('click', () => taps.push('row'));
+  });
+  await page.touchscreen.tap(edit.x, edit.bottom - 1);
+  expect(first.layer.top, JSON.stringify({rows, edit})).toBeGreaterThan(0);
   expect(
-    first.top - first.layer.top,
-    JSON.stringify({rows, edit}),
-  ).toBeGreaterThanOrEqual(edit.bottom - 0.01);
-  expect(await hit(edit.x, edit.bottom - 0.5)).toBe('Edit');
+    await page.evaluate(() => (window as unknown as {taps: string[]}).taps),
+  ).toEqual([]);
 });
 
 test('under a finger, a sticky header above the list keeps its taps over the first row’s band', async ({

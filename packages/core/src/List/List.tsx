@@ -30,6 +30,7 @@
 import {useCallback, useId, useMemo, useRef, type ReactNode} from 'react';
 import type {Reorderable} from '../reorderable/createReorderable';
 import * as stylex from '@stylexjs/stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -198,10 +199,6 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
-    // The rows' touch bands meet in the middle of the gap
-    // (touchHitAreaStyles.member).
-    '--_hit-group-block': `calc(${spacingVars['--spacing-0-5']} / 2)`,
-    '--_hit-group-inline': '22px',
     // A row dragged aside for its swipe actions (Item.swipeActions) paints
     // past the list's inline edge unless the list clips. `clip`, never
     // `hidden`: hidden makes a scroll container, which fights the list's
@@ -285,7 +282,6 @@ const styles = stylex.create({
   },
   withDividers: {
     gap: 0,
-    '--_hit-group-block': '0px',
   },
   withCounter: {
     counterReset: 'astryx-list',
@@ -440,6 +436,10 @@ export function List({
           animatedLayout != null && styles.animatedIsolation,
           isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
+          // Half the rows' gap is each row's touch room toward the next.
+          hasDividers
+            ? touchHitAreaStyles.blockGroup0
+            : touchHitAreaStyles.blockGroupSpacing05,
           reachesContainerPadding && styles.reachesContainerPadding,
           edge === 'bleed' && header == null && styles.bleedCorners,
           listStyle !== 'none' &&

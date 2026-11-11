@@ -599,8 +599,22 @@ export const TouchReach: Story = {
           label="Format"
           value={formats}
           onChange={setFormats}>
-          <ToggleButton label="Bold" value="bold" data-testid="bold" />
-          <ToggleButton label="Italic" value="italic" data-testid="italic" />
+          <ToggleButton
+            label="Bold"
+            value="bold"
+            size="sm"
+            isIconOnly
+            icon={<Icon icon={Cog6ToothIcon} />}
+            data-testid="bold"
+          />
+          <ToggleButton
+            label="Italic"
+            value="italic"
+            size="sm"
+            isIconOnly
+            icon={<Icon icon={TrashIcon} />}
+            data-testid="italic"
+          />
         </ToggleButtonGroup>
         <Text>
           See the{' '}

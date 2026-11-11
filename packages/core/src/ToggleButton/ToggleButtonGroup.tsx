@@ -39,6 +39,7 @@ import {
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {useGroupPressTracking} from '../hooks/useGroupPressTracking';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {mergeProps} from '../utils';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {themeProps} from '../utils/themeProps';
@@ -85,16 +86,10 @@ const styles = stylex.create({
     display: 'inline-flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
-    // The touch band's room between members is half the gap
-    // (touchHitAreaStyles.member).
-    '--_hit-group-inline': `calc(${spacingVars['--spacing-1']} / 2)`,
-    '--_hit-group-block': '22px',
   },
   vertical: {
     flexDirection: 'column',
     alignItems: 'stretch',
-    '--_hit-group-inline': '22px',
-    '--_hit-group-block': `calc(${spacingVars['--spacing-1']} / 2)`,
   },
 });
 
@@ -290,6 +285,10 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps): ReactNode {
           stylex.props(
             styles.group,
             orientation === 'vertical' && styles.vertical,
+            // Half the gap is each toggle's touch room toward the next.
+            orientation === 'vertical'
+              ? touchHitAreaStyles.blockGroupSpacing1
+              : touchHitAreaStyles.inlineGroupSpacing1,
             xstyle,
           ),
           className,

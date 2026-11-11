@@ -64,13 +64,12 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
     const lone = await boxOf(page, 'lone');
     expect(lone.bottom - lone.top).toBeCloseTo(24, 0);
     const x = (lone.left + lone.right) / 2;
-    expect(await buttonAt(page, x, lone.top - 9.5)).toBe('lone');
-    expect(await buttonAt(page, x, lone.top - 10.5)).toBeNull();
-    expect(await buttonAt(page, x, lone.bottom + 9.5)).toBe('lone');
-    expect(await buttonAt(page, x, lone.bottom + 10.5)).toBeNull();
-    expect(
-      await buttonAt(page, lone.left - 9.5, (lone.top + lone.bottom) / 2),
-    ).toBe('lone');
+    // Hit tests at whole pixels: the story places the button on them.
+    expect(await buttonAt(page, x, lone.top - 10)).toBe('lone');
+    expect(await buttonAt(page, x, lone.top - 11)).toBeNull();
+    expect(await buttonAt(page, x, lone.bottom + 9)).toBe('lone');
+    expect(await buttonAt(page, x, lone.bottom + 11)).toBeNull();
+    expect(await buttonAt(page, lone.left - 10, lone.top + 12)).toBe('lone');
     // A real finger 9 px above the edge presses it.
     const driver = await touchDriver(page);
     await tapAt(driver, {x: Math.round(x), y: Math.round(lone.top) - 9});
@@ -85,10 +84,11 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
     const italic = await boxOf(page, 'italic');
     const gap = italic.left - bold.right;
     expect(gap).toBeCloseTo(4, 0);
-    const middle = bold.right + gap / 2;
+    // Small toggles grow sideways only up to half the gap toward each other.
+    expect(bold.right - bold.left).toBeLessThan(44);
     const y = (bold.top + bold.bottom) / 2;
-    expect(await buttonAt(page, middle - 0.5, y)).toBe('bold');
-    expect(await buttonAt(page, middle + 0.5, y)).toBe('italic');
+    expect(await buttonAt(page, bold.right + 1, y)).toBe('bold');
+    expect(await buttonAt(page, italic.left - 1, y)).toBe('italic');
   });
 
   test('a tap on a link right before an InfoTip opens the link, not the tip', async ({

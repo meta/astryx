@@ -417,15 +417,10 @@ describe('build-css astryx.css', () => {
     const rules = () => astryxCss.split('\n').map(line => line.trim());
 
     it('gives an interactive row its hit layer only under a finger, and no row a new height', () => {
-      // Each edge grows by the inset utils/hitArea.ts measures, plus the
-      // border the row declares on that side. The layer's offsets start at the
-      // row's padding box, but the insets start at its border box. One inset
-      // per side, in physical order: top, right, bottom, left.
-      const offset = side =>
-        `calc\\(\\(var\\(--astryx-hit-inset-${side}, ?0px\\) ?\\+ ?var\\(--_hit-border-${side}, ?0px\\)\\) ?\\* ?-1\\)`;
-      const band = new RegExp(
-        `::after\\{inset:${offset('top')} ${offset('right')} ${offset('bottom')} ${offset('left')}\\}`,
-      );
+      // Each side grows toward 44 px and no further than its own room. The
+      // block end grows from past the row's divider.
+      const band =
+        /::after\{(top|bottom):[^}]*var\(--_hit-room-block-(start|end)\)/;
       const edges = rules().filter(rule => band.test(rule));
       expect(edges.length).toBeGreaterThan(0);
       for (const rule of edges) {
@@ -439,7 +434,7 @@ describe('build-css astryx.css', () => {
 
     it('declares a row’s border width on its layer alone, so content inside the row never inherits it', () => {
       const declared = rules().filter(rule =>
-        /\{--_hit-border-(top|right|bottom|left):/.test(rule),
+        /\{--_hit-border-block-end:/.test(rule),
       );
       expect(declared.length).toBeGreaterThan(0);
       for (const rule of declared) {

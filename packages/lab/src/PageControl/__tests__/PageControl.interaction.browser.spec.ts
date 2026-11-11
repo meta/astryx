@@ -247,16 +247,11 @@ test('a tap just above the control, inside its 44 px hit area, steps a page', as
   const {slider, driver} = await open(page);
   expect(await valueNow(slider)).toBe(3);
   // The 25.67 px tall control grows about 9 px past each edge.
-  await expect
-    .poll(() =>
-      slider.evaluate(
-        el =>
-          Number.parseFloat(
-            el.style.getPropertyValue('--astryx-hit-inset-top'),
-          ) || 0,
-      ),
-    )
-    .toBeGreaterThan(8);
+  expect(
+    await slider.evaluate(
+      el => -Number.parseFloat(getComputedStyle(el, '::after').top) || 0,
+    ),
+  ).toBeGreaterThan(8);
   const box = await slider.boundingBox();
   if (box == null) {
     throw new Error('no control');

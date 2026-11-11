@@ -35,6 +35,7 @@ import {
   useGroupPressTracking,
 } from '../hooks/useGroupPressTracking';
 import {useTouchPresentation} from '../utils/touchPresentation';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {mergeProps, composeEventHandlers} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {ButtonGroupContext} from './ButtonGroupContext';
@@ -101,15 +102,9 @@ const styles = stylex.create({
   group: {
     display: 'inline-flex',
     alignItems: 'stretch',
-    // The buttons touch, so their touch bands have no room between them
-    // (touchHitAreaStyles.member).
-    '--_hit-group-inline': '0px',
-    '--_hit-group-block': '22px',
   },
   vertical: {
     flexDirection: 'column',
-    '--_hit-group-inline': '22px',
-    '--_hit-group-block': '0px',
   },
 });
 
@@ -239,6 +234,10 @@ export function ButtonGroup({
             stylex.props(
               styles.group,
               orientation === 'vertical' && styles.vertical,
+              // The buttons touch: no room between their touch bands.
+              orientation === 'vertical'
+                ? touchHitAreaStyles.blockGroup0
+                : touchHitAreaStyles.inlineGroup0,
               elevationStyles[elevation],
               xstyle,
             ),
