@@ -302,9 +302,17 @@ export interface UsePopoverOptions {
   role?: 'dialog' | 'none';
 
   /**
-   * Whether the dialog is modal (`aria-modal`). Only applies when `role` is
-   * `'dialog'`. Set to `false` for non-modal dialogs that do not inert the rest
-   * of the page.
+   * Whether the popover is modal.
+   *
+   * - `true`: Tab and Shift+Tab cycle inside the open popover, and a dialog
+   *   popover carries `aria-modal`.
+   * - `false`: the popover holds nothing. Tab moves in the browser's order:
+   *   from the anchor (else the trigger) into the popover, and from its last
+   *   control to what follows the anchor. Escape closes it only while focus
+   *   is inside it or on its anchor or trigger. Use it for a coachmark or a
+   *   tour step, whose reader must reach the control it describes.
+   *
+   * A Tab pressed outside the popover is never pulled into it.
    *
    * @default true
    */
@@ -589,6 +597,26 @@ function usePopoverImplementation(
   // A caller that may cancel an outside dismissal gets the outside-press
   // watch in place of native light dismiss, which no script can cancel.
   const watchesOutsidePress = hasLightDismiss && onOutsidePress != null;
+  // A non-modal popover takes Escape only while it holds focus: inside it, or
+  // on the anchor or trigger it belongs to. Read at press time.
+  const surfaceHolderRef =
+    useRef<React.RefObject<HTMLDivElement | null> | null>(null);
+  const isFocusInNonModalScope = useCallback((): boolean => {
+    const surface = surfaceHolderRef.current?.current ?? null;
+    const doc = surface?.ownerDocument ?? document;
+    const active = doc.activeElement;
+    if (active == null) {
+      return false;
+    }
+    const anchor = boundAnchorRef.current;
+    const trigger = triggerElementRef.current;
+    return (
+      surface?.contains(active) === true ||
+      anchor?.contains(active) === true ||
+      trigger?.contains(active) === true
+    );
+  }, []);
+
   // Focus returns as the popover starts to close, while it still holds focus:
   // the browser restores focus only for an auto popover whose opener is still
   // there, and then with a focus ring whatever the last input was. The trap
@@ -633,7 +661,10 @@ function usePopoverImplementation(
     getAnchor: () =>
       anchorOptionRef.current == null ? null : boundAnchorRef.current,
     layerId: layer.id,
+    isContaining: isModal,
+    isEscapeInScope: isModal ? undefined : isFocusInNonModalScope,
   });
+  surfaceHolderRef.current = contentRef;
   returnFocusRef.current = returnFocus;
 
   const focusInitialTarget = useCallback(() => {

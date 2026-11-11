@@ -102,7 +102,7 @@ export const docs = {
       name: 'isModal',
       type: 'boolean',
       description:
-        'Whether a dialog-role popover is modal (aria-modal). Only applies when role is "dialog".',
+        'Whether the popover is modal. true holds Tab inside the open popover and marks a dialog popover aria-modal. false holds nothing: Tab follows the browser order from the anchor or trigger into the popover and on, and Escape closes it only while focus is inside it or on its anchor or trigger. A Tab pressed outside is never pulled in.',
       default: 'true',
     },
     {
@@ -241,7 +241,8 @@ export const docsDense = {
     closeButtonLabel: 'label for hidden close button.',
     dialogLabel: 'accessible label for popover dialog (role="dialog" only).',
     role: 'content wrapper ARIA role; "none" for listbox/menu popups.',
-    isModal: 'whether a dialog-role popover is modal (aria-modal).',
+    isModal:
+      'true: Tab held inside + aria-modal; false: page Tab order, Escape only while focus in popover/anchor/trigger.',
     hasSurface: 'apply default surface background/radius/shadow.',
     padding: 'spacing-scale padding on the painted surface; omit for none.',
     surfaceTarget:
