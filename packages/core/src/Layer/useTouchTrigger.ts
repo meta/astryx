@@ -151,12 +151,6 @@ function createTapRecognizer(): TapRecognizer {
   };
 }
 
-/** A tap stop that cancels only some taps, for a field that reads the tap. */
-export interface TapStopOptions {
-  /** Whether this tap's mouse event is cancelled. */
-  shouldStop: (mouse: ReactMouseEvent<Element>) => boolean;
-}
-
 export function useTapStop(event: 'click'): {
   onPointerDown: (event: ReactPointerEvent<Element>) => void;
   onClick: (event: ReactMouseEvent<Element>) => void;
@@ -165,44 +159,20 @@ export function useTapStop(event: 'mousedown'): {
   onPointerDown: (event: ReactPointerEvent<Element>) => void;
   onMouseDown: (event: ReactMouseEvent<Element>) => void;
 };
-export function useTapStop(
-  event: 'mousedown',
-  options: TapStopOptions,
-): {
-  onPointerDown: (event: ReactPointerEvent<Element>) => void;
-  onMouseDown: (event: ReactMouseEvent<Element>) => void;
-  /** Whether the latest press was a finger's or a pen's, until the next one. */
-  isTap: () => boolean;
-};
-export function useTapStop(
-  event: 'click' | 'mousedown',
-  options?: TapStopOptions,
-) {
+export function useTapStop(event: 'click' | 'mousedown') {
   const pressIsTapRef = useRef(false);
-  const lastPressIsTapRef = useRef(false);
-  const shouldStop = options?.shouldStop;
-  const onPointerDown = useCallback((pointer: ReactPointerEvent<Element>) => {
+  const onPointerDown = (pointer: ReactPointerEvent<Element>) => {
     pressIsTapRef.current = TOUCH_POINTER_TYPES.has(pointer.pointerType);
-    lastPressIsTapRef.current = pressIsTapRef.current;
-  }, []);
-  const cancel = useCallback(
-    (mouse: ReactMouseEvent<Element>) => {
-      if (pressIsTapRef.current && (shouldStop?.(mouse) ?? true)) {
-        mouse.preventDefault();
-      }
-      pressIsTapRef.current = false;
-    },
-    [shouldStop],
-  );
-  const isTap = useCallback(() => lastPressIsTapRef.current, []);
-  if (event === 'click') {
-    return {onPointerDown, onClick: cancel};
-  }
-  // Only a caller that reads the tap gets the reader, so a caller that
-  // spreads the handlers onto an element passes no unknown prop.
-  return options == null
-    ? {onPointerDown, onMouseDown: cancel}
-    : {onPointerDown, onMouseDown: cancel, isTap};
+  };
+  const cancel = (mouse: ReactMouseEvent<Element>) => {
+    if (pressIsTapRef.current) {
+      mouse.preventDefault();
+    }
+    pressIsTapRef.current = false;
+  };
+  return event === 'click'
+    ? {onPointerDown, onClick: cancel}
+    : {onPointerDown, onMouseDown: cancel};
 }
 
 /**

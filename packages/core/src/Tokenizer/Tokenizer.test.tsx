@@ -432,6 +432,8 @@ describe('Tokenizer', () => {
     it('moves focus to the input after a pen removes a token, as a mouse removal does', () => {
       const {input, remove, onChange} = renderPair();
       fireEvent.pointerDown(remove, {pointerType: 'pen'});
+      // A pen's press keeps its default, as a mouse's does.
+      expect(fireEvent.mouseDown(remove)).toBe(true);
       act(() => remove.focus());
       fireEvent.click(remove);
       expect(onChange).toHaveBeenCalledWith([users[1]], {
@@ -439,6 +441,25 @@ describe('Tokenizer', () => {
         type: 'remove',
       });
       expect(input).toHaveFocus();
+    });
+
+    it('leaves the next tap alone after a finger press on a token’s × turns into a scroll', () => {
+      const {input, remove} = renderPair();
+      // The browser takes the press over for scrolling: no mouse events follow.
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.pointerCancel(remove, {pointerType: 'touch'});
+      fireEvent.pointerDown(input, {pointerType: 'touch'});
+      expect(fireEvent.mouseDown(input)).toBe(true);
+    });
+
+    it('leaves a pen’s press on a token’s × alone after a finger tap on the input', () => {
+      const {input, remove} = renderPair();
+      fireEvent.pointerDown(input, {pointerType: 'touch'});
+      fireEvent.mouseDown(input);
+      act(() => input.focus());
+      act(() => input.blur());
+      fireEvent.pointerDown(remove, {pointerType: 'pen'});
+      expect(fireEvent.mouseDown(remove)).toBe(true);
     });
 
     it('keeps the input focused after a finger removes a token while typing', () => {
@@ -509,7 +530,8 @@ describe('Tokenizer', () => {
       expect(fireEvent.mouseDown(remove)).toBe(true);
     });
 
-    it('lets go of the tapped × before it unmounts, so the field blurs', () => {
+    it('moves focus to the input when the tapped × already held focus, as after Shift+Tab', async () => {
+      const user = userEvent.setup();
       const onBlur = vi.fn();
       render(
         <Tokenizer
@@ -520,16 +542,18 @@ describe('Tokenizer', () => {
           onBlur={onBlur}
         />,
       );
-      const remove = screen.getByRole('button', {name: 'Remove Alice'});
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      await user.tab({shift: true});
+      const remove = screen.getByRole('button', {name: 'Remove Bob'});
+      expect(remove).toHaveFocus();
       fireEvent.pointerDown(remove, {pointerType: 'touch'});
-      // Chrome focuses the tapped button before the click.
-      act(() => remove.focus());
       fireEvent.click(remove);
-      expect(onBlur).toHaveBeenCalled();
-      expect(document.activeElement).toBe(document.body);
+      expect(input).toHaveFocus();
+      expect(onBlur).not.toHaveBeenCalled();
     });
 
-    it('keeps the old refocus for a custom renderToken remove button: the input keeps focus, with no blur', () => {
+    it('keeps the old refocus for a custom renderToken remove button: the removal focuses the input, with no blur', () => {
       const onBlur = vi.fn();
       render(
         <Tokenizer
@@ -551,12 +575,12 @@ describe('Tokenizer', () => {
       const input = screen.getByRole('combobox');
       const drop = screen.getByRole('button', {name: 'Drop Alice'});
       fireEvent.pointerDown(drop, {pointerType: 'touch'});
-      // Its press default stays, and focus that lands on it moves on to the
-      // input (Chrome focuses the pressed button).
+      // Its press default stays, and the focus the press puts on it stays
+      // there (Chrome focuses the pressed button).
       expect(fireEvent.mouseDown(drop)).toBe(true);
       act(() => drop.focus());
-      expect(input).toHaveFocus();
-      // The removal leaves focus there, as before.
+      expect(drop).toHaveFocus();
+      // The removal moves focus to the input, as before.
       fireEvent.click(drop);
       expect(input).toHaveFocus();
       expect(onBlur).not.toHaveBeenCalled();
