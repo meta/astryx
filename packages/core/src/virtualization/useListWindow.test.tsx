@@ -68,7 +68,7 @@ function renderList(keys: number[], geometry: ListWindowGeometrySource) {
 }
 
 describe('useListWindow', () => {
-  it('mounts only the visible rows plus four per side in a 10k list', () => {
+  it('mounts only the visible rows plus one band per side in a 10k list', () => {
     const geometry = createGeometry({
       viewportHeight: 200,
       scrollTop: 20 * 5000,
@@ -77,11 +77,12 @@ describe('useListWindow', () => {
     });
     const {result} = renderList(keysOf(10_000), geometry.source);
     expect(result.current.isWindowed).toBe(true);
-    expect(result.current.plan).toMatchObject({start: 4996, end: 5014});
+    // A 200px viewport has a 200px band: 10 rows past each edge.
+    expect(result.current.plan).toMatchObject({start: 4990, end: 5020});
     expect(result.current.segments).toEqual([
-      {type: 'gap', start: 0, end: 4996, height: 4996 * 20},
-      {type: 'rows', start: 4996, end: 5014},
-      {type: 'gap', start: 5014, end: 10_000, height: 4986 * 20},
+      {type: 'gap', start: 0, end: 4990, height: 4990 * 20},
+      {type: 'rows', start: 4990, end: 5020},
+      {type: 'gap', start: 5020, end: 10_000, height: 4980 * 20},
     ]);
   });
 

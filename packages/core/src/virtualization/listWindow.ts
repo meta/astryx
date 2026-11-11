@@ -21,6 +21,11 @@ export interface ListWindowOptions {
   startOffset: number;
   isMeasured: boolean;
   focusIndex?: number;
+  /**
+   * Distance in CSS pixels to mount past each viewport edge. When set, it
+   * replaces the four overscan rows of a measured window.
+   */
+  bandPadding?: number;
 }
 
 export interface ListWindowPlan {
@@ -100,13 +105,39 @@ export function calculateListWindow(
     : listTop < 0
       ? listTop
       : bodyTop - firstVisibleIndex * rowHeight;
-  const start = isMeasured ? Math.max(0, firstVisibleIndex - 4) : 0;
-  const end = isMeasured
-    ? Math.min(
-        rowCount,
-        Math.max(firstVisibleIndex, Math.ceil(bodyBottom / rowHeight)) + 4,
-      )
-    : Math.min(rowCount, Math.ceil(viewportHeight / rowHeight) + 4);
+  const {bandPadding} = options;
+  const hasBand =
+    isMeasured &&
+    bandPadding !== undefined &&
+    Number.isFinite(bandPadding) &&
+    bandPadding >= 0;
+  const start = !isMeasured
+    ? 0
+    : hasBand
+      ? Math.min(
+          firstVisibleIndex,
+          Math.floor(Math.max(0, listTop - bandPadding) / rowHeight),
+        )
+      : Math.max(0, firstVisibleIndex - 4);
+  const end = !isMeasured
+    ? Math.min(rowCount, Math.ceil(viewportHeight / rowHeight) + 4)
+    : hasBand
+      ? Math.min(
+          rowCount,
+          Math.max(
+            firstVisibleIndex + 1,
+            Math.ceil(
+              Math.min(
+                totalHeight,
+                clampedScroll + viewportHeight - startOffset + bandPadding,
+              ) / rowHeight,
+            ),
+          ),
+        )
+      : Math.min(
+          rowCount,
+          Math.max(firstVisibleIndex, Math.ceil(bodyBottom / rowHeight)) + 4,
+        );
   return {
     segments: createListWindowSegments(
       rowCount,
@@ -186,6 +217,11 @@ export interface VariableListRangeOptions {
   scrollOffset: number;
   isMeasured: boolean;
   overscan: number;
+  /**
+   * Distance in CSS pixels to mount past each viewport edge. When set, it
+   * replaces the overscan item count of a measured range.
+   */
+  bandPadding?: number;
 }
 
 export interface VariableListRange {
@@ -229,6 +265,7 @@ export function calculateVariableListRange({
   scrollOffset,
   isMeasured,
   overscan,
+  bandPadding,
 }: VariableListRangeOptions): VariableListRange {
   const count = Math.max(0, offsets.length - 1);
   if (count === 0) {
@@ -257,6 +294,28 @@ export function calculateVariableListRange({
     first + 1,
     lowerBound(offsets, scroll + visibleSize, count),
   );
+  if (
+    bandPadding !== undefined &&
+    Number.isFinite(bandPadding) &&
+    bandPadding >= 0
+  ) {
+    const bandStart = Math.max(0, scroll - bandPadding);
+    return {
+      start: Math.min(
+        first,
+        Math.max(0, lowerBound(offsets, bandStart, count, true) - 1),
+      ),
+      end: Math.max(
+        last,
+        Math.min(
+          count,
+          lowerBound(offsets, scroll + visibleSize + bandPadding, count),
+        ),
+      ),
+      firstVisibleIndex: first,
+      offset: scroll - offsets[first],
+    };
+  }
   return {
     start: Math.max(0, first - overscan),
     end: Math.min(count, last + overscan),

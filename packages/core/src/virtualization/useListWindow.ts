@@ -112,6 +112,55 @@ const EMPTY_GEOMETRY: ListWindowGeometry = Object.freeze({
   isMeasured: false,
 });
 const getEmptyGeometry = () => EMPTY_GEOMETRY;
+
+/**
+ * The block-axis band past each viewport edge: the smaller of a CSS pixel
+ * limit and a fraction of the viewport height. Private, so a measurement
+ * build can switch it.
+ */
+const BLOCK_BAND = {limit: 512, viewportFraction: 1};
+
+/** The distance mounted past each viewport edge for a measured viewport. */
+export function getBlockBandPadding(viewportHeight: number): number {
+  return Math.max(
+    0,
+    Math.min(BLOCK_BAND.limit, viewportHeight * BLOCK_BAND.viewportFraction),
+  );
+}
+
+/**
+ * A snapshot reader that keeps the last snapshot it planned from until the
+ * block scroll offset moves half a band, or the viewport size, start offset,
+ * extent, measured state or layout revision changes. An identical snapshot
+ * lets React skip the render, so a scroll inside the band commits nothing,
+ * and an inline-only scroll never reaches the row plan. A content revision
+ * alone passes nothing through: the window's own mounts publish one, and it
+ * changes no plan input.
+ */
+function createBandedBlockSnapshot(
+  source: ListWindowGeometrySource,
+  isPassThrough: boolean,
+): () => ListWindowGeometry {
+  let planned: ListWindowGeometry | undefined;
+  return () => {
+    const live = source.getSnapshot();
+    if (
+      isPassThrough ||
+      planned === undefined ||
+      !live.isMeasured ||
+      !planned.isMeasured ||
+      live.viewportHeight !== planned.viewportHeight ||
+      live.startOffset !== planned.startOffset ||
+      live.scrollHeight !== planned.scrollHeight ||
+      live.layoutRevision !== planned.layoutRevision ||
+      Math.abs(live.scrollTop - planned.scrollTop) >=
+        getBlockBandPadding(live.viewportHeight) / 2
+    ) {
+      planned = live;
+    }
+    return planned;
+  };
+}
 const subscribeToNothing = () => () => {};
 
 function scrollViewport(node: HTMLElement, scrollTop: number) {
@@ -129,12 +178,18 @@ export function useListWindow({
   viewport,
   focusContainer,
 }: UseListWindowOptions): ListWindowResult {
+  const [tracking, setTracking] = useState<WindowTracking | undefined>();
+  // A pending anchor write must see each live offset until it lands.
+  const isAnchorPending = tracking?.pending !== undefined;
+  const getBandedSnapshot = useMemo(
+    () => createBandedBlockSnapshot(geometry, isAnchorPending),
+    [geometry, isAnchorPending],
+  );
   const snapshot = useSyncExternalStore(
     canWindow ? geometry.subscribe : subscribeToNothing,
-    canWindow ? geometry.getSnapshot : getEmptyGeometry,
+    canWindow ? getBandedSnapshot : getEmptyGeometry,
     canWindow ? geometry.getServerSnapshot : getEmptyGeometry,
   );
-  const [tracking, setTracking] = useState<WindowTracking | undefined>();
 
   // This is the only full-data pass owned here, and never runs on a scroll snapshot.
   const keyIndices = useMemo(() => {
@@ -219,6 +274,7 @@ export function useListWindow({
           startOffset: effectiveGeometry.startOffset,
           isMeasured: effectiveGeometry.isMeasured,
           focusIndex,
+          bandPadding: getBlockBandPadding(effectiveGeometry.viewportHeight),
         })
       : null;
   const isWindowed = plan !== null;

@@ -93,6 +93,51 @@ interface InlineTracking {
 
 const UNMEASURED: InlineListWindowGeometry = Object.freeze({isMeasured: false});
 const getUnmeasured = () => UNMEASURED;
+
+/**
+ * The inline band past each edge of the space between the insets: the
+ * smaller of a CSS pixel limit and a fraction of that space. Private, so a
+ * measurement build can switch it.
+ */
+const INLINE_BAND = {limit: 256, viewportFraction: 0.5};
+
+/** The distance mounted past each edge of the space between the insets. */
+export function getInlineBandPadding(visibleWidth: number): number {
+  return Math.max(
+    0,
+    Math.min(INLINE_BAND.limit, visibleWidth * INLINE_BAND.viewportFraction),
+  );
+}
+
+/**
+ * A snapshot reader that keeps the last snapshot it planned from until the
+ * inline scroll offset moves half a band, or the viewport size or measured
+ * state changes. An identical snapshot lets React skip the render, so a
+ * scroll inside the band commits nothing, and a block-only scroll never
+ * reaches the column plan.
+ */
+function createBandedInlineSnapshot(
+  source: InlineListWindowGeometrySource,
+  insets: number,
+  isPassThrough: boolean,
+): () => InlineListWindowGeometry {
+  let planned: InlineListWindowGeometry | undefined;
+  return () => {
+    const live = source.getSnapshot();
+    if (
+      isPassThrough ||
+      planned === undefined ||
+      !live.isMeasured ||
+      !planned.isMeasured ||
+      live.viewportWidth !== planned.viewportWidth ||
+      Math.abs((live.scrollLeft ?? 0) - (planned.scrollLeft ?? 0)) >=
+        getInlineBandPadding((live.viewportWidth ?? 0) - insets) / 2
+    ) {
+      planned = live;
+    }
+    return planned;
+  };
+}
 const subscribeToNothing = () => () => {};
 
 /** Right-to-left viewports report a negative physical inline offset. */
@@ -115,12 +160,19 @@ export function useInlineListWindow({
   viewport,
   focusContainer,
 }: UseInlineListWindowOptions): InlineListWindowResult {
+  const [tracking, setTracking] = useState<InlineTracking | undefined>();
+  // A pending anchor write must see each live offset until it lands.
+  const isAnchorPending = tracking?.pending !== undefined;
+  const insets = insetStart + insetEnd;
+  const getBandedSnapshot = useMemo(
+    () => createBandedInlineSnapshot(geometry, insets, isAnchorPending),
+    [geometry, insets, isAnchorPending],
+  );
   const snapshot = useSyncExternalStore(
     canWindow ? geometry.subscribeInline : subscribeToNothing,
-    canWindow ? geometry.getSnapshot : getUnmeasured,
+    canWindow ? getBandedSnapshot : getUnmeasured,
     canWindow ? geometry.getServerSnapshot : getUnmeasured,
   );
-  const [tracking, setTracking] = useState<InlineTracking | undefined>();
   const count = Math.max(0, offsets.length - 1);
   // Key work runs when the items change, never on a scroll.
   const keyIndices = useMemo(
@@ -181,6 +233,7 @@ export function useInlineListWindow({
           : 0,
         isMeasured,
         overscan,
+        bandPadding: getInlineBandPadding(viewportSize),
       })
     : undefined;
   // The last window feeds the anchor, so it lives in state. Immutable inputs

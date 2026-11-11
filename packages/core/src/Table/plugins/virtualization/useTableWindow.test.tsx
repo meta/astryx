@@ -162,8 +162,9 @@ describe('private Table shared-geometry controller', () => {
         isMeasured: true,
       }),
     );
+    // A 100px band mounts five rows past each viewport edge.
     expect(mounted(result.current.segments)).toEqual(
-      Array.from({length: 14}, (_, i) => i + 6),
+      Array.from({length: 16}, (_, i) => i + 5),
     );
     const segments = result.current.segments;
     act(() =>
@@ -210,14 +211,14 @@ describe('private Table shared-geometry controller', () => {
     );
     act(() => result.current.onRowFocus('row-80'));
     expect(mounted(result.current.segments)).toEqual([
-      ...Array.from({length: 13}, (_, i) => i + 16),
+      ...Array.from({length: 15}, (_, i) => i + 15),
       80,
     ]);
     act(() => result.current.onRowFocus('row-90'));
     expect(mounted(result.current.segments).filter(i => i >= 80)).toEqual([90]);
     act(() => result.current.onRowBlur());
     expect(mounted(result.current.segments)).toEqual(
-      Array.from({length: 13}, (_, i) => i + 16),
+      Array.from({length: 15}, (_, i) => i + 15),
     );
   });
   it('reconciles first-visible keys on changed data without a per-scroll data scan', () => {
@@ -253,7 +254,7 @@ describe('private Table shared-geometry controller', () => {
     };
     rerender(inserted);
     expect(mounted(result.current.segments)).toEqual(
-      Array.from({length: 14}, (_, i) => i + 7),
+      Array.from({length: 16}, (_, i) => i + 6),
     );
     const anchored = result.current.segments;
     rerender(inserted);
@@ -319,7 +320,7 @@ describe('private Table shared-geometry controller', () => {
       rerender(reordered);
       expect(firstViewport.scrollTop).toBe(610);
       expect(mounted(result.current.segments)).toEqual(
-        Array.from({length: 14}, (_, index) => index + 26),
+        Array.from({length: 16}, (_, index) => index + 25),
       );
       const anchored = result.current.segments;
       // A DOM resource handoff must not choose a different rendered range while
@@ -338,7 +339,7 @@ describe('private Table shared-geometry controller', () => {
       // is not mistaken for the old pending anchor.
       act(() => geometry.publish(Object.freeze({...measured})));
       expect(mounted(result.current.segments)).toEqual(
-        Array.from({length: 14}, (_, index) => index + 6),
+        Array.from({length: 16}, (_, index) => index + 5),
       );
       expect(geometry.listeners.size).toBe(1);
       unmount();
@@ -400,7 +401,7 @@ describe('private Table shared-geometry controller', () => {
     expect(viewport.scrollTop).toBe(1260);
     expect(removed.rowKeys[30]).toBe('row-31');
     expect(mounted(result.current.segments)).toEqual(
-      Array.from({length: 11}, (_, index) => index + 26),
+      Array.from({length: 8}, (_, index) => index + 28),
     );
     act(() => geometry.publish(Object.freeze({...measured, scrollTop: 1260})));
     const anchored = result.current.segments;
@@ -455,12 +456,12 @@ describe('private Table shared-geometry controller', () => {
     rerender(original);
     expect(viewport.scrollTop).toBe(210);
     expect(mounted(result.current.segments)).toEqual(
-      Array.from({length: 14}, (_, index) => index + 6),
+      Array.from({length: 16}, (_, index) => index + 5),
     );
     act(() => geometry.publish(Object.freeze({...measured})));
     act(() => geometry.publish(Object.freeze({...measured, scrollTop: 610})));
     expect(mounted(result.current.segments)).toEqual(
-      Array.from({length: 14}, (_, index) => index + 26),
+      Array.from({length: 16}, (_, index) => index + 25),
     );
     unmount();
     expect(geometry.listeners.size).toBe(0);
@@ -584,7 +585,8 @@ describe('private Table shared-geometry controller', () => {
         );
       }
       expect(reads).toBe(0);
-      expect(mounted(result.current.segments).length).toBeLessThanOrEqual(14);
+      // ceil((100 + 2 * 100) / 20) + 1 rows with a 100px band.
+      expect(mounted(result.current.segments).length).toBeLessThanOrEqual(16);
       unmount();
       expect(geometry.listeners.size).toBe(0);
     }
