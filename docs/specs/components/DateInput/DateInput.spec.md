@@ -128,6 +128,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The loop's steps in `DateInput/wheelOptions.ts`: `restingLoopStep`, a rest's
   turn to the nearest enabled row, and `loopedStep`, a key's step across the
   seam (FR13, FR17, DEC-3).
+- The month grid that `DateInput/MonthScroller.tsx` exports to `MonthPager`:
+  `MonthPane`, one month's grid, and `monthGridKeyTarget` and
+  `useMonthGridFocus`, its keys and its focus, with their types. Both calendars
+  render this one grid (PR2, AR8).
 - The disabled-reason Tooltip composition: DateInput renders the reason Tooltip
   and links it from its focusable controls (`family:input-fields`
   representative matrix, "Member with `disabledMessage`").
