@@ -99,9 +99,11 @@ describe('new', () => {
       settings: [],
     });
     // The render folder is removed after every render.
-    expect(fs.existsSync(path.join(cwd, 'themes', '.astryx-render'))).toBe(
-      false,
-    );
+    expect(
+      fs
+        .readdirSync(path.join(cwd, 'themes'))
+        .filter(f => f.startsWith('.astryx-render')),
+    ).toEqual([]);
   });
 
   it('caches the part data per Core version under node_modules/.cache', () => {

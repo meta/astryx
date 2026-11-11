@@ -7,7 +7,7 @@
  * @position api/theme-edit — pure helpers
  */
 
-import {luminance} from '../theme/palette/generate/color.mjs';
+import {luminance, oklabToLinearRgb} from '../theme/palette/generate/color.mjs';
 
 /** @typedef {[number, number, number]} Rgb */
 
@@ -259,14 +259,7 @@ function labToRgb(l, a, b) {
 
 /** @param {number} l @param {number} a @param {number} b OKLab @returns {Rgb} */
 function oklabToRgb(l, a, b) {
-  const l1 = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m1 = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s1 = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  return fromLinear([
-    4.0767416621 * l1 - 3.3077115913 * m1 + 0.2309699292 * s1,
-    -1.2684380046 * l1 + 2.6097574011 * m1 - 0.3413193965 * s1,
-    -0.0041960863 * l1 - 0.7034186147 * m1 + 1.707614701 * s1,
-  ]);
+  return fromLinear(oklabToLinearRgb(l, a, b));
 }
 
 /** @param {number} c @param {number} h degrees @returns {[number, number]} */
@@ -274,6 +267,41 @@ const polar = (c, h) => [
   c * Math.cos((h * Math.PI) / 180),
   c * Math.sin((h * Math.PI) / 180),
 ];
+
+/**
+ * The opacity of a CSS color, 0 to 1: the alpha of an 8- or 4-digit hex,
+ * `rgba()`/`hsla()`, or a `/ alpha` part; 0 for `transparent`; 1 otherwise.
+ * @param {unknown} value
+ * @returns {number}
+ */
+export function alphaOf(value) {
+  const s = String(value ?? '').trim();
+  if (/^transparent$/i.test(s)) return 0;
+  const h = /^#([0-9a-f]{4}|[0-9a-f]{8})$/i.exec(s);
+  if (h) {
+    const a = h[1].length === 4 ? h[1][3].repeat(2) : h[1].slice(6);
+    return parseInt(a, 16) / 255;
+  }
+  const slash = /\/\s*(-?[\d.]+)(%?)\s*\)$/.exec(s);
+  const comma = /^(?:rgba|hsla)\((?:[^,]*,){3}\s*(-?[\d.]+)(%?)\s*\)$/i.exec(s);
+  const m = slash ?? comma;
+  if (!m) return 1;
+  const n = Number(m[1]) / (m[2] ? 100 : 1);
+  return Math.max(0, Math.min(1, n));
+}
+
+/**
+ * A color drawn at `alpha` over `under`, as the opaque color the eye sees.
+ * @param {Rgb} over
+ * @param {number} alpha
+ * @param {Rgb} under
+ * @returns {Rgb}
+ */
+export function compositeOver(over, alpha, under) {
+  return /** @type {Rgb} */ (
+    over.map((c, i) => c * alpha + under[i] * (1 - alpha))
+  );
+}
 
 /**
  * The RGB of a fixed CSS color: a hex, a named color, or rgb(), hsl(),

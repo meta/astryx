@@ -368,7 +368,7 @@ export const ERROR_CODES = Object.freeze({
    */
   ERR_THEME_UNKNOWN_THING: 'ERR_THEME_UNKNOWN_THING',
   /**
-   * `reset` names a setting the theme does not have (with those `--on`, `--when`, `--state` and `--mode`). Nothing was changed. Raised only by `experimental theme`.
+   * `editor undo <theme> <thing>` names a setting the theme does not have (with those `--on`, `--when`, `--state` and `--mode`). Nothing was changed. Raised only by `experimental theme`.
    */
   ERR_THEME_NOT_SET: 'ERR_THEME_NOT_SET',
   /**

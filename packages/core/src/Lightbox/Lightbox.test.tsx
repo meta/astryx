@@ -629,6 +629,157 @@ describe('Lightbox', () => {
       expect(pause).toHaveBeenCalledTimes(1);
     });
 
+    it('pauses a playing video when the viewer closes', () => {
+      const items = [
+        {src: '/clip.mp4', alt: 'A clip', type: 'video' as const},
+        {src: '/b.jpg', alt: 'Image B'},
+      ];
+      const view = (isOpen: boolean) => (
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={() => {}}
+          media={items}
+          index={0}
+        />
+      );
+      const {rerender} = render(view(true));
+      const video = document.querySelector('video')!;
+      // Started by someone: playing, with its sound. Closing keeps the
+      // element mounted inside the closed dialog.
+      const pause = vi.fn();
+      video.pause = pause;
+      Object.defineProperty(video, 'paused', {
+        configurable: true,
+        get: () => pause.mock.calls.length > 0,
+      });
+      rerender(view(false));
+      expect(document.querySelector('video')).toBe(video);
+      expect(pause).toHaveBeenCalledTimes(1);
+    });
+
+    it('pauses a single playing video when the viewer closes', () => {
+      const media = {src: '/clip.mp4', alt: 'A clip', type: 'video' as const};
+      const view = (isOpen: boolean) => (
+        <Lightbox isOpen={isOpen} onOpenChange={() => {}} media={media} />
+      );
+      const {rerender} = render(view(true));
+      const video = document.querySelector('video')!;
+      const pause = vi.fn();
+      video.pause = pause;
+      Object.defineProperty(video, 'paused', {
+        configurable: true,
+        get: () => pause.mock.calls.length > 0,
+      });
+      rerender(view(false));
+      expect(document.querySelector('video')).toBe(video);
+      expect(pause).toHaveBeenCalledTimes(1);
+    });
+
+    it('plays a single video again when the viewer reopens, with hasAutoPlay', () => {
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, 'play')
+        .mockImplementation(async () => {});
+      try {
+        const media = {src: '/clip.mp4', alt: 'A clip', type: 'video' as const};
+        const view = (isOpen: boolean) => (
+          <Lightbox
+            isOpen={isOpen}
+            onOpenChange={() => {}}
+            media={media}
+            hasAutoPlay
+          />
+        );
+        const {rerender} = render(view(true));
+        expect(play).toHaveBeenCalledTimes(1);
+        const video = document.querySelector('video')!;
+        const pause = vi.fn();
+        video.pause = pause;
+        Object.defineProperty(video, 'paused', {
+          configurable: true,
+          get: () => pause.mock.calls.length > 0,
+        });
+        rerender(view(false));
+        expect(pause).toHaveBeenCalledTimes(1);
+        rerender(view(true));
+        expect(play).toHaveBeenCalledTimes(2);
+        expect(play.mock.contexts.at(-1)).toBe(video);
+      } finally {
+        play.mockRestore();
+      }
+    });
+
+    it('does not start a video inside a single photo caption, with hasAutoPlay', () => {
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, 'play')
+        .mockImplementation(async () => {});
+      try {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={{
+              src: '/photo.jpg',
+              alt: 'Photo',
+              caption: <video src="/caption.mp4" />,
+            }}
+            hasAutoPlay
+          />,
+        );
+        expect(document.querySelector('video')).not.toBeNull();
+        expect(play).not.toHaveBeenCalled();
+      } finally {
+        play.mockRestore();
+      }
+    });
+
+    it('does not start a video inside a gallery caption, with hasAutoPlay', () => {
+      const play = vi
+        .spyOn(HTMLMediaElement.prototype, 'play')
+        .mockImplementation(async () => {});
+      try {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={[
+              {
+                src: '/photo.jpg',
+                alt: 'Photo',
+                caption: <video src="/caption.mp4" />,
+              },
+              {src: '/b.jpg', alt: 'Image B'},
+            ]}
+            hasAutoPlay
+          />,
+        );
+        const captionVideo = document.querySelector(
+          '[data-lightbox-caption] video',
+        );
+        expect(captionVideo).not.toBeNull();
+        expect(play).not.toHaveBeenCalled();
+      } finally {
+        play.mockRestore();
+      }
+    });
+
+    it('withholds autoplay while the viewer is mounted closed', () => {
+      const media = {src: '/clip.mp4', alt: 'A clip', type: 'video' as const};
+      const view = (isOpen: boolean) => (
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={() => {}}
+          media={media}
+          hasAutoPlay
+        />
+      );
+      const {rerender} = render(view(false));
+      // The element stays mounted. The attribute would start playback once
+      // the file loads, after the close effect has already run.
+      expect(document.querySelector('video')).not.toHaveAttribute('autoplay');
+      rerender(view(true));
+      expect(document.querySelector('video')).toHaveAttribute('autoplay');
+    });
+
     it("keeps a paged-away video's element and time once the viewer pages back", () => {
       const items = [
         {src: '/clip.mp4', alt: 'A clip', type: 'video' as const},

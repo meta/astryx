@@ -800,9 +800,22 @@ export function Lightbox({
   // A video left on another page stops: the pager keeps the neighbours
   // mounted, and a playing one would go on, with its sound, off screen. With
   // `hasAutoPlay`, the video paged to plays again, as a newly shown one does.
+  // The closed dialog keeps them mounted too, so closing stops a playing
+  // video. A single video has no page element. Play looks only in the media
+  // box: a caption can contain its own video, and that one stays put.
   useEffect(() => {
     const container = containerRef.current;
     if (container == null) {
+      return;
+    }
+    if (!isOpen) {
+      for (const video of container.querySelectorAll<HTMLVideoElement>(
+        'video',
+      )) {
+        if (!video.paused) {
+          video.pause();
+        }
+      }
       return;
     }
     for (const video of container.querySelectorAll<HTMLVideoElement>(
@@ -812,14 +825,18 @@ export function Lightbox({
         video.pause();
       }
     }
-    const current = container.querySelector<HTMLVideoElement>(
-      '[data-lightbox-page][data-current] video',
-    );
+    const onAPage = container.querySelector('[data-lightbox-page]') != null;
+    const current = onAPage
+      ? container.querySelector<HTMLVideoElement>(
+          '[data-lightbox-page][data-current] [data-lightbox-page-media] video',
+        )
+      : (imageWrapperRef.current?.querySelector<HTMLVideoElement>('video') ??
+        null);
     if (hasAutoPlay && current != null && current.paused) {
       // A browser can refuse playback without a user's gesture.
       void current.play()?.catch(() => {});
     }
-  }, [index, hasAutoPlay]);
+  }, [index, hasAutoPlay, isOpen]);
 
   // The backdrop, the controls and the pages a dismissal faded, to restore
   // exactly those. A page faded as a neighbour may be the current one when
@@ -1810,7 +1827,7 @@ export function Lightbox({
         src={src}
         aria-label={alt}
         controls
-        autoPlay={isCurrent && hasAutoPlay}
+        autoPlay={isOpen && isCurrent && hasAutoPlay}
         preload={isCurrent ? 'auto' : 'metadata'}
         {...stylex.props(styles.video)}
       />
