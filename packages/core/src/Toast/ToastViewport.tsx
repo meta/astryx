@@ -55,6 +55,7 @@ import {
 import {ToastSurface} from './Toast';
 import {ToastContext, type ToastContextValue} from './ToastContext';
 import type {ToastEntry, ToastPosition, ToastDismissReason} from './types';
+import {useTouchPresentation} from '../utils/touchPresentation';
 import {layerInsetProperties} from '../Layer/layerInset';
 import {findToastNamesake, registerToastHost} from '../Layer/toastHost';
 import type {LayerInset} from '../Layer/LayerContext';
@@ -315,6 +316,14 @@ function ToastRow({
       row.removeEventListener('transitioncancel', onTransition);
     };
   }, []);
+  // Under a finger a leaving card retracts past its edge, outside the row, so
+  // the row does not clip it. The row collapses only once the retract, or its
+  // Reduce Motion cross-fade, has ended. So an app's dismiss shows the whole
+  // exit before the row unmounts.
+  const [isRetracting, setIsRetracting] = useState(false);
+  const [isRetracted, setIsRetracted] = useState(false);
+  const {isTouch: isNotification} = useTouchPresentation();
+  const isCollapsing = isExiting && (!isNotification || isRetracted);
 
   return (
     <div
@@ -325,7 +334,7 @@ function ToastRow({
         !hasEntryStarted && styles.toastWrapperEntering,
         isReversed ? styles.toastWrapperFromTop : styles.toastWrapperFromBottom,
         isReversed ? styles.toastWrapperGapReversed : styles.toastWrapperGap,
-        isExiting && styles.toastWrapperExiting,
+        isCollapsing && styles.toastWrapperExiting,
       )}
       onTransitionEnd={(e: React.TransitionEvent) => {
         // `grid-template-rows` is not private to this wrapper — any descendant
@@ -338,7 +347,10 @@ function ToastRow({
           return;
         }
         if (isExiting) {
-          onExited(entry.id);
+          // Holding open for the retract: not the collapse yet.
+          if (isCollapsing) {
+            onExited(entry.id);
+          }
           return;
         }
         // The row is fully open now. Release only the paint clip; the wrapper
@@ -350,7 +362,8 @@ function ToastRow({
       <div
         {...stylex.props(
           styles.toastWrapperInner,
-          isSettled && !isExiting && styles.toastWrapperInnerSettled,
+          ((isSettled && !isExiting) || isRetracting) &&
+            styles.toastWrapperInnerSettled,
         )}>
         <ToastSurface
           type={type}
@@ -361,6 +374,8 @@ function ToastRow({
           isExiting={isExiting}
           gestureDirection={isReversed ? -1 : 1}
           onDismiss={reason => onDismiss(entry.id, reason)}
+          onRetract={() => setIsRetracting(true)}
+          onRetractEnd={() => setIsRetracted(true)}
           renderContent={o.renderContent}
           timerKey={entry.id}
           isLiveRegion={isLiveRegion}

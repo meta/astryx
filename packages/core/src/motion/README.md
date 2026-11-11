@@ -23,6 +23,7 @@ roles through `resolveMotion`.
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
 | `uikit/progressBar.ts`                           | UIProgressView's fill: the whole-track duration and curve, its minimum length and empty alpha; the reduced-motion pulse (three roles).                               |
 | `uikit/popover.ts`                               | UIPopoverPresentationController: the scale and the length a popover grows out of and shrinks back into.                                                              |
+| `uikit/toast.ts`                                 | Toast's swipe under a finger, from the iOS notification banner: follow distance and ratio, release rule, retract timing.                                             |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
 | `uikit/picker.ts`                                | UIPickerView: row pitch, height and rubber band, velocity floor, the coast's stop speed, snap at rest, tap spin, tick.                                               |
 | `uikit/segmented.ts`                             | UISegmentedControl: the selection indicator's spring; under Reduce Motion the animator's cross-fade replaces it.                                                     |

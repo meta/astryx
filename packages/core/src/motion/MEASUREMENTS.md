@@ -382,3 +382,16 @@ the autoscroll steps, Reduce Motion.
 | M-RO26 | table T, one row at 88 pt      | drag the 88 pt row to edge depths 0 to 44 pt and hold; 44 pt rows held 4, 6, 8, 10 pt inside the bottom edge | autoscroll step per 20 ms tick by depth: indexed by the edge depth in points or by a fraction of the row; the exact start inset   | C      |
 | M-RO07 | table T                        | a system touch cancel mid-drag (a call or Control Center); `reloadData` mid-drag                             | does the row return to its origin or move to its slot; positions per frame                                                        | C      |
 | M-RO27 | table T, rows 6 and 9 at 88 pt | drag row 7 (44 pt) up past row 6; drag row 6 (88 pt) down past row 7 and back                                | the dragged row's centre travel at each change of the proposed slot, against `List/reorderModel.ts`'s slot rule (GUESS for these) | C      |
+
+## Toast (system notification banner)
+
+SpringBoard draws the banner out of process, so the lab app's animation dump
+cannot see it: a lab app posts the notifications (foreground presentation
+`.banner`) and drives HID touches, and a 60 fps recording is tracked per frame
+(method B). Run on an iPhone 17 Pro simulator, iOS 26.2. Three runs (Oct 23 2026) measured the follow distance and ratio, the release rule
+(`toast.dismissOffset`, `toast.flickVelocity`) and the settle spring
+(`springs.settle`); what remains is below.
+
+| ID   | What                  | App and gesture                                                                                                  | Extract                                                        | Method | Feeds             |
+| ---- | --------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------ | ----------------- |
+| M-T2 | Banner drag direction | A banner at rest; slow drags from its middle at 15°, 30°, 45° and 60° from vertical, toward the edge, 60 pt long | which drags move the banner and which leave it (the axis rule) | B      | `toast.axisRatio` |

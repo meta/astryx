@@ -6,7 +6,8 @@
  * @output Whether React can safely hydrate instead of client-rendering.
  * @position Prevents mismatches for iframe themes and for pages whose first
  *   render reads URL controls. Those pages are Shell Lab, Perf Scenes, Chat
- *   Layout, AlertDialog Cases, List Reorder Cases and Scroll Edge Taps.
+ *   Layout, AlertDialog Cases, Toast Swipe Cases, List Reorder Cases and Scroll
+ *   Edge Taps.
  */
 
 /** Pages whose first render reads the query string. */
@@ -15,6 +16,7 @@ const QUERY_RENDERED_PAGES = new Set([
   '/pages/perf-scenes/',
   '/pages/chat-layout/',
   '/pages/alert-dialog-cases/',
+  '/pages/toast-swipe-cases/',
   '/pages/list-reorder-cases/',
   '/pages/scroll-edge-taps/',
 ]);
