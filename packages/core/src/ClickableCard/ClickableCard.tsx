@@ -52,6 +52,7 @@ import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
 import type {BaseProps} from '../BaseProps';
 import {useLinkComponent} from '../Link/useLinkComponent';
+import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -424,6 +425,7 @@ export function ClickableCard({
     : onMouseUp;
 
   const isLink = href != null;
+  const {target: resolvedTarget, rel} = computeTargetAndRel(target, undefined);
 
   // Disabled links have no href, so bypass the router and render an anchor.
   const LinkRoot = isDisabled ? 'a' : LinkComponent;
@@ -474,7 +476,8 @@ export function ClickableCard({
         <LinkRoot
           ref={setInteractiveRef}
           href={isDisabled ? undefined : href}
-          target={isDisabled ? undefined : target}
+          target={isDisabled ? undefined : resolvedTarget}
+          rel={isDisabled ? undefined : rel}
           role={isDisabled ? 'link' : undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}
           aria-label={label}

@@ -921,6 +921,19 @@ describe('Button', () => {
       expect(style.maxWidth).toBe('100%');
     });
 
+    it('adds safe rel tokens when a link opens in a new tab', () => {
+      render(
+        <Button
+          label="Open release notes"
+          href="https://example.com/release-notes"
+          target="_blank"
+        />,
+      );
+      expect(
+        screen.getByRole('link', {name: 'Open release notes'}),
+      ).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
     it('shrinks inside a ButtonGroup like a standalone button', () => {
       render(
         <ButtonGroup label="Draft actions">

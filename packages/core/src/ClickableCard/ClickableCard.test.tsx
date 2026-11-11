@@ -134,6 +134,7 @@ describe('ClickableCard', () => {
     );
     const link = screen.getByRole('link', {name: 'External'});
     expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
   it('disabled button stays focusable and the surface runs nothing', () => {
