@@ -4,8 +4,10 @@
 /**
  * @file ContextMenu.tsx
  * @input Uses React, StyleX, useLayer, shared layer dismissal, BottomSheet,
- *   useListFocus, and the shared menu-presentation resolver
- * @output Exports ContextMenu with cursor-popover and touch-sheet presentations
+ *   useListFocus, the presentation resolver (usePresentation), useLongPress,
+ *   and the touch layer (ContextMenuTouchLayer, with the lift)
+ * @output Exports ContextMenu with cursor-popover, touch-lift and touch-sheet
+ *   presentations
  * @position Core implementation; consumed by index.ts
  *
  * Right-click context menu positioned at the cursor. The cursor point is
@@ -27,14 +29,23 @@
  * context menu that was never opened adds no popover element to the page (a
  * table with a menu on every cell would otherwise carry one per cell). Once
  * mounted it stays, so every later open and close, its exit animation
- * included, runs as before.
+ * included, runs as before. A finger's hold mounts it, closed, at the
+ * commit, so the show at 735 ms only reveals it. A hold that ends with no
+ * menu unmounts it again.
  * The trigger wrapper is a `div` by default; `triggerAs` makes it an inline
  * `span`, so a reference inside prose can own a context menu without
  * breaking the text flow.
+ * When a held finger opens the menu on a block trigger, the trigger lifts
+ * above a tinted page (ContextMenuLift.ts). The menu sits beside it
+ * (`contextMenu.lift`).
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/ContextMenu/ContextMenu.doc.mjs
  * - /packages/core/src/ContextMenu/ContextMenu.test.tsx
+ * - /packages/core/src/ContextMenu/ContextMenuTouchLayer.tsx (the touch layer)
+ * - /packages/core/src/ContextMenu/contextMenuPress.ts (touch timeline)
+ * - /packages/core/src/ContextMenu/contextMenuPressFeedback.ts (press feedback)
+ * - /packages/core/src/ContextMenu/ContextMenuLift.ts (the lift)
  * - /packages/core/src/ContextMenu/index.ts
  * - /apps/storybook/stories/ContextMenu.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ContextMenu/ (showcase blocks)
@@ -42,7 +53,6 @@
 
 import React, {
   useCallback,
-  useEffect,
   useId,
   lazy,
   useMemo,
@@ -56,10 +66,18 @@ import {Button} from '../Button';
 import {Heading} from '../Heading';
 import {Icon} from '../Icon';
 import {useLayerInternal} from '../Layer/useLayer';
+import {addAnchorName, removeAnchorName} from '../Layer/anchorName';
+import type {LiftFromTriggerResult} from '../liftFromTrigger/liftFromTrigger';
+import {
+  surfacePlacement,
+  type SurfacePlacement,
+} from '../liftFromTrigger/liftFromTriggerGeometry';
+import {contextMenu} from '../motion/uikit/contextMenu';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
-import {noteOutsideDismissal} from '../Layer/outsidePress';
+import {useOutsidePress} from '../Layer/outsidePress';
 import {MenuBottomSheetActionList} from '../DropdownMenu/MenuBottomSheetActionList';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
@@ -78,9 +96,17 @@ import {
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useInternalListFocus} from '../hooks/useListFocus';
+import {useLongPress} from '../hooks/useLongPress';
+import {pressableProps} from '../utils/pressFeedback';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
-import {useLongPress} from '../hooks/useLongPress';
+import {shadowHostOf} from '../utils/flatTree';
+import {usePresentation} from '../utils/presentation';
+import {
+  ContextMenuTouchLayer,
+  type ContextMenuHeldPointer,
+  type ContextMenuTouchHandle,
+} from './ContextMenuTouchLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {
@@ -103,10 +129,7 @@ import type {
 } from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {
-  useAdaptivePresentation,
-  type AdaptivePresentation,
-} from '../hooks/useAdaptivePresentation';
+import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -121,16 +144,46 @@ const LazyMenuBottomSheet = lazy(async () =>
   })),
 );
 const styles = stylex.create({
-  // Trigger wrapper: suppress the iOS long-press callout/selection so the
-  // long-press opens our context menu instead of the native text/callout UI.
-  // `position: relative` establishes the containing block for the absolutely
-  // positioned cursor anchor below, so the anchor point tracks the trigger
-  // (and scrolls with it) instead of the page.
+  // Trigger wrapper. `position: relative` makes the containing block for the
+  // absolutely positioned cursor anchor below. So the anchor point follows
+  // the trigger, and scrolls with it, instead of the page. The iOS callout and
+  // text selection stay off. A long press or a right-click then opens this
+  // menu instead of selecting the trigger's text. The
+  // gesture host adds its own lock for a held press.
   trigger: {
     position: 'relative',
     WebkitTouchCallout: 'none',
     WebkitUserSelect: 'none',
     userSelect: 'none',
+  },
+  // The trigger's own visual, which the press feedback grows. It lays its
+  // children out as the trigger would, and fills the trigger in block, flex
+  // and grid layout. A full-height child then keeps a set-height trigger's
+  // height. The cursor anchor stays outside it, so a layer never takes the
+  // press's scale.
+  triggerVisual: {
+    display: 'inherit',
+    flexDirection: 'inherit',
+    flexWrap: 'inherit',
+    alignItems: 'inherit',
+    alignContent: 'inherit',
+    justifyContent: 'inherit',
+    justifyItems: 'inherit',
+    rowGap: 'inherit',
+    columnGap: 'inherit',
+    gridTemplateColumns: 'inherit',
+    gridTemplateRows: 'inherit',
+    gridTemplateAreas: 'inherit',
+    gridAutoFlow: 'inherit',
+    gridAutoColumns: 'inherit',
+    gridAutoRows: 'inherit',
+    flexGrow: 1,
+    alignSelf: 'stretch',
+    gridColumn: '1 / -1',
+    gridRow: '1 / -1',
+    minWidth: 0,
+    height: '100%',
+    borderRadius: 'inherit',
   },
   // 1px anchor placed at the cursor point within the trigger. The menu is
   // anchored to this element, so it sits under the cursor yet is positioned
@@ -168,6 +221,11 @@ const styles = stylex.create({
     transitionTimingFunction: easeVars['--ease-standard'],
     userSelect: 'none',
     WebkitTouchCallout: 'none',
+    // A touch open focuses the menu itself, so no row is lit until the finger
+    // moves onto one, as with DropdownMenu's held finger. The menu is an
+    // internal focus target, not a control, so it shows no browser ring.
+    // Keyboard focus moves to an item instead.
+    outline: 'none',
   },
   // Scroll ownership by the browser's own signal; see DropdownMenu.
   touchPinchZoom: {
@@ -287,11 +345,13 @@ interface ContextMenuBaseProps extends BaseProps {
   onOpenChange?: (isOpen: boolean) => void;
   /**
    * Presentation policy for the menu.
-   * - `popover`: open beside the pointer position.
+   * - omitted: the menu at the pointer. Under a finger, a held finger opens it
+   *   on iOS's timeline (the touch model).
+   * - `popover`: the menu at the pointer on every device, as before. A held
+   *   finger opens it at 500 ms through today's long press.
    * - `bottom-sheet`: open as an action sheet.
    * - `adaptive`: use a BottomSheet on compact coarse-pointer viewports and
    *   the cursor-positioned popover elsewhere.
-   * @default 'popover'
    */
   presentation?: AdaptivePresentation;
   'data-testid'?: string;
@@ -345,7 +405,7 @@ export function ContextMenu({
   label: labelFromProps,
   isDisabled = false,
   onOpenChange,
-  presentation = 'popover',
+  presentation,
   triggerAs = 'div',
   ref,
   className,
@@ -363,8 +423,12 @@ export function ContextMenu({
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.contextMenu.label');
   const backLabel = t('@astryx.dropdownMenu.back');
-  const resolvedPresentation = useAdaptivePresentation(presentation);
-  const usesBottomSheet = resolvedPresentation === 'bottom-sheet';
+  // The surface, and whether the touch model applies: under a finger, unless
+  // the caller pins `presentation="popover"`.
+  const {surface, touchModes} = usePresentation(presentation, {
+    whenOmitted: 'touch',
+  });
+  const usesBottomSheet = surface === 'bottom-sheet';
   // Separate content props (union discriminant) from DOM pass-through attrs.
   // The union means exactly one of items/menuContent exists in rest; destructure
   // both so triggerProps contains only DOM-safe attributes.
@@ -386,6 +450,8 @@ export function ContextMenu({
   // — it scrolls with the content instead of sitting at a fixed viewport point.
   const positionRef = useRef({x: 0, y: 0});
   const cursorAnchorRef = useRef<HTMLSpanElement>(null);
+  // The trigger's own visual: what the press feedback grows.
+  const visualRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
   // Element focused before the menu opened, restored when it closes so focus
   // does not fall to <body> after Escape or outside-click dismissal.
@@ -398,32 +464,61 @@ export function ContextMenu({
 
   const [isOpen, setIsOpen] = useState(false);
   // An open from the trigger moves focus into the menu once it shows: a frame
-  // after the show, which for a first open comes as its layer attaches.
-  const focusOnShowRef = useRef(false);
+  // after the show, which for a first open comes as its layer attaches. A
+  // touch open focuses the menu itself; other opens focus its first row.
+  const focusOnShowRef = useRef<'first' | 'menu' | null>(null);
   const focusFirstRef = useRef<() => void>(() => {});
+  const focusMenuRef = useRef<() => void>(() => {});
   const [submenuPath, setSubmenuPath] = useState<ContextMenuItemData[]>([]);
   const currentSubmenu = submenuPath.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
   const currentTitle = currentSubmenu?.label ?? label;
   const sheetLabel = typeof currentTitle === 'string' ? currentTitle : label;
 
+  // The mounted touch layer, for its press feedback and whether it times a
+  // finger.
+  const touchHandleRef = useRef<ContextMenuTouchHandle | null>(null);
+  // While a finger's menu is up on a lifted trigger: where the trigger
+  // landed, and the menu's side and alignment against it.
+  const liftRef = useRef<LiftFromTriggerResult | null>(null);
+  const [liftPlacement, setLiftPlacement] = useState<SurfacePlacement | null>(
+    null,
+  );
+  // The menu closed: a finger's menu is over, and the trigger returns with
+  // the close itself (run by every close handler below).
+  const endTouchOpen = useCallback(() => {
+    touchHandleRef.current?.release();
+    if (liftRef.current != null) {
+      liftRef.current = null;
+      touchHandleRef.current?.drop();
+      setLiftPlacement(null);
+    }
+  }, []);
+
   const updateOpenState = useCallback(
     (nextIsOpen: boolean) => {
       if (!nextIsOpen) {
         setSubmenuPath([]);
+        endTouchOpen();
       }
       setIsOpen(nextIsOpen);
       onOpenChange?.(nextIsOpen);
     },
-    [onOpenChange],
+    [endTouchOpen, onOpenChange],
   );
 
+  const outsidePress = useOutsidePress();
+  // Starts the outside-press watch as the menu shows. It is set below, where
+  // the menu's list and its close exist.
+  const watchOutsideRef = useRef<() => void>(() => {});
   const layer = useLayerInternal({
     mode: 'context',
     // Mounted at the first open and kept (see the file header).
     lazyMount: true,
     keepsMountAfterShow: true,
     onHide: useCallback(() => {
+      outsidePress.stop();
+      endTouchOpen();
       setIsOpen(false);
       onOpenChange?.(false);
       // Restore focus to the element that was focused before opening.
@@ -432,13 +527,19 @@ export function ContextMenu({
       if (toRestore && document.contains(toRestore)) {
         toRestore.focus();
       }
-    }, [onOpenChange]),
+    }, [endTouchOpen, onOpenChange, outsidePress]),
     onShow: useCallback(() => {
       setIsOpen(true);
       onOpenChange?.(true);
-      if (focusOnShowRef.current) {
-        focusOnShowRef.current = false;
-        requestAnimationFrame(() => focusFirstRef.current());
+      watchOutsideRef.current();
+      const focusTarget = focusOnShowRef.current;
+      if (focusTarget != null) {
+        focusOnShowRef.current = null;
+        requestAnimationFrame(() =>
+          focusTarget === 'menu'
+            ? focusMenuRef.current()
+            : focusFirstRef.current(),
+        );
       }
     }, [onOpenChange]),
     lightDismiss: false,
@@ -493,6 +594,7 @@ export function ContextMenu({
     focusFollowsLastInput: true,
   });
   focusFirstRef.current = focusFirst;
+  focusMenuRef.current = () => listRef.current?.focus({preventScroll: true});
 
   // Join the shared stack so an Escape press dismisses exactly one top-most
   // surface. BottomSheet owns its own dismissal path.
@@ -516,44 +618,36 @@ export function ContextMenu({
       ),
   });
 
-  // Dismiss on any click outside the menu. We use popover="manual" (not
-  // "auto") because the native light-dismiss treats the mouseup from the
-  // opening right-click as a dismiss event. Handling it ourselves via
-  // mousedown avoids that race. A touch's compatibility mousedown for the
-  // press that opened the menu (sent mid-hold by iOS, or as a long press
-  // lifts by Chromium) belongs to that press's gesture, so it is not read as
-  // a press outside; any later press is a new gesture and closes as before.
-  useEffect(() => {
-    if (!isOpen || usesBottomSheet) {
+  // The menu is a manual popover: native light dismiss would read the mouseup
+  // of the opening right-click as a press outside. So one watch closes it. A
+  // mouse or a pen closes it at the press. Under the touch model, a touch
+  // closes it as it begins to pan, or at its lift, and the page stays free to
+  // scroll. Otherwise a touch closes it at its compatibility mousedown. The
+  // press that opened the menu keeps it open.
+  watchOutsideRef.current = () => {
+    const trigger = triggerRef.current;
+    if (trigger == null) {
       return;
     }
-    // Inside a shadow root, even a closed or nested one, the document sees a
-    // press on the menu as a press on an outer shadow host, so the menu's own
-    // tree judges its presses first and the document skips those.
-    const tree = listRef.current?.getRootNode();
-    const shadow = tree instanceof ShadowRoot ? tree : null;
-    const judged = new WeakSet<Event>();
-    const handleClickOutside = (e: Event) => {
-      const menu = listRef.current;
-      if (judged.has(e)) {
-        return;
-      }
-      judged.add(e);
-      if (currentGesture() === openingGestureRef.current) {
-        return;
-      }
-      if (menu && !menu.contains(e.target as Node)) {
-        noteOutsideDismissal(menu.ownerDocument);
-        closeMenu();
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    shadow?.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      shadow?.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen, closeMenu, listRef, usesBottomSheet]);
+    // The menu mounts after its first show, so each press reads it then. It
+    // renders in the trigger's own root, which may be another window's.
+    const root = trigger.getRootNode();
+    outsidePress.start(
+      trigger,
+      path => listRef.current != null && path.includes(listRef.current),
+      () => {
+        if (currentGesture() !== openingGestureRef.current) {
+          closeMenu();
+        }
+      },
+      {
+        pointerTypes: touchModes ? ['touch'] : [],
+        closesOnPan: touchModes,
+        pressTypes: touchModes ? ['mouse', 'pen'] : ['mouse', 'pen', 'touch'],
+        root: shadowHostOf(root) != null ? root : null,
+      },
+    );
+  };
 
   const listKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -608,7 +702,15 @@ export function ContextMenu({
   // what makes the menu context-relative: it scrolls with the content and the
   // browser auto-flips it against the viewport edges via CSS anchor positioning.
   const openAtLocalPoint = useCallback(
-    (localX: number, localY: number, focusEl: HTMLElement | null) => {
+    (
+      localX: number,
+      localY: number,
+      focusEl: HTMLElement | null,
+      // A touch open focuses the menu itself: UIKit lights no row until the
+      // finger moves onto one. Pointer and keyboard opens focus the first
+      // item (APG menu pattern); arrow keys reach the items from the menu.
+      focusTarget: 'first' | 'menu' = 'first',
+    ) => {
       const rect = triggerRef.current?.getBoundingClientRect();
       const x = rect ? keepAnchorInside(localX, rect.width) : localX;
       const y = rect ? keepAnchorInside(localY, rect.height) : localY;
@@ -630,17 +732,42 @@ export function ContextMenu({
         // A first open mounts the layer, and the show runs from the popover
         // element's callback ref as it attaches, in the same commit, before
         // the browser paints; a later one shows at once.
-        focusOnShowRef.current = true;
+        focusOnShowRef.current = focusTarget;
         layer.show();
       }
     },
     [layer, updateOpenState, usesBottomSheet],
   );
 
+  // The hold's commit: the menu shows at its moment or at the lift, so its
+  // layer mounts now, closed, and the show only reveals it.
+  const prepareMenu = useCallback(() => {
+    if (!usesBottomSheet) {
+      layer.prepare();
+    }
+  }, [layer, usesBottomSheet]);
+
   // The box the cursor anchor's offsets are measured from: the trigger, which
   // is its containing block.
   const getAnchorBaseRect = useCallback(
     (): DOMRect | undefined => triggerRef.current?.getBoundingClientRect(),
+    [],
+  );
+
+  // A client point in the trigger's own coordinates, where the cursor anchor
+  // lives. The press feedback grows only the trigger's visual, so the
+  // trigger's box is as laid out. The point stays inside that box.
+  const toTriggerLocal = useCallback(
+    (point: {x: number; y: number}): {x: number; y: number} => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (rect == null) {
+        return point;
+      }
+      return {
+        x: Math.min(Math.max(point.x - rect.left, 0), rect.width),
+        y: Math.min(Math.max(point.y - rect.top, 0), rect.height),
+      };
+    },
     [],
   );
 
@@ -675,19 +802,123 @@ export function ContextMenu({
     [isDisabled, openAtLocalPoint, getAnchorBaseRect],
   );
 
-  // Touch long-press invocation (menus-8). iOS Safari never synthesizes a
-  // `contextmenu` event on long-press, so a context menu is otherwise
-  // unreachable on touch. Open the menu at the touch point once the press is
-  // held long enough (see useLongPress for timer/move-cancel/cleanup logic).
-  // The hook also returns the imperative start/moveTo/cancel API the menu press
-  // model drives; only its four touch handlers belong on the trigger element.
+  const menuPress = useMenuPress({
+    menuRef: listRef,
+    itemSelector: MENU_ITEM_SELECTOR,
+    onDismiss: closeMenu,
+    isEnabled: !usesBottomSheet,
+  });
+  const {continueGesture} = menuPress;
+
+  // Opens the menu beside the lifted trigger, as the lift's layer shows and
+  // before the trigger lifts into it: the menu shows at its moment. The
+  // layer's anchor is the lift's own box at the lifted rect: an anchor inside
+  // the trigger would move with the trigger's lift. The menu renders below
+  // first, and once shown its height picks the side (the layout effect
+  // below), before the frame paints.
+  const showLifted = useCallback(
+    (lifted: LiftFromTriggerResult) => {
+      liftRef.current = lifted;
+      setLiftPlacement(
+        surfacePlacement(
+          lifted.lifted,
+          0,
+          lifted.viewport,
+          contextMenu.lift.menuGap,
+        ),
+      );
+      triggerFocusRef.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : triggerRef.current;
+      focusOnShowRef.current = 'menu';
+      layer.show();
+      // The show names the cursor anchor inside the trigger. The lift's box
+      // takes the name in the same task, so the menu's first frame is placed
+      // against it.
+      const cursorAnchor = cursorAnchorRef.current;
+      if (cursorAnchor != null) {
+        removeAnchorName(cursorAnchor, layer.anchorId);
+      }
+      addAnchorName(lifted.anchor, layer.anchorId);
+    },
+    [layer],
+  );
+  // Syncs the menu's side with the browser's layout of the shown menu: its
+  // height picks below or above the lift, before the frame paints.
+  useIsomorphicLayoutEffect(() => {
+    const lifted = liftRef.current;
+    const menu = listRef.current?.closest<HTMLElement>('[popover]');
+    if (lifted == null || liftPlacement == null || menu == null) {
+      return;
+    }
+    const placement = surfacePlacement(
+      lifted.lifted,
+      menu.offsetHeight,
+      lifted.viewport,
+      contextMenu.lift.menuGap,
+    );
+    if (
+      placement.side !== liftPlacement.side ||
+      placement.alignment !== liftPlacement.alignment
+    ) {
+      setLiftPlacement(placement);
+    }
+  }, [liftPlacement, listRef]);
+
+  // Touch invocation. Under the touch model, the touch layer runs UIKit's long
+  // press and asks for the menu here, at the client point where the finger
+  // landed.
+  const openFromFinger = useCallback(
+    (point: {x: number; y: number}, held: ContextMenuHeldPointer | null) => {
+      // The finger is still down: its lift belongs to the press that opened
+      // the menu, so it does not close it.
+      openingGestureRef.current = currentGesture();
+      // UIKit's presentation under a finger: a block trigger lifts above a
+      // tinted page, and the menu sits beside it. An inline trigger and the
+      // sheet keep the menu where the finger landed.
+      const lifted =
+        triggerAs !== 'span' && !usesBottomSheet
+          ? (touchHandleRef.current?.lift(showLifted) ?? null)
+          : null;
+      if (lifted != null) {
+        // The menu fades in once the lift holds the trigger.
+        const menu = listRef.current?.closest<HTMLElement>('[popover]');
+        if (menu != null) {
+          touchHandleRef.current?.enterMenu(menu);
+        }
+      } else {
+        const local = toTriggerLocal(point);
+        openAtLocalPoint(local.x, local.y, triggerRef.current, 'menu');
+      }
+      if (held != null) {
+        continueGesture({...held, time: Date.now()});
+      }
+    },
+    [
+      continueGesture,
+      listRef,
+      openAtLocalPoint,
+      showLifted,
+      toTriggerLocal,
+      triggerAs,
+      usesBottomSheet,
+    ],
+  );
+
+  // Today's long press for a finger outside the touch model: under a fine
+  // primary pointer, or with `presentation="popover"`, the way back. Safari on
+  // iOS never sends a `contextmenu` event for a long press. So the menu opens
+  // at the touch point once the finger is held for 500 ms. The useLongPress
+  // hook owns the timer, the move cancel and the cleanup. Under the touch
+  // model, the touch layer's recognizer owns the finger instead.
   const {
     onTouchStart: handleLongPressTouchStart,
     onTouchMove: handleLongPressTouchMove,
     onTouchEnd: handleLongPressTouchEnd,
     onTouchCancel: handleLongPressTouchCancel,
   } = useLongPress({
-    disabled: isDisabled,
+    disabled: isDisabled || touchModes,
     onLongPress: useCallback(
       (point: {x: number; y: number}) => {
         const rect = getAnchorBaseRect();
@@ -703,17 +934,6 @@ export function ContextMenu({
       [openAtLocalPoint, getAnchorBaseRect],
     ),
   });
-
-  // ContextMenu owns invocation and long-press cleanup. Consumer handlers are
-  // notified too, but preventing their default does not cancel component-owned
-  // behavior that the public API does not promise as cancelable.
-  const handleTriggerContextMenu = useCallback(
-    (event: React.MouseEvent<HTMLElement>) => {
-      handleContextMenu(event);
-      onContextMenuProp?.(event);
-    },
-    [handleContextMenu, onContextMenuProp],
-  );
   const handleTriggerTouchStart = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
       handleLongPressTouchStart(event);
@@ -743,6 +963,23 @@ export function ContextMenu({
     [handleLongPressTouchCancel, onTouchCancelProp],
   );
 
+  // ContextMenu owns invocation. Consumer handlers are notified too, but
+  // preventing their default does not cancel component-owned behavior that
+  // the public API does not promise as cancelable.
+  const handleTriggerContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLElement>) => {
+      if (touchHandleRef.current?.isTracking() === true) {
+        // The browser's own long-press menu (Android Chrome) for a finger the
+        // recognizer is timing: the recognizer decides, not this event.
+        event.preventDefault();
+      } else {
+        handleContextMenu(event);
+      }
+      onContextMenuProp?.(event);
+    },
+    [handleContextMenu, onContextMenuProp],
+  );
+
   const popoverXstyle = menuWidth
     ? styles.popoverCustomWidth(menuWidth)
     : styles.popover;
@@ -764,16 +1001,6 @@ export function ContextMenu({
     resolvedMenuContent,
     isOpen && !usesBottomSheet,
   );
-
-  // The press model: the row under a release acts, the highlight follows a
-  // held pointer, a mouse released outside dismisses and a finger leaves the
-  // menu open.
-  const menuPress = useMenuPress({
-    menuRef: listRef,
-    itemSelector: MENU_ITEM_SELECTOR,
-    onDismiss: closeMenu,
-    isEnabled: !usesBottomSheet,
-  });
 
   const renderedMenu = (
     <div
@@ -882,6 +1109,10 @@ export function ContextMenu({
       <TriggerElement
         ref={useMergedRefs(ref, triggerRef)}
         {...triggerProps}
+        // Under the touch model, an enabled trigger is a pressable surface of
+        // core's one press machine. The touch layer installs the machine. Its
+        // press feedback follows a pen's pressed state and a finger's landing.
+        {...(touchModes && !isDisabled ? pressableProps : null)}
         onContextMenu={handleTriggerContextMenu}
         onTouchStart={handleTriggerTouchStart}
         onTouchMove={handleTriggerTouchMove}
@@ -896,7 +1127,13 @@ export function ContextMenu({
               : [triggerXstyle]
             : []),
         )}>
-        {children}
+        {triggerAs === 'div' ? (
+          <div ref={visualRef} {...stylex.props(styles.triggerVisual)}>
+            {children}
+          </div>
+        ) : (
+          children
+        )}
         <span
           ref={useMergedRefs(cursorAnchorRef, layer.ref)}
           aria-hidden="true"
@@ -908,6 +1145,18 @@ export function ContextMenu({
           })}
         />
       </TriggerElement>
+      {touchModes && !isDisabled ? (
+        <ContextMenuTouchLayer
+          ref={touchHandleRef}
+          triggerRef={triggerRef}
+          visualRef={visualRef}
+          isShown={triggerAs !== 'span' && !usesBottomSheet}
+          onOpen={openFromFinger}
+          onCommit={prepareMenu}
+          onCancel={layer.releasePrepared}
+          onBackdropTap={closeMenu}
+        />
+      ) : null}
 
       {usesBottomSheet ? (
         <Suspense fallback={null}>
@@ -919,11 +1168,24 @@ export function ContextMenu({
           </LazyMenuBottomSheet>
         </Suspense>
       ) : (
-        layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
-          placement: 'below',
-          alignment: 'start',
-          xstyle: [popoverXstyle, layerAnimations.below],
-        })
+        layer.render(
+          <LayerDepthProvider>{renderedMenu}</LayerDepthProvider>,
+          liftPlacement != null
+            ? {
+                // With no room on either side, the layer runtime's own
+                // fallback places it.
+                placement: liftPlacement.side === 'above' ? 'above' : 'below',
+                alignment: liftPlacement.alignment,
+                offset: contextMenu.lift.menuGap,
+                // The lift fades the menu in.
+                xstyle: [popoverXstyle],
+              }
+            : {
+                placement: 'below',
+                alignment: 'start',
+                xstyle: [popoverXstyle, layerAnimations.below],
+              },
+        )
       )}
     </>
   );

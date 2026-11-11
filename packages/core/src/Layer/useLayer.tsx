@@ -474,6 +474,23 @@ interface InternalLayerFields {
   wasJustDismissed: () => boolean;
 }
 
+/** Context-mode members a core component may use through `useLayerInternal`. */
+interface InternalContextLayerFields {
+  /**
+   * With `lazyMount`, mounts the layer's content without showing it. The
+   * popover stays closed, so it shows no pixel and is out of the accessibility
+   * tree until `show()`, which then only shows it. A caller that knows a show
+   * is coming spares that show the first mount's render. Does nothing for a
+   * layer that is mounted already.
+   */
+  prepare: () => void;
+  /**
+   * Unmounts what `prepare()` mounted, unless the layer has shown since. A
+   * layer that has shown keeps its mount as its options say.
+   */
+  releasePrepared: () => void;
+}
+
 /**
  * Context-mode options a core component may pass through `useLayerInternal`;
  * not part of the public `useLayer` options.
@@ -518,7 +535,9 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
   writesEntranceSide?: boolean;
 }
 
-type InternalContextLayerReturn = ContextLayerReturn & InternalLayerFields;
+type InternalContextLayerReturn = ContextLayerReturn &
+  InternalLayerFields &
+  InternalContextLayerFields;
 type InternalFixedLayerReturn = FixedLayerReturn & InternalLayerFields;
 
 function toCssLength(value: number | string): string {
@@ -1543,6 +1562,30 @@ function useLayerImplementation(
     [mountStore],
   );
 
+  // The mount came from `prepare()`, and the layer has not shown since.
+  const isMountPreparedRef = useRef(false);
+
+  const prepare = useCallback(() => {
+    if (mode !== 'context' || !lazyMount || contextMountRef.current != null) {
+      return;
+    }
+    isMountPreparedRef.current = true;
+    requestContextMount();
+  }, [mode, lazyMount, requestContextMount]);
+
+  const releasePrepared = useCallback(() => {
+    if (
+      !isMountPreparedRef.current ||
+      pendingShowRef.current ||
+      isOpenRef.current
+    ) {
+      return;
+    }
+    isMountPreparedRef.current = false;
+    contextMountRef.current = null;
+    mountStore.set(null);
+  }, [mountStore]);
+
   const clearContextMount = useCallback(() => {
     if (mode !== 'context' || !lazyMount || keepsMountAfterShow) {
       return;
@@ -1557,6 +1600,7 @@ function useLayerImplementation(
     if (wasJustDismissed()) {
       return;
     }
+    isMountPreparedRef.current = false;
     // A context popover left over until React commits a previous hide must not
     // be reopened. The synchronous mount ref is the source of truth.
     const candidate = popoverRef.current;
@@ -2488,6 +2532,8 @@ function useLayerImplementation(
       hide,
       isOpen,
       wasJustDismissed,
+      prepare,
+      releasePrepared,
       id,
       render: renderContext,
     }),
@@ -2498,6 +2544,8 @@ function useLayerImplementation(
       hide,
       isOpen,
       wasJustDismissed,
+      prepare,
+      releasePrepared,
       id,
       renderContext,
     ],
@@ -2525,7 +2573,15 @@ export function useLayer(
 ): ContextLayerReturn | FixedLayerReturn {
   const internalLayer = useLayerImplementation(options);
   return useMemo(() => {
-    const {wasJustDismissed: _, ...layer} = internalLayer;
+    const {
+      wasJustDismissed: _,
+      prepare: _prepare,
+      releasePrepared: _releasePrepared,
+      ...layer
+    } = internalLayer as (
+      InternalContextLayerReturn | InternalFixedLayerReturn
+    ) &
+      Partial<InternalContextLayerFields>;
     return layer;
   }, [internalLayer]);
 }

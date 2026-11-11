@@ -5,8 +5,8 @@
  * @input Nothing
  * @output Exports the synthetic-input harness the gesture tests share: a
  *   manual clock, an arena wired to a transition log, fingers that land,
- *   move and lift at explicit timestamps, and a coarse primary pointer for
- *   tests that go through the document's host
+ *   move (with coalesced samples) and lift at explicit timestamps, and a
+ *   coarse primary pointer for tests that go through the document's host
  * @position Test-only helper of packages/core/src/gestures (excluded from the
  *   build with the rest of __tests__)
  */
@@ -18,6 +18,7 @@ import type {
   GestureTouch,
   NativeScrollProbe,
   TouchConsumer,
+  TouchSample,
 } from '../types';
 
 /**
@@ -82,8 +83,11 @@ export interface Harness {
     view?: {left?: number; top?: number; width: number; height: number};
   };
   finger(id: number): Finger;
-  /** Advance the clock and run every timer due by `time`. */
-  advance(time: number): void;
+  /**
+   * Advance the clock and run every timer due by `time`. `runsAt`: when the
+   * page runs those timers on the clock, later behind a block.
+   */
+  advance(time: number, runsAt?: number): void;
 }
 
 export function createHarness(): Harness {
@@ -138,8 +142,8 @@ export function createHarness(): Harness {
       }
       return finger;
     },
-    advance: time => {
-      clock.time = time;
+    advance: (time, runsAt = time) => {
+      clock.time = runsAt;
       arena.advanceTime(time);
     },
   };
@@ -189,12 +193,25 @@ export class Finger {
     return this;
   }
 
-  move(x: number, y: number, time: number): this {
+  /**
+   * `history`: the coalesced samples before this one, oldest first.
+   * `arrivesAt`: when the page gets the move on the clock, for a move that
+   * reaches it after its own time.
+   */
+  move(
+    x: number,
+    y: number,
+    time: number,
+    history?: ReadonlyArray<TouchSample>,
+    arrivesAt = time,
+  ): this {
     this.x = x;
     this.y = y;
     this.time = time;
-    this.harness.clock.time = time;
-    this.harness.arena.moved([{id: this.id, x, y, time}]);
+    this.harness.clock.time = arrivesAt;
+    this.harness.arena.moved([
+      {id: this.id, x, y, time, ...(history == null ? {} : {history})},
+    ]);
     return this;
   }
 

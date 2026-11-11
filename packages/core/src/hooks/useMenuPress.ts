@@ -6,7 +6,8 @@
  * @file useMenuPress.ts
  * @input The menu root, its trigger, the enabled-row selector, and callbacks
  *   for opening, highlighting, activating and dismissing
- * @output useMenuPress, the marker attributes and the activation mark
+ * @output useMenuPress, the marker attributes and the activation mark. Its
+ *   return also continues a pointer that went down elsewhere
  * @position Core hook for DropdownMenu, ContextMenu, DropdownMenuSubMenu,
  *   Selector, MenuBottomSheetActionList and the navigation menus. The
  *   transition table lives in menuPressGesture.ts.
@@ -242,6 +243,19 @@ interface MenuPressConfig extends UseMenuPressOptions {
   isInScrollView?: (control: Element) => boolean;
 }
 
+/**
+ * An in-flight pointer handed to
+ * {@link UseMenuPressReturn.continueGesture}.
+ *
+ * @internal
+ */
+export interface MenuPressContinuation {
+  pointerId: number;
+  pointerType: MenuPressPointerType;
+  /** `Date.now()` of the moment the menu opened under it. */
+  time: number;
+}
+
 export interface UseMenuPressReturn {
   /** Spread onto the menu root: claims presses that begin inside it. */
   menuProps: {
@@ -264,12 +278,24 @@ export interface UseMenuPressReturn {
   isTriggerClickFromPress: () => boolean;
   /** End the gesture in flight with nothing acting (the menu closed). */
   cancel: () => void;
+  /**
+   * Continue a pointer that went down elsewhere, such as a context menu's
+   * long press, into the menu that just opened under it. The pointer is then
+   * tracked as the opening press. A finger or a pen picks only after UIMenu's
+   * handoff distance, under either touch model, counted from the first
+   * position the menu sees. Its lift before that acts on nothing and leaves
+   * the menu open. A mouse follows the settle rule. Ignored while another
+   * gesture is live or the model is off.
+   *
+   * @internal
+   */
+  continueGesture: (pointer: MenuPressContinuation) => void;
 }
 
 /**
  * Where a pointer is, for a finger's handoff distance. Positions reach the
- * machine only under `touchModel: 'uikit'`. Without them, it keeps the settle
- * rule.
+ * machine under `touchModel: 'uikit'`, and for a continued finger or pen
+ * under either touch model. Without them, it keeps the settle rule.
  */
 function handoffPosition(
   event: PointerEvent,
@@ -431,6 +457,9 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
   );
   const lastPointerEventRef = useRef<PointerEvent | null>(null);
   const triggerGestureRef = useRef<number | null>(null);
+  // A finger or a pen handed to the menu as it opened: it takes the handoff
+  // under either touch model.
+  const isContinuedFingerRef = useRef(false);
   // The second pointer that ended a gesture must not start the next one.
   const ignoredPointerIdRef = useRef<number | null>(null);
 
@@ -502,6 +531,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
   const litRowRef = useRef<HTMLElement | null>(null);
   const heldMenuRef = useRef<HTMLElement | null>(null);
   const endGesture = useCallback(() => {
+    isContinuedFingerRef.current = false;
     longPressApiRef.current?.cancel();
     if (litRowRef.current != null) {
       clearMenuPressLit(litRowRef.current);
@@ -802,7 +832,8 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
             time: Date.now(),
             ...handoffPosition(
               event,
-              optionsRef.current.touchModel === 'uikit',
+              optionsRef.current.touchModel === 'uikit' ||
+                isContinuedFingerRef.current,
             ),
           },
           event,
@@ -823,7 +854,8 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
             time: Date.now(),
             ...handoffPosition(
               event,
-              optionsRef.current.touchModel === 'uikit',
+              optionsRef.current.touchModel === 'uikit' ||
+                isContinuedFingerRef.current,
             ),
           },
           event,
@@ -1005,6 +1037,27 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
     endGesture();
   }, [endGesture]);
 
+  const continueGesture = useCallback(
+    (pointer: MenuPressContinuation) => {
+      const {isEnabled = true} = optionsRef.current;
+      if (!isEnabled || gestureRef.current.phase !== 'idle') {
+        return;
+      }
+      attach(pointer.pointerId);
+      // The menu opened under this pointer, so it is the opening press.
+      isContinuedFingerRef.current = pointer.pointerType !== 'mouse';
+      gestureRef.current = {
+        phase: 'open',
+        pointerType: pointer.pointerType,
+        openedAt: pointer.time,
+      };
+      if (pointer.pointerType !== 'mouse') {
+        installTouchMovePreventer();
+      }
+    },
+    [attach, installTouchMovePreventer],
+  );
+
   // Syncs the document listeners of the menu gesture counter with this mount.
   // Unmount ends the gesture.
   useEffect(() => {
@@ -1023,8 +1076,9 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       },
       isTriggerClickFromPress,
       cancel,
+      continueGesture,
     }),
-    [handleMenuPointerDown, isTriggerClickFromPress, cancel],
+    [handleMenuPointerDown, isTriggerClickFromPress, cancel, continueGesture],
   );
 
   // The trigger half. A menu that never spreads `triggerProps` never runs it.

@@ -2,11 +2,14 @@
 
 import {describe, expect, it} from 'vitest';
 import type {MotionProperty} from './animator';
+import {cubicBezier} from './bezier';
 import {
+  easedProgress,
   mapProgress,
   mapRange,
   presentedProgressVelocity,
   progressCurve,
+  timedCurve,
   type ProgressChannel,
 } from './progress';
 import {solveSpring, toSpring} from './spring';
@@ -168,5 +171,110 @@ describe('presentedProgressVelocity', () => {
     };
     presentedProgressVelocity(animator, line({x: 0, y: 0}, {x: 1, y: 1}), 1234);
     expect(times).toEqual([1234, 1234]);
+  });
+});
+
+describe('easedProgress', () => {
+  it('eases from 0 to 1 over its length, and a curve of no length is at its end', () => {
+    const curve = easedProgress(0.2, x => x * x);
+    expect(curve.duration).toBe(0.2);
+    expect(curve.at(0)).toBe(0);
+    expect(curve.at(0.1)).toBeCloseTo(0.25, 6);
+    expect(curve.at(0.2)).toBe(1);
+    expect(curve.velocity(0.1)).toBeCloseTo(5, 3);
+    expect(curve.velocity(0.2)).toBe(0);
+    const none = easedProgress(0, x => x);
+    expect(none.at(0)).toBe(1);
+    expect(none.velocity(0)).toBe(0);
+  });
+
+  it('with jumps, a jump carries no speed and a smooth stretch keeps its slope', () => {
+    const steps = (x: number) => Math.floor(4 * x) / 4;
+    // Without the option, the jump at a quarter of 300 ms reads as a spike.
+    expect(easedProgress(0.3, steps).velocity(0.075)).toBeGreaterThan(100);
+    const jumping = easedProgress(0.3, steps, {jumps: true});
+    for (const t of [0, 0.0749, 0.075, 0.0751, 0.15, 0.225, 0.2995]) {
+      expect(jumping.velocity(t), `${t} s`).toBe(0);
+    }
+    expect(
+      easedProgress(0.2, x => x * x, {jumps: true}).velocity(0.1),
+    ).toBeCloseTo(5, 1);
+  });
+});
+
+describe('easedProgress with a retargeted velocity', () => {
+  const EASE = cubicBezier([0.25, 0.1, 0.25, 1]);
+
+  it('runs from 0 to 1 over the duration on the easing, then holds 1', () => {
+    const curve = easedProgress(0.3, EASE);
+    expect(curve.duration).toBeCloseTo(0.3, 9);
+    expect(curve.at(0)).toBeCloseTo(0, 9);
+    expect(curve.at(0.15)).toBeGreaterThan(0.5);
+    expect(curve.at(0.3)).toBe(1);
+    expect(curve.at(1)).toBe(1);
+    expect(curve.velocity(0.3)).toBe(0);
+    expect(curve.velocity(0.1)).toBeGreaterThan(0);
+  });
+
+  it('starts at a retargeted velocity and still lands on time, at rest', () => {
+    const curve = easedProgress(0.3, EASE, {velocity: 6});
+    expect(curve.velocity(0)).toBe(6);
+    const h = 1e-4;
+    expect((curve.at(h) - curve.at(0)) / h).toBeCloseTo(6, 1);
+    expect(curve.at(0.3)).toBeCloseTo(1, 9);
+    expect(curve.velocity(0.3)).toBe(0);
+    // Its own velocity numerics follow the curve it plays.
+    for (const t of [0.01, 0.1, 0.2, 0.29]) {
+      expect(curve.velocity(t), `${t} s`).toBeCloseTo(
+        (curve.at(t + 1e-6) - curve.at(t - 1e-6)) / 2e-6,
+        1,
+      );
+    }
+  });
+
+  it('from rest is the eased curve itself', () => {
+    const curve = easedProgress(0.3, EASE, {});
+    for (const t of [0, 0.05, 0.15, 0.25]) {
+      expect(curve.at(t)).toBe(EASE(t / 0.3));
+    }
+  });
+
+  it('lands at once for a zero duration', () => {
+    const curve = easedProgress(0, EASE, {velocity: 6});
+    expect(curve.duration).toBe(0);
+    expect(curve.at(0)).toBe(1);
+  });
+});
+
+describe('timedCurve', () => {
+  it('is easedProgress on its values, with the velocity in those units', () => {
+    const curve = timedCurve({
+      from: 100,
+      to: 400,
+      durationMs: 300,
+      easing: [0.25, 0.1, 0.25, 1],
+      velocity: 1800,
+    });
+    const progress = easedProgress(0.3, cubicBezier([0.25, 0.1, 0.25, 1]), {
+      velocity: 6,
+    });
+    for (const t of [0, 0.05, 0.15, 0.3]) {
+      expect(curve.at(t)).toBeCloseTo(100 + 300 * progress.at(t), 9);
+    }
+    expect(curve.velocity(0)).toBe(1800);
+  });
+
+  it('with no distance, only the carry plays and it comes back on time', () => {
+    const curve = timedCurve({
+      from: 50,
+      to: 50,
+      durationMs: 300,
+      easing: [0, 0, 1, 1],
+      velocity: 600,
+    });
+    expect(curve.velocity(0)).toBe(600);
+    expect(curve.at(0.1)).toBeGreaterThan(50);
+    expect(curve.at(0.3)).toBe(50);
+    expect(curve.velocity(0.3)).toBe(0);
   });
 });

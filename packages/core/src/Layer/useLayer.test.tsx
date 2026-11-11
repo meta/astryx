@@ -222,6 +222,12 @@ function KeptLazyContextHarness({
       <button type="button" onClick={layer.hide}>
         Close
       </button>
+      <button type="button" onClick={layer.prepare}>
+        Prepare
+      </button>
+      <button type="button" onClick={layer.releasePrepared}>
+        Release
+      </button>
       {unsafe ? (
         <div data-testid="unsafe-host">
           <p>{renderedLayer}</p>
@@ -1036,6 +1042,60 @@ describe('useLayer', () => {
         });
         expect(container.querySelector('[popover]')).toBe(layer);
         expect(layer).toHaveAttribute('data-open', 'true');
+      });
+
+      it('prepare() mounts it closed, and the next show opens that element at once', async () => {
+        const showSpy = mockPopover();
+        const {container, getByRole} = render(<KeptLazyContextHarness />);
+
+        fireEvent.click(getByRole('button', {name: 'Prepare'}));
+        await waitFor(() => {
+          expect(container.querySelector('[popover]')).not.toBeNull();
+        });
+        const layer = container.querySelector('[popover]');
+        expect(layer).not.toHaveAttribute('data-open');
+        expect(showSpy).not.toHaveBeenCalled();
+
+        fireEvent.click(getByRole('button', {name: 'Trigger'}));
+        // Mounted: shown within the call, not after a commit.
+        expect(showSpy).toHaveBeenCalledOnce();
+        expect(container.querySelector('[popover]')).toBe(layer);
+        expect(layer).toHaveAttribute('data-open', 'true');
+      });
+
+      it('releasePrepared() unmounts a prepared layer that never showed', async () => {
+        const showSpy = mockPopover();
+        const {container, getByRole} = render(<KeptLazyContextHarness />);
+
+        fireEvent.click(getByRole('button', {name: 'Prepare'}));
+        await waitFor(() => {
+          expect(container.querySelector('[popover]')).not.toBeNull();
+        });
+        fireEvent.click(getByRole('button', {name: 'Release'}));
+
+        await waitFor(() => {
+          expect(container.querySelector('[popover]')).toBeNull();
+        });
+        expect(container.querySelector('template')).not.toBeNull();
+        expect(showSpy).not.toHaveBeenCalled();
+      });
+
+      it('releasePrepared() keeps a prepared layer that has shown since', async () => {
+        mockPopover();
+        const {container, getByRole} = render(<KeptLazyContextHarness />);
+
+        fireEvent.click(getByRole('button', {name: 'Prepare'}));
+        await waitFor(() => {
+          expect(container.querySelector('[popover]')).not.toBeNull();
+        });
+        const layer = container.querySelector('[popover]');
+        fireEvent.click(getByRole('button', {name: 'Trigger'}));
+        fireEvent.click(getByRole('button', {name: 'Close'}));
+        fireEvent.click(getByRole('button', {name: 'Release'}));
+
+        await act(async () => {});
+        expect(container.querySelector('[popover]')).toBe(layer);
+        expect(layer?.isConnected).toBe(true);
       });
 
       it('without the option, a lazy layer still unmounts on hide', async () => {
