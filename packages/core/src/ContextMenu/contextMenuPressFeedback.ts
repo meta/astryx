@@ -15,16 +15,7 @@
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenu.tsx
  */
 
-// The growth starts in the first frame at or after the onset, 150 ms after a
-// finger lands, while the recognizer follows that finger. It plays its whole
-// spring from rest, from that frame, as Core Animation starts an animation at
-// its commit. The recognizer reports the landing; a pointer-only pen's press
-// waits for the press machine's "on". Only the recognizer's failure or cancel
-// returns it. A long press is a gesture, so the
-// growth plays UIKit's lift spring and each return its dismissal spring. The
-// compositor plays them, so a busy main thread does not stall them. Once the
-// menu opens, the trigger holds its size until the menu closes. Then it returns
-// on the dismissal spring. An inline trigger and Reduce Motion show no growth.
+// Only the recognizer's failure or cancel returns the growth.
 
 import {useCallback, useRef, type RefObject} from 'react';
 import {useAttachment} from '../hooks/useAttachment';
