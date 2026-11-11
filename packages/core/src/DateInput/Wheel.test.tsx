@@ -624,6 +624,331 @@ describe('Wheel — keys under a mouse', () => {
   });
 });
 
+describe('Wheel — a key step on a page starved of frames', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    // @ts-expect-error - deleting the shadow restores Element's own getter
+    delete HTMLElement.prototype.offsetHeight;
+  });
+
+  /** Each row gets a height: jsdom has no layout. */
+  function giveRowsHeight() {
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.getAttribute('role') === 'option' ? ROW : 0;
+      },
+    });
+  }
+
+  /**
+   * Plays the browser for the scrolling column `listbox`, resting on hour
+   * `initial`. `frame` draws one frame of a scroll at the `scrollTop` it
+   * gives, and `wait` moves the clock. A starved page waits without drawing.
+   * `scrollTo` records each scroll the wheel starts, and `land` plays the
+   * browser ending the last one where it aimed, with `scrollend`.
+   */
+  function playBrowser(listbox: HTMLElement, initial: number) {
+    let top = initial * ROW;
+    Object.defineProperty(listbox, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (next: number) => {
+        top = next;
+      },
+    });
+    const frame = (at: number) => {
+      act(() => {
+        top = at;
+        listbox.dispatchEvent(new Event('scroll'));
+      });
+    };
+    const wait = (ms: number) => {
+      act(() => {
+        vi.advanceTimersByTime(ms);
+      });
+    };
+    const scrollTo = vi.fn();
+    listbox.scrollTo = ((options: ScrollToOptions) => {
+      scrollTo(options);
+    }) as HTMLElement['scrollTo'];
+    const land = () => {
+      const last = scrollTo.mock.lastCall?.[0] as ScrollToOptions | undefined;
+      if (last?.top == null) {
+        throw new Error('no scroll to land');
+      }
+      frame(last.top);
+      act(() => {
+        listbox.dispatchEvent(new Event('scrollend'));
+      });
+    };
+    /** The column rests on `row`: the row the value names is the row shown. */
+    const expectRestOn = (row: number) => {
+      expect(Math.abs(listbox.scrollTop - row * ROW)).toBeLessThanOrEqual(0.5);
+    };
+    return {frame, wait, scrollTo, land, expectRestOn};
+  }
+
+  /** The scrolling column on hour `initial`, whose owner commits each change. */
+  function renderStepped(initial: number) {
+    giveRowsHeight();
+    const onChange = vi.fn();
+    function Owned() {
+      const [value, setValue] = useState(initial);
+      return (
+        <ScrollWheel
+          label="Hour"
+          options={HOURS}
+          value={value}
+          onChange={next => {
+            onChange(next);
+            setValue(next);
+          }}
+        />
+      );
+    }
+    render(<Owned />);
+    const listbox = screen.getByRole('listbox', {name: 'Hour'});
+    return {listbox, onChange, ...playBrowser(listbox, initial)};
+  }
+
+  /**
+   * The scrolling column on hour `initial`, shown. `show` sets its value and
+   * whether it is shown, as DateInput's sheet does when the wheels close and
+   * the calendar moves.
+   */
+  function renderShown(initial: number) {
+    giveRowsHeight();
+    const onChange = vi.fn();
+    const column = (value: number, isActive: boolean) => (
+      <ScrollWheel
+        label="Hour"
+        options={HOURS}
+        value={value}
+        onChange={onChange}
+        isActive={isActive}
+      />
+    );
+    const {rerender} = render(column(initial, true));
+    const listbox = screen.getByRole('listbox', {name: 'Hour'});
+    const show = (value: number, isActive: boolean) => {
+      rerender(column(value, isActive));
+    };
+    return {listbox, onChange, show, ...playBrowser(listbox, initial)};
+  }
+
+  it('rests on the row a key steps to when its frames stop for longer than the quiet period', () => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, wait, scrollTo, expectRestOn} =
+      renderStepped(10);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange.mock.calls).toEqual([[11]]);
+    scrollTo.mockClear();
+    // The step's first frame, a fifth of a row along. Then no frame comes for
+    // longer than the quiet period, as on a busy page or a slow device.
+    frame(10 * ROW + 6);
+    wait(SCROLL_QUIET_MS + 80);
+    // The row the step is leaving is not a rest: the step re-aims at 11, once.
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expect(scrollTo.mock.calls).toEqual([
+      [{top: 11 * ROW, behavior: 'smooth'}],
+    ]);
+    scrollTo.mockClear();
+    frame(11 * ROW);
+    act(() => {
+      listbox.dispatchEvent(new Event('scrollend'));
+    });
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expectRestOn(11);
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Tab', 'moves focus out of the column'],
+    ['ArrowLeft', 'scrolls nothing in a column'],
+  ])('keeps the row a key steps to through %s, which %s', key => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, wait, scrollTo, expectRestOn} =
+      renderStepped(10);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange.mock.calls).toEqual([[11]]);
+    scrollTo.mockClear();
+    // The key scrolls nothing. Then the step's first frame, and no frame for
+    // longer than the quiet period.
+    fireEvent.keyDown(listbox, {key});
+    frame(10 * ROW + 6);
+    wait(SCROLL_QUIET_MS + 80);
+    // The step still owns the column: it re-aims at 11 and never commits 10.
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expect(scrollTo.mock.calls).toEqual([
+      [{top: 11 * ROW, behavior: 'smooth'}],
+    ]);
+    frame(11 * ROW);
+    act(() => {
+      listbox.dispatchEvent(new Event('scrollend'));
+    });
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expectRestOn(11);
+  });
+
+  it('ends a key step on a key that scrolls the column, as Space, and commits the row shown', () => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, wait} = renderStepped(10);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange.mock.calls).toEqual([[11]]);
+    // Space scrolls a focused column by itself: the person's scroll replaces
+    // the step, and the rest commits the row it shows.
+    fireEvent.keyDown(listbox, {key: ' '});
+    frame(10 * ROW + 6);
+    wait(SCROLL_QUIET_MS + 80);
+    expect(onChange.mock.calls).toEqual([[11], [10]]);
+  });
+
+  it('keeps the row a key steps to when the quiet period of a scroll before the key ends first', () => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, wait, scrollTo, land, expectRestOn} =
+      renderStepped(10);
+    // A glide that ends on 10 just before the key: its quiet period runs on.
+    frame(10 * ROW - 5);
+    frame(10 * ROW);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    scrollTo.mockClear();
+    // That quiet period ends before the step draws its first frame.
+    wait(SCROLL_QUIET_MS);
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expect(scrollTo.mock.calls).toEqual([
+      [{top: 11 * ROW, behavior: 'smooth'}],
+    ]);
+    land();
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expectRestOn(11);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('finishes a key step that stops short of its row instead of rounding it back, without scrollend', () => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, wait, scrollTo, land, expectRestOn} =
+      renderStepped(10);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    // The step stops 30 px short of row 11, back on row 10, as when a layout
+    // change moves the snap points mid-step. No person touches the wheel.
+    frame(11 * ROW - 30);
+    scrollTo.mockClear();
+    wait(SCROLL_QUIET_MS + 10);
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expect(scrollTo.mock.calls).toEqual([
+      [{top: 11 * ROW, behavior: 'smooth'}],
+    ]);
+    land();
+    expect(onChange.mock.calls).toEqual([[11]]);
+    expectRestOn(11);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('commits the row the column shows when a key step rests short of its row again, with no progress', () => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, wait, scrollTo, expectRestOn} =
+      renderStepped(10);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    // The step's scroll snaps back onto row 10, and so does the re-aim.
+    frame(10 * ROW + 6);
+    frame(10 * ROW);
+    scrollTo.mockClear();
+    wait(SCROLL_QUIET_MS + 10);
+    frame(10 * ROW + 6);
+    frame(10 * ROW);
+    wait(SCROLL_QUIET_MS + 10);
+    // It re-aims once, then the value follows the row the column shows.
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls).toEqual([[11], [10]]);
+    expectRestOn(10);
+  });
+
+  it('finishes a second key step that the browser ends part-way instead of rounding it back', () => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, scrollTo, land, expectRestOn} =
+      renderStepped(10);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange.mock.calls).toEqual([[11], [12]]);
+    scrollTo.mockClear();
+    // WebKit ends a smooth scroll that a second one retargeted once the
+    // first one's time is up, with `scrollend` near row 11.
+    frame(11 * ROW + 3);
+    act(() => {
+      listbox.dispatchEvent(new Event('scrollend'));
+    });
+    expect(onChange.mock.calls).toEqual([[11], [12]]);
+    expect(scrollTo.mock.calls).toEqual([
+      [{top: 12 * ROW, behavior: 'smooth'}],
+    ]);
+    land();
+    expect(onChange.mock.calls).toEqual([[11], [12]]);
+    expectRestOn(12);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('parks on the value it is shown with after a hide, though a scroll of its own never moved', () => {
+    vi.useFakeTimers();
+    const {onChange, show, scrollTo, land, expectRestOn} = renderShown(10);
+    // A click on the row already under the band: its scroll moves nothing,
+    // so it never comes to rest.
+    fireEvent.click(screen.getByRole('option', {name: '10'}));
+    expect(onChange).not.toHaveBeenCalled();
+    // The wheels close, the calendar moves on, and the wheels open again.
+    show(10, false);
+    show(11, false);
+    scrollTo.mockClear();
+    show(11, true);
+    // The wheel parks on 11 and rests there. Nothing turns it back to 10.
+    land();
+    expect(onChange).not.toHaveBeenCalled();
+    expectRestOn(11);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('rests on the row a key steps to a quiet period after the frame that reaches it, without scrollend', () => {
+    vi.useFakeTimers();
+    const {listbox, onChange, frame, wait} = renderStepped(10);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    frame(10 * ROW + 6);
+    frame(11 * ROW);
+    wait(SCROLL_QUIET_MS + 10);
+    expect(onChange.mock.calls).toEqual([[11]]);
+    // At rest, a key steps on from 11.
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange).toHaveBeenLastCalledWith(12);
+  });
+
+  it.each([
+    [
+      'a trackpad',
+      (listbox: HTMLElement) => fireEvent.wheel(listbox, {deltaY: 60}),
+      () => {},
+    ],
+    [
+      'a finger',
+      (listbox: HTMLElement) => fireEvent.touchStart(listbox),
+      (listbox: HTMLElement) => fireEvent.touchEnd(listbox),
+    ],
+  ])(
+    'commits the row %s leaves it on when it takes the wheel during a key step',
+    (_name, take, leave) => {
+      vi.useFakeTimers();
+      const {listbox, onChange, frame, wait} = renderStepped(10);
+      fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+      frame(10 * ROW + 6);
+      take(listbox);
+      frame(12 * ROW);
+      frame(13 * ROW);
+      leave(listbox);
+      // A person's scroll still rests after the quiet period.
+      wait(SCROLL_QUIET_MS + 10);
+      expect(onChange).toHaveBeenLastCalledWith(13);
+    },
+  );
+});
+
 describe('Wheel — by pointer', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

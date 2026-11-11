@@ -238,6 +238,7 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   // public API, and allowed by lint only in Core and Lab
   // (architecture:react-component-runtime INV13).
   'internal/indicatorPress.stylex',
+  'internal/reorder',
   'internal/touchHitArea.stylex',
   'internal/touch',
   'internal/selectable-card',
@@ -246,6 +247,7 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   'internal/dialog-context',
   'internal/scroll-anchoring',
   'internal/line-clamp',
+  'internal/virtualization',
 ];
 
 /**

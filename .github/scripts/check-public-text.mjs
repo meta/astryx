@@ -141,12 +141,11 @@ function readArgs(argv) {
   return args;
 }
 
+const SHA = /^[0-9a-f]{7,64}$/i;
+
 /** Reads the range with git. Throws when it cannot be read whole. */
 export function readRange(base, head) {
-  if (
-    !/^[0-9a-f]{7,64}$/i.test(base ?? '') ||
-    !/^[0-9a-f]{7,64}$/i.test(head ?? '')
-  )
+  if (!SHA.test(base ?? '') || !SHA.test(head ?? ''))
     throw new Error('--base and --head must be commit shas');
   const log = git(['log', '--format=%H%x00%B%x1e', `${base}..${head}`]);
   const commits = log
@@ -158,6 +157,34 @@ export function readRange(base, head) {
       return {sha, message};
     });
   if (commits.length === 0) throw new Error('the range has no commits');
+  return {commits, diff: readDiffBetween(base, head)};
+}
+
+/**
+ * Reads exactly the pull request's commits from the commit list GitHub
+ * reports (one `{"sha", "message"}` JSON object a line), and its added lines
+ * from the diff between the base branch tip and the merge of the head into it.
+ * A shallow clone cannot misplace the merge base here, so the base branch's
+ * own commits are never read as the pull request's. Throws when the list is
+ * empty or unreadable.
+ */
+export function readPullRequestRange(commitsText, diffBase, diffHead) {
+  if (!SHA.test(diffBase ?? '') || !SHA.test(diffHead ?? ''))
+    throw new Error('--diff-base and --diff-head must be commit shas');
+  const commits = commitsText
+    .split('\n')
+    .filter(line => line.trim())
+    .map(line => {
+      const {sha, message} = JSON.parse(line);
+      if (!SHA.test(sha ?? '') || typeof message !== 'string')
+        throw new Error('a listed commit has no sha or message');
+      return {sha, message};
+    });
+  if (commits.length === 0) throw new Error('the commit list is empty');
+  return {commits, diff: readDiffBetween(diffBase, diffHead)};
+}
+
+function readDiffBetween(base, head) {
   // `--text` and `--no-textconv`: a path marked binary in `.gitattributes`
   // shows its added lines too. Renames are found, so a moved file shows only
   // the lines its move changed.
@@ -177,7 +204,7 @@ export function readRange(base, head) {
   ]);
   if (readDiff(diff).unreadable)
     throw new Error('a changed file has a path the check cannot read');
-  return {commits, diff};
+  return diff;
 }
 
 /**
@@ -199,7 +226,14 @@ function main() {
   let pr = {};
   try {
     digests = new Set(JSON.parse(fs.readFileSync(args.hashes, 'utf8')));
-    range = readRange(args.base, args.head);
+    range =
+      args['commits-json'] != null
+        ? readPullRequestRange(
+            fs.readFileSync(args['commits-json'], 'utf8'),
+            args['diff-base'],
+            args['diff-head'],
+          )
+        : readRange(args.base, args.head);
     if (args['pr-json'] != null)
       pr = readPullRequest(fs.readFileSync(args['pr-json'], 'utf8'));
   } catch (error) {
