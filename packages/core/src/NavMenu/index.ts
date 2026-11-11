@@ -1,6 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
 export {NavHeadingMenu} from './NavHeadingMenu';
 export type {NavHeadingMenuProps} from './NavHeadingMenu';
 export {NavHeadingMenuItem} from './NavHeadingMenuItem';
