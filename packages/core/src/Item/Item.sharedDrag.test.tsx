@@ -53,8 +53,13 @@ function renderRow() {
       data-testid="row"
       swipe={createSwipe({
         trailing: [
-          {label: 'Archive', onActivate: vi.fn()},
-          {label: 'Delete', onActivate: vi.fn(), hasRemoval: true},
+          {id: 'archive', label: 'Archive', onActivate: vi.fn()},
+          {
+            id: 'delete',
+            label: 'Delete',
+            onActivate: vi.fn(),
+            hasRemoval: true,
+          },
         ],
       })}
     />,
@@ -164,7 +169,7 @@ describe('the row on the shared drag path', () => {
         label="Conversation"
         data-testid="row"
         swipe={createSwipe({
-          trailing: [{label: 'Archive', onActivate: vi.fn()}],
+          trailing: [{id: 'archive', label: 'Archive', onActivate: vi.fn()}],
         })}
       />,
     );
@@ -174,7 +179,7 @@ describe('the row on the shared drag path', () => {
         label="Conversation"
         data-testid="row"
         swipe={createSwipe({
-          trailing: [{label: 'Archive', onActivate: vi.fn()}],
+          trailing: [{id: 'archive', label: 'Archive', onActivate: vi.fn()}],
         })}
       />,
     );
@@ -183,7 +188,7 @@ describe('the row on the shared drag path', () => {
         label="Conversation"
         data-testid="row"
         swipe={createSwipe({
-          trailing: [{label: 'Delete', onActivate: vi.fn()}],
+          trailing: [{id: 'delete', label: 'Delete', onActivate: vi.fn()}],
         })}
       />,
     );
@@ -212,8 +217,13 @@ describe('the row on the shared drag path', () => {
         data-testid="row"
         swipe={createSwipe({
           trailing: [
-            {label: 'Archive', onActivate: vi.fn()},
-            {label: 'Delete', onActivate: vi.fn(), hasRemoval: true},
+            {id: 'archive', label: 'Archive', onActivate: vi.fn()},
+            {
+              id: 'delete',
+              label: 'Delete',
+              onActivate: vi.fn(),
+              hasRemoval: true,
+            },
           ],
         })}
       />,

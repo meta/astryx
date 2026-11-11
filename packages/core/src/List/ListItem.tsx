@@ -56,7 +56,7 @@ import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import {ItemLabelNeededContext} from '../Item/ItemLabelContext';
 import {ItemTrailingContext} from '../Item/ItemTrailingContext';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
-import type {Swipe} from '../Swipe/swipeHost';
+import {swipeWithItemKey, type Swipe} from '../Swipe/swipeHost';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isReportedRow, keepPresentation} from './listLayoutUpdates';
@@ -463,6 +463,14 @@ export function ListItem({
   ...restProps
 }: ListItemProps) {
   const ctx = use(ListContext);
+  // The row's swipe, attached with its key for each action's `onActivate`.
+  // Kept per swipe value and key: a render that changes neither hands the row
+  // the same value. So an open row stays as it is.
+  const {swipe} = restProps;
+  const keyedSwipe = useMemo(
+    () => (swipe == null ? undefined : swipeWithItemKey(swipe, itemKey)),
+    [swipe, itemKey],
+  );
   // The row's element, which a row without a handle names for the reorder.
   const rowRef = useRef<HTMLLIElement | null>(null);
   // A List isolates its rows, so what a row raises stays below a page-level
@@ -645,6 +653,7 @@ export function ListItem({
       {...mergeProps(themeProps('list-item'), {className, style})}
       {...itemKeyProps(itemKey)}
       {...restProps}
+      swipe={keyedSwipe}
     />
   );
   const row = <ItemListRowContext value>{item}</ItemListRowContext>;

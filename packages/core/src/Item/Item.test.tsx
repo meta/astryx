@@ -1372,6 +1372,7 @@ describe('swipe', () => {
   }
 
   type Entry = {
+    id: string;
     label: string;
     onActivate: () => void;
     hasRemoval?: boolean;
@@ -1380,7 +1381,7 @@ describe('swipe', () => {
   };
 
   function renderRow({
-    leading = [{label: 'Unread', onActivate: vi.fn()}],
+    leading = [{id: 'unread', label: 'Unread', onActivate: vi.fn()}],
     trailing,
     behavior,
     onClick = vi.fn(),
@@ -1429,7 +1430,9 @@ describe('swipe', () => {
   });
 
   it('is served on a role-less row and a listitem, and not on a row whose role forbids interactive descendants', () => {
-    const actions = {leading: [{label: 'Unread', onActivate: vi.fn()}]};
+    const actions = {
+      leading: [{id: 'unread', label: 'Unread', onActivate: vi.fn()}],
+    };
     const {rerender} = render(
       <Item label="A" data-testid="row" swipe={createSwipe(actions)} />,
     );
@@ -1457,7 +1460,9 @@ describe('swipe', () => {
   });
 
   it('is not served on a row that is the enlarged target of a nested control, nor on a disabled row', () => {
-    const actions = {leading: [{label: 'Unread', onActivate: vi.fn()}]};
+    const actions = {
+      leading: [{id: 'unread', label: 'Unread', onActivate: vi.fn()}],
+    };
     function Delegating() {
       const inputRef = useRef<HTMLInputElement>(null);
       return (
@@ -1498,7 +1503,7 @@ describe('swipe', () => {
           label="A"
           data-testid="row"
           swipe={createSwipe({
-            trailing: [{label: 'Archive', onActivate: vi.fn()}],
+            trailing: [{id: 'archive', label: 'Archive', onActivate: vi.fn()}],
           })}
         />
       </ul>,
@@ -1537,8 +1542,8 @@ describe('swipe', () => {
   it('moves only by transforms that read one travel: the root, and a window, a track and entries that can never drift apart (spec:AST-057 FR2)', () => {
     const {row} = renderRow({
       leading: [
-        {label: 'Unread', onActivate: vi.fn()},
-        {label: 'Pin', onActivate: vi.fn()},
+        {id: 'unread', label: 'Unread', onActivate: vi.fn()},
+        {id: 'pin', label: 'Pin', onActivate: vi.fn()},
       ],
     });
     const f = finger(row);
@@ -1821,7 +1826,9 @@ describe('swipe', () => {
 
   it('springs back when the browser cancels a swipe in progress', async () => {
     const onActivate = vi.fn();
-    const {row} = renderRow({leading: [{label: 'Unread', onActivate}]});
+    const {row} = renderRow({
+      leading: [{id: 'unread', label: 'Unread', onActivate}],
+    });
     const f = finger(row);
     f.down(10);
     f.move(20);
@@ -1871,7 +1878,7 @@ describe('swipe', () => {
 
   it('does not move toward a side without entries', () => {
     const {row} = renderRow({
-      leading: [{label: 'Unread', onActivate: vi.fn()}],
+      leading: [{id: 'unread', label: 'Unread', onActivate: vi.fn()}],
     });
     const f = finger(row);
     f.down(200);
@@ -1981,7 +1988,7 @@ describe('swipe', () => {
       const onActivate = vi.fn();
       const onClick = vi.fn();
       const {row} = renderRow({
-        leading: [{label: 'Unread', onActivate}],
+        leading: [{id: 'unread', label: 'Unread', onActivate}],
         onClick,
       });
       dragLeading(row, 45);
@@ -2006,7 +2013,9 @@ describe('swipe', () => {
       const onActivate = vi.fn();
       const onClick = vi.fn();
       const {row} = renderRow({
-        leading: [{label: 'Unread', onActivate, isDisabled: true}],
+        leading: [
+          {id: 'unread', label: 'Unread', onActivate, isDisabled: true},
+        ],
         onClick,
       });
       dragLeading(row, 45);
@@ -2032,7 +2041,7 @@ describe('swipe', () => {
       const onActivate = vi.fn();
       const onClick = vi.fn();
       const {row} = renderRow({
-        leading: [{label: 'Unread', onActivate}],
+        leading: [{id: 'unread', label: 'Unread', onActivate}],
         onClick,
       });
       dragLeading(row, 45);
@@ -2050,7 +2059,9 @@ describe('swipe', () => {
 
     it('opens on a flick from short of half the panel, and fires nothing', async () => {
       const onActivate = vi.fn();
-      const {row} = renderRow({leading: [{label: 'Unread', onActivate}]});
+      const {row} = renderRow({
+        leading: [{id: 'unread', label: 'Unread', onActivate}],
+      });
       const f = finger(row);
       f.down(10);
       f.move(25);
@@ -2112,7 +2123,9 @@ describe('swipe', () => {
     it("holds the row out after a tapped entry with hasRemoval, and fires it once the row's content has left its box (spec:AST-057 FR5)", async () => {
       const onActivate = vi.fn();
       const {row} = renderRow({
-        trailing: [{label: 'Archive', onActivate, hasRemoval: true}],
+        trailing: [
+          {id: 'archive', label: 'Archive', onActivate, hasRemoval: true},
+        ],
         leading: [],
       });
       const f = finger(row);
@@ -2156,9 +2169,14 @@ describe('swipe', () => {
 
     it('keeps the other side’s panel inert while the row rests open: only the open side’s entries are in the tab order and the accessibility tree', async () => {
       const {row} = renderRow({
-        leading: [{label: 'Unread', onActivate: vi.fn()}],
+        leading: [{id: 'unread', label: 'Unread', onActivate: vi.fn()}],
         trailing: [
-          {label: 'Delete', onActivate: vi.fn(), variant: 'destructive'},
+          {
+            id: 'delete',
+            label: 'Delete',
+            onActivate: vi.fn(),
+            variant: 'destructive',
+          },
         ],
       });
       dragLeading(row, 45);
@@ -2398,8 +2416,8 @@ describe('swipe', () => {
       const outer = vi.fn();
       const {row} = renderRow({
         leading: [
-          {label: 'Unread', onActivate: inner},
-          {label: 'Pin', onActivate: outer},
+          {id: 'unread', label: 'Unread', onActivate: inner},
+          {id: 'pin', label: 'Pin', onActivate: outer},
         ],
       });
       // Two entries: a 144 px panel. The full swipe confirms 0.69 of the way
@@ -2433,8 +2451,8 @@ describe('swipe', () => {
       const outer = vi.fn();
       const {row} = renderRow({
         leading: [
-          {label: 'Unread', onActivate: inner},
-          {label: 'Pin', onActivate: outer},
+          {id: 'unread', label: 'Unread', onActivate: inner},
+          {id: 'pin', label: 'Pin', onActivate: outer},
         ],
       });
       dragLeading(row, 90);
@@ -2464,8 +2482,8 @@ describe('swipe', () => {
       const twoEntries = () =>
         renderRow({
           leading: [
-            {label: 'Unread', onActivate: vi.fn()},
-            {label: 'Pin', onActivate: vi.fn()},
+            {id: 'unread', label: 'Unread', onActivate: vi.fn()},
+            {id: 'pin', label: 'Pin', onActivate: vi.fn()},
           ],
         });
       /**
@@ -2564,8 +2582,8 @@ describe('swipe', () => {
           const outer = vi.fn();
           const {row} = renderRow({
             leading: [
-              {label: 'Unread', onActivate: vi.fn()},
-              {label: 'Pin', onActivate: outer},
+              {id: 'unread', label: 'Unread', onActivate: vi.fn()},
+              {id: 'pin', label: 'Pin', onActivate: outer},
             ],
           });
           openRow(row);
@@ -2600,8 +2618,13 @@ describe('swipe', () => {
           const unread = vi.fn();
           const {row} = renderRow({
             leading: [
-              {label: 'Unread', onActivate: unread, hasRemoval: true},
-              {label: 'Pin', onActivate: vi.fn()},
+              {
+                id: 'unread',
+                label: 'Unread',
+                onActivate: unread,
+                hasRemoval: true,
+              },
+              {id: 'pin', label: 'Pin', onActivate: vi.fn()},
             ],
           });
           openRow(row);
@@ -2637,10 +2660,11 @@ describe('swipe', () => {
                 swipe={createSwipe({
                   leading: [
                     {
+                      id: 'read',
                       label: isRead ? 'Unread' : 'Read',
                       onActivate: () => setIsRead(read => !read),
                     },
-                    {label: 'Pin', onActivate: vi.fn()},
+                    {id: 'pin', label: 'Pin', onActivate: vi.fn()},
                   ],
                 })}
               />
@@ -2667,7 +2691,9 @@ describe('swipe', () => {
 
       it('closes a swipe that confirmed and backed out, even at rest past half the panel, and fires nothing', async () => {
         const onActivate = vi.fn();
-        const {row} = renderRow({leading: [{label: 'Unread', onActivate}]});
+        const {row} = renderRow({
+          leading: [{id: 'unread', label: 'Unread', onActivate}],
+        });
         const f = finger(row);
         f.down(10);
         f.move(20);
@@ -2683,7 +2709,9 @@ describe('swipe', () => {
 
       it('fires from a confirmed release whatever its velocity, even moving back', async () => {
         const onActivate = vi.fn();
-        const {row} = renderRow({leading: [{label: 'Unread', onActivate}]});
+        const {row} = renderRow({
+          leading: [{id: 'unread', label: 'Unread', onActivate}],
+        });
         const f = finger(row);
         f.down(10);
         f.move(20);
@@ -2701,7 +2729,9 @@ describe('swipe', () => {
       it('never confirms toward a disabled outermost entry', async () => {
         const onActivate = vi.fn();
         const {row} = renderRow({
-          leading: [{label: 'Unread', onActivate, isDisabled: true}],
+          leading: [
+            {id: 'unread', label: 'Unread', onActivate, isDisabled: true},
+          ],
         });
         const f = finger(row);
         f.down(10);
@@ -2724,8 +2754,8 @@ describe('swipe', () => {
         const outer = vi.fn();
         const {row} = renderRow({
           leading: [
-            {label: 'Unread', onActivate: vi.fn()},
-            {label: 'Pin', onActivate: outer},
+            {id: 'unread', label: 'Unread', onActivate: vi.fn()},
+            {id: 'pin', label: 'Pin', onActivate: outer},
           ],
         });
         // Confirmed from the open row: the confirm point is 231.6 px for the
@@ -2747,8 +2777,8 @@ describe('swipe', () => {
         const outer = vi.fn();
         const {row} = renderRow({
           leading: [
-            {label: 'Unread', onActivate: vi.fn()},
-            {label: 'Pin', onActivate: outer},
+            {id: 'unread', label: 'Unread', onActivate: vi.fn()},
+            {id: 'pin', label: 'Pin', onActivate: outer},
           ],
         });
         openRow(row);
@@ -2772,8 +2802,8 @@ describe('swipe', () => {
         const outer = vi.fn();
         const {row, unmount} = renderRow({
           leading: [
-            {label: 'Unread', onActivate: vi.fn()},
-            {label: 'Pin', onActivate: outer},
+            {id: 'unread', label: 'Unread', onActivate: vi.fn()},
+            {id: 'pin', label: 'Pin', onActivate: outer},
           ],
         });
         // Confirmed past about 232 px from the open row: out it goes.
@@ -2809,8 +2839,9 @@ describe('swipe', () => {
       it("a disabled outermost entry's fill beside it takes the disabled entry's look", () => {
         const {row} = renderRow({
           trailing: [
-            {label: 'Archive', onActivate: vi.fn()},
+            {id: 'archive', label: 'Archive', onActivate: vi.fn()},
             {
+              id: 'delete',
               label: 'Delete',
               onActivate: vi.fn(),
               variant: 'destructive',
@@ -2838,12 +2869,17 @@ describe('swipe', () => {
     it('lays the entries outermost last: at the leading edge the row of entries runs in reverse', () => {
       const {row} = renderRow({
         leading: [
-          {label: 'Unread', onActivate: vi.fn()},
-          {label: 'Pin', onActivate: vi.fn()},
+          {id: 'unread', label: 'Unread', onActivate: vi.fn()},
+          {id: 'pin', label: 'Pin', onActivate: vi.fn()},
         ],
         trailing: [
-          {label: 'Archive', onActivate: vi.fn()},
-          {label: 'Delete', onActivate: vi.fn(), variant: 'destructive'},
+          {id: 'archive', label: 'Archive', onActivate: vi.fn()},
+          {
+            id: 'delete',
+            label: 'Delete',
+            onActivate: vi.fn(),
+            variant: 'destructive',
+          },
         ],
       });
       const leading = trackOf(row, 'leading');
@@ -2886,7 +2922,7 @@ describe('swipe', () => {
       const onActivate = vi.fn();
       const {row} = renderRow({
         behavior: 'commit',
-        leading: [{label: 'Unread', onActivate}],
+        leading: [{id: 'unread', label: 'Unread', onActivate}],
       });
       const panel = panelOf(row, 'leading') as HTMLElement;
       // Presentational at all times: nothing in it is ever tappable.
@@ -2909,7 +2945,7 @@ describe('swipe', () => {
       const onActivate = vi.fn();
       const {row} = renderRow({
         behavior: 'commit',
-        leading: [{label: 'Unread', onActivate}],
+        leading: [{id: 'unread', label: 'Unread', onActivate}],
       });
       dragLeading(row, 100);
       await settled();
@@ -2921,7 +2957,7 @@ describe('swipe', () => {
       const onActivate = vi.fn();
       const {row} = renderRow({
         behavior: 'commit',
-        leading: [{label: 'Unread', onActivate}],
+        leading: [{id: 'unread', label: 'Unread', onActivate}],
       });
       const f = finger(row);
       f.down(10);
@@ -2939,7 +2975,9 @@ describe('swipe', () => {
       const onActivate = vi.fn();
       const {row} = renderRow({
         behavior: 'commit',
-        leading: [{label: 'Archive', onActivate, hasRemoval: true}],
+        leading: [
+          {id: 'archive', label: 'Archive', onActivate, hasRemoval: true},
+        ],
       });
       dragLeading(row, 220);
       await settled();
@@ -2954,8 +2992,8 @@ describe('swipe', () => {
         renderRow({
           behavior: 'commit',
           leading: [
-            {label: 'Unread', onActivate: vi.fn()},
-            {label: 'Pin', onActivate: vi.fn()},
+            {id: 'unread', label: 'Unread', onActivate: vi.fn()},
+            {id: 'pin', label: 'Pin', onActivate: vi.fn()},
           ],
         });
         expect(warn).toHaveBeenCalledWith(
@@ -2968,7 +3006,9 @@ describe('swipe', () => {
   });
 
   it('gives the root back its own styles when the swipe actions go', () => {
-    const actions = {leading: [{label: 'Unread', onActivate: vi.fn()}]};
+    const actions = {
+      leading: [{id: 'unread', label: 'Unread', onActivate: vi.fn()}],
+    };
     const {rerender} = render(
       <Item
         label="Conversation"
@@ -2997,7 +3037,9 @@ describe('swipe', () => {
         label="Open"
         onClick={vi.fn()}
         data-testid="open"
-        swipe={createSwipe({leading: [{label: 'Unread', onActivate: vi.fn()}]})}
+        swipe={createSwipe({
+          leading: [{id: 'unread', label: 'Unread', onActivate: vi.fn()}],
+        })}
       />,
     );
     const open = screen.getByTestId('open');
@@ -3038,7 +3080,7 @@ describe('swipe', () => {
             onClick={vi.fn()}
             data-testid="row"
             swipe={createSwipe({
-              leading: [{label: 'Unread', onActivate}],
+              leading: [{id: 'unread', label: 'Unread', onActivate}],
             })}
           />
         </div>,
@@ -3084,12 +3126,58 @@ describe('swipe', () => {
 
   it('swipes nothing for a value not made by createSwipe (spec:AST-057 FR1)', () => {
     const forged = {
-      leading: [{label: 'Unread', onActivate: vi.fn()}],
+      leading: [{id: 'unread', label: 'Unread', onActivate: vi.fn()}],
     } as unknown as Swipe;
     render(<Item label="A" data-testid="row" swipe={forged} />);
     const row = screen.getByTestId('row');
     expect(panelOf(row, 'leading')).toBeNull();
     expect(row.childElementCount).toBe(1);
+  });
+
+  describe('a swipe defined at module scope (spec:AST-057 FR1)', () => {
+    // One definition serves every row: each action's handler receives its id
+    // and the row's item key, so it needs no closure over a row.
+    const onArchive = vi.fn();
+    const mailSwipe = createSwipe({
+      leading: [{id: 'archive', label: 'Archive', onActivate: onArchive}],
+    });
+
+    it('hands each row’s onActivate the action’s id and that row’s itemKey', async () => {
+      onArchive.mockClear();
+      render(
+        <List>
+          <ListItem
+            label="First"
+            data-testid="first"
+            itemKey={7}
+            swipe={mailSwipe}
+          />
+          <ListItem
+            label="Second"
+            data-testid="second"
+            itemKey="b"
+            swipe={mailSwipe}
+          />
+        </List>,
+      );
+      for (const [testId, itemKey] of [
+        ['first', 7],
+        ['second', 'b'],
+      ] as const) {
+        const row = screen.getByTestId(testId);
+        layOut(row);
+        dragLeading(row, 45);
+        await settled();
+        expect(xOf(row)).toBe(72);
+        const archive = row.querySelector<HTMLButtonElement>(
+          '[data-swipe-panel="leading"] button',
+        );
+        expect(archive?.textContent).toBe('Archive');
+        fireEvent.click(archive as HTMLButtonElement);
+        expect(onArchive).toHaveBeenLastCalledWith({id: 'archive', itemKey});
+      }
+      expect(onArchive).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('a new value from an inline createSwipe call (spec:AST-057 FR11)', () => {
@@ -3108,16 +3196,26 @@ describe('swipe', () => {
       const first = vi.fn();
       const second = vi.fn();
       const {rerender} = render(
-        <InlineRow entries={[{label: 'Unread', onActivate: first}]} />,
+        <InlineRow
+          entries={[{id: 'unread', label: 'Unread', onActivate: first}]}
+        />,
       );
       const row = screen.getByTestId('row');
       layOut(row);
-      rerender(<InlineRow entries={[{label: 'Unread', onActivate: first}]} />);
+      rerender(
+        <InlineRow
+          entries={[{id: 'unread', label: 'Unread', onActivate: first}]}
+        />,
+      );
       expect(xOf(row)).toBe(0);
       dragLeading(row, 45);
       await settled();
       expect(xOf(row)).toBe(72);
-      rerender(<InlineRow entries={[{label: 'Unread', onActivate: second}]} />);
+      rerender(
+        <InlineRow
+          entries={[{id: 'unread', label: 'Unread', onActivate: second}]}
+        />,
+      );
       await settled();
       expect(xOf(row)).toBe(72);
       expect(panelOf(row, 'leading')).not.toHaveAttribute('inert');
@@ -3129,7 +3227,9 @@ describe('swipe', () => {
     it('keeps a row settling open open through a new value', async () => {
       const onActivate = vi.fn();
       const {rerender} = render(
-        <InlineRow entries={[{label: 'Unread', onActivate: vi.fn()}]} />,
+        <InlineRow
+          entries={[{id: 'unread', label: 'Unread', onActivate: vi.fn()}]}
+        />,
       );
       const row = screen.getByTestId('row');
       layOut(row);
@@ -3137,7 +3237,9 @@ describe('swipe', () => {
       // Settling open from the release, which already counts as open (the
       // settle itself is Item.sharedDrag.test.tsx's: jsdom has no animations).
       expect(panelOf(row, 'leading')).not.toHaveAttribute('inert');
-      rerender(<InlineRow entries={[{label: 'Unread', onActivate}]} />);
+      rerender(
+        <InlineRow entries={[{id: 'unread', label: 'Unread', onActivate}]} />,
+      );
       expect(panelOf(row, 'leading')).not.toHaveAttribute('inert');
       await settled();
       expect(xOf(row)).toBe(72);
@@ -3145,9 +3247,11 @@ describe('swipe', () => {
       expect(onActivate).toHaveBeenCalledTimes(1);
     });
 
-    it('repaints a changed entry list on an open row', async () => {
+    it('keeps an open row open when a new swipe value keeps its ids, repaints its entries, and hands the tapped one its id (spec:AST-057 FR1)', async () => {
       const {rerender} = render(
-        <InlineRow entries={[{label: 'Unread', onActivate: vi.fn()}]} />,
+        <InlineRow
+          entries={[{id: 'unread', label: 'Unread', onActivate: vi.fn()}]}
+        />,
       );
       const row = screen.getByTestId('row');
       layOut(row);
@@ -3155,10 +3259,40 @@ describe('swipe', () => {
       await settled();
       expect(xOf(row)).toBe(72);
       const onActivate = vi.fn();
-      rerender(<InlineRow entries={[{label: 'Read', onActivate}]} />);
+      rerender(
+        <InlineRow
+          entries={[{id: 'unread', label: 'Mark unread', onActivate}]}
+        />,
+      );
+      await settled();
+      expect(xOf(row)).toBe(72);
       expect(screen.queryByRole('button', {name: 'Unread'})).toBeNull();
-      fireEvent.click(screen.getByRole('button', {name: 'Read'}));
-      expect(onActivate).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole('button', {name: 'Mark unread'}));
+      // A plain Item has no item key.
+      expect(onActivate).toHaveBeenCalledExactlyOnceWith({
+        id: 'unread',
+        itemKey: undefined,
+      });
+    });
+
+    it('closes an open row when a new swipe value brings other ids (spec:AST-057 FR1)', async () => {
+      const {rerender} = render(
+        <InlineRow
+          entries={[{id: 'unread', label: 'Unread', onActivate: vi.fn()}]}
+        />,
+      );
+      const row = screen.getByTestId('row');
+      layOut(row);
+      dragLeading(row, 45);
+      await settled();
+      expect(xOf(row)).toBe(72);
+      rerender(
+        <InlineRow
+          entries={[{id: 'read', label: 'Read', onActivate: vi.fn()}]}
+        />,
+      );
+      await settled();
+      expect(xOf(row)).toBe(0);
     });
   });
 
@@ -3171,7 +3305,9 @@ describe('swipe', () => {
         <Item
           label="Warm"
           data-testid="warm"
-          swipeActions={{leading: [{label: 'Unread', onActivate: () => {}}]}}
+          swipeActions={{
+            leading: [{id: 'unread', label: 'Unread', onActivate: () => {}}],
+          }}
         />,
       );
       await swipeLayerLoaded();
@@ -3182,7 +3318,7 @@ describe('swipe', () => {
     });
 
     function renderDeprecatedRow({
-      leading = [{label: 'Unread', onActivate: vi.fn()}],
+      leading = [{id: 'unread', label: 'Unread', onActivate: vi.fn()}],
       behavior,
     }: {leading?: Entry[]; behavior?: 'reveal' | 'commit'} = {}) {
       render(
@@ -3202,7 +3338,7 @@ describe('swipe', () => {
     it('still rest a row open and fire a tapped entry, as released', async () => {
       const onActivate = vi.fn();
       const {row} = renderDeprecatedRow({
-        leading: [{label: 'Unread', onActivate}],
+        leading: [{id: 'unread', label: 'Unread', onActivate}],
       });
       dragLeading(row, 45);
       await settled();
@@ -3217,7 +3353,7 @@ describe('swipe', () => {
       const onActivate = vi.fn();
       const {row} = renderDeprecatedRow({
         behavior: 'commit',
-        leading: [{label: 'Unread', onActivate}],
+        leading: [{id: 'unread', label: 'Unread', onActivate}],
       });
       expect(panelOf(row, 'leading')).toHaveAttribute('aria-hidden', 'true');
       dragLeading(row, 220);
@@ -3228,7 +3364,7 @@ describe('swipe', () => {
     });
 
     it('give the root the style a row given swipe has', () => {
-      const leading = [{label: 'Unread', onActivate: vi.fn()}];
+      const leading = [{id: 'unread', label: 'Unread', onActivate: vi.fn()}];
       render(
         <>
           <Item label="A" data-testid="deprecated" swipeActions={{leading}} />
@@ -3245,7 +3381,9 @@ describe('swipe', () => {
     });
 
     it('keep the released role gate: a listitem is served, an option is not', async () => {
-      const actions = {leading: [{label: 'Unread', onActivate: vi.fn()}]};
+      const actions = {
+        leading: [{id: 'unread', label: 'Unread', onActivate: vi.fn()}],
+      };
       const {rerender} = render(
         <Item as="li" label="A" data-testid="row" swipeActions={actions} />,
       );
@@ -3272,9 +3410,13 @@ describe('swipe', () => {
             label="A"
             data-testid="row"
             swipe={createSwipe({
-              trailing: [{label: 'Archive', onActivate: vi.fn()}],
+              trailing: [
+                {id: 'archive', label: 'Archive', onActivate: vi.fn()},
+              ],
             })}
-            swipeActions={{leading: [{label: 'Unread', onActivate: ignored}]}}
+            swipeActions={{
+              leading: [{id: 'unread', label: 'Unread', onActivate: ignored}],
+            }}
             swipeBehavior="commit"
           />,
         );
@@ -3307,8 +3449,8 @@ describe('swipe', () => {
         renderDeprecatedRow({
           behavior: 'commit',
           leading: [
-            {label: 'Unread', onActivate: vi.fn()},
-            {label: 'Pin', onActivate: vi.fn()},
+            {id: 'unread', label: 'Unread', onActivate: vi.fn()},
+            {id: 'pin', label: 'Pin', onActivate: vi.fn()},
           ],
         });
         expect(warn).toHaveBeenCalledWith(

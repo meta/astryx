@@ -85,7 +85,7 @@ describe('Item and the swipe layer', () => {
         label="Inbox"
         data-testid="row"
         swipe={createSwipe({
-          trailing: [{label: 'Archive', onActivate: () => {}}],
+          trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
         })}
       />,
     );
@@ -103,7 +103,7 @@ describe('Item and the swipe layer', () => {
         label="Inbox"
         data-testid="row"
         swipe={createSwipe({
-          trailing: [{label: 'Archive', onActivate: () => {}}],
+          trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
         })}
       />,
     );
@@ -116,7 +116,7 @@ describe('Item and the swipe layer', () => {
   });
 
   it('gives a row the deprecated swipeActions the released row style at its first render, before its chunk loads', () => {
-    const entries = [{label: 'Archive', onActivate: () => {}}];
+    const entries = [{id: 'archive', label: 'Archive', onActivate: () => {}}];
     render(
       <>
         <Item
@@ -144,7 +144,9 @@ describe('Item and the swipe layer', () => {
       <Item
         label="Inbox"
         data-testid="row"
-        swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+        swipeActions={{
+          trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+        }}
       />,
     );
     const row = screen.getByTestId('row');

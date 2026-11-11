@@ -14,42 +14,47 @@ async function applyTransform(source) {
 const flat = text => text.replace(/\s+/g, ' ');
 
 describe('migrate-item-swipe-actions-to-swipe', () => {
-  it('rewrites an inline swipeActions object, merging swipeBehavior in place', async () => {
+  it('rewrites an inline swipeActions object, giving each entry with no id one from its side and place, and merging swipeBehavior in place', async () => {
     const output = flat(
       await applyTransform(`import {Item} from '@astryxdesign/core/Item';
-const a = <Item label="A" swipeActions={{trailing: [archive]}} swipeBehavior="commit" />;`),
+const a = <Item label="A" swipeActions={{trailing: [{label: 'Archive', onActivate: archive}, {id: 'remove', label: 'Delete', onActivate: remove}]}} swipeBehavior="commit" />;`),
     );
     expect(output).not.toContain('swipeActions=');
     expect(output).not.toContain('swipeBehavior=');
     expect(output).toContain(
       "import { createSwipe } from '@astryxdesign/core/Swipe';",
     );
-    expect(output).toContain(
-      "swipe={createSwipe({ trailing: [archive], swipeBehavior: 'commit' })}",
+    expect(output).toMatch(
+      /swipe=\{createSwipe\(\{ trailing: \[\{ id: 'trailing-0', label: 'Archive', onActivate: archive \}, \{id: 'remove', label: 'Delete', onActivate: remove\}\], swipeBehavior: 'commit' \}\)\}/,
     );
   });
 
   it('drops a static swipeBehavior="reveal", the default', async () => {
     const output = flat(
       await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
-const a = <ListItem label="A" swipeBehavior="reveal" swipeActions={{leading: [read]}} />;`),
+const a = <ListItem label="A" swipeBehavior="reveal" swipeActions={{leading: [{label: 'Read', onActivate: read}]}} />;`),
     );
-    expect(output).toContain('swipe={createSwipe({leading: [read]})}');
+    expect(output).toContain(
+      "swipe={createSwipe({leading: [{ id: 'leading-0', label: 'Read', onActivate: read }]})}",
+    );
     expect(output).not.toContain('reveal');
   });
 
-  it('guards a name, which may be undefined, and spreads it beside a swipeBehavior expression', async () => {
-    const output = flat(
-      await applyTransform(`import {Item, ListItem} from '@astryxdesign/core';
+  it('reports a value whose entries it cannot see, leaving it unchanged, once', async () => {
+    const source = `import {Item, ListItem} from '@astryxdesign/core';
 const a = <Item label="A" swipeActions={actions} />;
-const b = <ListItem label="B" swipeActions={row.actions} swipeBehavior={mode} />;`),
-    );
-    expect(output).toContain(
-      'swipe={actions ? createSwipe(actions) : undefined}',
-    );
-    expect(output).toContain(
-      'swipe={row.actions ? createSwipe({ ...row.actions, swipeBehavior: mode }) : undefined}',
-    );
+const b = <ListItem label="B" swipeActions={row.actions} swipeBehavior={mode} />;
+const c = <Item label="C" swipeActions={actionsFor(row)} />;
+const d = <Item label="D" swipeActions={{...base, trailing: [{label: 'Archive', onActivate: archive}]}} />;
+const e = <Item label="E" swipeActions={{trailing: [archive]}} />;
+const f = <Item label="F" swipeActions={{trailing: entries}} />;`;
+    const once = await applyTransform(source);
+    expect(once).not.toContain('@astryxdesign/core/Swipe');
+    expect(once.match(/swipeActions=/g)).toHaveLength(6);
+    expect(
+      once.match(/does not show every entry as an object literal/g),
+    ).toHaveLength(6);
+    expect(await applyTransform(once)).toBe(once);
   });
 
   it('follows aliases and namespace imports, and leaves other libraries alone', async () => {
@@ -57,13 +62,13 @@ const b = <ListItem label="B" swipeActions={row.actions} swipeBehavior={mode} />
       await applyTransform(`import {Item as Row} from '@astryxdesign/core/Item';
 import * as Core from '@astryxdesign/core';
 import {Item} from 'other-library';
-const a = <Row label="A" swipeActions={{trailing: [archive]}} />;
-const b = <Core.ListItem label="B" swipeActions={{trailing: [archive]}} />;
-const c = <Item label="C" swipeActions={{trailing: [archive]}} />;`),
+const a = <Row label="A" swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}} />;
+const b = <Core.ListItem label="B" swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}} />;
+const c = <Item label="C" swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}} />;`),
     );
     expect(output.match(/swipe=\{createSwipe/g)).toHaveLength(2);
     expect(output).toContain(
-      '<Item label="C" swipeActions={{trailing: [archive]}} />',
+      `<Item label="C" swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}} />`,
     );
   });
 
@@ -71,14 +76,16 @@ const c = <Item label="C" swipeActions={{trailing: [archive]}} />;`),
     const reused = flat(
       await applyTransform(`import {Item} from '@astryxdesign/core/Item';
 import {createSwipe as make} from '@astryxdesign/core/Swipe';
-const a = <Item label="A" swipeActions={{trailing: [archive]}} />;`),
+const a = <Item label="A" swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}} />;`),
     );
-    expect(reused).toContain('swipe={make({trailing: [archive]})}');
+    expect(reused).toContain(
+      "swipe={make({trailing: [{ id: 'trailing-0', label: 'Archive', onActivate: archive }]})}",
+    );
     expect(reused.match(/import/g)).toHaveLength(2);
     const aliased = flat(
       await applyTransform(`import {Item} from '@astryxdesign/core/Item';
 const createSwipe = () => null;
-const a = <Item label="A" swipeActions={{trailing: [archive]}} />;`),
+const a = <Item label="A" swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}} />;`),
     );
     expect(aliased).toContain(
       "import { createSwipe as createSwipe2 } from '@astryxdesign/core/Swipe';",
@@ -96,69 +103,36 @@ const b = <Item label="B" swipeBehavior="commit" />;`),
     expect(output).toContain('<Item label="B" />');
   });
 
-  it('reports a computed value and a row that spreads props, leaving them unchanged, once', async () => {
+  it('reports a row that spreads props, leaving it unchanged, once', async () => {
     const source = `import {Item} from '@astryxdesign/core/Item';
-const a = <Item label="A" swipeActions={actionsFor(row)} />;
-const b = <Item label="B" {...rest} swipeActions={{trailing: [archive]}} />;
+const b = <Item label="B" {...rest} swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}} />;
 const c = <Item label="C" {...rest} />;`;
     const once = await applyTransform(source);
-    expect(once).toContain('swipeActions={actionsFor(row)}');
-    expect(once).toContain('swipeActions={{trailing: [archive]}}');
-    expect(once.match(/this swipeActions value is computed/g)).toHaveLength(1);
+    expect(once).toContain(
+      "swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}}",
+    );
     expect(once.match(/spreads props that may carry them/g)).toHaveLength(2);
     expect(await applyTransform(once)).toBe(once);
   });
 
-  it('renames the four types, importing them from the Swipe entry when theirs lacks them', async () => {
-    const output = flat(
-      await applyTransform(`import {Item, type ItemSwipeAction} from '@astryxdesign/core/Item';
-import type {ItemSwipeActions, ItemSwipeBehavior as Mode} from '@astryxdesign/core';
+  it('leaves the ItemSwipe* types as they are: two are deprecated with the props, and two stay supported', async () => {
+    const source = `import {Item, type ItemSwipeAction} from '@astryxdesign/core/Item';
+import type {ItemSwipeActions, ItemSwipeActionVariant, ItemSwipeBehavior as Mode} from '@astryxdesign/core';
 const archive: ItemSwipeAction = {label: 'Archive', onActivate: () => {}};
-function rows(actions: ItemSwipeActions, mode: Mode) {}`),
-    );
-    expect(output).toContain("import { Item } from '@astryxdesign/core/Item';");
-    expect(output).toContain(
-      "import type {CreateSwipeOptions, SwipeBehavior as Mode} from '@astryxdesign/core';",
-    );
-    expect(output).toContain(
-      "import { type SwipeAction } from '@astryxdesign/core/Swipe';",
-    );
-    expect(output).toContain('const archive: SwipeAction =');
-    expect(output).toContain('actions: CreateSwipeOptions, mode: Mode');
+function rows(actions: ItemSwipeActions, variant: ItemSwipeActionVariant, mode: Mode) {}`;
+    expect(await applyTransform(source)).toBe(source);
   });
 
-  it('reports code that mutates the leading or trailing array of a value it retypes as CreateSwipeOptions, once', async () => {
-    const source = `import {Item, type ItemSwipeActions} from '@astryxdesign/core/Item';
-import type {ItemSwipeActions as Acts} from '@astryxdesign/core';
-const opts: ItemSwipeActions = {trailing: [archive]};
-opts.trailing.push(remove);
-function edit(actions: Acts, entry: unknown) {
-  actions.leading[0] = entry;
-  actions.trailing.sort();
-}
-const kept: ItemSwipeActions = {leading: [read]};
-const copy = [...kept.leading, remove];
-const other = {leading: [read]};
-other.leading.push(remove);`;
-    const once = await applyTransform(source);
-    expect(once.match(/leading and trailing are readonly/g)).toHaveLength(3);
-    expect(flat(once)).toContain(
-      'readonly SwipeAction[]; this mutates one. Build a new array instead',
-    );
-    expect(once).toContain('const copy = [...kept.leading, remove];');
-    expect(await applyTransform(once)).toBe(once);
-  });
-
-  it('changes nothing in a file with no deprecated swipe props or types', async () => {
+  it('changes nothing in a file with no deprecated swipe props', async () => {
     const source = `import {Item} from '@astryxdesign/core/Item';
 const a = <Item label="A" swipe={swipe} />;`;
     expect(await applyTransform(source)).toBe(source);
   });
 
-  it('is idempotent', async () => {
+  it('is idempotent, and its output parses', async () => {
     const once =
       await applyTransform(`import {Item, type ItemSwipeAction} from '@astryxdesign/core/Item';
-const a = <Item label="A" swipeActions={{trailing: [archive]}} swipeBehavior="commit" />;`);
+const a = <Item label="A" swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}} swipeBehavior="commit" />;`);
     expect(await applyTransform(once)).toBe(once);
     const jscodeshift = (await import('jscodeshift')).default;
     expect(() => jscodeshift.withParser('tsx')(once)).not.toThrow();

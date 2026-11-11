@@ -22,14 +22,14 @@ export const docs = {
   params: [
     {
       name: 'options.leading',
-      type: 'ReadonlyArray<SwipeAction>',
+      type: 'ReadonlyArray<SwipeAction<Id>>',
       description:
-        "The verbs a drag toward the inline end uncovers (rightward in left-to-right text), outermost last. Each is `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`: `label` names the state the verb reaches and is the button's accessible name, `onActivate` fires on a tap on a resting entry, on a full swipe, or on a `commit` release, once the row's content has left its box when the row slides out, and `hasRemoval` only says the row holds out after the action fires instead of springing back.",
+        "The verbs a drag toward the inline end uncovers (rightward in left-to-right text), outermost last. Each is `{id, label, icon?, onActivate, isDisabled?, variant?: ItemSwipeActionVariant, hasRemoval?}`: `id` names the action, and the swipe's type carries the ids, so an id it does not have fails to compile. `label` names the state the verb reaches and is the button's accessible name. `onActivate({id, itemKey})` fires on a tap on a resting entry, on a full swipe, or on a `commit` release, once the row's content has left its box when the row slides out; `itemKey` is the `ListItem`'s, `undefined` on a plain `Item`. `hasRemoval` only says the row holds out after the action fires instead of springing back.",
       required: false,
     },
     {
       name: 'options.trailing',
-      type: 'ReadonlyArray<SwipeAction>',
+      type: 'ReadonlyArray<SwipeAction<Id>>',
       description:
         'The verbs a drag toward the inline start uncovers (leftward in left-to-right text), outermost last, in the same shape as `leading`.',
       required: false,
@@ -46,14 +46,14 @@ export const docs = {
   returns: [
     {
       name: 'Swipe',
-      type: 'Swipe',
+      type: 'Swipe<Id>',
       description:
-        'The row’s swipe actions, with nothing in them to read. Pass the value as `swipe` on `Item` or `ListItem`; a value made any other way swipes nothing.',
+        'The row’s swipe actions, with nothing in them to read; its type carries the actions’ ids. Pass the value as `swipe` on `Item` or `ListItem`; a value made any other way swipes nothing. A new value with the same ids keeps an open row as it is, and one with other ids closes it.',
     },
   ],
   usage: {
     description:
-      'Gives a list row the verbs a sideways swipe uncovers, the way a mail row reveals Archive and Delete on a phone: `<ListItem label="Inbox" swipe={createSwipe({trailing: [{label: \'Archive\', onActivate: archive}]})} />`. A finger, a pen or a trackpad’s two-finger swipe drags the row; a mouse never does. A plain function, not a hook: call it at module scope or inline in a render, where a new value neither closes an open row nor restarts its settle, and it does no DOM work. The swipe’s code comes with this function, so a row given `swipe` is swipeable at its first paint and an app that never imports it ships none of it.',
+      'Gives a list row the verbs a sideways swipe uncovers, the way a mail row reveals Archive and Delete on a phone: `const mail = createSwipe({trailing: [{id: \'archive\', label: \'Archive\', onActivate: ({itemKey}) => archive(itemKey)}]})`, then `<ListItem label="Inbox" itemKey={message.id} swipe={mail} />`. A finger, a pen or a trackpad’s two-finger swipe drags the row; a mouse never does. A plain function, not a hook, pure and cheap: define the swipe once at module scope, where each handler reads the row from `itemKey`, or in `useMemo` when its handlers need component state. A new value with the same ids neither closes an open row nor restarts its settle, and it does no DOM work. The swipe’s code comes with this function, so a row given `swipe` is swipeable at its first paint and an app that never imports it ships none of it.',
     bestPractices: [
       {
         guidance: true,
@@ -109,7 +109,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Touch accelerator for list rows; a mouse never swipes. Callable inline; no DOM work; its code ships only where it is imported.',
+      'Touch accelerator for list rows; a mouse never swipes. Define once at module scope (handlers get {id, itemKey}) or in useMemo; no DOM work; its code ships only where it is imported.',
     bestPractices: [
       {guidance: true, description: 'Give each verb a second home in the row.'},
       {guidance: false, description: 'Several entries on a commit side.'},

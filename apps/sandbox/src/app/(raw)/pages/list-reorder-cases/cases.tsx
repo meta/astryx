@@ -76,6 +76,7 @@ function ReorderableList({hasSwipeActions}: {hasSwipeActions: boolean}) {
               ? createSwipe({
                   trailing: [
                     {
+                      id: 'archive',
                       label: 'Archive',
                       onActivate: () => setArchived(count => count + 1),
                     },

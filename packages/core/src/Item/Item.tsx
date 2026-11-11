@@ -77,10 +77,9 @@ import {isCoarsePointer} from '../utils/coarsePointer';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
   swipeHostOf,
-  type SwipeAction,
+  type ItemSwipeActionVariant,
+  type ItemSwipeBehavior,
   type Swipe,
-  type SwipeActionVariant,
-  type SwipeBehavior,
   type SwipeBridge,
 } from '../Swipe/swipeHost';
 // The deprecated path's row style: a row given `swipeActions` takes it from
@@ -102,20 +101,29 @@ const DeprecatedSwipeLayer = lazy(
 export type ItemAlign = 'center' | 'start' | 'first-line';
 export type ItemDensity = 'compact' | 'balanced' | 'spacious';
 
-/** @deprecated Use `SwipeActionVariant`. */
-export type ItemSwipeActionVariant = SwipeActionVariant;
+export type {ItemSwipeActionVariant, ItemSwipeBehavior};
 
-/** @deprecated Use `SwipeAction`. */
-export type ItemSwipeAction = SwipeAction;
+/**
+ * @deprecated Use `SwipeAction`, whose `id` is required and whose
+ * `onActivate` receives the action's `id` and the row's `itemKey`.
+ */
+export interface ItemSwipeAction {
+  id?: string;
+  label: string;
+  icon?: ReactNode;
+  onActivate: () => void | Promise<void>;
+  isDisabled?: boolean;
+  /** @default 'accent' */
+  variant?: ItemSwipeActionVariant;
+  /** @default false */
+  hasRemoval?: boolean;
+}
 
 /** @deprecated Use `CreateSwipeOptions`. */
 export interface ItemSwipeActions {
   leading?: ItemSwipeAction[];
   trailing?: ItemSwipeAction[];
 }
-
-/** @deprecated Use `SwipeBehavior`. */
-export type ItemSwipeBehavior = SwipeBehavior;
 
 export interface ItemProps extends BaseProps<HTMLElement> {
   /** Ref forwarded to the root element. */

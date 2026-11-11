@@ -3,10 +3,4 @@
 'use client';
 
 export {createSwipe} from './createSwipe';
-export type {
-  CreateSwipeOptions,
-  SwipeAction,
-  SwipeActionVariant,
-  Swipe,
-  SwipeBehavior,
-} from './swipeHost';
+export type {CreateSwipeOptions, SwipeAction, Swipe} from './swipeHost';

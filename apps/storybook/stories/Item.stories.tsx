@@ -614,6 +614,7 @@ export const SwipeActions: Story = {
             swipe={createSwipe({
               leading: [
                 {
+                  id: 'read',
                   label: row.isUnread ? 'Read' : 'Unread',
                   icon: <Icon icon={EnvelopeIcon} size="sm" />,
                   onActivate: () => toggleRead(row.id),
@@ -621,6 +622,7 @@ export const SwipeActions: Story = {
               ],
               trailing: [
                 {
+                  id: 'archive',
                   label: 'Archive',
                   icon: <Icon icon={ArchiveBoxIcon} size="sm" />,
                   onActivate: () => remove(row.id),
@@ -628,6 +630,7 @@ export const SwipeActions: Story = {
                   hasRemoval: true,
                 },
                 {
+                  id: 'delete',
                   label: 'Delete',
                   icon: <Icon icon={TrashIcon} size="sm" />,
                   onActivate: () => remove(row.id),
@@ -671,6 +674,7 @@ export const SwipeCommit: Story = {
             swipe={createSwipe({
               trailing: [
                 {
+                  id: 'dismiss',
                   label: 'Dismiss',
                   icon: <Icon icon={TrashIcon} size="sm" />,
                   onActivate: () => remove(row.id),

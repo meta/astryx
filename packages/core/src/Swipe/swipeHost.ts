@@ -4,7 +4,8 @@
  * @file swipeHost.ts
  * @input Nothing at runtime
  * @output Exports the public swipe-action types: SwipeAction,
- *   SwipeActionVariant, SwipeBehavior, CreateSwipeOptions and the opaque Swipe.
+ *   ItemSwipeActionVariant, ItemSwipeBehavior, CreateSwipeOptions and the
+ *   opaque Swipe.
  *   Also the contract between a row and the runtime a Swipe value carries
  *   (SwipeHost, SwipeRowFacts, SwipeAttachment), and the deprecated path's
  *   layer contract (SwipeBridge, SwipeLayerProps). makeSwipe makes a Swipe
@@ -22,15 +23,20 @@ import {realmValue, sharedKey} from '../utils/sharedRealm';
  * How the action looks: ordinary, the one you mean, the dangerous one. Not a
  * status set: a verb is not a state.
  */
-export type SwipeActionVariant = 'neutral' | 'accent' | 'destructive';
+export type ItemSwipeActionVariant = 'neutral' | 'accent' | 'destructive';
 
 /**
  * One verb. The row renders it as a filled surface in its `variant`'s colour
  * with the icon above the label. Every field is known before the gesture
- * begins.
+ * begins, so a definition can live at module scope.
  */
-export interface SwipeAction {
-  id?: string;
+export interface SwipeAction<Id extends string = string> {
+  /**
+   * Names the action. `onActivate` receives it, and a row keys its panel on
+   * its actions' ids. A new `swipe` value with the same ids keeps an open row
+   * open; one with other ids closes it.
+   */
+  id: Id;
   /**
    * The verb's name, and the button's accessible name while the row rests
    * open. Names the state the verb reaches ("Unread"), since the gesture
@@ -43,13 +49,16 @@ export interface SwipeAction {
    * Fires on a tap on a resting entry, on the full-swipe accelerator, or on a
    * `commit` release. When the row slides out (a full swipe, a commit, a tapped
    * entry with `hasRemoval`), it fires once the row's content has left its box.
-   * A tapped entry without `hasRemoval` fires at the tap. May return a Promise;
-   * the row waits for nothing. Not `onClick`: a commit fires with no click.
+   * A tapped entry without `hasRemoval` fires at the tap. It receives the
+   * action's `id` and the row's `itemKey`: a `ListItem`'s, or `undefined` on a
+   * plain `Item`. So one handler serves every row, with no closure over a row.
+   * May return a Promise; the row waits for nothing. Not `onClick`: a commit
+   * fires with no click.
    */
-  onActivate: () => void | Promise<void>;
+  onActivate: (event: {id: Id; itemKey: string | number | undefined}) => void;
   isDisabled?: boolean;
   /** @default 'accent' */
-  variant?: SwipeActionVariant;
+  variant?: ItemSwipeActionVariant;
   /**
    * After this action activates, the row holds out rather than springing
    * back. Only that: not a promise the caller removes the row, not an
@@ -71,18 +80,18 @@ export interface SwipeAction {
  * Nothing rests, and the panel is presentational. On a side with two or more
  * entries, `commit` fires none.
  */
-export type SwipeBehavior = 'reveal' | 'commit';
+export type ItemSwipeBehavior = 'reveal' | 'commit';
 
 /**
  * The verbs a sideways drag uncovers on each side, outermost last, and what a
  * swipe does on both sides. `leading` is uncovered by a drag toward the inline
  * end, `trailing` by one toward the inline start.
  */
-export interface CreateSwipeOptions {
+export interface CreateSwipeOptions<Id extends string = string> {
   /** Uncovered by a drag toward the inline end (rightward in LTR); outermost last. */
-  leading?: ReadonlyArray<SwipeAction>;
+  leading?: ReadonlyArray<SwipeAction<Id>>;
   /** Uncovered by a drag toward the inline start (leftward in LTR); outermost last. */
-  trailing?: ReadonlyArray<SwipeAction>;
+  trailing?: ReadonlyArray<SwipeAction<Id>>;
   /**
    * What a swipe does; applies to both sides. `reveal`: a release opens or
    * closes the row by its speed, then by half the panel's width. The open
@@ -95,19 +104,41 @@ export interface CreateSwipeOptions {
    * removal: the row springs back unless the entry has `hasRemoval`.
    * @default 'reveal'
    */
-  swipeBehavior?: SwipeBehavior;
+  swipeBehavior?: ItemSwipeBehavior;
 }
 
 /**
  * The configured swipe actions. Callers create it only through `createSwipe`
- * and pass it only to `swipe`; its contents are not public.
+ * and pass it only to `swipe`; its contents are not public. Its type carries
+ * its actions' ids.
  */
-export interface Swipe {
+export interface Swipe<Id extends string = string> {
   /**
    * A brand that is never present, so the swipe types of the package and a
    * swizzled copy match.
    */
   readonly '@astryxdesign/core/swipe/v1'?: never;
+  /** The actions' ids, for the type only: never present. */
+  readonly '@astryxdesign/core/swipe/ids'?: Id;
+}
+
+/**
+ * An action as a row runs it: one `createSwipe` made, or an entry of the
+ * deprecated `swipeActions`. Such an entry's `id` is optional, and its
+ * handler takes nothing. The row calls `onActivate` with the entry's `id` and
+ * its key.
+ */
+export interface SwipeEntry {
+  readonly id?: string;
+  readonly label: string;
+  readonly icon?: ReactNode;
+  onActivate(event: {
+    id: string;
+    itemKey: string | number | undefined;
+  }): unknown;
+  readonly isDisabled?: boolean;
+  readonly variant?: ItemSwipeActionVariant;
+  readonly hasRemoval?: boolean;
 }
 
 /**
@@ -122,6 +153,8 @@ export interface SwipeRowFacts {
   readonly isDelegate: boolean;
   /** The root is itself a link. */
   readonly isLinkRoot: boolean;
+  /** The `itemKey` of the `ListItem` the row is; a plain `Item` has none. */
+  readonly itemKey?: string | number;
 }
 
 /**
@@ -141,9 +174,9 @@ export interface SwipeAttachment {
  * value carries. A row hands that runtime its facts and its root.
  */
 export interface SwipeHost {
-  readonly leading: ReadonlyArray<SwipeAction>;
-  readonly trailing: ReadonlyArray<SwipeAction>;
-  readonly behavior: SwipeBehavior;
+  readonly leading: ReadonlyArray<SwipeEntry>;
+  readonly trailing: ReadonlyArray<SwipeEntry>;
+  readonly behavior: ItemSwipeBehavior;
   /** Whether swipe actions serve a row with these facts. */
   readonly serves: (facts: SwipeRowFacts) => boolean;
   /** Whether the row is served, and if so, how (createSwipe.ts). */
@@ -170,9 +203,11 @@ export interface SwipeLayerProps {
    * runtime instead (swipeRoots.ts).
    */
   onBridge?: (bridge: SwipeBridge | null) => void;
-  leading: ReadonlyArray<SwipeAction>;
-  trailing: ReadonlyArray<SwipeAction>;
-  behavior: SwipeBehavior;
+  leading: ReadonlyArray<SwipeEntry>;
+  trailing: ReadonlyArray<SwipeEntry>;
+  behavior: ItemSwipeBehavior;
+  /** The row's key, handed to each `onActivate`. */
+  itemKey?: string | number;
 }
 
 // The host of every Swipe value: the value itself carries nothing a caller
@@ -185,8 +220,10 @@ const hosts = realmValue(
 );
 
 /** Makes a Swipe value for a host (createSwipe.ts). */
-export function makeSwipe(host: SwipeHost): Swipe {
-  const swipe: Swipe = Object.freeze({});
+export function makeSwipe<Id extends string = string>(
+  host: SwipeHost,
+): Swipe<Id> {
+  const swipe: Swipe<Id> = Object.freeze({});
   hosts.set(swipe, host);
   return swipe;
 }
@@ -194,4 +231,22 @@ export function makeSwipe(host: SwipeHost): Swipe {
 /** The host of a Swipe value, or null for a value it did not make. */
 export function swipeHostOf(swipe: Swipe): SwipeHost | null {
   return hosts.get(swipe) ?? null;
+}
+
+/**
+ * The Swipe value a `ListItem` hands its `Item`: the same actions and runtime,
+ * attached with the row's key.
+ */
+export function swipeWithItemKey(
+  swipe: Swipe,
+  itemKey: string | number | undefined,
+): Swipe {
+  const host = swipeHostOf(swipe);
+  if (host == null || itemKey == null) {
+    return swipe;
+  }
+  return makeSwipe({
+    ...host,
+    attach: facts => host.attach({...facts, itemKey}),
+  });
 }

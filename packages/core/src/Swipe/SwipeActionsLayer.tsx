@@ -37,7 +37,7 @@
  * SYNC: the property names are useSwipeAction.ts's.
  */
 
-import {useEffect} from 'react';
+import {useEffect, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   fontWeightVars,
@@ -51,7 +51,7 @@ import {themeProps} from '../utils/themeProps';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {isSwipeOpen, useSwipeAction, type SwipeSide} from './useSwipeAction';
-import type {SwipeAction, SwipeLayerProps} from './swipeHost';
+import type {SwipeEntry, SwipeLayerProps} from './swipeHost';
 import {registerSwipeRoot} from './swipeRoots';
 
 // =============================================================================
@@ -247,11 +247,22 @@ const swipeTrackFillStyles = stylex.create({
  * The swipe half of a row with swipe actions: both panels, rendered into the
  * root the row owns, and the gesture that drives that root.
  */
+/** A row's actions as their ids, side by side: what tells a change of actions. */
+function idsKeyOf(
+  leading: ReadonlyArray<SwipeEntry>,
+  trailing: ReadonlyArray<SwipeEntry>,
+): string {
+  const ids = (entries: ReadonlyArray<SwipeEntry>) =>
+    entries.map(entry => entry.id ?? '').join('\u0000');
+  return `${ids(leading)}\u0001${ids(trailing)}`;
+}
+
 export default function SwipeActionsLayer({
   onBridge,
   leading,
   trailing,
   behavior,
+  itemKey,
 }: SwipeLayerProps) {
   // The hook keeps the newest of these callbacks, so each reads the entries
   // of the render it came from.
@@ -272,7 +283,7 @@ export default function SwipeActionsLayer({
       if (entry == null || entry.isDisabled === true) {
         return false;
       }
-      void entry.onActivate();
+      void entry.onActivate({id: entry.id ?? '', itemKey});
       return entry.hasRemoval === true;
     },
     sides: {
@@ -297,6 +308,18 @@ export default function SwipeActionsLayer({
       onBridge?.(null);
     };
   }, [onBridge, onKeyDown, rootRef]);
+  // A new swipe value with the same ids keeps the row as it is. One with
+  // other ids shows other actions, so an open row closes.
+  const idsKey = idsKeyOf(leading, trailing);
+  const idsRef = useRef(idsKey);
+  const {close} = swipe;
+  // The Effect syncs the row's open panel with the ids of its actions.
+  useEffect(() => {
+    if (idsRef.current !== idsKey) {
+      idsRef.current = idsKey;
+      close();
+    }
+  }, [close, idsKey]);
   // Open from the release that opens it (`isSwipeOpen`), as UIKit counts it:
   // an entry the finger can see while the row springs open is tappable.
   const isOpen = isSwipeOpen(swipe.state);
@@ -308,7 +331,7 @@ export default function SwipeActionsLayer({
   // reached. A mouse drag never opens it.
   const renderSwipePanel = (
     side: SwipeSide,
-    entries: ReadonlyArray<SwipeAction>,
+    entries: ReadonlyArray<SwipeEntry>,
   ) => {
     if (entries.length === 0) {
       return null;
@@ -322,7 +345,7 @@ export default function SwipeActionsLayer({
       swipe.state.side === side && cover != null && cover < entries.length
         ? cover
         : null;
-    const renderEntry = (entry: SwipeAction, index: number) => {
+    const renderEntry = (entry: SwipeEntry, index: number) => {
       const variant = entry.variant ?? 'accent';
       const key = entry.id ?? entry.label;
       // The outermost entry is the full swipe's moving part itself.
@@ -367,7 +390,7 @@ export default function SwipeActionsLayer({
           onClick={() =>
             swipe.activateEntry(
               () => {
-                void entry.onActivate();
+                void entry.onActivate({id: entry.id ?? '', itemKey});
               },
               entry.hasRemoval === true,
               index,

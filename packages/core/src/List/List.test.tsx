@@ -1127,7 +1127,9 @@ function DelegateSwipeRow() {
           Open
         </button>
       }
-      swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+      swipeActions={{
+        trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+      }}
     />
   );
 }
@@ -1184,12 +1186,16 @@ describe('List and swipe actions', () => {
         <ListItem
           label="Swipeable"
           onClick={() => {}}
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
         <ListItem label="Pressable" onClick={() => {}} />
         <ListItem
           label="Static"
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
         <ListItem
           label="Empty sides"
@@ -1236,7 +1242,9 @@ describe('List and swipe actions', () => {
         <ListItem
           label="Outside"
           onClick={() => {}}
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
       </ul>,
     );
@@ -1265,7 +1273,7 @@ describe('List and swipe actions', () => {
           label="A"
           data-testid="row"
           swipe={createSwipe({
-            trailing: [{label: 'Archive', onActivate: () => {}}],
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
             swipeBehavior: 'commit',
           })}
         />
@@ -1288,7 +1296,9 @@ describe('List and swipe actions', () => {
           label="A"
           data-testid="row"
           swipeBehavior="commit"
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
       </List>,
     );

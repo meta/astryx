@@ -17,8 +17,13 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {createSwipe} from './createSwipe';
 import {swipeHostOf, type Swipe} from './swipeHost';
 
-const archive = {label: 'Archive', onActivate: () => {}};
-const remove = {label: 'Delete', onActivate: () => {}, hasRemoval: true};
+const archive = {id: 'archive', label: 'Archive', onActivate: () => {}};
+const remove = {
+  id: 'delete',
+  label: 'Delete',
+  onActivate: () => {},
+  hasRemoval: true,
+};
 
 describe('createSwipe', () => {
   afterEach(() => {
@@ -133,7 +138,7 @@ describe('createSwipe', () => {
 describe('a swizzled copy of the swipe module', () => {
   it('finds the host of a Swipe value the package made, and the package finds its own', async () => {
     const swipe = createSwipe({
-      trailing: [{label: 'Archive', onActivate: () => {}}],
+      trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
     });
     vi.resetModules();
     const copy = await import('./swipeHost');
@@ -142,5 +147,46 @@ describe('a swizzled copy of the swipe module', () => {
     expect(copy.swipeHostOf(swipe)).not.toBeNull();
     // A value built by hand has no host in any copy.
     expect(copy.swipeHostOf(Object.freeze({}))).toBeNull();
+  });
+});
+
+describe('the ids a swipe carries in its type (spec:AST-057 FR1)', () => {
+  it('infers its actions’ ids as literals, and rejects an unknown id, a handler for fewer ids and an action with no id', () => {
+    const noop = () => {};
+    const mail = createSwipe({
+      trailing: [
+        {id: 'archive', label: 'Archive', onActivate: noop},
+        {id: 'delete', label: 'Delete', onActivate: noop},
+      ],
+    });
+    const typed: Swipe<'archive' | 'delete'> = mail;
+    // @ts-expect-error The swipe has no 'delte' action.
+    const misspelt: Swipe<'archive' | 'delte'> = mail;
+    createSwipe({
+      trailing: [
+        {
+          id: 'archive',
+          label: 'Archive',
+          onActivate: ({id}) => {
+            // @ts-expect-error An id the swipe does not have never matches.
+            expect(id === 'achive').toBe(false);
+          },
+        },
+      ],
+    });
+    const archiveOnly = (event: {
+      id: 'archive';
+      itemKey: string | number | undefined;
+    }) => event;
+    createSwipe({
+      trailing: [
+        {id: 'archive', label: 'Archive', onActivate: noop},
+        // @ts-expect-error This handler takes fewer ids than the swipe has.
+        {id: 'delete', label: 'Delete', onActivate: archiveOnly},
+      ],
+    });
+    // @ts-expect-error An action needs an id.
+    createSwipe({trailing: [{label: 'Archive', onActivate: noop}]});
+    expect([typed, misspelt]).toHaveLength(2);
   });
 });

@@ -132,6 +132,7 @@ function swipeFor(
   {remove, toggleRead}: MailActions,
 ): Swipe {
   const readEntry = {
+    id: 'read',
     label: message.isUnread ? 'Read' : 'Unread',
     icon: (
       <Icon
@@ -142,6 +143,7 @@ function swipeFor(
     onActivate: () => toggleRead(message.id),
   };
   const deleteEntry = {
+    id: 'delete',
     label: 'Delete',
     icon: <Icon icon={TrashIcon} size="sm" />,
     onActivate: () => remove(message.id),
@@ -154,6 +156,7 @@ function swipeFor(
         leading: [readEntry],
         trailing: [
           {
+            id: 'archive',
             label: 'Archive',
             icon: <Icon icon={ArchiveBoxIcon} size="sm" />,
             onActivate: () => remove(message.id),
