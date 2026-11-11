@@ -54,7 +54,6 @@ export type {RichTextEditorToolbarProps} from './RichTextEditorToolbar';
 export {RichTextEditorSelectionToolbar} from './RichTextEditorSelectionToolbar';
 export type {
   RichTextEditorSelectionToolbarFormat,
-  RichTextEditorSelectionToolbarPresentation,
   RichTextEditorSelectionToolbarProps,
 } from './RichTextEditorSelectionToolbar';
 

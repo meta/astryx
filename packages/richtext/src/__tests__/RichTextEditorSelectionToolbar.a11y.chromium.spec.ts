@@ -8,8 +8,9 @@
  *   selection without taking focus, renders beside the editable text, clears
  *   the selected words, and moves no block; that axe finds nothing in it;
  *   that Alt+F10 moves focus into it, arrow keys move along it, and Escape
- *   returns focus to the editor with the selection kept; and that under a
- *   coarse pointer it docks to the bottom of the viewport.
+ *   returns focus to the editor with the selection kept; that it is an
+ *   anchored layer that scrolls with the text and that a clipping ancestor
+ *   does not cut off; and that it fits a phone width.
  *
  * Run after building Storybook:
  *   pnpm storybook:build
@@ -114,12 +115,13 @@ test('the selection toolbar overlays the document beside a selection, and takes 
   expect(
     await toolbar.evaluate(element => {
       const root = document.querySelector('[contenteditable="true"]');
-      const surface = element.closest('[data-richtext-selection-toolbar]');
+      const layer = element.closest('[popover]');
       return (
         root != null &&
-        surface != null &&
-        !root.contains(surface) &&
-        surface.parentElement === root.parentElement
+        layer instanceof HTMLElement &&
+        !root.contains(layer) &&
+        layer.matches(':popover-open') &&
+        layer.style.getPropertyValue('position-anchor') !== ''
       );
     }),
   ).toBe(true);
@@ -143,7 +145,7 @@ test('the selection toolbar overlays the document beside a selection, and takes 
   expect(bar.x).toBeGreaterThanOrEqual(0);
   expect(bar.x + bar.width).toBeLessThanOrEqual(900);
   const axe = await new AxeBuilder({page})
-    .include('[data-richtext-selection-toolbar]')
+    .include('[role="toolbar"]')
     .analyze();
   expect(axe.violations).toEqual([]);
 
@@ -174,35 +176,77 @@ test('the selection toolbar overlays the document beside a selection, and takes 
   expect(await blocks()).toEqual(before);
 });
 
-test('the selection toolbar docks to the bottom of the viewport under a coarse pointer', async ({
+test('the selection toolbar scrolls with the text and is not clipped by an ancestor', async ({
+  page,
+}) => {
+  const editor = await openStory(page);
+  await editor.click();
+  await page.keyboard.type('Ship the launch notes today.');
+  await selectInEditor(page, 'Ship the launch notes today.', 9, 21);
+  const toolbar = page.getByRole('toolbar', {name: 'Selected text'});
+  await expect(toolbar).toBeVisible();
+  const selectionTop = () =>
+    page.evaluate(
+      () => document.getSelection()?.getRangeAt(0).getBoundingClientRect().top,
+    );
+
+  // A taller page, scrolled: the toolbar keeps its place beside the words.
+  await page.evaluate(() => {
+    document.body.style.minHeight = '3000px';
+  });
+  const before = (await boxOf(toolbar)).y - ((await selectionTop()) ?? 0);
+  await page.evaluate(() => window.scrollBy(0, 60));
+  await expect
+    .poll(async () => (await boxOf(toolbar)).y - ((await selectionTop()) ?? 0))
+    .toBeCloseTo(before, 0);
+
+  // An ancestor that clips its overflow leaves the toolbar whole: it is in
+  // the top layer, outside that box.
+  await editor.evaluate(element => {
+    const field = element.parentElement?.parentElement;
+    if (field != null) {
+      field.style.overflow = 'hidden';
+    }
+  });
+  // Its center still hits the toolbar itself, so nothing clipped it.
+  expect(
+    await toolbar.evaluate(element => {
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      );
+      return hit != null && element.contains(hit);
+    }),
+  ).toBe(true);
+});
+
+test('the selection toolbar fits a phone width and moves no block', async ({
   browser,
 }) => {
   const context = await browser.newContext({
     viewport: {width: 390, height: 640},
-    isMobile: true,
-    hasTouch: true,
   });
   const page = await context.newPage();
   try {
     const editor = await openStory(page);
-    await editor.tap();
+    await editor.click();
     await page.keyboard.type('Ship the launch notes today.');
+    const blockTop = () =>
+      editor
+        .locator('p')
+        .first()
+        .evaluate(p => p.getBoundingClientRect().top);
+    const before = await blockTop();
     await selectInEditor(page, 'Ship the launch notes today.', 9, 21);
     const toolbar = page.getByRole('toolbar', {name: 'Selected text'});
     await expect(toolbar).toBeVisible();
-    const surface = page.locator('[data-richtext-selection-toolbar="docked"]');
-    await expect(surface).toHaveCSS('position', 'fixed');
-    const box = await boxOf(surface);
-    const viewport = await page.evaluate(() => ({
-      height: window.visualViewport?.height ?? window.innerHeight,
-      width: window.visualViewport?.width ?? window.innerWidth,
-    }));
-    expect(Math.abs(box.y + box.height - viewport.height)).toBeLessThanOrEqual(
-      1,
-    );
-    expect(Math.abs(box.width - viewport.width)).toBeLessThanOrEqual(1);
+    const box = await boxOf(toolbar);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    expect(await blockTop()).toBe(before);
     const axe = await new AxeBuilder({page})
-      .include('[data-richtext-selection-toolbar]')
+      .include('[role="toolbar"]')
       .analyze();
     expect(axe.violations).toEqual([]);
   } finally {

@@ -4,22 +4,18 @@
 
 /**
  * @file RichTextEditorSelectionToolbar.tsx
- * @input Uses React (createPortal), @lexical/react (composer context),
- *   @lexical/link, @lexical/table, lexical, core Toolbar, ToggleButton,
- *   Divider, useMediaQuery, isImeKeyEvent, and useTranslator, plus the
- *   glyphs and inline formats RichTextEditorToolbar shares and the link
- *   popover in ToolbarLinkPopover.
+ * @input Uses React, @lexical/react (composer context), @lexical/link,
+ *   @lexical/table, lexical, core Layer, Toolbar, ToggleButton, Divider,
+ *   isImeKeyEvent, and useTranslator, plus the glyphs and inline formats
+ *   RichTextEditorToolbar shares and the link popover in ToolbarLinkPopover.
  * @output Exports RichTextEditorSelectionToolbar, the toolbar a non-collapsed
- *   selection shows while the editor is editable, its props and option
- *   types, and selectionToolbarPlacement, the geometry that places it.
+ *   selection shows while the editor is editable, and its props and format
+ *   type.
  * @position @astryxdesign/richtext. Rendered in RichTextEditor's `plugins`
- *   slot. It renders into the positioned element that holds the content
- *   editable, a sibling of the editable text as LinkCard is, never inside
- *   it, and overlays the document without reflowing it. Base props pass
- *   through to the core Toolbar it renders as Toolbar places them, as
- *   RichTextEditorToolbar's do. Under a coarse pointer it docks to the bottom
- *   of the visual viewport by default, and `presentation` keeps either
- *   surface on every device.
+ *   slot, beside the editable text. Its surface is an anchored layer: a
+ *   one-pixel anchor sits at the selection inside the positioned element
+ *   that holds the editable text, and CSS anchor positioning keeps the
+ *   toolbar on it, so the toolbar scrolls with the text and is never clipped.
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/index.ts (exports)
@@ -34,13 +30,11 @@ import * as stylex from '@stylexjs/stylex';
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
   type Ref,
 } from 'react';
-import {createPortal} from 'react-dom';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {$isLinkNode} from '@lexical/link';
 import {$isTableCellNode, $isTableSelection} from '@lexical/table';
@@ -56,11 +50,11 @@ import {
   type LexicalEditor,
 } from 'lexical';
 import type {BaseProps} from '@astryxdesign/core';
+import {useLayer, type LayerPlacement} from '@astryxdesign/core/Layer';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
 import {Divider} from '@astryxdesign/core/Divider';
 import {HStack} from '@astryxdesign/core/Layout';
-import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {isImeKeyEvent, isRenderable} from '@astryxdesign/core/utils';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {
@@ -85,14 +79,6 @@ import {
 
 /** One of the inline formats the toolbar offers. */
 export type RichTextEditorSelectionToolbarFormat = InlineFormat;
-
-/**
- * Where the toolbar sits: `floating` beside the selection, `docked` along the
- * bottom of the visual viewport, above an on-screen keyboard, or `adaptive`,
- * which docks under a coarse pointer and floats otherwise.
- */
-export type RichTextEditorSelectionToolbarPresentation =
-  'adaptive' | 'floating' | 'docked';
 
 export interface RichTextEditorSelectionToolbarProps extends BaseProps<HTMLDivElement> {
   /**
@@ -128,14 +114,6 @@ export interface RichTextEditorSelectionToolbarProps extends BaseProps<HTMLDivEl
    */
   hasNewTabLinks?: boolean;
   /**
-   * Where the toolbar sits. `adaptive` docks it to the bottom of the visual
-   * viewport under a coarse pointer, where the platform's own selection menu
-   * and handles sit beside the selection, and floats it beside the selection
-   * otherwise. `floating` and `docked` keep one surface on every device.
-   * @default 'adaptive'
-   */
-  presentation?: RichTextEditorSelectionToolbarPresentation;
-  /**
    * Extra controls at the end of the toolbar, after a divider: actions on
    * the selected text, such as Comment.
    */
@@ -148,81 +126,6 @@ const GAP = 8;
 const ALL_FORMATS: ReadonlyArray<InlineFormat> = INLINE_FORMAT_ACTIONS.map(
   action => action.format,
 );
-
-/** The viewport rectangle the toolbar may sit in. */
-export interface SelectionToolbarBand {
-  readonly top: number;
-  readonly bottom: number;
-  readonly left: number;
-  readonly right: number;
-}
-
-/**
- * Where the floating toolbar sits in its positioned container, as `top` and
- * `left` from the container's edges. Every rectangle is in viewport
- * coordinates.
- *
- * It sits by the selection's focus, the end the pointer let go of or the
- * caret end of a keyboard selection, on the side of that line away from the
- * selected text: above a one-line selection and above a selection made
- * upwards, below one made downwards over lines. When that side has no room
- * in the band it takes the other. It stays inside the band, centred on the
- * focus and clamped sideways.
- */
-export function selectionToolbarPlacement({
-  rects,
-  focus,
-  isBackward,
-  container,
-  band,
-  width,
-  height,
-}: {
-  /** The selection's line boxes. */
-  rects: ReadonlyArray<DOMRect>;
-  /** The selection's focus, a caret-wide box on its line. */
-  focus: DOMRect;
-  /** Whether the focus starts the selection rather than ends it. */
-  isBackward: boolean;
-  /** The element the toolbar is positioned in. */
-  container: DOMRect;
-  band: SelectionToolbarBand;
-  width: number;
-  height: number;
-}): {top: number; left: number} {
-  const top = Math.min(...rects.map(rect => rect.top));
-  const bottom = Math.max(...rects.map(rect => rect.bottom));
-  const isMultiline = bottom - top > focus.height * 1.5;
-  // Over several lines, the side away from the text clears the whole
-  // selection, not just the focus line.
-  const aboveTop =
-    (isMultiline && !isBackward ? top : focus.top) - height - GAP;
-  const belowTop = (isMultiline && isBackward ? bottom : focus.bottom) + GAP;
-  const fitsAbove = aboveTop >= band.top + GAP;
-  const fitsBelow = belowTop + height <= band.bottom - GAP;
-  const prefersBelow = isMultiline && !isBackward;
-  let viewportTop = prefersBelow
-    ? fitsBelow || !fitsAbove
-      ? belowTop
-      : aboveTop
-    : fitsAbove || !fitsBelow
-      ? aboveTop
-      : belowTop;
-  // Never out of view: a selection taller than the band keeps the toolbar at
-  // the band's edge nearest the focus.
-  viewportTop = Math.max(
-    band.top + GAP,
-    Math.min(viewportTop, band.bottom - height - GAP),
-  );
-  const viewportLeft = Math.max(
-    band.left + GAP,
-    Math.min(focus.left - width / 2, band.right - width - GAP),
-  );
-  return {
-    top: viewportTop - container.top,
-    left: viewportLeft - container.left,
-  };
-}
 
 /** The selection the toolbar is for: its identity, formats, and link. */
 interface SelectionFacts {
@@ -272,37 +175,6 @@ function sameFacts(a: SelectionFacts | null, b: SelectionFacts | null) {
     a.formats.size === b.formats.size &&
     [...a.formats].every(format => b.formats.has(format))
   );
-}
-
-/** The nearest scrolling ancestor of `element`, or null for the page. */
-function scrollerOf(element: HTMLElement): HTMLElement | null {
-  for (let at = element.parentElement; at != null; at = at.parentElement) {
-    const overflow = getComputedStyle(at).overflowY;
-    if (overflow === 'auto' || overflow === 'scroll') {
-      return at;
-    }
-  }
-  return null;
-}
-
-/** The viewport, inside the container's scroller when it has one. */
-function visibleBand(container: HTMLElement): SelectionToolbarBand {
-  const view = container.ownerDocument.defaultView;
-  const band = {
-    top: 0,
-    bottom: view?.innerHeight ?? 0,
-    left: 0,
-    right: view?.innerWidth ?? 0,
-  };
-  const scroller = scrollerOf(container);
-  if (scroller != null) {
-    const rect = scroller.getBoundingClientRect();
-    band.top = Math.max(band.top, rect.top);
-    band.bottom = Math.min(band.bottom, rect.bottom);
-    band.left = Math.max(band.left, rect.left);
-    band.right = Math.min(band.right, rect.right);
-  }
-  return band;
 }
 
 function isBackward(selection: Selection): boolean {
@@ -396,68 +268,53 @@ function measureSelection(
   };
 }
 
-type Place =
-  | {readonly kind: 'floating'; readonly top: number; readonly left: number}
-  | {
-      readonly kind: 'docked';
-      readonly top: number;
-      readonly left: number;
-      readonly width: number;
-    };
-
-function samePlace(previous: Place | null, next: Place | null): Place | null {
-  if (previous == null || next == null || previous.kind !== next.kind) {
-    return next;
-  }
-  const sameWidth =
-    previous.kind !== 'docked' ||
-    next.kind !== 'docked' ||
-    previous.width === next.width;
-  return previous.top === next.top && previous.left === next.left && sameWidth
-    ? previous
-    : next;
+/**
+ * Writes the anchor's box in the element that positions it: one pixel wide at
+ * the selection's focus, as tall as the selected lines. The toolbar is
+ * anchored to it with CSS, so this runs when the selection or the text's
+ * layout changes, never to follow a scroll. Returns the side to prefer: below
+ * a selection made downwards over lines, above any other.
+ */
+function placeAnchor(
+  anchor: HTMLElement,
+  container: HTMLElement,
+  measured: {
+    rects: ReadonlyArray<DOMRect>;
+    focus: DOMRect;
+    isBackward: boolean;
+  },
+): LayerPlacement {
+  const {rects, focus, isBackward} = measured;
+  const top = Math.min(...rects.map(rect => rect.top));
+  const bottom = Math.max(...rects.map(rect => rect.bottom));
+  const box = container.getBoundingClientRect();
+  const originTop = box.top + container.clientTop - container.scrollTop;
+  const originLeft = box.left + container.clientLeft - container.scrollLeft;
+  anchor.style.top = `${top - originTop}px`;
+  anchor.style.left = `${focus.left - originLeft}px`;
+  anchor.style.height = `${Math.max(bottom - top, 1)}px`;
+  const isMultiline = bottom - top > focus.height * 1.5;
+  return isMultiline && !isBackward ? 'below' : 'above';
 }
 
 const styles = stylex.create({
-  surface: {
-    zIndex: 2,
-    boxSizing: 'border-box',
-    // Its own width wherever it sits, so the width it is placed by holds.
-    width: 'max-content',
-  },
-  floating: {
+  // A one-pixel box at the selection. It owns a box because WebKit counts an
+  // empty anchor box as clipped, and the layer's default
+  // `position-visibility: anchors-visible` then hides the toolbar.
+  anchor: {
     position: 'absolute',
+    width: '1px',
+    pointerEvents: 'none',
+  },
+  surface: {
+    boxSizing: 'border-box',
+    width: 'max-content',
     maxWidth: 'min(100vw, 40rem)',
     padding: spacingVars['--spacing-0-5'],
     backgroundColor: colorVars['--color-background-popover'],
     borderRadius: radiusVars['--radius-container'],
     boxShadow: shadowVars['--shadow-med'],
   },
-  docked: {
-    position: 'fixed',
-    paddingInline: spacingVars['--spacing-2'],
-    // Clear of a home indicator when no keyboard is up.
-    paddingBlockEnd: 'env(safe-area-inset-bottom, 0px)',
-    backgroundColor: colorVars['--color-background-surface'],
-    borderBlockStartWidth: 1,
-    borderBlockStartStyle: 'solid',
-    borderBlockStartColor: colorVars['--color-border'],
-    boxShadow: shadowVars['--shadow-med'],
-  },
-  unplaced: {
-    visibility: 'hidden',
-  },
-  floatingPlace: (top: number, left: number) => ({
-    top,
-    // eslint-disable-next-line @astryx/no-physical-properties -- intentional: `left` is measured from the selection's boxes, which are physical; `insetInlineStart` would flip the anchor edge in RTL.
-    left,
-  }),
-  dockedPlace: (top: number, left: number, width: number) => ({
-    top,
-    // eslint-disable-next-line @astryx/no-physical-properties -- intentional: the visual viewport's offset is physical in either direction.
-    left,
-    width,
-  }),
   divider: {
     alignSelf: 'stretch',
     height: 'auto',
@@ -475,8 +332,7 @@ function isAltF10(event: KeyboardEvent): boolean {
 }
 
 /**
- * A toolbar that floats beside a non-collapsed selection while the editor is
- * editable: bold, italic, underline, strikethrough, inline code, and Link,
+ * A toolbar beside a non-collapsed selection while the editor is editable: bold, italic, underline, strikethrough, inline code, and Link,
  * the formatting `RichTextEditorToolbar` offers, with the same commands,
  * glyphs, and link popover, plus any `endContent`. It never takes focus when
  * it appears. Alt+F10 (⌥F10) moves focus into it, arrow keys move along it,
@@ -504,7 +360,6 @@ export function RichTextEditorSelectionToolbar({
   formats = ALL_FORMATS,
   hasLink = true,
   hasNewTabLinks = true,
-  presentation = 'adaptive',
   endContent,
   xstyle,
   ref,
@@ -516,11 +371,6 @@ export function RichTextEditorSelectionToolbar({
   const label =
     labelFromProps ?? t('@astryx.richTextEditor.selectionToolbar.label');
   const formatLabels = inlineFormatLabels(t);
-  const isCoarse = useMediaQuery('(pointer: coarse)');
-  const isDocked =
-    presentation === 'docked' || (presentation === 'adaptive' && isCoarse);
-  // Docked controls take touch-sized targets.
-  const size = isDocked ? 'md' : 'sm';
 
   const [root, setRoot] = useState(() => editor.getRootElement());
   const [isEditable, setIsEditable] = useState(() => editor.isEditable());
@@ -530,21 +380,54 @@ export function RichTextEditorSelectionToolbar({
   const factsRef = useRef(facts);
   const [isFocused, setIsFocused] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [place, setPlace] = useState<Place | null>(null);
+  const [placement, setPlacement] = useState<LayerPlacement>('above');
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLSpanElement | null>(null);
   const linkButtonRef = useRef<HTMLButtonElement>(null);
   // The selection as it was when focus left the editor for the toolbar,
   // which Escape gives back.
   const heldSelectionRef = useRef<BaseSelection | null>(null);
   const link = useToolbarLink(editor, {hasNewTabLinks});
   const {toggle: toggleLink} = link;
+  const layer = useLayer({mode: 'context'});
+  const {ref: anchorLayerTo, show: showLayer, hide: hideLayer} = layer;
 
   const isShown =
     isEditable && facts != null && !isDragging && (isFocused || link.isOpen);
-  const isShownRef = useRef(isShown);
-  useEffect(() => {
-    isShownRef.current = isShown;
-  }, [isShown]);
+
+  // Moves the anchor to the selection. A selection the page no longer shows
+  // in the editor (focus is in the link field) keeps the anchor where it is.
+  const placeAtSelection = useCallback(
+    (current: SelectionFacts | null) => {
+      const anchor = anchorRef.current;
+      const container = anchor?.parentElement;
+      const editorRoot = editor.getRootElement();
+      if (
+        current == null ||
+        anchor == null ||
+        container == null ||
+        editorRoot == null
+      ) {
+        return;
+      }
+      const measured = measureSelection(editor, editorRoot, current);
+      if (measured != null) {
+        setPlacement(placeAnchor(anchor, container, measured));
+      }
+    },
+    [editor],
+  );
+
+  const setAnchor = useCallback(
+    (node: HTMLSpanElement | null) => {
+      anchorRef.current = node;
+      anchorLayerTo(node);
+      if (node != null) {
+        placeAtSelection(factsRef.current);
+      }
+    },
+    [anchorLayerTo, placeAtSelection],
+  );
 
   useEffect(
     () =>
@@ -557,10 +440,24 @@ export function RichTextEditorSelectionToolbar({
             factsRef.current = next;
             setFacts(next);
           }
+          placeAtSelection(next);
         }),
       ),
-    [editor],
+    [editor, placeAtSelection],
   );
+
+  // Text that wraps differently (a narrower field, a font that loads) moves
+  // the selection inside the editor, so the anchor moves with it.
+  useEffect(() => {
+    if (root == null || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const observer = new ResizeObserver(() =>
+      placeAtSelection(factsRef.current),
+    );
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [root, placeAtSelection]);
 
   // Focus in the editor, or in anything rendered beside it (this toolbar,
   // its link popover), keeps the toolbar.
@@ -610,6 +507,15 @@ export function RichTextEditorSelectionToolbar({
     };
   }, [editor, root]);
 
+  // Shows the anchored layer while the toolbar is shown.
+  useEffect(() => {
+    if (!isShown) {
+      return;
+    }
+    showLayer();
+    return () => hideLayer();
+  }, [isShown, showLayer, hideLayer]);
+
   const focusToolbar = useCallback((): boolean => {
     const toolbar = surfaceRef.current?.querySelector('[role="toolbar"]');
     const target =
@@ -622,134 +528,51 @@ export function RichTextEditorSelectionToolbar({
     return true;
   }, []);
 
-  useEffect(
-    () =>
-      mergeRegister(
-        // Alt+F10 (⌥F10), the ARIA toolbar key, moves focus from the
-        // selection into the toolbar.
-        editor.registerCommand(
-          KEY_DOWN_COMMAND,
-          event => {
-            if (!isAltF10(event) || !isShownRef.current) {
-              return false;
-            }
-            heldSelectionRef.current = editor
-              .getEditorState()
-              .read(() => $getSelection()?.clone() ?? null);
-            if (!focusToolbar()) {
-              return false;
-            }
-            event.preventDefault();
-            return true;
-          },
-          COMMAND_PRIORITY_HIGH,
-        ),
-        // Cmd/Ctrl+K opens this toolbar's link popover only when nothing else
-        // took it first: RichTextEditorToolbar and its link card do.
-        editor.registerCommand(
-          KEY_DOWN_COMMAND,
-          event => {
-            if (
-              !hasLink ||
-              !isShownRef.current ||
-              factsRef.current?.isTable !== false ||
-              !isInsertLink(event)
-            ) {
-              return false;
-            }
-            event.preventDefault();
-            toggleLink();
-            return true;
-          },
-          COMMAND_PRIORITY_LOW,
-        ),
-      ),
-    [editor, focusToolbar, hasLink, toggleLink],
-  );
-
-  const measure = useCallback((): Place | null => {
-    const surface = surfaceRef.current;
-    const container = root?.parentElement;
-    const current = factsRef.current;
-    if (
-      surface == null ||
-      container == null ||
-      root == null ||
-      current == null
-    ) {
-      return null;
-    }
-    if (isDocked) {
-      const view = container.ownerDocument.defaultView;
-      const viewport = view?.visualViewport;
-      const top = viewport?.offsetTop ?? 0;
-      const height = viewport?.height ?? view?.innerHeight ?? 0;
-      return {
-        kind: 'docked',
-        top: top + height - surface.offsetHeight,
-        left: viewport?.offsetLeft ?? 0,
-        width: viewport?.width ?? view?.innerWidth ?? 0,
-      };
-    }
-    const measured = measureSelection(editor, root, current);
-    if (measured == null) {
-      return null;
-    }
-    return {
-      kind: 'floating',
-      ...selectionToolbarPlacement({
-        ...measured,
-        container: container.getBoundingClientRect(),
-        band: visibleBand(container),
-        width: surface.offsetWidth,
-        height: surface.offsetHeight,
-      }),
-    };
-  }, [editor, isDocked, root]);
-
-  // Placed before it paints, and again as the selection or the page moves.
-  useLayoutEffect(() => {
+  // The toolbar's keys, registered with the editor only while it shows.
+  useEffect(() => {
     if (!isShown) {
       return;
     }
-    const next = measure();
-    if (next != null) {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- places the toolbar from a layout measurement before it paints
-      setPlace(previous => samePlace(previous, next));
-    }
-  }, [facts, isShown, measure]);
-
-  useEffect(() => {
-    if (!isShown || root == null) {
-      return;
-    }
-    const view = root.ownerDocument.defaultView;
-    let frame = 0;
-    const schedule = () => {
-      if (frame !== 0) {
-        return;
-      }
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        const next = measure();
-        if (next != null) {
-          setPlace(previous => samePlace(previous, next));
-        }
-      });
-    };
-    const viewport = view?.visualViewport;
-    view?.addEventListener('resize', schedule);
-    view?.addEventListener('scroll', schedule, true);
-    viewport?.addEventListener('resize', schedule);
-    viewport?.addEventListener('scroll', schedule);
-    return () => {
-      view?.removeEventListener('resize', schedule);
-      view?.removeEventListener('scroll', schedule, true);
-      viewport?.removeEventListener('resize', schedule);
-      viewport?.removeEventListener('scroll', schedule);
-      cancelAnimationFrame(frame);
-    };
-  }, [isShown, measure, root]);
+    return mergeRegister(
+      // Alt+F10 (⌥F10), the ARIA toolbar key, moves focus from the
+      // selection into the toolbar.
+      editor.registerCommand(
+        KEY_DOWN_COMMAND,
+        event => {
+          if (!isAltF10(event)) {
+            return false;
+          }
+          heldSelectionRef.current = editor
+            .getEditorState()
+            .read(() => $getSelection()?.clone() ?? null);
+          if (!focusToolbar()) {
+            return false;
+          }
+          event.preventDefault();
+          return true;
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+      // Cmd/Ctrl+K opens this toolbar's link popover only when nothing else
+      // took it first: RichTextEditorToolbar and its link card do.
+      editor.registerCommand(
+        KEY_DOWN_COMMAND,
+        event => {
+          if (
+            !hasLink ||
+            factsRef.current?.isTable !== false ||
+            !isInsertLink(event)
+          ) {
+            return false;
+          }
+          event.preventDefault();
+          toggleLink();
+          return true;
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+    );
+  }, [editor, focusToolbar, hasLink, isShown, toggleLink]);
 
   const returnToEditor = () => {
     const held = heldSelectionRef.current;
@@ -763,101 +586,93 @@ export function RichTextEditorSelectionToolbar({
     editor.focus();
   };
 
-  const container = root?.parentElement;
-  if (!isShown || container == null) {
-    return null;
-  }
   const isTable = facts?.isTable === true;
-  const placed =
-    place != null && place.kind === (isDocked ? 'docked' : 'floating');
-  return createPortal(
-    <div
-      ref={surfaceRef}
-      data-richtext-selection-toolbar={isDocked ? 'docked' : 'floating'}
-      // Pressing a control keeps the editor's focus and selection.
-      onMouseDown={event => {
-        if (!(event.target instanceof HTMLInputElement)) {
-          event.preventDefault();
-        }
-      }}
-      onKeyDown={event => {
-        // Escape that ends an IME composition is the input method's, and
-        // one the link form claimed is the form's.
-        if (
-          event.key !== 'Escape' ||
-          event.defaultPrevented ||
-          isImeKeyEvent(event.nativeEvent)
-        ) {
-          return;
-        }
-        event.preventDefault();
-        returnToEditor();
-      }}
-      {...stylex.props(
-        styles.surface,
-        isDocked ? styles.docked : styles.floating,
-        !placed && styles.unplaced,
-        placed &&
-          (place.kind === 'docked'
-            ? styles.dockedPlace(place.top, place.left, place.width)
-            : styles.floatingPlace(place.top, place.left)),
-      )}>
-      <Toolbar
-        {...rest}
-        ref={ref}
-        label={label}
-        size={size}
-        xstyle={xstyle}
-        // eslint-disable-next-line @astryx/no-hardcoded-i18n-string -- aria-keyshortcuts takes ARIA key names, which are not translated
-        aria-keyshortcuts="Alt+F10"
-        startContent={
-          <HStack gap={1}>
-            {formats.map(format => (
-              <ToggleButton
-                key={format}
-                label={formatLabels[format]}
-                icon={icon(format)}
-                size={size}
-                isIconOnly
-                isPressed={facts?.formats.has(format) ?? false}
-                onPressedChange={() => formatSelection(editor, format)}
-              />
-            ))}
+  return (
+    <>
+      <span ref={setAnchor} aria-hidden {...stylex.props(styles.anchor)} />
+      {isShown &&
+        layer.render(
+          <div
+            ref={surfaceRef}
+            // Pressing a control keeps the editor's focus and selection.
+            onMouseDown={event => {
+              if (!(event.target instanceof HTMLInputElement)) {
+                event.preventDefault();
+              }
+            }}
+            onKeyDown={event => {
+              // Escape that ends an IME composition is the input method's,
+              // and one the link form claimed is the form's.
+              if (
+                event.key !== 'Escape' ||
+                event.defaultPrevented ||
+                isImeKeyEvent(event.nativeEvent)
+              ) {
+                return;
+              }
+              event.preventDefault();
+              returnToEditor();
+            }}
+            {...stylex.props(styles.surface)}>
+            <Toolbar
+              {...rest}
+              ref={ref}
+              label={label}
+              size="sm"
+              xstyle={xstyle}
+              // eslint-disable-next-line @astryx/no-hardcoded-i18n-string -- aria-keyshortcuts takes ARIA key names, which are not translated
+              aria-keyshortcuts="Alt+F10"
+              startContent={
+                <HStack gap={1}>
+                  {formats.map(format => (
+                    <ToggleButton
+                      key={format}
+                      label={formatLabels[format]}
+                      icon={icon(format)}
+                      size="sm"
+                      isIconOnly
+                      isPressed={facts?.formats.has(format) ?? false}
+                      onPressedChange={() => formatSelection(editor, format)}
+                    />
+                  ))}
+                  {hasLink && !isTable && (
+                    <ToggleButton
+                      ref={linkButtonRef}
+                      label={t('@astryx.richTextEditor.toolbar.link')}
+                      icon={icon('link')}
+                      size="sm"
+                      isIconOnly
+                      isPressed={facts?.isLink === true || link.isOpen}
+                    />
+                  )}
+                  {isRenderable(endContent) && (
+                    <>
+                      <Divider orientation="vertical" xstyle={styles.divider} />
+                      {endContent}
+                    </>
+                  )}
+                </HStack>
+              }
+            />
+            {/* A sibling of the toolbar, not inside it: the toolbar is one
+                roving tab stop, which would leave the form's controls out of
+                Tab. */}
             {hasLink && !isTable && (
-              <ToggleButton
-                ref={linkButtonRef}
-                label={t('@astryx.richTextEditor.toolbar.link')}
-                icon={icon('link')}
-                size={size}
-                isIconOnly
-                isPressed={facts?.isLink === true || link.isOpen}
+              <ToolbarLinkPopover
+                link={link}
+                anchorRef={linkButtonRef}
+                size="sm"
+                icons={{
+                  applyLink: icon('applyLink'),
+                  removeLink: icon('removeLink'),
+                  cancel: icon('cancel'),
+                }}
               />
             )}
-            {isRenderable(endContent) && (
-              <>
-                <Divider orientation="vertical" xstyle={styles.divider} />
-                {endContent}
-              </>
-            )}
-          </HStack>
-        }
-      />
-      {/* A sibling of the toolbar, not inside it: the toolbar is one roving
-          tab stop, which would leave the form's controls out of Tab. */}
-      {hasLink && !isTable && (
-        <ToolbarLinkPopover
-          link={link}
-          anchorRef={linkButtonRef}
-          size={size}
-          icons={{
-            applyLink: icon('applyLink'),
-            removeLink: icon('removeLink'),
-            cancel: icon('cancel'),
-          }}
-        />
-      )}
-    </div>,
-    container,
+          </div>,
+          {placement, alignment: 'center', offset: GAP},
+        )}
+    </>
   );
 }
 

@@ -3,13 +3,12 @@
 /**
  * @file RichTextEditorSelectionToolbar.test.tsx
  * @input Uses vitest, @testing-library/react, Lexical, @lexical/table,
- *   RichTextEditor, and RichTextEditorSelectionToolbar with its placement
- *   geometry
+ *   RichTextEditor, and RichTextEditorSelectionToolbar
  * @output Tests for the toolbar a non-collapsed selection shows while the
  *   editor is editable: when it shows and hides, that it never takes focus,
  *   its controls and their order, formatting, its link popover, Alt+F10,
- *   arrow keys and Escape, table selections, where it renders, its docked
- *   presentation, and the read-only and disabled editors that show none.
+ *   arrow keys and Escape, table selections, its anchored layer, and the
+ *   read-only and disabled editors that show none.
  * @position Testing; validates RichTextEditorSelectionToolbar.tsx
  */
 
@@ -35,10 +34,10 @@ import {
   type TextNode,
 } from 'lexical';
 import {RichTextEditor, type RichTextEditorProps} from './RichTextEditor';
+import {editorStateJSONToMarkdown} from './markdownSerializers';
 import {RichTextEditorToolbar} from './RichTextEditorToolbar';
 import {
   RichTextEditorSelectionToolbar,
-  selectionToolbarPlacement,
   type RichTextEditorSelectionToolbarProps,
 } from './RichTextEditorSelectionToolbar';
 
@@ -130,7 +129,7 @@ function collapse(editor: LexicalEditor) {
   });
 }
 
-const bar = () => screen.queryByRole('toolbar', {name: 'Selected text'});
+const bar = () => screen.queryByRole('toolbar', {name: 'Selected text', ...h});
 const labels = (toolbar: HTMLElement) =>
   Array.from(toolbar.querySelectorAll('button')).map(button =>
     button.getAttribute('aria-label'),
@@ -138,7 +137,22 @@ const labels = (toolbar: HTMLElement) =>
 const selectedText = () => document.getSelection()?.toString() ?? '';
 
 describe('RichTextEditorSelectionToolbar', () => {
-  it('floats beside a non-collapsed selection, outside the editable text, without taking focus', async () => {
+  it('adds no content: the value exports the same Markdown while it shows', async () => {
+    const editor = await renderEditor();
+    await seed(editor);
+    const before = editorStateJSONToMarkdown(
+      JSON.stringify(editor.getEditorState().toJSON()),
+    );
+    await screen.findByRole('toolbar', {name: 'Selected text', ...h});
+    expect(
+      editorStateJSONToMarkdown(
+        JSON.stringify(editor.getEditorState().toJSON()),
+      ),
+    ).toBe(before);
+    expect(before).toBe('Ship the launch notes today.');
+  });
+
+  it('sits beside a non-collapsed selection as an anchored layer, outside the editable text, without taking focus', async () => {
     const editor = await renderEditor();
     await seed(editor, 2, 2);
     expect(bar()).toBeNull();
@@ -146,14 +160,26 @@ describe('RichTextEditorSelectionToolbar', () => {
     await seed(editor);
     const toolbar = await screen.findByRole('toolbar', {
       name: 'Selected text',
+      ...h,
     });
     const root = editor.getRootElement();
     expect(document.activeElement).toBe(root);
     expect(root?.contains(toolbar)).toBe(false);
-    // Rendered beside the editable text, in the element that positions it.
-    const surface = toolbar.closest('[data-richtext-selection-toolbar]');
-    expect(surface?.parentElement).toBe(root?.parentElement);
-    expect(getComputedStyle(surface as Element).position).toBe('absolute');
+    // An anchored layer: the surface is a popover, and its CSS anchor is a
+    // one-pixel box beside the editable text, in the element that positions
+    // it.
+    const layer = toolbar.closest('[popover]') as HTMLElement | null;
+    expect(layer).not.toBeNull();
+    const anchorName = layer?.style.getPropertyValue('position-anchor');
+    expect(anchorName).not.toBe('');
+    const anchor = Array.from(root?.parentElement?.children ?? []).find(
+      element =>
+        (
+          (element as HTMLElement).style as unknown as Record<string, string>
+        ).anchorName?.includes(anchorName ?? '-'),
+    );
+    expect(anchor).toBeDefined();
+    expect(root?.contains(anchor as Node)).toBe(false);
 
     collapse(editor);
     await waitFor(() => expect(bar()).toBeNull());
@@ -166,6 +192,7 @@ describe('RichTextEditorSelectionToolbar', () => {
     await seed(editor);
     const toolbar = await screen.findByRole('toolbar', {
       name: 'Selected text',
+      ...h,
     });
     expect(labels(toolbar)).toEqual([
       'Bold',
@@ -184,7 +211,7 @@ describe('RichTextEditorSelectionToolbar', () => {
       bar: {formats: ['italic', 'bold'], hasLink: false, label: 'Format'},
     });
     await seed(editor);
-    const toolbar = await screen.findByRole('toolbar', {name: 'Format'});
+    const toolbar = await screen.findByRole('toolbar', {name: 'Format', ...h});
     expect(labels(toolbar)).toEqual(['Italic', 'Bold']);
   });
 
@@ -193,6 +220,7 @@ describe('RichTextEditorSelectionToolbar', () => {
     await seed(editor);
     const toolbar = await screen.findByRole('toolbar', {
       name: 'Selected text',
+      ...h,
     });
     const bold = toolbar.querySelector(
       'button[aria-label="Bold"]',
@@ -218,6 +246,7 @@ describe('RichTextEditorSelectionToolbar', () => {
     await seed(editor);
     const toolbar = await screen.findByRole('toolbar', {
       name: 'Selected text',
+      ...h,
     });
     fireEvent.click(
       toolbar.querySelector('button[aria-label="Link"]') as HTMLButtonElement,
@@ -251,6 +280,7 @@ describe('RichTextEditorSelectionToolbar', () => {
     await seed(editor);
     const toolbar = await screen.findByRole('toolbar', {
       name: 'Selected text',
+      ...h,
     });
     expect(toolbar).toHaveAttribute('aria-keyshortcuts', 'Alt+F10');
     const root = editor.getRootElement() as HTMLElement;
@@ -278,6 +308,7 @@ describe('RichTextEditorSelectionToolbar', () => {
     await seed(editor);
     const toolbar = await screen.findByRole('toolbar', {
       name: 'Selected text',
+      ...h,
     });
     const italic = toolbar.querySelector(
       'button[aria-label="Italic"]',
@@ -337,6 +368,7 @@ describe('RichTextEditorSelectionToolbar', () => {
     await act(async () => {});
     const toolbar = await screen.findByRole('toolbar', {
       name: 'Selected text',
+      ...h,
     });
     expect(labels(toolbar)).not.toContain('Link');
     fireEvent.click(
@@ -378,6 +410,7 @@ describe('RichTextEditorSelectionToolbar', () => {
     await seed(editor);
     const toolbar = await screen.findByRole('toolbar', {
       name: 'Selected text',
+      ...h,
     });
     act(() => {
       fireEvent.keyDown(editor.getRootElement() as HTMLElement, {
@@ -399,6 +432,7 @@ describe('RichTextEditorSelectionToolbar', () => {
     await seed(editor);
     const toolbar = await screen.findByRole('toolbar', {
       name: 'Selected text',
+      ...h,
     });
     act(() => {
       fireEvent.keyDown(editor.getRootElement() as HTMLElement, {
@@ -417,130 +451,5 @@ describe('RichTextEditorSelectionToolbar', () => {
     expect(
       toolbar.querySelector('button[aria-label="Link"]'),
     ).not.toHaveAttribute('aria-expanded', 'true');
-  });
-
-  describe('presentation', () => {
-    function pointer(coarse: boolean) {
-      vi.spyOn(window, 'matchMedia').mockImplementation(
-        (query: string) =>
-          ({
-            matches: coarse && query.includes('pointer: coarse'),
-            media: query,
-            onchange: null,
-            addEventListener: () => {},
-            removeEventListener: () => {},
-            addListener: () => {},
-            removeListener: () => {},
-            dispatchEvent: () => false,
-          }) as MediaQueryList,
-      );
-    }
-    const surface = () =>
-      bar()?.closest('[data-richtext-selection-toolbar]') as HTMLElement;
-
-    it('docks to the bottom of the visual viewport under a coarse pointer', async () => {
-      pointer(true);
-      const editor = await renderEditor();
-      await seed(editor);
-      await screen.findByRole('toolbar', {name: 'Selected text'});
-      expect(surface()).toHaveAttribute(
-        'data-richtext-selection-toolbar',
-        'docked',
-      );
-      expect(getComputedStyle(surface()).position).toBe('fixed');
-    });
-
-    it('floats under a coarse pointer when the caller asks for floating', async () => {
-      pointer(true);
-      const editor = await renderEditor({bar: {presentation: 'floating'}});
-      await seed(editor);
-      await screen.findByRole('toolbar', {name: 'Selected text'});
-      expect(surface()).toHaveAttribute(
-        'data-richtext-selection-toolbar',
-        'floating',
-      );
-    });
-
-    it('docks under a fine pointer when the caller asks for docked', async () => {
-      pointer(false);
-      const editor = await renderEditor({bar: {presentation: 'docked'}});
-      await seed(editor);
-      await screen.findByRole('toolbar', {name: 'Selected text'});
-      expect(surface()).toHaveAttribute(
-        'data-richtext-selection-toolbar',
-        'docked',
-      );
-    });
-  });
-});
-
-describe('selectionToolbarPlacement', () => {
-  const container = new DOMRect(50, 100, 600, 400);
-  const band = {top: 0, bottom: 800, left: 0, right: 1000};
-  const size = {width: 200, height: 40};
-
-  it('sits above a one-line selection, centred on its focus', () => {
-    expect(
-      selectionToolbarPlacement({
-        rects: [new DOMRect(100, 200, 120, 20)],
-        focus: new DOMRect(220, 200, 0, 20),
-        isBackward: false,
-        container,
-        band,
-        ...size,
-      }),
-    ).toEqual({top: 52, left: 70});
-  });
-
-  it('sits below a selection made downwards over lines, clear of its text', () => {
-    expect(
-      selectionToolbarPlacement({
-        rects: [new DOMRect(100, 200, 300, 20), new DOMRect(60, 220, 160, 20)],
-        focus: new DOMRect(220, 220, 0, 20),
-        isBackward: false,
-        container,
-        band,
-        ...size,
-      }),
-    ).toEqual({top: 148, left: 70});
-  });
-
-  it('sits above a selection made upwards, kept inside the band', () => {
-    expect(
-      selectionToolbarPlacement({
-        rects: [new DOMRect(100, 200, 300, 20), new DOMRect(60, 220, 160, 20)],
-        focus: new DOMRect(100, 200, 0, 20),
-        isBackward: true,
-        container,
-        band,
-        ...size,
-      }),
-    ).toEqual({top: 52, left: -42});
-  });
-
-  it('takes the other side when its own has no room', () => {
-    expect(
-      selectionToolbarPlacement({
-        rects: [new DOMRect(100, 20, 120, 20)],
-        focus: new DOMRect(220, 20, 0, 20),
-        isBackward: false,
-        container: new DOMRect(50, 0, 600, 400),
-        band,
-        ...size,
-      }),
-    ).toEqual({top: 48, left: 70});
-  });
-
-  it('stays inside the band at its edge', () => {
-    expect(
-      selectionToolbarPlacement({
-        rects: [new DOMRect(900, 200, 90, 20)],
-        focus: new DOMRect(990, 200, 0, 20),
-        isBackward: false,
-        container,
-        band,
-        ...size,
-      }),
-    ).toEqual({top: 52, left: 742});
   });
 });
