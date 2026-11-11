@@ -48,7 +48,6 @@ import {themeTempo} from '../motion/themeTempo';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBandClamp, rubberBandUnclamp} from '../motion/rubberBand';
 import {paging, registerPagingTable} from '../motion/uikit/paging';
-import {mod, nearestLoopCopy} from '../utils/loopIndex';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {isRtlElement} from './isRtlElement';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
@@ -257,6 +256,27 @@ export interface Pager {
   dispose(): void;
 }
 
+/**
+ * The copy of page `index` nearest virtual page `from`, in a loop of `count`
+ * pages. Two copies can be equally near: with two pages, or half an even
+ * count away. Then it is `index` itself when that is one of them, so a step
+ * to `from + 1` always goes forward.
+ */
+export function nearestLoopCopy(
+  index: number,
+  from: number,
+  count: number,
+): number {
+  if (Math.abs(index - from) * 2 <= count) {
+    return index;
+  }
+  return Math.round(
+    from +
+      (((mod(index, count) - mod(from, count) + count + count / 2) % count) -
+        count / 2),
+  );
+}
+
 /** Whether two measured page lists are the same to within half a pixel. */
 function sameOffsets(
   a: ReadonlyArray<number>,
@@ -267,6 +287,10 @@ function sameOffsets(
     a.length === b.length &&
     a.every((offset, i) => Math.abs(offset - b[i]) < 0.5)
   );
+}
+
+export function mod(value: number, count: number): number {
+  return ((value % count) + count) % count;
 }
 
 /** A position curve seen as the track's x (mirrored for LTR). */

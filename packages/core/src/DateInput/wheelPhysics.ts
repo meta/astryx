@@ -115,7 +115,7 @@ export function dragOffset(offset: number, layout: WheelLayout): number {
 /**
  * The position of the row nearest `offset`, clamped to the rows. When looping
  * it is any integer, and the row it shows is that integer folded into the
- * rows (`mod` in utils/loopIndex.ts).
+ * rows (`mod` in hooks/usePager.ts).
  */
 export function nearestIndex(offset: number, layout: WheelLayout): number {
   const index = Math.round(offset / layout.rowHeight);
