@@ -213,14 +213,15 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-One stable public concept is introduced: the `presentation` prop, with the
+Two stable public concepts are introduced: the `presentation` prop, with the
 values `'popover' | 'bottom-sheet' | 'adaptive'` and `adaptive` the default,
 typed by the exported `PowerSearchPresentation`, the value set the selection
 controls and Tokenizer use (DEC-3).
 
 The `valueMatchBehavior` config option is additive and optional: omitted
-(`'field-prefix'`), free text answers as today; `'all-string-fields'`
-additionally emits per-field value rows (FR27).
+(`'field-prefix'`), the typeahead suggests values only for field-prefixed
+queries; `'all-string-fields'` also emits per-field value rows for free text
+(FR27).
 
 The inclusive 400–720 CSS px range and conditional alignment of the editor
 popover are internal PowerSearch readability policy, not callsite options.
