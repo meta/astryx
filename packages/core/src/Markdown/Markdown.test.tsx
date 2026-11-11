@@ -28,6 +28,8 @@ import type {
 } from './Markdown';
 import type {ParseOptions} from './index';
 import {stubMatchMedia} from '../__tests__/stubMatchMedia';
+import {declaredValue} from '../__tests__/stylexDeclarations';
+import {Link} from '../Link/Link';
 import {parseOutlineFromMarkdown} from '../Outline/parseOutlineFromMarkdown';
 import {spacingVars} from '../theme/tokens.stylex';
 
@@ -1430,5 +1432,28 @@ describe('Markdown contentWidth', () => {
       <Markdown contentWidth={0}>{'Hello world paragraph.'}</Markdown>,
     );
     expect(maxWidthStyles(container)).toEqual([]);
+  });
+});
+
+describe('Markdown components.link in running text', () => {
+  it('underlines a Link rendered for a paragraph link at rest', () => {
+    const {container} = render(
+      <Markdown components={{link: Link}}>
+        {'Read the [documentation](/docs) first.'}
+      </Markdown>,
+    );
+    const anchor = container.querySelector('a.astryx-link')!;
+    expect(anchor).toHaveTextContent('documentation');
+    expect(declaredValue(anchor, 'text-decoration')).toBe('underline');
+  });
+
+  it('underlines a Link rendered for a list item link at rest', () => {
+    const {container} = render(
+      <Markdown components={{link: Link}}>
+        {'- Read the [documentation](/docs) first.'}
+      </Markdown>,
+    );
+    const anchor = container.querySelector('a.astryx-link')!;
+    expect(declaredValue(anchor, 'text-decoration')).toBe('underline');
   });
 });

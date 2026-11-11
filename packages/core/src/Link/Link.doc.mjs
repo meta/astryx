@@ -44,8 +44,8 @@ export const docs = {
         {
           name: 'hasUnderline',
           type: 'boolean',
-          description: 'Always show underline',
-          default: 'false',
+          description: 'Shows the underline at rest. When unset, a link in running text (inside body, large, or supporting Text, or a Markdown link) is underlined and other links are not. `false` removes the resting underline; the hover underline stays.',
+          default: 'true in running text, false otherwise',
         },
         {
           name: 'isDisabled',
@@ -103,7 +103,7 @@ export const docs = {
         {
           name: 'isStandalone',
           type: 'boolean',
-          description: 'Applies base font sizing',
+          description: 'Marks the link as outside running text: applies base font sizing and no resting underline',
           default: 'false',
         },
         {
@@ -192,7 +192,8 @@ export const docs = {
       'A styled anchor for inline and standalone text navigation. Supports external links, underline variants, tooltips, and custom link components for router integration. Use it for navigating between pages or to external URLs.',
     bestPractices: [
       { guidance: true, description: 'Write descriptive, concise link text that clearly communicates the destination.' },
-      { guidance: true, description: 'Set `isStandalone` when the link appears outside of inline text, so it receives proper base font sizing.' },
+      { guidance: true, description: 'Set `isStandalone` when the link appears outside of inline text, so it receives proper base font sizing and no resting underline.' },
+      { guidance: true, description: 'Put an inline link inside body, large, or supporting Text, so it is underlined at rest and readers can find it without relying on color.' },
       { guidance: true, description: 'Put a Link inside a <Text maxLines> to truncate it with the surrounding text; inside a clamped Text the link flows in the text\'s lines.' },
       { guidance: true, description: 'Only set `label` when the link content is not descriptive text (e.g. an icon-only link). For text links, the visible text is already the accessible name; adding `label` overrides it for screen readers, which is harmful.' },
       { guidance: false, description: 'Use Link for actions that do not navigate; use a Button instead.' },
@@ -242,8 +243,8 @@ export const docsZh = {
         {
           name: 'hasUnderline',
           type: 'boolean',
-          description: '始终显示下划线',
-          default: 'false',
+          description: '静止时显示下划线。未设置时，正文中的链接（位于 body、large 或 supporting 类型的 Text 内，或 Markdown 链接）显示下划线，其他链接不显示。`false` 移除静止下划线；悬停下划线保留。',
+          default: '正文中为 true，否则为 false',
         },
         {
           name: 'isDisabled',
@@ -288,7 +289,7 @@ export const docsZh = {
         {
           name: 'isStandalone',
           type: 'boolean',
-          description: '应用基础字体大小',
+          description: '将链接标记为不在正文中：应用基础字体大小，静止时不显示下划线',
           default: 'false',
         },
         {
@@ -326,7 +327,8 @@ export const docsZh = {
       'A styled anchor for inline and standalone text navigation. Supports external links, underline variants, tooltips, and custom link components for router integration. Use it for navigating between pages or to external URLs.',
     bestPractices: [
       { guidance: true, description: 'Write descriptive, concise link text that clearly communicates the destination.' },
-      { guidance: true, description: 'Set `isStandalone` when the link appears outside of inline text, so it receives proper base font sizing.' },
+      { guidance: true, description: 'Set `isStandalone` when the link appears outside of inline text, so it receives proper base font sizing and no resting underline.' },
+      { guidance: true, description: 'Put an inline link inside body, large, or supporting Text, so it is underlined at rest and readers can find it without relying on color.' },
       { guidance: true, description: 'Put a Link inside a <Text maxLines> to truncate it with the surrounding text; inside a clamped Text the link flows in the text\'s lines.' },
       { guidance: true, description: 'Only set `label` when the link content is not descriptive text (e.g. an icon-only link). For text links, the visible text is already the accessible name; adding `label` overrides it for screen readers, which is harmful.' },
       { guidance: false, description: 'Use Link for actions that do not navigate; use a Button instead.' },
@@ -351,7 +353,8 @@ export const docsDense = {
       'A styled anchor for inline and standalone text navigation. Supports external links, underline variants, tooltips, and custom link components for router integration. Use it for navigating between pages or to external URLs.',
     bestPractices: [
       { guidance: true, description: 'Write descriptive, concise link text that clearly communicates the destination.' },
-      { guidance: true, description: 'Set `isStandalone` when the link appears outside of inline text, so it receives proper base font sizing.' },
+      { guidance: true, description: 'Set `isStandalone` when the link appears outside of inline text, so it receives proper base font sizing and no resting underline.' },
+      { guidance: true, description: 'Put an inline link inside body, large, or supporting Text, so it is underlined at rest and readers can find it without relying on color.' },
       { guidance: true, description: 'Put a Link inside a <Text maxLines> to truncate it with the surrounding text; inside a clamped Text the link flows in the text\'s lines.' },
       { guidance: true, description: 'Only set `label` when the link content is not descriptive text (e.g. an icon-only link). For text links, the visible text is already the accessible name; adding `label` overrides it for screen readers, which is harmful.' },
       { guidance: false, description: 'Use Link for actions that do not navigate; use a Button instead.' },
@@ -375,7 +378,7 @@ export const docsDense = {
         as: 'Custom component to render instead of <a>',
         label: 'Accessible label (aria-label). Only for non-text content like icon-only links.',
         href: 'Link destination URL. Shared rule blocks javascript:, vbscript:, data:text/html after scheme normalization on every Astryx-owned navigation path. Ordinary URLs, fragments, safe custom schemes, and accepted downloads are preserved. Rejected => inert, no custom router. No bypass prop; exceptional caller-owned rendering is outside the guarantee. Image/resource policy is separate.',
-        hasUnderline: 'Always show underline',
+        hasUnderline: 'Resting underline. Unset => on in running text (body/large/supporting Text, Markdown links), off elsewhere. false removes it; hover underline stays.',
         isDisabled: 'Disables link: no navigation or onClick; keeps Tab stop; announced as disabled',
         isExternalLink: 'Opens new tab w/ external icon and safe rel tokens',
         newTabLabel: 'SR text announcing an external link opens in a new tab',
@@ -384,7 +387,7 @@ export const docsDense = {
         rel: 'Link relationship tokens. noopener noreferrer are merged for target="_blank".',
         onClick: 'Click event handler',
         tooltip: 'Tooltip text on hover',
-        isStandalone: 'Applies base font sizing',
+        isStandalone: 'Outside running text: base font sizing, no resting underline',
         type: 'Text type forwarded to Text; `inherit` takes the surrounding text size',
         children: 'Link content',
         ref: 'Ref to the root anchor or button',

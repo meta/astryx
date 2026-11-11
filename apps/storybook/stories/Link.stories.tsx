@@ -2,6 +2,7 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {Link} from '@astryxdesign/core/Link';
+import {Markdown} from '@astryxdesign/core/Markdown';
 import {Text} from '@astryxdesign/core/Text';
 
 const meta: Meta<typeof Link> = {
@@ -125,6 +126,35 @@ export const InlineWithText: Story = {
       Read the <Link href="/docs">documentation</Link> for more information
       about using Astryx components.
     </Text>
+  ),
+};
+
+/**
+ * A link in running text is underlined at rest in every theme: inside a body
+ * paragraph and in Markdown rendered with `components={{link: Link}}`. A
+ * standalone link keeps the hover-only underline.
+ */
+export const InRunningText: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 16, maxWidth: 560}}>
+      <Text as="p" data-testid="running-text-paragraph">
+        Read the{' '}
+        <Link href="/docs" data-testid="running-text-link">
+          documentation
+        </Link>{' '}
+        before you change a theme, and check the release notes for the
+        components you use.
+      </Text>
+      <Link href="/all" isStandalone data-testid="standalone-link">
+        See all guides
+      </Link>
+      <div data-testid="running-text-markdown">
+        <Markdown components={{link: Link}}>
+          {'Markdown links such as [the changelog](/changelog) read the same.'}
+        </Markdown>
+      </div>
+    </div>
   ),
 };
 

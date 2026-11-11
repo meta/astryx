@@ -32,6 +32,7 @@ import {Icon} from '../Icon';
 import {Tooltip} from '../Tooltip';
 import {Text} from '../Text';
 import {TextClampContext} from '../Text/textClampContext';
+import {RunningTextContext} from '../Text/runningTextContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {
   TextType,
@@ -198,9 +199,11 @@ export interface LinkProps extends BaseProps<
    */
   href?: string;
   /**
-   * Whether the link should always display an underline.
-   * When false, underline only appears on hover.
-   * @default false
+   * Whether the link shows an underline at rest.
+   * When false, the underline only appears on hover. When unset, a link in
+   * running text (inside body, large, or supporting Text, or a Markdown link)
+   * is underlined, and other links are not.
+   * @default true in running text, false otherwise
    */
   hasUnderline?: boolean;
   /**
@@ -254,7 +257,8 @@ export interface LinkProps extends BaseProps<
   tooltip?: string;
   /**
    * Whether the link is standalone (not inline within text).
-   * Applies base font sizing when true.
+   * Applies base font sizing when true, and the link is not treated as
+   * running text, so it has no resting underline.
    * @default false
    */
   isStandalone?: boolean;
@@ -342,7 +346,7 @@ export function Link({
   as,
   label,
   href,
-  hasUnderline = false,
+  hasUnderline: hasUnderlineFromProps,
   isDisabled = false,
   isExternalLink = false,
   newTabLabel: newTabLabelFromProps,
@@ -387,6 +391,10 @@ export function Link({
   // Link with its own display or clamp keeps its own box.
   const isInClampedText =
     use(TextClampContext) && display === 'inline' && maxLines === 0;
+  // A link in running text is underlined at rest, so a reader can find it
+  // without its color. A standalone link is not in running text.
+  const isInRunningText = use(RunningTextContext) && !isStandalone;
+  const hasUnderline = hasUnderlineFromProps ?? isInRunningText;
 
   // The reflected theme attributes win over a caller's same-named `data-*`, so
   // theme targeting always sees the real value (public-component-api INV5).

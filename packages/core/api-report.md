@@ -1490,7 +1490,7 @@ component Link(props: LinkProps)
   prop color?: TextColor = 'accent'
   prop display?: TextDisplay = 'inline'
   prop download?: string | boolean
-  prop hasUnderline?: boolean = false
+  prop hasUnderline?: boolean = true in running text, false otherwise
   prop href?: string
   prop isDisabled?: boolean = false
   prop isExternalLink?: boolean = false
