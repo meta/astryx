@@ -12,7 +12,7 @@ export const doc = {
   summary:
     'Make a new starter app with the theme preview inside, ready to install and run',
   description:
-    "Writes a new starter app into <dir> (Next.js app router, Core and the neutral theme, with the Astryx packages pinned to this CLI's release), with the theme preview route and its default pages (the sample app page and every component grouped) in src/app/theme-preview/. With --theme, the theme folder is copied into the app's themes/ and the pages wear it; a base theme or font package it needs is added to package.json. No install runs: it prints the install and dev commands and the page to open. <dir> must be new or empty, inside the current folder; --overwrite uses a folder that is not empty, but never replaces a protected file there, and keeps its own package.json and .gitignore. Every check runs before the first write, so a refusal changes nothing. Later pages go in with `experimental theme preview add`, run in the new app. Experimental: it may change or be removed in a patch release.",
+    "Writes a new starter app into <dir> (Next.js app router, Core and the neutral theme, with the Astryx packages pinned to this CLI's release), with the theme preview route and its default pages (the sample app page and every component grouped) in src/app/theme-preview/. With --theme, the theme folder is copied into the app's themes/ and the pages wear it; a base theme or font package it needs is added to package.json. No install runs: it prints the install and dev commands and the page to open. <dir> must be new or empty, inside the current folder; a folder that is not empty is refused, with a free folder name to use instead. Every check runs before the first write, so a refusal changes nothing. Later pages go in with `experimental theme preview add`, run in the new app. Experimental: it may change or be removed in a patch release.",
   fn: 'themeEditPreviewApp',
   args: [
     {
@@ -27,12 +27,6 @@ export const doc = {
       param: 'options.theme',
       description:
         "A theme made by experimental theme editor here: copied into the app, and the pages wear it (default: the app's own neutral theme)",
-    },
-    {
-      flag: '--overwrite',
-      param: 'options.overwrite',
-      description:
-        'Write into a folder that is not empty; a protected file is never replaced, and its own package.json and .gitignore are kept',
     },
   ],
   examples: [
@@ -59,7 +53,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'no <dir>, a folder that is not empty without --overwrite or a protected file in it, a folder outside the current one, or an unknown theme',
+      when: 'no <dir>, a folder that is not empty, a folder outside the current one, or an unknown theme',
     },
   ],
   related: ['experimental theme preview', 'experimental theme preview add'],

@@ -76,6 +76,8 @@
  * @property {string} theme
  * @property {'set' | 'undo'} action
  * @property {ThemeEditSetting} setting - The setting written, or for `undo` the one removed.
+ * @property {string} [now] - On `undo`: what applies instead of the setting removed: a whole-theme setting of the same thing, or the base theme's value.
+ * @property {ThemeEditSetting} [removed] - On `undo`: the setting removed (the same as `setting`); the value now in effect is the base theme's, and `changedTokens` lists it.
  * @property {ThemeEditSetting | null} replaced - The setting this one replaced.
  * @property {string | null} was - For `base` and `mode`: the value before.
  * @property {string[]} parts - The parts it styles (a group's members when it spread).
@@ -111,7 +113,8 @@
  * @property {string | null} data.like
  * @property {string} data.mode
  * @property {Array<ThemeEditSetting & {parts: string[], masked?: string}>} data.settings - Each setting with the parts it styles; `masked` says what a later or stronger setting hides of it.
- * @property {Record<string, Record<string, string | null>>} data.resolved - Key tokens, per mode.
+ * @property {Record<string, Record<string, string | null> | string | null>} data.resolved - Key tokens: colors and shadows per mode; sizes, numbers and fonts, which are the same in both modes, as one value.
+ * @property {string[]} data.partValues - Each corners or spacing setting on a part or group, with what its parts get and the whole-theme value beside it.
  * @property {number | null} data.vibrancy - How saturated the generated colors are (0 to 100); null when the theme sets no color.
  * @property {ThemeEditColor[]} data.colors - Each color the theme sets, with the shade each token uses.
  * @property {string[]} data.colorNotes - Tokens that use another shade than usual so they read, and any that still do not.
@@ -177,6 +180,7 @@
  * @property {string} data.folder - The preview route folder.
  * @property {string | null} data.theme - The theme the pages wear; null for the app's own theme.
  * @property {string[]} data.added - Pages added by this call.
+ * @property {string[]} data.refreshed - Pages that were there already and are written again.
  * @property {Array<{page: string, why: string}>} data.matched - Each template page added for a description or --template, and why it was picked.
  * @property {Array<{page: string, reason: string, installCommand: string | null}>} data.skipped - Template pages not added: why (packages the app lacks, or a StyleX compiler it does not have), with the command that installs what is missing.
  * @property {string[]} data.notes - What else to know.
@@ -190,7 +194,6 @@
  * @typedef {object} ThemeEditPreviewAppOptions
  * @property {string} [cwd] - The folder the app folder is inside (default: process.cwd()).
  * @property {string} [theme] - A theme made by `experimental theme editor` here: it is copied into the app, and the preview pages wear it (default: the app's own neutral theme).
- * @property {boolean} [overwrite] - Write into a folder that is not empty. A protected file there is never replaced, and the folder's own package.json and .gitignore are kept.
  */
 
 /**

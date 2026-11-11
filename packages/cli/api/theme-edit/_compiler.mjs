@@ -11,21 +11,6 @@
 
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
 
-/**
- * Whether a color is see-through: its contrast depends on what is under it,
- * so it is not judged alone.
- * @param {unknown} v
- */
-function hasAlpha(v) {
-  const s = String(v ?? '').trim();
-  const h = /^#(?:[0-9a-f]{4}|[0-9a-f]{8})$/i.exec(s);
-  if (h) return s.length === 5 ? !/f$/i.test(s) : !/ff$/i.test(s);
-  const m = /\/\s*([\d.]+%?)\s*\)$|^rgba\([^)]*,\s*([\d.]+)\s*\)$/i.exec(s);
-  if (!m) return /^transparent$/i.test(s);
-  const a = m[1] ?? m[2];
-  return a.endsWith('%') ? parseFloat(a) < 100 : parseFloat(a) < 1;
-}
-
 /** Only these token types may differ between light and dark. */
 export const MODAL = new Set(['color', 'shadow']);
 
@@ -219,13 +204,18 @@ export function makeCompiler(project, parts) {
     return out;
   }
 
-  /** One line for where a token feeds. @param {ReturnType<typeof feeds>} list */
-  const fmtFeeds = list =>
+  /**
+   * One line for where a token feeds. A part inside `target` (a button in a
+   * toast) is named as inside it, so the line never reads as every button.
+   * @param {ReturnType<typeof feeds>} list
+   * @param {string} [target]
+   */
+  const fmtFeeds = (list, target) =>
     [
       ...new Set(
         list.map(
           f =>
-            `${f.prop}${f.part ? ` on ${f.part}` : ''}${f.when ? ` (when ${f.when})` : ''}`,
+            `${f.prop}${f.part ? ` on ${f.part}${target && f.part !== target ? ` inside ${target}` : ''}` : ''}${f.when ? ` (when ${f.when})` : ''}`,
         ),
       ),
     ]
@@ -270,7 +260,7 @@ export function makeCompiler(project, parts) {
         return null;
       const direct = g === 'text' ? 'color' : 'background-color';
       return {
-        message: `${target} reads ${token} only for ${fmtFeeds(fed)}, not for its ${g}, so this would not change what you expect.`,
+        message: `${target} reads ${token} only for ${fmtFeeds(fed, target)}, not for its ${g}, so this would not change what you expect.`,
         run: [
           `${P} set ${theme} ${direct} ${quote(value)} --on ${target}   # sets its ${g} directly`,
           `${HOW} ${target}`,
@@ -381,9 +371,34 @@ export function makeCompiler(project, parts) {
    * @param {(pair: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} value
    * @param {(pair: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} baseValue
    * @param {string[]} modes
-   * @param {{parseColor: (v: unknown) => number[] | null, ratio: (a: number[], b: number[]) => number}} helpers
+   * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined}} helpers
+   *   `page` is the page color in a mode: a see-through background is drawn
+   *   over it, and see-through text over that background, before measuring.
    */
-  function contrast(value, baseValue, modes, {parseColor, ratio}) {
+  function contrast(
+    value,
+    baseValue,
+    modes,
+    {parseColor, ratio, alphaOf, compositeOver, page},
+  ) {
+    /**
+     * The opaque colors the eye sees for a pair, or null with no fixed color.
+     * @param {unknown} fg @param {unknown} bg @param {string} m
+     */
+    const drawn = (fg, bg, m) => {
+      /** @type {[number, number, number]} */
+      const ground =
+        parseColor(page(m)) ?? (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      const bgAlpha = alphaOf(bg);
+      const back = parseColor(bg);
+      const under =
+        bgAlpha === 0
+          ? ground
+          : back && compositeOver(back, bgAlpha, ground);
+      const top = parseColor(fg);
+      if (!under || !top) return null;
+      return [compositeOver(top, alphaOf(fg), under), under];
+    };
     /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string}>} */
     const out = [];
     const seen = new Set();
@@ -400,23 +415,25 @@ export function makeCompiler(project, parts) {
         const fg = value(p, 'fg', m);
         const bg = value(p, 'bg', m);
         if (/gradient|url\(/.test(String(bg))) continue;
-        if (hasAlpha(fg) || hasAlpha(bg)) continue;
-        const a = parseColor(fg);
-        const b = parseColor(bg);
-        if (!a || !b) {
+        const pair = drawn(fg, bg, m);
+        if (!pair) {
           for (const [v, side] of /** @type {const} */ ([
             [fg, 'fg'],
             [bg, 'bg'],
           ]))
-            if (v && !parseColor(v) && v !== baseValue(p, side, m))
+            if (
+              v &&
+              !parseColor(v) &&
+              alphaOf(v) !== 0 &&
+              v !== baseValue(p, side, m)
+            )
               unchecked.add(String(v));
           continue;
         }
-        const r = ratio(a, b);
+        const r = ratio(pair[0], pair[1]);
         if (r >= 4.5) continue;
-        const a0 = parseColor(baseValue(p, 'fg', m));
-        const b0 = parseColor(baseValue(p, 'bg', m));
-        if (a0 && b0 && ratio(a0, b0) <= r + 0.05) continue;
+        const was = drawn(baseValue(p, 'fg', m), baseValue(p, 'bg', m), m);
+        if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
         const key = `${p.text}|${fg}|${bg}|${m}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -431,7 +448,11 @@ export function makeCompiler(project, parts) {
         });
       }
     }
-    return {problems: out.slice(0, 8), unchecked: [...unchecked]};
+    return {
+      problems: out.slice(0, 8),
+      more: Math.max(0, out.length - 8),
+      unchecked: [...unchecked],
+    };
   }
 
   /**
