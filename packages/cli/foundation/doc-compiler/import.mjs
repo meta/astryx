@@ -26,7 +26,7 @@
 
 import * as fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
-import {createJiti} from 'jiti';
+import {createRequire} from 'node:module';
 import {importUrl} from '../fs/import-url.mjs';
 import {
   importUserModule,
@@ -40,6 +40,14 @@ import {
   SHIPPED_ASSETS,
   STORED_DOCS_FILE,
 } from './stored-docs.mjs';
+
+const requireFromHere = createRequire(import.meta.url);
+
+/**
+ * jiti, loaded on first use: only TypeScript doc files need it.
+ * @type {typeof import('jiti').createJiti}
+ */
+const createJiti = (...args) => requireFromHere('jiti').createJiti(...args);
 
 /** @type {ReturnType<typeof createJiti> | undefined} */
 let jsxJiti;
