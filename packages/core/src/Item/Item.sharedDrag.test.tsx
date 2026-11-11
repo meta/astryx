@@ -145,18 +145,17 @@ describe('the row on the shared drag path', () => {
     });
   });
 
-  it('keeps a finger’s drag on UIKit’s model: the dead zone, then the tracking spring (spec:AST-057)', () => {
+  it('holds a finger’s row at the finger’s travel since touch-down, from the row’s claim on, with no spring (spec:AST-094)', () => {
     const {options} = renderRow();
     const model = options.model;
     model?.begin?.({start: 0, translation: 0, total: -10, input: 'touch'});
-    // Inside UIKit's 25 px dead zone the row stays where it is.
+    // Past the row's claim on the touch, the row is at the finger's travel.
     expect(
       model?.move?.({start: 0, translation: -12, total: -20, input: 'touch'}),
-    ).toBeNull();
-    // Past it, the swipe counts from 0 there, on the tracking spring.
+    ).toEqual({offset: -20});
     expect(
       model?.move?.({start: 0, translation: -52, total: -60, input: 'touch'}),
-    ).toEqual({offset: -35, spring: SWIPE.tracking});
+    ).toEqual({offset: -60});
   });
 
   it('creates the drag once: a new value from an inline createSwipe call attaches nothing again (spec:AST-057 FR11)', () => {

@@ -209,13 +209,13 @@ export const docs = {
           name: 'swipeActions',
           type: '{leading?: ItemSwipeAction[]; trailing?: ItemSwipeAction[]}',
           description:
-            "Deprecated (DEP-0017): pass swipe={createSwipe({leading, trailing})} instead. Each entry is `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`. Still works exactly as released, loading the swipe the first time a row has it, and is ignored when swipe is set; astryx upgrade rewrites static uses.",
+            "Deprecated (DEP-0017): pass swipe={createSwipe({leading, trailing})} instead. Each entry is `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`. Still works, with the swipe's current behavior, loading the swipe the first time a row has it, and is ignored when swipe is set; astryx upgrade rewrites static uses.",
         },
         {
           name: 'swipeBehavior',
           type: "'reveal' | 'commit'",
           description:
-            "Deprecated (DEP-0017): pass swipeBehavior in createSwipe' options instead. Still works exactly as released beside swipeActions, and is ignored when swipe is set; astryx upgrade rewrites static uses.",
+            "Deprecated (DEP-0017): pass swipeBehavior in createSwipe's options instead. Still works beside swipeActions, with the swipe's current behavior, and is ignored when swipe is set; astryx upgrade rewrites static uses.",
           default: "'reveal'",
         },
         {

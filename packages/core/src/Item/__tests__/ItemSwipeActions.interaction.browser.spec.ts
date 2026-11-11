@@ -5,8 +5,8 @@
  * @input The built "Swipe Actions" Item story, real touch input (Chromium
  *   CDP / WebKit's input command), the interaction harness and the UIKit
  *   constants table (motion/uikit/swipeActions.ts)
- * @output Interaction and animation proofs for a row's swipe actions. The row
- *   trails the finger on UIKit's tracking spring and catches up when it stops.
+ * @output Interaction and animation proofs for a row's swipe actions. A held
+ *   row stays under the finger, one for one, until the lift.
  *   The settle after a held release is UIKit's spring, frame by frame as the
  *   gesture writes it. The panel's window, track and entries are drawn in step
  *   with the row at every frame. A flick hands the row's velocity to the
@@ -648,7 +648,7 @@ function heldDrag(from: {x: number; y: number}, dx: number) {
   return frames;
 }
 
-test('the row trails the finger on the tracking spring and catches up when it stops', async ({
+test("a held row stays under the finger: at every frame from the claim to the lift, the row's travel is the finger's travel since touch-down", async ({
   page,
   browserName,
 }) => {
@@ -658,13 +658,12 @@ test('the row trails the finger on the tracking spring and catches up when it st
   const script = drag(
     start,
     {x: start.x - dx, y: start.y},
-    // The finger then rests 1.6 s. The tracking spring is within half a pixel
-    // 0.75 s after the last move, and a busy page may handle that move late.
-    {durationMs: 400, hz: 60, restMs: 1600},
+    // The finger then rests 0.6 s before the lift: a spring that followed it
+    // would still be catching up there.
+    {durationMs: 400, hz: 60, restMs: 600},
   );
   await recordFrames(row);
   await recordLift(page);
-  await watchTravelCurves(row);
   // Where the finger is, as the page handles each of its moves.
   await page.evaluate(() => {
     const moves: {at: number; x: number}[] = [];
@@ -682,6 +681,7 @@ test('the row trails the finger on the tracking spring and catches up when it st
   });
   const started = Date.now();
   await driver.play(script);
+  const lift = await liftOf(page);
   await waitForRest(row);
   const moves = await page.evaluate(
     () =>
@@ -689,45 +689,26 @@ test('the row trails the finger on the tracking spring and catches up when it st
         .__swipeMoves,
   );
   expect(moves.length).toBeGreaterThan(2);
-  const lastMove = moves[moves.length - 1].at;
-  // The swipe is the finger's travel past UIKit's 25 px threshold; the row's
-  // travel is toward the trailing side (negative x). At every frame the page
-  // drew while the finger moved, read against the finger's latest move.
-  const swipe = (x: number) =>
-    Math.max(0, start.x - x - swipeActions.hysteresis);
+  // The row's travel is toward the trailing side (negative x). From the row's
+  // claim on the touch, each frame the page drew up to the lift is read against
+  // the finger's latest move. The row handles a move before this listener sees
+  // it. So it catches up within the claiming move's frame.
+  const travel = (x: number) => Math.max(0, start.x - x);
   const frames = await framesOf(page);
-  const moving = frames
-    .filter(frame => frame.at <= lastMove)
+  const held = frames
+    .filter(frame => frame.at < lift)
     .map(frame => ({
-      finger: swipe(
+      finger: travel(
         moves.filter(move => move.at <= frame.at).at(-1)?.x ?? start.x,
       ),
       row: -frame.x,
-    }));
-  expect(moving.length, JSON.stringify(frames)).toBeGreaterThan(0);
-  // While the finger moves the row trails it, never ahead and never
-  // backwards...
-  expect(moving.every(s => s.row <= s.finger + 0.5)).toBe(true);
+    }))
+    .filter(sample => sample.finger >= swipeActions.claim);
+  expect(held.length, JSON.stringify(frames)).toBeGreaterThan(5);
   expect(
-    moving.every((s, i) => i === 0 || s.row >= moving[i - 1].row - 0.5),
-  ).toBe(true);
-  // ...visibly: a 1:1 drag would never be this far behind.
-  expect(
-    moving.some(s => s.finger - s.row > 10),
-    JSON.stringify(moving),
-  ).toBe(true);
-  // When the finger stops, the row catches up with it before the lift. The
-  // tracking curve playing at the lift has the row at the finger's swipe there.
-  // It is read on the curve itself, so a busy page that draws few frames
-  // changes nothing.
-  const lift = await liftOf(page);
-  const tracking = (await travelCurvesOf(page))
-    .filter(curve => curve.start <= lift)
-    .at(-1);
-  expect(tracking).toBeDefined();
-  expect(
-    -curveAt(tracking?.frames ?? [], lift - (tracking?.start ?? 0)),
-  ).toBeCloseTo(swipe(start.x - dx), 0);
+    held.filter(sample => Math.abs(sample.finger - sample.row) > 1),
+    JSON.stringify(held),
+  ).toEqual([]);
   // No long task on the page while it tracked: the Long Tasks API is
   // Chromium-only, so WebKit runs the rest of the case.
   if (browserName === 'chromium') {
@@ -735,6 +716,85 @@ test('the row trails the finger on the tracking spring and catches up when it st
       [],
     );
   }
+});
+
+test("past the confirm point a lead grows to the confirmation offset and the row keeps it, while its base stays at the finger's travel, frame by frame", async ({
+  page,
+}) => {
+  const opened = await openRow(page);
+  const {driver, row, rest} = opened;
+  // Two entries: a full swipe confirms only from the open row, so the drag
+  // starts on its content there.
+  const openWidth = await restOpen(opened);
+  const start = {x: opened.start.x - openWidth, y: opened.start.y};
+  const confirmAt = confirmPointOf(openWidth, rest.width);
+  const confirmedOffset = rest.width - swipeActions.confirmInset;
+  // A slow drag to 40 px past the confirm point on UIKit's measure, held 0.6
+  // s, then lifted.
+  const reach = confirmAt + 40 - openWidth + swipeActions.hysteresis;
+  const script = drag(
+    start,
+    {x: start.x - reach, y: start.y},
+    {durationMs: 1400, hz: 60, restMs: 600},
+  );
+  await recordFrames(row);
+  await recordLift(page);
+  await page.evaluate(() => {
+    const moves: {at: number; x: number}[] = [];
+    addEventListener(
+      'touchmove',
+      event => {
+        moves.push({
+          at: performance.now(),
+          x: event.touches[0]?.clientX ?? Number.NaN,
+        });
+      },
+      {capture: true, passive: true},
+    );
+    Object.assign(window, {__swipeMoves: moves});
+  });
+  await driver.play(script);
+  const lift = await liftOf(page);
+  const moves = await page.evaluate(
+    () =>
+      (window as unknown as {__swipeMoves: {at: number; x: number}[]})
+        .__swipeMoves,
+  );
+  // At each frame before the lift, the base is the open width plus the finger's
+  // travel since touch-down. The swipe is the same on UIKit's measure. The lead
+  // is how far past its base the row is drawn.
+  const samples = (await framesOf(page))
+    .filter(frame => frame.at < lift)
+    .map(frame => {
+      const x = moves.filter(move => move.at <= frame.at).at(-1)?.x;
+      const travel = x == null ? 0 : start.x - x;
+      return {
+        swipe: openWidth + travel - swipeActions.hysteresis,
+        base: openWidth + Math.max(0, travel),
+        row: -frame.x,
+      };
+    })
+    .filter(sample => sample.base >= openWidth + swipeActions.claim);
+  const before = samples.filter(sample => sample.swipe < confirmAt);
+  const after = samples.filter(sample => sample.swipe >= confirmAt);
+  expect(before.length, JSON.stringify(samples)).toBeGreaterThan(5);
+  expect(after.length, JSON.stringify(samples)).toBeGreaterThan(5);
+  // Short of the confirm point there is no lead: the row is at its base.
+  expect(
+    before.filter(sample => Math.abs(sample.row - sample.base) > 1),
+    JSON.stringify(before),
+  ).toEqual([]);
+  // Past it the lead only grows, and it ends where the base at the confirm
+  // put the confirmation offset.
+  const leads = after.map(sample => sample.row - sample.base);
+  expect(
+    leads.every((lead, i) => i === 0 || lead >= leads[i - 1] - 0.5),
+    JSON.stringify(leads),
+  ).toBe(true);
+  expect(
+    Math.abs((leads.at(-1) ?? 0) - (confirmedOffset - after[0].base)),
+    JSON.stringify(leads),
+  ).toBeLessThan(3);
 });
 
 test('the settle after a held release is UIKit’s spring, frame by frame, with the panel in step', async ({
@@ -831,11 +891,13 @@ test('the settle after a held release is UIKit’s spring, frame by frame, with 
   );
 });
 
-test('a flick hands the row’s velocity to the settle', async ({page}) => {
+test('a flick hands the row’s velocity, the finger’s, to the settle', async ({
+  page,
+}) => {
   // A quick throw toward the trailing side: about 55 px of swipe, short of half
   // the panel, still moving at 1000 px/s when it lifts. The release goes the
-  // way it moves, so the row opens. The settle starts with the row's own
-  // velocity, which the tracking spring had built up, not from rest.
+  // way it moves, so the row opens. The row moved with the finger, so the
+  // settle starts at the finger's velocity, not from rest.
   const {driver, row, entries, start} = await openRow(page);
   const openWidth = await openWidthOf(entries);
   expect(openWidth).toBeGreaterThan(0);
@@ -845,35 +907,20 @@ test('a flick hands the row’s velocity to the settle', async ({page}) => {
   );
   await waitForRest(row);
   expect(await xOf(row)).toBeCloseTo(-openWidth, 0);
-  // The curves the row played, read back from the animations themselves, not
-  // from frames. So a busy page that draws few of them changes nothing. The
-  // settle is the last, toward the open width. The tracking curve it took over
-  // from is the one before it.
-  const curves = await travelCurvesOf(page);
-  expect(curves.length).toBeGreaterThan(1);
-  const settle = curves[curves.length - 1];
-  const tracking = curves[curves.length - 2];
+  // The settle is the last curve the row played, toward the open width. It is
+  // read back from the animation itself, not from frames, so a busy page that
+  // draws few of them changes nothing.
+  const settle = (await travelCurvesOf(page)).at(-1);
+  if (settle == null) {
+    throw new Error('no settle curve');
+  }
   expect(settle.frames.at(-1)?.x).toBeCloseTo(-openWidth, 0);
-  // Velocities in px/s, each read off its curve's spring fitted to its
-  // keyframes (both springs are UIKit's critically damped one). One is how fast
-  // the row moved on the tracking curve when the settle took over, toward the
-  // finger's last place. The other is how fast the settle starts, toward the
-  // open width.
-  const rowVelocity = fittedVelocity(
-    tracking.frames,
-    tracking.frames.at(-1)?.x ?? 0,
-    settle.start - tracking.start,
-  );
+  // Its starting velocity in px/s, read off the spring fitted to its keyframes
+  // (UIKit's critically damped one). It is about the finger's 1000 px/s toward
+  // the open side; from rest it would be 0.
   const v0 = fittedVelocity(settle.frames, -openWidth, 0);
-  // The row was still moving toward the open width at the release, and the
-  // settle starts at its velocity. UIKit hands the presentation velocity to the
-  // settle. From rest it would start at 0, and the finger's own is several
-  // times faster.
-  expect(rowVelocity, JSON.stringify({rowVelocity, v0})).toBeLessThan(-50);
-  expect(
-    Math.abs(v0 - rowVelocity),
-    JSON.stringify({rowVelocity, v0}),
-  ).toBeLessThan(Math.abs(rowVelocity) * 0.1);
+  expect(v0, JSON.stringify({v0})).toBeLessThan(-700);
+  expect(v0, JSON.stringify({v0})).toBeGreaterThan(-1300);
   // And the settle is UIKit's spring from there: no keyframe off the
   // critically damped curve from that place and velocity.
   const from = settle.frames[0].x;
@@ -1361,18 +1408,20 @@ test('a full swipe from the open row confirms on the finger: the row runs ahead 
       }
     },
   });
-  // Short of the confirm point the row trails the finger, and the entries
-  // look as they always do.
+  // Short of the confirm point the row is at the finger's travel, 25 px past
+  // the swipe on UIKit's measure. The entries look as they always do.
   const {short, past} = seen;
   expect(short).toBeDefined();
-  expect(short?.root).toBeGreaterThan(-confirmAt);
+  expect(short?.root).toBeGreaterThan(-(confirmAt + swipeActions.hysteresis));
   expect(short?.outer).toBeCloseTo(0, 1);
   expect(short?.inner).toBeCloseTo(1, 2);
   expect(short?.fill).toBeCloseTo(0, 2);
-  // Past it, the row has run ahead of the finger to the confirmation offset.
-  // The outermost entry has slid past the others to the row's edge, and the
-  // others hide under its cover at once.
-  expect(past?.root).toBeCloseTo(-confirmedOffset, 0);
+  // Past it, the row ran ahead to the confirmation offset and kept that lead.
+  // 40 px more of the finger put it about 40 px past the offset, less part of
+  // one move's step, where the confirm fell. The outermost entry has slid past
+  // the others to the row's edge, and the others hide under its cover at once.
+  expect(past?.root).toBeLessThanOrEqual(-(confirmedOffset + 37));
+  expect(past?.root).toBeGreaterThanOrEqual(-(confirmedOffset + 40.5));
   expect(past?.outer).toBeCloseTo(-(openWidth - outerWidth), 0);
   expect(past?.inner).toBeCloseTo(0, 2);
   // Under them the track shows the outermost entry's colour.
@@ -1507,10 +1556,10 @@ test('under Reduce Motion backing out of a confirmed full swipe returns to the f
         confirmed = true;
       } else if (confirmed) {
         // The move that backs out: the row fades out, lands under the
-        // finger while transparent and fades back in. The drag's second dip
-        // (its first was the confirm's).
+        // finger, at its travel since touch-down, while transparent, and fades
+        // back in. The drag's second dip (its first was the confirm's).
         checked = true;
-        await expectCrossFadeSince(page, row, -swipe, 0, 1);
+        await expectCrossFadeSince(page, row, -(swipe + h), 0, 1);
       }
     },
   });
@@ -1694,10 +1743,10 @@ test(
     const {driver, row, rest} = await openRow(page);
     await recordFrames(row);
     await recordLift(page);
-    // 30 px of swipe toward the leading side, come to rest: short of half
-    // the panel, so the row springs back.
+    // 30 px toward the leading side, come to rest: short of half the panel,
+    // so the row springs back.
     await driver.play(
-      heldDrag({x: rest.x + 24, y: rest.y + rest.height / 2}, 55),
+      heldDrag({x: rest.x + 24, y: rest.y + rest.height / 2}, 30),
     );
     await waitForRest(row);
     const settle = await settleOf(page);

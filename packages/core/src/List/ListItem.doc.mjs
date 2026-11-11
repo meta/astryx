@@ -129,7 +129,7 @@ export const docs = {
       name: 'swipeBehavior',
       type: "'reveal' | 'commit'",
       description:
-        "Deprecated (DEP-0017): pass swipeBehavior in createSwipe' options instead. Passed through to Item unchanged; astryx upgrade rewrites static uses.",
+        "Deprecated (DEP-0017): pass swipeBehavior in createSwipe's options instead. Passed through to Item unchanged; astryx upgrade rewrites static uses.",
       default: "'reveal'",
     },
   ],

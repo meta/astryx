@@ -305,7 +305,7 @@ export default function SwipeActionsLayer({
   // blocks under `commit`. It is out of the accessibility tree and the tab
   // order except while the row is open on its side. So the row keeps one tab
   // stop, and the other side's entries, out of sight behind the row, are never
-  // reached. A pointer that can hover never meets it.
+  // reached. A mouse drag never opens it.
   const renderSwipePanel = (
     side: SwipeSide,
     entries: ReadonlyArray<SwipeAction>,

@@ -251,7 +251,7 @@ test('paints no panel at rest, keeps the panel fixed while the row moves, rests 
   // mid-flight, the gap the row has not yet covered is exactly the fill.
   await installTimerGate(page);
   await touch('touchStart', startX);
-  await dragTo([10, 30, 50, 45]);
+  await dragTo([10, 20, 30, 25]);
   await expect.poll(async () => translationOf(row)).toBeGreaterThan(15);
   // The scene stops in the lift's own task, before the row hears the lift,
   // and moves on 60 ms by its own clock. A read sent after the lift comes a

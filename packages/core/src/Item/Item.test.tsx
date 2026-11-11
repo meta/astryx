@@ -1411,7 +1411,7 @@ describe('swipe', () => {
     const f = finger(row);
     f.down(10);
     f.move(20);
-    f.move(35); // 25 px: the swipe begins here, at 0
+    f.move(35); // 25 px: the swipe begins on UIKit's measure, at 0
     f.move(35 + travel / 2);
     f.move(35 + travel);
     f.rest();
@@ -1545,10 +1545,10 @@ describe('swipe', () => {
     f.down(10);
     f.move(20);
     f.move(35);
-    f.move(95);
+    f.move(70);
     caughtUp();
-    // 60 px of swipe toward the leading side (rightward), written on the
-    // root as the one custom property every part reads.
+    // 60 px toward the leading side (rightward), the finger's travel, written
+    // on the root as the one custom property every part reads.
     expect(xOf(row)).toBe(60);
     // The root moves by it. The window reads its negation, so it stays over the
     // resting box. The track moves with the row. Every entry stays pinned at
@@ -1604,48 +1604,42 @@ describe('swipe', () => {
     f.up();
   });
 
-  it("claims the touch at 8 px, before a browser would scroll it, and moves the row only past UIKit's 25 px, from 0", () => {
+  it("claims the touch at 8 px, before a browser would scroll it, and from there holds the row at the finger's travel since touch-down", () => {
     const {row} = renderRow();
     const f = finger(row);
     f.down(10);
     // Short of the claim the scroller may still take the touch: the
-    // default stands.
+    // default stands, and the row has not moved.
     expect(f.move(15).defaultPrevented).toBe(false);
+    expect(row.style.getPropertyValue('--_item-swipe-travel')).toBe('');
     // 10 px, mostly sideways: the row's. Every further touchmove is cancelled.
     // That keeps a browser from scrolling a drag that is not perfectly level:
-    // iOS Safari commits at about 10 px.
+    // iOS Safari commits at about 10 px. The row catches up with the finger
+    // at once.
     expect(f.move(20, 12).defaultPrevented).toBe(true);
-    // The swipe itself has not begun: the row has not moved.
+    expect(xOf(row)).toBe(10);
     expect(f.move(34, 13).defaultPrevented).toBe(true);
-    expect(row.style.getPropertyValue('--_item-swipe-travel')).toBe('');
-    // 25 px: the swipe begins, at 0 (the threshold's travel is not part of
-    // it, as in UIKit).
-    expect(f.move(35, 14).defaultPrevented).toBe(true);
-    expect(xOf(row)).toBe(0);
+    expect(xOf(row)).toBe(24);
     expect(f.move(55, 16).defaultPrevented).toBe(true);
-    caughtUp();
-    expect(xOf(row)).toBe(20);
+    expect(xOf(row)).toBe(45);
     // The row owned the touch, so the lift is cancelled too: no click is
     // synthesized from it.
     expect(f.up().defaultPrevented).toBe(true);
   });
 
-  it('counts the swipe from where the finger crossed the threshold, so coming back past the start moves nothing', () => {
+  it("holds the row at the finger's travel since touch-down, so coming back past the start takes it home and no further", () => {
     const {row} = renderRow();
     const f = finger(row);
     f.down(10);
     f.move(20);
     f.move(35);
     f.move(60);
-    caughtUp();
-    expect(xOf(row)).toBe(25);
-    // Back to 10 px short of the touch-down point: the row heads home, and
-    // stays there rather than counting the threshold the other way.
+    expect(xOf(row)).toBe(50);
+    // Back to 10 px from the touch-down point: the row with it.
     f.move(20);
-    caughtUp();
-    expect(xOf(row)).toBe(0);
+    expect(xOf(row)).toBe(10);
+    // Past the touch-down point: the row stays home, never on its other side.
     f.move(4);
-    caughtUp();
     expect(xOf(row)).toBe(0);
     f.up();
   });
@@ -1802,14 +1796,14 @@ describe('swipe', () => {
     expect(panelOf(row, 'leading')).not.toHaveAttribute('inert');
   });
 
-  it('keeps the rest a settle lands while a claimed touch holds the row, when that touch lifts before the swipe begins', async () => {
+  it('keeps the rest a settle lands while a touch holds the row, when that touch lifts before its claim', async () => {
     const {row} = renderRow();
     // Released past half the panel: the row settles open.
     dragLeading(row, 45);
-    // While it settles, a finger claims it and holds short of the swipe.
+    // While it settles, a finger lands on it and holds short of the claim.
     const f = finger(row);
     f.down(150);
-    f.move(160);
+    f.move(155);
     // The settle lands under the held finger.
     await settled();
     expect(xOf(row)).toBe(72);
@@ -1832,7 +1826,7 @@ describe('swipe', () => {
     f.down(10);
     f.move(20);
     f.move(35);
-    f.move(95);
+    f.move(70);
     caughtUp();
     expect(xOf(row)).toBe(60);
     f.cancel();
@@ -1954,14 +1948,13 @@ describe('swipe', () => {
       const second = finger(row, 2);
       first.down(10);
       first.move(20);
-      first.move(35);
-      first.move(55);
+      first.move(30);
       caughtUp();
       expect(xOf(row)).toBe(20);
       second.down(200);
       // A second finger neither cancels nor redirects a claimed drag: the
       // row's finger is still the row's, its moves still cancelled.
-      expect(first.move(75).defaultPrevented).toBe(true);
+      expect(first.move(50).defaultPrevented).toBe(true);
       caughtUp();
       expect(xOf(row)).toBe(40);
       second.up();
@@ -1976,8 +1969,9 @@ describe('swipe', () => {
   describe('reveal (the default)', () => {
     it('springs back when released short of half the panel', async () => {
       const {row} = renderRow();
-      dragLeading(row, 30);
-      // 30 px of a 72 px panel, released at rest: short.
+      dragLeading(row, 5);
+      // The row at the finger's 30 px of a 72 px panel, released at rest:
+      // short.
       await settled();
       expect(xOf(row)).toBe(0);
       expect(panelOf(row, 'leading')).toHaveAttribute('inert');
@@ -2093,18 +2087,19 @@ describe('swipe', () => {
       f.move(40);
       f.move(55);
       f.up({afterMs: 0});
-      // A flick: the row is on its way to 72 px. A finger lands 100 ms in.
+      // A flick: the row is on its way to 72 px, from the finger's speed, fast
+      // enough to pass it before it settles. A finger lands 100 ms in.
       void act(() => vi.advanceTimersByTime(100));
       const g = finger(row);
       g.down(150);
       g.move(160);
       g.move(175);
-      // The swipe began: the row heads for where it was when the finger
-      // caught it, neither back to 15 nor on to 72.
+      // The swipe began: the row stays where the finger caught it, neither
+      // back to 15 nor on to 72.
       caughtUp();
       const caught = xOf(row);
       expect(caught).toBeGreaterThan(15);
-      expect(caught).toBeLessThan(72);
+      expect(caught).not.toBeCloseTo(72, 0);
       g.move(185);
       caughtUp();
       expect(xOf(row)).toBeCloseTo(caught + 10, 2);
@@ -2181,12 +2176,12 @@ describe('swipe', () => {
       // cross-fades.
       reduceMotion();
       const {row} = renderRow();
-      dragLeading(row, 45);
+      dragLeading(row, 20);
       await act(async () => {
         vi.advanceTimersByTime(16);
       });
-      // Mid-fade the row has not travelled: it lands at the bottom of the
-      // dip. It is open from its release, as after a spring, so its panel is
+      // Mid-fade the row has not travelled from the finger's 45 px: it lands
+      // at the bottom of the dip. It is open from its release, as after a spring, so its panel is
       // already live.
       expect(xOf(row)).toBe(45);
       expect(panelOf(row, 'leading')).not.toHaveAttribute('inert');
@@ -2502,11 +2497,11 @@ describe('swipe', () => {
         f.down(10);
         f.move(20);
         f.move(35);
-        f.move(35 + 100);
+        f.move(10 + 100);
         caughtUp();
         // Short of the open width: every entry pinned at the outer edge.
         expect(entriesX()).toBe(44);
-        f.move(35 + 200);
+        f.move(10 + 200);
         caughtUp();
         // Past it: beside the row, the outermost entry's colour filling out
         // to the edge.
@@ -2524,18 +2519,21 @@ describe('swipe', () => {
         f.down(10);
         f.move(20);
         f.move(35);
-        // From the row's 144 px: 76 px more is 220 px.
+        // From the row's 144 px: the finger's 101 px puts it at 245 px. On
+        // UIKit's measure the swipe is 76 px past the open width, short of the
+        // confirm point.
         f.move(35 + 76);
         caughtUp();
-        // Not yet: the row follows the finger.
-        expect(xOf(row)).toBe(220);
+        // Not yet: the row is at the finger's travel.
+        expect(xOf(row)).toBe(245);
         expect(confirmOf(row)).toBe(0);
         expect(isHidden(other)).toBe(false);
         f.move(35 + 96);
         caughtUp();
-        // Confirmed: ahead to 271 px, the 300 px row less 29. The outermost
-        // entry slid by its full slide past the other, to the row's edge (72
-        // px, the side's geometry). The other hides behind its cover.
+        // Confirmed: the finger's travel puts the row at 265 px, and its lead
+        // grows to 271 px, the 300 px row less 29. The outermost entry slid by
+        // its full slide past the other, to the row's edge (72 px, the side's
+        // geometry). The other hides behind its cover.
         expect(xOf(row)).toBe(271);
         expect(confirmOf(row)).toBe(1);
         expect(isHidden(other)).toBe(true);
@@ -2544,10 +2542,11 @@ describe('swipe', () => {
             '--_item-swipe-slide',
           ),
         ).toBe('72px');
-        // Backed out: the look undone, the row on the finger again.
+        // Backed out: the look undone, the lead gone, the row at the finger's
+        // travel again.
         f.move(35 + 56);
         caughtUp();
-        expect(xOf(row)).toBe(200);
+        expect(xOf(row)).toBe(225);
         expect(confirmOf(row)).toBe(0);
         expect(isHidden(other)).toBe(false);
         f.up();
@@ -2710,8 +2709,8 @@ describe('swipe', () => {
         f.move(35);
         f.move(35 + 260);
         caughtUp();
-        // No run ahead: the row stays on the finger, unconfirmed.
-        expect(xOf(row)).toBe(260);
+        // No run ahead: the row stays at the finger's travel, unconfirmed.
+        expect(xOf(row)).toBe(285);
         expect(confirmOf(row)).toBe(0);
         f.rest();
         f.up();
@@ -2983,8 +2982,7 @@ describe('swipe', () => {
     const f = finger(row);
     f.down(10);
     f.move(20);
-    f.move(35);
-    f.move(65);
+    f.move(40);
     caughtUp();
     expect(xOf(row)).toBe(30);
     f.up();
@@ -3052,8 +3050,7 @@ describe('swipe', () => {
       f.down(200);
       f.move(190);
       f.move(175);
-      f.move(155);
-      f.move(135);
+      f.move(160);
       caughtUp();
       // Physical travel is negative, and the panel parts mirror it. The side's
       // pin is on the right, and the open width runs in from the row's right

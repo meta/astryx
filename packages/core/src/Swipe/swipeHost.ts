@@ -153,7 +153,8 @@ export interface SwipeHost {
 /**
  * The deprecated path's bridge: the key handler
  * Item's root forwards its key events into (Escape closes a resting row).
- * The layer writes it after every render; the root reads it on every event.
+ * The layer writes it when it mounts and clears it when it leaves; the root
+ * reads it on every event.
  * Leaves with the deprecated props.
  */
 export interface SwipeBridge {
@@ -163,9 +164,9 @@ export interface SwipeBridge {
 /** What the swipe layer takes. */
 export interface SwipeLayerProps {
   /**
-   * The deprecated path only. It is called after every render of the layer,
-   * with the gesture for Item's root to forward into, and with `null` when the
-   * layer leaves. A row given `swipe` routes its root's keys through the
+   * The deprecated path only. It is called when the layer mounts, with the
+   * gesture for Item's root to forward into, and with `null` when the layer
+   * leaves. A row given `swipe` routes its root's keys through the
    * runtime instead (swipeRoots.ts).
    */
   onBridge?: (bridge: SwipeBridge | null) => void;

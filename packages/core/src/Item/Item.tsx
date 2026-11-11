@@ -289,13 +289,13 @@ export interface ItemProps extends BaseProps<HTMLElement> {
 
   /**
    * @deprecated Pass `swipe={createSwipe({leading, trailing})}`;
-   * `astryx upgrade` rewrites it. Still works as released; ignored when
-   * `swipe` is set.
+   * `astryx upgrade` rewrites it. Still works, with the swipe's current
+   * behavior; ignored when `swipe` is set.
    */
   swipeActions?: ItemSwipeActions;
 
   /**
-   * @deprecated Pass `swipeBehavior` in `createSwipe`' options;
+   * @deprecated Pass `swipeBehavior` in `createSwipe`'s options;
    * `astryx upgrade` rewrites it. Ignored when `swipe` is set.
    * @default 'reveal'
    */

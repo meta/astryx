@@ -52,9 +52,10 @@ export const swipeActions = {
    */
   hysteresis: 25,
   /**
-   * The spring the row follows the finger with. Each move starts a new spring
-   * toward the finger's offset, from the row's presentation value and velocity.
-   * So the row trails a moving finger and catches up when it stops. Overdamped
+   * UIKit's tracking spring. A held row stays under the finger, one for one,
+   * with no spring. A confirmed row runs ahead to the confirmation offset on
+   * this spring, and a trackpad's confirm or back-out springs the row on it.
+   * In UIKit, each tracking update starts it toward the finger. Overdamped
    * on paper; Core Animation renders it critically damped (allowsOverdamping
    * off), ω₀ = 10 rad/s, which `toSpring` mirrors.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,

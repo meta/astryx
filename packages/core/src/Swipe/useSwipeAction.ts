@@ -29,11 +29,12 @@
  *   first event past the pan's 8 px start. Its release settles to the nearest
  *   stop by position and velocity (Core's one release policy), from the
  *   fingers' speed at their last move.
- * - A finger's or a pen's drag stays on UIKit's model. The swipe begins after
- *   UIKit's 25 px dead zone and counts from 0 there. The row trails the finger
- *   on UIKit's tracking spring and catches up when it stops. The release goes
- *   by UIKit's rule (swipeRelease.ts), on UIKit's settle spring from the row's
- *   own velocity.
+ * - A finger's or a pen's drag begins at the row's 8 px claim. From then until
+ *   the release, the row is at the finger's travel since touch-down. The full
+ *   swipe confirms on UIKit's measure, from UIKit's 25 px dead zone. The row
+ *   then runs ahead to the confirmation offset and keeps that lead. The
+ *   release goes by UIKit's rule (swipeRelease.ts), on UIKit's settle spring
+ *   from the row's own velocity.
  *
  * Either way a drag stays on its side: within one gesture an open row only
  * closes, never passing rest to its other side. Dragged past the confirm point,
@@ -89,8 +90,14 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {isRtlElement} from '../hooks/isRtlElement';
 import type {MotionHandle} from '../motion/animator';
 import {reducedMotionFade} from '../motion/reducedMotion';
+import {resolveMotion} from '../motion/resolveMotion';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
-import type {SpringDescription} from '../motion/spring';
+import {
+  solveSpring,
+  toSpring,
+  type SpringCurve,
+  type SpringDescription,
+} from '../motion/spring';
 import {swipeActions as SWIPE} from '../motion/uikit/swipeActions';
 import {setPressHeld} from '../privateAttributes/pressHeld.stylex';
 import {subscribeInput} from '../utils/inputStream';
@@ -235,6 +242,35 @@ export function physicalSign(side: SwipeSide, inlineSign: 1 | -1): 1 | -1 {
 }
 
 /** How far out a row goes when an entry fires and the row leaves (logical px). */
+/**
+ * The finger's travel from touch-down at which its swipe begins: the row's
+ * claim on the touch. From there the row is at the finger's travel.
+ */
+const FINGER_SWIPE_START = SWIPE.claim;
+
+/** How close to its target a lead in flight counts as grown, in px. */
+const LEAD_REST = 0.25;
+
+/** A finger's lead at `now` (performance.now() ms): grown, or in flight. */
+function leadNow(drag: Drag, now: number): number {
+  const motion = drag.leadMotion;
+  if (motion == null) {
+    return drag.lead;
+  }
+  const t = (now - motion.start) / 1000;
+  return t < motion.curve.settleTime(LEAD_REST)
+    ? motion.curve.value(t)
+    : drag.lead;
+}
+
+/** How fast a finger's lead moves at `now`, in px/s. */
+function leadVelocity(drag: Drag, now: number): number {
+  const motion = drag.leadMotion;
+  return motion == null
+    ? 0
+    : motion.curve.velocity((now - motion.start) / 1000);
+}
+
 function outTravel(layout: SwipeLayout): number {
   return layout.rowWidth + SWIPE.slideOutOvershoot;
 }
@@ -353,14 +389,30 @@ interface Drag {
   canConfirm: boolean;
   /** A trackpad's scroll drives it, not a finger or a pen. */
   isScroll: boolean;
-  /** Past the dead zone: the row follows. */
+  /** The swipe began: the row follows. */
   started: boolean;
-  /** Which way the finger crossed the dead zone: +1 toward the side, -1 away. */
+  /** Which way the swipe began: +1 toward the side, -1 away. */
   startSign: number;
   /** The travel the row had when the swipe began (logical, ≥ 0). */
   baseTravel: number;
-  /** The swipe's travel toward the side (logical, ≥ 0: never past rest). */
+  /**
+   * The swipe's travel toward the side on UIKit's measure, counted from its
+   * dead zone for a finger (logical, ≥ 0: never past rest). The full swipe
+   * confirms on it.
+   */
   raw: number;
+  /**
+   * Where the row is drawn toward the side, less any lead (logical, ≥ 0). A
+   * finger's row is at the finger's travel since touch-down.
+   */
+  held: number;
+  /**
+   * How far a confirmed finger's row runs ahead of the finger once its lead
+   * has grown (logical); 0 when not confirmed.
+   */
+  lead: number;
+  /** The lead's growth or shrink in flight, and when it began (ms). */
+  leadMotion: {curve: SpringCurve; start: number} | null;
   /** Confirmed: the swipe is past the confirm point. */
   isArmed: boolean;
   /** The full swipe confirmed at some point in this swipe. */
@@ -515,6 +567,8 @@ export function useSwipeAction({
   const dragRef = useRef<Drag | null>(null);
   /** The shared drag on the root. */
   const snapRef = useRef<SnapDrag | null>(null);
+  /** The frame that draws a finger's lead in flight. */
+  const leadFrameRef = useRef<number | null>(null);
   /** The row is open (see `isSwipeOpen`), read by listeners and recognizers. */
   const isOpen = useCallback(() => isSwipeOpen(stateRef.current), []);
 
@@ -904,6 +958,9 @@ export function useSwipeAction({
       isArmed: false,
       isScroll: move.input === 'scroll',
       raw: 0,
+      held: 0,
+      lead: 0,
+      leadMotion: null,
       started: false,
       startSign: 1,
       wasConfirmed: false,
@@ -921,9 +978,9 @@ export function useSwipeAction({
     const sign = physicalSign(layout.side, layout.inlineSign);
     if (!drag.started) {
       // A trackpad's swipe follows from its first event past the pan's start. A
-      // finger's begins after UIKit's dead zone, counted from where the touch
-      // landed. In between, the row stays where it was caught.
-      if (!drag.isScroll && Math.abs(move.total) < SWIPE.hysteresis) {
+      // finger's begins at FINGER_SWIPE_START, counted from where the touch
+      // landed. Before that, the row stays where it was caught.
+      if (!drag.isScroll && Math.abs(move.total) < FINGER_SWIPE_START) {
         return null;
       }
       // The swipe begins: the row is caught where it is, and so is the confirm.
@@ -939,20 +996,50 @@ export function useSwipeAction({
         side: layout.side,
       });
     }
-    // The finger's swipe counts from where it crossed the dead zone, as in
-    // UIKit; a trackpad's from the pan's start.
+    // On UIKit's measure, a finger's swipe counts from UIKit's dead zone, and a
+    // trackpad's from the pan's start.
     const swipe = drag.isScroll
       ? move.translation * sign
       : move.total * sign - drag.startSign * SWIPE.hysteresis;
     // Within one gesture the row stays on its side: never past rest.
     const raw = Math.max(0, drag.baseTravel + swipe);
     drag.raw = raw;
-    // The full swipe confirms on the swipe's travel, not the row's, which
-    // trails a finger on the spring. It confirms only when the outermost entry
-    // can fire.
+    // A finger's row is at the finger's travel since touch-down: the part of
+    // the row under the finger stays under it.
+    const held = drag.isScroll
+      ? raw
+      : Math.max(0, drag.baseTravel + move.total * sign);
+    drag.held = held;
+    // The full swipe confirms on UIKit's measure, where UIKit's own threshold
+    // was measured. It confirms only when the outermost entry can fire.
     const isArmed = drag.canConfirm && raw >= drag.confirmAt;
     const flipped = isArmed !== drag.isArmed;
+    const fade = reducedMotionFade(rootRef.current);
+    const now = performance.now();
     if (flipped) {
+      // Confirmed, a finger's row gains a lead that grows to UIKit's
+      // confirmation offset on UIKit's tracking spring, as UIKit's row runs
+      // ahead. Backed out, the lead shrinks on it. The base stays at the
+      // finger's travel throughout. Under Reduce Motion the lead changes at
+      // once, inside the cross-fade below.
+      const from = leadNow(drag, now);
+      const velocity = leadVelocity(drag, now);
+      drag.lead = isArmed
+        ? Math.max(0, confirmedOffset(layout.rowWidth) - held)
+        : 0;
+      drag.leadMotion =
+        drag.isScroll || fade != null
+          ? null
+          : {
+              curve: solveSpring(
+                toSpring(resolveMotion(rootRef.current, SWIPE.tracking)),
+                {from, to: drag.lead, velocity},
+              ),
+              start: now,
+            };
+      if (drag.leadMotion != null && leadFrameRef.current == null) {
+        leadFrameRef.current = requestAnimationFrame(drawLeadFrame);
+      }
       drag.isArmed = isArmed;
       drag.wasConfirmed ||= isArmed;
       setSwipeState({
@@ -962,29 +1049,29 @@ export function useSwipeAction({
         side: layout.side,
       });
     }
-    // Confirmed, the row runs ahead to UIKit's confirmation offset; backed
-    // out, it follows again.
-    const travel = isArmed
-      ? Math.max(raw, confirmedOffset(layout.rowWidth))
-      : raw;
+    // A confirmed trackpad's row runs ahead to UIKit's confirmation offset and
+    // waits there for its fingers.
+    const travel = drag.isScroll
+      ? isArmed
+        ? Math.max(raw, confirmedOffset(layout.rowWidth))
+        : raw
+      : held + leadNow(drag, now);
     const offset = sign * travel;
-    const fade = reducedMotionFade(rootRef.current);
     if (fade == null) {
-      // A finger's row trails it on UIKit's tracking spring; a trackpad's
-      // follows its fingers one for one. A confirm or a back-out
-      // springs the row to its new place either way.
-      return drag.isScroll && !flipped
-        ? {offset}
-        : {offset, spring: SWIPE.tracking};
+      // A finger's row is drawn where it is, with no spring. A trackpad's
+      // confirm or back-out springs the row to its new place.
+      return drag.isScroll && flipped
+        ? {offset, spring: SWIPE.tracking}
+        : {offset};
     }
     if (flipped) {
       // Confirming and backing out are changes of state, not the drag. Under
       // Reduce Motion they cross-fade, and the moves leave that fade alone
       // until it ends.
-      drag.dipUntil = performance.now() + fade.duration;
+      drag.dipUntil = now + fade.duration;
       return {offset, spring: SWIPE.tracking};
     }
-    if (drag.dipUntil != null && performance.now() < drag.dipUntil) {
+    if (drag.dipUntil != null && now < drag.dipUntil) {
       return null;
     }
     // Otherwise the row follows one for one: the drag itself is direct
@@ -993,9 +1080,40 @@ export function useSwipeAction({
     return {offset};
   };
 
+  const stopLeadFrames = () => {
+    if (leadFrameRef.current != null) {
+      cancelAnimationFrame(leadFrameRef.current);
+      leadFrameRef.current = null;
+    }
+  };
+
+  // Draws a finger's row while its lead grows or shrinks, also on frames with
+  // no move. The base stays at the finger's travel, and the lead moves on.
+  const drawLeadFrame = () => {
+    leadFrameRef.current = null;
+    const drag = dragRef.current;
+    const snap = snapRef.current;
+    if (drag?.leadMotion == null || snap == null) {
+      return;
+    }
+    const {layout, leadMotion} = drag;
+    const now = performance.now();
+    const sign = physicalSign(layout.side, layout.inlineSign);
+    snap.animator.set({x: sign * (drag.held + leadNow(drag, now))});
+    if (
+      (now - leadMotion.start) / 1000 <
+      leadMotion.curve.settleTime(LEAD_REST)
+    ) {
+      leadFrameRef.current = requestAnimationFrame(drawLeadFrame);
+    } else {
+      drag.leadMotion = null;
+    }
+  };
+
   const release = (end: SnapDragRelease): SnapDragLanding | null => {
     const drag = dragRef.current;
     dragRef.current = null;
+    stopLeadFrames();
     // A drag that never became a swipe changed nothing: the row stays where
     // it was caught.
     if (drag == null || !drag.started) {
@@ -1029,17 +1147,18 @@ export function useSwipeAction({
         behavior: currentBehavior,
         isConfirmed: drag.isArmed,
         openWidth: layout.openWidth,
-        travel: drag.raw,
+        travel: drag.held,
         velocity,
         wasConfirmed: drag.wasConfirmed,
       });
     }
-    // A finger's settle starts from the row's own velocity on UIKit's spring. A
-    // trackpad's starts from the fingers' speed at their last move, on the
-    // shared settle spring.
-    const motion = drag.isScroll
-      ? {velocity: end.velocity, spring: settleSpringFor(true)}
-      : {spring: settleSpringFor(false)};
+    // A finger's settle starts from the row's own velocity, the finger's, on
+    // UIKit's spring. A trackpad's starts from the fingers' speed at their last
+    // move, on the shared settle spring.
+    const motion = {
+      velocity: end.velocity,
+      spring: settleSpringFor(drag.isScroll),
+    };
     if (landing === 'perform') {
       slideOutAndFire(layout, cause, motion);
     } else if (landing === 'open') {
@@ -1054,6 +1173,7 @@ export function useSwipeAction({
   const cancel = (): SnapDragLanding | null => {
     const drag = dragRef.current;
     dragRef.current = null;
+    stopLeadFrames();
     // The browser took a touch the row was following: it closes.
     if (drag != null && drag.started) {
       settle(drag.layout, 'rest', 'idle', {
@@ -1168,11 +1288,15 @@ export function useSwipeAction({
   );
 
   // A row that loses its swipe while open takes presses again, and drops its
-  // closes.
+  // closes and the frames of a lead in flight.
   useIsomorphicLayoutEffect(
     () => () => {
       stopClosesRef.current?.();
       stopClosesRef.current = null;
+      if (leadFrameRef.current != null) {
+        cancelAnimationFrame(leadFrameRef.current);
+        leadFrameRef.current = null;
+      }
       const root = rootRef.current;
       if (root != null) {
         setPressHeld(root, false);
