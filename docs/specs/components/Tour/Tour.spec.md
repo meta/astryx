@@ -23,23 +23,24 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | Unchanged by this record.                                                                                                                         |
-| Behavior                | Without a backdrop, a press on the page or on the target leaves the tour running. With a backdrop, a press anywhere ends it with `'backdrop'`.    |
-| End-user impact         | A person can use the control a step introduces, or the rest of the page, while a plain tour stays open; a dimmed tour ends on a press outside it. |
-| Builder impact          | An app that needs a press to end the tour passes `hasBackdrop`, which also dims the page and reports `'backdrop'` (DEC-1).                        |
-| Compatibility/readiness | Lab. Draft. FR1 gap and AR1 gap below.                                                                                                            |
-| Review checks           | Reject a press that ends a tour without a backdrop, or a press under a backdrop that leaves the tour running.                                     |
-| Governing rules         | None recorded.                                                                                                                                    |
+| Area                    | Contract                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | Unchanged by this record.                                                                                                                                                       |
+| Behavior                | Without a backdrop, a press on the page or on the target leaves the tour running. With a backdrop, a press outside the callout, the target included, ends it with `'backdrop'`. |
+| End-user impact         | A person can use the control a step introduces, or the rest of the page, while a plain tour stays open; a dimmed tour ends on a press outside it.                               |
+| Builder impact          | An app that needs a press on the page or the target to end the tour passes `hasBackdrop`, which also dims the page and reports `'backdrop'` (DEC-1).                            |
+| Compatibility/readiness | Lab. Draft. FR1 gap and AR1 gap below.                                                                                                                                          |
+| Review checks           | Reject a press on the page or the target that ends a tour without a backdrop, or a press outside the callout under a backdrop that leaves the tour running.                     |
+| Governing rules         | None recorded.                                                                                                                                                                  |
 
 This table is a review projection; the body below is authoritative.
 
 ## Intent
 
 Tour is the lab's guided walkthrough: a sequence of steps, each a callout
-beside a highlighted target. This record states only how a press outside the
-step's callout affects the tour. Consumer usage lives in `Tour.doc.mjs`.
+beside a highlighted target. This record states how a press outside the
+step's callout affects the tour, and whether keyboard focus can leave the
+callout. Consumer usage lives in `Tour.doc.mjs`.
 
 ## Compatibility and migration
 
@@ -57,17 +58,18 @@ AR1 gap: keyboard focus stays in the step's callout. Pending evidence: a test th
 **Owns**
 
 - Whether a press outside the step's callout ends the tour.
+- Whether keyboard focus can leave the step's callout without a backdrop (AR1).
 
 **Does not own / non-goals**
 
-- The callout's placement, focus movement, and the step controls. Not recorded here.
+- The callout's placement, where focus goes when a step starts or the tour ends, and the step controls. Not recorded here.
 - Escape, which ends the tour through the shared layer dismissal stack (`family:overlay-dismissal`).
 
 ## Public concepts
 
-| Concept  | Closed values or states | Meaning                                                     | Availability by variant/orientation/state | Default | Owner            | Stability    | Invalid-value behavior |
-| -------- | ----------------------- | ----------------------------------------------------------- | ----------------------------------------- | ------- | ---------------- | ------------ | ---------------------- |
-| Backdrop | on, off                 | Whether the step dims the page and ends the tour on a press | Every step                                | off     | `component:Tour` | experimental | Not applicable         |
+| Concept  | Closed values or states | Meaning                                                                         | Availability by variant/orientation/state | Default | Owner            | Stability    | Invalid-value behavior |
+| -------- | ----------------------- | ------------------------------------------------------------------------------- | ----------------------------------------- | ------- | ---------------- | ------------ | ---------------------- |
+| Backdrop | on, off                 | Whether the step dims the page and ends the tour on a press outside the callout | Every step                                | off     | `component:Tour` | experimental | Not applicable         |
 
 ## Behavioral and layout contract
 
@@ -92,7 +94,7 @@ The component implements design requirements without copying their rationale.
 
 ## Family and system relationships
 
-None recorded.
+- `family:overlay-dismissal` owns Escape through the shared dismissal stack. The step adopts it, and this record owns only the step's outside dismissal (FR1) and whether focus can leave the callout (AR1).
 
 ## Verification map
 
