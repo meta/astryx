@@ -74,6 +74,9 @@ describe('ChatVirtualizer on the page scroller: rotation', () => {
   let el: HTMLElement;
   let viewHeight = 400;
   let rowHeight = ROW;
+  // scrollTop writes the list makes, not the browser's in pageScroll().
+  let listWrites = 0;
+  let isBrowserWrite = false;
   let scrolling: PropertyDescriptor | undefined;
   let restorePointer: () => void = () => {};
   let restoreRects: () => void = () => {};
@@ -93,6 +96,18 @@ describe('ChatVirtualizer on the page scroller: rotation', () => {
     rowSizeOf = element =>
       (element as HTMLElement).dataset.pkey !== undefined ? rowHeight : null;
     el = document.createElement('div');
+    listWrites = 0;
+    let top = 0;
+    Object.defineProperty(el, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (value: number) => {
+        top = value;
+        if (!isBrowserWrite) {
+          listWrites++;
+        }
+      },
+    });
     Object.defineProperty(el, 'clientHeight', {
       configurable: true,
       get: () => viewHeight,
@@ -237,7 +252,9 @@ describe('ChatVirtualizer on the page scroller: rotation', () => {
 
   /** The page scrolls: its scroll event fires at the document. */
   function pageScroll(at: number): void {
+    isBrowserWrite = true;
     el.scrollTop = at;
+    isBrowserWrite = false;
     act(() => {
       document.dispatchEvent(new Event('scroll'));
     });
@@ -401,6 +418,67 @@ describe('ChatVirtualizer on the page scroller: rotation', () => {
     });
     await settled();
     expect(atBottom()).toBe(true);
+  });
+
+  it('follows a keyboard scroll right after a rotation', async () => {
+    render(list(rows(200)));
+    await settled();
+    pageScroll(50 * ROW);
+    await nextFrame();
+    await rotate({viewHeight: 700, rowHeight: PORTRAIT_ROW});
+    const before = topRow();
+    // PageDown: the key goes to the page, and the browser scrolls.
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', {key: 'PageDown'}));
+    });
+    pageScroll(el.scrollTop + 10 * PORTRAIT_ROW);
+    await nextFrame();
+    await nextFrame();
+    expect(topRow()).toBeGreaterThanOrEqual(before + 9);
+  });
+
+  it('writes the scroll position at most once for a run of scroll events after a rotation', async () => {
+    render(list(rows(200)));
+    await settled();
+    pageScroll(50 * ROW);
+    await nextFrame();
+    await rotate({viewHeight: 700, rowHeight: PORTRAIT_ROW});
+    await settled();
+    // A scripted smooth scroll right after the rotation, one step a frame.
+    listWrites = 0;
+    const start = el.scrollTop;
+    for (let step = 1; step <= 8; step++) {
+      pageScroll(start + step * 50);
+      await nextFrame();
+    }
+    expect(listWrites).toBeLessThanOrEqual(1);
+  });
+
+  it('follows a scroll on its own scroller in the frame its height changes', async () => {
+    // The list scrolls its own box, not the page.
+    Object.defineProperty(document, 'scrollingElement', {
+      configurable: true,
+      get: () => document.documentElement,
+    });
+    render(list(rows(200)));
+    await settled();
+    act(() => {
+      el.scrollTop = 50 * ROW;
+      el.dispatchEvent(new Event('scroll'));
+    });
+    await nextFrame();
+    await nextFrame();
+    const before = topRow();
+    // A growing composer shrinks the scroller; its observer entry has not
+    // arrived yet when the reader's scroll does.
+    viewHeight = 300;
+    act(() => {
+      el.scrollTop = el.scrollTop - 10 * ROW;
+      el.dispatchEvent(new Event('scroll'));
+    });
+    await nextFrame();
+    await nextFrame();
+    expect(topRow()).toBeLessThanOrEqual(before - 9);
   });
 
   it('writes no scroll position during a rotation while a finger scrolls', async () => {
