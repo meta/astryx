@@ -474,8 +474,14 @@ export function compileTheme(ctx, data, base) {
       } else if (s.thing === 'type') {
         const T = TYPE_STYLES[s.value];
         theme.typography ??= {};
+        // The base is text-size's wherever it sits in the settings.
+        const size = [...data.settings]
+          .reverse()
+          .find(x => x.source === 'dial' && x.thing === 'text-size' && !x.on);
         theme.typography.scale = {
-          base: theme.typography.scale?.base ?? 14,
+          base: size
+            ? textPx(size.value)
+            : (theme.typography.scale?.base ?? 14),
           ratio: T.ratio,
         };
         if (T.weight && !headingsAxis('weight'))
@@ -491,9 +497,15 @@ export function compileTheme(ctx, data, base) {
             putTok(k, HEADING_WEIGHTS[s.value]);
       } else if (s.thing === 'text-size') {
         theme.typography ??= {};
+        // The ratio is type's wherever it sits in the settings.
+        const type = [...data.settings]
+          .reverse()
+          .find(x => x.source === 'dial' && x.thing === 'type');
         theme.typography.scale = {
           base: textPx(s.value),
-          ratio: theme.typography.scale?.ratio ?? 1.2,
+          ratio: type
+            ? TYPE_STYLES[type.value].ratio
+            : (theme.typography.scale?.ratio ?? 1.2),
         };
       } else if (s.thing === 'spacing') {
         const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
@@ -572,7 +584,7 @@ export function maskedSettings(data) {
     if (hidden.length)
       out.set(
         s,
-        `heading ${hidden.join(' and ')} come${hidden.length > 1 ? '' : 's'} from headings, not type`,
+        `type still sets the heading sizes and line heights; heading ${hidden.join(' and ')} come${hidden.length > 1 ? '' : 's'} from headings`,
       );
   }
   return out;
@@ -633,7 +645,7 @@ function settingsSource(slug, data, theme, pal) {
   const REF = '@@palette:';
   /** @param {string} family @param {'light' | 'dark'} m @param {import('./_palette.mjs').StopRef} r */
   const refOf = (family, m, r) =>
-    `${REF}${family}.${m}.${r.stop}${r.alpha ? `+${r.alpha}` : ''}`;
+    `${REF}${family}.${r.from ?? m}.${r.stop}${r.alpha ? `+${r.alpha}` : ''}`;
   const out = {...theme, name: `${slug}-settings`};
   if (pal && theme.tokens) {
     out.tokens = {...theme.tokens};
