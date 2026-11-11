@@ -16,6 +16,7 @@ import type {
   ShowToastFn,
   ToastEntry,
 } from './types';
+import {sharedSequence} from '../utils/sharedRealm';
 
 // Fallback singleton
 let fallbackContext: ToastContextValue | null = null;
@@ -101,9 +102,11 @@ function getFallbackContext(): ToastContextValue {
   return queue.context;
 }
 
-let toastIdCounter = 0;
+// One sequence for every copy of Core: toasts from a swizzled copy share the
+// package's queue, so their ids must not repeat.
+const nextToastId = sharedSequence('toast/use-toast/toast-id', 1);
 function generateToastId(): string {
-  return `astryx-toast-${++toastIdCounter}`;
+  return `astryx-toast-${nextToastId()}`;
 }
 
 /**

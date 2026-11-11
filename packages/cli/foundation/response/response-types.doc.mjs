@@ -112,6 +112,61 @@ export const doc = {
       description:
         "One post's metadata plus the feed URL and the post's full plaintext body.",
     },
+    // experimental theme editor and preview (experimental: may change or be removed in a patch release)
+    {
+      value: 'themeEdit.new',
+      stability: 'experimental',
+      description:
+        'A theme made by `experimental theme editor new`: `theme`, `like` (the built-in theme it builds on, or null), the `files` written (settings, source, css, module), the dial `settings` it started with, font `notes`, contrast `problems`, the `preview` page, and any `pictures` (with `pictureProblem` when none could be taken). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.set',
+      stability: 'experimental',
+      description:
+        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, build `warnings`, the `preview` page and any `pictures`. Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.show',
+      stability: 'experimental',
+      description:
+        'Every `settings` entry with the `parts` it styles, key `resolved` token values (colors and shadows per mode, other values once), `partValues` (corners or spacing set on a part or group, with what its parts get beside the whole-theme value), the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures`, and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.undo',
+      stability: 'experimental',
+      description:
+        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page and any `pictures`. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` naming the one removed, which is back to the base theme's value. Experimental: may change or be removed in a patch release.",
+    },
+    {
+      value: 'themeEdit.previewAdd',
+      stability: 'experimental',
+      description:
+        "Pages added to the theme preview in the app: the route `folder`, the `theme` the pages wear (null for the app's own), the pages `added`, the pages that were there already and are written again (`refreshed`), every page (`pages`), each template page picked and why (`matched`), the template pages `skipped` (each with its `reason` and `installCommand`), the `files` the preview wrote, `notes`, and how to `open` it. Experimental: may change or be removed in a patch release.",
+    },
+    {
+      value: 'themeEdit.previewApp',
+      stability: 'experimental',
+      description:
+        'A new starter app with the theme preview inside: the app `folder`, the `theme` copied into it that the pages wear (null for its own neutral theme), the preview `pages`, the `files` written, `notes`, and how to `open` it (install, run, then the page). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.previewList',
+      stability: 'experimental',
+      description:
+        'The pages of the theme preview: the route `folder` (null with no preview), the `theme`, and the `pages` (`id`, `label`). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.previewRemove',
+      stability: 'experimental',
+      description:
+        'A page or the whole theme preview removed: the route `folder`, the files `removed`, and the `pages` left (empty when the whole preview went). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'themeEdit.how',
+      stability: 'experimental',
+      description:
+        'A how answer; `kind` says which: `part` (`component`, `recorded`, `group`, `groupMembers`, `spreads`, `variants`, `states`, `reads` per aspect, `contains`), `group` (`members`, `spreads`), `setting` (a dial: `values`, `help`, `examples`, and for a color the `shades` each token starts from; a token: `tokenType`, `default`, `perMode`, `readBy`, `examples`; a property: `setBy`, `examples`), `aspect` or `question` (`results`, each a `text` and its `commands`), `picture` (main colors or the color at points) or `list` (the `items`). Experimental: may change or be removed in a patch release.',
+    },
     // render (experimental: may change or be removed in a patch release)
     {
       value: 'render.page',

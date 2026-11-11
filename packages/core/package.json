@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.13",
+  "version": "0.7.14",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -910,7 +910,6 @@
     "!**/*.bench.*"
   ],
   "scripts": {
-    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "prepack": "pnpm build",
     "postinstall": "node scripts/postinstall.mjs",
     "build": "node ../../scripts/clean-dist.mjs && pnpm build:i18n && pnpm build:esm && tsc --project tsconfig.build.json && node ../../scripts/add-declaration-extensions.mjs && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",

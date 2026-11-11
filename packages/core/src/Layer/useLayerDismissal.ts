@@ -102,7 +102,8 @@ export interface UseLayerDismissalReturn {
  * the document it arrived in, so one press dismisses exactly one of them.
  * Dialog (and what is built on it, including CommandPalette), Popover and the
  * menus built on it, ContextMenu, Tooltip, HoverCard, Lightbox, MobileNav,
- * BottomSheet, BottomSheetSwitcher and `Drawer` register today.
+ * BottomSheet, BottomSheetSwitcher, `Drawer` and the `useKeyboardHint` hint
+ * register today.
  *
  * `DropdownMenuSubMenu` and `PowerSearchEditPopover` still run their own Escape
  * listeners. They stay safe next to the stack only because each claims the press

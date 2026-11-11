@@ -303,5 +303,5 @@ useTableSortableState useTableSortableState Table/plugins/sortable/useTableSorta
 useToastGesture useToastGesture Toast/Toast.doc.mjs Toast/useToastGesture.ts
 useTouchTrigger useTouchTrigger Layer/Layer.doc.mjs Layer/useTouchTrigger.ts
 useTriggerMenu useTriggerMenu Chat/Chat.doc.mjs Chat/useTriggerMenu.tsx
-useTruncation useTruncation Text/Heading.doc.mjs Text/useTruncation.ts
+useTruncation useTruncation Text/useTruncation.doc.mjs Text/useTruncation.ts
 utils utils Calendar/Calendar.doc.mjs Calendar/utils.ts

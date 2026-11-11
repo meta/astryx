@@ -219,6 +219,8 @@ describe('where runs wait', () => {
       'pr-interaction-webkit',
       'pr-touched-components',
       'pr-visual',
+      'release-specs',
+      'release-specs-plan',
       'typecheck',
     ]);
   });
