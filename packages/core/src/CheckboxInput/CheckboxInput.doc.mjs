@@ -109,7 +109,7 @@ export const docs = {
       name: 'size',
       type: "'sm' | 'md'",
       description:
-        'The size of the checkbox. sm for compact layouts, md for default. Under a coarse pointer a labelled checkbox’s target grows toward 44 px through an invisible hit area. It never shrinks below the row and stops at half the gap to a closer neighbour; nothing changes size.',
+        'The size of the checkbox. sm for compact layouts, md for default. Under a coarse pointer a labelled checkbox’s target grows toward 44 px through an invisible hit area. It never shrinks below the row, and nothing changes size. A tap on another control’s visible box goes to that control, and a tap in empty space where hit areas overlap goes to the nearest control.',
       default: "'md'",
     },
     {

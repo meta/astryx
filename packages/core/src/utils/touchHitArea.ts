@@ -15,7 +15,7 @@
  */
 
 import {useCallback, type RefCallback} from 'react';
-import {distanceTo, INTERACTIVE_SELECTOR, type HitRect} from './hitArea';
+import {distanceTo, INTERACTIVE_SELECTOR} from './hitArea';
 import {subscribeInput} from './inputStream';
 import {isElement} from './nodeType';
 import {isGrownHitInput} from '../privateAttributes/grownHitInput.stylex';
@@ -49,32 +49,23 @@ function isOwn(host: Element, candidate: Element): boolean {
 }
 
 /**
- * The box a target shows. A marked grown hit input, such as Switch's, paints
- * nothing: the person sees its parent's box.
+ * The element whose box a target shows. A marked grown hit input, such as
+ * Switch's, paints nothing and covers its parent: the person sees the parent.
  */
-function visibleBox(target: Element): HitRect {
-  const box = target.getBoundingClientRect();
-  const parent = target.parentElement;
-  if (parent == null || !isGrownHitInput(target)) {
-    return box;
-  }
-  const clip = parent.getBoundingClientRect();
-  return {
-    left: Math.max(box.left, clip.left),
-    top: Math.max(box.top, clip.top),
-    right: Math.min(box.right, clip.right),
-    bottom: Math.min(box.bottom, clip.bottom),
-  };
+function shownBy(target: Element): Element {
+  return (isGrownHitInput(target) ? target.parentElement : null) ?? target;
 }
 
+// The text entry a field's frame holds as a direct child.
+const FIELD_ENTRY =
+  ':scope > :is(input:not([type="hidden"]), textarea, [contenteditable="true"])';
+
 /**
- * Where a tap on `host`'s band at (x, y) goes, or null for the host itself. A
- * visible box under the finger wins; the band only claims empty space. In
- * empty space where bands overlap, the target whose box is nearest the finger
- * wins. It reads the host's box, and only when the press is outside it, the
- * elements under the finger and their targets' boxes, up to the host's own
- * container: what paints below that, such as the page under a layer, is not
- * beside the host. One layout flush serves every read.
+ * Where a tap on `host`'s band at (x, y) goes, or null for the host: a visible
+ * box under the finger, else the nearest box in empty space. It reads boxes
+ * only when the finger is outside the host's, up to the host's own container
+ * (what paints below, such as the page under a layer, is not beside it), in
+ * one layout flush.
  */
 function targetUnderFinger(
   host: Element,
@@ -94,12 +85,14 @@ function targetUnderFinger(
       break;
     }
     // The browser also lists an element whose band, not its box, is under
-    // the finger.
-    const target = element.closest(INTERACTIVE_SELECTOR);
+    // the finger. A field's frame around its text entry is the entry's.
+    const control = element.closest(INTERACTIVE_SELECTOR);
+    const target = control ?? element.querySelector(FIELD_ENTRY);
     if (target == null || isOwn(host, target)) {
       continue;
     }
-    const distance = distanceTo(visibleBox(target), x, y);
+    const shown = control != null ? shownBy(target) : element;
+    const distance = distanceTo(shown.getBoundingClientRect(), x, y);
     if (distance === 0) {
       return target as HTMLElement;
     }
@@ -111,13 +104,36 @@ function targetUnderFinger(
   return nearest;
 }
 
+// A select and the inputs whose native tap opens a picker.
+const PICKER =
+  /^(select-one|select-multiple|date|datetime-local|month|week|time|color)$/;
+
+/**
+ * Gives a tap to `target` as a native tap does, inside the same click, so the
+ * user gesture holds. `click()` runs a button's, link's, label's, checkbox's
+ * or submit's activation. A focusable target also takes the focus, so a text
+ * field raises the keyboard and the band's control keeps none, and a picker
+ * opens.
+ */
+function activate(target: HTMLElement): void {
+  if (target.tabIndex >= 0 || target.isContentEditable) {
+    target.focus({preventScroll: true});
+  }
+  target.click();
+  if (PICKER.test((target as HTMLInputElement).type ?? '')) {
+    try {
+      (target as HTMLInputElement).showPicker();
+    } catch {
+      // The browser refuses the picker; the focus has already moved.
+    }
+  }
+}
+
 /**
  * Checks each finger's tap on `host` until the returned function runs. The
- * press notes where the finger landed and reads nothing, so a scroll that it
- * starts never waits. When the tap began on the band over another target's
- * visible box, or in empty space nearer another target's box, its click goes
- * to that target. A keyboard or assistive-technology click (detail 0) goes
- * through.
+ * press reads nothing, so a scroll it starts never waits. At the click,
+ * `targetUnderFinger` may send the tap on; a keyboard or assistive-technology
+ * click (detail 0) goes through.
  */
 function checkTaps(host: Element, ownsDescendantTouches: boolean): () => void {
   const view = host.ownerDocument.defaultView;
@@ -148,7 +164,7 @@ function checkTaps(host: Element, ownsDescendantTouches: boolean): () => void {
       if (target != null) {
         click.preventDefault();
         click.stopPropagation();
-        target.click();
+        activate(target);
       }
     };
     const stopClick = subscribeInput(view, 'click', onClick, {cancels: true});
@@ -173,10 +189,8 @@ function checkTaps(host: Element, ownsDescendantTouches: boolean): () => void {
 /**
  * A callback ref for an element that takes taps (`enabled`) and draws a touch
  * band (`touchHitAreaStyles.layer`, or `band` on a descendant with
- * `BAND_ON_DESCENDANT`). Under a finger, a tap on the band over another
- * target's visible box acts on that target; in empty space, it acts on the
- * target whose box is nearest, the element when no other is nearer. Keep
- * `options` stable, as a module constant.
+ * `BAND_ON_DESCENDANT`), whose taps the press check routes. Keep `options`
+ * stable, as a module constant.
  *
  * @example
  * ```

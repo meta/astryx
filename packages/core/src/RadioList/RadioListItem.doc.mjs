@@ -8,7 +8,7 @@ export const docs = {
   displayName: 'Radio List Item',
   isHiddenFromOverview: true,
   description:
-    'Individual radio item with label, description, and content slots. Under a coarse pointer an enabled option’s target grows toward 44 px through an invisible hit area. It never shrinks below the row and stops at half the gap to a closer neighbour; the row keeps its size. That hit area is the row’s `::after`, so decorate a row with a child.',
+    'Individual radio item with label, description, and content slots. Under a coarse pointer an enabled option’s target grows toward 44 px through an invisible hit area. It never shrinks below the row, takes half the gap toward the next option, and the row keeps its size. A tap on another control’s visible box goes to that control. That hit area is the row’s `::after`, so decorate a row with a child.',
   // RadioListItem requires RadioList context; wrap it so the preview doesn't throw.
   playground: {
     defaults: {value: 'option-1', label: 'Option'},

@@ -4,6 +4,7 @@ import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
+import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Card} from '@astryxdesign/core/Card';
 import {Heading} from '@astryxdesign/core/Heading';
@@ -586,7 +587,11 @@ export const TouchReach: Story = {
       next: 0,
       pin: 0,
       mark: 0,
+      go: 0,
+      clear: 0,
     });
+    const [query, setQuery] = useState('');
+    const [agree, setAgree] = useState(false);
     const [sync, setSync] = useState(false);
     const count = (key: keyof typeof taps) => () =>
       setTaps(current => ({...current, [key]: current[key] + 1}));
@@ -673,6 +678,41 @@ export const TouchReach: Story = {
             onClick={count('mark')}
           />
         </div>
+        <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
+          <TextInput
+            label="Search"
+            isLabelHidden
+            value={query}
+            onChange={setQuery}
+            data-testid="search"
+          />
+          <Button
+            label="Go"
+            data-testid="go"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('go')}
+          />
+        </div>
+        <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
+          <CheckboxInput
+            label="Agree"
+            isLabelHidden
+            value={agree}
+            onChange={setAgree}
+          />
+          <Button
+            label="Clear"
+            data-testid="clear"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={TrashIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('clear')}
+          />
+        </div>
         <ToggleButtonGroup
           type="multiple"
           label="Format"
@@ -710,6 +750,9 @@ export const TouchReach: Story = {
         </Text>
         <output aria-label="Reach taps">
           Lone {taps.lone}, Link {taps.link}, Cut {taps.cut}, Copy {taps.copy}
+        </output>
+        <output aria-label="Field taps">
+          Go {taps.go}, Clear {taps.clear}, Agree {agree ? 'on' : 'off'}
         </output>
         <output aria-label="Overhang taps">
           Pin {taps.pin}, Mark {taps.mark}

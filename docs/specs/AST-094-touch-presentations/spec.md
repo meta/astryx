@@ -811,7 +811,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   that box, the elements under the finger within the control's container, in
   one read. Where the finger is on another target's visible box, that target
   takes the tap, as it does without the band. In empty space where bands
-  overlap, the target whose box is nearest the finger takes the tap (owner
+  overlap, the target whose box is nearest the finger takes the tap. A target
+  that takes a tap this way takes it as a native tap does: it takes the
+  focus, so a text field raises the keyboard, and a picker opens. A field's
+  frame around its text entry shows the entry's box (owner
   decision, 2026-11-10; DEC-32). A hit area a component or module
   record sets on purpose, such as `component:Thumbnail` AR4's, is unaffected.
   Mobile size increases belong to theme adaptations (DEC-20).

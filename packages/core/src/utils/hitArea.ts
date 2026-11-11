@@ -3,13 +3,10 @@
 /**
  * @file hitArea.ts
  * @input Rects in client pixels and a touch point
- * @output The touch target geometry: `touchTargetRect` grows a rect toward
- *   44 px, centered; `distanceTo` measures a point's distance to a rect;
- *   `resolveHitTarget` picks the target a touch is for.
- *   `INTERACTIVE_SELECTOR` names what a touch can land on
- * @position Core-internal utility, not exported from `@astryxdesign/core/utils`.
- *   It reads no layout. Press trackers pass it the rects they read when a
- *   press begins, and so does the press check in utils/touchHitArea.ts
+ * @output Touch geometry: `touchTargetRect`, `distanceTo`,
+ *   `resolveHitTarget`, and `INTERACTIVE_SELECTOR` (what a touch can land on)
+ * @position Core-internal; reads no layout. Press trackers and the press
+ *   check (utils/touchHitArea.ts) pass it the rects they read.
  */
 
 /** A rect in client pixels. */

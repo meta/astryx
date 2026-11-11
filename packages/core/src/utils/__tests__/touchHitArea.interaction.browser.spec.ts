@@ -362,6 +362,50 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
     await expect(output).toHaveText('Pin 1, Mark 0');
   });
 
+  test('a tap on a text field’s edge under a neighbour’s band focuses the field, and the neighbour gets no click', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), STORY);
+    const root = page.locator('#storybook-root');
+    const field = root.getByRole('textbox', {name: 'Search'});
+    const output = root.locator('output[aria-label="Field taps"]');
+    // The field's frame: the box around its text entry.
+    const edge = await field.evaluate(element => {
+      const r = element.parentElement!.getBoundingClientRect();
+      return {right: r.right, top: r.top, bottom: r.bottom};
+    });
+    const go = await boxOf(page, 'go');
+    // Go's band lies over the frame's last pixels.
+    expect(go.left - edge.right).toBeLessThan(8);
+    const driver = await touchDriver(page);
+    await tapAt(driver, {
+      x: Math.floor(edge.right) - 2,
+      y: Math.round((edge.top + edge.bottom) / 2),
+    });
+    await expect(field).toBeFocused();
+    await expect(output).toHaveText('Go 0, Clear 0, Agree off');
+  });
+
+  test('a tap on a checkbox’s edge under a neighbour’s band toggles it once, and the neighbour gets no click', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), STORY);
+    const root = page.locator('#storybook-root');
+    const box = await root
+      .getByRole('checkbox', {name: 'Agree'})
+      .evaluate(element => {
+        const r = element.getBoundingClientRect();
+        return {right: r.right, top: r.top, bottom: r.bottom};
+      });
+    const output = root.locator('output[aria-label="Field taps"]');
+    const driver = await touchDriver(page);
+    await tapAt(driver, {
+      x: Math.floor(box.right) - 1,
+      y: Math.round((box.top + box.bottom) / 2),
+    });
+    await expect(output).toHaveText('Go 0, Clear 0, Agree on');
+  });
+
   test('a NavigationStack push reads no layout and writes no hit size on either screen’s rows, through the frames after it lands', async ({
     page,
   }) => {
