@@ -38,6 +38,7 @@ import {
   programPath,
   traverseTemplateSource,
   writtenNames,
+  TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
 
 const require = createRequire(import.meta.url);
@@ -2109,13 +2110,7 @@ export function componentsInSource(src) {
   return parsedComponents(src);
 }
 
-/** Where the component lists of the templates Astryx ships are stored. */
-export const TEMPLATE_COMPONENTS_FILE = path.join(
-  CLI_ROOT,
-  'assets',
-  'templates',
-  'components.generated.json',
-);
+export {TEMPLATE_COMPONENTS_FILE} from './template-source-tree.mjs';
 
 /**
  * The components a template source composes, read from its syntax tree (see
