@@ -466,6 +466,21 @@ const styles = stylex.create({
         reducedMotionFadeConsts.easing,
     },
   },
+  /**
+   * The wheels cover the calendar with an opaque plate in the sheet's color,
+   * so only they fade and the calendar beneath stays drawn. `isolation` keeps
+   * the calendar's text from painting through the plate at full opacity,
+   * where no stacking context forms.
+   */
+  touchWheelsSurface: {
+    backgroundColor: colorVars['--color-background-surface'],
+    isolation: 'isolate',
+  },
+  // The calendar never fades: the wheels' plate covers it. With a mouse it
+  // takes `hidden` when the wheels show.
+  touchCalendarSurfaceHidden: {
+    visibility: 'hidden',
+  },
   // Under a finger, UIDatePicker's chevron: it points along the reading
   // direction for the calendar and turns down on the toggle's clock. With a
   // mouse it points down and stays. Under Reduced Motion it does not turn.
@@ -1269,7 +1284,11 @@ export function TouchDateTimeField({
               inert={isCalendarInert ? true : undefined}
               {...stylex.props(
                 styles.touchDateSurface,
-                isWheelOpen && styles.touchDateSurfaceHidden,
+                // Under a finger the calendar stays drawn beneath the opaque
+                // wheels, and `aria-hidden` and `inert` keep it out of reach.
+                // Flipping the inherited `visibility` would restyle it in the
+                // toggle's commit.
+                isWheelOpen && !isTouch && styles.touchCalendarSurfaceHidden,
               )}>
               <div aria-hidden="true" {...stylex.props(styles.touchWeekdays)}>
                 {weekdayHeaders.map(({dayOfWeek, name}) => (
@@ -1321,6 +1340,7 @@ export function TouchDateTimeField({
               inert={isWheelsInert ? true : undefined}
               {...stylex.props(
                 styles.touchDateSurface,
+                styles.touchWheelsSurface,
                 !isWheelOpen && styles.touchDateSurfaceHidden,
               )}>
               <div

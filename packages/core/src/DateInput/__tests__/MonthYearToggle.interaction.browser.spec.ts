@@ -314,7 +314,7 @@ test('the wheels fade out on the exit curve when they close', async ({
   });
 });
 
-test('DateTimeInput: the calendar and the wheels cross-fade on the theme’s motion tokens, the title chevron turning with them', async ({
+test('DateTimeInput: the wheels fade in over the calendar on the theme’s motion tokens, the title chevron turning with them', async ({
   page,
 }) => {
   await openStory(page, storybook(), DTI_STORY);
@@ -1059,6 +1059,108 @@ for (const [name, story, titleSelector, panelSelector, panelKey] of [
       (inert?.time ?? Number.NaN) - commitTime,
       JSON.stringify(log),
     ).toBeGreaterThanOrEqual(tokens.ms);
+  });
+}
+
+for (const [name, story, titleSelector, calendarSelector, wheelsSelector] of [
+  [
+    'DateInput',
+    STORY,
+    '[data-title="month-year"]',
+    '[data-panel="calendar"]',
+    '[data-panel="wheels"]',
+  ],
+  [
+    'DateTimeInput',
+    DTI_STORY,
+    'button[aria-label$="Choose month and year"]',
+    '[data-date-surface="calendar"]',
+    '[data-date-surface="wheels"]',
+  ],
+] as const) {
+  test(`${name}: the wheels fade in on an opaque plate, and the calendar stays drawn beneath them`, async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), story);
+    const driver = await touchDriver(page);
+    const tapCenter = async (selector: string) => {
+      const box = await page.locator(selector).first().boundingBox();
+      if (box == null) {
+        throw new Error(`no ${selector}`);
+      }
+      await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+    };
+    await tapCenter('button[aria-label^="Open "]');
+    await settlesAt(
+      page.getByRole('dialog').locator('.astryx-bottom-sheet').first(),
+      'transform',
+      'matrix(1, 0, 0, 1, 0, 0)',
+    );
+    const calendar = page.locator(calendarSelector).first();
+    const wheels = page.locator(wheelsSelector).first();
+    // The panels share one parent, so its watch sees a run on either panel.
+    const runs = await watchAnimations(calendar.locator('..'));
+    await tapCenter(titleSelector);
+    // The wheels fade in. Nothing fades out beneath them.
+    const fades = (await runs.started()).filter(run => run.name === 'opacity');
+    expect(fades.length, JSON.stringify(fades)).toBeGreaterThan(0);
+    for (const fade of fades) {
+      expect(String(fade.keyframes[0].opacity), JSON.stringify(fade)).toBe('0');
+    }
+    await waitForRest(wheels);
+    const state = await page.evaluate(
+      ({calendarAt, wheelsAt}) => {
+        const under = document.querySelector<HTMLElement>(calendarAt);
+        const over = document.querySelector<HTMLElement>(wheelsAt);
+        if (under == null || over == null) {
+          throw new Error('no panels');
+        }
+        // The color behind both panels: their nearest ancestor that paints.
+        let painted = over.parentElement;
+        while (
+          painted != null &&
+          getComputedStyle(painted).backgroundColor === 'rgba(0, 0, 0, 0)'
+        ) {
+          painted = painted.parentElement;
+        }
+        const underStyle = getComputedStyle(under);
+        const overStyle = getComputedStyle(over);
+        const underBox = under.getBoundingClientRect();
+        const overBox = over.getBoundingClientRect();
+        return {
+          calendar: {
+            opacity: underStyle.opacity,
+            visibility: underStyle.visibility,
+            ariaHidden: under.getAttribute('aria-hidden'),
+          },
+          plate: {
+            color: overStyle.backgroundColor,
+            isolation: overStyle.isolation,
+            covers:
+              overBox.left <= underBox.left + 0.5 &&
+              overBox.top <= underBox.top + 0.5 &&
+              overBox.right >= underBox.right - 0.5 &&
+              overBox.bottom >= underBox.bottom - 0.5,
+          },
+          sheetColor:
+            painted == null ? null : getComputedStyle(painted).backgroundColor,
+        };
+      },
+      {calendarAt: calendarSelector, wheelsAt: wheelsSelector},
+    );
+    // Still drawn at full opacity, but out of the accessibility tree.
+    expect(state.calendar).toEqual({
+      opacity: '1',
+      visibility: 'visible',
+      ariaHidden: 'true',
+    });
+    // The wheels cover it with a plate in the sheet's own color.
+    expect(state.sheetColor).not.toBeNull();
+    expect(state.plate).toEqual({
+      color: state.sheetColor,
+      isolation: 'isolate',
+      covers: true,
+    });
   });
 }
 
