@@ -831,6 +831,7 @@
     "/templates/useLocaleHookUsage/",
     "/templates/useMergedRefsHookUsage/",
     "/templates/useMultiComboboxHookUsage/",
+    "/templates/useOutlineFromDOMHookUsage/",
     "/templates/useOutlineFromMarkdownHookUsage/",
     "/templates/useOverflowHookUsage/",
     "/templates/useOverlayHookUsage/",
