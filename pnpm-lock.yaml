@@ -677,6 +677,9 @@ importers:
       '@tailwindcss/postcss':
         specifier: ^4.3.2
         version: 4.3.2
+      axe-core:
+        specifier: ^4.12.1
+        version: 4.12.1
       class-variance-authority:
         specifier: ^0.7.0
         version: 0.7.1
@@ -689,6 +692,9 @@ importers:
       lucide-react:
         specifier: ^1.66.0
         version: 1.67.0(@types/react@19.3.0)(react@19.3.1)
+      playwright-core:
+        specifier: ^1.61.1
+        version: 1.61.1
       postcss:
         specifier: ^8.5.23
         version: 8.5.25
@@ -754,7 +760,7 @@ importers:
   packages/charts:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -946,7 +952,7 @@ importers:
   packages/lab:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -1019,7 +1025,7 @@ importers:
   packages/richtext:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -1098,7 +1104,7 @@ importers:
   packages/themes/butter:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1108,13 +1114,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../cli
 
   packages/themes/chocolate:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1124,13 +1130,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../cli
 
   packages/themes/gothic:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1140,13 +1146,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../cli
 
   packages/themes/matcha:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1156,13 +1162,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../cli
 
   packages/themes/neutral:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1172,20 +1178,20 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../cli
 
   packages/themes/probe:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../core
       react:
         specifier: '>=19'
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../cli
       tsup:
         specifier: ^8.3.0
@@ -1194,7 +1200,7 @@ importers:
   packages/themes/stone:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1204,13 +1210,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../cli
 
   packages/themes/y2k:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1220,7 +1226,7 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.13
+        specifier: 0.7.14
         version: link:../../cli
 
   packages/vega:

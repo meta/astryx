@@ -62,6 +62,7 @@ import {
   writeDefinitionFile,
   writeIconSetData,
   refuseOutsideProject,
+  templateMeaningsOf,
 } from '../_adapter.mjs';
 import {passed, refuseIgnoredPairs} from '../_options.mjs';
 import {logger} from '../../logger.mjs';
@@ -159,7 +160,7 @@ export async function iconAdd(exportName, options) {
   if (all) {
     return authoring(() => addVariantForAll({cwd, from, selector, variant}));
   }
-  return authoring(async () => {
+  const result = await authoring(async () => {
     if (
       typeof exportName !== 'string' ||
       !/^[$A-Z_a-z][$\w]*$/u.test(exportName)
@@ -476,6 +477,11 @@ export async function iconAdd(exportName, options) {
       },
     };
   });
+  if (result.type !== 'icon.add') return result;
+  const templateMeanings = await templateMeaningsOf(cwd, result.data.set);
+  return templateMeanings
+    ? {...result, data: {...result.data, templateMeanings}}
+    : result;
 }
 
 /**

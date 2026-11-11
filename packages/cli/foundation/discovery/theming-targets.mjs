@@ -12,10 +12,13 @@
  *           <Name>` prints; nothing here is a second registry, so the list a
  *           theme author can enumerate and the set the compiler accepts cannot
  *           drift from the components or from each other.
+ *           A process reuses its target scan of a Core while the folders and
+ *           docs it read are unchanged.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {reusedWhileUnchanged} from '../fs/read-record.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
 
 const SKIP_DIRS = new Set(['node_modules', '__tests__']);
@@ -53,12 +56,42 @@ function targetKey(className) {
  * Unreadable docs are skipped rather than fatal — a single malformed doc must
  * not take out theme validation or the listing.
  *
+ * The scan walks every folder under `src` and reads every component doc. A
+ * process scans each Core once. It reuses that scan while every folder and
+ * doc it read is unchanged, as the docs and search catalogs do. A `src`
+ * reached through a symlink, as a project's node_modules reaches Core, shares
+ * the scan of its real path. Each call gets its own copy of the rows.
+ *
  * @param {string} coreSrc - absolute path to `<core>/src`
  * @returns {Promise<ThemingTarget[]>}
  */
 export async function collectThemingTargets(coreSrc) {
   if (!coreSrc || !fs.existsSync(coreSrc)) return [];
+  const real = fs.realpathSync(coreSrc);
+  let scan = targetScans.get(real);
+  if (scan == null) {
+    scan = reusedWhileUnchanged(() => scanThemingTargets(real));
+    targetScans.set(real, scan);
+  }
+  return (await scan()).map(target => ({
+    ...target,
+    props: [...target.props],
+    states: [...target.states],
+  }));
+}
 
+/**
+ * The target scan of each Core `src`, by its real path.
+ * @type {Map<string, () => Promise<ThemingTarget[]>>}
+ */
+const targetScans = new Map();
+
+/**
+ * Every theming target under `coreSrc`, read from its component docs.
+ * @param {string} coreSrc - real path to `<core>/src`
+ * @returns {Promise<ThemingTarget[]>}
+ */
+async function scanThemingTargets(coreSrc) {
   /** @type {Array<ThemingTarget & {parent: string|null}>} */
   const targets = [];
 

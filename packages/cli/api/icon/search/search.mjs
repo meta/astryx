@@ -9,11 +9,10 @@
  * @position api/icon/search — dispatched by ../icon.mjs
  */
 
-import {AstryxError} from '../../error.mjs';
-import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {loadIconSets} from '../_adapter.mjs';
 import {
   answeringMatches,
+  oneNamedSet,
   rankIcons,
   setsNamed,
   unusableSet,
@@ -27,19 +26,7 @@ import {
  */
 export async function iconSetIcons({cwd, set}) {
   const {sets, withdrawn} = await loadIconSets(cwd);
-  const named = setsNamed(sets, set);
-  if (named.length === 0) throw unusableSet(sets, withdrawn, set);
-  if (named.length > 1) {
-    throw new AstryxError(
-      `"${set}" names ${named.length} sets; name one as <package>/<set>`,
-      named.map(each => ({
-        name: `${each.package}/${each.name}`,
-        reason: 'name the package',
-      })),
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
-  const [only] = named;
+  const only = oneNamedSet(sets, withdrawn, set);
   /** @type {Map<string, string[]>} */
   const drawn = new Map();
   for (const [definition, id] of Object.entries(only.data.map ?? {})) {
