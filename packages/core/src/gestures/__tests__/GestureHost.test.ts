@@ -16,6 +16,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {isFingerScroll, watchFingerScrolls} from '../fingerScroll';
+import {browserClock} from '../GestureArena';
 import {GestureHost} from '../GestureHost';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
@@ -1207,6 +1208,215 @@ describe('GestureHost', () => {
     expect(released).toBeCloseTo(625, 6);
   });
 
+  /** A paired finger drags 10 px every 16 ms, then lifts at 168 ms. */
+  const pairedDrag = (
+    box: HTMLElement,
+    touchendAt: number,
+    withPointer: boolean,
+  ) => {
+    const finger = {id: 0, x: 10, y: 10};
+    if (withPointer) {
+      pointer('pointerdown', box, {
+        id: 21,
+        pointerType: 'touch',
+        x: 10,
+        y: 10,
+        buttons: 1,
+        time: 0,
+      });
+    }
+    touch('touchstart', box, [finger], [finger], 0);
+    let x = 10;
+    for (let step = 1; step <= 10; step++) {
+      x += 10;
+      const time = step * 16;
+      if (withPointer) {
+        pointer('pointermove', box, {
+          id: 21,
+          pointerType: 'touch',
+          x,
+          y: 10,
+          buttons: 1,
+          time,
+        });
+      }
+      touch('touchmove', box, [{...finger, x}], [{...finger, x}], time);
+    }
+    if (withPointer) {
+      pointer('pointerup', box, {
+        id: 21,
+        pointerType: 'touch',
+        x,
+        y: 10,
+        time: 168,
+      });
+    }
+    touch('touchend', box, [{...finger, x}], [], touchendAt);
+  };
+
+  it.each([
+    ['with it', 168],
+    ['60 ms after it, held by a busy pointerup listener', 228],
+  ])(
+    'reads a finger sampled from its pointer events as lifting at its pointerup: the touchend %s',
+    (_, touchendAt) => {
+      const {box} = mount('<div id="box"></div>');
+      const pan = new PanGestureRecognizer({name: 'pan'});
+      let released = Number.NaN;
+      pan.addListener(r => {
+        if (r.state === 'ended') {
+          released = pan.velocity().x;
+        }
+      });
+      detachers.push(host.attach(box, pan));
+      pairedDrag(box, touchendAt, true);
+      // 10 px every 16 ms: 625 px/s, whenever the touchend came.
+      expect(released).toBeCloseTo(625, 6);
+    },
+  );
+
+  it('reads a finger sampled from its touch events as lifting at its touchend', () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = new PanGestureRecognizer({name: 'pan'});
+    let released = Number.NaN;
+    pan.addListener(r => {
+      if (r.state === 'ended') {
+        released = pan.velocity().x;
+      }
+    });
+    detachers.push(host.attach(box, pan));
+    // No pointer events: the touchend is the lift, 68 ms after the last move.
+    pairedDrag(box, 228, false);
+    expect(released).toBe(0);
+  });
+
+  it('ends a tap whose pointerup comes before the long press’s time as a tap, however late its touchend', () => {
+    const {box} = mount('<div id="box"></div>');
+    const recognized: string[] = [];
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    tap.addListener(r => {
+      if (r.state === 'ended') {
+        recognized.push('tap');
+      }
+    });
+    const hold = new LongPressGestureRecognizer({name: 'hold'});
+    hold.addListener(r => {
+      if (r.state === 'began') {
+        recognized.push('hold');
+      }
+    });
+    detachers.push(host.attach(box, tap), host.attach(box, hold));
+    const finger = {id: 0, x: 10, y: 10};
+    pointer('pointerdown', box, {
+      id: 21,
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    touch('touchstart', box, [finger], [finger], 0);
+    pointer('pointerup', box, {
+      id: 21,
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      time: 450,
+    });
+    // A pointerup listener ran 70 ms: past the long press's 500 ms.
+    touch('touchend', box, [finger], [], 520);
+    expect(recognized).toEqual(['tap']);
+  });
+
+  /** Each finger's place and time as it ends. */
+  const endings = () => {
+    const ended: Pick<GestureTouch, 'x' | 'y' | 'time'>[] = [];
+    return {
+      ended,
+      consumer: {
+        touchBegan() {},
+        touchMoved() {},
+        touchEnded(touch: GestureTouch) {
+          ended.push({x: touch.x, y: touch.y, time: touch.time});
+        },
+        touchCancelled() {},
+        allowsAncestorRecognizer: () => true,
+      },
+    };
+  };
+
+  it('lifts each finger of one touchend at its own time, whatever order its touch list gives', () => {
+    const {box} = mount('<div id="box"></div>');
+    const {ended, consumer} = endings();
+    detachers.push(host.attachConsumer(box, consumer));
+    const sampled = {id: 0, x: 10, y: 10};
+    const touchOnly = {id: 1, x: 200, y: 10};
+    pointer('pointerdown', box, {
+      id: 21,
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    touch('touchstart', box, [sampled], [sampled], 0);
+    touch('touchstart', box, [touchOnly], [sampled, touchOnly], 10);
+    pointer('pointerup', box, {
+      id: 21,
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      time: 168,
+    });
+    // The later lift comes first in the list.
+    touch('touchend', box, [touchOnly, sampled], [], 228);
+    expect(ended).toEqual([
+      {x: 10, y: 10, time: 168},
+      {x: 200, y: 10, time: 228},
+    ]);
+  });
+
+  it('ends a finger sampled from its pointer events where its pointerup lifted', () => {
+    const {box} = mount('<div id="box"></div>');
+    const {ended, consumer} = endings();
+    detachers.push(host.attachConsumer(box, consumer));
+    const finger = {id: 0, x: 10, y: 10};
+    pointer('pointerdown', box, {
+      id: 21,
+      pointerType: 'touch',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    touch('touchstart', box, [finger], [finger], 0);
+    pointer('pointermove', box, {
+      id: 21,
+      pointerType: 'touch',
+      x: 40.5,
+      y: 10.5,
+      buttons: 1,
+      time: 16,
+    });
+    touch(
+      'touchmove',
+      box,
+      [{...finger, x: 40, y: 10}],
+      [{...finger, x: 40, y: 10}],
+      16,
+    );
+    pointer('pointerup', box, {
+      id: 21,
+      pointerType: 'touch',
+      x: 40.5,
+      y: 10.5,
+      time: 32,
+    });
+    // The touch list reports the place on its own channel, half a pixel off.
+    touch('touchend', box, [{...finger, x: 40, y: 10}], [], 32);
+    expect(ended).toEqual([{x: 40.5, y: 10.5, time: 32}]);
+  });
+
   it('samples a finger from its touch events once the browser cancels its pointer', () => {
     const {box} = mount('<div id="box"></div>');
     // A watcher follows the touch the browser takes (AST-094 FR20, DEC-7).
@@ -1424,15 +1634,95 @@ describe('GestureHost', () => {
       return {list, pan, at, lift};
     }
 
-    it('cancels the moves from the first one while every scroller under the finger is at its edge and the finger pulls away from it; the pan still begins at 10 px', () => {
+    it('leaves a tap\u2019s wobble under 5 px to the browser, then cancels the moves from the one that reaches 5 px while every scroller under the finger is at its edge and the finger pulls away from it; the pan still begins at 10 px (spec:AST-094 FR19, DEC-30)', () => {
       const {pan, at, lift} = sheetOverList(0);
-      expect(at(102, 16).defaultPrevented).toBe(true);
+      // WebKit ends a touch's click when one of its moves is cancelled.
+      expect(at(102, 16).defaultPrevented).toBe(false);
+      expect(at(104, 24).defaultPrevented).toBe(false);
       expect(pan.state).toBe('possible');
-      expect(at(107, 32).defaultPrevented).toBe(true);
+      // Mobile Safari commits its native pan on a kept move of 5 px.
+      expect(at(105, 32).defaultPrevented).toBe(true);
       expect(pan.state).toBe('possible');
+      expect(at(107, 40).defaultPrevented).toBe(true);
       expect(at(112, 48).defaultPrevented).toBe(true);
       expect(pan.state).toBe('began');
       lift(112, 64);
+    });
+
+    it('cancels a first move that reaches 5 px at once', () => {
+      const {pan, at, lift} = sheetOverList(0);
+      expect(at(105, 16).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('possible');
+      lift(105, 32);
+    });
+
+    it('leaves every move of a tap that wobbles under 5 px to the browser, so its click runs', () => {
+      const {pan, at, lift} = sheetOverList(0);
+      expect(at(103, 16).defaultPrevented).toBe(false);
+      expect(at(104, 24).defaultPrevented).toBe(false);
+      expect(at(101, 32).defaultPrevented).toBe(false);
+      lift(101, 48);
+      expect(pan.state).not.toBe('began');
+    });
+
+    it('measures the wobble along the pan\u2019s own axis: a sideways move is never held', () => {
+      const {list, row} = mount(
+        '<div id="list" style="overflow-y: auto"><div id="row"></div></div>',
+      );
+      scrollable(list, {scrollTop: 0, scrollHeight: 1000, clientHeight: 400});
+      const pan = new PanGestureRecognizer({
+        name: 'sheet',
+        direction: 'down',
+        scrollEdge: true,
+      });
+      detachers.push(host.attach(row, pan));
+      const finger = {id: 1, x: 50, y: 100};
+      touch('touchstart', row, [finger], [finger], 0);
+      const moved = {...finger, x: 58, y: 101};
+      expect(
+        touch('touchmove', row, [moved], [moved], 16).defaultPrevented,
+      ).toBe(false);
+      touch('touchend', row, [moved], [], 32);
+    });
+
+    it('measures the wobble along the pan\u2019s axis: a pan that claims drags off its axis holds only from 5 px along it', () => {
+      const {list, row} = mount(
+        '<div id="list" style="overflow-y: auto"><div id="row"></div></div>',
+      );
+      scrollable(list, {scrollTop: 0, scrollHeight: 1000, clientHeight: 400});
+      const pan = new PanGestureRecognizer({
+        name: 'sheet',
+        direction: 'down',
+        scrollEdge: true,
+        axisRatio: 0.5,
+      });
+      detachers.push(host.attach(row, pan));
+      const finger = {id: 1, x: 50, y: 100};
+      touch('touchstart', row, [finger], [finger], 0);
+      const at = (x: number, y: number, time: number) =>
+        touch('touchmove', row, [{...finger, x, y}], [{...finger, x, y}], time);
+      // 6 px across but 4 px along: still a tap's wobble.
+      expect(at(56, 104, 16).defaultPrevented).toBe(false);
+      expect(at(56, 105, 32).defaultPrevented).toBe(true);
+      touch('touchend', row, [{...finger, x: 56, y: 105}], [], 48);
+    });
+
+    it('waits out the same wobble for a horizontal scroll-edge pan over content with no scroller (a back swipe from the content)', () => {
+      const {row} = mount('<div id="row"></div>');
+      const pan = new PanGestureRecognizer({
+        name: 'back',
+        direction: 'right',
+        scrollEdge: true,
+      });
+      detachers.push(host.attach(row, pan));
+      const finger = {id: 1, x: 100, y: 100};
+      touch('touchstart', row, [finger], [finger], 0);
+      const at = (x: number, time: number) =>
+        touch('touchmove', row, [{...finger, x}], [{...finger, x}], time);
+      expect(at(103, 16).defaultPrevented).toBe(false);
+      expect(at(104, 24).defaultPrevented).toBe(false);
+      expect(at(105, 32).defaultPrevented).toBe(true);
+      touch('touchend', row, [{...finger, x: 105}], [], 48);
     });
 
     it('leaves the moves to the browser while a scroller under the finger can still scroll that way', () => {
@@ -2337,6 +2627,41 @@ describe('GestureHost', () => {
       expect(host.isScrollBraking(row)).toBe(true);
     });
 
+    it('counts a scroll as the finger’s momentum from its lift at the pointerup, not its late touchend', () => {
+      const {list, row} = mount('<div id="list"><div id="row"></div></div>');
+      const consumer = new RecordingConsumer();
+      detachers.push(host.attachConsumer(row, consumer));
+      const finger = {id: 1, x: 10, y: 10, target: row};
+      pointer('pointerdown', row, {
+        id: 21,
+        pointerType: 'touch',
+        x: 10,
+        y: 10,
+        buttons: 1,
+        time: 1000,
+      });
+      touch('touchstart', row, [finger], [finger], 1000);
+      pointer('pointerup', row, {
+        id: 21,
+        pointerType: 'touch',
+        x: 10,
+        y: 10,
+        time: 1100,
+      });
+      // A pointerup listener ran 60 ms before the touchend.
+      touch('touchend', row, [finger], [], 1160);
+      const scroll = (time: number) => {
+        const event = new Event('scroll');
+        Object.defineProperty(event, 'timeStamp', {value: time});
+        list.dispatchEvent(event);
+      };
+      const memory = UIKIT_GESTURES.press.momentumMemory.value;
+      scroll(1100 + memory + 20);
+      expect(host.isScrollBraking(row)).toBe(false);
+      scroll(1100 + memory - 20);
+      expect(host.isScrollBraking(row)).toBe(true);
+    });
+
     it('reads a scroll with no finger down as the program’s, even right after a tap', () => {
       const {list, row} = mount('<div id="list"><div id="row"></div></div>');
       detachers.push(watchFingerScrolls(host, list));
@@ -3051,6 +3376,105 @@ describe('GestureHost', () => {
     touch('touchmove', box, [{...finger, x: 40}], [{...finger, x: 40}], 16);
     box.dispatchEvent(new Event('touchcancel', {bubbles: true}));
     expect(states).toEqual(['began', 'cancelled']);
+  });
+
+  it('times a second document’s touches on that document’s own clock: a short tap starts no long press', () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+    vi.advanceTimersByTime(6000);
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument as Document;
+    const frameWindow = frameDocument.defaultView as Window & typeof globalThis;
+    // The frame opened after the page, so its clock reads 5 s less. Its
+    // events come stamped on that clock.
+    const frameNow = vi
+      .spyOn(frameWindow.performance, 'now')
+      .mockImplementation(() => performance.now() - 5000);
+    frameDocument.body.innerHTML = '<div id="box"></div>';
+    const box = frameDocument.getElementById('box') as HTMLElement;
+    const frameHost = new GestureHost(frameDocument, {
+      isPrimaryPointerCoarse: () => true,
+    });
+    const press = new LongPressGestureRecognizer({minimumPressDuration: 500});
+    const states: string[] = [];
+    press.addListener(r => states.push(r.state));
+    const detach = frameHost.attach(box, press);
+    const send = (type: 'touchstart' | 'touchend') => {
+      const event = new frameWindow.Event(type, {
+        bubbles: true,
+        cancelable: true,
+      });
+      const contact = {identifier: 1, clientX: 10, clientY: 10, target: box};
+      Object.defineProperty(event, 'changedTouches', {value: [contact]});
+      Object.defineProperty(event, 'touches', {
+        value: type === 'touchstart' ? [contact] : [],
+      });
+      Object.defineProperty(event, 'timeStamp', {
+        value: frameWindow.performance.now(),
+      });
+      box.dispatchEvent(event);
+    };
+    try {
+      send('touchstart');
+      vi.advanceTimersByTime(120);
+      send('touchend');
+      vi.advanceTimersByTime(1000);
+      expect(states).not.toContain('began');
+    } finally {
+      detach();
+      frameNow.mockRestore();
+      frame.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it('reads the page’s clock as it is at each touch: a hold that starts after fake timers replace it begins at its deadline', () => {
+    const pageHost = new GestureHost(document, {
+      isPrimaryPointerCoarse: () => true,
+    });
+    const {box} = mount('<div id="box"></div>');
+    const press = new LongPressGestureRecognizer({minimumPressDuration: 500});
+    const states: string[] = [];
+    press.addListener(r => states.push(r.state));
+    const detach = pageHost.attach(box, press);
+    // The page replaces its clock after the host exists, as fake timers do.
+    // jsdom stamps the touch with Date.now(), on the new clock's origin.
+    vi.useFakeTimers();
+    try {
+      const event = new Event('touchstart', {bubbles: true, cancelable: true});
+      const contact = {identifier: 1, clientX: 10, clientY: 10, target: box};
+      Object.defineProperty(event, 'changedTouches', {value: [contact]});
+      Object.defineProperty(event, 'touches', {value: [contact]});
+      box.dispatchEvent(event);
+      vi.advanceTimersByTime(499);
+      expect(states).not.toContain('began');
+      vi.advanceTimersByTime(1);
+      expect(states).toContain('began');
+    } finally {
+      detach();
+      vi.useRealTimers();
+    }
+  });
+
+  it('reads the page’s own clock object for the page’s document', () => {
+    const now = vi.spyOn(browserClock, 'now');
+    const pageHost = new GestureHost(document, {
+      isPrimaryPointerCoarse: () => true,
+    });
+    const {box} = mount('<div id="box"></div>');
+    const detach = pageHost.attach(
+      box,
+      new LongPressGestureRecognizer({minimumPressDuration: 500}),
+    );
+    const finger = {id: 1, x: 10, y: 10};
+    try {
+      touch('touchstart', box, [finger], [finger], performance.now());
+      expect(now).toHaveBeenCalled();
+      touch('touchend', box, [finger], [], performance.now());
+    } finally {
+      detach();
+      now.mockRestore();
+    }
   });
 
   it('reads epoch-stamped events on the arena clock', () => {
@@ -7082,6 +7506,7 @@ describe('nothing left after the last detach (spec:AST-094 FR21, FR24)', () => {
     'unpairedTouches',
     'lastFed',
     'pointerFed',
+    'liftStamps',
     'ownedScrolls',
     'touchGates',
     'fingerListeners',
@@ -7211,6 +7636,25 @@ describe('nothing left after the last detach (spec:AST-094 FR21, FR24)', () => {
     });
     const detach = subject.attach(box, new TapGestureRecognizer({name: 'tap'}));
     fingerDrag(box, 0, true);
+    detach();
+    await settle();
+    __resetClickGuardForTest();
+    expectNothingLeft(subject);
+  });
+
+  it('after a finger’s pointerup whose touchend never comes', async () => {
+    const {box} = mount('<div id="box"></div>');
+    const subject = new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => true,
+    });
+    const detach = subject.attach(
+      box,
+      new PanGestureRecognizer({direction: 'horizontal'}),
+    );
+    fingerDrag(box, 60, false);
+    pointer('pointerup', box, {pointerType: 'touch', x: 70, y: 10, time: 80});
+    touch('touchcancel', box, [{id: 1, x: 70, y: 10}], [], 90);
     detach();
     await settle();
     __resetClickGuardForTest();

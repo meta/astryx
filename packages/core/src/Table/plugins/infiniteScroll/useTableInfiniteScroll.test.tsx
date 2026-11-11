@@ -407,7 +407,7 @@ describe('useTableInfiniteScroll', () => {
         expect.objectContaining({element: button}),
         viewport,
         null,
-        {preventScroll: true, temporaryTabStop: true},
+        {preventScroll: true},
       );
       viewport.blur();
       expect(viewport).not.toHaveAttribute('tabindex');

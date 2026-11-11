@@ -1,4 +1,4 @@
-Results for "search" (20 of 115)
+Results for "search" (20 of 117)
 name:        cli/api/functions/search
 domain:      doc
 package:     @astryxdesign/cli
@@ -29,6 +29,11 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/TextInput
 command:     pnpm exec astryx component TextInput
+name:        usePowerSearchConfig
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/PowerSearch
+command:     pnpm exec astryx hook usePowerSearchConfig
 name:        useTypeahead
 domain:      hook
 package:     @astryxdesign/core
@@ -67,6 +72,10 @@ name:        TableInlineFilterTable
 domain:      template
 package:     @astryxdesign/core
 command:     pnpm exec astryx template TableInlineFilterTable --type block
+name:        usePowerSearchConfigHookUsage
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template usePowerSearchConfigHookUsage --type block
 name:        authoring/building-blocks/templates/document-the-template/template-doc-overview
 section:     document-the-shared-fields
 domain:      doc
@@ -84,14 +93,3 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs cli/api/enums/response-types
 parent:      pnpm exec astryx docs cli/api/enums
-name:        cli/api/functions/discover
-domain:      doc
-package:     @astryxdesign/cli
-command:     pnpm exec astryx docs cli/api/functions/discover
-parent:      pnpm exec astryx docs cli/api/functions
-name:        global/problems
-section:     core-offline
-domain:      doc
-package:     @astryxdesign/cli
-command:     pnpm exec astryx docs global/problems core-offline
-parent:      pnpm exec astryx docs global/problems --index

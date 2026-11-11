@@ -45,6 +45,30 @@ export const Default: Story = {
   },
 };
 
+/**
+ * Caller text that holds only weak and neutral characters, or that mixes a
+ * Latin word into right-to-left text. `MixedDirectionText.a11y.chromium.spec.ts`
+ * reads its character order under RTL and LTR.
+ */
+const MIXED_DIRECTION_TEXTS = [
+  'https://',
+  '.com',
+  '+3',
+  '@alice',
+  'iPhone جديد',
+  'example.com موقع',
+];
+
+export const MixedDirection: Story = {
+  render: () => (
+    <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+      {MIXED_DIRECTION_TEXTS.map(text => (
+        <Badge key={text} label={text} />
+      ))}
+    </div>
+  ),
+};
+
 export const Variants: Story = {
   render: () => (
     <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>

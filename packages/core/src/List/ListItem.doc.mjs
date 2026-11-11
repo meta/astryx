@@ -98,7 +98,8 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disabled state; sets aria-disabled on the item.',
+      description:
+        'Disabled state; interactive rows stay keyboard-reachable, expose aria-disabled, and cannot activate.',
       default: 'false',
     },
     {
@@ -110,7 +111,7 @@ export const docs = {
     {
       name: 'itemKey',
       type: 'string | number',
-      description: "The row's item key, a string or a number from the data (the shape Table's idKey returns). It is the row's identity for the list's animated layout (List animatedLayout): with a handle, the list matches rows by it to animate inserts, removals and moves, and a row without one changes at once. Separate from React's key.",
+      description: "The row's item key, a string or a number from the data (the shape Table's idKey returns). It is the row's identity for the list's animated layout (List animatedLayout): with a handle, the list matches rows by it to animate inserts, removals and moves, and a row without one changes at once. In a reorderable List (List reorderable), it is the key the reorderable object's onReorder reports and isReorderable is asked about, and a row without one has no reorder handle and keeps its place. Separate from React's key.",
     },
     {
       name: 'swipeActions',
@@ -207,7 +208,7 @@ export const docsZh = {
     {
       name: 'itemKey',
       type: 'string | number',
-      description: '行的项目键，取自数据的字符串或数字（与 Table 的 idKey 返回的形状相同）。它是列表动画布局（List animatedLayout）中该行的身份：传入句柄时，列表按它匹配各行，为插入、删除和移动添加动画；没有项目键的行会立即变化。与 React 的 key 相互独立。',
+      description: '行的项目键，取自数据的字符串或数字（与 Table 的 idKey 返回的形状相同）。它是列表动画布局（List animatedLayout）中该行的身份：传入句柄时，列表按它匹配各行，为插入、删除和移动添加动画；没有项目键的行会立即变化。在可重新排序的 List（List reorderable）中，它是可重新排序对象的 onReorder 报告的键，也是 isReorderable 判断的键；没有项目键的行没有重新排序手柄，保持原位。与 React 的 key 相互独立。',
     },
     {
       name: 'swipeActions',
@@ -245,8 +246,9 @@ export const docsDense = {
     target:
       'Link target attribute, only when href provided. target="_blank" auto-adds noopener noreferrer.',
     rel: 'Link relationship tokens. noopener noreferrer are merged for target="_blank".',
-    isDisabled: 'Disabled state; sets aria-disabled.',
+    isDisabled:
+      'Disabled state; interactive rows stay keyboard-reachable and cannot activate.',
     isSelected: 'Selected state; sets aria-current="true".',
-    itemKey: "The row's identity for List animatedLayout; a row without one changes at once.",
+    itemKey: "The row's identity for List animatedLayout and the key a reorderable List's onReorder reports; a row without one changes at once and has no reorder handle.",
   },
 };

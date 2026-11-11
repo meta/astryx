@@ -293,6 +293,116 @@ test('a finger scrolling the screen fades the veil in', async ({
   expect(await presentedOpacity(veil(page, 'root'))).toBe(1);
 });
 
+/**
+ * Holds the page's IntersectionObserver reports from `holdObserverReports()`
+ * until the finger's scroll has ended. That is after the `scrollend` that
+ * follows the lift, or after the lift when the scroll ended under the resting
+ * finger. A busy page runs a report that late. Each entry keeps its own
+ * `time`. `releasedReports` counts the reports held, so a test can see the
+ * hold.
+ */
+async function holdReportsPastTheScroll(page: Page) {
+  await page.addInitScript(() => {
+    const Observer = window.IntersectionObserver;
+    const held: Array<() => void> = [];
+    let isHolding = false;
+    let isLifted = false;
+    let hasScrollEnded = false;
+    const release = () => {
+      isHolding = false;
+      // After the gesture host and the finger-scroll watch hear the event.
+      setTimeout(() => {
+        const runs = held.splice(0);
+        Object.assign(window, {releasedReports: runs.length});
+        for (const run of runs) {
+          run();
+        }
+      });
+    };
+    Object.assign(window, {
+      releasedReports: 0,
+      holdObserverReports: () => {
+        isHolding = true;
+        isLifted = false;
+        hasScrollEnded = false;
+      },
+    });
+    document.addEventListener(
+      'touchend',
+      () => {
+        if (isHolding) {
+          isLifted = true;
+          if (hasScrollEnded) {
+            release();
+          }
+        }
+      },
+      true,
+    );
+    document.addEventListener(
+      'scrollend',
+      () => {
+        if (isHolding) {
+          hasScrollEnded = true;
+          if (isLifted) {
+            release();
+          }
+        }
+      },
+      true,
+    );
+    window.IntersectionObserver = class extends Observer {
+      constructor(
+        callback: IntersectionObserverCallback,
+        options?: IntersectionObserverInit,
+      ) {
+        super((entries, observer) => {
+          if (isHolding) {
+            held.push(() => callback(entries, observer));
+          } else {
+            callback(entries, observer);
+          }
+        }, options);
+      }
+    };
+  });
+}
+
+test('a finger’s scroll fades the veil even when its report runs after the scroll ended', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'native scrolling from injected touches is Chromium-only (harness README)',
+  );
+  await holdReportsPastTheScroll(page);
+  await openStack(page);
+  const layer = veil(page, 'root');
+  const hold = await armHold(page, layer, {
+    judges: {target: layer, property: 'opacity'},
+    newOnly: true,
+  });
+  const driver = await touchDriver(page);
+  await page.evaluate(() =>
+    (
+      window as unknown as {holdObserverReports: () => void}
+    ).holdObserverReports(),
+  );
+  await driver.play(
+    drag({x: 200, y: 560}, {x: 200, y: 460}, {durationMs: 300, restMs: 450}),
+  );
+  // A switch at once runs no animation, so the hold finds none.
+  await hold.held();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as {releasedReports: number}).releasedReports,
+    ),
+  ).toBeGreaterThan(0);
+  await releaseAnimations(page, {finish: true});
+  expect(await presentedOpacity(layer)).toBe(1);
+});
+
 test('the veil and its sentinel are hidden from assistive technology', async ({
   page,
 }) => {

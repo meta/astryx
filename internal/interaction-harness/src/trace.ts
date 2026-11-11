@@ -7,7 +7,8 @@
  * @output `traceRendering` — counts of the main thread's rendering work
  *   (Layout, Paint, UpdateLayoutTree, PrePaint, …) between two marks — and
  *   `installLongTaskLog` / `readLongTasks`. `longTasksOf` gives each long task
- *   its wall and thread time.
+ *   its wall and thread time. `layoutSources` names what ran each counted
+ *   Layout and what invalidated layout before it.
  * @position The "no Layout/Paint during a transform/opacity animation" proof.
  *   A compositor animation costs the main thread nothing per frame; one that
  *   animates a layout property, or writes styles from JavaScript each frame,
@@ -87,12 +88,20 @@ export interface RenderingTrace {
   /** Window length, ms. */
   readonly durationMs: number;
   /**
-   * The page's own main-thread tasks longer than 50 ms inside the window (long
-   * tasks), epoch ms. A task that ran a test's own DevTools command (a
-   * `page.evaluate`) is one, whether it calls page code directly or sets it
-   * off; only the harness's own marked reads are in `devtoolsTasks`.
+   * The page's own main-thread tasks inside the window whose main thread ran
+   * longer than 50 ms (long tasks), epoch ms. A task that ran a test's own
+   * DevTools command (a `page.evaluate`) is one, whether it calls page code
+   * directly or sets it off. Only the harness's own marked reads are in
+   * `devtoolsTasks`.
    */
   readonly longTasks: readonly TracedTask[];
+  /**
+   * The page's own tasks longer than 50 ms of wall time whose main thread ran
+   * 50 ms or less, epoch ms. A busy machine kept the renderer off the CPU, or
+   * the thread waited (a synchronous request, `Atomics.wait`). A claim about
+   * a blocking wait judges these too.
+   */
+  readonly stretchedTasks: readonly TracedTask[];
   /**
    * Main-thread tasks longer than 50 ms inside the window that ran a DevTools
    * command the harness marked as its own read (`HARNESS_READ`) and no page
@@ -108,6 +117,17 @@ export interface RenderingTrace {
   readonly events: readonly RenderingEvent[];
   /** The window, epoch ms on the page's clock. */
   readonly window: {readonly from: number; readonly to: number};
+  /**
+   * Every main-thread trace event inside the window, in time order, when the
+   * trace keeps them (`keepEvents`). A proof reads them only to explain a
+   * failure.
+   */
+  readonly mainThread?: readonly TimedTraceEvent[];
+}
+
+/** A main-thread trace event with its epoch-ms time. */
+export interface TimedTraceEvent extends TraceEvent {
+  readonly t: number;
 }
 
 /** Counts rendering events by name inside `[from, to]` (epoch ms). */
@@ -123,6 +143,117 @@ export function countBetween(
     }
   }
   return counts;
+}
+
+/** What ran a counted Layout, and what invalidated layout before it. */
+export interface LayoutSource {
+  /** The Layout's time, epoch ms. */
+  readonly t: number;
+  /** The task that ran the Layout: its dispatches and calls, in order. */
+  readonly task: readonly string[];
+  /**
+   * Each layout or style invalidation since the previous Layout, with the
+   * task it ran in. The trace names the reason and the node only when it
+   * tracks invalidations.
+   */
+  readonly invalidations: ReadonlyArray<{
+    readonly t: number;
+    readonly what: string;
+    readonly task: readonly string[];
+  }>;
+}
+
+const TASK_STEPS = new Set([
+  ...PAGE_SCRIPT_EVENTS,
+  'BeginMainThreadFrame',
+  'EvaluateScript',
+  'HitTest',
+  'IntersectionObserverController::computeIntersections',
+  'ParseHTML',
+  'UpdateLayoutTree',
+  'Layout',
+]);
+
+const INVALIDATIONS = new Set([
+  'InvalidateLayout',
+  'ScheduleStyleRecalculation',
+  'LayoutInvalidationTracking',
+  'StyleRecalcInvalidationTracking',
+]);
+
+/** One trace event as text: its name and what its data says about it. */
+function describeEvent(e: TraceEvent): string {
+  const data = (e.args?.data ?? {}) as Record<string, unknown>;
+  const text = (value: unknown) =>
+    typeof value === 'string' || typeof value === 'number'
+      ? String(value)
+      : null;
+  const url = text(data.url);
+  const parts = [
+    text(data.type),
+    text(data.functionName),
+    url == null
+      ? null
+      : `${url.split('/').pop()}:${text(data.lineNumber) ?? '?'}:${text(data.columnNumber) ?? '?'}`,
+    text(data.reason),
+    text(data.nodeName),
+  ].filter(part => part != null && part !== '');
+  // Square brackets: a message line that ends in `:line:column` or
+  // `:line:column)` reads as a stack frame to Playwright, which then reports
+  // that line as the failure's location.
+  return parts.length === 0 ? e.name : `${e.name}[${parts.join(' ')}]`;
+}
+
+/**
+ * Names the source of each Layout in `[from, to]` (epoch ms) from a trace that
+ * kept its events (`traceRendering(page, body, {keepEvents: true})`). For a
+ * Layout it gives the steps of the task that ran it. It also gives every
+ * invalidation since the previous Layout, with the steps of its own task.
+ */
+export function layoutSources(
+  trace: RenderingTrace,
+  from: number,
+  to: number,
+): LayoutSource[] {
+  const main = trace.mainThread;
+  if (main == null) {
+    throw new Error(
+      'layoutSources: the trace kept no events; trace with {keepEvents: true}',
+    );
+  }
+  const tasks = main.filter(e => e.name === 'RunTask' && e.ph === 'X');
+  const stepsBefore = (e: TimedTraceEvent): string[] => {
+    const task = tasks.find(t => t.ts <= e.ts && t.ts + (t.dur ?? 0) >= e.ts);
+    if (task == null) {
+      return [];
+    }
+    return main
+      .filter(
+        x =>
+          x !== e && x.ts >= task.ts && x.ts <= e.ts && TASK_STEPS.has(x.name),
+      )
+      .map(describeEvent)
+      .slice(-8);
+  };
+  const layouts = main.filter(e => e.name === 'Layout');
+  return layouts
+    .filter(e => e.t >= from && e.t <= to)
+    .map(layout => {
+      const previous = layouts.filter(e => e.ts < layout.ts).at(-1);
+      return {
+        t: layout.t,
+        task: stepsBefore(layout),
+        invalidations: main
+          .filter(
+            e =>
+              INVALIDATIONS.has(e.name) &&
+              e.ts > (previous?.ts ?? -Infinity) &&
+              e.ts <= layout.ts,
+          )
+          .slice(-12)
+          .map(e => ({t: e.t, what: describeEvent(e), task: stepsBefore(e)})),
+      };
+    });
 }
 
 export interface TraceEvent {
@@ -154,6 +285,7 @@ export interface TraceEvent {
 export async function traceRendering(
   page: Page,
   body: () => Promise<unknown>,
+  {keepEvents = false}: {keepEvents?: boolean} = {},
 ): Promise<RenderingTrace> {
   const cdp: CDPSession = await page.context().newCDPSession(page);
   const events: TraceEvent[] = [];
@@ -248,7 +380,7 @@ export async function traceRendering(
       });
     }
   }
-  const {longTasks, devtoolsTasks} = longTasksOf(
+  const {longTasks, devtoolsTasks, stretchedTasks} = longTasksOf(
     events.filter(e => onMain(e) && e.ph !== 'E'),
     toEpochMs,
   );
@@ -260,26 +392,42 @@ export async function traceRendering(
     prePaint: counts.PrePaint ?? 0,
     durationMs: (end.ts - start.ts) / 1000,
     longTasks,
+    stretchedTasks,
     devtoolsTasks,
     events: counted,
     window: {from: fromEpoch, to: toEpoch},
+    ...(keepEvents
+      ? {
+          mainThread: events
+            .filter(e => onMain(e) && e.ph !== 'E')
+            .sort((a, b) => a.ts - b.ts)
+            .map(e => ({...e, t: toEpochMs(e.ts)})),
+        }
+      : {}),
   };
 }
 
 /**
  * The main thread's tasks longer than 50 ms, split into the page's own and the
- * harness's marked reads. `main` holds the main thread's events in the window;
+ * harness's marked reads. A page task is long when its main thread ran longer
+ * than 50 ms; one only the wall clock stretched past that is apart
+ * (`stretchedTasks`). `main` holds the main thread's events in the window;
  * `toEpochMs` turns trace time into epoch ms.
  */
 export function longTasksOf(
   main: readonly TraceEvent[],
   toEpochMs: (ts: number) => number,
-): {longTasks: TracedTask[]; devtoolsTasks: TracedTask[]} {
+): {
+  longTasks: TracedTask[];
+  devtoolsTasks: TracedTask[];
+  stretchedTasks: TracedTask[];
+} {
   // A task that ran a DevTools command received it over the DevTools
   // session's pipe; page script it set off shows as its listener, timer or
   // frame callback.
   const longTasks: TracedTask[] = [];
   const devtoolsTasks: TracedTask[] = [];
+  const stretchedTasks: TracedTask[] = [];
   for (const task of main) {
     if (task.name !== 'RunTask' || (task.dur ?? 0) <= 50_000) {
       continue;
@@ -306,13 +454,20 @@ export function longTasksOf(
     );
     const pageScript = inside.some(e => PAGE_SCRIPT_EVENTS.has(e.name));
     const wall = task.dur ?? 0;
-    (devtools && harnessRead && !pageScript ? devtoolsTasks : longTasks).push({
+    const traced = {
       start: toEpochMs(task.ts),
       durationMs: wall / 1000,
       threadMs: Math.min(task.tdur ?? wall, wall) / 1000,
-    });
+    };
+    if (devtools && harnessRead && !pageScript) {
+      devtoolsTasks.push(traced);
+    } else if (traced.threadMs > 50) {
+      longTasks.push(traced);
+    } else {
+      stretchedTasks.push(traced);
+    }
   }
-  return {longTasks, devtoolsTasks};
+  return {longTasks, devtoolsTasks, stretchedTasks};
 }
 
 /**

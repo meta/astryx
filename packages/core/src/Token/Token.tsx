@@ -43,11 +43,13 @@ import {cancelNestedTouchPress} from '../hooks/useClickableContainer';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {TokenNamingContext} from './TokenNamingContext';
+import {textDirectionProps} from '../utils/textDirection';
 import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Token/Token.generated';
+import {tokenRemoveProps} from '../privateAttributes/tokenRemove.stylex';
 
 registerEnglishFallback(english);
 
@@ -145,6 +147,7 @@ const styles = stylex.create({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     minWidth: 0,
+    unicodeBidi: 'isolate',
   },
   interactive: {
     cursor: {
@@ -335,6 +338,7 @@ export function Token({
       aria-label={t('@astryx.token.remove', {
         label: naming?.removeName ?? label,
       })}
+      {...tokenRemoveProps}
       onClick={e => {
         e.stopPropagation();
         onRemove(e);
@@ -351,6 +355,7 @@ export function Token({
     <>
       {icon}
       <span
+        {...textDirectionProps(label)}
         {...stylex.props(styles.label, isLabelHidden && styles.labelHidden)}>
         {label}
       </span>
@@ -471,6 +476,7 @@ export function Token({
         {...pressable}
         labelContent={
           <span
+            {...textDirectionProps(label)}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,
@@ -563,6 +569,7 @@ export function Token({
           {...(isDisabled ? disabledInteractionProps() : null)}
           {...stylex.props(styles.invisibleButton)}>
           <span
+            {...textDirectionProps(label)}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,

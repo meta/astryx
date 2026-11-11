@@ -4,7 +4,7 @@
 
 /**
  * @file FieldLabel.tsx
- * @input Uses React, Icon, IconType, InfoTip, useComponentTranslator, FormLayoutContext
+ * @input Uses React, Icon, IconType, InfoTip, useComponentTranslator, useResolvedOptionality
  * @output Exports FieldLabel component, FieldLabelProps
  * @position Core label implementation; used by Field, CheckboxInput, Switch
  *
@@ -16,7 +16,7 @@
  * - /packages/core/locales/en.json (@astryx.field.required / @astryx.field.optional / @astryx.field.labelTooltip)
  */
 
-import {use, useMemo, useRef, type ReactNode, type RefObject} from 'react';
+import {useMemo, useRef, type ReactNode, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils/mergeProps';
@@ -33,7 +33,7 @@ import type {IconType} from '../Icon';
 import {InfoTip} from '../InfoTip/InfoTip';
 import {themeProps} from '../utils/themeProps';
 import {useInputContainer} from '../hooks/useInputContainer';
-import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
+import {useResolvedOptionality} from '../hooks/useResolvedRequired';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -244,20 +244,10 @@ export function FieldLabel({
   ...rest
 }: FieldLabelProps) {
   const t = useComponentTranslator();
-  const {defaultOptionality} = use(FormLayoutContext);
-
-  // A form-level `defaultOptionality` means "only the exception is marked": a
-  // field that merely restates the form's default shows no indicator, and only
-  // a deviation from it does. This is the *visible indicator* only; the
-  // matching `aria-required` is resolved on each control (see
-  // useResolvedRequired) so the unmarked majority is still announced.
-  //
-  //   defaultOptionality  isRequired            isOptional
-  //   'optional'          → required indicator  → (matches default, hidden)
-  //   'required'          → (matches, hidden)   → optional indicator
-  //   unset               → required indicator  → optional indicator
-  const showRequired = isRequired && defaultOptionality !== 'required';
-  const showOptional = isOptional && defaultOptionality !== 'optional';
+  // The visible indicator only; each control resolves its own `aria-required`
+  // so the unmarked majority is still announced.
+  const {showsRequiredMarker: showRequired, showsOptionalMarker: showOptional} =
+    useResolvedOptionality({isRequired, isOptional});
   const statusText = showOptional
     ? t('@astryx.field.optional')
     : showRequired

@@ -11,6 +11,7 @@
  * SYNC: useTableInfiniteScroll.test.tsx, index.ts, ../../useTableInfiniteScroll.doc.mjs
  */
 import {
+  use,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -36,7 +37,8 @@ import {
 } from '../../../utils/focusReturn';
 import {useFocusLeavingChange} from '../../../utils/useFocusLeavingChange';
 import {LayoutChangeSnapshot} from '../../../motion/LayoutChangeSnapshot';
-import {devWarn} from '../../../utils/devWarning';
+import {createDevWarnings} from '../../../utils/devWarning';
+import {TableRuntimeContext} from '../../tableRuntime';
 import {useInteractionModalityTracking} from '../../../utils/interactionModality';
 import type {TablePlugin, TableRenderContext} from '../../types';
 
@@ -87,7 +89,7 @@ function createRuntime(
   });
   const listeners = new Set<() => void>();
   // Each diagnosis warns once per hook instance.
-  const warned = new Set<string>();
+  const warnOnce = createDevWarnings();
   const subscribe = (listener: () => void) => {
     listeners.add(listener);
     return () => {
@@ -112,11 +114,7 @@ function createRuntime(
     subscribe,
     getSurface: () => surface,
     diagnose(message: string) {
-      if (warned.has(message)) {
-        return;
-      }
-      warned.add(message);
-      devWarn('useTableInfiniteScroll', message);
+      warnOnce('useTableInfiniteScroll', message);
     },
     activate() {
       runtime.isActive = true;
@@ -276,6 +274,8 @@ function InfiniteScrollSurface({
     runtime.getSurface,
   );
   const t = useComponentTranslator();
+  // Table bounds its block viewport only while it windows its rows.
+  const hasBlockViewport = use(TableRuntimeContext)?.viewportHeight != null;
   useInteractionModalityTracking();
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -309,7 +309,7 @@ function InfiniteScrollSurface({
         focus,
         context.viewport.current ?? resourcesRef.current.viewport,
         null,
-        {preventScroll: true, temporaryTabStop: true},
+        {preventScroll: true},
       ),
   );
   const setSentinel = useCallback(
@@ -330,9 +330,9 @@ function InfiniteScrollSurface({
     const state = resourcesRef.current;
     state.context = context;
     state.viewport = context.viewport.current;
-    // The browser viewport is the observation root until Table has a
-    // bounded block viewport of its own.
-    const root = null;
+    // Table's bounded block viewport is the root when it has one; otherwise
+    // the browser viewport is.
+    const root = hasBlockViewport ? context.viewport.current : null;
     const node = sentinelRef.current;
     if (state.root !== root || state.node !== node) {
       disconnect();
@@ -407,7 +407,7 @@ function InfiniteScrollSurface({
     state.observer = observer;
     observer.observe(node);
   });
-  // Release native observation/focus resources and detach the surface on unmount.
+  // Disconnect the observer and detach the surface on unmount.
   useLayoutEffect(
     () => () => {
       disconnect();

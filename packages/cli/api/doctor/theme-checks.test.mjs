@@ -37,7 +37,7 @@ function write(file, content) {
  */
 async function fixture(themeSpecs = [{slug: 'ocean'}], options = {}) {
   const dir = fs.mkdtempSync(
-    path.join(options.root ?? process.cwd(), '.astryx-doctor-themes-'),
+    path.join(options.root ?? REPO_ROOT, '.astryx-doctor-themes-'),
   );
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, 'src'), {recursive: true});
@@ -153,7 +153,7 @@ describe('the released themes check', () => {
   /** @param {string} name */
   function emptyApp(name) {
     const dir = fs.mkdtempSync(
-      path.join(process.cwd(), `.astryx-doctor-${name}-`),
+      path.join(REPO_ROOT, `.astryx-doctor-${name}-`),
     );
     dirs.push(dir);
     write(path.join(dir, 'package.json'), '{"name":"app","private":true}\n');
@@ -1151,7 +1151,7 @@ describe('app-theme doctor checks', () => {
 
   it('reports one information check when the CLI manages no themes', async () => {
     const dir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-doctor-empty-'),
+      path.join(REPO_ROOT, '.astryx-doctor-empty-'),
     );
     dirs.push(dir);
     write(path.join(dir, 'package.json'), '{"name":"empty"}\n');
@@ -1170,7 +1170,7 @@ describe('app-theme doctor checks', () => {
 
   it('reads astryx.theme from the app package when node_modules is hoisted to a workspace root', async () => {
     const root = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-doctor-monorepo-'),
+      path.join(REPO_ROOT, '.astryx-doctor-monorepo-'),
     );
     dirs.push(root);
     write(
@@ -1213,7 +1213,7 @@ describe('app-theme doctor checks', () => {
 
   it('names an unmigrated copy without failing a project that has no module', async () => {
     const dir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-doctor-unmigrated-'),
+      path.join(REPO_ROOT, '.astryx-doctor-unmigrated-'),
     );
     dirs.push(dir);
     write(path.join(dir, 'package.json'), '{"name":"empty"}\n');

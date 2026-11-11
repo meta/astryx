@@ -226,6 +226,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       listed: [],
       issues: [],
       comments: [],
+      updates: [],
     });
     const github = {
       rest: {
@@ -262,6 +263,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
         issues: {
           create: async args => calls.issues.push(args),
           createComment: async args => calls.comments.push(args),
+          update: async args => calls.updates.push(args),
         },
       },
     };
@@ -291,7 +293,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     return calls;
   }
 
-  const releaseCheck = tip => ({
+  const releaseCheck = (tip, {evidence = false} = {}) => ({
     owner: 'meta',
     repo: 'astryx',
     workflow_id: 'ci.yml',
@@ -300,6 +302,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       operation: 'release-check',
       'release-branch': 'main',
       'expected-head': tip,
+      ...(evidence ? {evidence: 'true'} : {}),
     },
   });
   // A unit run names the commit it tests (FR21, FR22).
@@ -368,7 +371,11 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
           runs: [at(now, 90)],
           units: [at(now, 20)],
         });
-        expect(calls.dispatch).toEqual([releaseCheck(sha), unitRun]);
+        // It is cut evidence, named Release evidence of <sha>.
+        expect(calls.dispatch).toEqual([
+          releaseCheck(sha, {evidence: true}),
+          unitRun,
+        ]);
         expect(calls.notices).toContain(
           'The pre-cut release-check runs now for aaaaaaa.',
         );
@@ -385,10 +392,41 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       expect(calls.dispatch).toEqual([]);
     });
 
-    it('is not needed when the tip already has a check', async () => {
+    it('runs as cut evidence when the tip has only a monitoring check from before 06:30', async () => {
       const calls = await run({
         now: MONDAY_0637,
         runs: [at(MONDAY_0637, 90, {head_sha: sha})],
+        units: [
+          at(MONDAY_0637, 20, {
+            head_sha: sha,
+            display_title: `Main validation of ${sha}`,
+          }),
+        ],
+      });
+      expect(calls.dispatch).toEqual([releaseCheck(sha, {evidence: true})]);
+    });
+
+    it('sends cut evidence with a windowed check that starts in the pre-cut hour', async () => {
+      const calls = await run({
+        now: MONDAY_0637,
+        runs: [at(MONDAY_0637, 200)],
+        units: [at(MONDAY_0637, 20)],
+      });
+      expect(calls.dispatch).toEqual([
+        releaseCheck(sha, {evidence: true}),
+        unitRun,
+      ]);
+    });
+
+    it('is not needed when the tip already has a check since 06:30', async () => {
+      const calls = await run({
+        now: MONDAY_0637,
+        runs: [
+          at(MONDAY_0637, 5, {
+            head_sha: sha,
+            display_title: `Release evidence of ${sha}`,
+          }),
+        ],
         units: [
           at(MONDAY_0637, 20, {
             head_sha: sha,
@@ -544,8 +582,40 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     ).toEqual([]);
   });
 
-  it('leaves every run name as it was', () => {
-    expect(ci['run-name']).toBeUndefined();
+  it("names main's nightly interaction run, the weekly WebKit run and a cut-evidence release-check, and leaves every other run's name", () => {
+    const name = (operation, evidence = false) =>
+      Function(
+        'github',
+        'inputs',
+        `return (${ci['run-name']
+          .replace(/^\$\{\{\s*|\s*\}\}$/g, '')
+          .replace(
+            /format\('([^']*)\{0\}', github\.sha\)/g,
+            '`$1${github.sha}`',
+          )});`,
+      )(
+        {event_name: operation ? 'workflow_dispatch' : 'pull_request', sha},
+        operation ? {operation, evidence} : {},
+      );
+    // An empty name keeps the event's default name.
+    for (const operation of [undefined, 'capture', 'release-check'])
+      expect(name(operation), String(operation)).toBe('');
+    expect(name('interaction-full')).toBe(`Interaction proofs of ${sha}`);
+    expect(name('webkit-weekly')).toBe(`WebKit weekly of ${sha}`);
+    // A cut-evidence release-check names itself, so a receipt and a person
+    // can tell it from a monitoring check.
+    expect(name('release-check', true)).toBe(`Release evidence of ${sha}`);
+    expect(name('capture', true)).toBe('');
+  });
+
+  it('never counts a weekly full WebKit run on the tip as its release-check', async () => {
+    const calls = await run({
+      runs: [
+        check(30, {head_sha: sha, display_title: `WebKit weekly of ${sha}`}),
+      ],
+      units: [unitAt(30)],
+    });
+    expect(calls.dispatch).toContainEqual(releaseCheck(sha));
   });
 
   it('does not check a tip twice', async () => {
@@ -593,6 +663,90 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
         expect(calls.issues[0].body).toContain('spec:AST-030 FR21');
       },
     );
+
+    const bot = {login: 'github-actions[bot]'};
+
+    it("closes this job's own open issue, naming the green run, once a later full unit run succeeds", async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20)],
+        issue: {number: 42, title, user: bot},
+      });
+      expect(calls.comments).toEqual([
+        expect.objectContaining({issue_number: 42}),
+      ]);
+      expect(calls.comments[0].body).toContain(
+        'https://github.com/meta/astryx/actions/runs/20',
+      );
+      expect(calls.comments[0].body).toContain('succeeded');
+      // An unnamed run names no commit: it tested main's tip when it started.
+      expect(calls.comments[0].body).not.toMatch(/ for [0-9a-f]{7} /);
+      expect(calls.updates).toEqual([
+        expect.objectContaining({
+          issue_number: 42,
+          state: 'closed',
+          state_reason: 'completed',
+        }),
+      ]);
+      expect(calls.issues).toEqual([]);
+    });
+
+    it('names the commit a named run tested', async () => {
+      // The run's event commit differs from the commit it names, as when a
+      // dispatch races a merge.
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [unitAt(20, {head_sha: 'e'.repeat(40)})],
+        issue: {number: 42, title, user: bot},
+      });
+      expect(calls.comments[0].body).toContain(
+        ` for ${sha.slice(0, 7)} succeeded`,
+      );
+    });
+
+    it('leaves an issue a person opened with the same title open', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20)],
+        issue: {number: 43, title, user: {login: 'someone'}},
+      });
+      expect(calls.comments).toEqual([]);
+      expect(calls.updates).toEqual([]);
+    });
+
+    it('does nothing after a success when no issue is open', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20)],
+      });
+      expect(calls.comments).toEqual([]);
+      expect(calls.updates).toEqual([]);
+      expect(calls.issues).toEqual([]);
+    });
+
+    it('keeps the issue open while the newest full unit run did not complete', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20, {conclusion: 'cancelled'})],
+        issue: {number: 42, title, user: bot},
+      });
+      expect(calls.updates).toEqual([]);
+      expect(calls.comments).toEqual([
+        expect.objectContaining({issue_number: 42}),
+      ]);
+    });
+
+    it('warns and keeps going when the issue lookup fails after a success', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20)],
+        issue: 'unavailable',
+      });
+      expect(calls.updates).toEqual([]);
+      expect(calls.warnings.join('\n')).toMatch(
+        /Could not close the unit-run issue/,
+      );
+    });
 
     it('comments on the open guardian issue instead of opening another', async () => {
       const calls = await run({

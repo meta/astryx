@@ -53,7 +53,9 @@ import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {
+  PressGroupBandContext,
   PressGroupContext,
   pressGroupItemProps,
 } from '../hooks/pressGroupContext';
@@ -269,16 +271,21 @@ const dynamicStyles = stylex.create({
   width: (width: SizeValue | null) => ({width}),
 });
 
+// At the default text size one label line is shorter than the element size,
+// so a caller's height still replaces this one. A larger text size makes the
+// line taller, and the button grows with its label.
 const sizeStyles = stylex.create({
-  sm: {
-    height: sizeVars['--size-element-sm'],
-  },
-  md: {
-    height: sizeVars['--size-element-md'],
-  },
-  lg: {
-    height: sizeVars['--size-element-lg'],
-  },
+  sm: {height: `max(${sizeVars['--size-element-sm']}, 1lh)`},
+  md: {height: `max(${sizeVars['--size-element-md']}, 1lh)`},
+  lg: {height: `max(${sizeVars['--size-element-lg']}, 1lh)`},
+});
+
+// An icon-only button holds its glyph, which does not grow with the text, so
+// it keeps a fixed square size.
+const iconOnlySizeStyles = stylex.create({
+  sm: {height: sizeVars['--size-element-sm']},
+  md: {height: sizeVars['--size-element-md']},
+  lg: {height: sizeVars['--size-element-lg']},
 });
 
 /**
@@ -752,9 +759,17 @@ export function Button({
   const isBusyOnlyDisabled =
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
-  // The group draws one band for all its members.
-  // A disabled or busy-only button takes no tap.
-  const hasHitArea = buttonGroup == null && !buttonDisabled;
+  // Server markup has no click guard until it hydrates, and a native submit
+  // or reset button acts on its form without one.
+  const isHydrating = useIsHydrating();
+  const renderedType =
+    buttonDisabled && isHydrating && (type === 'submit' || type === 'reset')
+      ? 'button'
+      : type;
+  // The group draws one band for all its members: a ButtonGroup, or a
+  // tracking group that says so. A disabled or busy-only button takes no tap.
+  const groupDrawsBand = use(PressGroupBandContext);
+  const hasHitArea = buttonGroup == null && !groupDrawsBand && !buttonDisabled;
   const hitAreaRef = useTouchHitArea(hasHitArea, use(ButtonHitAreaContext));
   // isIconOnly prop is the source of truth for icon-only rendering.
   // When false (default), label is always rendered as visible text.
@@ -823,7 +838,7 @@ export function Button({
   // Shared StyleX props for both button and link rendering
   const sharedStylexProps = focusOutlineProps.focusVisible(
     styles.base,
-    sizeStyles[size],
+    isIconOnly ? iconOnlySizeStyles[size] : sizeStyles[size],
     isIconOnly && styles.iconOnly,
     interactionOverlayStyles.backgroundImage,
     // The press the controller writes, on a layer under the label whose
@@ -1002,7 +1017,7 @@ export function Button({
     element = (
       <button
         ref={mergedButtonRef}
-        type={type}
+        type={renderedType}
         {...(inputGroup != null && buttonGroup == null
           ? inputGroupItemProps
           : undefined)}

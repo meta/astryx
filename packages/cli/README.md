@@ -96,24 +96,24 @@ Each command declares what it does in a folder outside any project, and `astryx 
 
 <!-- BEGIN GENERATED: commands -->
 
-| Command        | Description                                                                                                       | Outside a project |
-| -------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `blog`         | Read the Astryx blog from the published feed                                                                      | `same`            |
-| `build`        | Build a page: the template to start from, or the workflow playbook (no query)                                     | `same`            |
-| `component`    | List components or print component docs                                                                           | `same`            |
-| `discover`     | Browse and search integrations: the ones you have and the ones you could add                                      | `same`            |
-| `docs`         | Print reference docs                                                                                              | `same`            |
-| `doctor`       | Diagnose Astryx projects and integration packages                                                                 | `own`             |
-| `experimental` | [experimental] Try features that may change in a patch release: icon sets (find icons, build an icon-set package) | by subcommand     |
-| `gap-report`   | Report a missing component or feature to the package that owns it                                                 | `same`            |
-| `hook`         | List hooks or print hook docs                                                                                     | `same`            |
-| `init`         | Initialize the design system in your project                                                                      | `own`             |
-| `integration`  | Author and verify an Astryx integration package                                                                   | by subcommand     |
-| `search`       | Search components, hooks, docs, templates, and themes in one ranked list                                          | `same`            |
-| `swizzle`      | Copy component source for customization                                                                           | `refuse`          |
-| `template`     | List, show, or scaffold page and block templates                                                                  | `same`            |
-| `theme`        | Add, switch, build, and author themes                                                                             | by subcommand     |
-| `upgrade`      | Update your code after upgrading Astryx, and refresh ShadCN-copied components                                     | `own`             |
+| Command        | Description                                                                                                      | Outside a project |
+| -------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `blog`         | Read the Astryx blog from the published feed                                                                     | `same`            |
+| `build`        | Build a page: the template to start from, or the workflow playbook (no query)                                    | `same`            |
+| `component`    | List components or print component docs                                                                          | `same`            |
+| `discover`     | Browse and search integrations: the ones you have and the ones you could add                                     | `same`            |
+| `docs`         | Print reference docs                                                                                             | `same`            |
+| `doctor`       | Diagnose Astryx projects and integration packages                                                                | `own`             |
+| `experimental` | [experimental] Try features that may change in a patch release: icon sets, page rendering, checked theme editing | by subcommand     |
+| `gap-report`   | Report a missing component or feature to the package that owns it                                                | `same`            |
+| `hook`         | List hooks or print hook docs                                                                                    | `same`            |
+| `init`         | Initialize the design system in your project                                                                     | `own`             |
+| `integration`  | Author and verify an Astryx integration package                                                                  | by subcommand     |
+| `search`       | Search components, hooks, docs, templates, and themes in one ranked list                                         | `same`            |
+| `swizzle`      | Copy component source for customization                                                                          | `refuse`          |
+| `template`     | List, show, or scaffold page and block templates                                                                 | `same`            |
+| `theme`        | Add, switch, build, and author themes                                                                            | by subcommand     |
+| `upgrade`      | Update your code after upgrading Astryx, and refresh ShadCN-copied components                                    | `own`             |
 
 <!-- END GENERATED: commands -->
 <!-- Generated by scripts/generate-cli-readme.mjs from `astryx manifest`. Run `pnpm -F @astryxdesign/cli readme`. -->
