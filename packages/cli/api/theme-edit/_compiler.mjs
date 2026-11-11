@@ -374,50 +374,10 @@ export function makeCompiler(project, parts) {
   }
 
   /**
-   * What a part reads, one line per aspect.
-   * @param {string} target
-   * @param {string} P
-   * @param {string} [theme]
-   */
-  function explain(target, P, theme = '<theme>') {
-    const t = TARGET.get(target);
-    const lines = [`${target}  (part of ${t?.component ?? '?'})`];
-    for (const [p, vals] of Object.entries(variantValues(target)))
-      lines.push(`  --when ${p}:${vals.length ? vals.join('|') : '<value>'}`);
-    if (t?.states?.length)
-      lines.push(
-        `  --state ${t.states.join('|')} (also hover, active, focus-visible)`,
-      );
-    if (!MAP[target]) {
-      lines.push(
-        '  (no compiled record of what it reads: it did not render in the catalog)',
-      );
-      return lines;
-    }
-    for (const g of Object.keys(GROUPS)) {
-      const r = partReads(target, g);
-      if (!r.length) continue;
-      lines.push(
-        `  ${g.padEnd(10)} ${r
-          .slice(0, 5)
-          .map(x => x.token + fmtWhen(x.when) + statusNote(target, x.token))
-          .join(', ')}${r.length > 5 ? `, ... (${r.length - 5} more)` : ''}`,
-      );
-    }
-    const kids = MAP[target].contains ?? [];
-    if (kids.length)
-      lines.push(
-        `  contains   ${kids.slice(0, 10).join(', ')}  (tokens set --on ${target} reach these too)`,
-      );
-    lines.push(
-      `  any CSS property works directly, e.g. ${P} set ${theme} background "#fafafa" --on ${target}`,
-    );
-    return lines;
-  }
-
-  /**
    * Text that this theme made unreadable: every real text-on-background pair,
-   * in each mode, below 4.5:1 now but not as low in the base theme.
+   * in each mode, below 4.5:1 now but not as low in the base theme. Also
+   * the values this theme set that have no fixed color to check (a
+   * `color-mix()`, a `var()`), so the result can say what it skipped.
    * @param {(pair: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} value
    * @param {(pair: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} baseValue
    * @param {string[]} modes
@@ -427,6 +387,8 @@ export function makeCompiler(project, parts) {
     /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string}>} */
     const out = [];
     const seen = new Set();
+    /** @type {Set<string>} */
+    const unchecked = new Set();
     for (const p of parts.pairs) {
       if (
         p.fg.target !== p.bg.target &&
@@ -441,7 +403,15 @@ export function makeCompiler(project, parts) {
         if (hasAlpha(fg) || hasAlpha(bg)) continue;
         const a = parseColor(fg);
         const b = parseColor(bg);
-        if (!a || !b) continue;
+        if (!a || !b) {
+          for (const [v, side] of /** @type {const} */ ([
+            [fg, 'fg'],
+            [bg, 'bg'],
+          ]))
+            if (v && !parseColor(v) && v !== baseValue(p, side, m))
+              unchecked.add(String(v));
+          continue;
+        }
         const r = ratio(a, b);
         if (r >= 4.5) continue;
         const a0 = parseColor(baseValue(p, 'fg', m));
@@ -461,7 +431,7 @@ export function makeCompiler(project, parts) {
         });
       }
     }
-    return out.slice(0, 8);
+    return {problems: out.slice(0, 8), unchecked: [...unchecked]};
   }
 
   /**
@@ -514,7 +484,6 @@ export function makeCompiler(project, parts) {
     checkTokenOn,
     checkTokenGlobal,
     variantValues,
-    explain,
     contrast,
   };
 }

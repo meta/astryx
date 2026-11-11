@@ -129,7 +129,7 @@ export const doc = {
       value: 'themeEdit.show',
       stability: 'experimental',
       description:
-        'Every `settings` entry with the `parts` it styles, key `resolved` token values per mode, contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, and any `pictures`. Experimental: may change or be removed in a patch release.',
+        'Every `settings` entry with the `parts` it styles, key `resolved` token values per mode, the `palette` (files, families with their seeds and the stops that feed each token, contrast checks, overridden tokens; null with no color dial), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, and any `pictures`. Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.undo',
@@ -165,7 +165,7 @@ export const doc = {
       value: 'themeEdit.how',
       stability: 'experimental',
       description:
-        'A how answer; `kind` says which: `part`, `family`, `setting`, `aspect`, `question` (answers with commands), `picture` (main colors or the color at points) or `list` (the items). Experimental: may change or be removed in a patch release.',
+        'A how answer; `kind` says which: `part` (`component`, `recorded`, `family`, `familyMembers`, `spreads`, `variants`, `states`, `reads` per aspect, `contains`), `family` (`members`, `spreads`), `setting` (a dial: `values`, `help`, `examples`; a token: `tokenType`, `default`, `perMode`, `readBy`, `examples`; a property: `setBy`, `examples`), `aspect` or `question` (`results`, each a `text` and its `commands`), `picture` (main colors or the color at points) or `list` (the `items`). Experimental: may change or be removed in a patch release.',
     },
     // render (experimental: may change or be removed in a patch release)
     {

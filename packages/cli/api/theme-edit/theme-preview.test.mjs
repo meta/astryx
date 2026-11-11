@@ -18,6 +18,7 @@ import {
   themeEditPreviewList,
   themeEditPreviewRemove,
 } from './theme-edit.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -298,6 +299,46 @@ describe('preview options and errors', () => {
     }
   }, 120_000);
 
+  it('skips a StyleX template page in an app with no StyleX compiler', async () => {
+    const r = await refusal(() =>
+      themeEditPreviewAdd(undefined, {
+        cwd,
+        path: 'src/app/stylex',
+        template: 'kanban-board',
+      }),
+    );
+    expect(r.code).toBe('ERR_DEP_MISSING');
+    expect(r.message).toContain('StyleX');
+    expect(filesUnder(path.join(cwd, 'src/app/stylex'))).toEqual([]);
+  }, 120_000);
+
+  it('refuses a theme that does not build before it writes any page', async () => {
+    const broken = path.join(cwd, 'themes', 'broken');
+    fs.mkdirSync(broken, {recursive: true});
+    const settings = JSON.parse(read('themes/brand/brand.settings.json'));
+    fs.writeFileSync(
+      path.join(broken, 'broken.settings.json'),
+      JSON.stringify({...settings, name: 'broken'}),
+    );
+    fs.writeFileSync(
+      path.join(broken, 'broken.theme.ts'),
+      'export const = ;\n',
+    );
+    try {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {
+          cwd,
+          path: 'src/app/broken',
+          theme: 'broken',
+        }),
+      );
+      expect(['ERR_THEME_LOAD', 'ERR_THEME_INVALID']).toContain(r.code);
+      expect(filesUnder(path.join(cwd, 'src/app/broken'))).toEqual([]);
+    } finally {
+      fs.rmSync(broken, {recursive: true, force: true});
+    }
+  }, 120_000);
+
   it('lists no pages when there is no routes folder', async () => {
     const bare = path.join(cwd, 'bare-app');
     fs.mkdirSync(bare);
@@ -359,6 +400,26 @@ describe('preview remove', () => {
     fs.rmSync(dir, {recursive: true, force: true});
     fs.rmSync(path.join(cwd, 'keep-me.txt'));
   });
+});
+
+describe('the preview commands succeed from the command line', () => {
+  it('add, list and remove exit 0 with a JSON envelope each', async () => {
+    /** @param {string[]} args */
+    const ok = async args => {
+      const r = await runCli(
+        ['--json', 'experimental', 'theme', 'preview', ...args],
+        {cwd},
+      );
+      expect(r.status, args.join(' ')).toBe(0);
+      return JSON.parse(r.stdout);
+    };
+    expect((await ok(['add'])).type).toBe('themeEdit.previewAdd');
+    expect((await ok(['list'])).data.pages).toHaveLength(2);
+    expect((await ok(['remove', 'components'])).data.pages).toEqual([
+      'overview',
+    ]);
+    expect((await ok(['remove'])).data.pages).toEqual([]);
+  }, 120_000);
 });
 
 describe('preview app', () => {
@@ -487,6 +548,25 @@ describe('preview app', () => {
       expect(read('kept/tsconfig.json')).not.toBe('{}\n');
     } finally {
       fs.rmSync(app, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('checks the folder before it builds the theme, so a refusal writes nothing', async () => {
+    fs.mkdirSync(path.join(cwd, 'busy'));
+    fs.writeFileSync(path.join(cwd, 'busy', 'notes.md'), 'mine\n');
+    const js = path.join(cwd, 'themes/brand/brand.js');
+    const before = fs.readFileSync(js, 'utf8');
+    fs.rmSync(js);
+    try {
+      const r = await refusal(() =>
+        themeEditPreviewApp('busy', {cwd, theme: 'brand'}),
+      );
+      expect(r.code).toBe('ERR_FILE_EXISTS');
+      expect(fs.existsSync(js)).toBe(false);
+      expect(fs.readdirSync(path.join(cwd, 'busy'))).toEqual(['notes.md']);
+    } finally {
+      fs.writeFileSync(js, before);
+      fs.rmSync(path.join(cwd, 'busy'), {recursive: true, force: true});
     }
   }, 120_000);
 
