@@ -27,7 +27,7 @@ describe('WheelPacingError', () => {
   it('names the longest gap, the bound and every gap', () => {
     const error = new WheelPacingError(100, [16, 16, 141, 0, 16]);
     expect(error.name).toBe('WheelPacingError');
-    expect(error.message).toMatch(/a gap of 141 ms, over its 100 ms/);
+    expect(error.message).toMatch(/a gap of 141 ms, at or over its 100 ms/);
     expect(error.message).toMatch(/gaps 16, 16, 141, 0, 16 ms/);
     expect(error.receivedGapsMs).toEqual([16, 16, 141, 0, 16]);
   });
@@ -65,6 +65,21 @@ describe('wheelGapCauses', () => {
   it('finds nothing within the bound', () => {
     expect(
       wheelGapCauses('webkit', [0, 16, 32, 48], [1, 17, 33, 49], 100),
+    ).toEqual({pageStalls: [], dispatchStalls: []});
+  });
+
+  it('judges a gap of exactly the bound, as Core ends a wheel gesture at a pause of its end window or more', () => {
+    // WebKit stamps whole ms, so a gap can equal the bound exactly.
+    expect(wheelGapCauses('webkit', [0, 16, 116], [1, 17, 117], 100)).toEqual({
+      pageStalls: [],
+      dispatchStalls: [100],
+    });
+    expect(wheelGapCauses('chromium', [0, 16, 116], [1, 17, 117], 100)).toEqual(
+      {pageStalls: [], dispatchStalls: [100]},
+    );
+    // Just under the bound, the run stays one gesture.
+    expect(
+      wheelGapCauses('chromium', [0, 16, 115.9], [1, 17, 116.9], 100),
     ).toEqual({pageStalls: [], dispatchStalls: []});
   });
 
@@ -230,7 +245,7 @@ describe('WheelPageStallError', () => {
     expect(error.message).toMatch(
       /took 150 ms of page wall time to handle a step/,
     );
-    expect(error.message).toMatch(/152 ms later, over its 100 ms/);
+    expect(error.message).toMatch(/152 ms later, at or over its 100 ms/);
     expect(error.message).toMatch(
       /the page split the run\. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits/,
     );

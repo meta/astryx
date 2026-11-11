@@ -456,8 +456,6 @@ describe('apiChangesLine', () => {
   const pkg = (name, rows, extra = {}) => ({
     pkg: `@astryxdesign/${name}`,
     baseline: false,
-    stale: false,
-    missing: false,
     counts: {
       added: rows.filter(row => row.change === 'added').length,
       changed: rows.filter(row => row.change === 'changed').length,
@@ -499,7 +497,7 @@ describe('apiChangesLine', () => {
       ],
     });
     expect(out.split('\n')[0]).toBe(
-      '**API changes:** `core` +1 · ~1 · −1 (report stale: run `pnpm api:report`); `richtext` no changes (report not committed: run `pnpm api:report`); `charts` new report',
+      "**API changes:** `core` +1 · ~1 · −1; `charts` not in the merge base's build",
     );
     expect(out).toContain(
       '<details><summary>3 API changes (advisory)</summary>',
@@ -533,25 +531,50 @@ describe('apiChangesLine', () => {
     expect(outside).not.toMatch(/https?:|www\.|<img|\]\(/);
   });
 
-  it('prompts for a report that neither the merge base nor the head commits', () => {
+  it('ignores the stale-report fields an older head wrote', () => {
     expect(
       apiChangesLine({
-        version: 1,
-        packages: [pkg('core', [], {baseline: true, missing: true})],
+        version: 2,
+        packages: [pkg('core', [], {stale: true, missing: true, staleRows: 3})],
       }),
-    ).toBe(
-      '**API changes:** `core` no changes (report not committed: run `pnpm api:report`)\n\n',
-    );
+    ).toBe('');
   });
 
   it('lists at most 150 rows and counts the rest', () => {
     const rows = Array.from({length: 160}, (_, i) => row('added', `item ${i}`));
     const out = apiChangesLine({packages: [pkg('core', rows)]});
     expect(out.match(/^\| \+ \| `core` \|/gm)).toHaveLength(150);
-    expect(out).toContain('…and 10 more;');
+    expect(out).toContain("…and 10 more in this run's api-changes.json.");
   });
 
-  it('is absent when no package has a change or a report to refresh, or without a file', () => {
+  it('says the API was not compared when the merge base had no built surface', () => {
+    // No published package changed: nothing to compare, and no error.
+    expect(apiChangesLine({version: 2, baseRecord: null, packages: []})).toBe(
+      '',
+    );
+    const unknown = pkg('core', [], {
+      baseline: true,
+      baseUnknown: true,
+      baseSource: 'unknown',
+    });
+    expect(
+      apiChangesLine({version: 2, baseRecord: null, packages: [unknown]}),
+    ).toBe(
+      '**API changes:** not compared: no built surface of the merge base; unknown: `core`\n\n',
+    );
+    // An older head compared committed reports and wrote their rows with a
+    // null baseRecord; those rows are not a comparison of builds.
+    const out = apiChangesLine({
+      version: 2,
+      baseRecord: null,
+      packages: [pkg('core', [row('added', 'component AppShell')])],
+    });
+    expect(out).toBe(
+      '**API changes:** not compared: no built surface of the merge base; unknown: `core`\n\n',
+    );
+  });
+
+  it('is absent when no package has a change, or without a file', () => {
     expect(
       apiChangesLine({version: 1, packages: [pkg('core', []), pkg('lab', [])]}),
     ).toBe('');
