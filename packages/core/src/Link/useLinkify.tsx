@@ -73,14 +73,14 @@ export interface UseLinkifyOptions {
 // URL pattern: matches http(s) URLs
 const URL_PATTERN: LinkifyPattern = {
   pattern: /https?:\/\/[^\s<>'")\]},]+/g,
-  href: (match) => match[0],
+  href: match => match[0],
   isExternal: true,
 };
 
-// Email pattern: matches email addresses
+// Email pattern: matches email addresses (bounded to RFC 5321 limits to prevent quadratic backtracking)
 const EMAIL_PATTERN: LinkifyPattern = {
-  pattern: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
-  href: (match) => `mailto:${match[0]}`,
+  pattern: /[a-zA-Z0-9._%+-]{1,64}@[a-zA-Z0-9.-]{1,253}\.[a-zA-Z]{2,63}/g,
+  href: match => `mailto:${match[0]}`,
 };
 
 const BUILTIN_PATTERNS: LinkifyPattern[] = [URL_PATTERN, EMAIL_PATTERN];
@@ -197,11 +197,7 @@ export function useLinkify(
 
       // The link
       nodes.push(
-        <Link
-          key={`linkify-${i}`}
-          href={m.href}
-          isExternalLink={m.isExternal}
-        >
+        <Link key={`linkify-${i}`} href={m.href} isExternalLink={m.isExternal}>
           {m.label}
         </Link>,
       );

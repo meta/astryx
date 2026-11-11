@@ -25,6 +25,7 @@ import {
 } from 'lexical';
 import {RichTextEditor} from './RichTextEditor';
 import {RichTextEditorAutoLinkPlugin} from './RichTextEditorAutoLinkPlugin';
+import {EMAIL_MATCHER} from './linkUtils';
 import {markdownToEditorStateJSON} from './markdown';
 
 // jsdom has no clipboard or drag events; Lexical tells a paste from a drop
@@ -151,5 +152,21 @@ describe('RichTextEditorAutoLinkPlugin and code blocks', () => {
   it('still links a URL in ordinary text', async () => {
     const editor = await renderEditor('See https://example.com today.\n');
     expect(editor.read(() => $autoLinks($getRoot()))).toBe(1);
+  });
+});
+
+describe('EMAIL_MATCHER performance and correctness', () => {
+  it('matches valid email addresses', () => {
+    expect(EMAIL_MATCHER.test('test@example.com')).toBe(true);
+    expect(EMAIL_MATCHER.test('user.name+tag@sub.domain.co.uk')).toBe(true);
+    expect(EMAIL_MATCHER.test('"quoted.local"@example.org')).toBe(true);
+  });
+
+  it('rejects long tokens without an @ in linear time', () => {
+    const longString = 'a'.repeat(40000);
+    const start = performance.now();
+    expect(EMAIL_MATCHER.test(longString)).toBe(false);
+    const duration = performance.now() - start;
+    expect(duration).toBeLessThan(100);
   });
 });
