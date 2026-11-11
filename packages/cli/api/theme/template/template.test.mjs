@@ -147,6 +147,33 @@ describe('themeTemplate()', () => {
       expect(fs.readFileSync(dest, 'utf-8')).not.toMatch(/edited/);
     });
 
+    it('refuses a theme source in a folder the theme editor made', () => {
+      const dir = path.join(tmpDir, 'themes', 'my-theme');
+      fs.mkdirSync(dir, {recursive: true});
+      fs.writeFileSync(path.join(dir, 'my-theme.settings.json'), '{}\n');
+      const source = "export {myTheme} from './my-theme.settings';\n";
+      fs.writeFileSync(path.join(dir, 'my-theme.theme.ts'), source);
+
+      let error;
+      try {
+        themeTemplate({
+          cwd: tmpDir,
+          targetPath: 'themes/my-theme/my-theme.theme.ts',
+          overwrite: true,
+        });
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
+      expect(error.message).toMatch(
+        /theme editor made \(my-theme\.settings\.json is beside it\)/,
+      );
+      expect(
+        fs.readFileSync(path.join(dir, 'my-theme.theme.ts'), 'utf-8'),
+      ).toBe(source);
+    });
+
     it('replaces a file named like a theme source', () => {
       fs.writeFileSync(path.join(tmpDir, 'ocean.theme.ts'), '// mine\n');
       const res = themeTemplate({

@@ -71,7 +71,7 @@ export const doc = {
     },
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'overwrite names a file that is not a copy of the template or a theme source',
+      when: 'overwrite names a file that is not a copy of the template or a theme source, or a file in a folder the theme editor made (it holds a .settings.json)',
     },
     {code: 'ERR_WRITE_FAILED', when: 'the template file cannot be written'},
   ],

@@ -151,6 +151,24 @@ export function themeTemplate(options = {}) {
     );
   }
 
+  const editorRecord =
+    fs.existsSync(resolved) && overwrite ? editorRecordBeside(resolved) : null;
+  if (editorRecord) {
+    throw new AstryxError(
+      `${relative} belongs to a theme the theme editor made (${editorRecord} is beside it). Replacing it would cut the theme off from its settings, so --overwrite does not replace it.`,
+      [
+        {
+          name: formatCliCommand(
+            `theme template ${THEME_TEMPLATE_DEFAULT_PATH}`,
+            cwd,
+          ),
+          reason: 'write the template to a new file',
+        },
+      ],
+      ERROR_CODES.ERR_FILE_EXISTS,
+    );
+  }
+
   if (
     fs.existsSync(resolved) &&
     overwrite &&
@@ -204,5 +222,23 @@ function isDirectory(file) {
     return fs.statSync(file).isDirectory();
   } catch {
     return false;
+  }
+}
+
+/**
+ * The theme editor's record in a file's folder, if there is one. The editor
+ * owns every theme file in that folder and regenerates it from the record.
+ * @param {string} file
+ * @returns {string | null}
+ */
+function editorRecordBeside(file) {
+  try {
+    return (
+      fs
+        .readdirSync(path.dirname(file))
+        .find(name => name.endsWith('.settings.json')) ?? null
+    );
+  } catch {
+    return null;
   }
 }
