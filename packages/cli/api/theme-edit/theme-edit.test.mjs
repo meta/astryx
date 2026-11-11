@@ -134,7 +134,7 @@ describe('refusals', () => {
     expect(r.message).toContain('card never reads --color-on-info-muted');
     expect(r.message).toContain('Nothing was changed.');
     expect(r.run).toContain(
-      'astryx experimental theme editor set t color "#ffffff" --on card',
+      "astryx experimental theme editor set t color '#ffffff' --on card",
     );
     expect(settingsOf('t')).toBe(before);
   });
@@ -195,7 +195,7 @@ describe('refusals', () => {
     );
     expect(r.code).toBe('ERR_THEME_UNKNOWN_THING');
     expect(r.run[0]).toContain(
-      'background "linear-gradient(#fff, #000)" --on card',
+      "background 'linear-gradient(#fff, #000)' --on card",
     );
   });
 
@@ -213,7 +213,7 @@ describe('refusals', () => {
     );
     expect(r.code).toBe('ERR_MISSING_ARGUMENT');
     expect(r.run[0]).toBe(
-      'astryx experimental theme editor set t box-shadow none --on <part>',
+      'astryx experimental theme editor set t box-shadow none --on card',
     );
   });
 });
@@ -241,8 +241,9 @@ describe('colors', () => {
       'var(--brand-ink)',
       {cwd},
     );
-    expect(r.data.problems.join(' ')).toContain('not checked');
-    expect(r.data.problems.join(' ')).toContain('var(--brand-ink)');
+    // What cannot be measured is a note, not a problem.
+    expect(r.data.notes.join(' ')).toContain('not checked');
+    expect(r.data.notes.join(' ')).toContain('var(--brand-ink)');
     await themeEditUndo('t', {cwd, thing: '--color-text-primary'});
   });
 
@@ -289,11 +290,16 @@ describe('every refusal code', () => {
   });
 });
 
-describe('the editor commands succeed from the command line', () => {
+describe.sequential('the editor commands succeed from the command line', () => {
   // One CLI run per test: each run starts Node and copies the theme, so
   // several runs together outlast one test's time limit. The tests run in
   // order and share the fixture project, so each one builds on the one
-  // before it.
+  // before it. When `new` fails, the tests that need its theme skip with a
+  // note that names it, so the one failure shows alone.
+  let made = false;
+  /** @param {(condition: boolean, note: string) => void} skip */
+  const needsTheme = skip =>
+    skip(!made, 'needs the "cli" theme that "new exits 0" makes, which failed');
   /** @param {string[]} args */
   const ok = async args => {
     const r = await runCli(
@@ -308,31 +314,37 @@ describe('the editor commands succeed from the command line', () => {
     expect((await ok(['new', 'cli', '--like', 'neutral'])).type).toBe(
       'themeEdit.new',
     );
+    made = true;
   });
 
-  it('set exits 0 with a JSON envelope', async () => {
+  it('set exits 0 with a JSON envelope', async ({skip}) => {
+    needsTheme(skip);
     expect((await ok(['set', 'cli', 'corners', 'pill'])).type).toBe(
       'themeEdit.set',
     );
   });
 
-  it('set on one component exits 0 with a JSON envelope', async () => {
+  it('set on one component exits 0 with a JSON envelope', async ({skip}) => {
+    needsTheme(skip);
     expect(
       (await ok(['set', 'cli', 'corners', '12px', '--on', 'card'])).type,
     ).toBe('themeEdit.set');
   });
 
-  it('undo of one component exits 0 with a JSON envelope', async () => {
+  it('undo of one component exits 0 with a JSON envelope', async ({skip}) => {
+    needsTheme(skip);
     expect(
       (await ok(['undo', 'cli', 'corners', '--on', 'card'])).data.action,
     ).toBe('undo');
   });
 
-  it('undo of the last step exits 0 with a JSON envelope', async () => {
+  it('undo of the last step exits 0 with a JSON envelope', async ({skip}) => {
+    needsTheme(skip);
     expect((await ok(['undo', 'cli'])).data.action).toBe('step');
   });
 
-  it('show exits 0 with a JSON envelope', async () => {
+  it('show exits 0 with a JSON envelope', async ({skip}) => {
+    needsTheme(skip);
     expect((await ok(['show', 'cli'])).type).toBe('themeEdit.show');
   });
 
@@ -385,7 +397,7 @@ describe('typed modes', () => {
     );
     expect(r.code).toBe('ERR_THEME_NO_MODE');
     expect(r.run).toEqual([
-      'astryx experimental theme editor set night --color-accent "#ff0000"',
+      "astryx experimental theme editor set night --color-accent '#ff0000'",
     ]);
   });
 });
@@ -504,7 +516,7 @@ describe('settings round trip', () => {
       set.data.changedTokens.some(c => c.startsWith('--color-accent (light)')),
     ).toBe(true);
     expect(set.data.notes.join(' ')).toMatch(
-      /--color-accent uses accent shade \d+ \(#[0-9a-f]{6}\) in light/,
+      /--color-accent uses your exact color \(#7c3aed, accent shade \d+\) in light/,
     );
     expect(JSON.parse(settingsOf('t')).settings).toEqual([
       {thing: 'accent', value: '#7c3aed', source: 'dial'},
@@ -539,18 +551,21 @@ describe('how on real parts, questions and settings', () => {
     expect(r.data.kind).toBe('question');
     expect(r.data.understood.parts).toContain('banner');
     const commands = r.data.results.flatMap(x => x.commands);
-    expect(commands).toContain(
-      'astryx experimental theme editor set <theme> color "#ffffff" --on banner   # direct: always works',
-    );
     expect(
-      r.data.results.some(x => x.text.includes('--when status:<value>')),
+      commands.some(c =>
+        c.endsWith("editor set t color '#ffffff' --on banner"),
+      ),
     ).toBe(true);
+    expect(
+      r.data.results.some(x => x.text.includes('--when status:info')),
+    ).toBe(true);
+    expect(r.data.results[0].text).toContain('--color-on-info-muted');
   });
 
-  it('a question about soft shadows is answered with box-shadow and the shadow tokens', async () => {
+  it('a question about soft shadows is answered with box-shadow on the part', async () => {
     const r = await themeEditHow('card soft shadow', {cwd});
-    expect(r.data.results[0].commands[0]).toContain(
-      'box-shadow "var(--shadow-low)" --on containers',
+    expect(r.data.results[0].commands[0]).toMatch(
+      /editor set t box-shadow 'var\(--shadow-low\)' --on card$/,
     );
   });
 
@@ -619,10 +634,19 @@ describe('how on a picture', () => {
     fs.writeFileSync(path.join(cwd, 'p.png'), png());
     const r = await themeEditHow('p.png', {cwd, at: ['0,0;2,0', '3,1']});
     expect(r.data.points).toEqual([
-      {at: '0,0', color: '#ff0000'},
-      {at: '2,0', color: '#0000ff'},
-      {at: '3,1', color: '#000000'},
+      {at: '0,0', color: '#ff0000', alpha: 1},
+      {at: '2,0', color: '#0000ff', alpha: 1},
+      {at: '3,1', color: '#000000', alpha: 1},
     ]);
+  });
+
+  it('refuses a point outside the picture, naming its size', async () => {
+    fs.writeFileSync(path.join(cwd, 'p.png'), png());
+    const r = await refusal(() =>
+      themeEditHow('p.png', {cwd, at: ['-1,0', '9,9']}),
+    );
+    expect(r.code).toBe('ERR_INVALID_ARGUMENT');
+    expect(r.message).toContain('-1,0; 9,9 are outside the picture');
   });
 
   it('reads points in every accepted form', () => {
@@ -668,8 +692,9 @@ describe('the command', () => {
     expect(r.status).toBe(1);
     const out = JSON.parse(r.stdout);
     expect(out.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(out.suggestions[0].name).toBe(
-      'astryx experimental theme editor set t color "#ffffff" --on card',
+    // The same prefix the text output uses.
+    expect(out.suggestions[0].name).toMatch(
+      /^(astryx|(?:npx|pnpm dlx|yarn dlx|bunx) \S+) experimental theme editor set t color '#ffffff' --on card$/,
     );
   });
 
@@ -792,8 +817,7 @@ describe('the command', () => {
         cwd,
       },
     );
-    expect(fresh.stdout).toContain(
-      'Will replace: astryx theme template, astryx theme eject',
-    );
+    // Each stable command is claimed once, by its own copy.
+    expect(fresh.stdout).not.toContain('Will replace');
   });
 });

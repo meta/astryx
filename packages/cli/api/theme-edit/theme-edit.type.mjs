@@ -51,6 +51,7 @@
  * @property {string[]} pictures - PNG pictures taken (only with `png`).
  * @property {string | null} pictureProblem - Why no picture was taken, and how to get a browser for it.
  * @property {{code: string, cause: string} | null} notChecked - Set when the change is saved but the components could not be rendered, so it was not checked and has no preview: the cause, such as two copies of React.
+ * @property {string[]} [previewStale] - Files of the in-app theme preview that were not written again and still show the theme as it was: changed by hand, or a preview folder where a stopped preview change waits for the next preview command.
  */
 
 /**
@@ -79,7 +80,7 @@
  * @property {string} [now] - On `undo`: what applies instead of the setting removed: a dial that still writes the token (such as the generated accent color), a whole-theme setting of the same thing, or the base theme's value.
  * @property {ThemeEditSetting} [removed] - On `undo`: the setting removed (the same as `setting`); the value now in effect is the base theme's, and `changedTokens` lists it.
  * @property {ThemeEditSetting | null} replaced - The setting this one replaced.
- * @property {string | null} was - For `base` and `mode`: the value before.
+ * @property {string | null} was - For `base`, `mode` and a whole-theme dial: the value before.
  * @property {string[]} parts - The parts it styles (a group's members when it spread).
  * @property {{name: string, members: string[], onlyHint: boolean} | null} group - The group it spread to; `onlyHint` when `--only` would style one member.
  * @property {string[]} changedTokens - Resolved token changes, `name (mode): before -> after`.
@@ -93,6 +94,7 @@
  * @property {string[]} pictures
  * @property {string | null} pictureProblem
  * @property {{code: string, cause: string} | null} notChecked - Saved but not checked: see ThemeEditPreviewFields.
+ * @property {string[]} [previewStale] - In-app preview files changed by hand: see ThemeEditPreviewFields.
  */
 
 /**
@@ -117,10 +119,11 @@
  * @property {string[]} data.partValues - Each corners or spacing setting on a part or group, with what its parts get and the whole-theme value beside it.
  * @property {number | null} data.vibrancy - How saturated the generated colors are (0 to 100); null when the theme sets no color.
  * @property {ThemeEditColor[]} data.colors - Each color the theme sets, with the shade each token uses.
- * @property {string[]} data.colorNotes - Tokens that use another shade than usual so they read, and any that still do not.
+ * @property {string[]} data.colorNotes - What the color config keeps or replaced of a hand edit, tokens that use another shade than usual so they read, and any that still do not.
  * @property {string[]} data.problems
  * @property {string[]} data.notes
  * @property {string} data.preview
+ * @property {string[]} [data.previewStale] - In-app preview files changed by hand, so they were not written again and still show the theme as it was.
  * @property {string} data.sheet - The theme-building page with every component.
  * @property {number} data.sheetComponents
  * @property {string[]} data.skipped - Template pages left out, with the install line each needs.
@@ -167,7 +170,7 @@
  * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [theme] - The theme the pages wear: a theme made by `experimental theme editor` (default: the only one under themes/; with none or several, the app's own theme).
  * @property {string} [template] - Add this page template instead of ranking one from a description.
- * @property {number} [top] - With a description: how many of the best-fitting page templates to add, 1 to 3 (default 1).
+ * @property {number | string} [top] - With a description: how many of the best-fitting page templates to add, 1 to 3 (default 1). A string is taken as typed: only "1", "2" or "3".
  * @property {string} [path] - The folder of the preview route, inside the project (default: theme-preview/ in the app's routes folder, app/ or src/app/).
  */
 
@@ -222,7 +225,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditPreviewListResponse
  * @property {'themeEdit.previewList'} type
- * @property {{folder: string | null, theme: string | null, pages: Array<{id: string, label: string}>}} data
+ * @property {{folder: string | null, theme: string | null, pages: Array<{id: string, label: string}>, notes: string[]}} data - `notes`: what else to know, such as a theme the preview wears that is gone.
  */
 
 /**
@@ -230,16 +233,25 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditPreviewRemoveResponse
  * @property {'themeEdit.previewRemove'} type
- * @property {{folder: string, removed: string[], pages: string[]}} data
+ * @property {object} data
+ * @property {string} data.folder - The preview route folder.
+ * @property {string[]} data.removed - Files deleted.
+ * @property {string[]} data.kept - Files kept: changed by hand after the preview wrote them, or not written by it.
+ * @property {string[]} data.missing - Files the preview had written that were gone already.
+ * @property {string[]} data.rewritten - Files written again, so the route and the Colors page match the pages left.
+ * @property {string[]} data.notes - What else to know.
+ * @property {string[]} data.pages - The pages left, in order; empty when the whole preview was removed.
  */
 
 /**
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditHowOptions
  * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
- * @property {string} [list] - List what a change can name: dials, tokens, parts, groups, or properties; the subject filters it. An empty string lists the kinds.
- * @property {string[]} [at] - With a PNG picture: pixel points x,y ("40,20;300,180", "40,20 300,180", several entries, or a flat "40,20,300,180").
+ * @property {string} [list] - List what a change can name: dials, tokens, parts, groups, or properties (any case, singular or plural); the subject filters it. An empty string or `kinds` lists the kinds.
+ * @property {string} [theme] - The theme the suggested commands are for, checked against its settings (default: the only theme the editor made in the app; with several, the one an editor command changed last; with none, `my-theme`, which the answer makes first). An empty name is refused.
+ * @property {string[]} [at] - With a PNG picture: pixel points x,y, whole numbers inside the picture ("40,20;300,180", "40,20 300,180", several entries, or a flat "40,20,300,180").
  * @property {number} [count] - With a PNG picture: how many main colors (default 14).
+ * @property {string[]} [words] - The words as typed after `how`: a picture first takes only a count after it (the count is read from the words); anything else is one question. Replaces `subject`.
  */
 
 /**
