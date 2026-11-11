@@ -130,6 +130,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The change and Action pipeline, busy state, and busy announcement.
 - Disabled and disabled-reason behavior.
 - The track's focus ring, hover tint, and pressed overlay.
+- Marking its grown hit input for the touch press check. Switch writes the
+  private attribute `data-astryx-grown-hit-input` only through its owner
+  module, `packages/core/src/privateAttributes/grownHitInput.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and measures the visible switch, not the grown input (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 
