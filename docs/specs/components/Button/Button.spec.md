@@ -250,7 +250,8 @@ anatomy-theming map.
 - `family:navigation-destinations` and `spec:AST-005` own link-mode
   destination handling.
 - `spec:AST-085` owns disabled focusability; Button meets it for busy-only and
-  tooltip-disabled states and not for other disabled states (FR10).
+  disabled states (FR9, FR10), except a focused link Button that becomes
+  disabled (FR11).
 - `spec:AST-086` owns the loading region's live-region rules (AR4).
 - `architecture:component-size-cascade` owns size inheritance (ORD1).
 - `architecture:component-theming-surface` owns target and `data-*` rules
