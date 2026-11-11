@@ -126,6 +126,58 @@ describe('storyComponentFolders', () => {
     .filter(Boolean);
   const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
+  const scratch = files => {
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'story-folders-'));
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
+      fs.writeFileSync(path.join(tree, file), text);
+    }
+    const story = storyComponentFolders(
+      'apps/storybook/stories/X.stories.tsx',
+      {
+        listed: Object.keys(files),
+        read: file => fs.readFileSync(path.join(tree, file), 'utf8'),
+      },
+    );
+    fs.rmSync(tree, {recursive: true, force: true});
+    return story;
+  };
+  const MENU = {'packages/core/src/Menu/Menu.tsx': 'export const Menu = 1;\n'};
+
+  it('maps each branch of a story import: a component, an unknown root name, a whole package, a shared subpath', () => {
+    const component = scratch({
+      ...MENU,
+      'apps/storybook/stories/X.stories.tsx':
+        "import {Menu} from '@astryxdesign/core/Menu';\n",
+    });
+    expect(component).toEqual({
+      folders: ['packages/core/src/Menu/'],
+      unresolved: [],
+    });
+    const unknown = scratch({
+      ...MENU,
+      'apps/storybook/stories/X.stories.tsx':
+        "import {useThing} from '@astryxdesign/core';\n",
+    });
+    expect(unknown.unresolved).toHaveLength(1);
+    const whole = scratch({
+      ...MENU,
+      'apps/storybook/stories/X.stories.tsx':
+        "import * as core from '@astryxdesign/core';\n",
+    });
+    expect(whole.unresolved).toHaveLength(1);
+    const shared = scratch({
+      ...MENU,
+      'packages/core/src/hooks/index.ts': 'export const useAnnounce = 1;\n',
+      'apps/storybook/stories/X.stories.tsx':
+        "import {useAnnounce} from '@astryxdesign/core/hooks';\nimport {Menu} from '@astryxdesign/core/Menu';\n",
+    });
+    expect(shared).toEqual({
+      folders: ['packages/core/src/Menu/'],
+      unresolved: [],
+    });
+  });
+
   it('maps the ChatVirtualizer story to Chat, through its name from the Lab package root', () => {
     const story = storyComponentFolders(
       'apps/storybook/stories/ChatVirtualizer.stories.tsx',
