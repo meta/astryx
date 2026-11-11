@@ -213,18 +213,15 @@ const QUESTIONS = [
     },
   ],
   [
+    // Black on white and white on black already have the most contrast.
     'make the text darker',
-    {
-      aspects: ['text'],
-      top: /^set q --color-text-primary "#[0-9a-f]{6}"$/,
-      adds: /--color-text-primary=/,
-    },
+    {aspects: ['text'], top: null},
   ],
   [
     "secondary text is too light, can't read it",
     {
-      top: /^set q --color-text-secondary "#[0-9a-f]{6}"$/,
-      adds: /--color-text-secondary=/,
+      top: /^set q --color-text-secondary "#[0-9a-f]{6}" --mode light && set q --color-text-secondary "#[0-9a-f]{6}" --mode dark$/,
+      adds: /--color-text-secondary/,
     },
   ],
   [
@@ -1009,8 +1006,8 @@ const QUESTIONS_2 = [
   [
     'never use pure black for text',
     {
-      top: /^set q --color-text-primary "#1f2937"$/,
-      adds: /--color-text-primary=#1f2937/,
+      top: /^set q --color-text-primary "#1f2937" --mode light$/,
+      adds: /--color-text-primary.*#1f2937/,
     },
   ],
   [
@@ -1229,7 +1226,10 @@ const QUESTIONS_2 = [
   ],
   [
     'darker borders',
-    {top: /^set q --color-border "#[0-9a-f]+"$/, adds: /--color-border=/},
+    {
+      top: /^set q --color-border "#[0-9a-f]+" --mode light && set q --color-border "#[0-9a-f]+" --mode dark$/,
+      adds: /--color-border/,
+    },
   ],
   [
     'lighter font weight for body',
@@ -1244,7 +1244,10 @@ const QUESTIONS_2 = [
   ],
   [
     'make the modal overlay darker',
-    {top: /^set q --color-overlay "#[0-9a-f]+"$/, adds: /--color-overlay=/},
+    {
+      top: /^set q --color-overlay "#[0-9a-f]+" --mode light && set q --color-overlay "#[0-9a-f]+" --mode dark$/,
+      adds: /--color-overlay/,
+    },
   ],
   [
     'make the progress bar thicker',
@@ -1413,14 +1416,22 @@ describe('how answers pass-2 questions', () => {
   });
 
   it('undo and reset point to the commands that do them', async () => {
-    const undo = (await themeEditHow('undo the last change', {cwd, theme: 'q'}))
+    // q has no history yet: nothing to undo, so no undo command.
+    const none = (await themeEditHow('undo the last change', {cwd, theme: 'q'}))
       .data;
-    expect(undo.results[0].commands.map(bare)).toContain('undo q');
+    expect(none.results[0].text).toMatch(/q has no change to undo yet/);
+    expect(none.results[0].commands.map(bare)).not.toContain('undo q');
+    await themeEditNew('hist', {cwd, like: 'neutral'});
+    await themeEditSet('hist', 'corners', 'more', {cwd});
+    const undo = (
+      await themeEditHow('undo the last change', {cwd, theme: 'hist'})
+    ).data;
+    expect(undo.results[0].commands.map(bare)).toContain('undo hist');
     const reset = (
       await themeEditHow('reset everything to default', {cwd, theme: 'q'})
     ).data;
     expect(reset.results[0].commands.map(bare)).toContain('show q');
-  });
+  }, 120_000);
 
   it('a dark-mode ask on a light-only theme says it has no dark mode, and changes nothing', async () => {
     await themeEditNew('lo', {
@@ -1488,6 +1499,344 @@ describe('how answers pass-2 questions', () => {
       }
       expect(before, question).not.toMatch(want);
       expect(css(), question).toMatch(want);
+    }
+    fs.rmSync(keep, {recursive: true, force: true});
+  }, 300_000);
+});
+
+/**
+ * Pass-3 questions: lists, several colors in one ask, colors worked out
+ * per mode, CSS property names, typed values kept, other languages.
+ * @type {Array<[string, {parts?: string[], aspects?: string[], top: RegExp | null, adds?: RegExp, text?: RegExp}]>}
+ */
+const QUESTIONS_3 = [
+  // each line of a list is its own ask, and a "no" stays on its line
+  [
+    '- rounder buttons\n- no shadow on cards',
+    {
+      top: /^set q corners more --on button && set q box-shadow none --on card$/,
+      adds: /button\.base\.borderRadius=12px[\s\S]*card\.base\.boxShadow=none/,
+    },
+  ],
+  [
+    'no borders\nbold headings',
+    {
+      top: /^set q --border-width 0px && set q headings bold$/,
+      adds: /--border-width=0px/,
+    },
+  ],
+  // several colors, each kept, with the hex before or after its word
+  [
+    'accent #0ea5e9; danger #ef4444; success #22c55e',
+    {
+      top: /^set q accent "#0ea5e9" && set q danger "#ef4444" && set q success "#22c55e"$/,
+      adds: /--color-accent[^\n]*=#0ea5e9[\s\S]*--color-error[^\n]*=#ef4444[\s\S]*--color-success[^\n]*=#22c55e|--color-success[^\n]*=#22c55e/,
+    },
+  ],
+  [
+    'like Bootstrap 5: #0d6efd primary, 6px radius',
+    {
+      top: /^set q accent "#0d6efd" && set q corners 6px$/,
+      adds: /--color-accent[^\n]*=#0d6efd/,
+    },
+  ],
+  [
+    'make it look like Google: Roboto font, accent #1a73e8',
+    {
+      top: /^set q font roboto && set q accent "#1a73e8"$/,
+      adds: /--color-accent[^\n]*=#1a73e8/,
+    },
+  ],
+  [
+    'brand colors: primary #ff5a1f, secondary #1f2937',
+    {
+      top: /^set q accent "#ff5a1f" && set q background "#1f2937" --on button --when variant:secondary$/,
+      adds: /--color-accent[^\n]*=#ff5a1f/,
+    },
+  ],
+  [
+    'colors: bg=#fff text=#000 accent=#ff0080',
+    {
+      top: /^set q --color-background-body "#fff" && set q --color-text-primary "#000" && set q accent "#ff0080"$/,
+      adds: /--color-background-body=#fff/,
+    },
+  ],
+  [
+    'hex values in the mock: #FAFAFA bg, #171717 text, #E5E5E5 border, #0070F3 accent',
+    {
+      top: /^set q --color-background-body "#fafafa" && set q --color-text-primary "#171717" && set q --color-border "#e5e5e5" && set q accent "#0070f3"$/,
+      adds: /--color-border=#e5e5e5/,
+    },
+  ],
+  [
+    'LGTM except the accent, make it #6d28d9',
+    {top: /^set q accent "#6d28d9"$/, adds: /--color-accent[^\n]*=#6d28d9/},
+  ],
+  [
+    'not a fan of the purple, can we go back to blue?',
+    {top: /^set q accent "#2563eb"$/},
+  ],
+  [
+    'Airbnb: accent #ff385c, rounded 12px cards, Circular font',
+    {
+      top: /^set q accent "#ff385c" && set q border-radius 12px --on card && set q font Circular$/,
+    },
+  ],
+  // colors how works out are per mode
+  [
+    'more contrast',
+    {
+      top: /^set q --color-text-secondary "#[0-9a-f]+" --mode light && set q --color-text-secondary "#[0-9a-f]+" --mode dark && set q --color-border "#[0-9a-f]+" --mode light && set q --color-border "#[0-9a-f]+" --mode dark$/,
+      text: /in light and in dark mode/,
+    },
+  ],
+  [
+    'a11y audit: secondary text fails contrast on white',
+    {
+      top: /^set q --color-text-secondary "#[0-9a-f]{6}" --mode light && set q --color-text-secondary "#[0-9a-f]{6}" --mode dark$/,
+    },
+  ],
+  [
+    'make the page background lighter',
+    {
+      top: /--mode light && set q --color-background-body "#[0-9a-f]+" --mode dark$/,
+    },
+  ],
+  // CSS property names
+  [
+    'buttons have letter-spacing 0.02em and font-weight 500',
+    {
+      top: /^set q letter-spacing 0\.02em --on button && set q font-weight 500 --on button$/,
+      adds: /button\.base\.letterSpacing=0\.02em/,
+    },
+  ],
+  [
+    'headings are tight: letter-spacing -0.025em, line-height 1.2',
+    {
+      top: /^set q letter-spacing -0\.025em --on heading && set q line-height 1\.2 --on heading$/,
+      adds: /heading\.base\.lineHeight=1\.2/,
+    },
+  ],
+  [
+    'font-size 14px on buttons',
+    {
+      top: /^set q font-size 14px --on button$/,
+      adds: /button\.base\.fontSize=14px/,
+    },
+  ],
+  // what was meant
+  [
+    'drop shadow: x 0, y 4, blur 6, spread -1, rgba(0,0,0,0.1)',
+    {
+      top: /^set q --shadow-med "0 4px 6px -1px rgba\(0,0,0,0\.1\)"$/,
+      adds: /--shadow-med=0 4px 6px -1px/,
+    },
+  ],
+  [
+    "let's ditch the borders on inputs",
+    {top: /^set q border none --on inputs$/, adds: /\.border=none/},
+  ],
+  ['swap Inter for Manrope everywhere', {top: /^set q font manrope$/}],
+  [
+    'all radius values are 0, it is very sharp',
+    {top: /^set q corners square$/, adds: /--radius-element=0px/},
+  ],
+  [
+    'the card corners are about 12 pixels',
+    {
+      top: /^set q border-radius 12px --on card$/,
+      adds: /card\.base\.borderRadius=12px/,
+    },
+  ],
+  [
+    'Can you please make the tooltip darker? Thanks!',
+    {
+      top: /^set q filter "brightness\(0\.85\)" --on tooltip$/,
+      adds: /tooltip\.base\.filter/,
+    },
+  ],
+  [
+    'make inputs taller (44px)',
+    {top: /^set q min-height 44px --on inputs$/, adds: /minHeight=44px/},
+  ],
+  [
+    'stakeholders think the grays are too warm',
+    {top: /^set q neutral "#64748b"$/},
+  ],
+  // typed values kept
+  [
+    'cards have a gradient background from #ffffff to #f8fafc',
+    {
+      top: /^set q background "linear-gradient\(#ffffff, #f8fafc\)" --on card$/,
+      adds: /card\.base\.background=linear-gradient\(#ffffff, #f8fafc\)/,
+    },
+  ],
+  [
+    'shadow on dialogs is 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
+    {
+      top: /^set q box-shadow "0 20px 25px -5px rgb\(0 0 0 \/ 0\.1\), 0 8px 10px -6px rgb\(0 0 0 \/ 0\.1\)" --on dialog$/,
+    },
+  ],
+  [
+    'shadows are very soft and large, like 0 10px 40px rgba(0,0,0,0.05)',
+    {top: /^set q --shadow-med "0 10px 40px rgba\(0,0,0,0\.05\)"$/},
+  ],
+  [
+    'headings use "Playfair Display", body uses "Source Sans 3"',
+    {
+      top: /^set q font "Playfair Display" --on heading && set q --font-family-body /,
+    },
+  ],
+  [
+    'border width is 2px everywhere, color #000',
+    {top: /^set q --border-width 2px && set q --color-border "#000"$/},
+  ],
+  // parts
+  [
+    'the table has zebra rows #f9fafb and a header #f3f4f6',
+    {top: /^set q background "#f3f4f6" --on table-header-cell$/},
+  ],
+  [
+    'the error banner is #fef2f2 with #991b1b text',
+    {
+      top: /^set q background "#fef2f2" --on banner --when status:error && set q color "#991b1b" --on banner --when status:error$/,
+    },
+  ],
+  ['button color #fff', {top: /^set q color "#fff" --on button$/}],
+  [
+    'accent #ff0000 */ body{display:none} /*',
+    {top: /^set q accent "#ff0000"$/},
+  ],
+  // other languages
+  ['pulsanti senza ombra', {top: /^set q box-shadow none --on button$/}],
+  ['цвет акцента #00aa55', {top: /^set q accent "#00aa55"$/}],
+  ['카드 그림자 없애줘', {top: /^set q box-shadow none --on card$/}],
+  ['الأزرار مستديرة', {top: /^set q corners round --on button$/}],
+  ['बटन गोल करो', {top: /^set q corners round --on button$/}],
+  [
+    'cards sin sombra y botones azules',
+    {
+      top: /^set q box-shadow none --on card && set q background "#2563eb" --on button$/,
+    },
+  ],
+  // a refusal says why
+  [
+    'the eng lead wants square corners on tables only',
+    {top: null, text: /no command does it on q: .+/},
+  ],
+];
+
+describe('how answers pass-3 questions', () => {
+  for (const [question, want] of QUESTIONS_3)
+    it(question.replace(/\n/g, ' / '), async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      expect(data.kind).toBe('question');
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results;
+      const all = results.map(r => r.text).join('\n') + (data.hint ?? '');
+      if (want.text) expect(all).toMatch(want.text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want.top === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      // A step is given once.
+      expect(new Set(commands).size).toBe(commands.length);
+      if (want.adds) expect(await effect(commands)).toMatch(want.adds);
+    });
+
+  it('a color how works out never lands on both modes, and dark text stays light', async () => {
+    const {data} = await themeEditHow('secondary text is too light', {
+      cwd,
+      theme: 'q',
+    });
+    const cmds = data.results[0].commands.map(bare);
+    expect(cmds.join(' ')).toMatch(/--mode light/);
+    const dark = cmds.join(' ').match(/"(#[0-9a-f]{6})" --mode dark/)?.[1];
+    expect(dark).toBeTruthy();
+    // Light text on the dark page: every channel above the middle.
+    for (const i of [1, 3, 5])
+      expect(parseInt(String(dark).slice(i, i + 2), 16)).toBeGreaterThan(128);
+  });
+
+  it('a body font change asks for the body token when set font --on body also moves headings', async () => {
+    const {data} = await themeEditHow('serif body text', {cwd, theme: 'q'});
+    const font = (await themeEditHow('font', {cwd, theme: 'q'})).data;
+    const top = data.results[0].commands.map(bare)[0];
+    if (/also sets the heading font/.test(font.results[0].text))
+      expect(top).toMatch(/^set q --font-family-body /);
+    else expect(top).toBe('set q font serif --on body');
+  });
+
+  it('runs pass-3 answers through set and checks the built CSS', async () => {
+    await themeEditNew('p3', {cwd, like: 'neutral'});
+    const dir = path.join(cwd, 'themes', 'p3');
+    const keep = path.join(cwd, 'p3-pristine');
+    fs.cpSync(dir, keep, {recursive: true});
+    const css = () => fs.readFileSync(path.join(dir, 'p3.css'), 'utf8');
+    for (const [question, want] of /** @type {Array<[string, RegExp[]]>} */ ([
+      [
+        'accent #0ea5e9; danger #ef4444; success #22c55e',
+        [
+          /--color-accent:[^;]*#0ea5e9/i,
+          /--color-error:[^;]*#ef4444/i,
+          /--color-success:[^;]*#22c55e/i,
+        ],
+      ],
+      [
+        '- rounder buttons\n- no shadow on cards',
+        [/card[^{]*\{[^}]*box-shadow:\s*none/],
+      ],
+      [
+        'buttons have letter-spacing 0.02em and font-weight 500',
+        [/button[^{]*\{[^}]*letter-spacing:\s*0\.02em/],
+      ],
+      [
+        'a11y audit: secondary text fails contrast on white',
+        [
+          /--color-text-secondary:\s*light-dark\(#[0-9a-f]{6},\s*#[0-9a-f]{6}\)/i,
+        ],
+      ],
+      [
+        'cards have a gradient background from #ffffff to #f8fafc',
+        [/card[^{]*\{[^}]*background:\s*linear-gradient\(#ffffff, #f8fafc\)/],
+      ],
+      [
+        'drop shadow: x 0, y 4, blur 6, spread -1, rgba(0,0,0,0.1)',
+        [/--shadow-med:\s*0 4px 6px -1px rgba\(0,0,0,0\.1\)/],
+      ],
+    ])) {
+      fs.rmSync(dir, {recursive: true, force: true});
+      fs.cpSync(keep, dir, {recursive: true});
+      const {data} = await themeEditHow(question, {cwd, theme: 'p3'});
+      const top = data.results.find((/** @type {any} */ r) =>
+        r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
+      );
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const before = css();
+      for (const c of commands) {
+        const [, theme, thing, ...rest] = words(bare(c));
+        const fi = rest.findIndex(w => /^--(on|when|state|mode)$/.test(w));
+        /** @type {Record<string, string>} */
+        const flags = {};
+        for (let i = fi < 0 ? rest.length : fi; i < rest.length; i += 2)
+          flags[rest[i].slice(2)] = rest[i + 1];
+        await themeEditSet(
+          theme,
+          thing,
+          (fi < 0 ? rest : rest.slice(0, fi)).join(' '),
+          {cwd, ...flags},
+        );
+      }
+      for (const w of want) {
+        expect(before, question).not.toMatch(w);
+        expect(css(), question).toMatch(w);
+      }
     }
     fs.rmSync(keep, {recursive: true, force: true});
   }, 300_000);

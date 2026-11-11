@@ -166,10 +166,20 @@ function lockDir(root) {
  * @param {string} root
  * @param {string} name
  * @param {() => Promise<T>} fn
+ * @param {boolean} [bestEffort] a command that only reads, or writes
+ *   nothing a lock guards, runs without the lock when it cannot be taken
+ *   (a read-only node_modules)
  * @returns {Promise<T>}
  */
-async function withLock(root, name, fn) {
-  const dir = lockDir(root);
+async function withLock(root, name, fn, bestEffort = false) {
+  /** @type {string | null} */
+  let dir;
+  try {
+    dir = lockDir(root);
+  } catch (e) {
+    if (bestEffort) return fn();
+    throw e;
+  }
   if (!dir) return fn();
   const key = createHash('sha256').update(root).digest('hex').slice(0, 16);
   const lock = path.join(dir, `${key}-${name}.lock`);
@@ -208,6 +218,7 @@ async function withLock(root, name, fn) {
     }
   } catch (e) {
     if (e instanceof AstryxError) throw e;
+    if (bestEffort) return fn();
     throw new AstryxError(
       `Could not take the lock ${lock} (${/** @type {any} */ (e).code ?? String(e)}). Nothing was changed; fix the folder, then run the command again.`,
       [],
@@ -320,12 +331,29 @@ function absolute(result, root, from) {
  * @param {(o: O & {cwd: string}) => Promise<T>} fn
  * @returns {Promise<T>}
  */
-async function inProject(options, lock, fn) {
+async function inProject(options, lock, fn, bestEffort = false) {
   const from = options.cwd ?? process.cwd();
   const o = atRoot(options);
-  const r = lock ? await withLock(o.cwd, lock, () => fn(o)) : await fn(o);
+  const r = lock
+    ? await withLock(o.cwd, lock, () => fn(o), bestEffort)
+    : await fn(o);
   return absolute(r, o.cwd, from);
 }
+
+/**
+ * Options for a preview command, with a way to hold a theme's lock while
+ * the preview builds that theme.
+ * @template {{cwd: string}} O
+ * @param {O} o
+ * @returns {any}
+ */
+const withThemeLock = o => ({
+  ...o,
+  lockTheme: (
+    /** @type {string} */ slug,
+    /** @type {() => Promise<any>} */ fn,
+  ) => withLock(o.cwd, lockName(slug), fn),
+});
 
 /** @type {typeof edit.themeEditNew} */
 export const themeEditNew = (name, options = {}) =>
@@ -340,11 +368,11 @@ export const themeEditUndo = (theme, options = {}) =>
   inProject(options, lockName(theme), o => edit.themeEditUndo(theme, o));
 /** @type {typeof edit.themeEditShow} */
 export const themeEditShow = (theme, options = {}) =>
-  inProject(options, lockName(theme), o => edit.themeEditShow(theme, o));
+  inProject(options, lockName(theme), o => edit.themeEditShow(theme, o), true);
 /** @type {typeof preview.themeEditPreviewAdd} */
 export const themeEditPreviewAdd = (description, options = {}) =>
   inProject(options, 'preview', o =>
-    preview.themeEditPreviewAdd(description, o),
+    preview.themeEditPreviewAdd(description, withThemeLock(o)),
   );
 /**
  * `preview app` runs from the project root, with `dir` kept pointing where
@@ -364,6 +392,7 @@ export const themeEditPreviewApp = (dir, options = {}) => {
           : dir,
         o,
       ),
+    true,
   );
 };
 /** @type {typeof preview.themeEditPreviewList} */
@@ -371,4 +400,6 @@ export const themeEditPreviewList = (options = {}) =>
   inProject(options, null, async o => preview.themeEditPreviewList(o));
 /** @type {typeof preview.themeEditPreviewRemove} */
 export const themeEditPreviewRemove = (page, options = {}) =>
-  inProject(options, 'preview', o => preview.themeEditPreviewRemove(page, o));
+  inProject(options, 'preview', o =>
+    preview.themeEditPreviewRemove(page, withThemeLock(o)),
+  );

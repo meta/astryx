@@ -57,14 +57,6 @@
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
-    "packages/core/src/List/listLayoutUpdates.ts:keptStyles": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/List/listLayoutUpdates.ts:reportedRows": {
-      "status": "open",
-      "group": "triage"
-    },
     "packages/core/src/List/listReorderEngine.tsx:sessionsByOptions": {
       "status": "open",
       "group": "F10 List reorder"
