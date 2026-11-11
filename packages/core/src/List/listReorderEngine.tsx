@@ -140,6 +140,7 @@ import type {
   ListReorderEngine,
   ListReorderOptions,
   ListReorderSession,
+  ReorderRows,
 } from './listReorderContext';
 import {
   autoscrollStep,
@@ -233,6 +234,12 @@ function rowsOf(list: HTMLElement): HTMLElement[] {
       child instanceof HTMLElement && !isLeaving(child),
   );
 }
+
+/** A List's rows: its element children. */
+const CHILD_ROWS: ReorderRows = {
+  read: rowsOf,
+  holds: (element, container) => element.parentElement === container,
+};
 
 /**
  * Which rows bound the drop range: the rows that cannot move at either end
@@ -710,13 +717,8 @@ export class ListReorderController implements ListReorderSession {
   constructor(
     private readonly getList: () => HTMLElement | null,
     readonly hintId: string,
-    /**
-     * Reads the collection's rows, in order, from its container. A List's
-     * rows are the container's element children.
-     */
-    private readonly readRows: (
-      container: HTMLElement,
-    ) => HTMLElement[] = rowsOf,
+    /** Finds the collection's rows. A List's rows are its element children. */
+    private readonly rows: ReorderRows = CHILD_ROWS,
   ) {}
 
   /** The List's latest options, announcer, strings and presentation. */
@@ -873,7 +875,7 @@ export class ListReorderController implements ListReorderSession {
     if (list == null || row == null) {
       return;
     }
-    const rows = this.readRows(list);
+    const rows = this.rows.read(list);
     const index = rows.indexOf(row);
     this.announce(
       this.messages?.modeDone(
@@ -1160,7 +1162,7 @@ export class ListReorderController implements ListReorderSession {
     }
     // A drop still waiting for its commit is settled where it is.
     this.flushPending();
-    const rows = this.readRows(list);
+    const rows = this.rows.read(list);
     const dragged = rows.indexOf(row);
     const movable = rows.map(element => this.handleIn(element) != null);
     if (dragged < 0 || !movable[dragged]) {
@@ -1638,7 +1640,7 @@ export class ListReorderController implements ListReorderSession {
     if (pending == null) {
       return;
     }
-    const current = this.readRows(pending.list);
+    const current = this.rows.read(pending.list);
     if (!sameOrder(current, pending.rows)) {
       // The commit came but its layout effect has not run yet.
       return;
@@ -1711,12 +1713,12 @@ export class ListReorderController implements ListReorderSession {
       );
     }
     const session = this.session;
-    if (session != null && !sameOrder(this.readRows(list), session.rows)) {
+    if (session != null && !sameOrder(this.rows.read(list), session.rows)) {
       // The rows changed under the drag.
       this.cancel();
     }
     const pending = this.pending;
-    if (pending != null && !sameOrder(this.readRows(list), pending.rows)) {
+    if (pending != null && !sameOrder(this.rows.read(list), pending.rows)) {
       this.pending = null;
       if (this.fallback != null) {
         clearTimeout(this.fallback);
@@ -1727,7 +1729,7 @@ export class ListReorderController implements ListReorderSession {
     const announcement = this.announcement;
     if (
       announcement != null &&
-      this.readRows(list).indexOf(announcement.row) === announcement.to
+      this.rows.read(list).indexOf(announcement.row) === announcement.to
     ) {
       this.announcement = null;
       if (this.announcementFallback != null) {
@@ -1738,7 +1740,7 @@ export class ListReorderController implements ListReorderSession {
     }
     const move = this.committedMove;
     let slide: (() => void) | null = null;
-    if (move != null && !sameOrder(this.readRows(list), move.rows)) {
+    if (move != null && !sameOrder(this.rows.read(list), move.rows)) {
       this.committedMove = null;
       if (this.moveFallback != null) {
         clearTimeout(this.moveFallback);
@@ -1767,7 +1769,7 @@ export class ListReorderController implements ListReorderSession {
     const {list} = move;
     const at = motionNow();
     const shifts = move.rows.map((element, index) =>
-      element.parentElement === list
+      this.rows.holds(element, list)
         ? move.tops[index] - layoutTop(element, list)
         : 0,
     );
@@ -1793,7 +1795,7 @@ export class ListReorderController implements ListReorderSession {
     const at = motionNow();
     // Every read comes before the first write, so the drop lays out once.
     const rows = pending.rows.map((element, index) => {
-      if (element.parentElement !== list) {
+      if (!this.rows.holds(element, list)) {
         return null;
       }
       // The dragged row glides from where its preview was dropped, the rows
@@ -1868,7 +1870,7 @@ export class ListReorderController implements ListReorderSession {
       return () => this.clearModeLine();
     }
     const step = this.lastStep ?? -1;
-    const rows = this.readRows(list);
+    const rows = this.rows.read(list);
     const index = rows.indexOf(row);
     const top = layoutTop(row, list);
     const bottom = top + row.offsetHeight;
@@ -1910,16 +1912,19 @@ export class ListReorderController implements ListReorderSession {
   }
 
   /**
-   * The row that holds `element` (a handle): the list's child that contains
-   * it, whatever its tag. Null outside the list.
+   * The row that holds `element` (a handle): the row that contains it,
+   * whatever its tag. Null outside the list.
    */
   rowOf(element: Element | null): HTMLElement | null {
     const list = this.getList();
+    if (list == null) {
+      return null;
+    }
     let node = element;
-    while (node != null && node.parentElement !== list) {
+    while (node != null && !this.rows.holds(node, list)) {
       node = node.parentElement;
     }
-    return list != null && node instanceof HTMLElement ? node : null;
+    return node instanceof HTMLElement ? node : null;
   }
 
   /** The 1-based place of the row that holds `element`, or null. */
@@ -1928,7 +1933,7 @@ export class ListReorderController implements ListReorderSession {
     const row = this.rowOf(element);
     return list == null || row == null
       ? null
-      : this.readRows(list).indexOf(row) + 1;
+      : this.rows.read(list).indexOf(row) + 1;
   }
 
   // --- Keys ------------------------------------------------------------
@@ -1988,7 +1993,7 @@ export class ListReorderController implements ListReorderSession {
     ) {
       return;
     }
-    const rows = this.readRows(list);
+    const rows = this.rows.read(list);
     const index = rows.indexOf(row);
     const to = index + delta;
     if (to < 0 || to >= rows.length) {
@@ -2003,7 +2008,7 @@ export class ListReorderController implements ListReorderSession {
     this.announceWhenCommitted({
       row,
       to,
-      landed: () => this.placeIn(this.readRows(list), to),
+      landed: () => this.placeIn(this.rows.read(list), to),
       kept: this.placeIn(rows, index),
       politeness: undefined,
     });
@@ -2353,8 +2358,8 @@ function ListReorderModeHint({
 
 /** The machinery a reorderable object carries (createReorderable). */
 export const listReorderEngine: ListReorderEngine = {
-  createSession: (getList, hintId, readRows) =>
-    new ListReorderController(getList, hintId, readRows),
+  createSession: (getList, hintId, rows) =>
+    new ListReorderController(getList, hintId, rows),
   start: (options, key) => {
     const sessions = sessionsByOptions.get(options) ?? [];
     if (sessions.length > 1) {
