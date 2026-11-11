@@ -28,6 +28,7 @@ import {subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {isDocument, isNode} from '../utils/nodeType';
 import {observeResize} from '../utils/sharedResizeObserver';
+import {sharedState} from '../utils/sharedRealm';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {
   KEYBOARD_EPSILON,
@@ -118,11 +119,17 @@ function getObstructionTop(): number {
 // agent.
 // From then on, a sheet there reveals its field at once, in the report's own
 // frame.
-let revealsAtReport = new WeakSet<Window>();
+const reveals = sharedState(
+  'keyboard/use-mobile-keyboard/reveals-at-report',
+  1,
+  () => ({
+    atReport: new WeakSet<Window>(),
+  }),
+);
 
 /** Forgets every window's recorded reveal, for tests. */
 export function __resetRevealsAtReportForTest(): void {
-  revealsAtReport = new WeakSet<Window>();
+  reveals.atReport = new WeakSet<Window>();
 }
 
 // How far the body runs under the keyboard's top, CSS px. The keyboard's top
@@ -610,7 +617,7 @@ export function useMobileKeyboard(
 
         scrollControlIntoSafeArea(
           focusedControl,
-          overlap > 0 && !revealsAtReport.has(window),
+          overlap > 0 && !reveals.atReport.has(window),
           overlap > 0 ? showOnSlide(atReport) : null,
         );
       };
@@ -968,7 +975,7 @@ export function useMobileKeyboard(
           return;
         }
         if (revealPan?.isRevealPan(event.height) === true) {
-          revealsAtReport.add(window);
+          reveals.atReport.add(window);
           cancelAnimationFrame(animationFrame);
           // A smooth reveal still under way lands the field where it is going.
           // Another scroll on top of it would overshoot in Firefox, which keeps
