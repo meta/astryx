@@ -4,8 +4,8 @@
 
 /**
  * @file TimestampHoverCard.tsx
- * @input Uses React, HoverCard, IconButton, the theme's `timestamp-copy` icon
- *   slot, formatted lines
+ * @input Uses React, useHoverCard, a stable time ref, IconButton, the theme's
+ *   `timestamp-copy` icon slot, formatted lines
  * @output Default-exports the lazily-loaded copyable hover card for Timestamp
  * @position Split out of Timestamp so the overlay (HoverCard) and the copy
  *   affordance's Icon/IconButton load only when a card is actually shown — the
@@ -15,23 +15,27 @@
  *   columns — label, value, and a trailing action column for copy buttons —
  *   so the buttons align down a single column no matter how wide each value
  *   is. The action column is only added when at least one row is copyable, so
- *   a fully read-only card carries no dangling gutter. Label-less cards drop
- *   the label column and stack to whatever columns remain.
+ *   a fully read-only card carries no dangling gutter. A copy button sits
+ *   inside its row's value, which spans the value and action columns through
+ *   a subgrid. A row without a label is named by its zone's long name, which
+ *   is visually hidden. A card with no labels drops the label column.
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Timestamp/Timestamp.tsx (the lazy() + Suspense wrapper)
+ * - /packages/core/src/Timestamp/Timestamp.tsx (the persistent trigger and lazy attachment)
  * - /packages/core/src/Timestamp/Timestamp.doc.mjs (theming.targets)
  * - /packages/core/src/Timestamp/Timestamp.test.tsx
  */
 
-import type {ReactNode} from 'react';
-import {useCallback} from 'react';
+import type {ReactNode, RefObject} from 'react';
+import {useCallback, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {HoverCard} from '../HoverCard/HoverCard';
+import {useHoverCard} from '../HoverCard/useHoverCard';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {IconButton} from '../IconButton/IconButton';
 import {ComponentIcon} from '../Icon/ComponentIcon';
 import {useClipboard} from '../hooks/useClipboard';
 import {themeProps} from '../utils/themeProps';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {
   colorVars,
   spacingVars,
@@ -86,6 +90,19 @@ const styles = stylex.create({
     margin: 0,
     padding: 0,
     whiteSpace: 'nowrap',
+  },
+  // A value carrying the action cell spans the value and action columns and
+  // shares the card's tracks, so the copy buttons still align.
+  // Without subgrid, a flex row keeps the button at the row's end.
+  valueCells: {
+    gridColumn: 'span 2',
+    display: {
+      default: 'flex',
+      '@supports (grid-template-columns: subgrid)': 'grid',
+    },
+    justifyContent: 'space-between',
+    gridTemplateColumns: 'subgrid',
+    alignItems: 'center',
   },
   // The trailing action cell holds the copy button (or nothing, on a
   // read-only row). It lives in its own grid column so buttons align.
@@ -179,17 +196,28 @@ function EntryRow({
   hasLabelColumn: boolean;
   hasActionColumn: boolean;
 }) {
+  // A description list holds only name-value groups, so the action cell lives
+  // inside the value. A row without a label is named by its zone, out of
+  // sight, so the card looks the same.
+  const hasLabel = line.label != null && line.label !== '';
+  const hiddenName = <VisuallyHidden>{line.zoneName}</VisuallyHidden>;
   return (
     <div {...stylex.props(styles.row)}>
-      {hasLabelColumn && (
-        <dt {...stylex.props(styles.label)}>{line.label ?? ''}</dt>
+      {hasLabelColumn ? (
+        <dt {...stylex.props(styles.label)}>
+          {hasLabel ? line.label : hiddenName}
+        </dt>
+      ) : (
+        <VisuallyHidden as="dt">{line.zoneName}</VisuallyHidden>
       )}
-      <dd {...stylex.props(styles.value)}>{line.value}</dd>
-      {hasActionColumn && (
-        <div {...stylex.props(styles.action)}>
-          {line.isCopyable && <CopyButton value={line.value} />}
-        </div>
-      )}
+      <dd {...stylex.props(styles.value, hasActionColumn && styles.valueCells)}>
+        {hasActionColumn ? <span>{line.value}</span> : line.value}
+        {hasActionColumn && (
+          <span {...stylex.props(styles.action)}>
+            {line.isCopyable && <CopyButton value={line.value} />}
+          </span>
+        )}
+      </dd>
     </div>
   );
 }
@@ -199,8 +227,13 @@ export interface TimestampHoverCardProps {
   lines: ReadonlyArray<TimestampTooltipLine>;
   /** Accessible name for the card. */
   label: string;
-  /** The anchor the card is attached to (the `<time>` element). */
-  children: ReactNode;
+  /** Persistent anchor, rendered outside the lazy boundary. */
+  triggerRef: RefObject<HTMLTimeElement | null>;
+  /**
+   * Reports the open card's id when it shows, and null when it hides, so the
+   * time can name it through `aria-controls`.
+   */
+  onCardOpenChange: (cardId: string | null) => void;
 }
 
 function gridTemplateFor(
@@ -231,8 +264,51 @@ function gridTemplateFor(
 export default function TimestampHoverCard({
   lines,
   label,
-  children,
+  triggerRef,
+  onCardOpenChange,
 }: TimestampHoverCardProps): ReactNode {
+  const cardIdRef = useRef<string | null>(null);
+  const handleShow = useCallback(() => {
+    onCardOpenChange(cardIdRef.current);
+  }, [onCardOpenChange]);
+  const handleHide = useCallback(() => {
+    onCardOpenChange(null);
+  }, [onCardOpenChange]);
+  const {positionRef, interactionRef, id, show, renderHoverCard} = useHoverCard(
+    {
+      placement: 'above',
+      focusTrigger: 'always',
+      label,
+      onShow: handleShow,
+      onHide: handleHide,
+    },
+  );
+
+  const didAttachRef = useRef(false);
+  // Syncs the hover card's anchor and listeners with the <time> that
+  // Timestamp renders outside this lazy module.
+  useIsomorphicLayoutEffect(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) {
+      return;
+    }
+    cardIdRef.current = id;
+    positionRef(trigger);
+    interactionRef(trigger);
+    // Focus can reach the time before this module loads. Open the card only
+    // if the time still has focus.
+    if (!didAttachRef.current) {
+      didAttachRef.current = true;
+      if (trigger.ownerDocument.activeElement === trigger) {
+        show();
+      }
+    }
+    return () => {
+      positionRef(null);
+      interactionRef(null);
+    };
+  }, [triggerRef, positionRef, interactionRef, show, id]);
+
   // A label column is only reserved when some row is labelled; otherwise the
   // value sits flush at the card's leading edge. An action column is only
   // reserved when some row is copyable (option B), so a fully read-only card
@@ -260,16 +336,7 @@ export default function TimestampHoverCard({
     </dl>
   );
 
-  return (
-    <HoverCard
-      content={cardContent}
-      placement="above"
-      focusTrigger="always"
-      hasHoverIndication
-      label={label}>
-      {children}
-    </HoverCard>
-  );
+  return renderHoverCard(cardContent);
 }
 
 TimestampHoverCard.displayName = 'TimestampHoverCard';

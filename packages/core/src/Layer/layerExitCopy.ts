@@ -25,6 +25,7 @@ import {
   restoreScrollOffsets,
 } from '../motion/transientCopy';
 import {settledBox} from './settledBox';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 /** A box in viewport px. */
 export interface LayerExitBox {
@@ -109,7 +110,10 @@ function outermostLayer(element: HTMLElement): HTMLElement | null {
 }
 
 /** Each layer's copy: placing another for the same layer replaces it. */
-const copies = new WeakMap<HTMLElement, HTMLElement>();
+const copies = sharedWeakMap<HTMLElement, HTMLElement>(
+  'layer/layer-exit-copy/copies',
+  1,
+);
 
 /**
  * Shows the copies of layers inside `element` again, so they stay above the
@@ -264,8 +268,10 @@ export function placeLayerExitCopy(
   if (outer?.parentElement == null) {
     element.after(copy);
   } else {
-    outer.after(copy);
+    // keepInherited reads the host's style, so it runs before the insertion:
+    // no style read follows that write.
     keepInherited(copy, outer.parentElement);
+    outer.after(copy);
   }
   copies.set(element, copy);
   const show = (): boolean => {

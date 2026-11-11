@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "shipping-method",
+  "source": "fwc-6",
+  "title": "Shipping method selector",
+  "prompt": "Build a shipping method selector for a checkout page. There are three options: Standard (free, 5-7 days), Express ($9.99, 2-3 days), and Overnight ($24.99, next day). Only one option can be selected at a time, and Standard is selected when the page loads. Each option must be exposed to assistive technology as a radio button whose accessible name starts with the option name. Below the options, show a line that reads \"Shipping: Free\", \"Shipping: $9.99\" or \"Shipping: $24.99\" to match the current choice. People must be able to change the choice with a mouse and with the arrow keys."
+}

@@ -132,6 +132,33 @@ describe('placeLayerExitCopy', () => {
     expect(copy.style.getPropertyValue('color-scheme')).toBe('dark');
   });
 
+  it("reads what the outer layer's parent passes before it inserts the copy there, so no style read follows that write", () => {
+    popoverApi(true);
+    const element = layer();
+    const host = element.parentElement as HTMLElement;
+    const outer = document.createElement('div');
+    outer.setAttribute('popover', 'auto');
+    host.append(outer);
+    outer.append(element);
+    const order: string[] = [];
+    const read = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((node, pseudo) => {
+      if (node === host) {
+        order.push('read the host');
+      }
+      return read(node, pseudo);
+    });
+    const insert = outer.after.bind(outer);
+    outer.after = (...nodes: (Node | string)[]) => {
+      order.push('insert the copy');
+      insert(...nodes);
+    };
+    const copy = place(element);
+    expect(copy.parentElement).toBe(host);
+    expect(order).toContain('read the host');
+    expect(order.at(-1)).toBe('insert the copy');
+  });
+
   it('takes the copy out of every form and radio group, so the live selection stays', () => {
     popoverApi(true);
     const element = layer();
@@ -257,9 +284,15 @@ describe('placeLayerExitCopy', () => {
     popoverApi(true);
     const element = layer();
     // Mid-entrance: drawn at half size about its top-left corner, at a
-    // fractional position its whole-pixel offsets round away.
-    const laidOut = {left: 40.391, top: 120.594, width: 320.4, height: 253};
-    const drawn = {...laidOut, width: 160.2, height: 126.5};
+    // fractional position its whole-pixel offsets round away. Like a real
+    // engine, the box is laid out on the 1/64 px grid.
+    const laidOut = {
+      left: 40.390625,
+      top: 120.59375,
+      width: 320.40625,
+      height: 253,
+    };
+    const drawn = {...laidOut, width: 160.203125, height: 126.5};
     // jsdom keeps no `!important`: the read's override shows as `none`.
     const settled = () => element.style.getPropertyValue('scale') === 'none';
     element.getBoundingClientRect = () => {
@@ -288,7 +321,7 @@ describe('placeLayerExitCopy', () => {
     const presented: Record<string, string> = {
       scale: '0.5',
       'transform-origin': '0px 0px',
-      width: '320.4px',
+      width: '320.40625px',
       height: '253px',
       'box-sizing': 'border-box',
     };
@@ -307,9 +340,9 @@ describe('placeLayerExitCopy', () => {
     );
     const copy = place(element);
     // Laid out where the layer is, at its used size, fractions kept...
-    expect(copy.style.getPropertyValue('left')).toBe('40.391px');
-    expect(copy.style.getPropertyValue('top')).toBe('120.594px');
-    expect(copy.style.getPropertyValue('width')).toBe('320.4px');
+    expect(copy.style.getPropertyValue('left')).toBe('40.390625px');
+    expect(copy.style.getPropertyValue('top')).toBe('120.59375px');
+    expect(copy.style.getPropertyValue('width')).toBe('320.40625px');
     expect(copy.style.getPropertyValue('height')).toBe('253px');
     // ...and drawn as it was drawn.
     expect(copy.style.getPropertyValue('scale')).toBe('0.5');

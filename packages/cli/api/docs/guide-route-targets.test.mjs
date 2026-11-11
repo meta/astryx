@@ -23,6 +23,7 @@ import {
   DocsCatalog,
   mergeTopic,
 } from '../../foundation/discovery/docs-discovery.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 const CLI = '@astryxdesign/cli';
@@ -115,7 +116,7 @@ async function cliJson(args) {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-guide-route-targets-'),
+    path.join(REPO_ROOT, '.astryx-guide-route-targets-'),
   );
 });
 
@@ -150,6 +151,34 @@ describe('a flat topic that replaces a placed guide by its route', () => {
       expect(index).toMatchObject({type: 'docs.index', package: KIT});
       expect(index.data).toMatchObject({replaces: GUIDE, replacedPackage: CLI});
       expect(index.data.sections.every(s => s.package === KIT)).toBe(true);
+    },
+    SLOW,
+  );
+
+  it(
+    'lists under its own package where the topic list names the guide',
+    async () => {
+      const list = await docs(undefined, undefined, {cwd: tmpDir, depth: 'all'});
+      if (list.type !== 'docs.list') return;
+      /** @param {any[]} rows */
+      const flat = rows =>
+        rows.flatMap((/** @type {any} */ row) => [
+          row,
+          ...flat(row.children ?? []),
+        ]);
+      const child = flat(list.meta?.namespaces ?? []).find(
+        (/** @type {any} */ row) => row.topic === GUIDE,
+      );
+      // The same attribution the namespace read gives it, not the package
+      // whose route it took.
+      expect(child).toMatchObject({
+        package: KIT,
+        replaces: GUIDE,
+        replacedPackage: CLI,
+        title: 'Acme quick-start',
+      });
+      const text = await cliText(['docs', '--depth', 'all']);
+      expect(text.stdout).toContain(GUIDE);
     },
     SLOW,
   );

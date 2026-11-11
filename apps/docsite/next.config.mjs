@@ -7,7 +7,9 @@
  *   staged preview-only static exports.
  * @output Docsite routes plus Storybook and Sandbox at /storybook/ and /sandbox/.
  *   Client main-app chunks start with the preview's cookie compatibility guard;
- *   large Webpack builds run with isolated, memory-optimized compilation.
+ *   large Webpack builds run with isolated, memory-optimized compilation. The
+ *   experimental DOCSITE_ICON_SET setting draws template previews with an
+ *   installed icon set.
  * @position Next.js configuration for the existing Vercel docsite deployment.
  */
 
@@ -33,6 +35,13 @@ const docRedirects = existsSync(docRedirectsPath)
   ? JSON.parse(readFileSync(docRedirectsPath, 'utf8'))
   : {};
 
+// Experimental: the icon set template previews draw with, main set first and
+// backups after it, separated by commas. Unset, previews keep the icons their
+// templates import, and the loader is not added.
+const previewIconSet = process.env.DOCSITE_ICON_SET?.trim() ?? '';
+const templateSources =
+  /packages[\\/]cli[\\/]assets[\\/]templates[\\/](?:pages|blocks)[\\/].+\.tsx$/u;
+
 const stagesStaticApps =
   process.env.VERCEL_ENV === 'preview' ||
   process.env.VERCEL_ENV === 'production';
@@ -47,31 +56,30 @@ const nextConfig = {
     webpackBuildWorker: true,
     webpackMemoryOptimizations: true,
   },
-  // The search API (app/api/search) runs `astryx search` itself. The CLI stays
-  // an external module (see webpack below), so its code and dependencies are
-  // traced as installed; these are the files it reads from disk at run time:
-  // its docs and templates, and each documented package's docs and sources.
+  // The search API (app/api/search) ranks with the CLI's own search. The CLI
+  // stays an external module (see webpack below), so its code and dependencies
+  // are traced as installed; these are the files it reads from disk at run
+  // time: its version, and the cards and weights its ranker reads. The
+  // candidates it ranks are in the route's own bundle
+  // (generated/searchIndex.ts), so the function carries no docs, templates or
+  // package sources.
   outputFileTracingIncludes: {
     '/api/search': [
-      './astryx.config.mjs',
       '../../packages/cli/package.json',
-      '../../packages/cli/{api,assets,authoring,clients,foundation,host}/**/*',
-      '../../packages/core/package.json',
-      '../../packages/core/src/**/*',
-      // Integrations resolve through the site's node_modules, so they are
-      // traced at that path.
-      './node_modules/@astryxdesign/{lab,charts,richtext,vega}/{package.json,astryx.integration.mjs}',
-      './node_modules/@astryxdesign/{lab,charts,richtext,vega}/{src,blocks,docs,dist}/**/*',
+      '../../packages/cli/api/**/*.json',
     ],
   },
   // Packages the CLI imports for other commands but a search never loads
-  // (bundlers, compilers, browsers, test runners), and built output it never
-  // reads. Leaving them out keeps the search function small; the parity test
-  // and a traced-files-only build hold it to `astryx search`.
+  // (bundlers, compilers, browsers, test runners), and built output and Core's
+  // folder, which it never reads: the tracer adds that whole folder for a path
+  // the CLI builds at run time. Leaving them out keeps the search function
+  // small; the parity test and a traced-files-only build hold it to
+  // `astryx search`.
   outputFileTracingExcludes: {
     '/api/search': [
       '../../node_modules/.pnpm/{esbuild,@esbuild+*,typescript,playwright,playwright-core,vite,rolldown,@rolldown+*,flow-parser,esprima,tsx,vitest,@vitest+*,chai,@testing-library+*}@*/**',
       '../../packages/*/dist/**',
+      '../../packages/core/**',
       './src/**',
     ],
   },
@@ -177,6 +185,35 @@ const nextConfig = {
         t,
         'dist/theme.css',
       );
+    }
+
+    if (previewIconSet) {
+      // A cached module keeps the icons of the set it was built with, so a
+      // build with another set must not reuse it.
+      if (typeof config.cache?.version === 'string') {
+        config.cache.version += `|DOCSITE_ICON_SET=${previewIconSet}`;
+      }
+      config.module.rules.push({
+        test: templateSources,
+        enforce: 'pre',
+        // The sets are installed in the docsite, but template sources live
+        // outside it, so their rewritten imports also resolve from here.
+        resolve: {
+          modules: [
+            ...(config.resolve.modules ?? ['node_modules']),
+            resolve(import.meta.dirname, 'node_modules'),
+          ],
+        },
+        use: [
+          {
+            loader: resolve(
+              import.meta.dirname,
+              'scripts/template-icon-loader.mjs',
+            ),
+            options: {iconSet: previewIconSet, projectDir: import.meta.dirname},
+          },
+        ],
+      });
     }
 
     // Vercel can add Toolbar instrumentation to Next's shared main-app entry.

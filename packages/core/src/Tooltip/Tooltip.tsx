@@ -22,6 +22,7 @@ import React, {
 } from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   useTooltip,
   type TooltipFocusTrigger,
@@ -150,6 +151,10 @@ export interface TooltipProps {
    * answers by calling `onOpenChange(false)` without hiding itself — closing is
    * your update's decision, exactly as for a controlled Dialog. Ignore the call
    * and the tip stays, and so does the press: nothing underneath dismisses.
+   *
+   * The same holds for focus held closed: focus that would open the tooltip
+   * calls `onOpenChange(true)` and shows nothing until your update sets
+   * `isOpen`.
    */
   isOpen?: boolean;
 
@@ -341,7 +346,9 @@ export function Tooltip({
           ref={tooltip.ref}
           tabIndex={0}
           aria-describedby={tooltip.describedBy}
-          {...stylex.props(
+          // The span is a tab stop Astryx adds: it draws the shared ring,
+          // which a theme restyles through the focus-outline tokens.
+          {...focusOutlineProps.focusVisible(
             styles.wrapperInline,
             showHoverIndication && styles.hoverIndication,
           )}>

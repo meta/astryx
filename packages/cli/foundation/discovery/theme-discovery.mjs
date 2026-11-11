@@ -22,6 +22,7 @@ import * as path from 'node:path';
 import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {listDirEntries} from '../fs/listing-cache.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
@@ -1187,7 +1188,7 @@ function listThemeFolder(folder) {
   const symlinks = [];
   /** @param {string} directory */
   function walk(directory) {
-    for (const entry of fs.readdirSync(directory, {withFileTypes: true})) {
+    for (const entry of listDirEntries(directory)) {
       if (isIgnoredThemeEntry(entry.name)) continue;
       const full = path.join(directory, entry.name);
       const relative = path.relative(folder, full).split(path.sep).join('/');
@@ -1291,8 +1292,7 @@ export function discoverUnmigratedThemeCopies(
 ) {
   const root = path.resolve(projectDir, owner);
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return [];
-  return fs
-    .readdirSync(root, {withFileTypes: true})
+  return listDirEntries(root)
     .filter(entry => entry.isDirectory() && !isIgnoredThemeEntry(entry.name))
     .map(entry => unmigratedThemeCopy(path.join(root, entry.name)))
     .filter(copy => copy !== null)
@@ -1345,15 +1345,17 @@ function copiedThemeFiles(files, entry, descriptor, exportName, bundled) {
  * Discover and validate one theme root.
  * @param {string} themeRoot absolute root containing one directory per slug
  * @param {string} owner package that owns the root
- * @param {{bundled?: boolean, allowUnmigrated?: boolean}} [options] a bundled root is the CLI's own; its
+ * @param {{bundled?: boolean, allowUnmigrated?: boolean, skip?: Set<string>, progress?: {slug?: string}}} [options] a bundled root is the CLI's own; its
  *   sources are checked by the CLI's tests rather than on every read. A local
  *   root may skip released source copies until `astryx upgrade` adds descriptors.
+ *   `skip` names theme folders to leave out; `progress.slug` is set to the
+ *   folder being read, so a caller can tell which folder an error is about.
  * @returns {DiscoveredTheme[]}
  */
 export function discoverThemeDirectory(
   themeRoot,
   owner,
-  {bundled = false, allowUnmigrated = false} = {},
+  {bundled = false, allowUnmigrated = false, skip, progress} = {},
 ) {
   if (!fs.existsSync(themeRoot) || !fs.statSync(themeRoot).isDirectory()) {
     throw new Error(
@@ -1369,9 +1371,9 @@ export function discoverThemeDirectory(
   /** @type {DiscoveredTheme[]} */
   const themes = [];
   const slugs = new Set();
-  const rootEntries = fs
-    .readdirSync(themeRoot, {withFileTypes: true})
-    .filter(entry => !isIgnoredThemeEntry(entry.name));
+  const rootEntries = listDirEntries(themeRoot).filter(
+    entry => !isIgnoredThemeEntry(entry.name),
+  );
   const rootDescriptor = rootEntries.find(
     entry => entry.isFile() && entry.name.endsWith(THEME_DOC_SUFFIX),
   );
@@ -1392,6 +1394,8 @@ export function discoverThemeDirectory(
 
   for (const directory of directories) {
     const slug = directory.name;
+    if (skip?.has(slug)) continue;
+    if (progress) progress.slug = slug;
     const listing = listThemeFolder(path.join(themeRoot, slug));
     const evidence = themeEvidence(listing);
     if (evidence === undefined) continue;
@@ -1574,6 +1578,7 @@ export function discoverThemeDirectory(
     });
   }
 
+  if (progress) progress.slug = undefined;
   return themes;
 }
 
@@ -1614,8 +1619,7 @@ export function unreadThemeFolders(themeRoot, {packageDir, packageName} = {}) {
   if (!fs.existsSync(themeRoot) || !fs.statSync(themeRoot).isDirectory()) {
     return [];
   }
-  const folders = fs
-    .readdirSync(themeRoot, {withFileTypes: true})
+  const folders = listDirEntries(themeRoot)
     .filter(entry => entry.isDirectory() && !isIgnoredThemeEntry(entry.name))
     .map(entry => path.join(themeRoot, entry.name))
     .sort();
@@ -1630,8 +1634,7 @@ export function unreadThemeFolders(themeRoot, {packageDir, packageName} = {}) {
   if (unread.length === 0) return [];
 
   const modules = [
-    ...fs
-      .readdirSync(themeRoot, {withFileTypes: true})
+    ...listDirEntries(themeRoot)
       .filter(
         entry =>
           entry.isFile() &&
@@ -1692,20 +1695,48 @@ export function discoverBundledThemes() {
  * Discover authored themes in the app's conventional local themes root.
  * @param {string} projectDir
  * @param {string} [owner]
+ * @param {{onFolderError?: (slug: string, error: Error) => void}} [options]
+ *   with `onFolderError`, a theme folder that fails validation is reported
+ *   through it and left out, so one broken folder does not hide the others
  * @returns {DiscoveredTheme[]}
  */
-export function discoverLocalThemes(projectDir, owner = LOCAL_THEME_ROOT) {
+export function discoverLocalThemes(
+  projectDir,
+  owner = LOCAL_THEME_ROOT,
+  {onFolderError} = {},
+) {
   const root = path.resolve(projectDir, owner);
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return [];
-  return discoverThemeDirectory(root, owner, {allowUnmigrated: true}).map(
-    theme => ({
-      ...theme,
-      package: owner,
-      packageDir: projectDir,
-      packageExports: null,
-      source: /** @type {const} */ ('local'),
-    }),
-  );
+  /** @type {Set<string>} */
+  const skip = new Set();
+  /** @type {{slug?: string}} */
+  const progress = {};
+  let discovered;
+  for (;;) {
+    try {
+      discovered = discoverThemeDirectory(root, owner, {
+        allowUnmigrated: true,
+        skip,
+        progress,
+      });
+      break;
+    } catch (error) {
+      const slug = progress.slug;
+      if (!onFolderError || slug === undefined) throw error;
+      skip.add(slug);
+      onFolderError(
+        slug,
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    }
+  }
+  return discovered.map(theme => ({
+    ...theme,
+    package: owner,
+    packageDir: projectDir,
+    packageExports: null,
+    source: /** @type {const} */ ('local'),
+  }));
 }
 
 /**

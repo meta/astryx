@@ -163,7 +163,7 @@ export const SYNONYMS_OF = (() => {
 /**
  * @typedef {import('../_adapter.mjs').PageTemplate} PageTemplate
  * @typedef {import('../_adapter.mjs').ComponentWords} ComponentWords
- * @typedef {{name: string, score: number, hits: number, familyNamed: boolean, containerMatched: boolean, family: string, base: boolean, matched: Set<string>}} RankedPage
+ * @typedef {{name: string, score: number, hits: number, familyNamed: boolean, headNamed: boolean, containerMatched: boolean, family: string, base: boolean, matched: Set<string>}} RankedPage
  * @typedef {'page' | 'part' | 'edit'} IdeaKind
  */
 
