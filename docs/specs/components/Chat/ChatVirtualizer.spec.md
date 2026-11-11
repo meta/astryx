@@ -52,15 +52,6 @@ owners.
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
-## Current-state impact
-
-- **AR2 gap:** the rows mount inside `ChatMessageList`'s `role="log"`, which
-  delivers new messages. The list marks each commit that mounts other rows
-  `aria-busy="true"` until two frames later, and announces nothing itself.
-- **PR1 gap:** while the reader is in history, appended messages mount after a
-  gap spacer below the window, up to one window of the newest rows, so the
-  mounted rows can form a second run.
-
 ## Ownership boundary
 
 **Owns**

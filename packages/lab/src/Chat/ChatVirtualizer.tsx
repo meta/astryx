@@ -4,9 +4,10 @@
 
 /**
  * @file ChatVirtualizer.tsx
- * @input Uses React, Core's scrollable-area hook, finger-scroll watch and
- *   scroll-anchoring writer; attaches to a caller-owned scroll container
- *   that runs no follow of its own, or renders its own
+ * @input Uses React, Core's scrollable-area hook, announcement channel,
+ *   finger-scroll watch and scroll-anchoring writer; attaches to a
+ *   caller-owned scroll container that runs no follow of its own, or renders
+ *   its own
  * @output Exports ChatVirtualizer component, ChatVirtualizerProps and
  *   ChatVirtualizerHandle
  * @position Experimental windowing participant for ChatMessageList children:
@@ -19,7 +20,7 @@
 
 import * as React from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {useScrollableArea} from '@astryxdesign/core/hooks';
+import {useAnnounce, useScrollableArea} from '@astryxdesign/core/hooks';
 import {observeResize} from '@astryxdesign/core/utils';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {setScrollAnchoringOff} from '@astryxdesign/core/internal/scroll-anchoring';
@@ -137,6 +138,18 @@ export interface ChatVirtualizerProps<T> {
    */
   getItemType?: (item: T, index: number) => string;
   /**
+   * The words a screen reader hears for one new message, such as its sender
+   * and text. Return '' to announce nothing, as for the reader's own message.
+   * Defaults to the translated "New message". When several messages are
+   * ready on one data change, the list announces their count instead.
+   */
+  getItemAnnouncement?: (item: T, index: number) => string;
+  /**
+   * Whether a message is still streaming. The list announces a new message
+   * on the first data change that reports it complete. Defaults to complete.
+   */
+  isItemStreaming?: (item: T, index: number) => boolean;
+  /**
    * ATTACH MODE. By default the list renders its own scroll container. Pass
    * the caller's scroll element instead — a scroller that runs no follow of
    * its own, such as a page shell's content area — and it renders one
@@ -212,6 +225,8 @@ export function ChatVirtualizer<T>(
     estimatedItemSize = 120,
     handleRef,
     getItemType,
+    getItemAnnouncement,
+    isItemStreaming,
     scrollElement,
     endThreshold = 24,
     overscanTop = 1600,
@@ -275,17 +290,13 @@ export function ChatVirtualizer<T>(
   const [focusedKey, setFocusedKey] = React.useState<string | null>(null);
   // The focused row this render keeps outside the window, read by the passes.
   const pinnedKeyRef = React.useRef<string | null>(null);
-  // Rows a commit mounts that are not new messages (the window moving over
-  // history, or history loading above) must not reach the transcript's
-  // polite log as news: the content block is marked busy for that commit
-  // and the next frame. A message appended at the tail mounts unmarked.
-  const renderedKeysRef = React.useRef<ReadonlySet<string>>(new Set());
-  // The messages the last data change appended at the tail that have not
-  // mounted yet: the only rows that mount as news.
-  const newsKeysRef = React.useRef(new Set<string>());
-  // The first row of the arrived tail run this render mounts (see
-  // `arrival`), for the spacers.
-  const tailKeyRef = React.useRef<string | null>(null);
+  // New messages reach assistive technology through the shared channel, not
+  // through their rows, so a row mounts only for the window. These are the
+  // new messages still streaming, keyed by row identity.
+  const unreadyNewsRef = React.useRef(new Set<string>());
+  // The words of the new messages that became ready since the last commit.
+  // The announcement Effect empties it, so a replay announces nothing.
+  const readyNewsRef = React.useRef<string[]>([]);
   // The commit the last correction pass ran for, so a commit that changes
   // nothing the pass reads skips it.
   const passedRenderRef = React.useRef<{
@@ -294,11 +305,6 @@ export function ChatVirtualizer<T>(
     sizing: readonly unknown[];
   } | null>(null);
   const pendingRenderKeysRef = React.useRef('');
-  const gapTailRef = React.useRef<HTMLDivElement | null>(null);
-  // This render's rows, and whether they mount history, for its commit.
-  const pendingRenderedRef = React.useRef<ReadonlySet<string>>(new Set());
-  const pendingBusyRef = React.useRef(false);
-  const busyClearRef = React.useRef<number | null>(null);
   const rowEls = React.useRef(new Map<string, HTMLDivElement>());
   const sizes = React.useRef(new Map<string, number>());
   const geo = React.useRef<Geo>({
@@ -561,15 +567,8 @@ export function ChatVirtualizer<T>(
       empty || pinnedKey === null ? undefined : g.index.get(pinnedKey);
     const pinnedAbove = pinned !== undefined && pinned < w.start;
     const pinnedBelow = pinned !== undefined && pinned > w.end;
-    // The arrived tail run: from its first row to the last row.
-    const tailKey = tailKeyRef.current;
-    const tailIndex =
-      empty || tailKey === null ? undefined : g.index.get(tailKey);
-    const tail =
-      tailIndex !== undefined && tailIndex > w.end ? tailIndex : undefined;
     const first = pinnedAbove ? pinned : w.start;
-    const last =
-      tail !== undefined ? g.keys.length - 1 : pinnedBelow ? pinned : w.end;
+    const last = pinnedBelow ? pinned : w.end;
     // gestureAdj shifts the whole rendered block without touching scrollTop
     // (0 outside a touch gesture). Clamped at the very top of the list —
     // there is no spacer left to absorb into there.
@@ -593,18 +592,7 @@ export function ChatVirtualizer<T>(
     write(
       gapBottomRef,
       'height',
-      pinnedBelow
-        ? Math.max(0, g.offsets[pinned] - offsetAfter(w.end))
-        : tail !== undefined
-          ? Math.max(0, g.offsets[tail] - offsetAfter(w.end))
-          : 0,
-    );
-    write(
-      gapTailRef,
-      'height',
-      pinnedBelow && tail !== undefined
-        ? Math.max(0, g.offsets[tail] - offsetAfter(pinned))
-        : 0,
+      pinnedBelow ? Math.max(0, g.offsets[pinned] - offsetAfter(w.end)) : 0,
     );
     write(spacerBottomRef, 'height', Math.max(0, g.total - belowEnd));
     // The extent these spacers describe: the model total, plus whatever the
@@ -925,10 +913,10 @@ export function ChatVirtualizer<T>(
     // The rows past the last row the previous data had are this change's
     // news, but only for a tail append: the walk must stop at a row the
     // previous data held. A thread loaded into an empty list, or one that
-    // replaces the rows, is history, so the log does not read it out. The
-    // geometry still indexes the previous data here.
+    // replaces the rows, is history and is not announced. The geometry still
+    // indexes the previous data here.
     const previous = geo.current.index;
-    const appended = new Set<string>();
+    const appended: string[] = [];
     let isTailAppend = false;
     for (let i = data.length - 1; i >= 0; i--) {
       const key = String(getRowKey(data[i], i));
@@ -936,12 +924,48 @@ export function ChatVirtualizer<T>(
         isTailAppend = true;
         break;
       }
-      appended.add(key);
+      appended.push(key);
     }
     // The first message of a new conversation (one row into an empty list)
     // is news too; a larger load into an empty list stays history.
-    const isFirstMessage = previous.size === 0 && appended.size === 1;
-    newsKeysRef.current = isTailAppend || isFirstMessage ? appended : new Set();
+    const isFirstMessage = previous.size === 0 && appended.length === 1;
+    const news = unreadyNewsRef.current;
+    if (isTailAppend || isFirstMessage) {
+      for (const key of appended) {
+        news.add(key);
+      }
+    } else {
+      news.clear();
+    }
+    // A new message is ready once it is not streaming. News sits at the
+    // tail, so the walk starts there and stops when it has found every key.
+    if (news.size > 0) {
+      const found = new Set<string>();
+      const ready: string[] = [];
+      for (let i = data.length - 1; i >= 0 && found.size < news.size; i--) {
+        const key = String(getRowKey(data[i], i));
+        if (!news.has(key)) {
+          continue;
+        }
+        found.add(key);
+        if (isItemStreaming?.(data[i], i) !== true) {
+          ready.push(key);
+          readyNewsRef.current.push(
+            getItemAnnouncement?.(data[i], i) ??
+              t('@astryx.chatVirtualizer.newMessage'),
+          );
+        }
+      }
+      // A message removed before it is ready is never announced.
+      for (const key of news) {
+        if (!found.has(key)) {
+          news.delete(key);
+        }
+      }
+      for (const key of ready) {
+        news.delete(key);
+      }
+    }
     // HEAD CHANGE (loading older history, or trimming it). Rows arrived above
     // everything placed, so the restore owes a correction the size of the whole
     // page, paid across several passes as those rows measure in. That is a
@@ -988,28 +1012,21 @@ export function ChatVirtualizer<T>(
     syncAndRestore();
   });
 
-  // Marks the content block busy for a commit that mounts history, until
-  // the frame after it, so the log does not read those rows out as new.
-  React.useLayoutEffect(function markHistoryMountsBusy() {
-    // News is news once: a message that has mounted is history after.
-    for (const key of pendingRenderedRef.current) {
-      newsKeysRef.current.delete(key);
-    }
-    renderedKeysRef.current = pendingRenderedRef.current;
-    const block = contentRef.current;
-    if (!pendingBusyRef.current || block === null) {
+  const announce = useAnnounce();
+  // Effect: syncs the shared announcement channel with the new messages that
+  // became ready. Those are one occasion: one message says its words, several
+  // say their count. Empty words announce nothing and are not counted.
+  React.useEffect(function announceNewMessages() {
+    const words = readyNewsRef.current.filter(w => w !== '');
+    readyNewsRef.current = [];
+    if (words.length === 0) {
       return;
     }
-    block.setAttribute('aria-busy', 'true');
-    if (busyClearRef.current !== null) {
-      cancelAnimationFrame(busyClearRef.current);
-    }
-    busyClearRef.current = requestAnimationFrame(() => {
-      busyClearRef.current = requestAnimationFrame(() => {
-        busyClearRef.current = null;
-        block.removeAttribute('aria-busy');
-      });
-    });
+    announce(
+      words.length === 1
+        ? words[0]
+        : t('@astryx.chatVirtualizer.newMessages', {count: words.length}),
+    );
   });
 
   // The RO is the measurement pipeline: sizes come from the observed
@@ -1086,9 +1103,6 @@ export function ChatVirtualizer<T>(
       }
       if (rafRelease.current !== null) {
         cancelAnimationFrame(rafRelease.current);
-      }
-      if (busyClearRef.current !== null) {
-        cancelAnimationFrame(busyClearRef.current);
       }
     },
     [],
@@ -1375,74 +1389,6 @@ export function ChatVirtualizer<T>(
     return cb;
   };
 
-  // Tail messages the window has not reached. They mount on arrival, after a
-  // gap spacer below the window, so the log can deliver them while the reader
-  // is in history. State, not a ref: it decides what renders. Only a tail
-  // append adds to it, so a replaced thread mounts nothing extra. A row
-  // leaves once the window reaches it or it is gone from the data.
-  const [arrival, setArrival] = React.useState<{
-    data: readonly T[];
-    win: Win;
-    keys: ReadonlySet<string>;
-  }>(() => ({data, win, keys: new Set()}));
-  let arrivedKeys = arrival.keys;
-  if (arrival.data !== data || arrival.win !== win) {
-    const next = new Set<string>();
-    const indexOf = new Map<string, number>();
-    for (let i = 0; i < data.length; i++) {
-      indexOf.set(String(getRowKey(data[i], i)), i);
-    }
-    const reached = (key: string): boolean =>
-      win.end >= win.start && (indexOf.get(key) ?? -1) <= win.end;
-    for (const key of arrival.keys) {
-      if (indexOf.has(key) && !reached(key)) {
-        next.add(key);
-      }
-    }
-    if (arrival.data !== data) {
-      const previous = new Set<string>();
-      for (let i = 0; i < arrival.data.length; i++) {
-        previous.add(String(getRowKey(arrival.data[i], i)));
-      }
-      const run: string[] = [];
-      let isTailAppend = false;
-      for (let i = data.length - 1; i >= 0; i--) {
-        const key = String(getRowKey(data[i], i));
-        if (previous.has(key)) {
-          isTailAppend = true;
-          break;
-        }
-        run.push(key);
-      }
-      // Only while the reader is away from the tail: a window that reached
-      // the previous last row follows the append itself.
-      const wasAtTail =
-        win.end >= win.start && win.end >= arrival.data.length - 1;
-      if (isTailAppend && !wasAtTail) {
-        for (const key of run) {
-          if (!reached(key)) {
-            next.add(key);
-          }
-        }
-      }
-    }
-    // At most one window's worth of the newest arrivals stays mounted, across
-    // every batch and single arrival while the reader stays in history. They
-    // are the newest rows, so the run they start is that long too.
-    const room = Math.max(1, win.end - win.start + 1);
-    if (next.size > room) {
-      const newest = [...next]
-        .sort((a, b) => (indexOf.get(b) ?? -1) - (indexOf.get(a) ?? -1))
-        .slice(0, room);
-      next.clear();
-      for (const key of newest) {
-        next.add(key);
-      }
-    }
-    arrivedKeys = next;
-    setArrival({data, win, keys: next});
-  }
-
   // A focused row outside the window stays mounted beside it. It keeps its
   // place among its siblings as rows mount and unmount around it, so React
   // never moves its node (a moved node loses focus).
@@ -1454,22 +1400,6 @@ export function ChatVirtualizer<T>(
     if (pinnedIndex >= win.start && pinnedIndex <= win.end) {
       pinnedIndex = -1;
     }
-  }
-  // The arrived tail run starts at the first arrived row past the window and
-  // runs to the last row.
-  let tailIndex = -1;
-  if (arrivedKeys.size > 0 && win.end >= win.start) {
-    for (let i = data.length - 1; i > win.end; i--) {
-      if (arrivedKeys.has(String(getRowKey(data[i], i)))) {
-        tailIndex = i;
-      }
-    }
-  }
-  tailKeyRef.current =
-    tailIndex < 0 ? null : String(getRowKey(data[tailIndex], tailIndex));
-  // A focused row inside the tail run is drawn by the run.
-  if (tailIndex >= 0 && pinnedIndex >= tailIndex) {
-    pinnedIndex = -1;
   }
   pinnedKeyRef.current = pinnedIndex < 0 ? null : focusedKey;
   const renderRow = (i: number): React.ReactNode => {
@@ -1503,39 +1433,11 @@ export function ChatVirtualizer<T>(
       renderRow(pinnedIndex),
     );
   }
-  if (tailIndex >= 0) {
-    children.push(
-      pinnedIndex > win.end ? (
-        <div key="__gapTail" ref={gapTailRef} aria-hidden />
-      ) : (
-        <div key="__gapBottom" ref={gapBottomRef} aria-hidden />
-      ),
-    );
-    for (let i = tailIndex; i < data.length; i++) {
-      children.push(renderRow(i));
-    }
-  }
   children.push(<div key="__bottom" ref={spacerBottomRef} aria-hidden />);
 
-  // Busy when this render mounts a row that is not news: the window moving
-  // over history, or history loading above.
-  const renderedKeys = new Set<string>();
-  for (const child of children) {
-    const key = (child as React.ReactElement).key;
-    if (key !== null && !key.startsWith('__')) {
-      renderedKeys.add(key);
-    }
-  }
-  let mountsHistory = false;
-  for (const key of renderedKeys) {
-    if (!renderedKeysRef.current.has(key) && !newsKeysRef.current.has(key)) {
-      mountsHistory = true;
-      break;
-    }
-  }
-  pendingRenderedRef.current = renderedKeys;
-  pendingRenderKeysRef.current = [...renderedKeys].join('\n');
-  pendingBusyRef.current = mountsHistory;
+  pendingRenderKeysRef.current = children
+    .map(child => (child as React.ReactElement).key)
+    .join('\n');
 
   // Which row holds focus, for the pinning above.
   const onContentFocus = (event: React.FocusEvent<HTMLDivElement>): void => {
@@ -1565,7 +1467,11 @@ export function ChatVirtualizer<T>(
     });
   };
 
+  // The rows are never a live region, also inside ChatMessageList's log: a
+  // row mounts for the window, which is never news. New messages reach
+  // assistive technology through the shared channel instead.
   const contentProps = {
+    'aria-live': 'off' as const,
     ref: contentRef,
     onFocus: onContentFocus,
     onBlur: onContentBlur,

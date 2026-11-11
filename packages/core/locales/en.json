@@ -1459,6 +1459,14 @@
     "defaultMessage": "Messages",
     "description": "Accessible name of a lab ChatVirtualizer's own scroll container, which keyboard users can focus and scroll, when the caller gives no label."
   },
+  "@astryx.chatVirtualizer.newMessage": {
+    "defaultMessage": "New message",
+    "description": "Politely announced to screen reader users when one new message arrives in a long chat transcript, when the app gives no words of its own. The message may be out of view."
+  },
+  "@astryx.chatVirtualizer.newMessages": {
+    "defaultMessage": "{count, number} new {count, plural, one {message} other {messages}}",
+    "description": "Politely announced to screen reader users when several new messages arrive at once in a long chat transcript, e.g. \"3 new messages\". `count` is the number of messages."
+  },
   "@astryx.chatLayoutScrollButton.scrollToBottom": {
     "defaultMessage": "Scroll to bottom",
     "description": "Visible tooltip AND screen-reader label for a small down-arrow button that scrolls the chat viewport to its latest message."

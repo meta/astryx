@@ -1,10 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {afterEach, beforeEach, describe, it, expect, vi} from 'vitest';
-import {render, act, screen, waitFor} from '@testing-library/react';
-import {createRef, useLayoutEffect} from 'react';
+import {render, act, screen} from '@testing-library/react';
+import {StrictMode, createRef, useLayoutEffect} from 'react';
 import {TOUCH_QUERY} from '@astryxdesign/core/internal/touch';
 import {ChatVirtualizer, type ChatVirtualizerHandle} from './ChatVirtualizer';
+
+const announce = vi.fn();
+vi.mock('@astryxdesign/core/hooks', async importOriginal => ({
+  ...(await importOriginal<typeof import('@astryxdesign/core/hooks')>()),
+  useAnnounce: () => announce,
+}));
 
 // jsdom has no real layout (offsetHeight is 0, ResizeObserver never fires),
 // so these tests cover the CONTRACT layer — rendering shape, key handling,
@@ -514,32 +520,26 @@ describe('ChatVirtualizer', () => {
     el.remove();
   });
 
-  it('mounts at most a window of rows when a large batch arrives while the reader is in history', async () => {
+  it('mounts no appended row while the reader is in history', async () => {
     const el = tallScroller();
     const {container, rerender} = render(attachedTo(rows(60), el));
     await settled();
     scrollEvent(el, 0);
     await settled();
-    const window = container.querySelectorAll('[data-pkey]').length;
+    const mounted = (): string[] =>
+      [...container.querySelectorAll<HTMLElement>('[data-pkey]')].map(
+        row => row.dataset.pkey!,
+      );
+    const window = mounted();
+    // A batch and then single arrivals, still in history: the mounted rows
+    // stay the window, one run between the two spacers.
     act(() => rerender(attachedTo(rows(2060), el)));
-    expect(
-      container.querySelectorAll('[data-pkey]').length,
-    ).toBeLessThanOrEqual(2 * window);
-    // The newest message is among the ones that mount.
-    expect(screen.getByText('message 2059')).toBeInTheDocument();
-    // A second batch and then single arrivals, still in history: the mounted
-    // arrivals stay one window's worth of the newest rows.
     act(() => rerender(attachedTo(rows(4060), el)));
-    expect(
-      container.querySelectorAll('[data-pkey]').length,
-    ).toBeLessThanOrEqual(2 * window);
     for (const n of [4061, 4062, 4063]) {
       act(() => rerender(attachedTo(rows(n), el)));
     }
-    expect(
-      container.querySelectorAll('[data-pkey]').length,
-    ).toBeLessThanOrEqual(2 * window);
-    expect(screen.getByText('message 4062')).toBeInTheDocument();
+    expect(mounted()).toEqual(window);
+    expect(screen.queryByText('message 4062')).toBeNull();
     el.remove();
   });
 
@@ -844,96 +844,166 @@ describe('ChatVirtualizer', () => {
     expect(container.querySelectorAll('[data-pkey]').length).toBeGreaterThan(0);
     el.remove();
   });
+});
 
-  it('delivers the first message of an empty transcript unmarked', async () => {
+describe('ChatVirtualizer new-message announcements', () => {
+  beforeEach(() => {
+    announce.mockClear();
+  });
+
+  const tallScroller = (): HTMLElement => {
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientHeight', {value: 400, writable: true});
+    Object.defineProperty(el, 'scrollHeight', {value: 1e6, writable: true});
+    document.body.appendChild(el);
+    return el;
+  };
+  const settled = async (): Promise<void> => {
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 40));
+    });
+  };
+  const scrollEvent = (el: HTMLElement, at: number): void => {
+    el.scrollTop = at;
+    act(() => {
+      el.dispatchEvent(new Event('scroll'));
+    });
+  };
+  const thread = (prefix: string, n: number): Row[] =>
+    Array.from({length: n}, (_, i) => ({
+      id: `${prefix}${i}`,
+      text: `${prefix} message ${i}`,
+    }));
+  const inLog = (
+    data: Row[],
+    el: HTMLElement,
+    extra: Partial<React.ComponentProps<typeof ChatVirtualizer<Row>>> = {},
+  ) => (
+    <div role="log">
+      <ChatVirtualizer<Row>
+        data={data}
+        getRowKey={m => String(m.id)}
+        renderItem={({item}) => <span>{item.text}</span>}
+        estimatedItemSize={100}
+        scrollElement={el}
+        {...extra}
+      />
+    </div>
+  );
+
+  it('keeps every row out of the live region it renders in', async () => {
     const el = tallScroller();
-    const list = (n: number) => <div role="log">{attachedTo(rows(n), el)}</div>;
-    const {container, rerender} = render(list(0));
+    const {container} = render(inLog(rows(60), el));
     await settled();
-    const block = container.querySelector('[role="log"]')!
-      .firstElementChild as HTMLElement;
-    // The opening message arrives: news for the log, not busy.
-    act(() => rerender(list(1)));
-    expect(screen.getByText('message 0')).toBeInTheDocument();
-    expect(block.hasAttribute('aria-busy')).toBe(false);
-    // The reply is news too.
-    act(() => rerender(list(2)));
+    const block = container.querySelector('[role="log"]')!.firstElementChild!;
+    expect(block.getAttribute('aria-live')).toBe('off');
     expect(block.hasAttribute('aria-busy')).toBe(false);
     el.remove();
   });
 
-  it('marks a thread loaded into an empty list, or replacing the rows, as busy for the log', async () => {
+  it('announces the first message of an empty transcript, and each reply', async () => {
     const el = tallScroller();
-    const thread = (prefix: string, n: number): Row[] =>
-      Array.from({length: n}, (_, i) => ({
-        id: `${prefix}${i}`,
-        text: `${prefix} message ${i}`,
-      }));
-    const list = (data: Row[]) => <div role="log">{attachedTo(data, el)}</div>;
-    const {container, rerender} = render(list([]));
+    const {rerender} = render(inLog([], el));
     await settled();
-    const block = container.querySelector('[role="log"]')!
-      .firstElementChild as HTMLElement;
-    // A thread loads into the empty list: its rows are history, not news.
-    act(() => rerender(list(thread('a', 60))));
-    expect(block.getAttribute('aria-busy')).toBe('true');
-    await settled();
-    expect(block.hasAttribute('aria-busy')).toBe(false);
-    // Another thread replaces the rows: history again.
-    act(() => rerender(list(thread('b', 60))));
-    expect(block.getAttribute('aria-busy')).toBe('true');
-    await settled();
-    expect(block.hasAttribute('aria-busy')).toBe(false);
+    act(() => rerender(inLog(rows(1), el)));
+    expect(announce).toHaveBeenLastCalledWith('New message');
+    act(() => rerender(inLog(rows(2), el)));
+    expect(announce).toHaveBeenCalledTimes(2);
     el.remove();
   });
 
-  it('marks the rows the window moves over as busy for the log, and new tail rows not', async () => {
+  it('announces nothing for a loaded thread, a replacing thread, history above, or the window moving', async () => {
     const el = tallScroller();
-    const list = (n: number) => <div role="log">{attachedTo(rows(n), el)}</div>;
-    const {container, rerender} = render(list(60));
+    const {rerender} = render(inLog([], el));
     await settled();
-    const block = container.querySelector('[role="log"]')!
-      .firstElementChild as HTMLElement;
-    expect(block.hasAttribute('aria-busy')).toBe(false);
-    // A message appended at the tail while following: news for the log.
-    act(() => rerender(list(61)));
-    expect(block.hasAttribute('aria-busy')).toBe(false);
-    // Scrolling up mounts history: busy for that commit and the next frame.
+    act(() => rerender(inLog(thread('a', 60), el)));
+    await settled();
+    act(() => rerender(inLog(thread('b', 60), el)));
+    await settled();
+    act(() => rerender(inLog([...thread('c', 30), ...thread('b', 60)], el)));
+    await settled();
     scrollEvent(el, 0);
-    expect(block.getAttribute('aria-busy')).toBe('true');
     await settled();
-    expect(block.hasAttribute('aria-busy')).toBe(false);
+    expect(announce).not.toHaveBeenCalled();
     el.remove();
   });
 
-  it('mounts a message that arrives while the reader is in history, unmarked, so the log delivers it', async () => {
+  it('announces a message that arrives while the reader is in history, without mounting it', async () => {
     const el = tallScroller();
-    const withText = (n: number, last?: string) =>
-      rows(n).map((row, i) =>
-        last !== undefined && i === n - 1 ? {...row, text: last} : row,
-      );
-    const list = (data: Row[]) => <div role="log">{attachedTo(data, el)}</div>;
-    const {container, rerender} = render(list(withText(60)));
+    const {rerender} = render(inLog(rows(60), el));
     await settled();
-    const block = container.querySelector('[role="log"]')!
-      .firstElementChild as HTMLElement;
-    // The reader scrolls up into history.
     scrollEvent(el, 0);
     await settled();
-    expect(screen.queryByText('message 59')).toBeNull();
-    // The history mount's busy mark has cleared.
-    await waitFor(() => expect(block.hasAttribute('aria-busy')).toBe(false));
-    // A reply arrives at the tail: it mounts now, and the commit is not busy.
-    act(() => rerender(list(withText(61))));
-    expect(screen.getByText('message 60')).toBeInTheDocument();
-    expect(block.hasAttribute('aria-busy')).toBe(false);
-    // The reply streams: it stays mounted, and the update is not busy either.
-    act(() => rerender(list(withText(61, 'message 60, streamed'))));
-    expect(screen.getByText('message 60, streamed')).toBeInTheDocument();
-    expect(block.hasAttribute('aria-busy')).toBe(false);
+    act(() => rerender(inLog(rows(61), el)));
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith('New message');
+    expect(screen.queryByText('message 60')).toBeNull();
+    el.remove();
+  });
+
+  it('announces a streamed reply once, when it completes', async () => {
+    const el = tallScroller();
+    const isItemStreaming = (m: Row) => m.text.endsWith('…');
+    const reply = (text: string): Row[] => [...rows(60), {id: 60, text}];
+    const {rerender} = render(inLog(rows(60), el, {isItemStreaming}));
     await settled();
-    // The rows between the window and the reply stay unmounted.
-    expect(screen.queryByText('message 59')).toBeNull();
+    act(() => rerender(inLog(reply('Hel…'), el, {isItemStreaming})));
+    act(() => rerender(inLog(reply('Hello th…'), el, {isItemStreaming})));
+    expect(announce).not.toHaveBeenCalled();
+    act(() => rerender(inLog(reply('Hello there.'), el, {isItemStreaming})));
+    act(() => rerender(inLog(reply('Hello there.'), el, {isItemStreaming})));
+    expect(announce).toHaveBeenCalledTimes(1);
+    el.remove();
+  });
+
+  it('announces a message removed while it streams never', async () => {
+    const el = tallScroller();
+    const isItemStreaming = () => true;
+    const {rerender} = render(inLog(rows(60), el, {isItemStreaming}));
+    await settled();
+    act(() => rerender(inLog(rows(61), el, {isItemStreaming})));
+    act(() => rerender(inLog(rows(60), el)));
+    expect(announce).not.toHaveBeenCalled();
+    el.remove();
+  });
+
+  it('announces a batch once, with its count', async () => {
+    const el = tallScroller();
+    const {rerender} = render(inLog(rows(60), el));
+    await settled();
+    act(() => rerender(inLog(rows(2060), el)));
+    await settled();
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith('2,000 new messages');
+    el.remove();
+  });
+
+  it("announces the caller's words, and nothing for empty words", async () => {
+    const el = tallScroller();
+    const getItemAnnouncement = (m: Row) =>
+      m.id === 60 || m.id === 63 ? '' : `Ana: ${m.text}`;
+    const {rerender} = render(inLog(rows(60), el, {getItemAnnouncement}));
+    await settled();
+    // The reader's own message: nothing.
+    act(() => rerender(inLog(rows(61), el, {getItemAnnouncement})));
+    expect(announce).not.toHaveBeenCalled();
+    act(() => rerender(inLog(rows(62), el, {getItemAnnouncement})));
+    expect(announce).toHaveBeenCalledWith('Ana: message 61');
+    // Two at once, one of them empty: the other one's words.
+    act(() => rerender(inLog(rows(64), el, {getItemAnnouncement})));
+    expect(announce).toHaveBeenCalledTimes(2);
+    expect(announce).toHaveBeenLastCalledWith('Ana: message 62');
+    el.remove();
+  });
+
+  it('announces once under StrictMode', async () => {
+    const el = tallScroller();
+    const strict = (n: number) => <StrictMode>{inLog(rows(n), el)}</StrictMode>;
+    const {rerender} = render(strict(60));
+    await settled();
+    act(() => rerender(strict(61)));
+    await settled();
+    expect(announce).toHaveBeenCalledTimes(1);
     el.remove();
   });
 });

@@ -9,7 +9,7 @@ export const docs = {
   category: 'Chat',
   displayName: 'Chat Virtualizer',
   description:
-    'Windowed message list for long transcripts: only the rows near the viewport are rendered, and the rest is represented by two spacer elements, so a thread of thousands of messages costs a viewport of DOM. Rows stay in normal document flow. While a finger scrolls the list, position corrections are written as spacer height rather than a scrollTop jump, so nothing moves under the finger; they settle when that scroll ends. Outside a touch gesture the list writes scrollTop. Follows the newest message by default, re-engaging that follow when a user scroll lands within endThreshold of the bottom. Renders its own scroll container, or nests inside one the caller already owns (see scrollElement).',
+    'Windowed message list for long transcripts: only the rows near the viewport are rendered, and the rest is represented by two spacer elements, so a thread of thousands of messages costs a viewport of DOM. Rows stay in normal document flow. While a finger scrolls the list, position corrections are written as spacer height rather than a scrollTop jump, so nothing moves under the finger; they settle when that scroll ends. Outside a touch gesture the list writes scrollTop. Follows the newest message by default, re-engaging that follow when a user scroll lands within endThreshold of the bottom. Renders its own scroll container, or nests inside one the caller already owns (see scrollElement). The rows are not a live region, also inside ChatMessageList: scrolling through history announces nothing, and each new message is announced once through the shared polite channel, also when it arrives out of view.',
   props: [
     {
       name: 'data',
@@ -50,6 +50,20 @@ export const docs = {
       type: '(item: T, index: number) => string',
       description:
         'Classifies a row so measured sizes feed a running average per type. A transcript mixing one-line tool stubs with long markdown then converges to an honest price per shape instead of one blended number.',
+    },
+    {
+      name: 'getItemAnnouncement',
+      type: '(item: T, index: number) => string',
+      description:
+        "The words a screen reader hears for one new message, such as its sender and text. Return '' to announce nothing, as for the reader's own message. When several messages are ready on one data change, the list announces their count instead. A new message is one appended after the previous last message; a loaded or replaced thread and history loaded above are not announced.",
+      default: "'New message' (translated)",
+    },
+    {
+      name: 'isItemStreaming',
+      type: '(item: T, index: number) => boolean',
+      description:
+        'Whether a message is still streaming. A new message is announced on the first data change that reports it complete, so a streamed reply is heard once, when it is finished.',
+      default: 'every message is complete',
     },
     {
       name: 'scrollElement',
@@ -103,7 +117,7 @@ export const docsZh = {
   name: 'ChatVirtualizer',
   displayName: 'Chat Virtualizer',
   description:
-    '面向长会话的窗口化消息列表：只渲染视口附近的行，其余用两个占位元素表示，因此上千条消息的线程只消耗一个视口的 DOM。行保持在正常文档流中。手指滚动列表期间，位置修正写入占位高度而非跳写 scrollTop，所以手指下的内容不会移动；该次滚动结束后修正落定。触摸手势之外，列表直接写入 scrollTop。默认跟随最新消息，用户滚动落在距底部 endThreshold 以内时重新接管跟随。可自建滚动容器，也可嵌入调用方已有的容器（见 scrollElement）。',
+    '面向长会话的窗口化消息列表：只渲染视口附近的行，其余用两个占位元素表示，因此上千条消息的线程只消耗一个视口的 DOM。行保持在正常文档流中。手指滚动列表期间，位置修正写入占位高度而非跳写 scrollTop，所以手指下的内容不会移动；该次滚动结束后修正落定。触摸手势之外，列表直接写入 scrollTop。默认跟随最新消息，用户滚动落在距底部 endThreshold 以内时重新接管跟随。可自建滚动容器，也可嵌入调用方已有的容器（见 scrollElement）。行不属于实时区域（在 ChatMessageList 内也是如此）：滚动浏览历史不会播报，每条新消息通过共享的 polite 通道播报一次，即使它不在视口内。',
   propDescriptions: {
     data: '要渲染的行，按时间正序。变更通过引用比较检测，所以请替换数组而不要原地修改。',
     getRowKey:
@@ -116,6 +130,10 @@ export const docsZh = {
       '暴露 scrollToDistanceFromBottomPx 与 anchorToKey 的命令式句柄。两者都是“声明参考系”而非执行一次滚动：行陆续测量进来时列表会持续恢复所声明的位置。',
     getItemType:
       '为行分类，使测量结果按类型累积均值。工具调用短行与长 markdown 混排的会话因此能收敛出各自诚实的价格，而非一个混合数字。',
+    getItemAnnouncement:
+      "读屏用户听到的一条新消息的内容，例如发送者与正文。返回 '' 则不播报，例如读者自己发出的消息。同一次数据变更中有多条消息就绪时，改为播报条数。默认播报翻译后的“New message”。",
+    isItemStreaming:
+      '消息是否仍在流式输出。新消息在数据首次报告其完成时播报，所以流式回复只在完成时播报一次。默认均已完成。',
     scrollElement:
       '接管模式：调用方已有的滚动容器，占位与行包在一个内容块里渲染进去，列表不再自建滚动容器。传元素本身而非 ref：父的 ref 在子的 layout effect 之后才装配，所以最先需要滚动容器的那次提交里 ref 仍读到 null；而且 ref 赋值对 React 不可见，落地时既不重渲染也不重跑 effect，元素存进 state 才让“到达”成为一次渲染和真正的依赖（换容器时滚动监听、观察和手势状态机都要重建）。请在 passive effect 里读出并存进 state。尚未就绪时传 null 而不是 undefined：undefined 表示自建容器模式，在不限高的父容器里哪怕只有一次提交也会挂载全部行。',
     endThreshold:
@@ -134,7 +152,7 @@ export const docsDense = {
   name: 'ChatVirtualizer',
   displayName: 'Chat Virtualizer',
   description:
-    'windowed msg list; rows near viewport + 2 spacers => viewport-sized DOM for 1000s of msgs; rows in document flow; during a finger scroll corrections go to spacer height not scrollTop (nothing moves under the finger, settled when the scroll ends), otherwise scrollTop; follows newest by default, re-engages within endThreshold of bottom; own scroller or attach to caller (scrollElement)',
+    'windowed msg list; rows near viewport + 2 spacers => viewport-sized DOM for 1000s of msgs; rows in document flow; during a finger scroll corrections go to spacer height not scrollTop (nothing moves under the finger, settled when the scroll ends), otherwise scrollTop; follows newest by default, re-engages within endThreshold of bottom; own scroller or attach to caller (scrollElement); rows are not live (aria-live off, even inside ChatMessageList); each new msg announced once via the shared polite channel, also out of view',
   propDescriptions: {
     data: 'rows oldest-first; REFERENCE change detection — replace, never mutate',
     getRowKey:
@@ -147,6 +165,10 @@ export const docsDense = {
       'scrollToDistanceFromBottomPx + anchorToKey; both DECLARE a frame, restored as rows measure in',
     getItemType:
       'per-type running averages; keeps tool stubs from blending with long markdown',
+    getItemAnnouncement:
+      "words for one new msg; '' = silent (own msg); several ready at once => count; default 'New message'",
+    isItemStreaming:
+      'true while a msg streams; announced on the first data change that reports it complete',
     scrollElement:
       "attach mode: caller's scroller, rows render in one content block; pass the ELEMENT not a ref (parent ref attaches after child layout effects + ref writes are invisible to React) — read it in a passive effect, hold it in state; null (not undefined) while pending, else one commit mounts every row",
     endThreshold:
