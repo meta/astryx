@@ -840,6 +840,7 @@
     "/templates/useScrollOverflowHookUsage/",
     "/templates/useScrollableAreaHookUsage/",
     "/templates/useStreamingTextHookUsage/",
+    "/templates/useSyntaxThemeHookUsage/",
     "/templates/useTableColumnSettingsStateHookUsage/",
     "/templates/useTableSortableStateHookUsage/",
     "/templates/useThemeHookUsage/",
