@@ -77,6 +77,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   `context-menu` target.
 - Cursor-anchor placement across the two presentation paths, and open state
   (FR10).
+- The private context-menu-trigger attribute and its owner module,
+  `privateAttributes/contextMenuTrigger.stylex.ts`: `markContextMenuTrigger`
+  marks a trigger while its touch press feedback is attached, and
+  `closestContextMenuTrigger` finds the trigger a press belongs to, so a press
+  on a nested trigger grows no outer trigger.
 
 **Does not own / non-goals**
 
