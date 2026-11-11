@@ -30,6 +30,10 @@ const REPO_DIR = path.resolve(CLI_DIR, '..', '..');
  */
 export const PREPACK_FILES = [
   {
+    file: 'assets/templates/components.generated.json',
+    script: 'scripts/generate-template-components.mjs',
+  },
+  {
     file: 'clients/cli/commands.generated.json',
     script: 'scripts/generate-command-list.mjs',
   },

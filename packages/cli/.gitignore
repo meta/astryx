@@ -18,6 +18,11 @@ foundation/*.d.mts
 # real tsc over migrated output); created + removed per test run.
 .codemod-tsc-*/
 
+# Stored component lists of the shipped templates, written at `prepack` by
+# scripts/generate-template-components.mjs so the published package reads them
+# instead of parsing each template's source. Not committed: a checkout parses.
+assets/templates/components.generated.json
+
 # The root help's command list, written at `prepack` by
 # scripts/generate-command-list.mjs so the published package prints its root
 # help without loading every command. Not committed: a checkout loads them.

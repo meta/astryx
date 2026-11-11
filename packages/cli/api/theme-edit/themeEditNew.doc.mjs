@@ -26,7 +26,8 @@ export const doc = {
     {
       name: 'theme',
       type: 'string',
-      description: 'The theme name: lowercase letters, digits and dashes.',
+      description:
+        'The theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most.',
       required: true,
     },
     {
@@ -48,7 +49,8 @@ export const doc = {
     {
       name: 'options.cwd',
       type: 'string',
-      description: 'The app folder (default: the current directory).',
+      description:
+        'The folder to start from (default: the current directory): commands act on the Astryx project at or above it, so a subfolder of an app works.',
     },
   ],
   returns: [
@@ -82,6 +84,10 @@ export const doc = {
     {
       code: 'ERR_PROJECT_REQUIRED',
       when: '@astryxdesign/core is not installed in the folder',
+    },
+    {
+      code: 'ERR_THEME_BUSY',
+      when: 'another command is changing the same theme and did not finish within 30 seconds; nothing was changed',
     },
     {
       code: 'ERR_THEME_INVALID',
