@@ -3,7 +3,11 @@
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {themeList, themeListAvailable, themeListCopySources} from './list.mjs';
+import {
+  themeList,
+  themeListAvailable,
+  themeListCopySources,
+} from './list.mjs';
 import {renderThemeModule} from '../../../foundation/config/theme-state.mjs';
 import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
@@ -283,6 +287,7 @@ describe('themeListAvailable with a broken local theme folder', () => {
     const result = await themeListAvailable({cwd: tmpDir});
 
     expect(result.data.some(theme => theme.slug === 'neutral')).toBe(true);
+    expect(result.meta?.unmigratedCopies).toEqual([]);
     expect(result.meta?.skippedThemes).toEqual([
       {
         slug: 'mine',

@@ -11,21 +11,20 @@
 
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import {createRequire} from 'node:module';
 import {
   findCarriedCoreDir,
   findPackageRoot,
   requireCoreDir,
 } from '../../foundation/fs/paths.mjs';
-import {tryLock} from '../../foundation/release/cache.mjs';
+import {tryLock, userCacheDir} from '../../foundation/release/cache.mjs';
 import {Project} from '../../foundation/config/project.mjs';
 import {
   BUNDLED_THEME_PACKAGE,
   THEMES_DIR,
   discoverBundledThemes,
   discoverIntegrationThemes,
-  discoverLocalThemes,
   discoverUnmigratedThemeCopies,
   themeImportPackage,
 } from '../../foundation/discovery/theme-discovery.mjs';
@@ -35,6 +34,7 @@ import {
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
   findThemeProject,
+  editorThemeRecord,
   isLocalThemeOwner,
   LOCAL_THEME_ROOT,
   ThemeStateError,
@@ -113,29 +113,14 @@ async function availableThemeState(cwd, {includeLocal = true} = {}) {
     return {themes: availableBundledThemes(), issues: [], skipped: []};
   }
   try {
-    const external = await project.themes({includeLocal: false});
-    /** @type {SkippedLocalTheme[]} */
-    const skipped = [];
-    const projectDir = findPackageRoot(cwd) ?? cwd;
     // One broken local folder must not hide every other theme: it is
     // skipped with its reason, and only a lookup of that slug fails.
-    const local = includeLocal
-      ? discoverLocalThemes(projectDir, LOCAL_THEME_ROOT, {
-          onFolderError: (slug, error) =>
-            skipped.push({
-              slug,
-              path: [LOCAL_THEME_ROOT.replace(/^\.\//, ''), slug].join('/'),
-              reason: error.message,
-            }),
-        })
-      : [];
-    const bundled = external.filter(theme => theme.source === 'bundled');
-    const themes = [
-      ...bundled,
-      ...local,
-      ...external.filter(theme => theme.source !== 'bundled'),
-    ];
-    return {themes, issues: await project.issues(), skipped};
+    const themes = await project.themes({includeLocal, skipBrokenLocal: true});
+    return {
+      themes,
+      issues: await project.issues(),
+      skipped: project.skippedLocalThemes(),
+    };
   } catch (error) {
     throw asThemeError(error);
   }
@@ -418,7 +403,7 @@ function assertEjectTargetFree(theme, dir, cwd) {
           reason: `fork into ${defaultEjectTarget(theme.slug).split(path.sep).join('/')}`,
         },
       ];
-  const editorRecord = entries.find(name => name.endsWith('.settings.json'));
+  const editorRecord = editorThemeRecord(dir);
   if (editorRecord) {
     throw new AstryxError(
       `${rel} holds a theme made by the theme editor (${editorRecord}). Eject does not write into it, even with --overwrite.`,
@@ -584,18 +569,9 @@ export function forkNeeds(outputDir, files, cwd) {
       }
     })
     .join('\n');
-  let projectDir = path.resolve(cwd);
-  while (!fs.existsSync(path.join(projectDir, 'package.json'))) {
-    const parent = path.dirname(projectDir);
-    if (parent === projectDir) {
-      projectDir = path.resolve(cwd);
-      break;
-    }
-    projectDir = parent;
-  }
   const {missingPackages, installCommand} = analyzeTemplateNeeds(
     source,
-    projectDir,
+    findPackageRoot(cwd) ?? path.resolve(cwd),
   );
   return {missingPackages, installCommand};
 }
@@ -785,12 +761,14 @@ async function writeThemeApp(
 ) {
   // A recorded theme whose folder or package is gone would make every later
   // add, use and remove fail, and the record is generated, so it cannot be
-  // fixed by hand. Leave it out and say so; the default stays required.
+  // fixed by hand. Leave it out and say so. A theme that is only broken or
+  // not installed yet stays, and its refusal says how to fix it.
   const kept = {...themes};
   for (const [recorded, owner] of Object.entries(themes)) {
     if (
       recorded === defaultSlug ||
-      isRecordedThemeAvailable(recorded, owner, available)
+      isRecordedThemeAvailable(recorded, owner, available) ||
+      !isRecordedThemeGone(recorded, owner, state.projectDir)
     )
       continue;
     delete kept[recorded];
@@ -861,14 +839,55 @@ function isRecordedThemeAvailable(slug, owner, available) {
   );
 }
 
+/**
+ * Is a recorded theme's source gone, not just broken? A local theme is gone
+ * when its folder is; a package theme when the app neither declares the
+ * package nor can resolve it.
+ * @param {string} slug
+ * @param {string} owner
+ * @param {string} projectDir
+ */
+function isRecordedThemeGone(slug, owner, projectDir) {
+  if (isLocalThemeOwner(owner)) {
+    return !fs.existsSync(path.resolve(projectDir, owner, slug));
+  }
+  let declared = false;
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(projectDir, 'package.json'), 'utf-8'),
+    );
+    declared = [
+      pkg.dependencies,
+      pkg.devDependencies,
+      pkg.peerDependencies,
+      pkg.optionalDependencies,
+    ].some(deps => deps != null && Object.hasOwn(deps, owner));
+  } catch {
+    // An unreadable package.json declares nothing.
+  }
+  if (declared) return false;
+  try {
+    createRequire(path.join(projectDir, 'package.json')).resolve(
+      `${owner}/package.json`,
+    );
+    return false;
+  } catch (error) {
+    // A package whose exports hide package.json is still installed.
+    return (
+      /** @type {NodeJS.ErrnoException} */ (error).code !==
+      'ERR_PACKAGE_PATH_NOT_EXPORTED'
+    );
+  }
+}
+
 /** How long a theme command waits for another one changing the same app. */
 const THEME_APP_LOCK_WAIT_MS = 15_000;
 
 /**
  * Run one read-modify-write of the app theme record at a time per project.
  * Two commands at once would each read the old record, and the second write
- * would drop the first one's change. The lock folder lives in the system temp
- * folder, so nothing is left in the project.
+ * would drop the first one's change. The lock folder lives in the per-user
+ * cache folder, so nothing is left in the project.
  * @template T
  * @param {string} cwd
  * @param {() => Promise<T>} fn
@@ -887,9 +906,22 @@ async function withThemeAppLock(cwd, fn) {
     .update(fs.realpathSync(projectDir))
     .digest('hex')
     .slice(0, 24);
-  const lockDir = path.join(os.tmpdir(), 'astryx-theme-app-locks', key);
+  const lockDir = path.join(userCacheDir(), 'theme-app-locks', key);
+  const lockFailed = (/** @type {unknown} */ error) =>
+    new AstryxError(
+      `Could not take the lock that keeps two theme commands from changing this app's themes at once (${lockDir}): ${error instanceof Error ? error.message : String(error)}. Check that the folder can be written, then run this command again.`,
+      undefined,
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
   const deadline = Date.now() + THEME_APP_LOCK_WAIT_MS;
-  while (!tryLock(lockDir)) {
+  for (;;) {
+    let taken;
+    try {
+      taken = tryLock(lockDir);
+    } catch (error) {
+      throw lockFailed(error);
+    }
+    if (taken) break;
     if (Date.now() > deadline) {
       throw new AstryxError(
         "Another theme command is changing this app's themes. Run this command again when it ends.",
@@ -902,7 +934,11 @@ async function withThemeAppLock(cwd, fn) {
   try {
     return await fn();
   } finally {
-    fs.rmSync(lockDir, {recursive: true, force: true});
+    try {
+      fs.rmSync(lockDir, {recursive: true, force: true});
+    } catch {
+      // A lock left behind expires: tryLock takes over a lock whose holder is gone.
+    }
   }
 }
 
@@ -1015,42 +1051,7 @@ async function removeThemeFromAppLocked(slug, cwd) {
       ERROR_CODES.ERR_UNKNOWN_THEME,
     );
   }
-  const available = await listAvailableThemes(state.projectDir);
-  /** @type {string[]} */
-  const notes = [];
-  let defaultSlug = state.defaultSlug;
-  if (
-    state.defaultSlug === recordedSlug &&
-    !isRecordedThemeAvailable(
-      recordedSlug,
-      state.themes[recordedSlug],
-      available,
-    )
-  ) {
-    // The default's folder or package is gone, so no `theme use` can run
-    // first. Removing it is the way out: the next available theme becomes
-    // the default.
-    const next = Object.entries(state.themes).find(
-      ([other, owner]) =>
-        other !== recordedSlug &&
-        isRecordedThemeAvailable(other, owner, available),
-    )?.[0];
-    if (next == null) {
-      throw new AstryxError(
-        `Theme "${recordedSlug}" is the default, and its source is gone. Add another theme first, then remove it.`,
-        [
-          {
-            name: formatCliCommand('theme list', state.projectDir),
-            reason: 'themes you can add',
-          },
-        ],
-        ERROR_CODES.ERR_THEME_INVALID,
-      );
-    }
-    defaultSlug = next;
-    notes.push(`"${next}" is now the default theme.`);
-  }
-  if (defaultSlug === recordedSlug) {
+  if (state.defaultSlug === recordedSlug) {
     throw new AstryxError(
       `Theme "${recordedSlug}" is the default. Run \`${formatCliCommand('theme use <other-slug>', state.projectDir)}\` before removing it.`,
       undefined,
@@ -1059,22 +1060,22 @@ async function removeThemeFromAppLocked(slug, cwd) {
   }
   const themes = {...state.themes};
   delete themes[recordedSlug];
-  if (defaultSlug == null) {
+  if (state.defaultSlug == null) {
     throw new AstryxError(
       `The generated theme module has no default theme. Run \`${formatCliCommand('theme use <slug>', state.projectDir)}\` first.`,
       undefined,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
+  const available = await listAvailableThemes(state.projectDir);
   return writeThemeApp(
     state,
     themes,
-    defaultSlug,
+    state.defaultSlug,
     'remove',
     recordedSlug,
     true,
     available,
-    notes,
   );
 }
 

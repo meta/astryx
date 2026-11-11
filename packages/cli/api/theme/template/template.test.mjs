@@ -37,19 +37,13 @@ describe('themeTemplate()', () => {
       type: 'theme.template',
       data: {path: THEME_TEMPLATE_DEFAULT_PATH, written: true, reason: null},
     });
-    const written = fs.readFileSync(
-      path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH),
-      'utf-8',
-    );
+    const written = fs.readFileSync(path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH), 'utf-8');
     expect(written).toMatch(/defineTheme/);
   });
 
   it('does not carry our copyright header into the consumer tree', () => {
     themeTemplate({cwd: tmpDir});
-    const written = fs.readFileSync(
-      path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH),
-      'utf-8',
-    );
+    const written = fs.readFileSync(path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH), 'utf-8');
     expect(written).not.toMatch(/Copyright \(c\) Meta Platforms/);
     expect(written.startsWith('/**')).toBe(true);
   });
@@ -79,15 +73,10 @@ describe('themeTemplate()', () => {
   });
 
   it('honors a custom path and creates its directory', () => {
-    const res = themeTemplate({
-      cwd: tmpDir,
-      targetPath: 'src/themes/starter.ts',
-    });
+    const res = themeTemplate({cwd: tmpDir, targetPath: 'src/themes/starter.ts'});
 
     expect(res.data.path).toBe(path.join('src', 'themes', 'starter.ts'));
-    expect(fs.existsSync(path.join(tmpDir, 'src/themes/starter.ts'))).toBe(
-      true,
-    );
+    expect(fs.existsSync(path.join(tmpDir, 'src/themes/starter.ts'))).toBe(true);
   });
 
   it('refuses a path that escapes the project', () => {
@@ -172,6 +161,19 @@ describe('themeTemplate()', () => {
       expect(
         fs.readFileSync(path.join(dir, 'my-theme.theme.ts'), 'utf-8'),
       ).toBe(source);
+    });
+
+    it('still replaces a theme source beside a settings file the editor did not make', () => {
+      const dir = path.join(tmpDir, 'api');
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, 'local.settings.json'), '{}\n');
+      fs.writeFileSync(path.join(dir, 'ocean.theme.ts'), '// mine\n');
+      const res = themeTemplate({
+        cwd: tmpDir,
+        targetPath: 'api/ocean.theme.ts',
+        overwrite: true,
+      });
+      expect(res.data.written).toBe(true);
     });
 
     it('replaces a file named like a theme source', () => {

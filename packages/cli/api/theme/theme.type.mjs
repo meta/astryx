@@ -79,7 +79,7 @@
  * @typedef {object} ThemeListResponse
  * @property {'theme.list'} type
  * @property {ThemeListEntry[]} data
- * @property {{unmigratedCopies?: ThemeUnmigratedCopy[], skippedThemes?: Array<{slug: string, path: string, reason: string}>}} [meta] descriptor-less released copies that are not listed as themes; local theme folders left out because they are broken
+ * @property {{unmigratedCopies: ThemeUnmigratedCopy[], skippedThemes?: Array<{slug: string, path: string, reason: string}>}} [meta] descriptor-less released copies that are not listed as themes; local theme folders left out because they are broken
  */
 
 /**

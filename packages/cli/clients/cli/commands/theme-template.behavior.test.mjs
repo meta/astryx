@@ -54,18 +54,14 @@ describe('astryx theme template', () => {
   it('replaces it with --overwrite', async () => {
     fs.writeFileSync(path.join(tmpDir, 'theme.template.ts'), '// mine\n');
 
-    const {status} = await runCli(['theme', 'template', '--overwrite'], {
-      cwd: tmpDir,
-    });
+    const {status} = await runCli(['theme', 'template', '--overwrite'], {cwd: tmpDir});
 
     expect(status).toBe(0);
     expect(read('theme.template.ts')).toMatch(/defineTheme/);
   });
 
   it('returns a theme.template envelope under --json', async () => {
-    const {status, stdout} = await runCli(['--json', 'theme', 'template'], {
-      cwd: tmpDir,
-    });
+    const {status, stdout} = await runCli(['--json', 'theme', 'template'], {cwd: tmpDir});
 
     expect(status).toBe(0);
     const payload = JSON.parse(stdout);
@@ -78,18 +74,13 @@ describe('astryx theme template', () => {
   });
 
   it('refuses a path that escapes the project', async () => {
-    const {status, stderr} = await runCli(
-      ['theme', 'template', '../escaped.ts'],
-      {
-        cwd: tmpDir,
-      },
-    );
+    const {status, stderr} = await runCli(['theme', 'template', '../escaped.ts'], {
+      cwd: tmpDir,
+    });
 
     expect(status).toBe(1);
     expect(stderr).toMatch(/outside the project root/);
-    expect(fs.existsSync(path.join(path.dirname(tmpDir), 'escaped.ts'))).toBe(
-      false,
-    );
+    expect(fs.existsSync(path.join(path.dirname(tmpDir), 'escaped.ts'))).toBe(false);
   });
 
   it('fails a write with ERR_WRITE_FAILED under --json', async () => {

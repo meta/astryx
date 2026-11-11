@@ -105,7 +105,7 @@ export const doc = {
     },
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'an output path holds a non-empty file without the generated header, such as package.json, app source, or an output from a CLI before 0.6.7; nothing is written. Delete the file and run the same build again (the suggestion), or pick another out path',
+      when: 'a path that out names holds a non-empty file without the generated header, such as package.json, app source, or an output from a CLI before 0.6.7; nothing is written. Delete the file and run the same build again (the suggestion), or pick another out path. At the default paths beside the source, and at family output paths, a header-less file is an output of a CLI before 0.6.7 and is replaced',
     },
     {
       code: 'ERR_INVALID_ARGUMENT',

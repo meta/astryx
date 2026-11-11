@@ -398,6 +398,32 @@ describe('themeAdd', () => {
     expect(Object.keys(record.themes).sort()).toEqual(['ocean', 'reef']);
   });
 
+  it('reports a lock it cannot take as ERR_WRITE_FAILED and writes nothing', async () => {
+    installTheme();
+    const blocker = path.join(tmpDir, 'not-a-folder');
+    fs.writeFileSync(blocker, '');
+    const saved = {
+      XDG_CACHE_HOME: process.env.XDG_CACHE_HOME,
+      HOME: process.env.HOME,
+    };
+    process.env.XDG_CACHE_HOME = blocker;
+    process.env.HOME = blocker;
+    try {
+      await expect(themeAdd('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+        code: 'ERR_WRITE_FAILED',
+        message: expect.stringMatching(/^Could not take the lock /),
+      });
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+    expect(fs.existsSync(path.join(tmpDir, 'src/astryx-themes.ts'))).toBe(
+      false,
+    );
+  });
+
   it('skips a broken local theme folder for every other theme, and names it when asked for', async () => {
     installTheme();
     const broken = path.join(tmpDir, 'src', 'themes', 'mine');

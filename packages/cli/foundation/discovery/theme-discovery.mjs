@@ -1345,17 +1345,17 @@ function copiedThemeFiles(files, entry, descriptor, exportName, bundled) {
  * Discover and validate one theme root.
  * @param {string} themeRoot absolute root containing one directory per slug
  * @param {string} owner package that owns the root
- * @param {{bundled?: boolean, allowUnmigrated?: boolean, onFolderError?: (slug: string, error: Error) => void}} [options] a bundled root is the CLI's own; its
+ * @param {{bundled?: boolean, allowUnmigrated?: boolean, skip?: Set<string>, progress?: {slug?: string}}} [options] a bundled root is the CLI's own; its
  *   sources are checked by the CLI's tests rather than on every read. A local
  *   root may skip released source copies until `astryx upgrade` adds descriptors.
- *   With `onFolderError`, a theme folder that fails validation is reported
- *   through it and skipped, so one broken folder does not hide the others.
+ *   `skip` names theme folders to leave out; `progress.slug` is set to the
+ *   folder being read, so a caller can tell which folder an error is about.
  * @returns {DiscoveredTheme[]}
  */
 export function discoverThemeDirectory(
   themeRoot,
   owner,
-  {bundled = false, allowUnmigrated = false, onFolderError} = {},
+  {bundled = false, allowUnmigrated = false, skip, progress} = {},
 ) {
   if (!fs.existsSync(themeRoot) || !fs.statSync(themeRoot).isDirectory()) {
     throw new Error(
@@ -1393,201 +1393,192 @@ export function discoverThemeDirectory(
     .sort((a, b) => a.name.localeCompare(b.name));
 
   for (const directory of directories) {
-    try {
-      const slug = directory.name;
-      const listing = listThemeFolder(path.join(themeRoot, slug));
-      const evidence = themeEvidence(listing);
-      if (evidence === undefined) continue;
-      if (!THEME_SLUG_RE.test(slug)) {
-        throw new Error(
-          `Theme root for ${owner} has invalid directory "${slug}"; use lowercase kebab-case starting with a letter.`,
-        );
-      }
-      const normalizedSlug = slug.toLowerCase();
-      if (slugs.has(normalizedSlug)) {
-        throw new Error(
-          `Theme root for ${owner} declares duplicate slug "${slug}".`,
-        );
-      }
-      slugs.add(normalizedSlug);
+    const slug = directory.name;
+    if (skip?.has(slug)) continue;
+    if (progress) progress.slug = slug;
+    const listing = listThemeFolder(path.join(themeRoot, slug));
+    const evidence = themeEvidence(listing);
+    if (evidence === undefined) continue;
+    if (!THEME_SLUG_RE.test(slug)) {
+      throw new Error(
+        `Theme root for ${owner} has invalid directory "${slug}"; use lowercase kebab-case starting with a letter.`,
+      );
+    }
+    const normalizedSlug = slug.toLowerCase();
+    if (slugs.has(normalizedSlug)) {
+      throw new Error(
+        `Theme root for ${owner} declares duplicate slug "${slug}".`,
+      );
+    }
+    slugs.add(normalizedSlug);
 
-      const sourceDir = resolveThemePath(
-        slug,
-        themeRoot,
-        `theme "${slug}" directory`,
+    const sourceDir = resolveThemePath(
+      slug,
+      themeRoot,
+      `theme "${slug}" directory`,
+    );
+    const theme = `Theme "${slug}" for ${owner}`;
+    if (listing.symlinks.length > 0) {
+      throw new Error(
+        `${theme} contains symlink "${listing.symlinks[0]}"; theme files must be regular files inside the theme directory.`,
       );
-      const theme = `Theme "${slug}" for ${owner}`;
-      if (listing.symlinks.length > 0) {
-        throw new Error(
-          `${theme} contains symlink "${listing.symlinks[0]}"; theme files must be regular files inside the theme directory.`,
-        );
-      }
-      const descriptors = listing.files.filter(file =>
-        file.endsWith(THEME_DOC_SUFFIX),
+    }
+    const descriptors = listing.files.filter(file =>
+      file.endsWith(THEME_DOC_SUFFIX),
+    );
+    const docs = descriptors.filter(file => !file.includes('/'));
+    if (
+      allowUnmigrated &&
+      descriptors.length === 0 &&
+      unmigratedThemeCopy(sourceDir)
+    ) {
+      continue;
+    }
+    if (docs.length !== 1) {
+      const detail =
+        docs.length > 1
+          ? `: ${quoted(docs)}`
+          : evidence.includes('/')
+            ? `; "${evidence}" is in a subfolder`
+            : ` beside "${evidence}"`;
+      const themeDoc = formatCliCommand('docs authoring theme-doc', sourceDir);
+      const fix =
+        docs.length > 1
+          ? `Fix: keep the one descriptor that shares its stem with the theme's source and delete the rest.`
+          : evidence.includes('/')
+            ? `Fix: move "${evidence}" up into ${slug}/, beside where its descriptor goes.`
+            : THEME_SOURCE_RE.test(evidence)
+              ? `Fix: add ${evidence.replace(/\.[^.]+$/u, '')}${THEME_DOC_SUFFIX} beside it with type: 'theme' and name: '${slug}'; \`${themeDoc}\` lists its fields.`
+              : `Fix: add a descriptor that shares its stem with the theme's source, with type: 'theme' and name: '${slug}'; \`${themeDoc}\` lists its fields.`;
+      throw new Error(
+        `${theme} must contain exactly one same-stem .doc.mjs descriptor; found ${docs.length}${detail}. ${fix}`,
       );
-      const docs = descriptors.filter(file => !file.includes('/'));
-      if (
-        allowUnmigrated &&
-        descriptors.length === 0 &&
-        unmigratedThemeCopy(sourceDir)
-      ) {
-        continue;
-      }
-      if (docs.length !== 1) {
-        const detail =
-          docs.length > 1
-            ? `: ${quoted(docs)}`
-            : evidence.includes('/')
-              ? `; "${evidence}" is in a subfolder`
-              : ` beside "${evidence}"`;
-        const themeDoc = formatCliCommand(
-          'docs authoring theme-doc',
+    }
+    const nested = descriptors.find(file => file.includes('/'));
+    if (nested) {
+      throw new Error(
+        `${theme} contains more than one .doc.mjs descriptor: "${docs[0]}" and "${nested}".`,
+      );
+    }
+
+    const docPath = resolveThemePath(
+      docs[0],
+      sourceDir,
+      `theme "${slug}" descriptor`,
+    );
+    const label = themeDescriptorLabel(docPath, owner);
+    const exportName = docs[0].slice(0, -THEME_DOC_SUFFIX.length);
+    if (!/^[$A-Z_a-z][$\w]*$/u.test(exportName)) {
+      throw new Error(
+        `${label} has stem "${exportName}", which is not a valid runtime export name.`,
+      );
+    }
+    const sources = THEME_MODULE_EXTENSIONS.map(
+      extension => `${exportName}${extension}`,
+    ).filter(file => listing.files.includes(file));
+    if (sources.length !== 1) {
+      const fix =
+        sources.length > 1
+          ? (builtThemeSourceFix(sourceDir, sources, docs[0], exportName) ??
+            `Fix: keep one of them; the theme's source is a single module.`)
+          : `Fix: add ${exportName}.ts beside ${docs[0]}, exporting \`${exportName}\` from defineTheme.`;
+      throw new Error(
+        `${theme} must contain exactly one same-stem source for ${docs[0]}; found ${sources.length}${sources.length > 1 ? `: ${quoted(sources)}` : ''}. ${fix}`,
+      );
+    }
+
+    const doc = readThemeDoc(docPath, owner);
+    if (doc.name !== slug) {
+      throw new Error(
+        `${label} names "${doc.name}" but its directory is "${slug}".`,
+      );
+    }
+    const entry = sources[0];
+    const entryPath = resolveThemePath(
+      entry,
+      sourceDir,
+      `theme "${slug}" entry`,
+    );
+
+    if (!bundled) {
+      const allowedFiles = new Set(
+        listing.files
+          .map(file =>
+            resolveThemePath(file, sourceDir, `theme "${slug}" file`),
+          )
+          .filter(file => file !== docPath),
+      );
+      const jscodeshift = sourceParser();
+      try {
+        validateThemeModuleGraph(
+          entryPath,
+          jscodeshift,
           sourceDir,
+          allowedFiles,
+          owner,
+          entry,
+          docPath,
         );
-        const fix =
-          docs.length > 1
-            ? `Fix: keep the one descriptor that shares its stem with the theme's source and delete the rest.`
-            : evidence.includes('/')
-              ? `Fix: move "${evidence}" up into ${slug}/, beside where its descriptor goes.`
-              : THEME_SOURCE_RE.test(evidence)
-                ? `Fix: add ${evidence.replace(/\.[^.]+$/u, '')}${THEME_DOC_SUFFIX} beside it with type: 'theme' and name: '${slug}'; \`${themeDoc}\` lists its fields.`
-                : `Fix: add a descriptor that shares its stem with the theme's source, with type: 'theme' and name: '${slug}'; \`${themeDoc}\` lists its fields.`;
-        throw new Error(
-          `${theme} must contain exactly one same-stem .doc.mjs descriptor; found ${docs.length}${detail}. ${fix}`,
-        );
-      }
-      const nested = descriptors.find(file => file.includes('/'));
-      if (nested) {
-        throw new Error(
-          `${theme} contains more than one .doc.mjs descriptor: "${docs[0]}" and "${nested}".`,
-        );
-      }
-
-      const docPath = resolveThemePath(
-        docs[0],
-        sourceDir,
-        `theme "${slug}" descriptor`,
-      );
-      const label = themeDescriptorLabel(docPath, owner);
-      const exportName = docs[0].slice(0, -THEME_DOC_SUFFIX.length);
-      if (!/^[$A-Z_a-z][$\w]*$/u.test(exportName)) {
-        throw new Error(
-          `${label} has stem "${exportName}", which is not a valid runtime export name.`,
-        );
-      }
-      const sources = THEME_MODULE_EXTENSIONS.map(
-        extension => `${exportName}${extension}`,
-      ).filter(file => listing.files.includes(file));
-      if (sources.length !== 1) {
-        const fix =
-          sources.length > 1
-            ? (builtThemeSourceFix(sourceDir, sources, docs[0], exportName) ??
-              `Fix: keep one of them; the theme's source is a single module.`)
-            : `Fix: add ${exportName}.ts beside ${docs[0]}, exporting \`${exportName}\` from defineTheme.`;
-        throw new Error(
-          `${theme} must contain exactly one same-stem source for ${docs[0]}; found ${sources.length}${sources.length > 1 ? `: ${quoted(sources)}` : ''}. ${fix}`,
-        );
-      }
-
-      const doc = readThemeDoc(docPath, owner);
-      if (doc.name !== slug) {
-        throw new Error(
-          `${label} names "${doc.name}" but its directory is "${slug}".`,
-        );
-      }
-      const entry = sources[0];
-      const entryPath = resolveThemePath(
-        entry,
-        sourceDir,
-        `theme "${slug}" entry`,
-      );
-
-      if (!bundled) {
-        const allowedFiles = new Set(
-          listing.files
-            .map(file =>
-              resolveThemePath(file, sourceDir, `theme "${slug}" file`),
-            )
-            .filter(file => file !== docPath),
-        );
-        const jscodeshift = sourceParser();
-        try {
-          validateThemeModuleGraph(
+        if (
+          !moduleExportsName(
             entryPath,
+            exportName,
             jscodeshift,
             sourceDir,
             allowedFiles,
-            owner,
-            entry,
-            docPath,
-          );
-          if (
-            !moduleExportsName(
-              entryPath,
-              exportName,
-              jscodeshift,
+          )
+        ) {
+          throw new ThemeRuntimeExportError(
+            builtModuleDescriptorMessage(
+              label,
               sourceDir,
-              allowedFiles,
-            )
-          ) {
-            throw new ThemeRuntimeExportError(
-              builtModuleDescriptorMessage(
-                label,
-                sourceDir,
-                entry,
-                exportName,
-                docs[0],
-                slug,
-                listing.files,
-              ) ??
-                `Theme "${slug}" for ${owner} entry "${entry}" does not export "${exportName}".`,
-            );
-          }
-        } catch (error) {
-          if (
-            error instanceof ThemeModuleReferenceError ||
-            error instanceof ThemeRuntimeExportError
-          ) {
-            throw error;
-          }
-          const message =
-            error instanceof Error ? error.message : String(error);
-          throw new Error(
-            `Theme "${slug}" for ${owner} entry "${entry}" could not be parsed: ${message}`,
-            {cause: error},
+              entry,
+              exportName,
+              docs[0],
+              slug,
+              listing.files,
+            ) ??
+              `Theme "${slug}" for ${owner} entry "${entry}" does not export "${exportName}".`,
           );
         }
+      } catch (error) {
+        if (
+          error instanceof ThemeModuleReferenceError ||
+          error instanceof ThemeRuntimeExportError
+        ) {
+          throw error;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Theme "${slug}" for ${owner} entry "${entry}" could not be parsed: ${message}`,
+          {cause: error},
+        );
       }
-
-      themes.push({
-        slug,
-        displayName: doc.displayName,
-        description: doc.description,
-        maintained: doc.maintained,
-        entry,
-        exportName,
-        files: copiedThemeFiles(
-          listing.files,
-          entry,
-          docs[0],
-          exportName,
-          bundled,
-        ),
-        package: owner,
-        source: bundled ? 'bundled' : 'package',
-        sourceDir,
-        bundled,
-        docPath,
-      });
-    } catch (error) {
-      if (!onFolderError) throw error;
-      onFolderError(
-        directory.name,
-        error instanceof Error ? error : new Error(String(error)),
-      );
     }
+
+    themes.push({
+      slug,
+      displayName: doc.displayName,
+      description: doc.description,
+      maintained: doc.maintained,
+      entry,
+      exportName,
+      files: copiedThemeFiles(
+        listing.files,
+        entry,
+        docs[0],
+        exportName,
+        bundled,
+      ),
+      package: owner,
+      source: bundled ? 'bundled' : 'package',
+      sourceDir,
+      bundled,
+      docPath,
+    });
   }
 
+  if (progress) progress.slug = undefined;
   return themes;
 }
 
@@ -1704,7 +1695,9 @@ export function discoverBundledThemes() {
  * Discover authored themes in the app's conventional local themes root.
  * @param {string} projectDir
  * @param {string} [owner]
- * @param {{onFolderError?: (slug: string, error: Error) => void}} [options] see discoverThemeDirectory
+ * @param {{onFolderError?: (slug: string, error: Error) => void}} [options]
+ *   with `onFolderError`, a theme folder that fails validation is reported
+ *   through it and left out, so one broken folder does not hide the others
  * @returns {DiscoveredTheme[]}
  */
 export function discoverLocalThemes(
@@ -1714,10 +1707,30 @@ export function discoverLocalThemes(
 ) {
   const root = path.resolve(projectDir, owner);
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return [];
-  return discoverThemeDirectory(root, owner, {
-    allowUnmigrated: true,
-    onFolderError,
-  }).map(theme => ({
+  /** @type {Set<string>} */
+  const skip = new Set();
+  /** @type {{slug?: string}} */
+  const progress = {};
+  let discovered;
+  for (;;) {
+    try {
+      discovered = discoverThemeDirectory(root, owner, {
+        allowUnmigrated: true,
+        skip,
+        progress,
+      });
+      break;
+    } catch (error) {
+      const slug = progress.slug;
+      if (!onFolderError || slug === undefined) throw error;
+      skip.add(slug);
+      onFolderError(
+        slug,
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    }
+  }
+  return discovered.map(theme => ({
     ...theme,
     package: owner,
     packageDir: projectDir,

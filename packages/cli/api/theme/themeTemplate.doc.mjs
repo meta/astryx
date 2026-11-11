@@ -26,15 +26,7 @@ export const doc = {
   importPath: '@astryxdesign/cli/api',
   signature:
     'themeTemplate(options?: {targetPath?: string, overwrite?: boolean, cwd?: string}): ThemeTemplateResponse',
-  keywords: [
-    'theme',
-    'template',
-    'starter',
-    'defineTheme',
-    'scaffold',
-    'reference',
-    'tokens',
-  ],
+  keywords: ['theme', 'template', 'starter', 'defineTheme', 'scaffold', 'reference', 'tokens'],
   params: [
     {
       name: 'options.targetPath',
@@ -45,8 +37,7 @@ export const doc = {
     {
       name: 'options.overwrite',
       type: 'boolean',
-      description:
-        'Replace an existing file instead of reporting it untouched.',
+      description: 'Replace an existing file instead of reporting it untouched.',
       default: 'false',
     },
     {
@@ -71,7 +62,7 @@ export const doc = {
     },
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'overwrite names a file that is not a copy of the template or a theme source, or a file in a folder the theme editor made (it holds a .settings.json)',
+      when: 'overwrite names a file that is not a copy of the template or a theme source, or a file in a folder the theme editor made (folder <slug>/ holds <slug>.settings.json)',
     },
     {code: 'ERR_WRITE_FAILED', when: 'the template file cannot be written'},
   ],
@@ -83,11 +74,5 @@ export const doc = {
     },
   ],
   command: 'theme template',
-  related: [
-    'themeAdd',
-    'themeEject',
-    'themeBuild',
-    'themeListAvailable',
-    'themeTargets',
-  ],
+  related: ['themeAdd', 'themeEject', 'themeBuild', 'themeListAvailable', 'themeTargets'],
 };

@@ -16,22 +16,16 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../../../foundation/fs/paths.mjs';
-import {
-  assertWithin,
-  PathSafetyError,
-} from '../../../foundation/fs/path-safety.mjs';
+import {assertWithin, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
 import {stripCopyrightHeader} from '../../../foundation/text/copyright-header.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 import {fsErrorMessage} from '../../../foundation/fs/fs-error.mjs';
+import {editorThemeRecord} from '../../../foundation/config/theme-state.mjs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 
 /** The annotated `defineTheme` reference that ships with the CLI. */
-export const THEME_TEMPLATE_SRC = path.join(
-  CLI_ROOT,
-  'assets',
-  'theme.template.ts',
-);
+export const THEME_TEMPLATE_SRC = path.join(CLI_ROOT, 'assets', 'theme.template.ts');
 
 /** Where it lands when the caller does not say. */
 export const THEME_TEMPLATE_DEFAULT_PATH = 'theme.template.ts';
@@ -111,11 +105,7 @@ export function themeTemplate(options = {}) {
     resolved = assertWithin(targetPath, cwd, {label: 'theme template path'});
   } catch (err) {
     if (err instanceof PathSafetyError) {
-      throw new AstryxError(
-        err.message,
-        undefined,
-        ERROR_CODES.ERR_PATH_TRAVERSAL,
-      );
+      throw new AstryxError(err.message, undefined, ERROR_CODES.ERR_PATH_TRAVERSAL);
     }
     throw err;
   }
@@ -152,7 +142,9 @@ export function themeTemplate(options = {}) {
   }
 
   const editorRecord =
-    fs.existsSync(resolved) && overwrite ? editorRecordBeside(resolved) : null;
+    fs.existsSync(resolved) && overwrite
+      ? editorThemeRecord(path.dirname(resolved))
+      : null;
   if (editorRecord) {
     throw new AstryxError(
       `${relative} belongs to a theme the theme editor made (${editorRecord} is beside it). Replacing it would cut the theme off from its settings, so --overwrite does not replace it.`,
@@ -190,16 +182,11 @@ export function themeTemplate(options = {}) {
   }
 
   if (fs.existsSync(resolved) && !overwrite) {
-    return {
-      type: 'theme.template',
-      data: {path: relative, written: false, reason: 'exists'},
-    };
+    return {type: 'theme.template', data: {path: relative, written: false, reason: 'exists'}};
   }
 
   // Our repo header has no business in someone else's source tree.
-  const contents = stripCopyrightHeader(
-    fs.readFileSync(THEME_TEMPLATE_SRC, 'utf-8'),
-  );
+  const contents = stripCopyrightHeader(fs.readFileSync(THEME_TEMPLATE_SRC, 'utf-8'));
   try {
     fs.mkdirSync(path.dirname(resolved), {recursive: true});
     fs.writeFileSync(resolved, contents);
@@ -210,10 +197,7 @@ export function themeTemplate(options = {}) {
     throw new AstryxError(message, undefined, ERROR_CODES.ERR_WRITE_FAILED);
   }
 
-  return {
-    type: 'theme.template',
-    data: {path: relative, written: true, reason: null},
-  };
+  return {type: 'theme.template', data: {path: relative, written: true, reason: null}};
 }
 
 /** @param {string} file */
@@ -222,23 +206,5 @@ function isDirectory(file) {
     return fs.statSync(file).isDirectory();
   } catch {
     return false;
-  }
-}
-
-/**
- * The theme editor's record in a file's folder, if there is one. The editor
- * owns every theme file in that folder and regenerates it from the record.
- * @param {string} file
- * @returns {string | null}
- */
-function editorRecordBeside(file) {
-  try {
-    return (
-      fs
-        .readdirSync(path.dirname(file))
-        .find(name => name.endsWith('.settings.json')) ?? null
-    );
-  } catch {
-    return null;
   }
 }

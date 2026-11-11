@@ -829,18 +829,25 @@ function themeFilesIn(dir) {
 }
 
 /**
- * Refuse a build that would replace a file it does not own. A build replaces
- * only its own earlier outputs (they carry the `@generated` header) and empty
- * files. It never writes over its input, another file such as `package.json`
- * or app source, two of its own outputs at one path, or an output another
- * theme in the same run already wrote.
+ * Refuse a build that would replace a file it does not own. A build never
+ * writes over its input, two of its own outputs at one path, or an output
+ * another theme in the same run already wrote. With `refuseUnmarked`, it also
+ * replaces only its own earlier outputs (they carry the `@generated` header)
+ * and empty files, never another file such as `package.json` or app source.
  * @param {Array<{dest: string}>} writes
  * @param {string} filePath the theme source
  * @param {string} cwd
- * @param {Map<string, string>} [claimed] outputs written earlier in this run, by the source that wrote them
- * @param {string} [rerun] this build's command, to run again once the file is gone
+ * @param {{claimed?: Map<string, string>, rerun?: string, refuseUnmarked?: boolean, elsewhere?: string}} [options]
+ *   `claimed`: outputs written earlier in this run, by the source that wrote
+ *   them; `rerun`: this build's command, to run again once the file is gone;
+ *   `elsewhere`: the option that moves the outputs
  */
-function assertOutputsReplaceable(writes, filePath, cwd, claimed, rerun) {
+function assertOutputsReplaceable(
+  writes,
+  filePath,
+  cwd,
+  {claimed, rerun, refuseUnmarked = false, elsewhere = '--out'} = {},
+) {
   const rel = (/** @type {string} */ file) => path.relative(cwd, file);
   const sourceKey = outputKey(filePath);
   const sourceHead = fileHead(filePath);
@@ -901,16 +908,20 @@ function assertOutputsReplaceable(writes, filePath, cwd, claimed, rerun) {
     }
     if (stat.isDirectory()) {
       throw new AstryxError(
-        `The output ${rel(write.dest)} is a folder. Pick another --out.`,
+        `The output ${rel(write.dest)} is a folder. Move the folder, or pick another ${elsewhere}.`,
         undefined,
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }
     // Outputs from CLIs before 0.6.7 have no header, so they read as files
     // the build did not write; only the user can say they may go.
-    if (stat.size > 0 && !fileHead(write.dest).includes(GENERATED_MARKER)) {
+    if (
+      refuseUnmarked &&
+      stat.size > 0 &&
+      !fileHead(write.dest).includes(GENERATED_MARKER)
+    ) {
       throw new AstryxError(
-        `${rel(write.dest)} was written by an older CLI (before 0.6.7) or by hand, so the build does not replace it. Delete that file and run the same build again, or pick another --out.`,
+        `${rel(write.dest)} was written by an older CLI (before 0.6.7) or by hand, so the build does not replace it. Delete that file and run the same build again, or pick another ${elsewhere}.`,
         rerun
           ? [
               {
@@ -3821,13 +3832,14 @@ async function themeBuildInternal(
     confineOutputs(writes, writeRoot, options.out ? OUT_REMEDY : SOURCE_REMEDY);
     // prettier-ignore
     const rerun = formatCliCommand(['theme', 'build', path.relative(cwd, filePath), ...(options.out ? ['--out', options.out] : []), ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])].map(shellWord).join(' '), cwd);
-    assertOutputsReplaceable(
-      writes,
-      filePath,
-      cwd,
-      options.__claimedOutputs,
+    // A header-less file at the default paths beside the source is an output
+    // of a CLI before 0.6.7, which the build has always replaced. A path that
+    // --out names may hold anything, so there only build outputs are replaced.
+    assertOutputsReplaceable(writes, filePath, cwd, {
+      claimed: options.__claimedOutputs,
       rerun,
-    );
+      refuseUnmarked: Boolean(options.out),
+    });
   }
 
   // Check mode: compare generated content against what's on disk instead of
@@ -4479,7 +4491,14 @@ export async function themeBuildFamily(
     dts: path.relative(cwd, dtsPath),
   };
   // A family build's outputs stay inside cwd too; check mode only reads them.
-  if (!options.check) confineOutputs(writes, cwd, FAMILY_REMEDY);
+  if (!options.check) {
+    confineOutputs(writes, cwd, FAMILY_REMEDY);
+    // Family outputs always go to the family's default paths, where a
+    // header-less file is an output of a CLI before 0.6.7: it is replaced.
+    assertOutputsReplaceable(writes, root.filePath, cwd, {
+      elsewhere: '--family-key',
+    });
+  }
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);
     const upToDate = stale.length === 0;

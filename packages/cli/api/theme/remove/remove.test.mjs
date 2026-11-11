@@ -93,20 +93,14 @@ describe('themeRemove', () => {
     });
   });
 
-  it('removes a default whose source is gone and makes the next theme the default', async () => {
+  it('still refuses to remove the default when its source is gone, and names theme use', async () => {
     fs.rmSync(path.join(tmpDir, 'node_modules/@acme/themes/themes/ocean'), {
       recursive: true,
     });
-
-    const result = await themeRemove('ocean', {cwd: tmpDir});
-
-    expect(result.data.default).toBe('reef');
-    expect(result.data.notes).toEqual(['"reef" is now the default theme.']);
-    expect(
-      parseThemeModuleRecord(
-        fs.readFileSync(path.join(tmpDir, 'src/astryx-themes.ts'), 'utf-8'),
-      ),
-    ).toEqual({themes: {reef: '@acme/themes'}, defaultSlug: 'reef'});
+    await expect(themeRemove('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message: expect.stringContaining(' theme use <other-slug>`'),
+    });
   });
 
   it('removes a non-default theme whose source is gone', async () => {

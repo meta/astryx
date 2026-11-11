@@ -54,7 +54,11 @@ describe('themeEject (api/theme/eject)', () => {
     }
     expect(
       fs.readFileSync(
-        path.join(tmpDir, result.data.outputDir, 'neutralTheme.doc.mjs'),
+        path.join(
+          tmpDir,
+          result.data.outputDir,
+          'neutralTheme.doc.mjs',
+        ),
         'utf-8',
       ),
     ).toContain('maintained: false');

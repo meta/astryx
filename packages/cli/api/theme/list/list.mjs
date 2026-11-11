@@ -114,7 +114,7 @@ export async function themeListAvailable(options = {}) {
     ...(unmigratedCopies.length > 0 || skippedThemes.length > 0
       ? {
           meta: {
-            ...(unmigratedCopies.length > 0 ? {unmigratedCopies} : {}),
+            unmigratedCopies,
             ...(skippedThemes.length > 0 ? {skippedThemes} : {}),
           },
         }

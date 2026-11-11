@@ -33,7 +33,7 @@ export const doc = {
     {
       type: 'theme.app',
       description:
-        'Every remaining theme and its imports, the default slug, the generated module path, and the remove change. A default whose folder or package is gone can be removed: the next available theme becomes the default, and data.notes says so. Other added themes whose source is gone are left out, with a note.',
+        'Every remaining theme and its imports, the default slug, the generated module path, and the remove change. The default is never removed: choose another with themeUse first, which also works when the folder or package of the default is gone. Other added themes whose local folder or package is gone are left out, with a note in data.notes.',
     },
   ],
   throws: [
