@@ -632,9 +632,9 @@ works on is `spec:AST-040` FR9's.
   by the Claude Code and Codex plugins, separate from the computer-level file
   (FR8). Each host's plugin and marketplace manifests MAY carry that host's
   listing metadata (description, homepage, and related presentation fields the
-  host reads) while pointing at the same skill. `renderComputerAgentText` generates
-  the skill. A `--check` run MUST fail when the committed file differs from the
-  generated skill.
+  host or its plugin directory reads) while pointing at the same skill.
+  `renderComputerAgentText` generates the skill. A `--check` run MUST fail when
+  the committed file differs from the generated skill.
 
 ### Computer-level agent files
 
