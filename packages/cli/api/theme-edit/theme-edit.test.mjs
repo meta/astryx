@@ -628,6 +628,15 @@ describe('how on a picture', () => {
     ]);
   });
 
+  it('refuses a point outside the picture, naming its size', async () => {
+    fs.writeFileSync(path.join(cwd, 'p.png'), png());
+    const r = await refusal(() =>
+      themeEditHow('p.png', {cwd, at: ['-1,0', '9,9']}),
+    );
+    expect(r.code).toBe('ERR_INVALID_ARGUMENT');
+    expect(r.message).toContain('-1,0; 9,9 are outside the picture');
+  });
+
   it('reads points in every accepted form', () => {
     expect(parsePoints(['1,2 3,4'])).toEqual([
       {x: 1, y: 2},
