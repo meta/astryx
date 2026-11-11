@@ -55,11 +55,13 @@ its folder. The agent is not sandboxed, so the runner audits it instead (below).
   Today only `astryx init` writes one.
 
 After the agent stops, the runner reads its transcript. A path that reaches the
-home folder, the repository or another run, or any use of a web tool or a
-sub-agent, is a violation, and the run fails as `integrity`. Paths in shell
-commands resolve from the folder the shell is in after each `cd`. Heredoc bodies
-are file content, so the audit skips them. Other outside paths are warnings to
-review. When the agent exits or times out, the runner kills its whole process
+home folder, the repository or any run under the run root, a folder that holds
+one of them (such as `/`), or any use of a web tool or a sub-agent, is a
+violation, and the run fails as `integrity`. Paths in shell commands resolve
+from the folder the agent's shell is in, which persists between commands.
+Heredoc bodies that are file content are skipped; bodies that an interpreter
+runs are scanned for path literals. The agent's own session folder, where it
+saves long tool output, is allowed. Other outside paths are warnings to review. When the agent exits or times out, the runner kills its whole process
 group, so a server it started does not keep running.
 
 A run where the agent fails before its first turn, writes no result, or cannot

@@ -236,9 +236,22 @@ async function judge({record, lines, workspace, runRoot, arm, task, browser, mod
   record.passed = record.failure === null;
 }
 
-function sensitiveRootsFor(runDir) {
-  // Real paths, because agents see the workspace through its real path.
-  return [runDir, REPO_ROOT, os.homedir()].map(root => fs.realpathSync(root));
+/**
+ * This run, every other run under the default run root (they hold other agents'
+ * solutions and the self-test references), the repository and the home folder.
+ * Each root is listed by its given path and its real path, because a symlink
+ * (for example the macOS temp folder) gives one folder two names.
+ */
+export function sensitiveRootsFor(runDir) {
+  const roots = [runDir, path.dirname(defaultRunDir()), REPO_ROOT, os.homedir()];
+  const realOrSame = root => (fs.existsSync(root) ? fs.realpathSync(root) : root);
+  return [...new Set(roots.flatMap(root => [path.resolve(root), realOrSame(root)]))];
+}
+
+/** The agent facts a regrade needs, from a saved record. A run that timed out has no result. */
+export function agentFromRecord(record) {
+  const agent = record.agent ?? {};
+  return {initModel: agent.initModel ?? null, result: Array.isArray(agent.models) ? {models: agent.models} : null};
 }
 
 /**
@@ -277,7 +290,7 @@ async function regrade(dir) {
           browser,
           model: meta.model,
           sensitiveRoots,
-          agent: {initModel: record.agent?.initModel ?? null, result: {models: record.agent?.models ?? []}},
+          agent: agentFromRecord(record),
         });
       } finally {
         fs.rmSync(modules, {recursive: true, force: true});

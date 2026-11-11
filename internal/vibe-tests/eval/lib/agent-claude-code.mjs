@@ -36,6 +36,7 @@ export function buildArgs({prompt, model, maxBudgetUsd, instructions}) {
     'WebFetch',
     'WebSearch',
     'Task',
+    'Agent',
   ];
   if (instructions) args.push('--append-system-prompt', instructions);
   return args;
@@ -130,6 +131,7 @@ export function runClaudeCode({
     liveGroups.add(child);
     let buffered = '';
     const lines = [];
+    child.stdout.setEncoding('utf8');
     child.stdout.on('data', chunk => {
       buffered += chunk;
       const parts = buffered.split('\n');

@@ -13,7 +13,7 @@ import path from 'node:path';
 /** System locations an agent may name without reading project data. */
 const ALLOWED_PREFIXES = ['/dev/null', '/dev/stdout', '/dev/stderr', '/usr/', '/bin/', '/etc/', '/lib', '/proc/self/'];
 
-const BLOCKED_TOOLS = new Set(['WebFetch', 'WebSearch', 'Task']);
+const BLOCKED_TOOLS = new Set(['WebFetch', 'WebSearch', 'Task', 'Agent']);
 
 function* toolUses(lines) {
   for (const line of lines) {
@@ -31,17 +31,44 @@ function* toolUses(lines) {
   }
 }
 
-/** Removes heredoc bodies: they hold file content, not paths the shell opens. */
-export function stripHeredocs(command) {
-  return command.replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2(?=\n|$)/g, '');
+/** Programs that run a heredoc body as code, so the body is audited too. */
+const INTERPRETER = /(?:^|[\s|;&(])(?:python3?|node|deno|bun|tsx|bash|sh|zsh|ruby|perl)(?=[\s<]|$)/;
+
+/**
+ * Splits heredoc bodies from the shell text. A body that is file content, such
+ * as `cat > App.tsx <<'EOF'`, is dropped. A body that an interpreter runs is
+ * code, so it is returned for a separate scan. The marker line stays in the
+ * shell text, so its redirect is audited.
+ * @returns {{shell: string, code: string[]}}
+ */
+export function splitHeredocs(command) {
+  const code = [];
+  const shell = command.replace(
+    /([^\n]*)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n([\s\S]*?)\n\s*\3(?=\n|$)/g,
+    (_whole, before, _quote, _marker, after, body) => {
+      if (INTERPRETER.test(before)) code.push(body);
+      return `${before} ${after}`;
+    },
+  );
+  return {shell, code};
 }
 
+/** In code, a path is a string literal, so division and comments are not paths. */
+const CODE_PATH_PATTERN = /(['"`])((?:\/|~\/|\$HOME\/|\.\.\/)[^'"`\s]*)\1/g;
+
+const HOME_PREFIX = /^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/;
 const PATH_PATTERN =
-  /(?:^|[\s'"=:(<>])((?:\/[\w.-]|~\/|\$HOME\/|\.\.(?:\/|(?=[\s;&|)]|$)))[^\s'"`;|&)<>]*)/g;
+  /(?:^|[\s'"=:(<>])((?:\/(?=[\w.-]|[\s;&|)'"]|$)|(?:~|\$HOME|\$\{HOME\})(?=[\/\s;&|)'"]|$)|\.\.(?=[\/\s;&|)'"]|$))[^\s'"`;|&)<>]*)/g;
 
 /** Absolute, home-relative and parent-relative paths named in one shell segment. */
 export function pathsInCommand(command) {
   return [...command.matchAll(PATH_PATTERN)].map(match => match[1]);
+}
+
+/** Resolves a raw path from the shell folder, expanding the home folder forms. */
+export function resolveRaw(raw, cwd, home) {
+  const fromHome = HOME_PREFIX.exec(raw);
+  return fromHome ? path.join(home, raw.slice(fromHome[0].length)) : path.resolve(cwd, raw);
 }
 
 /**
@@ -51,16 +78,21 @@ export function pathsInCommand(command) {
  * command leaves it.
  * @returns {{found: {raw: string, resolved: string}[], cwd: string}}
  */
-export function resolveCommandPaths(command, workspace, startCwd = workspace) {
+export function resolveCommandPaths(command, workspace, startCwd = workspace, home = os.homedir()) {
   let cwd = startCwd;
   const found = [];
-  for (const segment of stripHeredocs(command).split(/&&|\|\||;|\n/)) {
+  const {shell, code} = splitHeredocs(command);
+  for (const segment of shell.split(/&&|\|\||;|\n/)) {
     const trimmed = segment.trim();
-    const cd = /^cd\s+(['"]?)([^'"\s]+)\1\s*$/.exec(trimmed);
-    for (const raw of pathsInCommand(trimmed)) {
-      found.push({raw, resolved: path.resolve(cwd, raw)});
-    }
-    if (cd && !cd[2].startsWith('~') && !cd[2].startsWith('$')) cwd = path.resolve(cwd, cd[2]);
+    for (const raw of pathsInCommand(trimmed)) found.push({raw, resolved: resolveRaw(raw, cwd, home)});
+    const cd = /^cd(?:\s+(['"]?)([^'"\s]+)\1)?\s*$/.exec(trimmed);
+    if (!cd) continue;
+    const target = cd[2] ?? '~';
+    // Other variables are unknown, so the folder stays where it was.
+    if (!target.startsWith('$') || HOME_PREFIX.test(target)) cwd = resolveRaw(target, cwd, home);
+  }
+  for (const body of code) {
+    for (const match of body.matchAll(CODE_PATH_PATTERN)) found.push({raw: match[2], resolved: resolveRaw(match[2], cwd, home)});
   }
   return {found, cwd: isInside(cwd, workspace) ? cwd : workspace};
 }
@@ -72,7 +104,7 @@ function isInside(candidate, workspace) {
 
 /**
  * A path inside a sensitive root (the home folder, the repository with the
- * probes, other workspaces) is a violation. Any other outside path is a
+ * probes, other runs), or a folder that holds one, is a violation. Any other outside path is a
  * warning to review: a command can name a path without reading it.
  * @param {string[]} lines
  * @param {string} workspace real path of the workspace
@@ -86,16 +118,15 @@ export function auditTranscript(lines, workspace, sensitiveRoots = [], home = os
   // The agent saves long tool output in its own session folder and reads it back.
   const ownSession = path.join(home, '.claude', 'projects', workspace.replace(/[^A-Za-z0-9]/g, '-'));
   let shellCwd = workspace;
-  const check = (raw, tool, resolved = path.resolve(workspace, raw)) => {
-    const fromHome = /^(~|\$HOME)\//.exec(raw);
-    if (fromHome) resolved = path.join(home, raw.slice(fromHome[0].length));
+  const check = (raw, tool, resolved = resolveRaw(raw, workspace, home)) => {
     if (isInside(resolved, ownSession)) return;
-    if (fromHome) {
+    if (HOME_PREFIX.test(raw)) {
       violations.push({tool, path: raw});
       return;
     }
     if (isInside(resolved, workspace)) return;
-    if (sensitiveRoots.some(root => isInside(resolved, root))) {
+    // A folder that holds a sensitive root reaches it too, for example `find / -name …`.
+    if (sensitiveRoots.some(root => isInside(resolved, root) || isInside(root, resolved))) {
       violations.push({tool, path: raw});
       return;
     }
@@ -113,11 +144,11 @@ export function auditTranscript(lines, workspace, sensitiveRoots = [], home = os
     for (const key of ['file_path', 'path', 'notebook_path']) {
       if (typeof input[key] === 'string') check(input[key], use.name);
     }
-    if (use.name === 'Glob' && typeof input.pattern === 'string' && /^(\/|~|\.\.)/.test(input.pattern)) {
+    if (use.name === 'Glob' && typeof input.pattern === 'string' && /^(\/|~|\$HOME|\$\{HOME\}|\.\.)/.test(input.pattern)) {
       check(input.pattern, use.name);
     }
     if (typeof input.command === 'string') {
-      const {found, cwd} = resolveCommandPaths(input.command, workspace, shellCwd);
+      const {found, cwd} = resolveCommandPaths(input.command, workspace, shellCwd, home);
       for (const {raw, resolved} of found) check(raw, use.name, resolved);
       shellCwd = cwd;
       if (/\b(astryx|shadcn)\b/.test(input.command)) docsCommands.push(input.command.slice(0, 200));

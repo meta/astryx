@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {auditTranscript, pathsInCommand} from './transcript-audit.mjs';
+import {auditTranscript, pathsInCommand, resolveCommandPaths} from './transcript-audit.mjs';
 
 const WORKSPACE = '/runs/r1/runs/task__arm__r1/workspace';
 const SENSITIVE = ['/runs/r1', '/repo', '/home/agent'];
@@ -21,7 +21,9 @@ describe('pathsInCommand', () => {
 
   it('ignores JSX, URLs, comments and division', () => {
     const heredoc = "cat > src/App.tsx <<'EOF'\n<Button /> // note\nconst a = 1 / 2;\nfetch('https://example.com/x')\nEOF";
-    expect(pathsInCommand(heredoc)).toEqual([]);
+    expect(resolveCommandPaths(heredoc, '/w').found).toEqual([]);
+    const script = "python3 - <<'EOF'\nx = 1 / 2  # see /notes\nprint(open('src/App.tsx').read())\nEOF";
+    expect(resolveCommandPaths(script, '/w').found).toEqual([]);
   });
 });
 
@@ -105,5 +107,28 @@ describe('agent shell state', () => {
     const other = '/home/agent/.claude/projects/-runs-r1-runs-other-workspace/s2/tool-results/t.txt';
     const lines = [toolUse('Bash', {command: `grep Button ${own}`}), toolUse('Read', {file_path: other})];
     expect(auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent').violations).toEqual([{tool: 'Read', path: other}]);
+  });
+});
+
+describe('reads the review found unaudited', () => {
+  const audit = command => auditTranscript([toolUse('Bash', {command})], WORKSPACE, SENSITIVE, '/home/agent');
+
+  it.each([
+    'ls ~',
+    'cat ${HOME}/.npmrc',
+    'ls $HOME',
+    'cd ~ && cat .npmrc',
+    "find / -name '*.probe.mjs'",
+    'cd / && cat repo/x',
+    "cat <<'EOF' > /repo/x.txt\nhello\nEOF",
+    "python3 - <<'EOF'\nprint(open('/repo/secret').read())\nEOF",
+  ])('flags %j', command => {
+    expect(audit(command).violations.length).toBeGreaterThan(0);
+  });
+
+  it('blocks the sub-agent tool under its current name', () => {
+    expect(auditTranscript([toolUse('Agent', {prompt: 'x'})], WORKSPACE, SENSITIVE).violations).toEqual([
+      {tool: 'Agent', path: '(blocked tool)'},
+    ]);
   });
 });

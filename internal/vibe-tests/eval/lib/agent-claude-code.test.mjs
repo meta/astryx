@@ -15,7 +15,7 @@ describe('buildArgs', () => {
     expect(args[args.indexOf('--model') + 1]).toBe('model-x');
     expect(args[args.indexOf('--max-budget-usd') + 1]).toBe('2');
     const disallowed = args.slice(args.indexOf('--disallowedTools') + 1);
-    expect(disallowed).toEqual(['WebFetch', 'WebSearch', 'Task']);
+    expect(disallowed).toEqual(['WebFetch', 'WebSearch', 'Task', 'Agent']);
     expect(args).not.toContain('--append-system-prompt');
   });
 

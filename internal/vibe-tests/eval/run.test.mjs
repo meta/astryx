@@ -1,7 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {agentErrorReason, Budget, modelMismatch, parseOptions, planJobs} from './run.mjs';
+import {agentErrorReason, agentFromRecord, Budget, modelMismatch, parseOptions, planJobs, sensitiveRootsFor} from './run.mjs';
 
 describe('parseOptions', () => {
   it('requires a pinned model and a total cap for a run', () => {
@@ -76,5 +79,23 @@ describe('modelMismatch', () => {
     expect(modelMismatch({initModel: 'm-1', result: {models: ['m-1', 'helper']}}, 'm-1')).toBe(false);
     expect(modelMismatch({initModel: 'm-2', result: {models: ['m-2']}}, 'm-1')).toBe(true);
     expect(modelMismatch({initModel: null, result: {models: ['helper']}}, 'm-1')).toBe(true);
+  });
+});
+
+describe('regrade', () => {
+  it('keeps a timed-out run out of model-mismatch', () => {
+    const timedOut = {agent: {exitCode: null, timedOut: true, initModel: 'm-1'}};
+    expect(modelMismatch(agentFromRecord(timedOut), 'm-1')).toBe(false);
+    const other = {agent: {initModel: 'm-2', models: ['m-2']}};
+    expect(modelMismatch(agentFromRecord(other), 'm-1')).toBe(true);
+  });
+});
+
+describe('sensitiveRootsFor', () => {
+  it('lists the run, other runs, the repository and the home folder by given and real path', () => {
+    const roots = sensitiveRootsFor(os.tmpdir());
+    expect(roots).toContain(path.join(os.tmpdir(), 'astryx-vibe-eval'));
+    expect(roots).toContain(fs.realpathSync(os.homedir()));
+    expect(roots).toContain(path.resolve(os.homedir()));
   });
 });
