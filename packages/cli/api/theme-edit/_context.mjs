@@ -295,12 +295,29 @@ export async function previewAfter(ctx, slug, data, png) {
   };
 }
 
-/** @param {string | undefined} section a section of the sheet */
-export function checkSection(section) {
-  if (section != null && !SHOWCASE_GROUPS.includes(section))
+/**
+ * The section of the sheet, in lower case, or undefined; a refusal for one
+ * that is not a section.
+ * @param {string | undefined} section
+ * @param {string} [theme] the theme the suggestions name
+ * @returns {string | undefined}
+ */
+export function checkSection(section, theme = 'my') {
+  if (section === '')
+    refuse(E.ERR_MISSING_ARGUMENT, '--section was given no value.', {
+      run: [`${P} show ${theme} --section ${SHOWCASE_GROUPS[0]}`],
+    });
+  const s = section?.toLowerCase();
+  if (s != null && !SHOWCASE_GROUPS.includes(s))
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `--section takes ${SHOWCASE_GROUPS.join(', ')}, not "${section}".`,
-      {didYouMean: nearest(section, SHOWCASE_GROUPS)},
+      {
+        didYouMean: nearest(s, SHOWCASE_GROUPS),
+        run: [
+          `${P} show ${theme} --section ${nearest(s, SHOWCASE_GROUPS)[0] ?? SHOWCASE_GROUPS[0]}`,
+        ],
+      },
     );
+  return s;
 }

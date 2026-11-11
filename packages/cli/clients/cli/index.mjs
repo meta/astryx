@@ -12,7 +12,7 @@
  * the full program in program.mjs.
  */
 
-import {Command, Option} from 'commander';
+import {Command, Help, Option} from 'commander';
 import {fileURLToPath} from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -363,8 +363,10 @@ const READS_EVERY_COMMAND = new Set(['manifest']);
  * first operand after the root's own options, so this reads the arguments the
  * same way. It returns that one command, no command for a run that only
  * prints the version, or null for every command. These runs load every
- * command: help, the manifest, `help <command>`, an unknown word, and a flag
- * the root does not declare. They print or read the whole list.
+ * command: the root help when no stored list ships (a checkout; the published
+ * package prints it from the list, see `printsRootHelp`), the manifest,
+ * `help <command>`, an unknown word, and a flag the root does not declare.
+ * They print or read the whole list.
  *
  * @param {import('commander').Command} program the root, with its options
  * @param {string[]} argv the arguments after `astryx`
@@ -426,6 +428,63 @@ export function resolveDeepHelp(program) {
     }
     return dispatch(name);
   };
+}
+
+/**
+ * Where the root help's command list is stored: each command's name, and the
+ * term and description the root help prints for it, as the fully loaded
+ * program gives them. `prepack` writes it (scripts/generate-command-list.mjs),
+ * so the published package prints its root help without loading every
+ * command. A checkout has none and loads them.
+ */
+export const COMMAND_LIST_FILE = path.join(__dirname, 'commands.generated.json');
+
+/**
+ * Whether a run only prints the root help: `--help`, `-h` or `help`, alone.
+ * @param {string[]} argv
+ * @returns {boolean}
+ */
+function printsRootHelp(argv) {
+  return argv.length === 1 && ['--help', '-h', 'help'].includes(argv[0]);
+}
+
+/**
+ * The stored command list, or null when there is none or it cannot be read.
+ * @returns {Array<{name: string, term: string, description: string}> | null}
+ */
+function storedCommandList() {
+  try {
+    return JSON.parse(fs.readFileSync(COMMAND_LIST_FILE, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Give `program` a command for each stored row, which the root help prints
+ * with the row's term and description. Commander adds its own `help`
+ * command, so a stored `help` row adds none.
+ * @param {import('commander').Command} program
+ * @param {Array<{name: string, term: string, description: string}>} rows
+ */
+function listStoredCommands(program, rows) {
+  /** @type {Map<string, {term: string, description: string}>} */
+  const byName = new Map();
+  for (const row of rows) {
+    if (row.name === 'help') continue;
+    byName.set(row.name, row);
+    program.command(row.name);
+  }
+  const help = program.configureHelp();
+  program.configureHelp({
+    ...help,
+    subcommandTerm: cmd =>
+      byName.get(cmd.name())?.term ??
+      Help.prototype.subcommandTerm.call(program.createHelp(), cmd),
+    subcommandDescription: cmd =>
+      byName.get(cmd.name())?.description ??
+      Help.prototype.subcommandDescription.call(program.createHelp(), cmd),
+  });
 }
 
 const SETUP_NUDGE_EXEMPT = new Set(['init', 'agent-docs']);
@@ -840,7 +899,9 @@ export async function createProgram({argv} = {}) {
   });
 
   const loads = argv == null ? null : commandsForArgs(program, argv);
-  for (const cmd of commands) {
+  const listed = argv != null && printsRootHelp(argv) ? storedCommandList() : null;
+  if (listed) listStoredCommands(program, listed);
+  for (const cmd of listed ? [] : commands) {
     if (loads != null && !loads.has(cmd.name)) continue;
     try {
       const mod = await import(cmd.path);

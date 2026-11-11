@@ -1,14 +1,6 @@
 {
   "$comment": "Module-scope cross-module identity the FR3 check knows about (spec:AST-110 FR3, FR7). \"open\" names the fix group that removes the entry; \"allowed\" gives the approved reason. A new hit or a stale entry fails scripts/shared-identity.test.mjs.",
   "entries": {
-    "packages/core/src/AppShell/useAppShellMainId.ts:claims": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/AppShell/useAppShellMainId.ts:listeners": {
-      "status": "open",
-      "group": "triage"
-    },
     "packages/core/src/BottomSheet/BottomSheetPanel.tsx:stopViewportResize": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
@@ -64,14 +56,6 @@
     "packages/core/src/DateInput/nativeDateSegments.ts:cachedEngine": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
-    },
-    "packages/core/src/List/listLayoutUpdates.ts:keptStyles": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/List/listLayoutUpdates.ts:reportedRows": {
-      "status": "open",
-      "group": "triage"
     },
     "packages/core/src/List/listReorderEngine.tsx:sessionsByOptions": {
       "status": "open",

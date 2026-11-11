@@ -64,7 +64,9 @@ describe('paletteFiles', () => {
       config: 'themes/brand/palette.config.json',
       palette: 'themes/brand/tokens/brand.palette.ts',
       receipt: 'themes/brand/tokens/brand.palette.receipt.json',
+      refs: 'themes/brand/tokens/brand.palette-refs.ts',
       importPath: './tokens/brand.palette',
+      refsImportPath: './tokens/brand.palette-refs',
     });
   });
 
@@ -74,9 +76,11 @@ describe('paletteFiles', () => {
     expect(f.importPath).toBe('./tokens/my-theme.palette');
   });
 
-  it('keeps the import path as the palette file without its extension', () => {
+  it('keeps each import path as its file without the extension', () => {
     const f = paletteFiles('brand');
     expect(`themes/brand/${f.importPath.slice(2)}.ts`).toBe(f.palette);
+    // The theme imports only the stops it uses, from the refs file.
+    expect(`themes/brand/${f.refsImportPath.slice(2)}.ts`).toBe(f.refs);
   });
 });
 
@@ -160,15 +164,24 @@ describe('mappingRows', () => {
     const swap = (/** @type {string[]} */ rows, /** @type {string} */ w) =>
       rows.map(r => r.replaceAll(w, 'X'));
     const base = swap(mappingRows('success'), 'success');
-    expect(swap(mappingRows('warning'), 'warning')).toEqual(base);
     expect(swap(mappingRows('info'), 'info')).toEqual(base);
     expect(swap(mappingRows('danger'), 'error')).toEqual(base);
+    // Warning differs in one row only: text on its fill is near-black first,
+    // as the official themes put it.
+    const warning = swap(mappingRows('warning'), 'warning');
+    const onRow = (/** @type {string} */ r) => r.startsWith('--color-on-X:');
+    expect(warning.filter(r => !onRow(r))).toEqual(base.filter(r => !onRow(r)));
+    expect(warning.find(onRow)).toContain('near-black first in both modes');
   });
 
   it('shows the neutral mapping as shades, tints and moving text', () => {
     const rows = mappingRows('neutral');
     expect(rows.length).toBeGreaterThan(5);
-    expect(rows[0]).toMatch(/^--[\w-]+: light shade \d+, dark shade \d+/);
+    // First the exact neutral color, then each token's shades.
+    expect(rows[0]).toMatch(/^your exact color sits at its own shade/);
+    expect(rows.filter(r => r.startsWith('--'))[0]).toMatch(
+      /^--[\w-]+: light shade \d+, dark shade \d+/,
+    );
     expect(rows.some(r => /at opacity/.test(r))).toBe(true);
     // Secondary text and icons move until they read: icons need 3:1, text 4.5:1.
     const secondary = rows.filter(r => r.includes('-secondary:'));
@@ -206,6 +219,10 @@ describe('paletteNotes', () => {
     /** @type {any} */ ({
       tokens: tokens ?? {'--color-error': stop('danger', '--color-error')},
       contrast,
+      // No main token set exactly, no hand edits kept, no seeds to name.
+      exact: {},
+      notes: [],
+      families: [],
     });
 
   it('has nothing to say with no palette', () => {
@@ -215,8 +232,8 @@ describe('paletteNotes', () => {
   it("names the main token's shade in each mode, then the generated files", () => {
     const notes = paletteNotes(mapping([]), 'danger', 'brand');
     expect(notes).toEqual([
-      '--color-error uses danger shade 50 (#aa0000) in light and shade 70 (#ff8888) in dark',
-      'the generated colors are in themes/brand/tokens/brand.palette.ts, made from themes/brand/palette.config.json (receipt: themes/brand/tokens/brand.palette.receipt.json)',
+      '--color-error uses danger shade 50 (#aa0000) in light and danger shade 70 (#ff8888) in dark',
+      'the generated colors are in themes/brand/tokens/brand.palette.ts, made from themes/brand/palette.config.json (receipt: themes/brand/tokens/brand.palette.receipt.json); the theme imports only the shades it uses, from themes/brand/tokens/brand.palette-refs.ts',
     ]);
   });
 
