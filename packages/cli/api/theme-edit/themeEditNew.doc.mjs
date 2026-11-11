@@ -26,7 +26,8 @@ export const doc = {
     {
       name: 'theme',
       type: 'string',
-      description: 'The theme name: lowercase letters, digits and dashes.',
+      description:
+        'The theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most.',
       required: true,
     },
     {

@@ -14,12 +14,12 @@ import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {themeBuildForReport} from '../theme/build/build.mjs';
-import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {
   AUTO_SPREAD,
   CORNERS,
@@ -49,6 +49,7 @@ import {
 } from './_color.mjs';
 import {
   PALETTE_DIALS,
+  assertNoPlaceholder,
   paletteImport,
   paletteMapping,
   syncPalette,
@@ -84,7 +85,13 @@ import {baseResolved, baseThemeFile} from './_project.mjs';
  * @property {string} [palette] - The hash of the palette.config.json the editor last wrote.
  */
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, wrote?: Map<string, string | null>}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>}}} Ctx */
+/** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
+/** @typedef {import('./_parts.mjs').TextPair} TextPair */
+
+/** What a theme name may be, in words. */
+export const NAME_RULE =
+  'lowercase letters, digits and dashes, starting with a letter, 64 characters at most';
 
 /** A theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most. @param {string} s */
 export const slugOk = s =>
@@ -193,12 +200,24 @@ export function refuse(code, message, extra = {}) {
  * @returns {ThemeData}
  */
 export function loadTheme(cwd, slug, skip = '') {
-  if (!slugOk(slug))
+  if (!slugOk(slug)) {
+    // A path or a capital letter typed for a theme that exists names it.
+    const plain = String(slug ?? '')
+      .toLowerCase()
+      .replace(/^.*themes[\\/]/, '')
+      .replace(/[\\/].*$/, '');
+    const same =
+      slugOk(plain) && fs.existsSync(themeFiles(cwd, plain).settings)
+        ? plain
+        : null;
     refuse(
       ERROR_CODES.ERR_INVALID_ARGUMENT,
-      `"${slug ?? ''}" is not a theme name (lowercase letters, digits, dashes).`,
-      {run: [`${P} new my-theme`]},
+      `"${String(slug ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}).`,
+      same
+        ? {didYouMean: [same], run: [`${P} show ${same}`]}
+        : {run: [`${P} new my-theme`]},
     );
+  }
   const f = themeFiles(cwd, slug);
   if (!fs.existsSync(f.settings)) {
     const have = fs.existsSync(f.root)
@@ -206,13 +225,30 @@ export function loadTheme(cwd, slug, skip = '') {
           .readdirSync(f.root)
           .filter(d => fs.existsSync(themeFiles(cwd, d).settings))
       : [];
+    // A typed path or case of a theme that exists names that theme.
+    const plain = String(slug)
+      .toLowerCase()
+      .replace(/^.*themes[\\/]/, '')
+      .replace(/[\\/].*$/, '');
+    const same = have.includes(plain) ? plain : null;
     refuse(
       ERROR_CODES.ERR_UNKNOWN_THEME,
       `There is no theme "${slug}" made by this command (no themes/${slug}/${slug}.settings.json).`,
-      {didYouMean: nearest(slug, have), run: [`${P} new ${slug}`]},
+      {
+        didYouMean: same ? [same] : nearest(slug, have),
+        run: same ? [`${P} show ${same}`] : [`${P} new ${slug}`],
+      },
     );
   }
   refuseLinks(cwd, slug);
+  // undo is offered only when there is a step to go back to.
+  const steps = readHistory(f.history).steps.length;
+  const recover = steps
+    ? {
+        text: `, or step back to the settings before the last change with ${P} undo ${slug} (the last change is then lost)`,
+        run: [{name: `${P} undo ${slug}`, reason: 'do this instead'}],
+      }
+    : {text: '; there is no earlier step to go back to', run: []};
   /** @type {any} */
   let data;
   try {
@@ -221,31 +257,42 @@ export function loadTheme(cwd, slug, skip = '') {
     );
   } catch (e) {
     throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json is not valid JSON (${e instanceof Error ? e.message : String(e)}). Fix it by hand, or run ${P} undo ${slug}.`,
-      [{name: `${P} undo ${slug}`, reason: 'do this instead'}],
+      `themes/${slug}/${slug}.settings.json is not valid JSON (${e instanceof Error ? e.message : String(e)}). Fix it by hand${recover.text}.`,
+      recover.run,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
   const problem = settingsProblem(data, skip);
   // A value made under looser rules is not damage: the command that
   // changes or removes that setting still works.
-  const thing = problem ? badThing(data) : null;
-  if (problem && thing && settingsProblem(data, thing) !== problem)
+  const bad = problem ? badSetting(data) : null;
+  if (problem && bad && settingsProblem(data, bad.thing) !== problem) {
+    // A value it takes, for a dial; a color for a color token.
+    const example = DIALS[bad.thing]
+      ? DIALS[bad.thing].values.split('|').find(w => !w.startsWith('<'))
+      : bad.thing.startsWith('--color-')
+        ? '#1f2937'
+        : null;
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json: ${problem}, a value the editor no longer accepts. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
       [
-        {name: `${P} undo ${slug} ${thing}`, reason: 'do this instead'},
-        {
-          name: `${P} set ${slug} ${thing} <value>`,
-          reason: 'or give it a value it takes',
-        },
+        {name: `${P} undo ${slug} ${undoArgs(bad)}`, reason: 'do this instead'},
+        ...(example
+          ? [
+              {
+                name: `${P} set ${slug} ${undoArgs(bad).replace(bad.thing, `${bad.thing} ${q(example)}`)}`,
+                reason: 'or give it a value it takes',
+              },
+            ]
+          : []),
       ],
       ERROR_CODES.ERR_THEME_INVALID,
     );
+  }
   if (problem)
     throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json: ${problem}. Fix it by hand, or step back to the settings before the last change with ${P} undo ${slug}. Nothing was changed.`,
-      [{name: `${P} undo ${slug}`, reason: 'do this instead'}],
+      `themes/${slug}/${slug}.settings.json: ${problem}. Fix it by hand${recover.text}. Nothing was changed.`,
+      recover.run,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   return data;
@@ -268,6 +315,7 @@ export function settingsProblem(data, skip = '') {
   if (data.like != null && !LIKE.includes(data.like))
     return `base "${data.like}" is not a built-in theme (${LIKE.join(', ')})`;
   if (!Array.isArray(data.settings)) return 'settings is not a list';
+  const keys = new Set();
   for (const s of data.settings) {
     if (!s || typeof s.thing !== 'string' || typeof s.value !== 'string')
       return 'a setting has no thing or value';
@@ -278,6 +326,9 @@ export function settingsProblem(data, skip = '') {
         return `${s.thing} has a ${k} that is not a word`;
     if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
       return `${s.thing} has mode "${s.mode}"`;
+    const key = keyOf(s);
+    if (keys.has(key)) return `${describe(s)} is listed twice`;
+    keys.add(key);
     if (s.thing === skip) continue;
     const problem = valueProblem(s);
     if (problem) return problem;
@@ -286,14 +337,29 @@ export function settingsProblem(data, skip = '') {
 }
 
 /**
- * The thing of the first setting whose only problem is its value (made
- * under looser rules): `undo <theme> <thing>` removes it.
- * @param {any} data
- * @returns {string | null}
+ * The words that name a setting for `undo`.
+ * @param {import('./_settings.mjs').Setting} x
  */
-export function badThing(data) {
+export function undoArgs(x) {
+  return [
+    x.thing,
+    ...(x.on ? [`--on ${x.on}`] : []),
+    ...(x.when ? [`--when ${x.when}`] : []),
+    ...(x.state ? [`--state ${x.state}`] : []),
+    ...(x.mode ? [`--mode ${x.mode}`] : []),
+    ...(x.only ? ['--only'] : []),
+  ].join(' ');
+}
+
+/**
+ * The first setting whose only problem is its value (made under looser
+ * rules): `undo <theme> <undoArgs>` removes it.
+ * @param {any} data
+ * @returns {Setting | null}
+ */
+export function badSetting(data) {
   for (const s of Array.isArray(data?.settings) ? data.settings : [])
-    if (s && typeof s.thing === 'string' && valueProblem(s)) return s.thing;
+    if (s && typeof s.thing === 'string' && valueProblem(s)) return s;
   return null;
 }
 
@@ -320,6 +386,12 @@ function valueProblem(s) {
   {
     const bad = `${s.thing} "${s.value}"`;
     if (!isSafeValue(s.value)) return `${bad} cannot be a CSS value`;
+    if (s.source === 'token') {
+      if (s.mode && !s.thing.startsWith('--color-'))
+        return `${s.thing} is set for ${s.mode} only, but only colors differ by mode`;
+      if (new RegExp(`var\\(\\s*${s.thing}\\s*[,)]`, 'i').test(s.value))
+        return `${bad} reads itself`;
+    }
     if (s.source !== 'dial') return null;
     const d = DIALS[s.thing];
     if (!d) return `${s.thing} is not a dial`;
@@ -554,7 +626,17 @@ export function compileTheme(ctx, data, base) {
   const headingWeightTokens = Object.keys(TOKENS).filter(k =>
     /^--text-(heading|display)-\d-weight$/.test(k),
   );
-  for (const s of data.settings) {
+  // Dials first, then exact tokens and part properties: an exact setting
+  // always wins over a dial, whatever the order they were made in.
+  // A font for one role (body, heading, code) comes after the whole-theme
+  // font, so the role keeps its own font whatever the order.
+  const roleFont = (/** @type {Setting} */ x) => x.thing === 'font' && !!x.on;
+  const ordered = [
+    ...data.settings.filter(x => x.source === 'dial' && !roleFont(x)),
+    ...data.settings.filter(x => x.source === 'dial' && roleFont(x)),
+    ...data.settings.filter(x => x.source !== 'dial'),
+  ];
+  for (const s of ordered) {
     // A setting for the mode a one-mode theme does not have stays saved but
     // does not apply (maskedSettings names it).
     if (modeOnly && s.mode && s.mode !== modeOnly) continue;
@@ -569,7 +651,11 @@ export function compileTheme(ctx, data, base) {
             putComp({...s, mode: undefined}, t, 'borderRadius', val(px));
         else {
           putTok('--radius-element', val(px));
-          putTok('--radius-inner', val(Math.round(px * 0.6)));
+          // A checkbox stays a rounded square next to a round radio.
+          putTok(
+            '--radius-inner',
+            px >= 9999 ? '6px' : val(Math.round(px * 0.6)),
+          );
           putTok(
             '--radius-container',
             px >= 9999 ? '24px' : `${Math.round(px * 1.25)}px`,
@@ -656,9 +742,11 @@ export function compileTheme(ctx, data, base) {
         };
       } else if (s.thing === 'spacing') {
         const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
-        for (const [k, v] of Object.entries(
+        // The rungs scale the spacing the base theme starts from.
+        for (const [k, core] of Object.entries(
           /** @type {Record<string, string>} */ (TOKENS),
         )) {
+          const v = base.light[k] ?? core;
           let nv = null;
           if (/^--spacing-/.test(k) && /rem$/.test(v))
             nv = `${Number((parseFloat(v) * f).toFixed(3))}rem`;
@@ -889,7 +977,7 @@ function settingsSource(slug, data, theme, pal) {
   }
   let usesPalette = false;
   const body = JSON.stringify(out, null, 2).replace(
-    /"@@palette:(?:(black|white)|([a-z][a-z0-9-]*)\.(light|dark)\.(\d+)(?:\+([0-9a-f]{2}))?)"/g,
+    /"@@palette:(?:(black|white)|([a-z][a-z0-9-]*)\.(light|dark)\.(\d+(?:\.\d+)?)(?:\+([0-9a-f]{2}))?)"/g,
     (_, end, family, m, stop, alpha) => {
       usesPalette = true;
       if (end) return `palette.${end}`;
@@ -988,6 +1076,9 @@ export async function buildTheme(ctx, slug, data) {
     });
     receipt = await step(() => runBuild(ctx, slug));
   }
+  for (const out of [f.css, f.js])
+    if (fs.existsSync(out))
+      assertNoPlaceholder(shown(cwd, out), fs.readFileSync(out, 'utf8'));
   // Font notices are reported by the font dial itself, once.
   const warnings = [
     ...(receipt?.data?.warnings ?? []),
@@ -1081,7 +1172,7 @@ export async function resolvedTokens(ctx, slug) {
  */
 export async function contrastProblems(ctx, data, res) {
   const base = await baseResolved(ctx.project, data.like);
-  /** @param {import('./_parts.mjs').PaintSide} side @param {'fg' | 'bg'} which @param {string} m */
+  /** @param {PaintSide} side @param {'fg' | 'bg'} which @param {string} m */
   const override = (side, which, m) => {
     if (!side.target) return null;
     const props =
@@ -1099,7 +1190,7 @@ export async function contrastProblems(ctx, data, res) {
       );
     return hit?.value ?? null;
   };
-  /** @type {(p: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', m: string) => string | null} */
+  /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const value = (p, side, m) => {
     const s = p[side];
     return (
@@ -1109,7 +1200,7 @@ export async function contrastProblems(ctx, data, res) {
         : s.raw)
     );
   };
-  /** @type {(p: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', m: string) => string | null} */
+  /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const baseValue = (p, side, m) => {
     const s = p[side];
     return s.tokens.length
@@ -1137,6 +1228,28 @@ export async function contrastProblems(ctx, data, res) {
     ...(more
       ? [`and ${more} more text pair${more > 1 ? 's' : ''} below 4.5:1`]
       : []),
+    // Pairs styled for one variant or state are not measured yet.
+    ...(() => {
+      const scoped = data.settings.filter(
+        x =>
+          (x.on &&
+            (x.when || x.state) &&
+            (/^(color|background|background-color)$/.test(x.thing) ||
+              /^--color-/.test(x.thing))) ||
+          // The button style recolors the primary button only.
+          (x.thing === 'buttons' && ['soft', 'outline'].includes(x.value)),
+      );
+      return scoped.length
+        ? [
+            `not checked: text contrast for ${scoped
+              .slice(0, 3)
+              .map(describe)
+              .join(
+                '; ',
+              )}${scoped.length > 3 ? ` and ${scoped.length - 3} more` : ''}, set for one variant or state`,
+          ]
+        : [];
+    })(),
     ...(unchecked.length
       ? [
           `not checked: text on or in ${unchecked.slice(0, 3).join(', ')}${unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : ''}, which ${unchecked.length === 1 ? 'is' : 'are'} not a fixed color`,
@@ -1323,14 +1436,36 @@ export function settingsStamp(data) {
  * @param {ThemeData} data
  */
 export function buildCurrent(cwd, slug, data) {
+  return staleBuild(cwd, slug, data) == null;
+}
+
+/**
+ * Why the theme's build does not match its settings, in words, or null when
+ * it does: a file missing, another CLI version, settings changed since the
+ * build (a hand edit), or a build left half done (a command stopped).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {ThemeData} data
+ * @returns {string | null}
+ */
+export function staleBuild(cwd, slug, data) {
   const f = themeFiles(cwd, slug);
-  if (![f.js, f.css, f.settingsTs].every(p => fs.existsSync(p))) return false;
+  const missing = [f.js, f.css, f.settingsTs].find(p => !fs.existsSync(p));
+  if (missing) return `${path.basename(missing)} was missing`;
   const ts = fs.readFileSync(f.settingsTs, 'utf8');
-  return (
-    ts.includes(`// Built from settings ${settingsStamp(data)}.`) &&
-    ts.trimEnd().endsWith('});') &&
-    fs.statSync(f.css).mtimeMs >= fs.statSync(f.settingsTs).mtimeMs - 1000
-  );
+  const stamp =
+    /\/\/ Built from settings ([0-9a-f]{16}) \(CLI ([^)]+)\)\./.exec(ts);
+  const [hash] = settingsStamp(data).split(' ');
+  if (stamp && stamp[1] === hash && stamp[2] !== cliVersion())
+    return `it was built by CLI ${stamp[2]}, and this is ${cliVersion()}`;
+  if (!stamp || stamp[1] !== hash)
+    return `${slug}.settings.json changed after the build (edited by hand, or by another tool)`;
+  if (
+    !ts.trimEnd().endsWith('});') ||
+    fs.statSync(f.css).mtimeMs < fs.statSync(f.settingsTs).mtimeMs - 1000
+  )
+    return 'the last build did not finish (a command stopped while building)';
+  return null;
 }
 
 /** @param {string} dir */

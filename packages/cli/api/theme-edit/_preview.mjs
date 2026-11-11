@@ -335,7 +335,13 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     source,
     templateFiles(imports),
   );
-  const out = options.out ?? themeFiles(project.cwd, slug).sheet;
+  // One section goes to its own file, so the full sheet stays whole.
+  const full = themeFiles(project.cwd, slug).sheet;
+  const out =
+    options.out ??
+    (options.group
+      ? path.join(path.dirname(full), `sheet-${options.group}.html`)
+      : full);
   fs.mkdirSync(path.dirname(out), {recursive: true});
   // Written whole and renamed in, never through a link.
   writeWhole(out, html);

@@ -27,3 +27,8 @@ assets/templates/components.generated.json
 # scripts/generate-stored-docs.mjs so the published package reads them instead
 # of importing each doc. Not committed: a checkout imports every doc.
 assets/docs.generated.json
+
+# The root help's command list, written at `prepack` by
+# scripts/generate-command-list.mjs so the published package prints its root
+# help without loading every command. Not committed: a checkout loads them.
+clients/cli/commands.generated.json

@@ -12,6 +12,7 @@ import {
   colorProblem,
   compositeOver,
   hex,
+  isClipped,
   isColorValue,
   parseColor,
   ratio,
@@ -97,6 +98,14 @@ describe('parseColor', () => {
       opaque: '#ff0000',
     });
     expect(colorProblem(' #7c3aed ')).toBeNull();
+    expect(colorProblem('rgb(255 0 0 / 0.999)')?.message).toContain(
+      'see-through (opacity 0.999)',
+    );
+    expect(colorProblem('rgb(255 0 0 / 0.9999)')?.message).toContain(
+      'not fully opaque',
+    );
+    expect(isClipped('color(display-p3 1 0 0)')).toBe(true);
+    expect(isClipped('#ff0000')).toBe(false);
     // Functions that compute at run time are taken as written.
     expect(isColorValue('rgb(var(--r) 0 0 / 0.5)')).toBe(true);
   });

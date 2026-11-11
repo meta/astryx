@@ -440,7 +440,7 @@ export const DIALS = {
     words: 'cta solid outline outlined soft tint caps uppercase filled',
   },
   type: {
-    help: 'The type personality: how far headings step up from body text and how they are set. compact: small steps (x1.15), semibold. standard: the default (x1.2). editorial: bigger steps (x1.3), tight tracking, semibold. display: big steps (x1.4), heavy weight, tighter tracking (a marketing feel). Text below the base size keeps its standard sizes, so small text stays readable. Works with text-size; a headings setting keeps its weight or tracking whatever the order.',
+    help: 'The type personality: how far headings step up from body text and how they are set. compact: small steps (x1.15), semibold. standard: the default (x1.2). editorial: bigger steps (x1.3), tight tracking, semibold. display: big steps (x1.4), heavy weight, tighter tracking (a marketing feel). Text below the base size keeps its standard sizes, so small text stays readable. Works with text-size; a headings setting keeps its weight or tracking whatever the order. Phones (touch screens below 1024px wide) keep the base theme reading sizes.',
     values: Object.keys(TYPE_STYLES).join('|'),
     examples: ['set my type display', 'set my type editorial'],
     words:
@@ -450,7 +450,7 @@ export const DIALS = {
     help:
       'Base text size; every heading size scales from it. Rungs: ' +
       TEXT_SIZE.map(([n, v]) => `${n} (${v}px)`).join(', ') +
-      ', or a number of pixels from 10 to 32.',
+      ', or a number of pixels from 10 to 32. Phones (touch screens below 1024px wide) keep the base theme reading sizes.',
     values: 'small|medium|large|larger|more|less|<number>',
     examples: ['set my text-size small', 'set my text-size more'],
     words: 'text size font size small big large scale',
@@ -637,3 +637,22 @@ export const COMMON_STATES = [
   'focus-within',
   'disabled',
 ];
+
+// These tables are looked up by words people type: with no prototype,
+// `constructor` or `__proto__` is never found in them.
+for (const table of [
+  FAMILIES,
+  FONTS,
+  OPEN_FONTS,
+  CLOSEST_OPEN_FONT,
+  HEADING_WEIGHTS,
+  HEADING_TRACKING,
+  SURFACES,
+  TYPE_STYLES,
+  DIALS,
+  GROUPS,
+  DIRECT,
+  THING_HINTS,
+  DESIGN,
+])
+  Object.setPrototypeOf(table, null);

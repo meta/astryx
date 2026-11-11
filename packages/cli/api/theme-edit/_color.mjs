@@ -284,10 +284,16 @@ const amount = (v, full) => (v.unit === '%' ? (v.n / 100) * full : v.n);
 /** @param {number} v @param {number} lo @param {number} hi */
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+/** How far a linear channel may stray past 0..1 before it counts as clipped. */
+const GAMUT_SLACK = 0.0005;
+/** Set when the color read last fell outside sRGB and was clipped. */
+let clipped = false;
+
 /** @param {number[]} lin linear sRGB @returns {Rgb} */
 const fromLinear = lin =>
   /** @type {Rgb} */ (
     lin.map(c => {
+      if (c < -GAMUT_SLACK || c > 1 + GAMUT_SLACK) clipped = true;
       const v = Math.max(0, Math.min(1, c));
       return (
         255 *
@@ -414,6 +420,7 @@ export function compositeOver(over, alpha, under) {
  * @returns {{rgb: Rgb, alpha: number} | null}
  */
 function readColor(s) {
+  clipped = false;
   const m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(s);
   if (m) {
     let h = m[1];
@@ -518,6 +525,16 @@ export function parseColor(value) {
 }
 
 /**
+ * Whether a fixed color lies outside sRGB (a wide-gamut `color(display-p3
+ * …)` or a strong `oklch()`), so the RGB {@link parseColor} gives is the
+ * nearest sRGB color, not the color itself.
+ * @param {unknown} value
+ */
+export function isClipped(value) {
+  return readColor(String(value ?? '').trim()) != null && clipped;
+}
+
+/**
  * Why a value cannot seed a color dial, or null when it is one fixed,
  * opaque color: `opaque` is the color without its alpha, for a suggestion.
  * @param {unknown} value
@@ -530,7 +547,7 @@ export function colorProblem(value) {
   if (read)
     return {
       kind: 'translucent',
-      message: `is see-through (opacity ${Math.round(read.alpha * 100) / 100}), and a color needs to be opaque to generate shades from`,
+      message: `is ${Math.round(read.alpha * 1000) / 1000 >= 1 ? 'not fully opaque' : `see-through (opacity ${Math.round(read.alpha * 1000) / 1000})`}, and a color needs to be opaque to generate shades from`,
       opaque: hex(read.rgb),
     };
   const lower = s.toLowerCase();

@@ -37,6 +37,10 @@ export const PREPACK_FILES = [
     file: 'assets/docs.generated.json',
     script: 'scripts/generate-stored-docs.mjs',
   },
+  {
+    file: 'clients/cli/commands.generated.json',
+    script: 'scripts/generate-command-list.mjs',
+  },
 ];
 
 /**
