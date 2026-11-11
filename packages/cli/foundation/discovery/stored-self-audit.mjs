@@ -5,17 +5,19 @@
  * @input assets/self-audit.generated.json, written at `prepack` by
  *   scripts/generate-self-audit.mjs: for each audit, the value it found and
  *   the state of every file and folder it read.
- * @output `storedSelfAudit(name)`: the stored value while every file and folder
- *   the audit read is as it was when stored, else undefined (the caller audits
- *   as before). A checkout has no file, so it always audits.
+ * @output `storedSelfAudit(name)`: the stored value while the package version
+ *   and every doc, type file and folder the audit read are as they were when
+ *   stored, else undefined (the caller audits as before). The audit's own code
+ *   is the package's and is not checked again. A checkout has no file, so it
+ *   always audits.
  * @position Read by api/doctor/doctor.mjs. These audits read only the
  *   package's own files, so their answer is fixed until one of them changes.
  */
 
-import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
 
 /** Where the stored audits are, in the published package. */
 export const SELF_AUDIT_FILE = path.join(
@@ -23,14 +25,6 @@ export const SELF_AUDIT_FILE = path.join(
   'assets',
   'self-audit.generated.json',
 );
-
-/**
- * @param {string | Buffer} data
- * @returns {string}
- */
-function digest(data) {
-  return createHash('sha256').update(data).digest('hex').slice(0, 32);
-}
 
 /**
  * Names a folder's state leaves out, being where and how the package is
@@ -67,18 +61,18 @@ export function inputState(file) {
         .readdirSync(file)
         .filter(name => !PACKING_NAMES.test(name))
         .sort();
-      return `dir:${digest(names.join('\n'))}`;
+      return `dir:${storedKey(names.join('\n'))}`;
     }
     if (path.basename(file) === 'package.json') {
       // A packer rewrites package.json (pnpm resolves `catalog:` ranges and
       // drops lifecycle scripts): only the fields that say what the package
       // is and holds count.
       const pkg = JSON.parse(fs.readFileSync(file, 'utf-8'));
-      return `pkg:${digest(
+      return `pkg:${storedKey(
         JSON.stringify(PACKAGE_FIELDS.map(field => pkg[field] ?? null)),
       )}`;
     }
-    return digest(fs.readFileSync(file));
+    return storedKey(fs.readFileSync(file));
   } catch {
     return '-';
   }
@@ -106,9 +100,6 @@ export function selfAuditInputs(files) {
   return inputs;
 }
 
-/** @type {Record<string, {inputs: Record<string, string>, value: unknown}> | null | undefined} */
-let stored;
-
 /**
  * The stored value of the audit `name`, while every file and folder it read
  * is unchanged, else undefined.
@@ -116,14 +107,8 @@ let stored;
  * @returns {unknown}
  */
 export function storedSelfAudit(name) {
-  if (stored === undefined) {
-    try {
-      stored = JSON.parse(fs.readFileSync(SELF_AUDIT_FILE, 'utf-8'));
-    } catch {
-      stored = null;
-    }
-  }
-  const entry = stored?.[name];
+  /** @type {{inputs: Record<string, string>, value: unknown} | undefined} */
+  const entry = readStore(SELF_AUDIT_FILE).get(name);
   if (!entry) return undefined;
   for (const [rel, state] of Object.entries(entry.inputs)) {
     if (inputState(path.join(CLI_ROOT, ...rel.split('/'))) !== state) {

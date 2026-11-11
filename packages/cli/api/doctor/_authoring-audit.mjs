@@ -7,6 +7,7 @@
  */
 
 import {DocsCatalog} from '../../foundation/discovery/docs-discovery.mjs';
+import {storedSelfAudit} from '../../foundation/discovery/stored-self-audit.mjs';
 import {indexView} from '../../foundation/doc-compiler/lenses.mjs';
 import {guideEntry, lowerTopic, projectTree} from '../docs/_adapter.mjs';
 
@@ -71,3 +72,35 @@ export async function authoringAuditData(options = {}) {
 
 /** The name the authoring-docs check's data is stored under. */
 export const AUTHORING_AUDIT = 'authoring-docs';
+
+/**
+ * The authoring-docs check's data as stored at publish, while the files it
+ * read are unchanged, else undefined.
+ * @returns {AuthoringAuditData | undefined}
+ */
+function storedAuthoringAudit() {
+  const value = /** @type {any} */ (storedSelfAudit(AUTHORING_AUDIT));
+  if (!value) return undefined;
+  const {keys, ...rest} = value.topic;
+  return {
+    ...value,
+    topic: keys === null ? {keys: null, ...rest} : {keys: new Set(keys)},
+  };
+}
+
+/**
+ * The authoring-docs check's data: as stored at publish while what it read is
+ * unchanged, else read now. Another tree, list or topic index (tests) is
+ * always read now.
+ * @param {{root?: string, sources?: string[], topicKeys?: Set<string> | null}} [options]
+ * @returns {Promise<AuthoringAuditData>}
+ */
+export async function authoringAudit(options = {}) {
+  const fresh =
+    options.root !== undefined ||
+    options.sources !== undefined ||
+    options.topicKeys !== undefined;
+  return (
+    (fresh ? undefined : storedAuthoringAudit()) ?? authoringAuditData(options)
+  );
+}
