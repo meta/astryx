@@ -153,7 +153,7 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
   protected override touchesMoved(touches: ReadonlyArray<GestureTouch>): void {
     const touch = touches.find(each => each.id === this.pressTouchId);
     if (touch != null) {
-      this.latestMove = {time: touch.inputTime, arrivedAt: performance.now()};
+      this.latestMove = {time: touch.inputTime, arrivedAt: this.pageTime()};
     }
     const hasDrifted = touch != null && !this.followHold(touch);
     if (hasDrifted && this.state === 'possible') {
@@ -238,7 +238,7 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
       return;
     }
     const moment = this.holdStart + menuDisplayMs;
-    if (performance.now() - moment > LATE_TIMER_MS || this.hasLateMove()) {
+    if (this.pageTime() - moment > LATE_TIMER_MS || this.hasLateMove()) {
       this.waitForMoves();
       return;
     }
@@ -267,8 +267,13 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
     // On the arena's clock, like the hold's own deadlines. It counts from when
     // the page runs again. Behind a block, the event clock still reads the
     // moment, and moves stamped after it are still queued.
-    const from = Math.max(this.now(), performance.now());
+    const from = Math.max(this.now(), this.pageTime());
     this.setTimer(from + LATE_MOVE_GAP_MS, () => this.endMoveWait());
+  }
+
+  /** When the page runs now, on the arena's injected clock. */
+  private pageTime(): number {
+    return this.arena?.pageTime() ?? this.now();
   }
 
   private presentMenu(): void {
@@ -283,7 +288,7 @@ export class ContextMenuPressRecognizer extends LongPressGestureRecognizer {
    */
   private hasLateMove(): boolean {
     const move = this.latestMove;
-    const now = performance.now();
+    const now = this.pageTime();
     return (
       move != null &&
       move.time < this.holdStart + menuDisplayMs &&
