@@ -541,6 +541,45 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     };
   };
 
+  /**
+   * The dark shade nearest the seed's own shade (a lighter one on a tie)
+   * where text on it reads at 4.5:1 and it stands out from the dark
+   * surfaces at 3:1; null when no shade does both.
+   * @param {string} onToken @param {string} id @param {number} seedStop
+   */
+  const nearestDarkFill = (onToken, id, seedStop) => {
+    const page = surfaces('dark', id);
+    const order = [...stops]
+      .filter(s => s > 0 && s < 100)
+      .sort((a, b) => Math.abs(a - seedStop) - Math.abs(b - seedStop) || b - a);
+    for (const stop of order) {
+      const fill = ref(id, 'dark', stop).color;
+      if (Math.min(...page.map(([, bg]) => contrast(fill, bg))) < NON_TEXT)
+        continue;
+      const best = ON_FILL.dark
+        .map(on => ({on, r: contrast(ref(id, 'dark', on).color, fill)}))
+        .reduce((a, b) => (b.r > a.r + 0.01 ? b : a));
+      if (best.r < TEXT) continue;
+      if (has(onToken))
+        checks.push({
+          token: onToken,
+          mode: 'dark',
+          stop: best.on,
+          preferred: ON_FILL.dark[0],
+          against: `the fill (shade ${stop})`,
+          ratio: round(best.r),
+          needs: TEXT,
+          pass: true,
+        });
+      return {
+        fill: ref(id, 'dark', stop),
+        on: ref(id, 'dark', best.on),
+        moved: stop,
+      };
+    }
+    return null;
+  };
+
   const modes = /** @type {Mode[]} */ (['light', 'dark']);
   const neutral = fams.find(f => f.id === 'neutral');
   if (neutral) {
@@ -649,7 +688,9 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         return fillPair(names.fill, names.on, f.id, m, fillStart(f.id));
       const exact = exactDarkFill(names.fill, names.on, f.id, fillStart(f.id));
       if (exact.pair) return exact.pair;
-      const pair = fillPair(names.fill, names.on, f.id, m, FILL[1]);
+      const pair =
+        nearestDarkFill(names.on, f.id, fillStart(f.id)) ??
+        fillPair(names.fill, names.on, f.id, m, FILL[1]);
       if (has(names.fill))
         checks.push({
           token: names.fill,

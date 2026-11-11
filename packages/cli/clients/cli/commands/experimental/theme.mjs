@@ -324,14 +324,9 @@ function changeBlocks(r) {
     d.was != null
       ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
       : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; it is back to the base theme's value`}`;
-  // On undo the setting is the one removed: it prints as `removed`, never as
-  // the value now in effect.
-  const {setting, ...rest} = d;
-  void setting;
-  return [
-    status,
-    ...project(/** @type {any} */ (d.action === 'undo' ? rest : d)),
-  ];
+  // On undo, `setting` and `removed` both name the setting removed, as in
+  // the JSON; the status line says the base theme's value is back.
+  return [status, ...project(/** @type {any} */ (d))];
 }
 
 /**

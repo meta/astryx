@@ -321,9 +321,18 @@ async function change(sub, slug, thing, value, options) {
       `the ${s.thing} color is no longer generated, and the tokens it fed go back to the base theme's values`,
     );
   if (s.thing === 'neutral' && sub === 'set') {
-    const page = base.light['--color-background-body'];
+    // Only the theme's own modes; a dark theme gets no white-page offer.
+    const modes = modesOf(data);
+    const pages = modes
+      .map(m => [m, base[m]['--color-background-body']])
+      .filter(([, v]) => v)
+      .map(([m, v]) => `${v} in ${m}`);
     notes.push(
-      `the page background stays the base theme's${page ? ` (${page} in light${base.dark['--color-background-body'] ? `, ${base.dark['--color-background-body']} in dark` : ''})` : ''}; for a white or off-white page: ${P} set ${slug} --color-background-body "#ffffff"${data.mode === 'both' ? ' --mode light' : ''}`,
+      `the page background stays the base theme's${pages.length ? ` (${pages.join(', ')})` : ''}${
+        modes.includes('light')
+          ? `; for a white or off-white page: ${P} set ${slug} --color-background-body "#ffffff"${modes.length > 1 ? ' --mode light' : ''}`
+          : `; for another page color: ${P} set ${slug} --color-background-body "<color>"`
+      }`,
     );
   }
   if (s.thing === 'vibrancy') {
@@ -500,12 +509,30 @@ function partValues(ctx, data, res, mode) {
       const listed = `${parts.slice(0, 4).join(', ')}${parts.length > 4 ? `, and ${parts.length - 4} more` : ''}`;
       if (s.thing === 'corners') {
         const px = cornerPx(s.value);
-        const token = FAMILIES[s.on ?? '']
-          ? s.on === 'containers'
-            ? '--radius-container'
-            : '--radius-element'
-          : '--radius-element';
-        return `${describe(s)} -> border-radius ${px >= 9999 ? 'fully round' : `${px}px`} on ${listed} (whole theme: ${token} ${res[mode][token] ?? 'unset'})`;
+        // The radius token each part's resting corners read, as the whole-
+        // theme value they would have without this setting.
+        // A part the census saw closed (a menu, a popover) has no recorded
+        // radius: like every Core surface, it reads the container radius.
+        /** @type {Map<string, string[]>} */
+        const byToken = new Map();
+        for (const t of parts) {
+          const reads = ctx.C.partReads(t, 'corners').filter(x =>
+            x.props.includes('border-radius'),
+          );
+          const token =
+            (reads.find(x => x.when.includes('')) ?? reads[0])?.token ??
+            (['containers', 'menus'].includes(familyOf(t) ?? '')
+              ? '--radius-container'
+              : '--radius-element');
+          byToken.set(token, [...(byToken.get(token) ?? []), t]);
+        }
+        const whole = [...byToken]
+          .map(
+            ([token, ts]) =>
+              `${token} ${res[mode][token] ?? 'unset'}${byToken.size > 1 ? ` for ${ts.join(', ')}` : ''}`,
+          )
+          .join('; ');
+        return `${describe(s)} -> border-radius ${px >= 9999 ? 'fully round' : `${px}px`} on ${listed} (whole theme: ${whole})`;
       }
       const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
       return `${describe(s)} -> spacing x${f} inside ${listed} (whole theme: --spacing-4 ${res[mode]['--spacing-4'] ?? 'unset'})`;
