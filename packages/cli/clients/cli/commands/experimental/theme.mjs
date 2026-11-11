@@ -29,6 +29,7 @@ import {
   text,
 } from '../../formatters/index.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
+import {AstryxError} from '../../../../api/error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {
   themeEditHow,
@@ -299,16 +300,45 @@ const changeOptions = o => ({
  * The dial settings `new` takes as flags, by dial name: every option of its
  * CommandDoc that `set` would take as a dial.
  * @param {any} o
- * @returns {Record<string, string>}
+ * @returns {Record<string, string | string[]>}
  */
 function newSettings(o) {
-  /** @type {Record<string, string>} */
+  /** @type {Record<string, string | string[]>} */
   const out = {};
   for (const opt of newDoc.options ?? []) {
     if (opt.param !== 'options.settings') continue;
     const name = opt.flag.split(' ')[0].slice(2);
     const value = o[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
-    if (value != null) out[name] = String(value);
+    if (value == null) continue;
+    // A flag given twice: headings takes one value per axis (a weight and a
+    // tracking); any other flag given two different values is refused.
+    const all = flagValues(name);
+    if (name === 'headings' && all.length > 1) out[name] = all;
+    else if (new Set(all).size > 1)
+      throw new AstryxError(
+        `--${name} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
+        [],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    else out[name] = String(value);
+  }
+  return out;
+}
+
+/**
+ * Every value one flag was given on the command line, in order.
+ * @param {string} name
+ * @returns {string[]}
+ */
+function flagValues(name) {
+  const argv = process.argv;
+  /** @type {string[]} */
+  const out = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--') break;
+    if (argv[i] === `--${name}` && i + 1 < argv.length) out.push(argv[++i]);
+    else if (argv[i].startsWith(`--${name}=`))
+      out.push(argv[i].slice(name.length + 3));
   }
   return out;
 }
@@ -469,16 +499,36 @@ export function registerExperimentalTheme(group, program) {
   explained(
     defineCommand(editor, newDoc, {
       fn: newFn,
-      action: (/** @type {string} */ name, /** @type {any} */ o) =>
+      action: (
+        /** @type {string} */ name,
+        /** @type {any} */ o,
+        /** @type {any} */ cmd,
+      ) =>
         run(
           program,
-          () =>
-            themeEditNew(name, {
+          () => {
+            // A word after the name is never dropped without a word.
+            const extra = (cmd?.args ?? []).slice(1);
+            if (extra.length)
+              throw new AstryxError(
+                `new takes one theme name; "${extra.join(' ')}" is extra. For a base theme, use --like. Nothing was changed.`,
+                /^[a-z][a-z0-9-]*$/.test(extra[0])
+                  ? [
+                      {
+                        name: `${EDITOR} new ${name} --like ${extra[0]}`,
+                        reason: 'do this instead',
+                      },
+                    ]
+                  : [],
+                ERROR_CODES.ERR_INVALID_ARGUMENT,
+              );
+            return themeEditNew(name, {
               cwd: process.cwd(),
               like: o.like,
               png: o.png ?? false,
               settings: newSettings(o),
-            }),
+            });
+          },
           r => [
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
             ...project(/** @type {any} */ (r.data)),

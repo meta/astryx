@@ -12,6 +12,7 @@
  * @position api/theme-edit — imported by _settings.mjs, _check.mjs, _how.mjs
  */
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
@@ -23,6 +24,36 @@ import {
 import {themePaletteGenerate} from '../theme/palette/generate/generate.mjs';
 import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {parseColor, hex, ratio} from './_color.mjs';
+
+/**
+ * Write a file whole: a temp file beside it, renamed into place, so a link
+ * there is replaced, never written through, and a stopped write leaves the
+ * old file. The temp file goes whatever happens.
+ * @param {string} file
+ * @param {string | Buffer} text
+ */
+export function writeWhole(file, text) {
+  const tmp = tempFor(file);
+  try {
+    fs.writeFileSync(tmp, text);
+    fs.renameSync(tmp, file);
+  } finally {
+    fs.rmSync(tmp, {force: true});
+  }
+}
+
+/**
+ * A temp file beside `file` for a whole write, named so only the editor
+ * makes such names: `.<name>.astryx-<pid>-<random>.tmp`. The write that
+ * makes one removes it.
+ * @param {string} file
+ */
+export function tempFor(file) {
+  return path.join(
+    path.dirname(file),
+    `.${path.basename(file)}.astryx-${process.pid}-${Math.random().toString(36).slice(2, 10)}.tmp`,
+  );
+}
 
 /** @typedef {'light' | 'dark'} Mode */
 /** @typedef {import('../theme/theme.type.mjs').TonalPaletteCandidate} Candidate */
@@ -193,6 +224,9 @@ const GRAY_CHROMA = 0.02;
 /** @param {string} seed */
 const isGray = seed => hexToOklch(seed).C < GRAY_CHROMA;
 
+/** Whether a seed (or no seed) has no color to saturate. @param {string | null} seed */
+export const isGraySeed = seed => !seed || isGray(seed);
+
 /**
  * The color dial settings of a theme, in dial order.
  * @param {import('./_settings.mjs').ThemeData} data
@@ -327,6 +361,27 @@ export function syncPalette(cwd, slug, data) {
   const abs = (/** @type {string} */ p) => path.join(cwd, p);
   const config = paletteConfig(cwd, slug, data);
   if (!config) {
+    // Only palette files the editor wrote go: a hand-made palette.config.json
+    // (and what it generated) stays.
+    // The hash the saved settings recorded too: an undo may carry settings
+    // from before the palette existed.
+    /** @type {string | undefined} */
+    let saved;
+    try {
+      saved = JSON.parse(
+        fs.readFileSync(abs(`themes/${slug}/${slug}.settings.json`), 'utf8'),
+      ).palette;
+    } catch {
+      saved = undefined;
+    }
+    const hash = fs.existsSync(abs(f.config))
+      ? createHash('sha256')
+          .update(fs.readFileSync(abs(f.config)))
+          .digest('hex')
+      : null;
+    const mine = hash != null && (data.palette === hash || saved === hash);
+    delete data.palette;
+    if (!mine) return;
     for (const p of [f.config, f.palette, f.receipt])
       fs.rmSync(abs(p), {force: true});
     const tokensDir = path.dirname(abs(f.palette));
@@ -340,8 +395,12 @@ export function syncPalette(cwd, slug, data) {
     fs.readFileSync(abs(f.config), 'utf8') === text &&
     fs.existsSync(abs(f.palette)) &&
     fs.existsSync(abs(f.receipt));
-  if (same) return;
-  fs.writeFileSync(abs(f.config), text);
+  if (same) {
+    data.palette = createHash('sha256').update(text).digest('hex');
+    return;
+  }
+  writeWhole(abs(f.config), text);
+  data.palette = createHash('sha256').update(text).digest('hex');
   themePaletteGenerate(f.config, {out: f.palette, overwrite: true}, {cwd});
 }
 

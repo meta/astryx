@@ -450,7 +450,7 @@ export const DIALS = {
     help:
       'Base text size; every heading size scales from it. Rungs: ' +
       TEXT_SIZE.map(([n, v]) => `${n} (${v}px)`).join(', ') +
-      ', or a number.',
+      ', or a number of pixels from 10 to 32.',
     values: 'small|medium|large|larger|more|less|<number>',
     examples: ['set my text-size small', 'set my text-size more'],
     words: 'text size font size small big large scale',

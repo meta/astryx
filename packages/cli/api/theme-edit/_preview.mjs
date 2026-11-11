@@ -27,6 +27,7 @@ import {
 import {renderDir, renderGenerated} from './_parts.mjs';
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
+import {writeWhole} from './_palette.mjs';
 import {importPathOf, installLine} from './_project.mjs';
 import {DIRECT} from './_tables.mjs';
 
@@ -305,7 +306,8 @@ export async function renderPreview(ctx, slug, data) {
   });
   const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
   const out = themeFiles(project.cwd, slug).preview;
-  fs.writeFileSync(out, html);
+  // Written whole and renamed in, never through a link.
+  writeWhole(out, html);
   return shown(project.cwd, out);
 }
 
@@ -335,7 +337,8 @@ export async function renderSheet(ctx, slug, data, options = {}) {
   );
   const out = options.out ?? themeFiles(project.cwd, slug).sheet;
   fs.mkdirSync(path.dirname(out), {recursive: true});
-  fs.writeFileSync(out, html);
+  // Written whole and renamed in, never through a link.
+  writeWhole(out, html);
   return {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,

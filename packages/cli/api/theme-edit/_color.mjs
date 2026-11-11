@@ -395,11 +395,72 @@ export const isColorValue = v => {
   );
 };
 
-/** Whether a value reads as one CSS size. @param {unknown} v */
-export const isSize = v =>
-  /^(-?\d*\.?\d+(px|rem|em|%|vh|vw)?|0|var\(--[a-z0-9-]+\)|calc\(.+\))$/i.test(
-    String(v).trim(),
-  );
+/**
+ * Whether a value reads as one CSS size for the token: a length in any CSS
+ * unit, 0, a variable, env(), or calc()/min()/max()/clamp() with a length
+ * inside; below zero only where the property takes it (an offset).
+ * @param {unknown} v
+ * @param {string} [name]
+ */
+export const isSize = (v, name = '') => {
+  const s = String(v).trim();
+  const length =
+    /^-?(\d+\.?\d*|\.\d+)(e-?\d+)?(px|rem|em|ex|ch|lh|rlh|cap|ic|pt|pc|cm|mm|in|q|%|vh|vw|vmin|vmax|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|cqi|cqb)$/i;
+  if (s === '0') return true;
+  // Only a property that takes a negative length gets one: an offset, a
+  // letter spacing, an indent.
+  if (length.test(s))
+    return (
+      !s.startsWith('-') || /offset|tracking|letter-spacing|indent/.test(name)
+    );
+  if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
+  if (/^env\([a-z-]+(,.*)?\)$/i.test(s)) return true;
+  return /^(calc|min|max|clamp)\(.*(\d|var\().*\)$/i.test(s);
+};
 
-/** Whether a value reads as a number. @param {unknown} v */
-export const isNumber = v => /^-?\d*\.?\d+$|^var\(/.test(String(v).trim());
+/**
+ * Whether a value reads as a CSS number for the token: a weight is 1 to
+ * 1000 or a weight keyword; a line height is a positive number, length or
+ * percentage, or `normal`.
+ * @param {unknown} v
+ * @param {string} [name]
+ */
+export const isNumber = (v, name = '') => {
+  const s = String(v).trim();
+  if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
+  if (/weight/.test(name))
+    return (
+      /^(normal|bold|bolder|lighter)$/.test(s) ||
+      (/^\d+(\.\d+)?$/.test(s) && Number(s) >= 1 && Number(s) <= 1000)
+    );
+  if (/leading|line-height/.test(name))
+    return (
+      s === 'normal' ||
+      (/^\d*\.?\d+(px|rem|em|%)?$/.test(s) && Number.parseFloat(s) > 0) ||
+      /^calc\(.*\d.*\)$/.test(s)
+    );
+  return /^-?\d*\.?\d+$/.test(s);
+};
+
+/**
+ * Whether a value can sit in a CSS declaration as it is: no `<>`, control
+ * character, comment or `!important` anywhere; outside a quoted string or a
+ * `url(data:…)`, no `;{}`; brackets and quotes closed. So `content: "a;b"`
+ * and a base64 data URL are values, and nothing can end the declaration.
+ * @param {string} v
+ */
+export function isSafeValue(v) {
+  // eslint-disable-next-line no-control-regex
+  if (/[<>\u0000-\u001f\u007f]|\/\*|!important/i.test(v)) return false;
+  const outside = v
+    .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""')
+    .replace(/url\(data:[^\s"'()\\]*\)/gi, 'url()');
+  if (/[;{}\\]/.test(outside)) return false;
+  let depth = 0;
+  for (const c of outside.replace(/""/g, '')) {
+    if (c === '"' || c === "'") return false;
+    if (c === '(') depth++;
+    if (c === ')' && --depth < 0) return false;
+  }
+  return depth === 0;
+}
