@@ -116,7 +116,7 @@ describe('MobileNav side="auto"', () => {
   });
 
   it('has the resolved side in the commit that opens the drawer, not one later', () => {
-    const sideAtShow: Array<string | null | undefined> = [];
+    const sideAtShow: (string | null | undefined)[] = [];
     HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
       sideAtShow.push(this.getAttribute('data-side'));
       this.setAttribute('open', '');

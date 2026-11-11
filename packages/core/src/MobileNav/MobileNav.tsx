@@ -51,6 +51,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -298,6 +299,10 @@ export const MAX_CLOSE_DELAY_MS = 250;
  */
 export const MAX_EXIT_MS = 550;
 /** Fraction of the hold to close at, so the close never lands on its boundary. */
+const subscribeToNothing = () => () => {};
+const canReadDomOnClient = () => true;
+const canReadDomOnServer = () => false;
+
 const CLOSE_WITHIN_HOLD = 0.6;
 
 /**
@@ -557,19 +562,28 @@ export function MobileNav({
   // the wrong edge before jumping. An explicit `side` is used directly.
   const [autoSide, setAutoSide] = useState<'start' | 'end'>('end');
   const [wasOpen, setWasOpen] = useState(false);
-  if (isOpen !== wasOpen) {
+  // False on the server and in the hydrating render, true after: a drawer that
+  // is already open when it hydrates reads no focus or layout in that render
+  // (the server did not), and resolves in the render right after it.
+  const canReadDom = useSyncExternalStore(
+    subscribeToNothing,
+    canReadDomOnClient,
+    canReadDomOnServer,
+  );
+  if (canReadDom && isOpen !== wasOpen) {
     setWasOpen(isOpen);
-    if (isOpen && side === 'auto' && typeof document !== 'undefined') {
-      // The opener is the focused element. When nothing is focused (a tap does
-      // not focus a button in every mobile browser), the Toggle that controls
-      // this drawer is the opener; it names the dialog's rendered id, which a
-      // caller `id` replaces.
+    if (isOpen && side === 'auto') {
+      // The opener is the focused element. With none (a tap does not focus a
+      // button in every mobile browser), it is the element whose
+      // `aria-controls` names this dialog; a caller `id` replaces the
+      // dialog's own id.
       const active = document.activeElement as HTMLElement | null;
       const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
       const trigger =
         active && active !== document.body
           ? active
           : Array.from(
+              // eslint-disable-next-line @eslint-react/purity -- runs only on the closed-to-open render, never on the server or while hydrating; an Effect would commit the default edge first
               document.querySelectorAll<HTMLElement>('[aria-controls]'),
             ).find(el =>
               (el.getAttribute('aria-controls') ?? '')
