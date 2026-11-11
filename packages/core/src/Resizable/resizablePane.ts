@@ -25,6 +25,7 @@ import {resolveMotion} from '../motion/resolveMotion';
 import type {SpringDescription} from '../motion/spring';
 import {springs} from '../motion/uikit/springs';
 import type {ResizableProps} from './useResizable';
+import {sharedState, sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
 
 export type {LayoutEdge};
 
@@ -59,10 +60,22 @@ export interface ResizablePane {
   listen(listener: PaneListener | null): void;
 }
 
-const lent = new WeakMap<Element, ResizablePane>();
-const watchers = new Set<() => void>();
+// Every copy of Core lends and finds panes through these, so a swizzled handle
+// finds a package panel beside it, and the reverse.
+const lent = sharedWeakMap<Element, ResizablePane>(
+  'resizable/resizable-pane/lent',
+  1,
+);
+const watchers = sharedState(
+  'resizable/resizable-pane/watchers',
+  1,
+  () => new Set<() => void>(),
+);
 // The elements ResizeHandle renders, for a panel beside one to find it.
-const resizeHandles = new WeakSet<Element>();
+const resizeHandles = sharedWeakSet<Element>(
+  'resizable/resizable-pane/resize-handles',
+  1,
+);
 
 /** ResizeHandle registers the element it renders; returns the unregister. */
 export function registerResizeHandle(element: Element): () => void {
@@ -201,7 +214,10 @@ export function createRegionPaneSlot(): RegionPaneSlot {
  * Kept off the exported `ResizableProps`, like the hook's collapse controls:
  * a hand-built object has no region, so its panel never slides.
  */
-const propsRegions = new WeakMap<ResizableProps, RegionPaneSlot>();
+const propsRegions = sharedWeakMap<ResizableProps, RegionPaneSlot>(
+  'resizable/resizable-pane/props-regions',
+  1,
+);
 
 /** The hook registers each `props` object it returns with its region. */
 export function registerPropsRegion(
