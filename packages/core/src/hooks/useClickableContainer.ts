@@ -308,7 +308,11 @@ export function useClickableContainerProxy({
         const shouldOpenNewTab =
           target === '_blank' || event.ctrlKey || event.metaKey;
         if (shouldOpenNewTab) {
-          window.open(href, '_blank', 'noopener');
+          window.open(
+            href,
+            '_blank',
+            target === '_blank' ? 'noopener,noreferrer' : 'noopener',
+          );
         } else if (interactiveRef?.current) {
           // Proxy click to the sr-only link so the framework link component
           // handles navigation (client-side transitions in Next.js, etc.).
