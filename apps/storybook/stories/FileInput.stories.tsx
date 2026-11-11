@@ -388,6 +388,7 @@ const AUDIT_CASES: AuditCase[] = [
     label: 'Attachments',
     mode: 'dropzone',
     status: ERROR_STATUS,
+    statusVariant: 'attached',
   },
   {
     id: 'dropzone-error-detached',

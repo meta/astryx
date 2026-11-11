@@ -649,7 +649,8 @@ describe('Item', () => {
     expect(screen.getByTestId('item')).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it("gives a disabled row's link no destination (spec:AST-085 FR2)", () => {
+  it("keeps a disabled row's link keyboard-reachable and gives it no destination (spec:AST-085 FR1, FR2)", async () => {
+    const user = userEvent.setup();
     function RouterLink({ref, ...props}: React.ComponentPropsWithRef<'a'>) {
       return <a ref={ref} data-router-link {...props} />;
     }
@@ -669,6 +670,7 @@ describe('Item', () => {
     // menu cannot navigate; it keeps the link role and skips the router link.
     const disabled = screen.getByRole('link', {name: 'Billing'});
     expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    expect(disabled).toHaveAttribute('tabindex', '0');
     for (const attribute of ['href', 'target', 'rel', 'data-router-link']) {
       expect(disabled).not.toHaveAttribute(attribute);
     }
@@ -676,6 +678,9 @@ describe('Item', () => {
     expect(enabled).toHaveAttribute('href', '/profile');
     expect(enabled).toHaveAttribute('data-router-link');
     expect(enabled).not.toHaveAttribute('aria-disabled');
+
+    await user.tab();
+    expect(disabled).toHaveFocus();
   });
 
   it('keeps focus on a focused link row that becomes disabled (spec:AST-085 FR4)', () => {
@@ -686,6 +691,7 @@ describe('Item', () => {
     // focus moves to it instead of falling to the page.
     const disabled = screen.getByRole('link', {name: 'Billing'});
     expect(disabled).not.toHaveAttribute('href');
+    expect(disabled).toHaveAttribute('tabindex', '0');
     expect(disabled).toHaveFocus();
     rerender(<Item label="Billing" href="/billing" />);
     expect(screen.getByRole('link', {name: 'Billing'})).toHaveFocus();
@@ -708,12 +714,42 @@ describe('Item', () => {
     expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
   });
 
-  it('disables the invisible button when isDisabled', () => {
-    const {container} = render(
-      <Item label="Disabled" onClick={() => {}} isDisabled />,
+  it('keeps a disabled action focusable and inert (spec:AST-085 FR1, FR2)', async () => {
+    const onClick = vi.fn();
+    const onAncestorClick = vi.fn();
+    const user = userEvent.setup();
+    const {rerender} = render(
+      <div onClick={onAncestorClick}>
+        <button type="button">Before</button>
+        <Item label="Action" onClick={onClick} />
+        <button type="button">After</button>
+      </div>,
     );
-    const button = container.querySelector('button');
-    expect(button).toBeDisabled();
+
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Before'})).toHaveFocus();
+    await user.tab();
+
+    const action = screen.getByRole('button', {name: 'Action'});
+    expect(action).toHaveFocus();
+    rerender(
+      <div onClick={onAncestorClick}>
+        <button type="button">Before</button>
+        <Item label="Action" onClick={onClick} isDisabled />
+        <button type="button">After</button>
+      </div>,
+    );
+
+    expect(action).toHaveAttribute('aria-disabled', 'true');
+    expect(action).not.toBeDisabled();
+    expect(action).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    fireEvent.click(action);
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onAncestorClick).not.toHaveBeenCalled();
+    expect(action).toHaveFocus();
   });
 
   it('does not fire onClick when disabled item is clicked', async () => {
