@@ -541,6 +541,45 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     };
   };
 
+  /**
+   * The dark shade nearest the seed's own shade (a lighter one on a tie)
+   * where text on it reads at 4.5:1 and it stands out from the dark
+   * surfaces at 3:1; null when no shade does both.
+   * @param {string} onToken @param {string} id @param {number} seedStop
+   */
+  const nearestDarkFill = (onToken, id, seedStop) => {
+    const page = surfaces('dark', id);
+    const order = [...stops]
+      .filter(s => s > 0 && s < 100)
+      .sort((a, b) => Math.abs(a - seedStop) - Math.abs(b - seedStop) || b - a);
+    for (const stop of order) {
+      const fill = ref(id, 'dark', stop).color;
+      if (Math.min(...page.map(([, bg]) => contrast(fill, bg))) < NON_TEXT)
+        continue;
+      const best = ON_FILL.dark
+        .map(on => ({on, r: contrast(ref(id, 'dark', on).color, fill)}))
+        .reduce((a, b) => (b.r > a.r + 0.01 ? b : a));
+      if (best.r < TEXT) continue;
+      if (has(onToken))
+        checks.push({
+          token: onToken,
+          mode: 'dark',
+          stop: best.on,
+          preferred: ON_FILL.dark[0],
+          against: `the fill (shade ${stop})`,
+          ratio: round(best.r),
+          needs: TEXT,
+          pass: true,
+        });
+      return {
+        fill: ref(id, 'dark', stop),
+        on: ref(id, 'dark', best.on),
+        moved: stop,
+      };
+    }
+    return null;
+  };
+
   const modes = /** @type {Mode[]} */ (['light', 'dark']);
   const neutral = fams.find(f => f.id === 'neutral');
   if (neutral) {
@@ -575,7 +614,20 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     /** @type {Array<[string, string]>} */
     const out = [];
     for (const n of names) {
-      const v = tokens[n]?.[m].color ?? base[m][n];
+      // The theme's own exact page and surface colors win, as they do in
+      // the built theme.
+      const exact = [...data.settings]
+        .reverse()
+        .find(
+          s =>
+            s.source === 'token' &&
+            s.thing === n &&
+            !s.on &&
+            !s.when &&
+            !s.state &&
+            (!s.mode || s.mode === m),
+        )?.value;
+      const v = exact ?? tokens[n]?.[m].color ?? base[m][n];
       if (v && parseColor(v)) out.push([n, v]);
     }
     if (!out.length)
@@ -649,7 +701,9 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         return fillPair(names.fill, names.on, f.id, m, fillStart(f.id));
       const exact = exactDarkFill(names.fill, names.on, f.id, fillStart(f.id));
       if (exact.pair) return exact.pair;
-      const pair = fillPair(names.fill, names.on, f.id, m, FILL[1]);
+      const pair =
+        nearestDarkFill(names.on, f.id, fillStart(f.id)) ??
+        fillPair(names.fill, names.on, f.id, m, FILL[1]);
       if (has(names.fill))
         checks.push({
           token: names.fill,
@@ -764,7 +818,7 @@ export function mappingRows(dial) {
   const t = (/** @type {string} */ a, /** @type {string} */ b) =>
     word ? a.replace('$', word) : b;
   const rows = [
-    `${t('--color-$', '--color-accent')}: the color you gave, exactly, in light and in dark; in dark, when no text on it reads at ${TEXT}:1, shade ${FILL[1]} or the nearest shade where text does, and the result says so`,
+    `${t('--color-$', '--color-accent')}: the color you gave, exactly, in light, and in dark when text on it reads at ${TEXT}:1 and it stands out from the dark page at ${NON_TEXT}:1; otherwise dark mode uses the shade nearest your color that passes both, and the result says so`,
     `${t('--color-on-$', '--color-on-accent')}: shade ${ON_FILL.light[0]} or ${ON_FILL.light[1]} in light, ${ON_FILL.dark[0]} or ${ON_FILL.dark[1]} in dark, whichever reads better on the fill`,
     `${t('--color-text-$', '--color-text-accent')} and ${t('--color-icon-$', '--color-icon-accent')}: light shade ${TEXT_STOP[0]}, dark shade ${TEXT_STOP[1]} (moves until it reads at ${TEXT}:1 on the surfaces and the muted tint)`,
     `${t('--color-$-muted', '--color-accent-muted')}: light shade ${MUTED[0]}, dark shade ${MUTED[1]}`,

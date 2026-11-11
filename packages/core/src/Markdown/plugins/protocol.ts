@@ -105,10 +105,17 @@ export interface MarkdownTransformContext {
   report(message: string): void;
 }
 
-const markdownTransformPluginName = Symbol('MarkdownTransformPluginName');
-const markdownTransformHasRenderer = Symbol('MarkdownTransformHasRenderer');
-const markdownTransformSourceUnchanged = Symbol(
-  'MarkdownTransformSourceUnchanged',
+// Registered keys, so a transform made with the package's helpers reads the
+// context a swizzled Markdown passes it. Each is spelled out in full to keep
+// its own symbol type.
+const markdownTransformPluginName = Symbol.for(
+  '@astryxdesign/core/markdown/protocol/transform-plugin-name/v1',
+);
+const markdownTransformHasRenderer = Symbol.for(
+  '@astryxdesign/core/markdown/protocol/transform-has-renderer/v1',
+);
+const markdownTransformSourceUnchanged = Symbol.for(
+  '@astryxdesign/core/markdown/protocol/transform-source-unchanged/v1',
 );
 
 type InternalMarkdownTransformContext = MarkdownTransformContext & {

@@ -80,6 +80,33 @@ export const WithPrefix: Story = {
   },
 };
 
+/**
+ * Caller text that holds only weak and neutral characters, or that mixes a
+ * Latin word into right-to-left text. `MixedDirectionText.a11y.chromium.spec.ts`
+ * reads its character order under RTL and LTR.
+ */
+const MIXED_DIRECTION_TEXTS = [
+  'https://',
+  '.com',
+  '+3',
+  '@alice',
+  'iPhone جديد',
+  'example.com موقع',
+];
+
+export const MixedDirection: Story = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+      {MIXED_DIRECTION_TEXTS.map(text => (
+        <InputGroup key={text} label={`Prefix ${text}`}>
+          <InputGroupText>{text}</InputGroupText>
+          <TextInput label="Value" isLabelHidden value="" onChange={() => {}} />
+        </InputGroup>
+      ))}
+    </div>
+  ),
+};
+
 export const WithSuffix: Story = {
   render: args => {
     const [value, setValue] = useState('');

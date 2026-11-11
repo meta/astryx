@@ -3855,6 +3855,149 @@ describe('Tokenizer consumer key handler order', () => {
   });
 });
 
+describe('Tokenizer pending search after a dismissal', () => {
+  it('keeps a dismissed menu closed when its search answers late, and shows that answer on reopen', async () => {
+    const answers = new Map<string, (items: SearchableItem[]) => void>();
+    const search = vi.fn(
+      async (query: string) =>
+        new Promise<SearchableItem[]>(resolve => answers.set(query, resolve)),
+    );
+    // No cancel: the late answer still arrives, as it does for a source that
+    // cannot abort its request.
+    const source: SearchSource = {search, bootstrap: () => []};
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'a'}});
+    await waitFor(() => expect(answers.has('a')).toBe(true));
+    await act(async () => answers.get('a')?.([users[0]]));
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.change(input, {target: {value: 'b'}});
+    await waitFor(() => expect(answers.has('b')).toBe(true));
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).not.toHaveAttribute('aria-busy');
+
+    await act(async () => answers.get('b')?.([users[1]]));
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(search.mock.calls.filter(([q]) => q === 'b')).toHaveLength(1);
+  });
+
+  it('searches the typed text when a press on a token dismissed it inside the debounce', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const answers = new Map<string, (items: SearchableItem[]) => void>();
+      const search = vi.fn(
+        async (query: string) =>
+          new Promise<SearchableItem[]>(resolve => answers.set(query, resolve)),
+      );
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={{search, bootstrap: () => []}}
+          value={[users[0]]}
+          onChange={vi.fn()}
+          debounceMs={200}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      input.focus();
+      fireEvent.change(input, {target: {value: 'b'}});
+      // A press on the token's text takes focus from the input with no target
+      // in the field, then focus returns to the input.
+      fireEvent.pointerDown(screen.getByText(users[0].label));
+      act(() => input.blur());
+      await act(async () => vi.advanceTimersByTime(400));
+      expect(search).not.toHaveBeenCalled();
+
+      act(() => input.focus());
+      expect(search).toHaveBeenLastCalledWith('b', expect.anything());
+      await waitFor(() => expect(answers.has('b')).toBe(true));
+      await act(async () => answers.get('b')?.([users[1]]));
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText(users[1].label)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reopens the Create entry after a query drops below minQueryLength inside the debounce', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const search = vi.fn(() => []);
+      render(
+        <Tokenizer
+          label="Labels"
+          searchSource={{search, bootstrap: () => []}}
+          value={[]}
+          onChange={vi.fn()}
+          hasCreate
+          minQueryLength={3}
+          debounceMs={200}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      input.focus();
+      fireEvent.change(input, {target: {value: 'QAX'}});
+      fireEvent.change(input, {target: {value: 'QA'}});
+      await act(async () => vi.advanceTimersByTime(400));
+      expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+
+      fireEvent.keyDown(input, {key: 'Escape'});
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+      expect(search).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reopens the Create entry for a query below minQueryLength with ArrowDown after Escape', async () => {
+    const search = vi.fn(() => []);
+    render(
+      <Tokenizer
+        label="Labels"
+        searchSource={{search, bootstrap: () => []}}
+        value={[]}
+        onChange={vi.fn()}
+        hasCreate
+        minQueryLength={3}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'QA'}});
+    });
+    expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Create "QA"')).toBeInTheDocument();
+    expect(search).not.toHaveBeenCalled();
+  });
+});
+
 describe('Tokenizer caller aria-labelledby', () => {
   it('names the input by its label and a caller aria-labelledby', () => {
     render(
