@@ -6,21 +6,13 @@ export const docs = {
   name: 'FileInput',
   displayName: 'File Input',
   category: 'Form Controls',
-  keywords: [
-    'fileinput',
-    'file',
-    'upload',
-    'drag',
-    'drop',
-    'dropzone',
-    'attachment',
-    'browse',
-  ],
+  keywords: ["fileinput","file","upload","drag","drop","dropzone","attachment","browse"],
   props: [
     {
       name: 'label',
       type: 'string',
-      description: 'Accessible label for the file input.',
+      description:
+        'Accessible label for the file input.',
       required: true,
     },
     {
@@ -50,21 +42,18 @@ export const docs = {
     {
       name: 'isMultiple',
       type: 'boolean',
-      description:
-        'Whether multiple files can be selected. When true, value and onChange use File[] instead of File.',
+      description: 'Whether multiple files can be selected. When true, value and onChange use File[] instead of File.',
       default: 'false',
     },
     {
       name: 'maxSize',
       type: 'number',
-      description:
-        'Maximum file size in bytes. Files exceeding this are rejected with an error status.',
+      description: 'Maximum file size in bytes. Files exceeding this are rejected with an error status.',
     },
     {
       name: 'maxFiles',
       type: 'number',
-      description:
-        'Maximum number of files (only applies when isMultiple is true).',
+      description: 'Maximum number of files (only applies when isMultiple is true).',
     },
     {
       name: 'isLabelHidden',
@@ -121,8 +110,7 @@ export const docs = {
     {
       name: 'mode',
       type: "'input' | 'dropzone'",
-      description:
-        "Visual mode. 'input' is a compact inline style; 'dropzone' is a larger area with drag-and-drop support.",
+      description: "Visual mode. 'input' is a compact inline style; 'dropzone' is a larger area with drag-and-drop support.",
       default: "'input'",
     },
     {
@@ -159,14 +147,12 @@ export const docs = {
     {
       name: 'containerClassName',
       type: 'string',
-      description:
-        'Class name for the field container. Same targeting as `containerXstyle`.',
+      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'containerStyle',
       type: 'CSSProperties',
-      description:
-        'Inline styles for the field container. Same targeting as `containerXstyle`.',
+      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'controlXstyle',
@@ -195,95 +181,24 @@ export const docs = {
     description:
       'FileInput provides file upload with optional drag-and-drop support. Use it for single or multiple file selection with built-in validation for file type, size, and count. Pair with validation status for upload feedback.',
     bestPractices: [
-      {
-        guidance: true,
-        description:
-          'Always specify an accept prop to guide users toward valid file types.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use maxSize and maxFiles to prevent oversized uploads; the component handles validation and error display automatically.',
-      },
-      {
-        guidance: true,
-        description:
-          'Add a description to communicate constraints like file size limits or accepted formats.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use changeAction for immediate upload workflows that benefit from optimistic UI.',
-      },
-      {
-        guidance: false,
-        description:
-          "Don't use FileInput for directory or folder uploads; that is not supported in v1.",
-      },
-      {
-        guidance: false,
-        description:
-          "Don't avoid dropzone mode unless space is constrained; drag-and-drop is the expected interaction for file uploads.",
-      },
-      {
-        guidance: false,
-        description:
-          "Don't wrap a disabled FileInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
-      },
+      {guidance: true, description: 'Always specify an accept prop to guide users toward valid file types.'},
+      {guidance: true, description: 'Use maxSize and maxFiles to prevent oversized uploads; the component handles validation and error display automatically.'},
+      {guidance: true, description: 'Add a description to communicate constraints like file size limits or accepted formats.'},
+      {guidance: true, description: 'Use changeAction for immediate upload workflows that benefit from optimistic UI.'},
+      {guidance: false, description: "Don't use FileInput for directory or folder uploads; that is not supported in v1."},
+      {guidance: false, description: "Don't avoid dropzone mode unless space is constrained; drag-and-drop is the expected interaction for file uploads."},
+      {guidance: false, description: "Don't wrap a disabled FileInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead."},
     ],
     anatomy: [
-      {
-        name: 'Label',
-        required: true,
-        description:
-          'Text that identifies the field. Always rendered for accessibility even when visually hidden.',
-      },
-      {
-        name: 'Description',
-        required: false,
-        description:
-          'Helper text between the label and the drop zone explaining accepted formats or size limits.',
-      },
-      {
-        name: 'Drop zone',
-        required: true,
-        description:
-          'The clickable area for file selection. In dropzone mode, also accepts dragged files.',
-      },
-      {
-        name: 'Upload icon',
-        required: false,
-        description:
-          'An upload-to-tray icon in the drop zone hinting at the upload action.',
-      },
-      {
-        name: 'Placeholder',
-        required: false,
-        description: 'Hint text shown when no files are selected.',
-      },
-      {
-        name: 'File name display',
-        required: false,
-        description: 'Shows the name(s) of selected files.',
-      },
-      {
-        name: 'Clear button',
-        required: false,
-        description:
-          'A close button that removes selected files and returns focus to the file-selection trigger.',
-      },
-      {
-        name: 'Spinner',
-        required: false,
-        description:
-          'Loading indicator that appears during async upload actions.',
-      },
-      {
-        name: 'Status message',
-        required: false,
-        description:
-          'Validation feedback showing error, warning, or success with a message.',
-      },
+      {name: 'Label', required: true, description: 'Text that identifies the field. Always rendered for accessibility even when visually hidden.'},
+      {name: 'Description', required: false, description: 'Helper text between the label and the drop zone explaining accepted formats or size limits.'},
+      {name: 'Drop zone', required: true, description: 'The clickable area for file selection. In dropzone mode, also accepts dragged files.'},
+      {name: 'Upload icon', required: false, description: 'An upload-to-tray icon in the drop zone hinting at the upload action.'},
+      {name: 'Placeholder', required: false, description: 'Hint text shown when no files are selected.'},
+      {name: 'File name display', required: false, description: 'Shows the name(s) of selected files.'},
+      {name: 'Clear button', required: false, description: 'A close button that removes selected files and returns focus to the file-selection trigger.'},
+      {name: 'Spinner', required: false, description: 'Loading indicator that appears during async upload actions.'},
+      {name: 'Status message', required: false, description: 'Validation feedback showing error, warning, or success with a message.'},
     ],
   },
 };
@@ -369,8 +284,7 @@ export const docsZh = {
     {
       name: 'mode',
       type: "'input' | 'dropzone'",
-      description:
-        "视觉模式。'input' 为紧凑内联样式；'dropzone' 为支持拖放的较大区域。",
+      description: "视觉模式。'input' 为紧凑内联样式；'dropzone' 为支持拖放的较大区域。",
       default: "'input'",
     },
     {
@@ -428,140 +342,51 @@ export const docsZh = {
     description:
       'FileInput provides file upload with optional drag-and-drop support. Use it for single or multiple file selection with built-in validation for file type, size, and count. Pair with validation status for upload feedback.',
     bestPractices: [
-      {
-        guidance: true,
-        description:
-          'Always specify an accept prop to guide users toward valid file types.',
-      },
-      {
-        guidance: true,
-        description: 'Use maxSize and maxFiles to prevent oversized uploads.',
-      },
-      {
-        guidance: true,
-        description: 'Add a description to communicate constraints.',
-      },
-      {
-        guidance: false,
-        description: "Don't use FileInput for directory uploads.",
-      },
-      {
-        guidance: false,
-        description:
-          "Don't use mode='input' unless space is constrained; dropzone mode provides a better experience.",
-      },
-      {
-        guidance: false,
-        description:
-          "Don't wrap a disabled FileInput in Tooltip to explain the disabled state; use the disabledMessage prop instead.",
-      },
+      {guidance: true, description: 'Always specify an accept prop to guide users toward valid file types.'},
+      {guidance: true, description: 'Use maxSize and maxFiles to prevent oversized uploads.'},
+      {guidance: true, description: 'Add a description to communicate constraints.'},
+      {guidance: false, description: "Don't use FileInput for directory uploads."},
+      {guidance: false, description: "Don't use mode='input' unless space is constrained; dropzone mode provides a better experience."},
+      {guidance: false, description: "Don't wrap a disabled FileInput in Tooltip to explain the disabled state; use the disabledMessage prop instead."},
     ],
     anatomy: [
-      {
-        name: 'Label',
-        required: true,
-        description: 'Text identifying the field.',
-      },
-      {
-        name: 'Drop zone',
-        required: true,
-        description: 'Clickable area for file selection.',
-      },
-      {
-        name: 'Placeholder',
-        required: false,
-        description: 'Hint text when no files selected.',
-      },
-      {
-        name: 'File name display',
-        required: false,
-        description: 'Shows selected file names.',
-      },
-      {
-        name: 'Clear button',
-        required: false,
-        description: 'Removes selected files.',
-      },
+      {name: 'Label', required: true, description: 'Text identifying the field.'},
+      {name: 'Drop zone', required: true, description: 'Clickable area for file selection.'},
+      {name: 'Placeholder', required: false, description: 'Hint text when no files selected.'},
+      {name: 'File name display', required: false, description: 'Shows selected file names.'},
+      {name: 'Clear button', required: false, description: 'Removes selected files.'},
     ],
   },
 };
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
-  description:
-    'File input w/ input/dropzone modes, validation, label, description, status.',
+  description: 'File input w/ input/dropzone modes, validation, label, description, status.',
   usage: {
     description:
       'FileInput provides file upload with optional drag-and-drop support. Use it for single or multiple file selection with built-in validation for file type, size, and count.',
     bestPractices: [
-      {
-        guidance: true,
-        description:
-          'Always specify an accept prop to guide users toward valid file types.',
-      },
-      {
-        guidance: true,
-        description: 'Use maxSize and maxFiles to prevent oversized uploads.',
-      },
-      {
-        guidance: true,
-        description: 'Add a description to communicate constraints.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use changeAction for immediate upload workflows that benefit from optimistic UI.',
-      },
-      {
-        guidance: false,
-        description: "Don't use FileInput for directory uploads.",
-      },
-      {
-        guidance: false,
-        description:
-          "Don't use mode='input' unless space is constrained; dropzone mode provides a better experience.",
-      },
-      {
-        guidance: false,
-        description:
-          "Don't wrap a disabled FileInput in Tooltip to explain the disabled state; use the disabledMessage prop instead.",
-      },
+      {guidance: true, description: 'Always specify an accept prop to guide users toward valid file types.'},
+      {guidance: true, description: 'Use maxSize and maxFiles to prevent oversized uploads.'},
+      {guidance: true, description: 'Add a description to communicate constraints.'},
+      {guidance: true, description: 'Use changeAction for immediate upload workflows that benefit from optimistic UI.'},
+      {guidance: false, description: "Don't use FileInput for directory uploads."},
+      {guidance: false, description: "Don't use mode='input' unless space is constrained; dropzone mode provides a better experience."},
+      {guidance: false, description: "Don't wrap a disabled FileInput in Tooltip to explain the disabled state; use the disabledMessage prop instead."},
     ],
     anatomy: [
-      {
-        name: 'Label',
-        required: true,
-        description: 'Text identifying the field.',
-      },
-      {
-        name: 'Drop zone',
-        required: true,
-        description: 'Clickable area for file selection.',
-      },
-      {
-        name: 'Placeholder',
-        required: false,
-        description: 'Hint text when no files selected.',
-      },
-      {
-        name: 'File name display',
-        required: false,
-        description: 'Shows selected file names.',
-      },
-      {
-        name: 'Clear button',
-        required: false,
-        description: 'Removes selected files.',
-      },
+      {name: 'Label', required: true, description: 'Text identifying the field.'},
+      {name: 'Drop zone', required: true, description: 'Clickable area for file selection.'},
+      {name: 'Placeholder', required: false, description: 'Hint text when no files selected.'},
+      {name: 'File name display', required: false, description: 'Shows selected file names.'},
+      {name: 'Clear button', required: false, description: 'Removes selected files.'},
     ],
   },
   propDescriptions: {
-    containerXstyle:
-      'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
+    containerXstyle: 'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
     containerClassName: 'Class name for the field container.',
     containerStyle: 'Inline styles for the field container.',
-    controlXstyle:
-      'StyleX styles for the visual control box (border, background, icons); not the native input.',
+    controlXstyle: 'StyleX styles for the visual control box (border, background, icons); not the native input.',
     controlClassName: 'Class name for the visual control box.',
     controlStyle: 'Inline styles for the visual control box.',
     label: 'Accessible label for the file input.',
@@ -583,8 +408,7 @@ export const docsDense = {
     placeholder: 'Placeholder when no files selected.',
     mode: "Visual mode: 'input' (compact) or 'dropzone' (drag-and-drop).",
     status: 'Validation status; colored border. Message floats below.',
-    statusVariant:
-      'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon. Dropzone: attached unsupported; defaults to detached (explicit attached kept until next minor).',
+    statusVariant: 'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon. Dropzone: attached unsupported; defaults to detached (explicit attached kept until next minor).',
     labelTooltip: 'Tooltip in info icon at label end.',
   },
 };
