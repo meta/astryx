@@ -33,7 +33,7 @@ export const STORED_DOCS_FILE = path.join(
  * The key of a source file's text in a store written at publish (the stored
  * docs, the stored template component lists): a hash of the text, so an
  * edited or unknown file is never answered from a store.
- * @param {string} text
+ * @param {string | Buffer} text
  * @returns {string}
  */
 export function storedKey(text) {
