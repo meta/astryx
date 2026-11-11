@@ -35,7 +35,7 @@ import {Typeahead} from './Typeahead';
 import {Tokenizer} from '../Tokenizer';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
-import type {SearchSource, SearchableItem} from './types';
+import type {SearchContext, SearchSource, SearchableItem} from './types';
 
 const popoverOpenState = new WeakMap<HTMLElement, boolean>();
 const originalMatchesDescriptor = Object.getOwnPropertyDescriptor(
@@ -1488,6 +1488,11 @@ describe('BaseTypeahead pending work after a dismissal', () => {
       await answer('al', ['Alpine', 'Alps']);
       const liveRegion = () =>
         document.querySelector('[data-astryx-live-region="polite"]');
+      // The announcer writes on the next frame.
+      await act(
+        async () =>
+          new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+      );
       expect(liveRegion()?.textContent ?? '').not.toContain('2 results');
 
       fireEvent.keyDown(input, {key: 'ArrowDown'});
@@ -1496,6 +1501,175 @@ describe('BaseTypeahead pending work after a dismissal', () => {
     } finally {
       __resetLiveRegionsForTest();
     }
+  });
+
+  describe('every open path after a dismissal shows the kept list at once', () => {
+    // A source that shows a partial list at once and answers when the test
+    // says so. It cannot abort.
+    function partialSource() {
+      let finish: ((items: SearchableItem[]) => void) | null = null;
+      const search = vi.fn(
+        async (_query: string, context?: SearchContext<SearchableItem>) =>
+          new Promise<SearchableItem[]>(resolve => {
+            context?.update([{id: 'Alpine', label: 'Alpine'}]);
+            finish = resolve;
+          }),
+      );
+      const settle = async () => {
+        await act(async () =>
+          finish?.([
+            {id: 'Alpine', label: 'Alpine'},
+            {id: 'Alps', label: 'Alps'},
+          ]),
+        );
+      };
+      return {source: {search, bootstrap: () => []}, search, settle};
+    }
+
+    type OpenPath = {
+      dismiss: (input: HTMLElement) => void;
+      open: (input: HTMLElement, handle: BaseTypeaheadHandle | null) => void;
+    };
+    const pressEscape = (input: HTMLElement) =>
+      fireEvent.keyDown(input, {key: 'Escape'});
+    const OPEN_PATHS: Array<[string, OpenPath]> = [
+      [
+        'ArrowDown',
+        {
+          dismiss: pressEscape,
+          open: input => fireEvent.keyDown(input, {key: 'ArrowDown'}),
+        },
+      ],
+      [
+        'focus return',
+        {
+          dismiss: () =>
+            act(() => screen.getByRole('button', {name: 'Elsewhere'}).focus()),
+          open: input => act(() => input.focus()),
+        },
+      ],
+      [
+        'pointer press',
+        {
+          dismiss: pressEscape,
+          open: input => {
+            fireEvent.pointerDown(input);
+            fireEvent.click(input);
+          },
+        },
+      ],
+      [
+        'handle open()',
+        {
+          dismiss: pressEscape,
+          open: (_input, handle) => act(() => handle?.open()),
+        },
+      ],
+    ];
+
+    async function renderDismissed() {
+      __resetLiveRegionsForTest();
+      const handleRef = createRef<BaseTypeaheadHandle>();
+      const pending = partialSource();
+      render(
+        <>
+          <BaseTypeahead
+            searchSource={pending.source}
+            value={null}
+            onChange={() => {}}
+            debounceMs={0}
+            handleRef={handleRef}
+          />
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.change(input, {target: {value: 'al'}});
+      await waitFor(() =>
+        expect(input).toHaveAttribute('aria-expanded', 'true'),
+      );
+      expect(input).toHaveAttribute('aria-busy', 'true');
+      return {...pending, input, handleRef};
+    }
+    const liveRegion = () =>
+      document.querySelector('[data-astryx-live-region="polite"]');
+    afterEach(() => __resetLiveRegionsForTest());
+
+    it.each(OPEN_PATHS)(
+      '%s shows the kept partial list, busy while its search is pending',
+      async (_name, path) => {
+        const {input, handleRef, search, settle} = await renderDismissed();
+        path.dismiss(input);
+        await waitFor(() =>
+          expect(input).toHaveAttribute('aria-expanded', 'false'),
+        );
+        expect(input).not.toHaveAttribute('aria-busy');
+
+        path.open(input, handleRef.current);
+        await waitFor(() =>
+          expect(input).toHaveAttribute('aria-expanded', 'true'),
+        );
+        expect(screen.getByText('Alpine')).toBeInTheDocument();
+        expect(input).toHaveAttribute('aria-busy', 'true');
+        expect(search).toHaveBeenCalledOnce();
+
+        await settle();
+        expect(input).not.toHaveAttribute('aria-busy');
+        expect(screen.getByText('Alps')).toBeInTheDocument();
+        await waitFor(() =>
+          expect(liveRegion()).toHaveTextContent('2 results'),
+        );
+      },
+    );
+
+    it.each(OPEN_PATHS)(
+      '%s shows a kept settled answer, not busy, and announces its count',
+      async (_name, path) => {
+        const {input, handleRef, search, settle} = await renderDismissed();
+        path.dismiss(input);
+        await waitFor(() =>
+          expect(input).toHaveAttribute('aria-expanded', 'false'),
+        );
+        await settle();
+        await act(
+          async () =>
+            new Promise<void>(resolve =>
+              requestAnimationFrame(() => resolve()),
+            ),
+        );
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+        expect(liveRegion()?.textContent ?? '').not.toContain('2 results');
+
+        path.open(input, handleRef.current);
+        await waitFor(() =>
+          expect(input).toHaveAttribute('aria-expanded', 'true'),
+        );
+        expect(screen.getByText('Alps')).toBeInTheDocument();
+        expect(input).not.toHaveAttribute('aria-busy');
+        expect(search).toHaveBeenCalledOnce();
+        await waitFor(() =>
+          expect(liveRegion()).toHaveTextContent('2 results'),
+        );
+      },
+    );
+
+    it('searches again on ArrowDown for an empty settled answer not kept through a dismissal', async () => {
+      const {input, search, answer} = renderPending({});
+      input.focus();
+      fireEvent.change(input, {target: {value: 'zz'}});
+      await answer('zz', []);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.keyDown(input, {key: 'Escape'});
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      await waitFor(() =>
+        expect(
+          search.mock.calls.filter(([query]) => query === 'zz'),
+        ).toHaveLength(2),
+      );
+    });
   });
 
   it('does not run a search still waiting on its debounce after focus leaves', async () => {

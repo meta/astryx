@@ -895,6 +895,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // The result count of an answer kept while the popup was dismissed, for the
   // next open to announce.
   const keptCountRef = useRef<number | null>(null);
+  // True while an answer that arrived with the popup dismissed waits for the
+  // next open, including an empty answer.
+  const keptAnswerRef = useRef(false);
 
   // The previous source is remembered in state, not a ref, so a render React
   // discards cannot consume the comparison without its state updates.
@@ -1039,6 +1042,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     dismissedRef.current = false;
     const keptCount = keptCountRef.current;
     keptCountRef.current = null;
+    keptAnswerRef.current = false;
     if (keptCount != null && keptCount > 0) {
       announce(t('@astryx.typeahead.resultCount', {count: keptCount}));
     }
@@ -1172,6 +1176,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setLastSearchedQuery(searchQuery);
       dismissedRef.current = false;
       keptCountRef.current = null;
+      keptAnswerRef.current = false;
       searchInFlightRef.current = {gen, query: searchQuery};
       setLoading(true);
       setHasSearched(true);
@@ -1284,6 +1289,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         }
         const shown = showList(searchResults, true);
         if (dismissed) {
+          keptAnswerRef.current = true;
           if (searchQuery.length > 0) {
             keptCountRef.current = shown.length;
           }
@@ -1510,6 +1516,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setQuery(newQuery);
       queryRef.current = newQuery;
       keptCountRef.current = null;
+      keptAnswerRef.current = false;
       onChangeQuery?.(newQuery);
 
       if (searchTimeoutRef.current) {
@@ -1671,24 +1678,43 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     return true;
   }, [setLoading]);
 
-  // The rows on hand answer the text the field holds: from the current
-  // source, of the current search generation, and, for an empty answer, a
-  // settled search of this query. Results a replaced source or an older query
-  // left behind count as none.
-  const hasCurrentAnswer = useCallback(
-    () =>
-      resultsGenRef.current >= sourceGenRef.current &&
-      resultsGenRef.current === searchGenRef.current &&
-      (results.length > 0 ||
-        (hasSearched && !loadingRef.current && query === lastSearchedQuery)),
-    [results.length, hasSearched, query, lastSearchedQuery],
+  // The one reopen path for every open trigger. The field is busy again only
+  // while the query's search is still pending. Rows on hand for the text the
+  // field holds show at once, and the layer's show announces a kept count. An
+  // empty answer shows only when it arrived while the popup was dismissed.
+  // Results a replaced source or an older query left behind count as none.
+  // Returns false when nothing is on hand or pending, so the caller loads.
+  const openWithKeptAnswer = useCallback(
+    (highlightFirst: boolean) => {
+      const isPending = resumePendingSearch();
+      const isCurrent =
+        resultsGenRef.current >= sourceGenRef.current &&
+        resultsGenRef.current === searchGenRef.current;
+      const hasRows =
+        results.length > 0 && (query.length > 0 || hasEntriesOnFocus);
+      if (isCurrent && (hasRows || (keptAnswerRef.current && !isPending))) {
+        showLayer();
+        if (highlightFirst) {
+          setHighlightedIndex(results.length > 0 ? 0 : -1);
+        }
+        return true;
+      }
+      return isPending;
+    },
+    [
+      resumePendingSearch,
+      results.length,
+      query.length,
+      hasEntriesOnFocus,
+      showLayer,
+    ],
   );
 
   const openIfEligible = useCallback(() => {
     if (isDisabled) {
       return;
     }
-    if (resumePendingSearch()) {
+    if (openWithKeptAnswer(false)) {
       return;
     }
     const hasResultsFromCurrentSource =
@@ -1699,21 +1725,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       query.length === 0
     ) {
       void performBootstrap();
-    } else if (
-      results.length > 0 &&
-      (query.length > 0 || hasEntriesOnFocus) &&
-      resultsGenRef.current === searchGenRef.current
-    ) {
-      showLayer();
     }
   }, [
     isDisabled,
-    resumePendingSearch,
+    openWithKeptAnswer,
     hasEntriesOnFocus,
     results.length,
     query.length,
     performBootstrap,
-    showLayer,
   ]);
 
   // Handle focus
@@ -1846,19 +1865,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           // Results held from a replaced search source are not current
           // (spec:AST-092 FR4), and results an older query left behind are not
           // shown either: both count as none.
-          if (resumePendingSearch()) {
-            // The search is still pending, so the field is busy again. A
-            // partial list kept from it shows now; its answer shows the rest.
-            if (
-              results.length > 0 &&
-              resultsGenRef.current === searchGenRef.current
-            ) {
-              popover.show();
-              setHighlightedIndex(0);
-            }
-          } else if (hasCurrentAnswer()) {
-            popover.show();
-            setHighlightedIndex(results.length > 0 ? 0 : -1);
+          if (openWithKeptAnswer(true)) {
+            // Rows on hand or the pending search's answer open the popup.
           } else if (
             query.length > 0 &&
             !isBelowMinQueryLength(query, minQueryLength)
@@ -1953,8 +1961,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       minQueryLength,
       performBootstrap,
       performSearch,
-      resumePendingSearch,
-      hasCurrentAnswer,
+      openWithKeptAnswer,
       dismiss,
       externalOnKeyDown,
     ],
@@ -1962,13 +1969,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
   // The handle's listbox open: show current results, or load them.
   const openListbox = useCallback(() => {
-    if (resumePendingSearch()) {
+    if (openWithKeptAnswer(false)) {
       return;
     }
     const isQueryBelowMinLength = isBelowMinQueryLength(query, minQueryLength);
-    if (hasCurrentAnswer()) {
-      showLayer();
-    } else if (query.length > 0 && !isQueryBelowMinLength) {
+    if (query.length > 0 && !isQueryBelowMinLength) {
       void performSearch(query);
     } else if (hasEntriesOnFocus && !isQueryBelowMinLength) {
       void performBootstrap();
@@ -1977,11 +1982,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     query,
     minQueryLength,
     hasEntriesOnFocus,
-    showLayer,
     performSearch,
     performBootstrap,
-    resumePendingSearch,
-    hasCurrentAnswer,
+    openWithKeptAnswer,
   ]);
 
   useImperativeHandle(
