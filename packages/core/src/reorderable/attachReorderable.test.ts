@@ -408,11 +408,17 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
       }),
     );
     const milk = rows()[0];
+    expect(milk).toHaveAccessibleName('Reorder Milk');
     act(() => milk.focus());
     fireEvent.keyDown(milk, {key: 'Enter'});
     fireEvent.keyDown(milk, {key: 'ArrowDown'});
     await settle();
     expect(rows().map(row => row.textContent)).toEqual(['Eggs', 'Milk']);
+    // Each read names it again from its text, not from the label it got.
+    expect(milk).toHaveAccessibleName('Reorder Milk');
+    expect(announced()).toEqual([
+      'Milk, position 2 of 2, after Eggs, at the end',
+    ]);
   });
 
   it('wires no handle for a keyless item', () => {

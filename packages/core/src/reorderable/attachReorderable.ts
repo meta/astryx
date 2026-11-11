@@ -97,10 +97,24 @@ let nextHintId = 0;
 
 /**
  * The name announcements and the handle give an item: the element's
- * accessible name, with its handle left out.
+ * accessible name, with its handle left out. An item that is its own handle
+ * is read with the `aria-label` it had before `attach` named it.
  */
-function nameOf(item: ReorderableItem): string {
-  return readAccessibleName(item.element, {exclude: item.handle}) ?? '';
+function nameOf(
+  item: ReorderableItem,
+  ownLabels: WeakMap<HTMLElement, string | null>,
+): string {
+  if (item.handle !== item.element || !ownLabels.has(item.element)) {
+    return readAccessibleName(item.element, {exclude: item.handle}) ?? '';
+  }
+  const copy = item.element.cloneNode(true) as HTMLElement;
+  const ownLabel = ownLabels.get(item.element);
+  if (ownLabel == null) {
+    copy.removeAttribute('aria-label');
+  } else {
+    copy.setAttribute('aria-label', ownLabel);
+  }
+  return readAccessibleName(copy) ?? '';
 }
 
 /** Puts back the handle attributes and the container style `attach` set. */
@@ -148,6 +162,8 @@ export function attachReorderable(
   const t = getResolve('en', {});
   const hintId = `astryx-reorder-attach-hint-${(nextHintId += 1)}`;
   const wired = new Map<HTMLElement, WiredHandle>();
+  // Each wired handle's own `aria-label` before `attach` named it.
+  const ownLabels = new WeakMap<HTMLElement, string | null>();
   // Every item's name, a fixed one's too: a refusal names it.
   const named = new Map<HTMLElement, {name: string; release: () => void}>();
   let detached = false;
@@ -217,7 +233,7 @@ export function attachReorderable(
     const present = new Set<HTMLElement>();
     for (const item of readItems()) {
       present.add(item.element);
-      const name = nameOf(item);
+      const name = nameOf(item, ownLabels);
       const entry = named.get(item.element);
       if (entry == null || entry.name !== name) {
         entry?.release();
@@ -266,7 +282,7 @@ export function attachReorderable(
   // The handle's name: "Reorder" and the item's name, or its place when it
   // has none. Set again at each read, so it follows a rename and a move.
   const relabel = (item: ReorderableItem) => {
-    const name = nameOf(item);
+    const name = nameOf(item, ownLabels);
     const label =
       name === ''
         ? t('@astryx.list.reorderHandleAt', {
@@ -281,8 +297,9 @@ export function attachReorderable(
   const wire = (item: ReorderableItem): WiredHandle => {
     const {handle, element, key} = item;
     const restore = snapshot(handle, HANDLE_ATTRIBUTES);
+    ownLabels.set(handle, handle.getAttribute('aria-label'));
     const unmark = markReorderHandle(handle);
-    const name = nameOf(item);
+    const name = nameOf(item, ownLabels);
     if (name === '') {
       devWarn(
         'createReorderable',
@@ -309,6 +326,7 @@ export function attachReorderable(
       element,
       name,
       unwire: () => {
+        ownLabels.delete(handle);
         releaseKey();
         controller.release(handle);
         unmark();
