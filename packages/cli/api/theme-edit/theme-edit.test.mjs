@@ -289,11 +289,16 @@ describe('every refusal code', () => {
   });
 });
 
-describe('the editor commands succeed from the command line', () => {
+describe.sequential('the editor commands succeed from the command line', () => {
   // One CLI run per test: each run starts Node and copies the theme, so
   // several runs together outlast one test's time limit. The tests run in
   // order and share the fixture project, so each one builds on the one
-  // before it.
+  // before it. When `new` fails, the tests that need its theme skip with a
+  // note that names it, so the one failure shows alone.
+  let made = false;
+  /** @param {(condition: boolean, note: string) => void} skip */
+  const needsTheme = skip =>
+    skip(!made, 'needs the "cli" theme that "new exits 0" makes, which failed');
   /** @param {string[]} args */
   const ok = async args => {
     const r = await runCli(
@@ -308,31 +313,37 @@ describe('the editor commands succeed from the command line', () => {
     expect((await ok(['new', 'cli', '--like', 'neutral'])).type).toBe(
       'themeEdit.new',
     );
+    made = true;
   });
 
-  it('set exits 0 with a JSON envelope', async () => {
+  it('set exits 0 with a JSON envelope', async ({skip}) => {
+    needsTheme(skip);
     expect((await ok(['set', 'cli', 'corners', 'pill'])).type).toBe(
       'themeEdit.set',
     );
   });
 
-  it('set on one component exits 0 with a JSON envelope', async () => {
+  it('set on one component exits 0 with a JSON envelope', async ({skip}) => {
+    needsTheme(skip);
     expect(
       (await ok(['set', 'cli', 'corners', '12px', '--on', 'card'])).type,
     ).toBe('themeEdit.set');
   });
 
-  it('undo of one component exits 0 with a JSON envelope', async () => {
+  it('undo of one component exits 0 with a JSON envelope', async ({skip}) => {
+    needsTheme(skip);
     expect(
       (await ok(['undo', 'cli', 'corners', '--on', 'card'])).data.action,
     ).toBe('undo');
   });
 
-  it('undo of the last step exits 0 with a JSON envelope', async () => {
+  it('undo of the last step exits 0 with a JSON envelope', async ({skip}) => {
+    needsTheme(skip);
     expect((await ok(['undo', 'cli'])).data.action).toBe('step');
   });
 
-  it('show exits 0 with a JSON envelope', async () => {
+  it('show exits 0 with a JSON envelope', async ({skip}) => {
+    needsTheme(skip);
     expect((await ok(['show', 'cli'])).type).toBe('themeEdit.show');
   });
 
