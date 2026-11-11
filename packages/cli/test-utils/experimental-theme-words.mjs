@@ -12,16 +12,34 @@
  *   mock runCli with these two functions and import the stable suites.
  */
 
+/** The global options that take a value as the next word. */
+const VALUE_OPTIONS = new Set(['--lang', '--detail']);
+
+/**
+ * Where the command word is: the first word that is not a global option or
+ * the value of one (`full` in `--detail full`), or -1.
+ * @param {string[]} args
+ */
+function commandIndex(args) {
+  for (let i = 0; i < args.length; i += 1) {
+    if (VALUE_OPTIONS.has(args[i])) i += 1;
+    else if (!args[i].startsWith('-')) return i;
+  }
+  return -1;
+}
+
 /**
  * The experimental words for one CLI call: `theme build ...` becomes
  * `experimental theme compile ...`, any other `theme <x> ...` becomes
  * `experimental theme <x> ...`. Global flags before the command stay.
+ * `theme palette ...` stays as it is: the experimental group makes colors
+ * through `editor set` and has no copy of the palette commands.
  * @param {string[]} args
  * @returns {string[]}
  */
 export function toExperimental(args) {
-  const i = args.findIndex(a => !a.startsWith('-'));
-  if (i < 0 || args[i] !== 'theme') return args;
+  const i = commandIndex(args);
+  if (i < 0 || args[i] !== 'theme' || args[i + 1] === 'palette') return args;
   const sub = args[i + 1] === 'build' ? 'compile' : args[i + 1];
   return [
     ...args.slice(0, i),
