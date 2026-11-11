@@ -303,6 +303,49 @@ describe('controlled active state', () => {
     expect(onActivate).toHaveBeenCalledTimes(1);
   });
 
+  it.each([false, 'false'] as const)(
+    'ignores an earlier plugin declaring aria-current=%j and stays active',
+    declared => {
+      const onActivate = vi.fn();
+      function Harness() {
+        const plugin = useTableActivation<Member>({
+          activeKey: '1',
+          onActivate,
+        });
+        return (
+          <Table
+            data={members}
+            columns={memberColumns}
+            idKey="id"
+            plugins={{falseOwner: falseOwnerPlugin(), activation: plugin}}
+          />
+        );
+      }
+      function falseOwnerPlugin(): TablePlugin<Member> {
+        return {
+          rowModel: 'flat',
+          transformBodyRow: props => ({
+            ...props,
+            htmlProps: {
+              ...props.htmlProps,
+              'aria-current': declared,
+            },
+          }),
+        };
+      }
+      const {unmount} = render(<Harness />);
+      try {
+        const rows = bodyRows();
+        expect(rows[0].getAttribute('data-active')).toBe('true');
+        expect(rows[0].getAttribute('aria-current')).toBe('true');
+        fireEvent.click(rows[0]);
+        expect(onActivate).toHaveBeenCalledTimes(1);
+      } finally {
+        unmount();
+      }
+    },
+  );
+
   it('removes only the current exposure the module wrote', () => {
     function Harness() {
       const plugin = useTableActivation<Member>({
