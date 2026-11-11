@@ -163,7 +163,9 @@ each finding at its file and line.
   INV24 and INV25).
   A new internal module or hook that no record defines gets REQUEST_CHANGES:
   it needs an owner API decision, with the delta as usage, why it is needed,
-  and why existing modules are not enough.
+  and why existing modules are not enough
+  ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#contract-before-escalation)
+  step 5 and DEC-22).
 - **b. Behavior.** Each observable behavior change in a published package
   cites the current record and clause that settle it. If nothing changes
   behavior, write "No behavior change" in the description. A clause settles
