@@ -915,10 +915,8 @@ function EndLane({
 }) {
   const isSearchBusy = useIsBusy(lane);
   const isBusy = isSearchBusy || isValueBusy;
-  // The field is busy while a search is in flight or while its value loads
-  // or saves. The Spinner stays named (family:input-fields FR7) but is not a
-  // live region; the field announces each busy start instead
-  // (spec:AST-086 FR8).
+  // The Spinner stays named (family:input-fields FR7) but is not a live region.
+  // The field announces each busy start (spec:AST-086 FR8).
   useBusyAnnouncement(isBusy, loadingLabel, anchorRef);
   if (!isBusy && !hasStaticContent && !hasBusySlot) {
     return null;
