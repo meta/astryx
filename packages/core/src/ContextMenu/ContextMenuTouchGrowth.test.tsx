@@ -10,7 +10,8 @@
  *   packages/core/src/ContextMenu/ContextMenuTouchLayer.tsx
  */
 
-import {act, render, screen} from '@testing-library/react';
+import {act, cleanup, render, screen, within} from '@testing-library/react';
+import {createPortal} from 'react-dom';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
 import {ContextMenu} from './ContextMenu';
@@ -192,6 +193,70 @@ describe('ContextMenu’s growth under a finger', () => {
     expect(growths(trigger)).toHaveLength(0);
     advance(1 + FRAME_MS);
     expectGrowthFromOnsetFrame(trigger, landedAt);
+  });
+
+  it('times a finger’s growth on a second document’s own clock: it starts at that clock’s onset, 150 ms after the landing', async () => {
+    // An app can render a ContextMenu into a same-origin iframe or a Document
+    // Picture-in-Picture window through a portal.
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const secondDocument = frame.contentDocument as Document;
+    const view = secondDocument.defaultView as Window & typeof globalThis;
+    // The frame opened after the page, so its clock reads 5 s less. Its
+    // events come stamped on that clock.
+    const frameNow = vi
+      .spyOn(view.performance, 'now')
+      .mockImplementation(() => performance.now() - 5000);
+    // Its animation frames come with the page's fake ones.
+    const frameRequest = vi
+      .spyOn(view, 'requestAnimationFrame')
+      .mockImplementation(callback => requestAnimationFrame(callback));
+    const frameCancel = vi
+      .spyOn(view, 'cancelAnimationFrame')
+      .mockImplementation(handle => cancelAnimationFrame(handle));
+    Object.defineProperty(view, 'matchMedia', {
+      value: window.matchMedia,
+      configurable: true,
+    });
+    try {
+      render(
+        createPortal(
+          <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
+            <div>Hold me</div>
+          </ContextMenu>,
+          secondDocument.body,
+        ),
+      );
+      const trigger = within(secondDocument.body).getByTestId('ctx');
+      const contact = {
+        identifier: 1,
+        clientX: 20,
+        clientY: 20,
+        target: trigger,
+      };
+      const event = new view.Event('touchstart', {
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, 'changedTouches', {value: [contact]});
+      Object.defineProperty(event, 'touches', {value: [contact]});
+      const landedAt = view.performance.now();
+      Object.defineProperty(event, 'timeStamp', {value: landedAt});
+      trigger.dispatchEvent(event);
+      // Its nodes come from another window, so the checks read numbers.
+      advance(149);
+      expect(growths(trigger).map(startOf)).toEqual([]);
+      advance(1 + FRAME_MS);
+      expectGrowthFromOnsetFrame(trigger, landedAt);
+    } finally {
+      // Unmount before the frame goes, or React removes nodes from a
+      // document that no longer exists.
+      cleanup();
+      frame.remove();
+      frameNow.mockRestore();
+      frameRequest.mockRestore();
+      frameCancel.mockRestore();
+    }
   });
 
   it('grows the trigger at the onset when the press machine marks the press before the recognizer has the finger', async () => {
