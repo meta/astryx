@@ -1159,6 +1159,23 @@ describe('Button tooltip description (FR12)', () => {
 });
 
 describe('Button tooltip mount on the first interaction', () => {
+  it('keeps the element and its focus when tooltip turns off and on', async () => {
+    const {rerender} = render(
+      <Button label="Previous" tooltip="Go to the previous page" />,
+    );
+    await settle();
+    const button = screen.getByRole('button', {name: 'Previous'});
+    act(() => button.focus());
+    rerender(<Button label="Previous" />);
+    expect(screen.getByRole('button', {name: 'Previous'})).toBe(button);
+    expect(button).toHaveFocus();
+    expect(button).not.toHaveAttribute('aria-describedby');
+    rerender(<Button label="Previous" tooltip="Go to the previous page" />);
+    expect(screen.getByRole('button', {name: 'Previous'})).toBe(button);
+    expect(button).toHaveFocus();
+    expect(button).toHaveAccessibleDescription('Go to the previous page');
+  });
+
   it('follows a new element: a link Button that becomes disabled still shows its tooltip', async () => {
     const showPopover = withPopover();
     const {rerender} = render(

@@ -951,12 +951,9 @@ export function Button({
 
   const mergedButtonRef = useMergedRefs(ref, hitAreaRef);
 
-  const renderElement = (
-    trigger: OnDemandTooltipTriggerProps | null,
-  ): ReactNode => {
-    // The tooltip's ref already holds the caller's.
-    const {ref: tooltipRef, ...tooltipTrigger} = trigger ?? {ref: undefined};
-    const elementRef = tooltipRef ?? mergedButtonRef;
+  const renderElement = (trigger: OnDemandTooltipTriggerProps): ReactNode => {
+    // The part's ref already holds the caller's.
+    const {ref: elementRef, ...tooltipTrigger} = trigger;
     if (renderAsLink) {
       return (
         <LinkComponent
@@ -1015,19 +1012,17 @@ export function Button({
   // container's direct-child `:has()` selectors still find its markers). Its
   // module loads on demand; the first hover, tap or focus mounts it. A tooltip
   // that repeats the name is not a description, so it is not read twice.
-  if (tooltip) {
-    return (
-      <OnDemandTooltip
-        tooltip={tooltip}
-        isDescription={!isTooltipName}
-        callerRef={mergedButtonRef}
-        callerProps={props}>
-        {renderElement}
-      </OnDemandTooltip>
-    );
-  }
-
-  return renderElement(null);
+  // Rendered through the part with or without a tooltip, so turning the
+  // tooltip on or off keeps the element and its focus.
+  return (
+    <OnDemandTooltip
+      tooltip={tooltip}
+      isDescription={!isTooltipName}
+      callerRef={mergedButtonRef}
+      callerProps={props}>
+      {renderElement}
+    </OnDemandTooltip>
+  );
 }
 
 Button.displayName = 'Button';
