@@ -69,94 +69,6 @@
       "status": "open",
       "group": "F8 Public registries"
     },
-    "packages/core/src/Layer/gestureCounter.ts:claimedPress": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:clickedGesture": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:contextMenuGesture": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:gesture": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:isListening": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:pressPointerId": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/gestureCounter.ts:unsubscribePress": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerExitCopy.ts:copies": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerStack.ts:composingDocuments": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerStack.ts:entries": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerStack.ts:layerCountByDocument": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerStack.ts:nextSeq": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerStack.ts:seqByToken": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/layerSurfacePress.ts:surfaces": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/modalOutlet.ts:listeners": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/modalOutlet.ts:outletGroups": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/modalOutlet.ts:outlets": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/outsidePress.ts:outsideDismissals": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/popoverOperations.ts:browserHidesByDocument": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/popoverOperations.ts:browserHidesInFlight": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/popoverOperations.ts:ownOperationsByDocument": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
-    "packages/core/src/Layer/popoverOperations.ts:settledCallbacksByDocument": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
-    },
     "packages/core/src/List/listLayoutUpdates.ts:keptStyles": {
       "status": "open",
       "group": "triage"
@@ -305,14 +217,6 @@
       "status": "allowed",
       "reason": "The attach and the scroll calls run in the same copy; the paging value is shared."
     },
-    "packages/core/src/Spinner/spinnerRotor.ts:flushScheduled": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/Spinner/spinnerRotor.ts:pendingRotors": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
     "packages/core/src/Table/glidingDivider.ts:inlineColorOf": {
       "status": "open",
       "group": "triage"
@@ -332,10 +236,6 @@
     "packages/core/src/Table/plugins/groupedRows/useTableGroupedRows.tsx:GROUP_HEADER": {
       "status": "open",
       "group": "triage"
-    },
-    "packages/core/src/Table/plugins/virtualization/useTableWindow.ts:textContext": {
-      "status": "allowed",
-      "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/core/src/Table/tableColumnAdmission.ts:heightSafe": {
       "status": "open",
@@ -401,17 +301,9 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/gestures/gestureSync.ts:syncingDepth": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
     "packages/core/src/gestures/haptics.ts:nextLabelId": {
       "status": "open",
       "group": "F13 Shared id sequences"
-    },
-    "packages/core/src/gestures/pageHold.ts:holdsByDocument": {
-      "status": "open",
-      "group": "F3 Scroll lock"
     },
     "packages/core/src/gestures/touchActionRule.ts:markedRoots": {
       "status": "allowed",
@@ -421,38 +313,6 @@
       "status": "allowed",
       "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
     },
-    "packages/core/src/hooks/modalAnnounce.ts:deferredByScope": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/modalAnnounce.ts:held": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/modalAnnounce.ts:presented": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/rootScrollStyles.ts:claims": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
-    "packages/core/src/hooks/rootScrollStyles.ts:held": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
-    "packages/core/src/hooks/rootScrollStyles.ts:lockCount": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
-    "packages/core/src/hooks/rootScrollStyles.ts:lockListeners": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
-    "packages/core/src/hooks/rootScrollStyles.ts:nextClaimId": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
     "packages/core/src/hooks/scrollGeometrySubscriptions.ts:listeners": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
@@ -461,45 +321,9 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/hooks/useAnnounce.ts:clearTimers": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:lastJoined": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:modalRoute": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:pendingByRegion": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:pendingFrames": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:pendingMessages": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useAnnounce.ts:regions": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
     "packages/core/src/hooks/useEntryAnimation.ts:initialPaintComplete": {
       "status": "open",
       "group": "triage"
-    },
-    "packages/core/src/hooks/useFocusTrap.ts:activeEscapeTrapCount": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/hooks/useFocusTrap.ts:activeRegionContainers": {
-      "status": "open",
-      "group": "F5 Focus and announce"
     },
     "packages/core/src/hooks/useMediaQuery.ts:watches": {
       "status": "allowed",
@@ -513,121 +337,9 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/hooks/useScrollLock.ts:activeLock": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
-    "packages/core/src/hooks/useScrollLock.ts:lockCount": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
     "packages/core/src/i18n/resolve.ts:formatterCache": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
-    },
-    "packages/core/src/keyboard/keyboardHeight.ts:focusTakeovers": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardHeight.ts:stores": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardHeight.ts:touchStartWatches": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardLayoutGuide.ts:guides": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardTarget.ts:currentRides": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardTarget.ts:riddenAnimators": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/keyboardTarget.ts:targets": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/keyboard/useMobileKeyboard.ts:revealsAtReport": {
-      "status": "open",
-      "group": "F6 Keyboard"
-    },
-    "packages/core/src/motion/animatedLayout.ts:batches": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:changeStarts": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:edgeMotions": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:endedReports": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:exits": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:glideReports": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:glides": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:heldSlides": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:ours": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:presentedGlides": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:releaseGlides": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:replaced": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:resizeReveals": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:settleRetimes": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:settling": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:slideTargets": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:stoppedShown": {
-      "status": "open",
-      "group": "F7 Motion frame"
-    },
-    "packages/core/src/motion/animatedLayout.ts:transitionSettles": {
-      "status": "open",
-      "group": "F7 Motion frame"
     },
     "packages/core/src/motion/animator.ts:frameDepth": {
       "status": "open",
@@ -781,14 +493,6 @@
       "status": "allowed",
       "reason": "Deduplicates development warnings; a copy can at most repeat a warning once."
     },
-    "packages/core/src/utils/focusReturn.ts:focusDetachedAtRemovalStart": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
-    "packages/core/src/utils/focusReturn.ts:temporaryFocus": {
-      "status": "open",
-      "group": "F5 Focus and announce"
-    },
     "packages/core/src/utils/hitArea.ts:frame": {
       "status": "open",
       "group": "triage"
@@ -846,8 +550,8 @@
       "group": "triage"
     },
     "packages/core/src/utils/layoutViewport.ts:thicknesses": {
-      "status": "open",
-      "group": "F6 Keyboard"
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/core/src/utils/plainDate.ts:dateTimeFormats": {
       "status": "allowed",
@@ -856,10 +560,6 @@
     "packages/core/src/utils/plainDate.ts:dayNumberFormats": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
-    },
-    "packages/core/src/utils/pressClaim.ts:watchers": {
-      "status": "open",
-      "group": "F4 Layers and popovers"
     },
     "packages/core/src/utils/pressFeedback.ts:boxHold": {
       "status": "open",
@@ -917,10 +617,6 @@
       "status": "open",
       "group": "triage"
     },
-    "packages/core/src/utils/selectionLock.ts:locks": {
-      "status": "open",
-      "group": "F3 Scroll lock"
-    },
     "packages/core/src/utils/sharedMutationObserver.ts:observers": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
@@ -952,6 +648,10 @@
     "packages/core/src/utils/windowExtent.ts:windowWidthListeners": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
+    },
+    "packages/core/src/virtualization/measure.ts:textContext": {
+      "status": "allowed",
+      "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/lab/src/CodeEditor/CodeEditor.tsx:editorInstanceCounter": {
       "status": "open",

@@ -111,6 +111,15 @@ function keyToSlug(key) {
   return key.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
 }
 
+// Every table lists Core's defaults. A theme replaces them, so the headers
+// say whose values they are.
+const VALUE_HEADERS = ['Token', 'Core default'];
+const LIGHT_DARK_HEADERS = [
+  'Token',
+  'Core default (light)',
+  'Core default (dark)',
+];
+
 /** Map of group name → { exportName, file?, title, description, headers } */
 const groups = [
   {
@@ -120,7 +129,7 @@ const groups = [
     title: 'Color Tokens',
     description:
       'Semantic colors for consistent theming. All colors use light-dark() for automatic mode switching.',
-    headers: ['Token', 'Light', 'Dark'],
+    headers: LIGHT_DARK_HEADERS,
     formatRow: lightDarkRow,
     // One line per status role (architecture:theme-tokens INV11), so a reader
     // picks the token by the surface it sits on.
@@ -180,7 +189,7 @@ const groups = [
     title: 'Data Visualization Tokens',
     description:
       'Colors for charts and graphs: one categorical accent per series, a neutral for labels and reference lines, and sequential ramps from 5 (darkest) to 1 (lightest) for ordered scales and heatmaps. Import dataVars from @astryxdesign/core/theme/dataTokens.stylex for CSS-capable code. Source compilation emits the complete 56-variable group when any member is retained and none for an unused graph. Prebuilt CSS consumers load @astryxdesign/core/astryx.css, which defines the complete group for the already-compiled dataVars entry.',
-    headers: ['Token', 'Light', 'Dark'],
+    headers: LIGHT_DARK_HEADERS,
     formatRow: lightDarkRow,
   },
   {
@@ -191,7 +200,7 @@ const groups = [
     title: 'Syntax Tokens',
     description:
       'Code highlighting colors used by CodeBlock. Each defaults to a palette token, so syntax colors follow the theme; defineTheme({syntax}) sets a syntax theme instead.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -201,7 +210,7 @@ const groups = [
     title: 'Spacing Tokens',
     description:
       'Spacing scale used for padding, gap, and margin. Component gap props map spacing steps to these tokens.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -211,7 +220,7 @@ const groups = [
     title: 'Size Tokens',
     description:
       'Control heights for consistent sizing across buttons, inputs, and selectors.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -220,7 +229,7 @@ const groups = [
     exportName: 'borderDefaults',
     title: 'Border Tokens',
     description: 'Border width for card and input borders.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -229,7 +238,7 @@ const groups = [
     title: 'Focus Tokens',
     description:
       'The keyboard focus ring, shared by every component that draws one. Override these to restyle focus across the system.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -239,7 +248,7 @@ const groups = [
     title: 'Radius Tokens',
     description:
       "Numeric scale based on a 4dp base unit. Tokens scale with the theme's radius multiplier; --radius-none and --radius-full are fixed.",
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -249,7 +258,7 @@ const groups = [
     title: 'Shadow Tokens',
     description:
       'Elevation shadows (low to med to high) and inset shadows for input state rings.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -259,7 +268,7 @@ const groups = [
     title: 'Duration Tokens',
     description:
       "Motion duration primitives. Three bands: fast (micro-interactions), medium (entrance/exit), slow (continuous). Min/max variants derive from base × ratio. Of a theme's two `motion` knobs, `tempo` (0.75–1.5) scales every duration here; `character` leaves durations alone. A duration scale beats `tempo` for the bands it sets, and explicit `tokens` beat both. `tempo` leaves these unscaled: finger tracking, momentum, the rubber band, the on-screen keyboard, the press's onset delay, cancel distance and tap flash, hover-intent delays, gesture thresholds, Spinner's and Skeleton's loops, and the 200 ms Reduce Motion cap.",
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -269,7 +278,7 @@ const groups = [
     title: 'Easing Tokens',
     description:
       "Easing curves for animations and transitions. Of a theme's two `motion` knobs, `character` sets `--ease-entrance` and `--ease-move`: `crisp` decelerates without overshoot, `expressive` overshoots slightly, and at `standard` both equal `--ease-standard`; `--ease-exit` keeps its own curve at every character. `tempo` leaves curves alone. A duration scale's own fields win over the knobs, and explicit `tokens` win over everything. No curve here shapes motion that follows a finger or the system (dragging, momentum, the rubber band, the on-screen keyboard), and the press's clocks, hover-intent delays and gesture thresholds keep their timing whatever the character.",
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -278,7 +287,7 @@ const groups = [
     exportName: 'typographyDefaults',
     title: 'Font Family Tokens',
     description: 'Font family stacks for body, code, and heading text.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -288,7 +297,7 @@ const groups = [
     title: 'Font Size Tokens',
     description:
       'Geometric type scale: round(14 × 1.2^step). Base is 14px (--font-size-base).',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -297,7 +306,7 @@ const groups = [
     exportName: 'fontWeightDefaults',
     title: 'Font Weight Tokens',
     description: 'Font weight values for body, emphasis, and headings.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
   {
@@ -307,7 +316,7 @@ const groups = [
     title: 'Type Scale Tokens',
     description:
       'Semantic tokens for headings, body, labels, code, supporting text, and display text. References font size and weight tokens. Override via typography.scale in defineTheme.',
-    headers: ['Token', 'Value'],
+    headers: VALUE_HEADERS,
     formatRow: (name, value) => [name, value],
   },
 ];
