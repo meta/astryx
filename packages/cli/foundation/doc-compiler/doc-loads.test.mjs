@@ -375,6 +375,10 @@ const RUNNERS = {
       'require(typescript/package.json)',
     ],
   },
+  'foundation/discovery/module-exports.mjs': {
+    runs: "@babel/parser, loaded on first use, to read a module's exports",
+    sites: ['require(@babel/parser)'],
+  },
   'foundation/discovery/template-adapter.mjs': {
     runs: '@babel/parser, to find the fixture references and page-local bindings in template source; and a template doc that does not validate, to read the replacement it declares',
     sites: ['importDocModule', 'require(@babel/parser)'],
@@ -391,11 +395,11 @@ const RUNNERS = {
     runs: 'authored doc files, for the doc reader and discovery, and again after an edit, without the cache entry of a CommonJS doc',
     sites: [
       '.import() ×2',
-      'createJiti ×2',
       'importUrl ×2',
       'importUserModule ×2',
       'readFreshInTurn',
       'readInTurn',
+      'require(jiti)',
     ],
   },
   'foundation/doc-compiler/read.mjs': {
@@ -426,7 +430,7 @@ const RUNNERS = {
   },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache',
-    sites: ['.import() ×3', 'createJiti ×3', 'importUrl ×2', 'require.cache'],
+    sites: ['.import() ×3', 'importUrl ×2', 'require(jiti)', 'require.cache'],
   },
   'foundation/fs/read-record.mjs': {
     runs: "nothing; it wraps node:fs's read calls to record the paths an operation reads, and republishes them to ESM imports",
