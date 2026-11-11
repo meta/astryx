@@ -129,6 +129,9 @@ function run(args, {tmp, cwd = project, env = {}}) {
         TMP: tmp,
         TEMP: tmp,
         NO_UPDATE_NOTIFIER: '1',
+        // Node's compile cache (bin/astryx.mjs) keeps its own folder in the
+        // same temp folder; these runs look only at the catalog's.
+        NODE_DISABLE_COMPILE_CACHE: '1',
         ...env,
       },
     },
@@ -485,7 +488,12 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       spawnSync(process.execPath, [bin, ...QUERIES[0]], {
         cwd: project,
         encoding: 'utf8',
-        env: {...process.env, TMPDIR: tmp, NO_UPDATE_NOTIFIER: '1'},
+        env: {
+          ...process.env,
+          TMPDIR: tmp,
+          NO_UPDATE_NOTIFIER: '1',
+          NODE_DISABLE_COMPILE_CACHE: '1',
+        },
       });
     const first = ask();
     // An edit to the CLI's code between runs, which the build id would miss.
@@ -518,7 +526,12 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       {
         cwd: project,
         encoding: 'utf8',
-        env: {...process.env, TMPDIR: notAFolder, NO_UPDATE_NOTIFIER: '1'},
+        env: {
+          ...process.env,
+          TMPDIR: notAFolder,
+          NO_UPDATE_NOTIFIER: '1',
+          NODE_DISABLE_COMPILE_CACHE: '1',
+        },
       },
     );
     expect(broken.status).toBe(0);
