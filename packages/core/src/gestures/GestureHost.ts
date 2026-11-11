@@ -179,6 +179,7 @@ import {
   disarmClickGuard,
   withoutClickGuard,
 } from '../utils/clickGuard';
+import {clockOf, type EventClock} from '../utils/inputAge';
 import {subscribeInput} from '../utils/inputStream';
 import {isPrimaryClick} from '../utils/primaryClick';
 import {
@@ -663,10 +664,10 @@ function panTakesMove(
 
 /**
  * An event's time on the arena's clock: `timing.now()`, with `timing` the
- * performance of the event's own window. Some engines and DOM emulators stamp
+ * clock of the event's own window. Some engines and DOM emulators stamp
  * events in epoch milliseconds instead.
  */
-function eventTime(event: Event, timing: Performance | undefined): number {
+function eventTime(event: Event, timing: EventClock | null): number {
   const time = event.timeStamp;
   if (time > 1e12 && timing != null && timing.timeOrigin > 0) {
     return time - timing.timeOrigin;
@@ -675,15 +676,15 @@ function eventTime(event: Event, timing: Performance | undefined): number {
 }
 
 /**
- * The clock of a document's own window. A same-origin iframe or a
- * Picture-in-Picture window stamps its events from its own start.
+ * The arena clock for a document whose window's clock is `timing`. A
+ * same-origin iframe or a Picture-in-Picture window stamps its events from
+ * its own start.
  */
-function documentClock(doc: Document): GestureClock {
-  const view = doc.defaultView;
-  if (view == null || view.performance === globalThis.performance) {
+function documentClock(timing: EventClock | null): GestureClock {
+  if (timing == null || timing === globalThis.performance) {
     return browserClock;
   }
-  return {...browserClock, now: () => view.performance.now()};
+  return {...browserClock, now: () => timing.now()};
 }
 
 /** A touch list as an array; a synthetic event may carry none. */
@@ -821,8 +822,8 @@ export class GestureHost {
   private claimedLiftTimer: unknown = null;
   /** The arena's clock, which the claimed lifts' timer runs on too. */
   private readonly clock: GestureClock;
-  /** The performance of the document's own window, which stamps its events. */
-  private readonly timing: Performance | undefined;
+  /** The clock of the document's own window, which stamps its events. */
+  private readonly timing: EventClock | null;
   /** Fingers still waiting for their pointerdown, by arena id. */
   private readonly unpairedTouches = new Map<number, PlacedContact>();
   private readonly isPrimaryPointerCoarse: () => boolean;
@@ -921,10 +922,8 @@ export class GestureHost {
         return {left, top, width, height};
       },
     };
-    this.timing =
-      doc.defaultView?.performance ??
-      (typeof performance === 'undefined' ? undefined : performance);
-    this.clock = options.clock ?? documentClock(doc);
+    this.timing = clockOf(doc);
+    this.clock = options.clock ?? documentClock(this.timing);
     this.arena = new GestureArena({
       clock: this.clock,
       environment,
@@ -4292,7 +4291,7 @@ function needsSuppression(
 
 function coalescedHistory(
   event: PointerEvent,
-  timing: Performance | undefined,
+  timing: EventClock | null,
 ): TouchSample[] {
   if (typeof event.getCoalescedEvents !== 'function') {
     return [];
