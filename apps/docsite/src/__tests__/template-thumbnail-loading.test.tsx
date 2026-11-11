@@ -284,7 +284,7 @@ describe('TemplateThumbnail loading', () => {
     expect(startTransitionMock).not.toHaveBeenCalled();
     expect(previewState.renders).toEqual([]);
   });
-  it('starts every visible template import before its render turn', () => {
+  it('starts every visible template import before its render turn', async () => {
     loadState.isLoaded = false;
     const view = render(
       <>
@@ -299,6 +299,8 @@ describe('TemplateThumbnail loading', () => {
         callback([visibleEntry], {} as IntersectionObserver);
       }
     });
+    expect(loadState.preloads).toEqual([]);
+    await act(() => new Promise(resolve => setTimeout(resolve, 200)));
 
     expect(loadState.preloads).toEqual(['first', 'second']);
     expect(idleCallbacks).toHaveLength(1);
@@ -306,6 +308,23 @@ describe('TemplateThumbnail loading', () => {
 
     view.unmount();
     act(() => idleCallbacks.shift()?.(idleDeadline));
+    expect(startTransitionMock).not.toHaveBeenCalled();
+  });
+
+  it('starts no import for a tile that leaves the viewport at once', async () => {
+    loadState.isLoaded = false;
+    render(<TemplateThumbnail slug="first" />);
+
+    act(() =>
+      intersectionCallbacks[0]?.([visibleEntry], {} as IntersectionObserver),
+    );
+    act(() =>
+      intersectionCallbacks[0]?.([hiddenEntry], {} as IntersectionObserver),
+    );
+    await act(() => new Promise(resolve => setTimeout(resolve, 200)));
+    act(() => idleCallbacks.shift()?.(idleDeadline));
+
+    expect(loadState.preloads).toEqual([]);
     expect(startTransitionMock).not.toHaveBeenCalled();
   });
 

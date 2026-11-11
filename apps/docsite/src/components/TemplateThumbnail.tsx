@@ -32,6 +32,8 @@ import {scheduleThumbnailRender} from './thumbnailRenderScheduler';
 import previewCss from './TemplatePreviewSurface.module.css';
 
 const FIXED_SCALE = 0.5;
+// A tile must stay visible this long before it downloads its template.
+const PREFETCH_DWELL_MS = 150;
 
 const styles = stylex.create({
   container: {
@@ -154,13 +156,18 @@ export function TemplateThumbnail({
     return () => observer.disconnect();
   }, []);
 
-  // Syncs the template chunk download with visibility: every visible tile
-  // starts its import at once, so downloads run in parallel. Only the render
-  // waits for the queue.
+  // Syncs the template chunk download with visibility: a tile that stays
+  // visible for PREFETCH_DWELL_MS starts its import, so the downloads of
+  // visible tiles run in parallel. Tiles that only pass through the viewport
+  // during a fast scroll download nothing. Only the render waits for the queue.
   useEffect(() => {
-    if (isVisible && Component != null) {
-      preloadTemplate(slug).catch(() => {});
+    if (!isVisible || Component == null) {
+      return;
     }
+    const timer = setTimeout(() => {
+      preloadTemplate(slug).catch(() => {});
+    }, PREFETCH_DWELL_MS);
+    return () => clearTimeout(timer);
   }, [Component, isVisible, slug]);
 
   // The queue does not release the next thumbnail until this preview commits,
