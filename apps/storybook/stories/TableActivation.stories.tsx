@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import React, {useState} from 'react';
+import React, {useCallback, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {
   Table,
@@ -126,10 +126,15 @@ function ServiceDetail({service}: {service: Service | null}) {
 
 function MasterDetailDemo() {
   const [activeKey, setActiveKey] = useState<string | null>('svc-search');
+  const handleActivate = useCallback(
+    (_item: Service, key: string | number) => setActiveKey(key as string),
+    [],
+  );
+  const isActivatable = useCallback((item: Service) => !item.isArchived, []);
   const activation = useTableActivation<Service>({
     activeKey,
-    onActivate: (_item, key) => setActiveKey(key as string),
-    getIsItemActivatable: item => !item.isArchived,
+    onActivate: handleActivate,
+    getIsItemActivatable: isActivatable,
   });
   const active = services.find(service => service.id === activeKey) ?? null;
   const content = (
@@ -164,10 +169,15 @@ const manyServices: Service[] = Array.from({length: 60}, (_, index) => ({
 
 function LargeTableDemo() {
   const [activeKey, setActiveKey] = useState<string | null>('svc-05');
+  const handleActivate = useCallback(
+    (_item: Service, key: string | number) => setActiveKey(key as string),
+    [],
+  );
+  const isActivatable = useCallback((item: Service) => !item.isArchived, []);
   const activation = useTableActivation<Service>({
     activeKey,
-    onActivate: (_item, key) => setActiveKey(key as string),
-    getIsItemActivatable: item => !item.isArchived,
+    onActivate: handleActivate,
+    getIsItemActivatable: isActivatable,
   });
   return (
     <Table
