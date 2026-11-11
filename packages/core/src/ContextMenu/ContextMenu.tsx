@@ -38,7 +38,7 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/ContextMenu/ContextMenu.doc.mjs
  * - /packages/core/src/ContextMenu/ContextMenu.test.tsx
- * - /packages/core/src/ContextMenu/ContextMenuTouch.ts (the touch layer's one import site)
+ * - /packages/core/src/ContextMenu/ContextMenuTouchLayer.tsx (the touch layer)
  * - /packages/core/src/ContextMenu/contextMenuPress.ts (touch timeline)
  * - /packages/core/src/ContextMenu/index.ts
  * - /apps/storybook/stories/ContextMenu.stories.tsx

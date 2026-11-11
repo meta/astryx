@@ -4,7 +4,7 @@
 
 /**
  * @file ContextMenuTouchLayer.tsx
- * @input ContextMenu's touch layer (ContextMenuTouch.ts), the gesture
+ * @input ContextMenu's press recognizer (contextMenuPress.ts), the gesture
  *   foundation and the UIKit context-menu constants
  * @output ContextMenuTouchLayer: renders nothing; runs the trigger's press
  *   recognizer while ContextMenu is under the touch model
@@ -18,7 +18,7 @@ import {flushSync} from 'react-dom';
 import {playHaptic} from '../gestures/haptics';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {contextMenu} from '../motion/uikit/contextMenu';
-import {ContextMenuPressRecognizer} from './ContextMenuTouch';
+import {ContextMenuPressRecognizer} from './contextMenuPress';
 
 /** What ContextMenu reaches of a mounted touch layer. */
 export interface ContextMenuTouchHandle {
