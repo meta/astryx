@@ -66,6 +66,10 @@ async function settle(page: Page) {
 async function pageSensors(page: Page) {
   return page.evaluate(() => ({
     mode: document.documentElement.getAttribute('data-theme'),
+    theme:
+      document
+        .querySelector('#storybook-root [data-astryx-theme]')
+        ?.getAttribute('data-astryx-theme') ?? null,
     direction: getComputedStyle(
       document.querySelector('#storybook-root [dir]') as Element,
     ).direction,
@@ -273,6 +277,13 @@ for (const mode of ['light', 'dark'] as const) {
       await page.getByRole('button', {name: 'Sent'}).hover();
       await settle(page);
       const hovered = await rowPaint('Sent');
+      const alpha = Number(
+        /rgba\([^)]*,\s*([\d.]+)\)/.exec(hovered.background)?.[1] ?? 1,
+      );
+      check(
+        alpha > 0 && alpha < 1,
+        `hover paints ${hovered.background}, not a translucent overlay`,
+      );
       await frame('hover', {sent: hovered});
 
       await page.mouse.move(2, 2);
@@ -293,6 +304,10 @@ for (const mode of ['light', 'dark'] as const) {
       });
       check(focus.inList, 'Tab did not reach a row');
       check(focus.focusVisible, 'the focused row is not :focus-visible');
+      check(
+        /^solid ([2-9]|\d{2,})(\.\d+)?px /.test(focus.rowOutline ?? ''),
+        `focused row ring ${focus.rowOutline}`,
+      );
       await frame('focus-visible', {focus});
     },
   });
@@ -336,6 +351,7 @@ cases.push({
   run: async (page, check, frame) => {
     const semantics = await listSemantics(page, '#storybook-root ol');
     check(semantics.tag === 'ol', `element ${semantics.tag}`);
+    check(semantics.start === '98', `start ${semantics.start}`);
     check(semantics.role === 'list', `role ${semantics.role}`);
     await frame('rest', {semantics});
   },
@@ -592,6 +608,7 @@ async function runCase(page: Page, item: AuditCase) {
   const sensors = await pageSensors(page);
   check(!sensors.storybookError, 'storybook error display');
   check(sensors.mode === item.mode, `mode ${sensors.mode}`);
+  check(sensors.theme === 'astryx-neutral', `theme ${sensors.theme}`);
   check(sensors.direction === item.direction, `direction ${sensors.direction}`);
   check(sensors.dpr === 2, `dpr ${sensors.dpr}`);
   check(sensors.fonts === 'loaded', `fonts ${sensors.fonts}`);

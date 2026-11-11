@@ -1011,14 +1011,18 @@ describe('List', () => {
 
   it('forwards ref to the list element, with or without a header', () => {
     for (const header of [undefined, 'Steps']) {
-      const ref = createRef<HTMLUListElement | HTMLOListElement>();
-      const {container} = render(
-        <List ref={ref} header={header}>
-          <ListItem label="First" />
-        </List>,
-      );
-      expect(ref.current).toBe(container.querySelector('ul'));
-      cleanup();
+      for (const listStyle of ['none', 'decimal'] as const) {
+        const ref = createRef<HTMLUListElement | HTMLOListElement>();
+        const {container} = render(
+          <List ref={ref} header={header} listStyle={listStyle}>
+            <ListItem label="First" />
+          </List>,
+        );
+        expect(ref.current).toBe(
+          container.querySelector(listStyle === 'decimal' ? 'ol' : 'ul'),
+        );
+        cleanup();
+      }
     }
   });
 
@@ -1034,6 +1038,17 @@ describe('List', () => {
       expect(list.style.maxWidth).toBe('320px');
       cleanup();
     }
+  });
+
+  it('keeps its own counter start beside a consumer style', () => {
+    const {container} = render(
+      <List listStyle="decimal" start={3} style={{maxWidth: 320}}>
+        <ListItem label="Third" />
+      </List>,
+    );
+    const list = container.querySelector('ol')!;
+    expect(list.style.maxWidth).toBe('320px');
+    expect(list.getAttribute('style')).toContain('astryx-list 2');
   });
 
   it('marks the corner reader where a bleeding list meets its container: the list, or its root under a header', () => {
