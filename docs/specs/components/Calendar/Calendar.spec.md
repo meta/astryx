@@ -258,23 +258,23 @@ button.
 
 ### `spec:AST-013` FR12 exception — calendars that need `Temporal`
 
-- **Capability:** calendars other than `gregory`, `iso8601`, `buddhist`,
-  `roc`, and `japanese`, which need the runtime's `Temporal`.
+- **Capability:** calendars other than the Gregorian, Buddhist, Minguo, and
+  Japanese calendars, which need the runtime's `Temporal`.
 - **Reduction:** where `Temporal` is missing or does not support the calendar,
   as in Safari on macOS and iOS, such a calendar resolves to `gregory` before
   the first render and warns once in development, on the server and in the
   browser, naming `temporal-polyfill/full/global` (`spec:AST-111` FR5). An
-  application that loads a `Temporal` polyfill gets the full calendar. A
-  server without `Temporal` renders Gregorian markup, which a browser with
-  `Temporal` does not match, so a server-rendered application loads `Temporal`
-  on the server too. `chinese` and `dangi` month starts follow the runtime's
-  `Temporal`; a server and a browser whose implementations disagree on a
-  month start render that month differently, and React renders it again on
-  the client during hydration (`spec:AST-111` FR19). Day and month names
-  follow the month and day that the grid shows in every case.
+  application that loads a `Temporal` polyfill gets the full calendar. A server
+  without `Temporal` renders Gregorian markup, which a browser with `Temporal`
+  does not match, so a server-rendered application loads `Temporal` on the
+  server too. Month starts in the Chinese and Dangi calendars follow the
+  runtime's `Temporal`; a server and a browser whose implementations disagree on
+  a month start render that month differently, and React renders it again on the
+  client during hydration (`spec:AST-111` FR19). Day and month names follow the
+  month and day that the grid shows in every case.
 - **Preserved obligations:** `spec:AST-013` FR7 and FR8, and FR9 whenever the
   server and the browser resolve the calendar the same way, outside the
-  `chinese` and `dangi` case. The Gregorian grid keeps
+  case of the Chinese and Dangi calendars. The Gregorian grid keeps
   the primary task, accessibility, Gregorian ISO values and callbacks, and
   repeated use; nothing throws; a server and a browser that both have
   `Temporal`, or both lack it, render the same markup.
