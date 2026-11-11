@@ -17,7 +17,7 @@ import {Stack, Text, Button} from '@astryxdesign/core';
 import {Heading} from '@astryxdesign/core/Text';
 
 const meta: Meta<typeof WeightedSVGIcon> = {
-  title: 'Lab/SVGIcon/Weighted',
+  title: 'Lab/SVGIcon',
   component: WeightedSVGIcon,
 };
 
@@ -35,7 +35,7 @@ const ROW_ICONS = [
 ];
 
 /** Icons pick their drawing from the text around them: no weight prop anywhere. */
-export const FollowsFontWeight: Story = {
+export const WeightedFollowsFontWeight: Story = {
   render: () => (
     <Stack gap={3}>
       {WEIGHTS.map(w => (
@@ -60,7 +60,7 @@ export const FollowsFontWeight: Story = {
 };
 
 /** Drag the slider: the text weight changes and the icons follow it, stop by stop. */
-export const LiveWeight: Story = {
+export const WeightedLiveWeight: Story = {
   render: function LiveWeightStory() {
     const [weight, setWeight] = useState(400);
     return (
@@ -100,7 +100,7 @@ export const LiveWeight: Story = {
 };
 
 /** Astryx components set font-weight from the theme; icons inside them follow. */
-export const InsideAstryxText: Story = {
+export const WeightedInsideAstryxText: Story = {
   render: () => (
     <Stack gap={3}>
       {(['normal', 'medium', 'semibold', 'bold'] as const).map(w => (
@@ -125,7 +125,7 @@ export const InsideAstryxText: Story = {
 };
 
 /** One sprite holds each icon's drawings once; every instance is a `<use>` reference. */
-export const Sprite: Story = {
+export const WeightedSprite: Story = {
   render: () => (
     <Stack gap={3}>
       <WeightedIconSprite icons={weightedStarterIcons} />
@@ -152,7 +152,7 @@ export const Sprite: Story = {
 };
 
 /** `weight` pins one icon; `--astryx-icon-weight` pins a whole subtree. */
-export const PinnedWeight: Story = {
+export const WeightedPinnedWeight: Story = {
   render: () => (
     <Stack gap={3}>
       <div

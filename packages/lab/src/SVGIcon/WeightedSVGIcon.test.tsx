@@ -117,16 +117,44 @@ describe('WeightedSVGIcon', () => {
 describe('the weight probe font', () => {
   /** Gives a document's window a FontFace and its document a font set. */
   function stubFonts(doc: Document) {
-    const add = vi.fn();
+    const faces = new Set<{family: string}>();
+    const add = vi.fn((face: {family: string}) => faces.add(face));
     const view = doc.defaultView as Window & {FontFace?: unknown};
     view.FontFace = class {
+      family: string;
+      constructor(family: string) {
+        this.family = family;
+      }
       load() {
         return Promise.resolve(this);
       }
     };
-    Object.defineProperty(doc, 'fonts', {configurable: true, value: {add}});
+    Object.defineProperty(doc, 'fonts', {
+      configurable: true,
+      value: {add, [Symbol.iterator]: () => faces.values()},
+    });
     return add;
   }
+
+  it('is added once per document by every copy of the module, a swizzled one too', async () => {
+    const iframe = document.createElement('iframe');
+    document.body.append(iframe);
+    const frameDoc = iframe.contentDocument;
+    if (frameDoc == null) {
+      throw new Error('no iframe document');
+    }
+    const add = stubFonts(frameDoc);
+    const first = await import('./weightProbe');
+    vi.resetModules();
+    const second = await import('./weightProbe');
+    expect(second).not.toBe(first);
+
+    first.registerWeightProbe(frameDoc);
+    second.registerWeightProbe(frameDoc);
+
+    expect(add).toHaveBeenCalledTimes(1);
+    iframe.remove();
+  });
 
   it('is added once per document, in StrictMode too, including an iframe the icon renders into', () => {
     const iframe = document.createElement('iframe');

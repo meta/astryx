@@ -26,8 +26,19 @@ const WEIGHT_PROBE_FAMILY = 'AstryxWeightProbe';
 const WEIGHT_PROBE_WOFF2 =
   'd09GMgABAAAAAAF8AA0AAAAAA3gAAAEqAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP0hWQVJCBmAANC8kChQ0MDgBNgIkAwgLBgAEIAWBHwcmG6wCSJ4Dbju8irW92Oh6kugpxBHF73Wz914orQn1haE0i7NEfoVGyjhDMSqx3PQe4nGGeCocqpVjz8Tigex/gProjx0HFGASWG5hEFKioUWYlo2QwKAbOy9qONhMS92/KOAAAAQbggtRMzPAEwWlFALzlgGfTGkTXVMAjyUGQ/uHEPTdgELDgSY40N2g64JhQcIE3t9R4gArn3EygMg37R8CFOgIGjqgg9CSdQkQBJyp2oftsbBjaTSDpdETjGrevv+jyvtDEL54adqir/D2Dz97+oCOIoKmQGj/MJkCC0WwFwiC0hCqWQCWfCAQuwgo3a5AWHKoSV8Vd84vlxX3Zdjw/twP3bo8UEXd1V44y2GYwzD0Bp3VwhJKxRIDrVPzhGbSYAAJZjW2DwA=';
 
-// The face stays for the document's lifetime, so each document gets it once.
-const registeredDocuments = new WeakSet<Document>();
+/**
+ * Whether the document already holds the probe face. The document's font set
+ * is the record, so every copy of this module, a swizzled one too, adds the
+ * face once.
+ */
+function hasWeightProbe(fonts: FontFaceSet): boolean {
+  for (const face of fonts) {
+    if (face.family.replace(/["']/g, '') === WEIGHT_PROBE_FAMILY) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Adds the probe font to `doc.fonts` once per document: the page, an iframe
@@ -36,10 +47,9 @@ const registeredDocuments = new WeakSet<Document>();
  */
 export function registerWeightProbe(doc: Document): void {
   const FontFaceInView = doc.defaultView?.FontFace;
-  if (registeredDocuments.has(doc) || FontFaceInView == null) {
+  if (FontFaceInView == null || hasWeightProbe(doc.fonts)) {
     return;
   }
-  registeredDocuments.add(doc);
   const bytes = Uint8Array.from(atob(WEIGHT_PROBE_WOFF2), c => c.charCodeAt(0));
   const face = new FontFaceInView(WEIGHT_PROBE_FAMILY, bytes, {
     weight: '1 1000',
