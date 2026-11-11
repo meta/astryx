@@ -357,12 +357,13 @@ export function useTableWindow<T>({
   });
 
   const totalHeight = plan?.totalHeight ?? 0;
-  const revision = snapshot.revision;
+  const mountedStart = plan?.start;
+  const mountedEnd = plan?.end;
   const layoutRevision = snapshot.layoutRevision;
-  // Validates after mount, on changed inputs and on each content or layout
-  // invalidation. Newly mounted rows cause a content invalidation, which the
-  // shared measurement publishes after its own layout reads. So a scroll
-  // commit reads no layout, and this check reads an already clean layout.
+  // Validates after mount, on changed inputs, on each layout invalidation and
+  // in the commit that mounts new rows. A scroll inside the mounted range
+  // commits nothing, so it reads no layout; only a changed range reads the
+  // rows it mounted.
   useIsomorphicLayoutEffect(() => {
     if (
       !isWindowed ||
@@ -454,7 +455,8 @@ export function useTableWindow<T>({
     keys,
     logicalPositionColumns,
     totalHeight,
-    revision,
+    mountedStart,
+    mountedEnd,
     layoutRevision,
     positionWidths,
     body,

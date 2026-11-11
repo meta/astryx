@@ -131,6 +131,36 @@ function countScrollCommits(
   return commits;
 }
 
+/**
+ * Commits while scrolling 2,000px at `step` px per event. After each commit,
+ * the source publishes a content revision, as the shared measurement does
+ * once the window's newly mounted items are in the DOM.
+ */
+function countCommitsWithMountRevisions(
+  element: (source: Source) => React.ReactElement,
+  move: (offset: number) => Partial<FakeSnapshot>,
+  step: number,
+): number {
+  const source = createSource();
+  let commits = 0;
+  render(
+    <Profiler id="window" onRender={() => commits++}>
+      {element(source)}
+    </Profiler>,
+  );
+  commits = 0;
+  let revision = 0;
+  for (let offset = step; offset <= 2000; offset += step) {
+    const before = commits;
+    act(() => source.move(move(offset)));
+    if (commits > before) {
+      revision++;
+      act(() => source.move({revision}));
+    }
+  }
+  return commits;
+}
+
 describe('scroll band commit counts', () => {
   it('commits a block scroll only when it moves half a band', () => {
     const band = getBlockBandPadding(600);
@@ -179,7 +209,7 @@ describe('scroll band commit counts', () => {
     ).toBe(0);
   });
 
-  it('passes a viewport, offset or revision change through at once', () => {
+  it('passes a viewport, offset or layout change through at once, and holds a content revision', () => {
     const source = createSource();
     let commits = 0;
     render(
@@ -192,6 +222,29 @@ describe('scroll band commit counts', () => {
     act(() => source.move({startOffset: 40}));
     act(() => source.move({revision: 1}));
     act(() => source.move({layoutRevision: 1}));
-    expect(commits).toBe(4);
+    // The content revision alone commits nothing.
+    expect(commits).toBe(3);
+  });
+
+  it('commits a fast block scroll once per band move, not again for the revision its mounts publish', () => {
+    const band = getBlockBandPadding(600);
+    const commits = countCommitsWithMountRevisions(
+      source => <Rows source={source} />,
+      offset => ({scrollTop: offset}),
+      120,
+    );
+    expect(commits).toBeLessThanOrEqual(Math.ceil(2000 / (band / 2)) + 1);
+    expect(commits).toBeGreaterThan(0);
+  });
+
+  it('commits a fast diagonal scroll once per band move on either axis', () => {
+    const blockMoves = Math.ceil(2000 / (getBlockBandPadding(600) / 2));
+    const inlineMoves = Math.ceil(2000 / (getInlineBandPadding(900) / 2));
+    const commits = countCommitsWithMountRevisions(
+      source => <Both source={source} />,
+      offset => ({scrollTop: offset, scrollLeft: offset}),
+      120,
+    );
+    expect(commits).toBeLessThanOrEqual(blockMoves + inlineMoves + 1);
   });
 });

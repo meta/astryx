@@ -123,10 +123,12 @@ export function getBlockBandPadding(viewportHeight: number): number {
 
 /**
  * A snapshot reader that keeps the last snapshot it planned from until the
- * block scroll offset moves half a band, or anything else the plan reads
- * changes. An identical snapshot lets React skip the render, so a scroll
- * inside the band commits nothing, and an inline-only scroll never reaches
- * the row plan.
+ * block scroll offset moves half a band, or the viewport size, start offset,
+ * extent, measured state or layout revision changes. An identical snapshot
+ * lets React skip the render, so a scroll inside the band commits nothing,
+ * and an inline-only scroll never reaches the row plan. A content revision
+ * alone passes nothing through: the window's own mounts publish one, and it
+ * changes no plan input.
  */
 function createBandedBlockSnapshot(
   source: ListWindowGeometrySource,
@@ -143,7 +145,6 @@ function createBandedBlockSnapshot(
       live.viewportHeight !== planned.viewportHeight ||
       live.startOffset !== planned.startOffset ||
       live.scrollHeight !== planned.scrollHeight ||
-      live.revision !== planned.revision ||
       live.layoutRevision !== planned.layoutRevision ||
       Math.abs(live.scrollTop - planned.scrollTop) >=
         getBlockBandPadding(live.viewportHeight) / 2
