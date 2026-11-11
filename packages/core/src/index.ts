@@ -197,6 +197,9 @@ export {
 export {
   createReorderable,
   type Reorderable,
+  type ReorderableAttachOptions,
+  type ReorderableAttachment,
+  type ReorderableItem,
   type ReorderableOptions,
   type ReorderMove,
 } from './reorderable/createReorderable';

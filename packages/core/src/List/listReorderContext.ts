@@ -163,6 +163,17 @@ export interface ReorderableInternals {
   readonly [REORDER_ENGINE]: ListReorderEngine;
   /** Reorder mode for the item with `key`, from the app's own UI. */
   start(key: Key): void;
+  /** Reorders a container's plain elements (reorderable/attachReorderable.ts). */
+  attach(
+    container: HTMLElement,
+    options: {
+      items: () => ReadonlyArray<{
+        key: Key;
+        element: HTMLElement;
+        handle: HTMLElement;
+      }>;
+    },
+  ): {detach(): void};
 }
 
 /** What a reorderable List hands its rows. */

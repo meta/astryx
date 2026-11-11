@@ -1,0 +1,331 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {act, fireEvent, screen, waitFor} from '@testing-library/react';
+import {announceMessage} from '../hooks/useAnnounce';
+import {createReorderable} from './createReorderable';
+import type {ReorderableAttachment, ReorderMove} from './createReorderable';
+
+vi.mock('../hooks/useAnnounce', async importOriginal => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  announceMessage: vi.fn(() => null),
+}));
+
+const announced = () =>
+  vi.mocked(announceMessage).mock.calls.map(([message]) => message);
+
+type Apply = 'sync' | 'microtask' | 'never' | 'late';
+
+/** A plain list the app renders: one `<li>` per item, each with a button. */
+function renderPlainList(
+  names: string[],
+  {
+    apply = 'sync',
+    isReorderable,
+    handleTag = 'button',
+    handleDescribedBy,
+  }: {
+    apply?: Apply;
+    isReorderable?: (key: string | number) => boolean;
+    handleTag?: 'button' | 'span';
+    handleDescribedBy?: string;
+  } = {},
+) {
+  const container = document.createElement('ul');
+  document.body.append(container);
+  for (const name of names) {
+    const row = document.createElement('li');
+    row.dataset.key = name.toLowerCase();
+    const text = document.createElement('span');
+    text.textContent = name;
+    const handle = document.createElement(handleTag);
+    if (handle instanceof HTMLButtonElement) {
+      handle.type = 'button';
+    }
+    handle.className = 'grip';
+    if (handleDescribedBy != null) {
+      handle.setAttribute('aria-describedby', handleDescribedBy);
+    }
+    row.append(text, handle);
+    container.append(row);
+  }
+  const rows = () => Array.from(container.querySelectorAll('li'));
+  const moves: ReorderMove[] = [];
+  const move = ({key, to}: ReorderMove) => {
+    const row = rows().find(element => element.dataset.key === key);
+    const rest = rows().filter(element => element !== row);
+    if (row == null) {
+      return;
+    }
+    const before = rest[to] ?? null;
+    container.insertBefore(row, before);
+  };
+  const reorderable = createReorderable({
+    onReorder: next => {
+      moves.push(next);
+      if (apply === 'sync') {
+        move(next);
+      } else if (apply === 'microtask') {
+        // What React's flush of a setState made in this task does.
+        queueMicrotask(() => move(next));
+      } else if (apply === 'late') {
+        setTimeout(() => move(next), 0);
+      }
+    },
+    isReorderable,
+  });
+  const attachment = reorderable.attach(container, {
+    items: () =>
+      rows().map(row => ({
+        key: row.dataset.key ?? '',
+        element: row,
+        handle: row.querySelector<HTMLElement>('.grip') as HTMLElement,
+      })),
+  });
+  const handle = (name: string) =>
+    rows()
+      .find(row => row.dataset.key === name.toLowerCase())
+      ?.querySelector<HTMLElement>('.grip') as HTMLElement;
+  const order = () => rows().map(row => row.textContent);
+  return {container, reorderable, attachment, handle, order, moves};
+}
+
+/** Lets the end-of-task check and the controller's fallback run. */
+async function settle() {
+  await act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+}
+
+let attachments: ReorderableAttachment[] = [];
+function track<T extends {attachment: ReorderableAttachment}>(value: T): T {
+  attachments.push(value.attachment);
+  return value;
+}
+
+beforeEach(() => {
+  vi.mocked(announceMessage).mockClear();
+});
+
+afterEach(() => {
+  for (const attachment of attachments) {
+    attachment.detach();
+  }
+  attachments = [];
+  document.body.innerHTML = '';
+});
+
+describe('createReorderable attach (spec:AST-103 FR4b)', () => {
+  it('wires each handle as a named reorder toggle in the Tab order', () => {
+    const {handle} = track(renderPlainList(['Milk', 'Eggs']));
+    const milk = handle('Milk');
+    expect(milk).toHaveAttribute('aria-pressed', 'false');
+    expect(milk).toHaveAccessibleName('Reorder Milk');
+    expect(milk).toHaveAccessibleDescription(
+      'Drag to move this item, or press Space or Enter, then the arrow keys to move it one place at a time. Press Escape when you are done.',
+    );
+    expect(milk).not.toHaveAttribute('role');
+  });
+
+  it('gives a handle that is not a button the button role and a Tab stop', () => {
+    const {handle} = track(renderPlainList(['Milk'], {handleTag: 'span'}));
+    const milk = handle('Milk');
+    expect(milk).toHaveAttribute('role', 'button');
+    expect(milk).toHaveAttribute('tabindex', '0');
+    milk.focus();
+    fireEvent.keyDown(milk, {key: 'Enter'});
+    expect(milk).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('moves an item in reorder mode and announces its new place once', async () => {
+    const {handle, order, moves} = track(
+      renderPlainList(['Milk', 'Eggs', 'Bread']),
+    );
+    const milk = handle('Milk');
+    act(() => milk.click());
+    expect(milk).toHaveAttribute('aria-pressed', 'true');
+    expect(milk).toHaveFocus();
+    fireEvent.keyDown(milk, {key: 'ArrowDown'});
+    expect(moves).toEqual([{key: 'milk', to: 1}]);
+    await settle();
+    expect(order()).toEqual(['Eggs', 'Milk', 'Bread']);
+    expect(announced()).toEqual([
+      'Milk, position 2 of 3, after Eggs, before Bread',
+    ]);
+    expect(milk).toHaveFocus();
+    expect(milk).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('commits a move the app applies in a microtask, as a React flush does', async () => {
+    const {handle, order} = track(
+      renderPlainList(['Milk', 'Eggs', 'Bread'], {apply: 'microtask'}),
+    );
+    const milk = handle('Milk');
+    act(() => milk.click());
+    fireEvent.keyDown(milk, {key: 'ArrowDown'});
+    await settle();
+    expect(order()).toEqual(['Eggs', 'Milk', 'Bread']);
+    expect(announced()).toEqual([
+      'Milk, position 2 of 3, after Eggs, before Bread',
+    ]);
+  });
+
+  it('refuses and announces a move the app does not apply', async () => {
+    const {handle, order} = track(
+      renderPlainList(['Milk', 'Eggs', 'Bread'], {apply: 'never'}),
+    );
+    const milk = handle('Milk');
+    act(() => milk.click());
+    fireEvent.keyDown(milk, {key: 'ArrowDown'});
+    await settle();
+    expect(order()).toEqual(['Milk', 'Eggs', 'Bread']);
+    expect(announced()).toEqual(["Can't move Milk"]);
+  });
+
+  it('refuses a move the app applies in a later task', async () => {
+    const {handle} = track(
+      renderPlainList(['Milk', 'Eggs', 'Bread'], {apply: 'late'}),
+    );
+    const milk = handle('Milk');
+    act(() => milk.click());
+    fireEvent.keyDown(milk, {key: 'ArrowDown'});
+    await settle();
+    expect(announced()).toEqual(["Can't move Milk"]);
+  });
+
+  it('ends reorder mode on Escape and announces where the item is', async () => {
+    const {handle} = track(renderPlainList(['Milk', 'Eggs', 'Bread']));
+    const milk = handle('Milk');
+    act(() => milk.click());
+    fireEvent.keyDown(milk, {key: 'ArrowDown'});
+    await settle();
+    vi.mocked(announceMessage).mockClear();
+    fireEvent.keyDown(milk, {key: 'Escape'});
+    expect(milk).toHaveAttribute('aria-pressed', 'false');
+    expect(announced()).toEqual(['Done, Milk at position 2 of 3']);
+  });
+
+  it('shows the hint while in reorder mode, its buttons doing what the keys do', async () => {
+    const {handle, order} = track(renderPlainList(['Milk', 'Eggs', 'Bread']));
+    const milk = handle('Milk');
+    act(() => milk.click());
+    // jsdom never opens a popover, so the hint layer stays hidden there.
+    const down = await waitFor(() =>
+      screen.getByRole('button', {name: 'Move down', hidden: true}),
+    );
+    act(() => down.click());
+    await settle();
+    expect(order()).toEqual(['Eggs', 'Milk', 'Bread']);
+    act(() => screen.getByRole('button', {name: 'Done', hidden: true}).click());
+    expect(milk).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it("starts reorder mode from the app's own UI with start(key)", () => {
+    const {handle, reorderable} = track(renderPlainList(['Milk', 'Eggs']));
+    act(() => reorderable.start('eggs'));
+    expect(handle('Eggs')).toHaveAttribute('aria-pressed', 'true');
+    expect(handle('Eggs')).toHaveFocus();
+  });
+
+  it('wires no handle for an item isReorderable rejects, and refuses moves past one at the end', async () => {
+    const {handle} = track(
+      renderPlainList(['Milk', 'Eggs', 'Pinned'], {
+        isReorderable: key => key !== 'pinned',
+      }),
+    );
+    expect(handle('Pinned')).not.toHaveAttribute('aria-pressed');
+    const eggs = handle('Eggs');
+    act(() => eggs.click());
+    fireEvent.keyDown(eggs, {key: 'ArrowDown'});
+    await settle();
+    expect(announced()).toEqual(["Can't move past Pinned"]);
+  });
+
+  it('wires an item the app adds after attach at the next press', () => {
+    const {container, handle} = track(renderPlainList(['Milk']));
+    const row = document.createElement('li');
+    row.dataset.key = 'eggs';
+    row.innerHTML =
+      '<span>Eggs</span><button type="button" class="grip"></button>';
+    container.append(row);
+    expect(handle('Eggs')).not.toHaveAttribute('aria-pressed');
+    act(() => handle('Milk').click());
+    expect(handle('Eggs')).toHaveAttribute('aria-pressed', 'false');
+    expect(handle('Eggs')).toHaveAccessibleName('Reorder Eggs');
+  });
+
+  it('detach puts back every attribute and element, and stops listening', () => {
+    const {container, handle, attachment} = renderPlainList(['Milk', 'Eggs'], {
+      handleTag: 'span',
+      handleDescribedBy: 'own',
+    });
+    const milk = handle('Milk');
+    expect(milk.getAttribute('aria-describedby')).toMatch(/^own \S+$/);
+    const nodes = document.body.children.length;
+    attachment.detach();
+    expect(document.body.children.length).toBe(nodes - 1);
+    // The description the app set before attach stays.
+    expect(milk).toHaveAttribute('aria-describedby', 'own');
+    for (const name of ['role', 'tabindex', 'aria-pressed', 'aria-label']) {
+      expect(milk).not.toHaveAttribute(name);
+    }
+    expect(milk).not.toHaveAttribute('data-astryx-list-reorder');
+    expect(container.children.length).toBe(2);
+    fireEvent.keyDown(milk, {key: 'Enter'});
+    expect(milk).not.toHaveAttribute('aria-pressed');
+  });
+
+  it.each(['flex', 'grid'])(
+    "leaves a %s parent's children as they were, and puts its own elements in the theme scope",
+    display => {
+      const scope = document.createElement('div');
+      scope.setAttribute('data-astryx-theme', 'neutral');
+      const parent = document.createElement('div');
+      parent.style.display = display;
+      const before = document.createElement('div');
+      const container = document.createElement('div');
+      const after = document.createElement('div');
+      const row = document.createElement('div');
+      row.textContent = 'Milk';
+      const grip = document.createElement('button');
+      row.append(grip);
+      container.append(row);
+      parent.append(before, container, after);
+      scope.append(parent);
+      document.body.append(scope);
+      const attachment = createReorderable({onReorder: () => {}}).attach(
+        container,
+        {items: () => [{key: 'milk', element: row, handle: grip}]},
+      );
+      act(() => grip.click());
+      expect(Array.from(parent.children)).toEqual([before, container, after]);
+      expect(container.children.length).toBe(1);
+      const owned = Array.from(scope.children).filter(
+        child => child !== parent,
+      );
+      expect(owned.length).toBeGreaterThan(0);
+      for (const element of owned) {
+        expect(
+          (element as HTMLElement).hidden ||
+            (element as HTMLElement).style.position === 'fixed',
+        ).toBe(true);
+      }
+      act(() => attachment.detach());
+      expect(Array.from(scope.children)).toEqual([parent]);
+    },
+  );
+
+  it('detach ends reorder mode without a word and restores the container', () => {
+    const {container, handle, attachment} = renderPlainList(['Milk', 'Eggs']);
+    const className = container.className;
+    act(() => handle('Milk').click());
+    vi.mocked(announceMessage).mockClear();
+    act(() => attachment.detach());
+    expect(announced()).toEqual([]);
+    expect(container.className).toBe(className);
+    expect(container.style.position).toBe('');
+    expect(container.children.length).toBe(2);
+    expect(document.body.children.length).toBe(1);
+  });
+});

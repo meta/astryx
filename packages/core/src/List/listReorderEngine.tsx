@@ -179,7 +179,7 @@ const sessionsByOptions = new WeakMap<
 >();
 
 /** Records `controller` as mounted with `options`; returns the removal. */
-function mountSession(
+export function mountSession(
   options: ListReorderOptions,
   controller: ListReorderController,
 ): () => void {
@@ -573,7 +573,7 @@ interface PendingAnnouncement {
 }
 
 /** The strings the controller announces, from the translator. */
-interface ReorderMessages {
+export interface ReorderMessages {
   /**
    * A row's place in reorder mode: its name, place and count. Also the names
    * of the rows before and after it, null at the top or the end.
@@ -589,6 +589,11 @@ interface ReorderMessages {
   refused: (label: string) => string;
   /** A row's name when it shows no text: its place. */
   itemAt: (position: number) => string;
+  /**
+   * A reorder mode move the app did not apply by the end of the task: the
+   * row's name. Without it, the row's unchanged place is announced.
+   */
+  notMoved?: (label: string) => string;
   /** Reorder mode ended: the row's name and its place. */
   modeDone: (label: string, position: number, total: number) => string;
   pickedUp: (position: number, total: number) => string;
@@ -596,7 +601,7 @@ interface ReorderMessages {
   cancelled: (position: number, total: number) => string;
 }
 
-function messagesFrom(t: TranslatorFn): ReorderMessages {
+export function messagesFrom(t: TranslatorFn): ReorderMessages {
   return {
     place: (label, position, total, previous, next) =>
       previous == null
@@ -1943,7 +1948,18 @@ export class ListReorderController implements ListReorderSession {
    * row a place at once, and Escape ends the mode, keeping the moves. Space
    * and Enter toggle the mode through the handle's click.
    */
-  keyDown(handle: HTMLElement | null, event: KeyboardEvent): void {
+  keyDown(
+    handle: HTMLElement | null,
+    event: Pick<
+      KeyboardEvent,
+      | 'key'
+      | 'altKey'
+      | 'ctrlKey'
+      | 'metaKey'
+      | 'preventDefault'
+      | 'stopPropagation'
+    >,
+  ): void {
     // A modified key is a browser or assistive-technology shortcut.
     if (
       handle == null ||
@@ -2009,7 +2025,9 @@ export class ListReorderController implements ListReorderSession {
       row,
       to,
       landed: () => this.placeIn(this.rows.read(list), to),
-      kept: this.placeIn(rows, index),
+      kept:
+        this.messages?.notMoved?.(this.nameOf(row, index)) ??
+        this.placeIn(rows, index),
       politeness: undefined,
     });
     if (this.animates) {
@@ -2288,7 +2306,7 @@ function HintButton({
  * a pointer or a finger can reorder by tapping the handle, the moves, then
  * Done.
  */
-function ListReorderModeHint({
+export function ListReorderModeHint({
   controller,
 }: {
   controller: ListReorderController;
