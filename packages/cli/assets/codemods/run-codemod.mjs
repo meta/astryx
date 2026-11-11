@@ -337,6 +337,50 @@ export function runConfigCodemod(
 }
 
 /**
+ * Whether a file parses as its codemod's transform would parse it, by parser
+ * and file, while its text is the same: each file is parsed once for every
+ * codemod that skips it.
+ * @type {Map<string, {source: string, parses: boolean}>}
+ */
+const parsedOnce = new Map();
+
+/**
+ * Whether a codemod cannot change a file, so its transform need not run: the
+ * codemod declares every word a file must say for it to act (`mentions`), the
+ * file says none of them and holds no backslash (no escape can spell one),
+ * and the file parses, so the transform would neither
+ * change it nor report it unparseable. A codemod that declares no words runs
+ * on every file.
+ * @param {{mentions?: string[]}} codemod
+ * @param {string} source
+ * @param {string} filePath
+ * @param {string} parser
+ * @param {any} j jscodeshift bound to the file's parser
+ * @returns {boolean}
+ */
+function cannotChange(codemod, source, filePath, parser, j) {
+  const {mentions} = codemod;
+  if (!Array.isArray(mentions) || mentions.length === 0) return false;
+  if (mentions.some(word => source.includes(word))) return false;
+  // An escape (`\u0054ypeahead`, `'base\x2dtable'`, a line continuation)
+  // can spell a word without its letters: such a file always runs.
+  if (source.includes('\\')) return false;
+  const key = `${parser}\0${filePath}`;
+  let known = parsedOnce.get(key);
+  if (known?.source !== source) {
+    let parses = true;
+    try {
+      j(source);
+    } catch {
+      parses = false;
+    }
+    known = {source, parses};
+    parsedOnce.set(key, known);
+  }
+  return known.parses;
+}
+
+/**
  * Apply a code codemod to discovered source files.
  *
  * @param {import('../../authoring/codemod/type').CodemodEntry} entry normalized codemod entry {id, codemod, package}
@@ -380,6 +424,7 @@ export function runCodeCodemod(
         contents?.get(filePath) ?? fs.readFileSync(filePath, 'utf-8');
       const parser = ext === '.tsx' || ext === '.ts' ? 'tsx' : 'babel';
       const j = jscodeshift.withParser(parser);
+      if (cannotChange(codemod, source, filePath, parser, j)) continue;
       const api = {
         jscodeshift: markingSourceParseErrors(j, source),
         stats: () => {},

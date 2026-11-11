@@ -34,6 +34,9 @@ export const meta = {
     'with a TODO where `edge` is computed or a later spread may override ' +
     'it, on a dynamic value, and where the List also spreads props; the ' +
     'deprecated prop still works there.',
+  // A file can change only through a JSX `edgeCompensation` prop, so a file whose text
+  // never says `edgeCompensation` is left as it is (assets/codemods/run-codemod.mjs).
+  mentions: ['edgeCompensation'],
 };
 
 const OLD_NAME = 'edgeCompensation';
