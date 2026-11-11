@@ -25,8 +25,10 @@ import {
   pageSource,
 } from './_catalog.mjs';
 import {renderDir, renderGenerated} from './_parts.mjs';
+import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
 import {importPathOf, installLine} from './_project.mjs';
+import {DIRECT} from './_tables.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -560,6 +562,69 @@ const usesSource = v =>
     : Boolean(v && typeof v === 'object') &&
       Object.values(/** @type {object} */ (v)).some(usesSource);
 
+/** The heading of each group on the components page. */
+const GROUP_TITLES = /** @type {Record<string, string>} */ ({
+  data: 'data display',
+  overlays: 'overlays (shown open)',
+});
+
+/**
+ * A cell with the component's name. A cell whose parts show nothing on
+ * their own (no size and no text) says so, so no cell is blank.
+ */
+const CELL = [
+  'function Cell({name, children}: {name: string, children: React.ReactNode}) {',
+  '  const ref = React.useRef<HTMLDivElement>(null);',
+  '  const [empty, setEmpty] = React.useState(false);',
+  '  React.useEffect(() => {',
+  "    const row = ref.current?.querySelector('.tp-row');",
+  '    if (!row) return;',
+  "    const shown = Array.from(row.querySelectorAll('.tp-item > :not(.tp-label)')).some(el => {",
+  '      const box = el.getBoundingClientRect();',
+  "      return (box.width > 2 && box.height > 2) || (el.textContent ?? '').trim() !== '';",
+  '    });',
+  '    setEmpty(!shown);',
+  '  }, []);',
+  '  return (',
+  '    <div ref={ref} className="tp-cell">',
+  '      <div className="tp-name">{name}</div>',
+  '      {children}',
+  '      {empty ? <div className="tp-note">{name} shows nothing on its own here: it needs content or a trigger</div> : null}',
+  '    </div>',
+  '  );',
+  '}',
+];
+
+/**
+ * The command that changes a component most, from what its main part reads:
+ * its background, else its border, else its text color, else its corners;
+ * `how <part>` when it reads none of them.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {import('./_compiler.mjs').Compiler} C
+ * @param {string} name
+ * @param {string | null} theme
+ * @returns {string | null}
+ */
+function changeLine(project, C, name, theme) {
+  const keys = project.targets
+    .filter(t => t.component === name)
+    .map(t => t.key);
+  const kebabName = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+  const part = keys.includes(kebabName) ? kebabName : keys[0];
+  if (!part) return null;
+  const P = 'astryx experimental theme editor';
+  const t = theme ?? '<theme>';
+  for (const [aspect, value] of /** @type {const} */ ([
+    ['background', '"<color>"'],
+    ['border', '"1px solid <color>"'],
+    ['text', '"<color>"'],
+  ]))
+    if (C.partReads(part, aspect).length)
+      return `${P} set ${t} ${DIRECT[aspect]} ${value} --on ${part}`;
+  if (C.showsCorners(part)) return `${P} set ${t} corners round --on ${part}`;
+  return `${P} how ${part}`;
+}
+
 /** Layers that stay closed until a person opens them, and a frame with no content: on the page they show nothing. */
 const PAGE_SKIP = new Set([
   'AspectRatio',
@@ -573,10 +638,13 @@ const PAGE_SKIP = new Set([
  * The source of the preview's components page: every component grouped,
  * each variant side by side, overlays open. Template pages are pages of
  * their own (`preview add --template`), so they are not on it.
+ * Under each cell, one line: the command that changes the component most,
+ * from what its part reads (`how <part>`).
  * @param {import('./_project.mjs').ThemeProject} project
+ * @param {{theme?: string | null, C?: import('./_compiler.mjs').Compiler}} [options]
  * @returns {{source: string, components: number}}
  */
-export function componentsPageSource(project) {
+export function componentsPageSource(project, {theme = null, C} = {}) {
   const items = showcaseItems(project, undefined)
     .items.filter(it => it.group !== 'pages' && !PAGE_SKIP.has(it.name))
     .map(it => ({
@@ -605,13 +673,14 @@ export function componentsPageSource(project) {
                 `          <div className="tp-item">${it.label ? `\n            <div className="tp-label">${it.label}</div>` : ''}\n            <Safe name=${JSON.stringify(name)}>\n              ${jsx(/** @type {any} */ (it.tree), 7)}\n            </Safe>\n          </div>`,
             )
             .join('\n');
-          return `        <div className="tp-cell">\n          <div className="tp-name">${name}</div>\n          <div className="tp-row">\n${body}\n          </div>\n        </div>`;
+          const line = C ? changeLine(project, C, name, theme) : null;
+          return `        <Cell name=${JSON.stringify(name)}>\n          <div className="tp-row">\n${body}\n          </div>${line ? `\n          <code className="tp-cmd">{${JSON.stringify(line)}}</code>` : ''}\n        </Cell>`;
         })
         .join('\n');
-      return `      <section>\n        <h2 className="tp-group">${g}</h2>\n        <div className="tp-grid">\n${cells}\n        </div>\n      </section>`;
+      return `      <section>\n        <h2 className="tp-group">${GROUP_TITLES[g] ?? g}</h2>\n        <div className="tp-grid">\n${cells}\n        </div>\n      </section>`;
     })
     .join('\n');
-  const css = `.tp-group{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}.tp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}.tp-cell{border:1px dashed #8885;padding:10px;overflow:hidden}.tp-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}.tp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.tp-label{font:10px ui-monospace,monospace;opacity:.5}.tp-note{font:11px ui-monospace,monospace;opacity:.6;padding:6px 8px;border:1px dashed #8886}`;
+  const css = `.tp-group{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}.tp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}.tp-cell{border:1px dashed #8885;padding:10px;overflow:hidden}.tp-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}.tp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.tp-label{font:10px ui-monospace,monospace;opacity:.5}.tp-cmd{display:block;margin-top:10px;font:10px ui-monospace,monospace;opacity:.75;overflow-wrap:break-word}.tp-note{font:11px ui-monospace,monospace;opacity:.6;padding:6px 8px;border:1px dashed #8886}`;
   const source = [
     '// Written by `astryx experimental theme preview add`: every component grouped, each variant side by side, overlays open.',
     "'use client';",
@@ -623,6 +692,8 @@ export function componentsPageSource(project) {
     ),
     '',
     ...SAFE,
+    '',
+    ...CELL,
     '',
     ...(usesSource(items) ? [...SAMPLE_SOURCE, ''] : []),
     'export default function ComponentsPage() {',
@@ -639,33 +710,218 @@ export function componentsPageSource(project) {
 }
 
 /**
- * The source of the preview's overview page: the content of the sample app
- * page. The preview route is the app shell, so the page has no shell of its
- * own.
+ * The source of the preview's Overview page: the theme at a glance, built
+ * to show what themes most often break (see _overview.mjs). A header names
+ * the theme, its fonts and its main colors; each section renders inside a
+ * boundary, so one part that throws never blanks the page. The preview
+ * route is the app shell, so the page has no shell of its own.
  * @param {import('./_project.mjs').ThemeProject} project
+ * @param {{theme?: string | null}} [options]
  * @returns {string}
  */
-export function overviewPageSource(project) {
-  const content = /** @type {unknown[]} */ (SAMPLE_PAGE.children)[0];
-  const page = withCoreNames(project, {
-    __element: 'Layout',
-    props: {
-      content: {
-        __element: 'LayoutContent',
-        props: {padding: 4},
-        children: [content],
-      },
-    },
-  });
+export function overviewPageSource(project, {theme = null} = {}) {
+  const sections = OVERVIEW_SECTIONS.map(x => ({
+    title: x.title,
+    tree: /** @type {import('./_catalog.mjs').Tree | undefined} */ (
+      withCoreNames(project, x.tree)
+    ),
+  })).filter(x => x.tree !== undefined);
+  const body = sections
+    .map(
+      x =>
+        `      <section className="tp-section">\n        <h2 className="tp-group">${x.title}</h2>\n        <Safe name=${JSON.stringify(x.title)}>\n          ${jsx(/** @type {any} */ (x.tree), 5)}\n        </Safe>\n      </section>`,
+    )
+    .join('\n');
+  const css =
+    '.tp-page{display:grid;gap:20px;padding:24px 24px 160px;color:var(--color-text-primary)}' +
+    '.tp-group{font:600 13px ui-monospace,monospace;margin:0 0 10px;opacity:.7;text-transform:uppercase;letter-spacing:.04em}' +
+    '.tp-head{display:flex;flex-wrap:wrap;gap:16px;align-items:end;justify-content:space-between}' +
+    '.tp-swatches{display:flex;flex-wrap:wrap;gap:8px}' +
+    '.tp-swatch{display:grid;gap:4px;font:11px ui-monospace,monospace;color:var(--color-text-secondary)}' +
+    '.tp-chip{width:56px;height:36px;border-radius:var(--radius-element);border:1px solid var(--color-border)}' +
+    '.tp-note{font:11px ui-monospace,monospace;opacity:.6;padding:6px 8px;border:1px dashed #8886}';
   return [
-    '// Written by `astryx experimental theme preview add`: a sample app page.',
+    '// Written by `astryx experimental theme preview add`: the theme at a glance, built to show what themes most often break.',
     "'use client';",
     '',
     "import * as React from 'react';",
-    ...componentTable(project, page),
+    ...componentTable(
+      project,
+      sections.map(x => x.tree),
+    ),
+    '',
+    ...SAFE,
+    '',
+    '/** The main colors, as the theme resolves them. */',
+    'const SWATCHES = [',
+    ...[
+      ['accent', '--color-accent'],
+      ['neutral', '--color-background-surface'],
+      ['text', '--color-text-primary'],
+      ['info', '--color-info'],
+      ['success', '--color-success'],
+      ['warning', '--color-warning'],
+      ['danger', '--color-error'],
+    ].map(
+      ([n, t]) =>
+        `  {name: ${JSON.stringify(n)}, token: ${JSON.stringify(t)}},`,
+    ),
+    '];',
+    '',
+    '/** The first family of the body and heading fonts, read from the theme. */',
+    'function FontNames() {',
+    '  const ref = React.useRef<HTMLDivElement>(null);',
+    "  const [fonts, setFonts] = React.useState('');",
+    '  React.useEffect(() => {',
+    '    if (!ref.current) return;',
+    '    const style = getComputedStyle(ref.current);',
+    "    const first = (token: string) => style.getPropertyValue(token).split(',')[0].replace(/[\"']/g, '').trim() || 'default';",
+    "    setFonts(`Body: ${first('--font-family-body')}. Headings: ${first('--font-family-heading')}.`);",
+    '  }, []);',
+    '  return (',
+    "    <div ref={ref} style={{color: 'var(--color-text-secondary)', fontSize: 13}}>",
+    '      {fonts}',
+    '    </div>',
+    '  );',
+    '}',
     '',
     'export default function OverviewPage() {',
-    `  return ${jsx(/** @type {any} */ (page), 1)};`,
+    '  return (',
+    '    <div className="tp-page">',
+    `      <style>{${JSON.stringify(css)}}</style>`,
+    '      <header className="tp-head">',
+    '        <div>',
+    `          <h1 style={{margin: 0, fontSize: 28}}>{${JSON.stringify(theme ? `${theme} at a glance` : 'The theme at a glance')}}</h1>`,
+    '          <FontNames />',
+    '        </div>',
+    '        <div className="tp-swatches">',
+    '          {SWATCHES.map(s => (',
+    '            <div key={s.name} className="tp-swatch" title={s.token}>',
+    '              <div className="tp-chip" style={{background: `var(${s.token})`}} />',
+    '              {s.name}',
+    '            </div>',
+    '          ))}',
+    '          <div className="tp-swatch" style={{alignSelf: \'center\'}}>Every shade: the Colors page</div>',
+    '        </div>',
+    '      </header>',
+    body,
+    '    </div>',
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+}
+
+/**
+ * The source of the preview's Colors page: each generated color's shades in
+ * light and dark, with the shade number, the hex, and the tokens that use
+ * it. The shades come from the theme's generated color module, so the page
+ * follows every change; `uses` and `seeds` are written in by the editor.
+ * With no generated colors, the page says how to set one.
+ * @param {{slug: string, module: string | null, seeds: Record<string, string>, uses: Record<string, Record<'light' | 'dark', Record<string, string[]>>>}} colors
+ *   `module`: the import of the generated colors from the page, or null.
+ * @returns {string}
+ */
+export function colorsPageSource({slug, module, seeds, uses}) {
+  const head = [
+    "// Written by `astryx experimental theme preview add`: the theme's generated colors.",
+    '// `astryx experimental theme editor set` rewrites it with every change.',
+    "'use client';",
+    '',
+    "import * as React from 'react';",
+  ];
+  const text = {color: 'var(--color-text-primary)'};
+  const page = {
+    padding: 32,
+    display: 'grid',
+    gap: 32,
+    fontFamily: 'var(--font-family-body)',
+    ...text,
+  };
+  if (!module)
+    return [
+      ...head,
+      '',
+      'export default function ColorsPage() {',
+      '  return (',
+      `    <div style={${JSON.stringify(page)}}>`,
+      '      <p style={{margin: 0}}>',
+      `        {${JSON.stringify(`This theme sets no color yet. Set one, and its shades show here: astryx experimental theme editor set ${slug} accent "#7c3aed"`)}}`,
+      '      </p>',
+      '    </div>',
+      '  );',
+      '}',
+      '',
+    ].join('\n');
+  return [
+    ...head,
+    `import {palette} from ${JSON.stringify(module)};`,
+    '',
+    "type Mode = 'light' | 'dark';",
+    'type Ramp = Readonly<Record<string, string>>;',
+    '',
+    `const SEEDS: Record<string, string> = ${JSON.stringify(seeds)};`,
+    '// The tokens that use each shade, by color, mode and shade.',
+    `const USES: Record<string, Partial<Record<Mode, Record<string, string[]>>>> = ${JSON.stringify(uses)};`,
+    'const COLORS = Object.entries(palette) as Array<[string, Readonly<Record<Mode, Ramp>>]>;',
+    "const MODES: Mode[] = ['light', 'dark'];",
+    '',
+    'export default function ColorsPage() {',
+    '  return (',
+    `    <div style={${JSON.stringify(page)}}>`,
+    '      <div>',
+    '        <h1 style={{margin: 0, fontSize: 28}}>Colors</h1>',
+    "        <p style={{margin: '8px 0 0', color: 'var(--color-text-secondary)'}}>",
+    `          {${JSON.stringify(`Each color is generated from one seed, light and dark. An outlined shade is one a token uses. Change one with: astryx experimental theme editor set ${slug} accent <color>`)}}`,
+    '        </p>',
+    '      </div>',
+    '      {COLORS.map(([name, ramps]) => (',
+    "        <section key={name} style={{display: 'grid', gap: 12}}>",
+    "          <h2 style={{margin: 0, fontSize: 20, textTransform: 'capitalize'}}>",
+    '            {name}',
+    '            {SEEDS[name] ? (',
+    "              <span style={{marginLeft: 8, fontSize: 14, fontWeight: 400, color: 'var(--color-text-secondary)'}}>",
+    '                from {SEEDS[name]}',
+    '              </span>',
+    '            ) : null}',
+    '          </h2>',
+    '          {MODES.map(mode => (',
+    "            <div key={mode} style={{display: 'grid', gap: 6}}>",
+    "              <div style={{fontSize: 13, fontWeight: 600, textTransform: 'capitalize'}}>{mode}</div>",
+    "              <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8}}>",
+    '                {Object.entries(ramps[mode]).map(([shade, hex]) => {',
+    '                  const tokens = USES[name]?.[mode]?.[shade] ?? [];',
+    '                  return (',
+    '                    <div',
+    '                      key={shade}',
+    "                      title={tokens.join(', ')}",
+    '                      style={{',
+    "                        border: tokens.length ? '2px solid var(--color-text-primary)' : '1px solid var(--color-border)',",
+    '                        borderRadius: 8,',
+    "                        overflow: 'hidden',",
+    "                        background: 'var(--color-background-card)',",
+    '                      }}>',
+    '                      <div style={{background: hex, height: 48}} />',
+    "                      <div style={{padding: 6, fontSize: 11, lineHeight: 1.4, fontFamily: 'ui-monospace, monospace'}}>",
+    '                        <div>',
+    '                          <strong>{shade}</strong> {hex}',
+    '                        </div>',
+    '                        {tokens.map(t => (',
+    "                          <div key={t} style={{color: 'var(--color-text-secondary)', overflowWrap: 'anywhere'}}>",
+    '                            {t}',
+    '                          </div>',
+    '                        ))}',
+    '                      </div>',
+    '                    </div>',
+    '                  );',
+    '                })}',
+    '              </div>',
+    '            </div>',
+    '          ))}',
+    '        </section>',
+    '      ))}',
+    '    </div>',
+    '  );',
     '}',
     '',
   ].join('\n');
@@ -691,7 +947,10 @@ export function previewRouteSource({pages, theme}) {
         '          </SegmentedControl>',
       ]
     : [];
+  // The frame fills the viewport with the theme's own page background, so
+  // no root-layout background shows at the edges or on overscroll.
   const shell = [
+    '      <div style={FRAME}>',
     '      <AppShell',
     '        height="fill"',
     '        topNav={',
@@ -708,6 +967,7 @@ export function previewRouteSource({pages, theme}) {
     '        }>',
     '        <current.Page />',
     '      </AppShell>',
+    '      </div>',
   ];
   return [
     '// Written by `astryx experimental theme preview add`. `preview add`, `preview remove` and',
@@ -731,6 +991,15 @@ export function previewRouteSource({pages, theme}) {
     ),
     '',
     ...(theme ? ["type Mode = 'light' | 'dark' | 'system';", ''] : []),
+    'const FRAME: React.CSSProperties = {',
+    "  position: 'fixed',",
+    '  inset: 0,',
+    "  overflow: 'auto',",
+    "  overscrollBehavior: 'none',",
+    "  background: 'var(--color-background-body)',",
+    "  color: 'var(--color-text-primary)',",
+    '};',
+    '',
     'const PAGES = [',
     ...pages.map(
       (p, i) =>

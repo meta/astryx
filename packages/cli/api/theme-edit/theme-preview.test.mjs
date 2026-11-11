@@ -168,6 +168,33 @@ describe('preview add', () => {
     expect(typeErrors(dir)).toEqual([]);
   }, 120_000);
 
+  it('adds a Colors page once the theme has generated colors, and keeps it in step', async () => {
+    const dir = path.join(cwd, 'src/app/theme-preview');
+    const page = 'src/app/theme-preview/pages/colors.tsx';
+    await themeEditSet('brand', 'accent', '#7c3aed', {cwd});
+    const r = await themeEditPreviewAdd(undefined, {cwd});
+    expect(r.data.added).toEqual(['colors']);
+    expect(r.data.pages).toEqual(['overview', 'components', 'colors']);
+    const source = read(page);
+    expect(source).toContain(
+      'import {palette} from "../../../../themes/brand/tokens/brand.palette";',
+    );
+    expect(source).toContain('"--color-accent"');
+    expect(read('src/app/theme-preview/page.tsx')).toContain('label: "Colors"');
+    expect(typeErrors(dir)).toEqual([]);
+    // A later change rewrites the tokens that use each shade.
+    await themeEditSet('brand', 'neutral', '#64748b', {cwd});
+    expect(read(page)).toContain('"--color-background-surface"');
+    // With no color left, the page stays and says how to set one.
+    await themeEditUndo('brand', {cwd, thing: 'neutral'});
+    await themeEditUndo('brand', {cwd, thing: 'accent'});
+    expect(read(page)).not.toContain('palette');
+    expect(read(page)).toContain('This theme sets no color yet');
+    expect(typeErrors(dir)).toEqual([]);
+    await themeEditPreviewRemove('colors', {cwd});
+    expect(fs.existsSync(path.join(cwd, page))).toBe(false);
+  }, 240_000);
+
   it('writes a components page whose parts work on their own and survive leaving the page', () => {
     const page = read('src/app/theme-preview/pages/components.tsx');
     // A typeahead with no search source throws as it unmounts, past every
@@ -398,7 +425,7 @@ describe('preview options and errors', () => {
           theme: 'broken',
         }),
       );
-      expect(['ERR_THEME_LOAD', 'ERR_THEME_INVALID']).toContain(r.code);
+      expect(r.code).toBe('ERR_THEME_LOAD');
       expect(filesUnder(path.join(cwd, 'src/app/broken'))).toEqual([]);
     } finally {
       fs.rmSync(broken, {recursive: true, force: true});

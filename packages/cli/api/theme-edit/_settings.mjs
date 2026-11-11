@@ -49,7 +49,7 @@ import {baseResolved, baseThemeFile} from './_project.mjs';
  * @property {string} thing - A dial, a token (`--color-accent`), or a CSS property.
  * @property {string} value
  * @property {'dial' | 'token' | 'property'} source
- * @property {string} [on] - A part, a family, or a typography role (font).
+ * @property {string} [on] - A part, a group, or a typography role (font).
  * @property {string} [when] - `<prop>:<value>`.
  * @property {string} [state]
  * @property {'light' | 'dark'} [mode]
@@ -68,7 +68,7 @@ import {baseResolved, baseThemeFile} from './_project.mjs';
  * @property {string[]} [lifted] - Variant keys the last build repeated a part setting on.
  */
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null}} Ctx */
 
 /** @param {string} s */
 export const slugOk = s => /^[a-z][a-z0-9-]*$/.test(s ?? '');
@@ -238,8 +238,8 @@ export function describe(s) {
 }
 
 /**
- * The parts a setting styles: the family when `--on` names one, the whole
- * family of an always-alike member unless `--only`, else the one part.
+ * The parts a setting styles: the group when `--on` names one, the whole
+ * group of an always-alike member unless `--only`, else the one part.
  * @param {Ctx} ctx
  * @param {Pick<Setting, 'on' | 'only' | 'thing'>} s
  * @returns {string[]}
@@ -401,6 +401,12 @@ export function compileTheme(ctx, data, base) {
   const pal = paletteMapping(ctx.project.cwd, data.name, data, base, TOKENS);
   for (const [k, v] of Object.entries(pal?.tokens ?? {}))
     putTok(k, [v.light.color, v.dark.color]);
+  // `headings` owns heading weight and tracking whatever the order: `type`
+  // sets them only where no `headings` setting does.
+  const headingsAxis = (/** @type {'weight' | 'tracking'} */ axis) =>
+    data.settings.some(
+      x => x.thing === 'headings' && (x.axis ?? 'weight') === axis,
+    );
   const headingWeightTokens = Object.keys(TOKENS).filter(k =>
     /^--text-(heading|display)-\d-weight$/.test(k),
   );
@@ -426,7 +432,7 @@ export function compileTheme(ctx, data, base) {
             px >= 9999 ? '32px' : `${Math.round(px * 2.5)}px`,
           );
         }
-      } else if (PALETTE_DIALS.includes(s.thing)) {
+      } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
         // The palette mapping above sets these tokens.
       } else if (s.thing === 'font') {
         const f = fontOf(s.value);
@@ -472,8 +478,9 @@ export function compileTheme(ctx, data, base) {
           base: theme.typography.scale?.base ?? 14,
           ratio: T.ratio,
         };
-        if (T.weight) for (const k of headingWeightTokens) putTok(k, T.weight);
-        if (T.tracking)
+        if (T.weight && !headingsAxis('weight'))
+          for (const k of headingWeightTokens) putTok(k, T.weight);
+        if (T.tracking && !headingsAxis('tracking'))
           block({...s, mode: undefined}, 'heading').letterSpacing = T.tracking;
       } else if (s.thing === 'headings') {
         if (s.axis === 'tracking')
@@ -510,6 +517,13 @@ export function compileTheme(ctx, data, base) {
       for (const t of parts) putComp(s, t, camel(s.thing), s.value);
     }
   }
+  // A scale steeper than the standard one enlarges the headings; the steps
+  // below the base text size keep the standard ratio, so small text stays
+  // readable.
+  const scale = theme.typography?.scale;
+  if (scale && scale.ratio > STANDARD_RATIO)
+    for (const [k, step] of SMALL_STEPS)
+      putTok(k, `${Math.round(scale.base * STANDARD_RATIO ** step) / 16}rem`);
   for (const [k, {light, dark}] of Object.entries(tok)) {
     const l = light ?? base.light[k] ?? TOKENS[k];
     const d = dark ?? base.dark[k] ?? TOKENS[k];
@@ -518,6 +532,47 @@ export function compileTheme(ctx, data, base) {
   if (!Object.keys(theme.tokens).length) delete theme.tokens;
   if (!Object.keys(theme.components).length) delete theme.components;
   return theme;
+}
+
+/** Core's default type scale ratio. */
+const STANDARD_RATIO = 1.2;
+/** The font-size tokens below the base, with their step on the scale. */
+const SMALL_STEPS = /** @type {Array<[string, number]>} */ ([
+  ['--font-size-sm', -1],
+  ['--font-size-xs', -2],
+  ['--font-size-2xs', -3],
+  ['--font-size-3xs', -4],
+  ['--font-size-4xs', -5],
+]);
+
+/**
+ * Settings whose effect a later or stronger setting hides, with why: `type`
+ * loses heading weight and tracking to `headings`.
+ * @param {ThemeData} data
+ * @returns {Map<Setting, string>}
+ */
+export function maskedSettings(data) {
+  /** @type {Map<Setting, string>} */
+  const out = new Map();
+  const axes = new Set(
+    data.settings
+      .filter(x => x.thing === 'headings')
+      .map(x => x.axis ?? 'weight'),
+  );
+  for (const s of data.settings) {
+    if (s.thing !== 'type' || !axes.size) continue;
+    const T = TYPE_STYLES[s.value];
+    const hidden = [
+      ...(T?.weight && axes.has('weight') ? ['weight'] : []),
+      ...(T?.tracking && axes.has('tracking') ? ['tracking'] : []),
+    ];
+    if (hidden.length)
+      out.set(
+        s,
+        `heading ${hidden.join(' and ')} come${hidden.length > 1 ? '' : 's'} from headings, not type`,
+      );
+  }
+  return out;
 }
 
 /**

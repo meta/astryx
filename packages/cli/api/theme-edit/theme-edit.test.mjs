@@ -2,7 +2,7 @@
 
 /**
  * @file Tests for `astryx experimental theme` (the theme-edit API): refusals
- * with the command that works, families, typed modes, the lift pass, the
+ * with the command that works, groups, typed modes, the lift pass, the
  * settings round trip, `how` on real parts, and `colors`.
  * Every check runs against the Core this repository builds.
  */
@@ -365,13 +365,13 @@ describe('typed modes', () => {
   });
 });
 
-describe('families', () => {
+describe('groups', () => {
   it('styling one input styles every input; --only styles just that one', async () => {
     const all = await themeEditSet('t', 'border', '1px solid #999999', {
       cwd,
       on: 'text-input',
     });
-    expect(all.data.family?.name).toBe('inputs');
+    expect(all.data.group?.name).toBe('inputs');
     expect(all.data.parts).toEqual(
       expect.arrayContaining(['text-input', 'text-area', 'selector']),
     );
@@ -390,13 +390,13 @@ describe('families', () => {
     });
   });
 
-  it('a container styles only itself unless --on names the family', async () => {
+  it('a container styles only itself unless --on names the group', async () => {
     const card = await themeEditSet('t', 'box-shadow', 'none', {
       cwd,
       on: 'card',
     });
     expect(card.data.parts).toEqual(['card']);
-    expect(card.data.family).toBeNull();
+    expect(card.data.group).toBeNull();
     const all = await themeEditSet('t', 'box-shadow', 'none', {
       cwd,
       on: 'containers',
@@ -408,7 +408,7 @@ describe('families', () => {
     await themeEditUndo('t', {thing: 'box-shadow', cwd, on: 'containers'});
   });
 
-  it('--only is refused for a family that does not spread', async () => {
+  it('--only is refused for a group that does not spread', async () => {
     const r = await refusal(() =>
       themeEditSet('t', 'box-shadow', 'none', {cwd, on: 'card', only: true}),
     );
@@ -479,7 +479,7 @@ describe('settings round trip', () => {
       set.data.changedTokens.some(c => c.startsWith('--color-accent (light)')),
     ).toBe(true);
     expect(set.data.notes.join(' ')).toMatch(
-      /--color-accent is accent stop \d+ \(#[0-9a-f]{6}\) in light/,
+      /--color-accent uses accent shade \d+ \(#[0-9a-f]{6}\) in light/,
     );
     expect(JSON.parse(settingsOf('t')).settings).toEqual([
       {thing: 'accent', value: '#7c3aed', source: 'dial'},

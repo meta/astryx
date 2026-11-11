@@ -8,6 +8,9 @@
  * @position api/theme-edit — imported only by the adapter's operation helpers
  */
 
+import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
+import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {CLOSEST_OPEN_FONT, OPEN_FONTS, P, SYSTEM_FONTS} from './_tables.mjs';
@@ -41,13 +44,78 @@ export function requireProject(cwd) {
   );
 }
 
-/** @param {string} cwd */
+/**
+ * The project, its part data and the compiler. When the components cannot
+ * be rendered, the part data is empty and `unchecked` says why: changes are
+ * then saved without the checks that need it, and say so.
+ * @param {string} cwd
+ */
 export async function context(cwd) {
   requireProject(cwd);
   const project = await openProject(cwd);
-  const parts = await partData(project);
-  return {project, C: makeCompiler(project, parts), parts};
+  /** @type {import('./_parts.mjs').PartData} */
+  let parts;
+  /** @type {string | null} */
+  let unchecked = null;
+  try {
+    parts = await partData(project);
+  } catch (e) {
+    if (!isRenderFailure(e)) throw e;
+    unchecked = renderCause(project, /** @type {Error} */ (e).message);
+    parts = {
+      version: 0,
+      coreKey: project.coreKey,
+      map: {},
+      pairs: [],
+      rendered: 0,
+      items: 0,
+    };
+  }
+  return {project, C: makeCompiler(project, parts), parts, unchecked};
 }
+
+/** @param {unknown} e */
+const isRenderFailure = e =>
+  e instanceof AstryxError &&
+  (e.code === E.ERR_RENDER_FAILED ||
+    e.code === E.ERR_RENDER_MISSING_DEPENDENCY);
+
+/**
+ * Why the components did not render, with the likely cause: two copies of
+ * React (the app's and the one Core resolves) break every hook.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} message
+ */
+function renderCause(project, message) {
+  /** @param {(id: string) => string} resolve */
+  const reactOf = resolve => {
+    try {
+      return fs.realpathSync(path.dirname(resolve('react/package.json')));
+    } catch {
+      return null;
+    }
+  };
+  const app = reactOf(project.req.resolve);
+  let core = null;
+  try {
+    core = reactOf(
+      createRequire(project.req.resolve('@astryxdesign/core/package.json'))
+        .resolve,
+    );
+  } catch {
+    // No Core package file: nothing to compare.
+  }
+  return app && core && app !== core
+    ? `${message} The likely cause: two copies of React, the app's (${app}) and the one Core resolves (${core}). Make Core resolve the app's React.`
+    : message;
+}
+
+/**
+ * The "saved, not checked" report of a change, or null when it was checked.
+ * @param {string | null} cause
+ */
+const notChecked = cause =>
+  cause ? {code: E.ERR_THEME_NOT_CHECKED, cause} : null;
 
 /**
  * Pictures of HTML files, on request.
@@ -85,10 +153,17 @@ export function fontNotes(ctx, data) {
   /** @type {string[]} */
   const notes = [];
   for (const {pkg, family, installed} of fontPackages(ctx, data)) {
+    const fallbacks =
+      Object.values(OPEN_FONTS).find(f => f.pkg === pkg)?.fallbacks ?? '';
+    const near = /monospace/.test(fallbacks)
+      ? 'mono'
+      : /serif/.test(fallbacks.replace('sans-serif', ''))
+        ? 'serif'
+        : 'system';
     notes.push(
       installed
         ? `the app loads this font with one import: import '${pkg}';`
-        : `${family} is not installed, so it does not load: the previews and the app show the next font in the stack. Install it: ${installLine(ctx.project.cwd, [pkg])}. Then the preview imports it on the next set or show, and the app imports it once: import '${pkg}';`,
+        : `${family} is not installed, so it does not load: the previews and the app show the next font in the stack. Install it: ${installLine(ctx.project.cwd, [pkg])}. Then the preview imports it on the next set or show, and the app imports it once: import '${pkg}'; Until then, the closest font that needs no install is ${near}: ${P} set ${data.name} font ${near}`,
     );
   }
   for (const s of data.settings) {
@@ -177,16 +252,30 @@ export function styledChanges(before, after) {
  * @param {boolean} png
  */
 export async function previewAfter(ctx, slug, data, png) {
-  const preview = await renderPreview(ctx, slug, data);
+  /** @type {string | null} */
+  let preview = null;
+  let cause = ctx.unchecked ?? null;
+  try {
+    preview = await renderPreview(ctx, slug, data);
+  } catch (e) {
+    if (!isRenderFailure(e)) throw e;
+    cause ??= renderCause(ctx.project, /** @type {Error} */ (e).message);
+  }
   const f = themeFiles(ctx.project.cwd, slug);
-  const shots = png
-    ? await pictures(
-        ctx.project,
-        [{html: f.preview, png: f.previewPng}],
-        modesOf(data),
-      )
-    : {files: [], problem: null};
-  return {preview, pictures: shots.files, pictureProblem: shots.problem};
+  const shots =
+    png && preview
+      ? await pictures(
+          ctx.project,
+          [{html: f.preview, png: f.previewPng}],
+          modesOf(data),
+        )
+      : {files: [], problem: null};
+  return {
+    preview,
+    pictures: shots.files,
+    pictureProblem: shots.problem,
+    notChecked: notChecked(cause),
+  };
 }
 
 /** @param {string | undefined} group */

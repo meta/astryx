@@ -79,7 +79,7 @@ export default function GalleryHero() {
             <Grid columns={{minWidth: 200, repeat: 'fit'}} gap={4}>
               {IMAGES.map(image => (
                 <AspectRatio
-                  key={image.src}
+                  key={image.alt}
                   ratio={4 / 5}
                   style={galleryImageClip}>
                   <img style={galleryImage} src={image.src} alt={image.alt} />
