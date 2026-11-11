@@ -11,7 +11,6 @@
       "displayName": "Astryx",
       "source": "./plugins/astryx",
       "description": "Teaches coding agents that Astryx is available through the astryx command, when to use it, and where to start. Use when building or changing UI, choosing components, layout, styling or theming, or working with @astryxdesign packages.",
-      "version": "0.1.1",
       "author": {
         "name": "Astryx",
         "url": "https://astryx.atmeta.com"
