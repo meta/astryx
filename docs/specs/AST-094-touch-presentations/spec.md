@@ -38,6 +38,7 @@ verified_by:
     "packages/core/src/motion/uikit/segmented.ts",
     "packages/core/src/motion/uikit/slider.ts",
     "packages/core/src/Swipe/useSwipeAction.ts",
+    "packages/core/src/dragToSnapPoints/compositorSettle.ts",
     "packages/core/src/Item/Item.sharedDrag.test.tsx",
     "packages/core/src/Item/Item.test.tsx",
     "packages/core/src/Item/__tests__/ItemSwipeActions.interaction.browser.spec.ts"
@@ -258,6 +259,10 @@ a measured, sourced difference exists.
   and MUST keep advancing at display rate through a main-thread block. It MUST
   NOT animate layout properties, and MUST NOT step a frame from script when the
   compositor can run the curve.
+  A snap-point drag whose parts read one custom property settles through
+  `dragToSnapPoints/compositorSettle.ts`: one `translate` animation per part,
+  from one spring on one clock. The animator cannot do this: its custom
+  property animates on the main thread, and its `translate` moves one element.
   A press shows at once. Every press release that fades does so on the
   theme's exit motion tokens (`--duration-exit`, `--ease-exit`), on every
   device and pointer, by the owner's decision (2026-11-03); under Reduce
