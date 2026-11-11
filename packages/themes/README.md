@@ -20,4 +20,6 @@ full setup. To create your own theme, install `@astryxdesign/cli` and run
 declared theming target for the visual gate. It is never published and is not a
 theme to use in an app.
 
-Theme specification records live in [`docs/themes/`](../../docs/themes/README.md).
+A theme's specification record lives beside its package as
+`<theme>/<theme>.spec.md`; [`docs/themes/`](../../docs/themes/README.md) is the
+guide and index.
