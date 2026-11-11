@@ -62,6 +62,20 @@ import {
 const E = ERROR_CODES;
 
 /**
+ * The value to carry into a suggestion for another dial: the one given when
+ * that dial takes it, else the dial's example.
+ * @param {string} dial @param {string} v
+ */
+function valueFor(dial, v) {
+  if (PALETTE_DIALS.includes(dial)) return colorProblem(v) ? '#7c3aed' : v;
+  if (dial === 'vibrancy')
+    return /^(more|less)$/.test(v) || (/^\d{1,3}$/.test(v) && Number(v) <= 100)
+      ? v
+      : '60';
+  return v;
+}
+
+/**
  * The other words for each color dial and vibrancy (gray, brand, error,
  * saturation), from the dial tables, without words that name a part, a CSS
  * property or a plain color.
@@ -903,7 +917,10 @@ export function checkSetting(
           .replace(/\s*!important\s*$/i, '')
           .replace(/;+\s*$/, '')
           .trim()
-          .replace(/^([0-9a-f]{3}|[0-9a-f]{6})$/i, '#$1');
+          .replace(/^([0-9a-f]{3}|[0-9a-f]{6})$/i, '#$1')
+          // One hex digit short or over: repeat or drop the last one.
+          .replace(/^#([0-9a-f]{4})([0-9a-f])$/i, '#$1$2$2')
+          .replace(/^#([0-9a-f]{6})[0-9a-f]$/i, '#$1');
         const near =
           problem.kind === 'unknown'
             ? nearest(v.toLowerCase(), COLOR_NAMES)
@@ -928,10 +945,14 @@ export function checkSetting(
           {run: [`${P} set ${slug} vibrancy ${q(v)}`]},
         );
       if (step) {
-        const cur = Number(
-          [...data.settings].reverse().find(x => x.thing === 'vibrancy')
-            ?.value ?? VIBRANCY_DEFAULT,
-        );
+        const saved = [...data.settings]
+          .reverse()
+          .find(x => x.thing === 'vibrancy')?.value;
+        // A value edited by hand that is not one steps from the default.
+        const cur =
+          saved != null && /^\d{1,3}$/.test(saved) && Number(saved) <= 100
+            ? Number(saved)
+            : VIBRANCY_DEFAULT;
         const next = Math.max(
           0,
           Math.min(100, cur + (v === 'more' ? 10 : -10)),
@@ -1308,7 +1329,7 @@ export function checkSetting(
         run: aliases.map(d =>
           unset
             ? `${P} undo ${slug} ${d}${onFlag}`
-            : `${P} set ${slug} ${d} ${q(v)}${onFlag}`,
+            : `${P} set ${slug} ${d} ${q(valueFor(d, v))}${onFlag}`,
         ),
       },
     );

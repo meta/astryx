@@ -49,6 +49,7 @@ import {
 } from './_color.mjs';
 import {
   PALETTE_DIALS,
+  assertNoPlaceholder,
   paletteImport,
   paletteMapping,
   syncPalette,
@@ -976,7 +977,7 @@ function settingsSource(slug, data, theme, pal) {
   }
   let usesPalette = false;
   const body = JSON.stringify(out, null, 2).replace(
-    /"@@palette:(?:(black|white)|([a-z][a-z0-9-]*)\.(light|dark)\.(\d+)(?:\+([0-9a-f]{2}))?)"/g,
+    /"@@palette:(?:(black|white)|([a-z][a-z0-9-]*)\.(light|dark)\.(\d+(?:\.\d+)?)(?:\+([0-9a-f]{2}))?)"/g,
     (_, end, family, m, stop, alpha) => {
       usesPalette = true;
       if (end) return `palette.${end}`;
@@ -1075,6 +1076,9 @@ export async function buildTheme(ctx, slug, data) {
     });
     receipt = await step(() => runBuild(ctx, slug));
   }
+  for (const out of [f.css, f.js])
+    if (fs.existsSync(out))
+      assertNoPlaceholder(shown(cwd, out), fs.readFileSync(out, 'utf8'));
   // Font notices are reported by the font dial itself, once.
   const warnings = [
     ...(receipt?.data?.warnings ?? []),
