@@ -592,7 +592,9 @@ export const TouchReach: Story = {
       go: 0,
       clear: 0,
       apply: 0,
+      check: 0,
     });
+    const [email, setEmail] = useState('');
     const [day, setDay] = useState<ISODateString | undefined>(undefined);
     const [query, setQuery] = useState('');
     const [agree, setAgree] = useState(false);
@@ -700,6 +702,23 @@ export const TouchReach: Story = {
             onClick={count('go')}
           />
         </div>
+        <div style={{display: 'flex', gap: 4, alignItems: 'flex-end'}}>
+          <TextInput
+            label="Email"
+            value={email}
+            onChange={setEmail}
+            status={{type: 'error', message: 'Enter an email'}}
+          />
+          <Button
+            label="Check"
+            data-testid="check"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={Cog6ToothIcon} />}
+            style={{width: 24, height: 24, minWidth: 24, padding: 0}}
+            onClick={count('check')}
+          />
+        </div>
         <div style={{display: 'flex', gap: 4, alignItems: 'center'}}>
           <DateInput
             label="Pick"
@@ -777,6 +796,7 @@ export const TouchReach: Story = {
           Go {taps.go}, Clear {taps.clear}, Agree {agree ? 'on' : 'off'}, Apply{' '}
           {taps.apply}, Pick {day ?? 'none'}
         </output>
+        <output aria-label="Status taps">Check {taps.check}</output>
         <output aria-label="Overhang taps">
           Pin {taps.pin}, Mark {taps.mark}
         </output>

@@ -81,6 +81,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The control box and its `text-input` target.
 - Its grouped adaptation inside InputGroup.
 - The touch-keyboard attributes of the native input (FR16).
+- Marking its frame for the touch press check. TextInput writes the private
+  attribute `data-astryx-field-frame` only through its owner module,
+  `packages/core/src/privateAttributes/fieldFrame.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and measures the frame as the entry's visible box (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 

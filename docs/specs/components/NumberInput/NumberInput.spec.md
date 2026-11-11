@@ -91,6 +91,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   `architecture:icon-resolution-and-component-slots` hands to NumberInput.
 - Disabled, disabled-reason, and read-only behavior; the `number-input`
   target; its grouped adaptation.
+- Marking its frame for the touch press check. NumberInput writes the private
+  attribute `data-astryx-field-frame` only through its owner module,
+  `packages/core/src/privateAttributes/fieldFrame.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and measures the frame as the entry's visible box (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 

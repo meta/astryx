@@ -166,7 +166,9 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
         () => (window as unknown as {__hitAreaCounts: object}).__hitAreaCounts,
       ),
     ).toEqual({reads: 0, observers: 0});
-    // A finger on the band reads the pressed control at the tap's click.
+    // A finger on the band reads the pressed control at the tap's click. The
+    // scroll above can move the button out of view, so bring it back first.
+    await page.evaluate(() => window.scrollTo(0, 0));
     const lone = await boxOf(page, 'lone');
     const driver = await touchDriver(page);
     await tapAt(driver, {
@@ -434,6 +436,33 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
       ),
     ).toBe(3);
     await expect(output).toContainText('Apply 0');
+  });
+
+  test('a tap on a field’s status message under a neighbour’s band presses the neighbour and leaves the field unfocused', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), STORY);
+    const root = page.locator('#storybook-root');
+    const field = root.getByRole('textbox', {name: 'Email'});
+    const message = root.getByText('Enter an email');
+    const output = root.locator('output[aria-label="Status taps"]');
+    const at = await message.evaluate(element => {
+      const r = element.getBoundingClientRect();
+      return {right: r.right, top: r.top, bottom: r.bottom};
+    });
+    const check = await boxOf(page, 'check');
+    const frame = await field.evaluate(element => {
+      const r = element.parentElement!.getBoundingClientRect();
+      return {right: r.right};
+    });
+    // Check's band reaches back past the frame's edge, over the space where
+    // the message sits.
+    const x = Math.max(Math.round(at.right) - 1, Math.round(frame.right) + 1);
+    expect(check.left - x).toBeLessThan(10);
+    const driver = await touchDriver(page);
+    await tapAt(driver, {x, y: Math.round((at.top + at.bottom) / 2)});
+    await expect(output).toHaveText('Check 1');
+    await expect(field).not.toBeFocused();
   });
 
   test('a tap on a checkbox’s edge under a neighbour’s band toggles it once, and the neighbour gets no click', async ({

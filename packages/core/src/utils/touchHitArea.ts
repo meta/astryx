@@ -19,6 +19,7 @@ import {distanceTo, INTERACTIVE_SELECTOR} from './hitArea';
 import {subscribeInput} from './inputStream';
 import {isElement} from './nodeType';
 import {isGrownHitInput} from '../privateAttributes/grownHitInput.stylex';
+import {closestFieldFrame} from '../privateAttributes/fieldFrame.stylex';
 
 /** How a host's band relates to its content. */
 export interface TouchHitAreaOptions {
@@ -56,13 +57,12 @@ function shownBy(target: Element): Element {
   return (isGrownHitInput(target) ? target.parentElement : null) ?? target;
 }
 
-// An entry that renders as a field, which a field's frame holds directly or
-// in one wrapper. A checkbox, radio, file or submit input is not one.
+// An entry that renders as a field. A checkbox, radio, file or submit input
+// is not one.
 const ENTRY = `:is(textarea, select, [contenteditable="true"], input:not([type]), ${'text search email url tel password number date time datetime-local month week color'
   .split(' ')
   .map(type => `input[type="${type}"]`)
   .join()})`;
-const FIELD_ENTRY = `:scope > ${ENTRY}, :scope > :not(${INTERACTIVE_SELECTOR}) > ${ENTRY}`;
 
 /**
  * Where a tap on `host`'s band at (x, y) goes, or null for the host: a visible
@@ -89,13 +89,14 @@ function targetUnderFinger(
       break;
     }
     // The browser also lists an element whose band, not its box, is under
-    // the finger. A field's frame is its entry's visible box.
+    // the finger. A field's marked frame is its entry's visible box.
     const control = element.closest(INTERACTIVE_SELECTOR);
-    const target = control ?? element.querySelector(FIELD_ENTRY);
-    if (target == null || isOwn(host, target)) {
+    const frame = control == null ? closestFieldFrame(element) : null;
+    const target = control ?? frame?.querySelector(ENTRY);
+    if (target == null || isOwn(host, target) || frame?.contains(host)) {
       continue;
     }
-    const shown = control != null ? shownBy(target) : element;
+    const shown = frame ?? shownBy(target);
     const distance = distanceTo(shown.getBoundingClientRect(), x, y);
     if (distance === 0) {
       return target as HTMLElement;

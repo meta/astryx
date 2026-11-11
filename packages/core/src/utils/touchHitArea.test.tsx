@@ -17,6 +17,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {useTouchHitArea} from './touchHitArea';
 import {grownHitInputProps} from '../privateAttributes/grownHitInput.stylex';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {Button} from '../Button/Button';
 import {ButtonGroup} from '../ButtonGroup/ButtonGroup';
@@ -309,7 +310,7 @@ describe('at a tap', () => {
     render(
       <div data-testid="container">
         <Host id="a" onClick={onA} />
-        <div id="frame">
+        <div id="frame" {...fieldFrameProps}>
           <input id="entry" aria-label="Search" />
         </div>
       </div>,
@@ -360,7 +361,7 @@ describe('at a tap', () => {
     render(
       <div data-testid="container">
         <Host id="a" onClick={onA} />
-        <div id="frame">
+        <div id="frame" {...fieldFrameProps}>
           <button type="button" tabIndex={-1} aria-label="Open calendar" />
           <span id="slot">
             <input id="day" type="date" aria-label="Pick" />
@@ -409,6 +410,46 @@ describe('at a tap', () => {
     expect(onA).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(size);
     expect(showPicker).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives a tap on a field root’s status message or beside its frame to the band’s control, and a tap inside the frame to the field', () => {
+    const onA = vi.fn();
+    render(
+      <div data-testid="container">
+        <Host id="a" onClick={onA} />
+        <div id="root">
+          <label htmlFor="entry">Search</label>
+          <div id="frame" {...fieldFrameProps}>
+            <input id="entry" />
+          </div>
+          <span id="status">Required</span>
+        </div>
+      </div>,
+    );
+    const a = document.getElementById('a') as HTMLElement;
+    const root = document.getElementById('root') as HTMLElement;
+    const frame = document.getElementById('frame') as HTMLElement;
+    const entry = document.getElementById('entry') as HTMLElement;
+    const status = document.getElementById('status') as HTMLElement;
+    const container = screen.getByTestId('container');
+    a.getBoundingClientRect = () => rect(100, 100, 24, 24);
+    root.getBoundingClientRect = () => rect(128, 80, 200, 64);
+    frame.getBoundingClientRect = () => rect(140, 100, 160, 24);
+    entry.getBoundingClientRect = () => rect(148, 104, 144, 16);
+    status.getBoundingClientRect = () => rect(128, 126, 80, 16);
+    // On the status message, under the control's band: empty space.
+    elementsAtPoint = [a, status, root, container, document.body];
+    expect(tap(a, 130)).toBe(false);
+    // Beside the frame, on the root's own box: empty space.
+    elementsAtPoint = [a, root, container, document.body];
+    expect(tap(a, 132)).toBe(false);
+    expect(onA).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).not.toBe(entry);
+    // Inside the marked frame, on its padding: the field's.
+    elementsAtPoint = [a, frame, root, container, document.body];
+    expect(tap(a, 142)).toBe(true);
+    expect(onA).toHaveBeenCalledTimes(2);
+    expect(document.activeElement).toBe(entry);
   });
 
   it('stops at the control’s own container: what paints below it, such as the page under a layer, is not beside it', () => {
