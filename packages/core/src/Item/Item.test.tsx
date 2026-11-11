@@ -1154,10 +1154,7 @@ describe('swipeActions', () => {
         swipeActions={{leading: [{label: 'Unread', onActivate: () => {}}]}}
       />,
     );
-    await swipeLayerLoaded();
-    expect(
-      screen.getByTestId('warm').querySelector('[data-swipe-panel]'),
-    ).not.toBeNull();
+    await swipeLayerLoaded(screen.getByTestId('warm'));
     cleanup();
   });
 

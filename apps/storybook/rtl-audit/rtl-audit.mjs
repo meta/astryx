@@ -93,6 +93,7 @@ import {
   parseShard,
   readShardFiles,
   readStorybookSha,
+  retriesLine,
   shardFile,
   shardPositions,
 } from './rtl-audit-shards.mjs';
@@ -1511,6 +1512,7 @@ async function cleanupRuntime() {
   const curatedResults = [];
   let d8BrowserContract;
   let pageRecoveries;
+  let storyRetries;
 
   if (MERGE_SHARDS !== null) {
     const merged = mergeRtlShards(readShardFiles(MERGE_SHARDS), {plan, storybookSha});
@@ -1520,6 +1522,7 @@ async function cleanupRuntime() {
     curatedResults.push(...merged.curated);
     d8BrowserContract = merged.d8BrowserContract;
     pageRecoveries = merged.pageRecoveries;
+    storyRetries = merged.storyRetries;
     console.error(`MERGED ${MERGE_SHARDS}: ${autoResults.length} D1, ${pmResults.length} story, ${curatedResults.length} curated cards`);
   } else {
     const {server, port} = await serve(path.resolve(DIST));
@@ -1566,10 +1569,15 @@ async function cleanupRuntime() {
           }
           return withD1CompletionIdentity(card, id);
         },
-        onError: ({comp, id}, e) => {
+        onError: ({comp, id}, e, {firstError} = {}) => {
           console.error(`AUTO ERROR ${comp}: ${String(e).slice(0, 120)}`);
-          return {component: comp, storyId: id, dim: 'D1', verdict: 'ERROR', notes: [String(e).slice(0, 160)], icons: 0};
+          const retried = firstError ? {attempts: 2, firstError} : {};
+          return {component: comp, storyId: id, dim: 'D1', verdict: 'ERROR', notes: [String(e).slice(0, 160)], icons: 0, ...retried};
         },
+        // A scan that threw is retried once on a fresh page; a judged verdict
+        // never is.
+        retry: true,
+        onRetried: (card, firstError) => ({...card, attempts: 2, firstError}),
         describe: ({id}) => ({phase: 'D1', storyId: id}),
       });
       autoResults.push(...d1Cards);
@@ -1588,14 +1596,20 @@ async function cleanupRuntime() {
           }
           return cards;
         },
-        onError: ({id, comp}, e) => {
+        onError: ({id, comp}, e, {firstError} = {}) => {
           console.error(`PM+DEC ERROR ${comp} ${id}: ${String(e).slice(0, 120)}`);
           const notes = [String(e).slice(0, 160)];
+          const retried = firstError ? {attempts: 2, firstError} : {};
           return {
-            positional: {component: comp, storyId: id, dim: 'D5-positional', verdict: 'ERROR', notes, candidates: 0, fails: []},
-            decoration: {component: comp, storyId: id, dim: 'D6-decoration', verdict: 'ERROR', notes: [...notes], decorations: 0, results: []},
+            positional: {component: comp, storyId: id, dim: 'D5-positional', verdict: 'ERROR', notes, candidates: 0, fails: [], ...retried},
+            decoration: {component: comp, storyId: id, dim: 'D6-decoration', verdict: 'ERROR', notes: [...notes], decorations: 0, results: [], ...retried},
           };
         },
+        retry: true,
+        onRetried: (cards, firstError) => ({
+          positional: {...cards.positional, attempts: 2, firstError},
+          decoration: {...cards.decoration, attempts: 2, firstError},
+        }),
         describe: ({id}) => ({phase: 'D5+D6', storyId: id}),
       });
       pmResults.push(...storyCards.map(cards => cards.positional));
@@ -1625,6 +1639,7 @@ async function cleanupRuntime() {
       }
     }
     pageRecoveries = pool.recoveries;
+    storyRetries = pool.retries;
 
     if (SHARD !== null) {
       fs.writeFileSync(
@@ -1637,6 +1652,7 @@ async function cleanupRuntime() {
             cards: shardCards,
             d8BrowserContract,
             pageRecoveries,
+            storyRetries,
           }),
         ),
       );
@@ -1720,6 +1736,9 @@ async function cleanupRuntime() {
     // keeps its ERROR result; the record shows the stories after it ran on a
     // fresh page.
     pageRecoveries,
+    // Stories whose scan threw (ERROR, no verdict) and ran once more on a
+    // fresh page, each with its first reason and the retry's outcome.
+    retries: {count: storyRetries.length, stories: storyRetries},
     declaredD1Exclusions,
     // Story-declared plots whose overlays D5 grades as physical (DR5).
     declaredD5PhysicalRegions,
@@ -1759,6 +1778,7 @@ async function cleanupRuntime() {
   console.error(`PM  : ${report.positionalMirror.pass} pass / ${report.positionalMirror.fail} fail / ${report.positionalMirror.na} N-A (tol ${PM_TOL}px)`);
   console.error(`DEC : ${report.directionalDecorations.pass} pass / ${report.directionalDecorations.fail} fail / ${report.directionalDecorations.na} N-A`);
   console.error(`POOL: ${pageRecoveries.length} page replacement(s) after a failed story`);
+  console.error(retriesLine(storyRetries));
   console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
   if (coverage.ignoredStoryIdentities.length > 0) console.error(`IGN : ${coverage.ignoredStoryIdentities.length} story identities name no public component (not roster entries): ${coverage.ignoredStoryIdentities.map(entry => entry.component).join(', ')}`);
   if (declaredD5PhysicalRegions.length > 0) console.error(`D5P : ${declaredD5PhysicalRegions.length} declared physical region(s): ${declaredD5PhysicalRegions.map(r => `${r.storyId} (${r.physical} within ${r.within})`).join('; ')}`);

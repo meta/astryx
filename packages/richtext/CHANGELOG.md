@@ -1,5 +1,41 @@
 # @astryxdesign/richtext
 
+# 0.7.13
+
+---
+
+# 0.7.12
+
+#### New Features
+
+- In `RichTextEditor`, Tab and Shift+Tab in a code block indent and outdent every line the selection touches, by the indent the block already uses (a tab when one of its lines starts with a tab, otherwise the fewest leading spaces of any indented line, kept between 2 and 8, otherwise 2 spaces). The selection stays on the same characters and each press is one undo step. Tab used to put a tab character in place of the selection, and Shift+Tab did the same. Escape then Tab still moves focus out of the editor. (#8579)
+
+#### Fixes
+
+- Declare renderer-owned DOM boundaries so decorator overlays mount outside managed content without changing safe inline hosting. RichTextEditor also mirrors its `dir` prop onto the wrapper around the editable surface, so the editing surface and its content blocks, the placeholder, UI rendered through `plugins`, and relocated overlays follow `dir`; the editing surface previously kept the surrounding direction. (#7633)
+- `RichTextEditorAutoLinkPlugin` no longer turns a URL inside a code block into a link. A URL typed or pasted into a code block, or one in an imported fence, now stays code. Before, the link nested inside the code block, and the exported Markdown fence lost it. (#10664)
+- In `RichTextEditor`, pasting rich content into a code block inserts plain text: the plain text on the clipboard, or, when there is none, each pasted block as one line of its text. Headings, lists, tables, and formatting used to land inside the code block, where the Markdown export wrote them as plain lines of the fence, so the document read back differently from what the editor showed. (#8580)
+- A link inside a disabled `RichTextEditor` no longer navigates, shows no pointer cursor, and is not a tab stop. Before, a disabled editor's links acted as live links: a click or Enter opened them, and Tab stopped on each one. (#10679)
+- TextInput, TextArea, NumberInput, DateInput, DateRangeInput, DateTimeInput, TimeInput, Tokenizer, Typeahead, PowerSearch, ChatComposer and RichTextEditor: when the primary pointer is coarse (a phone or tablet), the focus look shows at once, with no fade, so a tapped field repaints once while the keyboard rises. With a fine primary pointer, such as a mouse, a click and the Tab key keep the fade. ChatComposer's focus depth also shows at once under reduced motion, as the other fields' focus look already does. (#10611)
+
+#### Documentation
+
+- `RichTextView`, `RichTextEditorToolbar` and `RichTextEditorAutoLinkPlugin` each ship a doc file, so `astryx component`, `astryx discover` and the docs list their props, defaults and usage. (#10407)
+- A source comment in the editor theme now says that core `Markdown` gives each block the direction of its own text, while the editor keeps blocks in the surface's direction. (#10293)
+- RichTextEditor documents how to switch between reading and editing in place without reflow: set the field's inset and border outside the reading width with `xstyle`, so every paragraph keeps its line count across the switch. A standalone editor keeps its form width. (#10429)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @emilyhorsman
+- @ernestt
+- @freddymeta
+- @vjeux
+
+---
+
 # 0.7.11
 
 #### Fixes

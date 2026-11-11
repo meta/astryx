@@ -37,12 +37,12 @@ import {
   FrameStarvationError,
   freezePageOn,
   freezePageWhen,
-  holdAnimations,
   installPageFreeze,
   installTimerGate,
   MARKER_RGB,
   openStory,
   releaseAnimations,
+  requireFrames,
   sampleCurve,
   sampleRects,
   seekAnimations,
@@ -52,9 +52,8 @@ import {
   toTouchEvents,
   touchArrivalsFrom,
   touchDriver,
-  TouchPacingError,
   touchPacingFault,
-  TouchPageStallError,
+  touchPlayError,
   touchStoryboard,
   traceRendering,
   trackMarker,
@@ -879,11 +878,15 @@ test('brought back past its start, the screen follows with resistance, then spri
     });
   }
   frames.push({t: last.t + steps * 16.7 + 4, fingers: []});
-  await driver.play(frames);
-  // The return, held where it runs and read every 2 ms from its start.
-  const heldAnimations = await holdAnimations(page, top, {
+  // The return, held as it starts and read every 2 ms from its start. The
+  // page holds it itself. A hold sent after the play reaches the page later
+  // the busier the machine is, and the return can be over by then.
+  const returning = await armHold(page, top, {
     judges: {target: top, property: 'translate'},
+    newOnly: true,
   });
+  await driver.play(frames);
+  const heldAnimations = await returning.held();
   const returnIndex = await top.evaluate(element =>
     (
       (window as unknown as {__harnessHeld?: Animation[]}).__harnessHeld ?? []
@@ -1015,7 +1018,8 @@ async function flickFromTheEdge(page: Page, busyLiftMs?: number) {
   }
   // ~60 px of travel at ~1200 px/s: p + 0.35·v is well past half.
   const script = flick({x: left + 6, y: 400}, {velocity: {x: 1200, y: 0}});
-  const run = await armInputRun(page, TOUCH_INPUT_TYPES);
+  // With the page's frames, so a starved runner's late move reads as such.
+  const run = await armInputRun(page, TOUCH_INPUT_TYPES, {frames: true});
   // The page reads the release from when the moves arrive: pace on spacing.
   await driver.play(script, {pacing: 'spacing'});
   await waitForRest(card(page, 'screen-General'));
@@ -1024,8 +1028,9 @@ async function flickFromTheEdge(page: Page, busyLiftMs?: number) {
   } catch (error) {
     // A starved runner delivers the moves late, so the page reads a release
     // far from the script's. Past half of it, the run did not deliver the
-    // flick this test describes. It fails by name, as the page's when its own
-    // listeners held a move.
+    // flick this test describes. It fails by name. It is the page's when its
+    // own listeners held a move. It is the starved runner's when the page drew
+    // no frame across the late gap.
     const record = await run.evaluate(recorded => {
       recorded.stop();
       return {
@@ -1033,17 +1038,14 @@ async function flickFromTheEdge(page: Page, busyLiftMs?: number) {
         pointerTypes: recorded.pointerTypes.slice(),
         stamps: recorded.stamps.slice(),
         handledAt: recorded.handledAt.slice(),
+        frames: recorded.frames.slice(),
       };
     });
-    const fault = touchPacingFault(
-      toTouchEvents(script),
-      touchArrivalsFrom(record),
-      0.5,
-    );
+    const steps = toTouchEvents(script);
+    const arrivals = touchArrivalsFrom(record);
+    const fault = touchPacingFault(steps, arrivals, 0.5);
     if (fault != null) {
-      throw fault.heldByPage == null
-        ? new TouchPacingError(fault)
-        : new TouchPageStallError({...fault, heldByPage: fault.heldByPage});
+      throw touchPlayError(steps, arrivals, fault, [], record.frames);
     }
     throw error;
   }
@@ -2469,28 +2471,60 @@ test('under Reduce Motion the bar title cross-fades in place, without the rise',
   await page.emulateMedia({reducedMotion: 'reduce'});
   await openStack(page, 'large-title');
   const barText = page.locator('[data-navigation-bar="root"] h2');
-  await card(page, 'root').evaluate(element =>
-    (element.firstElementChild as HTMLElement).scrollTo({top: 300}),
-  );
-  const samples = await sampleRects(barText, 900);
-  await expect
-    .poll(async () =>
-      barText.evaluate(e => Number(getComputedStyle(e).opacity)),
-    )
-    .toBe(1);
+  const scrollTo = (top: number) =>
+    card(page, 'root').evaluate(
+      (element, y) =>
+        (element.firstElementChild as HTMLElement).scrollTo({top: y}),
+      top,
+    );
+  const opacity = () =>
+    barText.evaluate(e => Number(getComputedStyle(e).opacity));
+  // The read starts before the scroll, so it covers the whole fade.
+  const reading = sampleRects(barText, 900);
+  await scrollTo(300);
+  const samples = await reading;
+  await expect.poll(opacity).toBe(1);
   // Where the shown title rests (hidden, it sits 15 px lower for the rise).
   const rest = await barText.boundingBox();
-  const fading = samples.filter(
-    sample => sample.opacity > 0.05 && sample.opacity < 0.95,
-  );
-  // A fade, not a jump…
-  expect(fading.length, JSON.stringify(samples)).toBeGreaterThan(2);
+  // A fade, not a jump: frames the page drew mid-fade. A page starved of
+  // frames draws too few of them, and fails by name.
+  requireFrames(samples, {
+    min: 3,
+    during: 'the bar title faded in',
+    where: sample => sample.opacity > 0.05 && sample.opacity < 0.95,
+  });
   // …in place: every visible frame is already at the resting position.
   for (const sample of samples.filter(item => item.opacity > 0.05)) {
     expect(
       Math.abs((sample.box?.y ?? NaN) - (rest?.y ?? NaN)),
       JSON.stringify(samples),
     ).toBeLessThan(0.5);
+  }
+  // The same fade, held as it starts and read at fixed times through the
+  // 200 ms cross-fade. It is part-way at more than two of them, so it is a
+  // fade and not a jump. The title is in place at each.
+  await scrollTo(0);
+  await expect.poll(opacity).toBe(0);
+  const fade = await armHold(page, barText, {
+    judges: {target: barText, property: 'opacity'},
+    newOnly: true,
+  });
+  await scrollTo(300);
+  await fade.held();
+  const curve = await sampleCurve(
+    barText,
+    Array.from({length: 9}, (_, i) => (i + 1) * 20),
+  );
+  await releaseAnimations(page, {finish: true});
+  const trace = JSON.stringify(
+    curve.map(c => [c.t, c.opacity, c.transform.translateY]),
+  );
+  expect(
+    curve.filter(c => c.opacity > 0.05 && c.opacity < 0.95).length,
+    trace,
+  ).toBeGreaterThan(2);
+  for (const c of curve) {
+    expect(Math.abs(c.transform.translateY), trace).toBeLessThan(0.5);
   }
 });
 
