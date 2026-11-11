@@ -800,10 +800,11 @@ export function answerHow(ctx, question) {
     !(/\bwhite\b/.test(text) && !whiteText)
   )
     intents = intents.filter(g => g !== 'background');
-  // "border color" is the border's color, not a fill; a color word for
-  // something else ("white with a gray border") still is one.
+  // "border color" or "a gray border" is the border's color, not a fill; a
+  // color word for anything else ("a dark card with a border", "the card
+  // color and its border", "colored buttons") is the fill's.
   const looseColor = new RegExp(
-    `\\b(${COLOR_WORDS.join('|')})\\b(?!\\s+(border|outline|stroke|edge|text|labels?)s?\\b)`,
+    `(?<!\\b(border|outline|stroke|edge)\\s)\\b(${[...COLOR_WORDS, 'dark', 'light', 'colou?r(ed)?'].join('|')})\\b(?!\\s+(border|outline|stroke|edge|text|labels?)s?\\b)`,
   ).test(text);
   if (
     intents.includes('border') &&

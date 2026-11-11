@@ -599,3 +599,69 @@ describe('round 4 follow-ups', () => {
     expect(r.run[0]).toMatch(/--theme s --path "src\/app\/my preview"$/);
   }, 120_000);
 });
+
+describe('round 5', () => {
+  it('matches app phrases, not loose words, and a detail view before its list', async () => {
+    const ai = await themeEditPreviewAdd(
+      'a landing page for an AI tool with a big hero headline and two CTA buttons',
+      {cwd, theme: 's', path: 'src/app/r5'},
+    );
+    expect(ai.data.added[0]).not.toMatch(/^ai-chat/);
+    const event = await refusal(() =>
+      themeEditPreviewAdd(
+        'an event page for a concert with a date, venue, lineup and a buy tickets button',
+        {cwd, theme: 's', path: 'src/app/r5'},
+      ),
+    );
+    expect(event.code).toBe('ERR_NOT_FOUND');
+    const detail = await themeEditPreviewAdd(
+      'an issue detail page with title, description, comments and a properties panel',
+      {cwd, theme: 's', path: 'src/app/r5'},
+    );
+    // work-item-detail needs StyleX here, so the next detail page is taken.
+    expect(detail.data.added).toEqual(['detail-page']);
+    expect(detail.data.skipped.map(x => x.page)).toContain('work-item-detail');
+  }, 300_000);
+
+  it('keeps the fill when the color word belongs to it', async () => {
+    for (const q of [
+      'dark card with a thin border',
+      'change the card color and its border',
+      'colored buttons with a border',
+    ]) {
+      const r = /** @type {any} */ ((await themeEditHow(q, {cwd})).data);
+      expect(r.understood.aspects, q).toEqual(['border', 'background']);
+    }
+    const border = /** @type {any} */ (
+      (await themeEditHow('a gray border on cards', {cwd})).data
+    );
+    expect(border.understood.aspects).toEqual(['border']);
+  });
+
+  it('shows the radius token each part reads, and a dark page offer only where it fits', async () => {
+    await themeEditSet('s', 'corners', 'large', {cwd, on: 'menus'});
+    const show = await themeEditShow('s', {cwd});
+    expect(
+      show.data.partValues.find(x => x.startsWith('corners = large on menus')),
+    ).toContain('(whole theme: --radius-container');
+    await themeEditUndo('s', {cwd, thing: 'corners', on: 'menus'});
+    await themeEditNew('dk', {
+      cwd,
+      like: 'neutral',
+      settings: {mode: 'dark-only'},
+    });
+    const n = await themeEditSet('dk', 'neutral', '#64748b', {cwd});
+    const note = n.data.notes.join(' ');
+    expect(note).not.toContain('in light');
+    expect(note).not.toContain('"#ffffff"');
+    fs.rmSync(path.join(cwd, 'themes/dk'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('moves a dark fill to the nearest shade that passes both checks', async () => {
+    const r = await themeEditSet('s', 'accent', '#7c3aed', {cwd});
+    expect(r.data.notes.join(' ')).toContain(
+      'in dark, --color-accent is shade 50',
+    );
+    await themeEditUndo('s', {cwd, thing: 'accent'});
+  }, 120_000);
+});

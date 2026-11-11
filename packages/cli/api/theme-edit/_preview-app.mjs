@@ -604,9 +604,14 @@ async function rankedPages(words, cwd, notes, flags) {
   const suggest = (/** @type {string[]} */ list) =>
     list.slice(0, 3).map(n => `${PREVIEW} add --template ${n}${flags}`);
   // No page relates when the ranking fell back to a frame with no direct
-  // match, and no page the search found matches two words of the request.
-  const termsMatched = (/** @type {any} */ r) =>
-    Number(/^matches (\d+)\//.exec(String(r.reason ?? ''))?.[1] ?? 0);
+  // match, and no page the search found matches three words of the request
+  // or two fifths of them.
+  const termsMatched = (/** @type {any} */ r) => {
+    const m = /^matches (\d+)\/(\d+)/.exec(String(r.reason ?? ''));
+    if (!m) return 0;
+    const [hit, of] = [Number(m[1]), Number(m[2])];
+    return hit >= 3 || hit / of >= 0.4 ? hit : 0;
+  };
   const unrelated =
     !pages.length ||
     (start &&
@@ -615,7 +620,8 @@ async function rankedPages(words, cwd, notes, flags) {
       !kit.data.directMatch &&
       !found.some(
         (/** @type {any} */ r) => !frames.has(r.name) && termsMatched(r) >= 2,
-      ));
+      ) &&
+      !APP_PAGES.some(([re]) => re.test(words.toLowerCase())));
   if (unrelated)
     refuse(
       E.ERR_NOT_FOUND,
@@ -643,12 +649,28 @@ async function rankedPages(words, cwd, notes, flags) {
   /** @type {Map<string, string>} */
   const reasons = new Map();
   if (app) {
-    const id = /** @type {string} */ (app[1].find(exists));
-    if (pages.includes(id)) pages.splice(pages.indexOf(id), 1);
-    pages.unshift(id);
-    reasons.set(
-      id,
-      `the description names ${/** @type {RegExpExecArray} */ (app[0].exec(text))[0]}, and an app page shows a theme better than a hero`,
+    // The ranked page stays first when it already serves the app named;
+    // the app's pages come next, in order, so the next one is taken when
+    // one cannot be shown here.
+    const named = /** @type {RegExpExecArray} */ (app[0].exec(text))[0];
+    const keep = app[1].includes(pages[0]) ? pages[0] : null;
+    const ids = app[1].filter(id => exists(id) && id !== keep);
+    for (const id of [...ids].reverse()) {
+      if (pages.includes(id)) pages.splice(pages.indexOf(id), 1);
+      pages.splice(keep ? 1 : 0, 0, id);
+    }
+    if (keep)
+      reasons.set(
+        keep,
+        `the description names ${named}, and this page is that app`,
+      );
+    ids.forEach((id, k) =>
+      reasons.set(
+        id,
+        k === 0 && !keep
+          ? `the description names ${named}, and an app page shows a theme better than a hero`
+          : `the next page for ${named}`,
+      ),
     );
   } else if (side && listed.some(t => t.id === 'side-gallery')) {
     if (pages.includes('side-gallery'))
@@ -681,21 +703,34 @@ async function rankedPages(words, cwd, notes, flags) {
 }
 
 /**
- * App pages for the apps a description can name, best first.
+ * App pages for the apps a description names, best first. Each is matched
+ * by a phrase, never one loose word, so "buy tickets" is not an issue
+ * tracker and "an AI tool" is not a chat. A detail view comes before its
+ * list.
  * @type {Array<[RegExp, string[]]>}
  */
 const APP_PAGES = [
   [
-    /\b(issue[- ]?tracker|issues|tickets?|bug tracker|backlog)\b/,
-    ['table-grouped', 'work-item-detail', 'table'],
+    /\b(issue|ticket|bug|task|work[- ]item|story) (detail|details|view|page)\b/,
+    ['work-item-detail', 'detail-page'],
   ],
-  [/\b(kanban|task board|boards?)\b/, ['kanban-board']],
-  [/\b(dashboard|analytics|metrics|charts?)\b/, ['dashboard']],
-  [/\b(inbox|email|messages)\b/, ['table-inbox']],
-  [/\b(chat|assistant|ai)\b/, ['ai-chat', 'ai-chat-landing']],
-  [/\b(settings|preferences)\b/, ['settings']],
-  [/\b(docs|documentation)\b/, ['documentation']],
-  [/\b(data ?table|table|spreadsheet|data grid)\b/, ['table']],
+  [
+    /\b(issue[- ]?tracker|bug[- ]tracker|issue (list|table|queue|board)|ticket(ing)? (system|queue|tracker)|backlog)\b/,
+    ['table-grouped', 'table'],
+  ],
+  [/\b(kanban|task board|project board)\b/, ['kanban-board']],
+  [/\b(analytics )?dashboard\b|\banalytics (app|page|view)\b/, ['dashboard']],
+  [
+    /\b(email|mail) (inbox|client|app)\b|\binbox (app|view|page)\b/,
+    ['table-inbox'],
+  ],
+  [
+    /\b(chat (app|interface|ui|window|screen|view)|chatbot|ai (chat|assistant) (app|interface|ui))\b/,
+    ['ai-chat'],
+  ],
+  [/\b(settings|preferences) (page|screen|panel|view)\b/, ['settings']],
+  [/\b(docs|documentation) (site|page|portal)\b/, ['documentation']],
+  [/\b(data ?table|spreadsheet|data grid)\b/, ['table']],
   [
     /\b(app|product) (screenshot|window|preview|ui)\b/,
     ['table-grouped', 'dashboard', 'table'],
