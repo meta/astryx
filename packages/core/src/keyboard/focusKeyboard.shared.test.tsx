@@ -4,9 +4,9 @@
  * @file focusKeyboard.shared.test.tsx
  * @input Two loads of the focus-trap and keyboard modules, as the package and
  *   a swizzled copy each carry one
- * @output Proves both loads see one set of focus traps (a copy's region
- *   nested in a package region answers its own Tab), one keyboard layout
- *   guide per window, and one set of keyboard targets
+ * @output Proves both loads see one set of focus traps, one keyboard layout
+ *   guide per window, one set of keyboard targets and one scroll-back record.
+ *   A copy's region nested in a package region answers its own Tab
  * @position Shared-state tests for useFocusTrap.ts and the keyboard modules
  *   (spec:AST-110 FR3)
  */
@@ -100,5 +100,16 @@ describe('focus traps and the keyboard, shared by the package and a copy', () =>
     expect(pkg.isInsideKeyboardTarget(field)).toBe(true);
     release();
     target.remove();
+  });
+
+  it("sees where a copy's scroll for the keyboard is headed", async () => {
+    const pkg = await load(async () => import('./keyboardScrollBack'));
+    const copy = await load(async () => import('./keyboardScrollBack'));
+    const scroller = document.createElement('div');
+    document.body.append(scroller);
+    copy.noteKeyboardScroll(scroller, 0, window, 120);
+    scroller.scrollTop = 60;
+    expect(pkg.keyboardScrollTarget(scroller, window)).toBe(120);
+    scroller.remove();
   });
 });

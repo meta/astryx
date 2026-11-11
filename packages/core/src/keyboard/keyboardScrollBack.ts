@@ -16,6 +16,7 @@
 
 import {reducesMotion} from '../motion/reducedMotion';
 import {isTouchOnScreen, subscribeInput} from '../utils/inputStream';
+import {sharedWeakMap} from '../utils/sharedRealm';
 import {isIosWebKit} from '../utils/touchQueries';
 import {KEYBOARD_EPSILON, subscribeKeyboardHeight} from './keyboardHeight';
 import {bringsUpKeyboard, hidesField} from './keyboardLayoutGuide';
@@ -29,10 +30,23 @@ interface AddedScroll {
   isBack: boolean;
 }
 
-const addedScrolls = new WeakMap<Window, Map<Element, AddedScroll>>();
-const stopsOf = new WeakMap<Window, () => void>();
-const foldWaitsOf = new WeakMap<Window, () => void>();
-const claimants = new WeakMap<Window, number>();
+// Every copy of Core shares these stores, so one scroll back runs per page.
+const addedScrolls = sharedWeakMap<Window, Map<Element, AddedScroll>>(
+  'keyboard/keyboard-scroll-back/added-scrolls',
+  1,
+);
+const stopsOf = sharedWeakMap<Window, () => void>(
+  'keyboard/keyboard-scroll-back/stops',
+  1,
+);
+const foldWaitsOf = sharedWeakMap<Window, () => void>(
+  'keyboard/keyboard-scroll-back/fold-waits',
+  1,
+);
+const claimants = sharedWeakMap<Window, number>(
+  'keyboard/keyboard-scroll-back/claimants',
+  1,
+);
 
 /**
  * Counts a field that keeps itself above `win`'s keyboard until the returned
