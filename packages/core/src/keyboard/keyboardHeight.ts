@@ -20,11 +20,7 @@
 
 import {armClickGuard} from '../utils/clickGuard';
 import {matchesMediaQuery} from '../utils/coarsePointer';
-import {
-  getTouchStartCount,
-  isTouchOnScreen,
-  subscribeInput,
-} from '../utils/inputStream';
+import {getTouches, subscribeInput} from '../utils/inputStream';
 import {deepActiveElement} from '../utils/flatTree';
 import {isNode} from '../utils/nodeType';
 import {layoutViewportHeight} from '../utils/layoutViewport';
@@ -222,7 +218,7 @@ function attach(win: Window, store: KeyboardStore): () => void {
     store.height = height;
     store.room = measureResizedRoom(win, store, height);
     if (wasUp && height <= KEYBOARD_EPSILON && store.room <= KEYBOARD_EPSILON) {
-      store.startsAtHide = getTouchStartCount(win);
+      store.startsAtHide = getTouches(win).starts;
     }
     const report: KeyboardHeightEvent = {type: 'viewport', height, timeStamp};
     for (const listener of [...store.listeners]) {
@@ -360,9 +356,10 @@ export function subscribeKeyboardHeight(
  */
 export function isFingerOnScreen(win: Window): boolean {
   const startsAtHide = stores.get(win)?.startsAtHide;
+  const touches = getTouches(win);
   return (
-    isTouchOnScreen(win) &&
-    (startsAtHide == null || getTouchStartCount(win) !== startsAtHide)
+    touches.fingers > 0 &&
+    (startsAtHide == null || touches.starts !== startsAtHide)
   );
 }
 

@@ -346,10 +346,10 @@ app to turn on.
   loses behavior and no breaking change applies; `BottomSheet.doc.mjs` states
   each platform's behavior. Firefox for Android gets FR2–FR5.
 - No public API exposes the keyboard height, and FR3 keeps it that way.
-- The keyboard module reads the input stream's touch counts, which
-  `packages/core/src/utils/inputStream.ts` exports as `isTouchOnScreen` and
-  `getTouchStartCount`. A finger in a native pan has no press in
-  `getDownPresses`, and reading a count adds no listener.
+- The keyboard module reads the input stream's touch counts through one reader,
+  `getTouches`, which `packages/core/src/utils/inputStream.ts` exports. A finger
+  in a native pan has no press in `getDownPresses`, and reading a count adds no
+  listener.
 - `keyboardHeight.ts` exports `isFingerOnScreen`, which forgets a finger held at
   the keyboard's last hide. It also exports `panVisualViewportTo`, which pans
   the visual viewport to a field the document cannot scroll to.

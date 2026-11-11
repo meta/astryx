@@ -6,8 +6,8 @@
  *   controller, the gesture host, the keyboard module)
  * @output subscribeInput. Its readers: getLastPointerType, the latest
  *   pointer's type; getLastMousePoint, the latest mouse point; getDownPresses,
- *   each finger and pen press that is down. isTouchOnScreen says whether a
- *   finger is on the screen, and getTouchStartCount how many touches started.
+ *   each finger and pen press that is down; getTouches, the fingers on the
+ *   screen and how many touches started.
  * @position The one entry for document-wide input listeners in core: one
  *   native listener per event type on the window's capture phase, shared by
  *   every subscriber
@@ -85,10 +85,18 @@ const inputState = realmValue(sharedKey('input-stream', 1), () => ({
 const {streams, lastPointerTypes, lastMousePoints, downPresses} = inputState;
 const NO_PRESSES: ReadonlyMap<number, MousePoint> = new Map();
 
-interface TouchRecord {
+/** The fingers on a window's screen, and the touches that started there. */
+export interface TouchRecord {
+  /** How many fingers are on the screen. */
   readonly fingers: number;
+  /**
+   * How many touches started. It never goes down, so a count a caller notes
+   * stays comparable: a different count later says a touch started since.
+   */
   readonly starts: number;
 }
+
+const NO_TOUCHES: TouchRecord = {fingers: 0, starts: 0};
 
 /**
  * How many fingers are on each window's screen, and how many touches have
@@ -137,27 +145,23 @@ export function getDownPresses(view: Window): ReadonlyMap<number, MousePoint> {
 }
 
 /**
- * Whether a finger is on `view`'s screen, from the latest touch event its
- * stream delivered. A native pan keeps the finger on the screen, though the
- * pan's `pointercancel` drops its press from getDownPresses. The stream counts
- * fingers only while subscribers listen to `touchstart`, `touchend` and
- * `touchcancel`, as the keyboard module does. Reading it adds no listener.
- * It counts a stylus too, since a stylus drag moves the page as a finger
- * does. The gesture host's own count skips a stylus, and it listens only
- * while a recognizer needs input, so it cannot serve here.
+ * The fingers on `view`'s screen and the touches that started there, from the
+ * touch events its stream delivered. A native pan keeps the finger on the
+ * screen, though the pan's `pointercancel` drops its press from
+ * getDownPresses. The stream counts only while subscribers listen to
+ * `touchstart`, `touchend` and `touchcancel`, as the keyboard module does.
+ * Reading it adds no listener. It counts a stylus too, since a stylus drag
+ * moves the page as a finger does. The gesture host's own count skips a
+ * stylus, and it listens only while a recognizer needs input, so it cannot
+ * serve here.
+ *
+ * @example
+ * ```
+ * const isFingerDown = getTouches(window).fingers > 0;
+ * ```
  */
-export function isTouchOnScreen(view: Window): boolean {
-  return (touchRecords.get(view)?.fingers ?? 0) > 0;
-}
-
-/**
- * How many `touchstart` events `view`'s stream has heard while it counts
- * fingers (see {@link isTouchOnScreen}). A caller notes the count; a
- * different count later says a touch started since. It never goes down, so a
- * noted count stays comparable.
- */
-export function getTouchStartCount(view: Window): number {
-  return touchRecords.get(view)?.starts ?? 0;
+export function getTouches(view: Window): TouchRecord {
+  return touchRecords.get(view) ?? NO_TOUCHES;
 }
 
 /**
