@@ -108,7 +108,7 @@ another implementation helper.
   it renders a box. A member omits its nested Field when a supported InputGroup
   owns the group label and supporting text.
 - `FormLayout` owns outer arrangement, spacing, direction, form-level
-  optionality, and the form-level validation timing default (FR14). It does
+  optionality, and the form-level validation behavior default (FR14). It does
   not redefine a member's internal control geometry.
 - `InputGroup` owns the row height (fixed today; it grows with a set text size
   under `spec:AST-102` FR4, and the fixed height is a gap), connected outer surface, edge alignment,
@@ -144,7 +144,7 @@ another implementation helper.
 | Transition Action | absent or component-supported `changeAction`                   | Callback first, optimistic value next, Action in a transition, one busy presentation                                                                      | approved family rule where exposed                   |
 | status placement  | `attached`, `detached`, or `tooltip` at the input-family layer | Attached is the default where the member supports safe overlap; detached and tooltip remain available to every input                                      | approved family rule                                 |
 | prop targets      | base props, `container*`, `control*`                           | Base props reach the primary semantic control; `container*` reaches Field; `control*` reaches the control box; no root styling input                      | approved by DEC-7                                    |
-| validation timing | `complete` or `commit` on members that reject entries          | A member's own rejection appears once the entry is complete, or only at commit; its message, invalid state, and announcement move together                | proposed by `spec:AST-117`                           |
+| validation timing | `complete` or `commit` on members that reject entries          | A member reveals its own rejection as it ships, or holds every signal of it until commit; a field's own prop wins over the form's                         | proposed by `spec:AST-117`                           |
 
 ## Cross-component invariants
 
@@ -276,16 +276,14 @@ another implementation helper.
   no keyboard, such as DateRangeInput, FileInput, ComplexSelector, or a touch
   picker field with no input mode, is outside it.
 
-- **FR14 — Members that reject entries share one validation timing.**
+- **FR14 — Members that reject entries share one validation behavior.**
   DateInput, DateTimeInput, TimeInput, and NumberInput take
-  `validationTiming`, `'complete'` by default or `'commit'`, and FormLayout's
-  `defaultValidationTiming` sets it for a form; a field's own prop wins. An
-  unfinished entry is never flagged, text that does not read as a value waits
-  for commit, a commit keeps rejected text, and a rejection's message, invalid
-  state, and announcement appear and clear together. `spec:AST-117` owns the
-  rule, including when each kind of entry is complete. Members that reject
-  nothing themselves, such as TextInput, Selector, and DateRangeInput, take no
-  timing.
+  `validationBehavior`: `'complete'`, the default, keeps each member's shipped
+  timing, and `'commit'` holds every signal of a rejection until Enter or blur.
+  FormLayout's `defaultValidationBehavior` sets it for a form, and a field's own
+  prop wins. `spec:AST-117` owns the rule. Members that reject nothing
+  themselves, such as TextInput, Selector, and DateRangeInput, take no
+  validation behavior.
 
 ## Allowed component variation
 
@@ -427,10 +425,8 @@ DEC-6 does not require unrelated components to add a new floor.
 - **On-screen keyboard (FR13):** no member meets FR13 on current main. No
   member has keyboard handling, and the keyboard module does not exist
   yet; `spec:AST-099` lists each gap.
-- **Validation timing (FR14):** no member takes `validationTiming`, and
-  FormLayout has no form default. NumberInput and TimeInput mark unfinished
-  drafts invalid and announce them on each keystroke with no visible message;
-  `spec:AST-117` lists each gap.
+- **Validation behavior (FR14):** no member takes `validationBehavior`, and
+  FormLayout has no form default; `spec:AST-117` lists each gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
   individual state behavior, but do not yet provide the complete real-browser
   inline-size/end-overlap matrix below. This current record names those
@@ -456,7 +452,7 @@ The exhaustive coverage obligation follows the membership and adoption tables.
 | FR11     | `InputClearButton.test.tsx` tooltip and accessible-name assertions, plus real-Chromium hover captures                                                                                                                                                                                                                    | a long field label; a locale override; light and dark                                                                             | The tooltip repeats the field label, or the accessible name loses the field label                                                                                                                                                                                                                                                          |
 | FR12     | `Typeahead.test.tsx`, `BaseTypeahead.test.tsx`, `Tokenizer.test.tsx`, `Selector.test.tsx`, and `MultiSelector.test.tsx` cases for both attributes, with Enter keeping its member-owned effect; `SearchKeyboard.interaction.browser.spec.ts` on a touch-emulated phone, where the search input a tap focuses carries both | Typeahead; Tokenizer; Selector and MultiSelector search row; a phone viewport with touch emulation                                | A missing attribute, or an Enter whose effect changes with the label, fails                                                                                                                                                                                                                                                                |
 | FR13     | TBD (gap): the per-field keyboard focus tests and simulator evidence `spec:AST-099` FR9 names                                                                                                                                                                                                                            | each member FR13 covers, in the page, a sheet, a docked bar Core moves, a floating bar, and a bar with its own `translate`        | A focused field left under the keyboard in a scroller (including one inside a fixed container FR9 leaves to the app), a Core host, or a docked bar Core moves, or a public prop for the behavior; a field with no scroller between it and a floating, own-`translate`, or full-viewport host is the app's to position and is not a failure |
-| FR14     | TBD (gap): the timing, completeness, commit, and announcement suites `spec:AST-117` names                                                                                                                                                                                                                                | DateInput, DateTimeInput, TimeInput, and NumberInput under each timing, standalone and in a FormLayout                            | A rejection appears before its timing allows, an unfinished entry is flagged, a commit drops rejected text, or the message, invalid state, and announcement part                                                                                                                                                                           |
+| FR14     | TBD (gap): the validation behavior suites `spec:AST-117` names                                                                                                                                                                                                                                                           | DateInput, DateTimeInput, TimeInput, and NumberInput under each value, standalone and in a FormLayout                             | A signal appears before commit under `'commit'`, `'complete'` differs from the shipped behavior, or a form default outranks a field's own prop                                                                                                                                                                                             |
 
 ## Decision links
 
