@@ -87,7 +87,7 @@ It needs Node 22 or later, npm registry access and a Chromium build. Install
 the grader's dependencies with `pnpm install` at the repository root, then a
 browser with `pnpm -F @astryxdesign/vibe-tests exec playwright-core install
 chromium`. Set `VIBE_EVAL_CHROMIUM` to use another Chromium build. When
-`HTTPS_PROXY` is set, Chromium uses it to reach the font hosts. The run
+`HTTPS_PROXY` is set, the grader uses it to reach the font hosts. The run
 directory defaults to a new folder in the system temp folder. It must be
 outside the repository.
 

@@ -34,6 +34,11 @@ export default function steps(page) {
       await email.fill('not-an-email');
       await subscribe.click();
       await shown(page.getByText(ERROR, {exact: true}), 'error text for an invalid address');
+      await eventually(
+        async () => (await email.getAttribute('aria-invalid')) === 'true',
+        'the field is not marked aria-invalid="true" for an invalid address',
+      );
+      assert((await describedText(email)).includes(ERROR), 'the error for an invalid address is not referenced by aria-describedby or aria-errormessage');
     }],
     ['valid email shows the thank-you message', async () => {
       await email.fill('ada@example.com');
