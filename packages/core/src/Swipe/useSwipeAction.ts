@@ -40,7 +40,8 @@
  * Either way a drag stays on its side: within one gesture an open row only
  * closes, never passing rest to its other side. Dragged past the confirm point,
  * when the side's outermost entry can fire, a full swipe confirms. On a side
- * with two or more entries, only a drag from the open row confirms. The row
+ * with two or more entries, only a drag from the open row, or one that lands
+ * on its outermost entry, confirms. The row
  * runs ahead to UIKit's confirmation offset, and the outermost entry covers the
  * space. The panel reads that from a second custom property, the confirm;
  * backing out undoes it. A lift still confirmed slides the row out and fires
@@ -640,6 +641,8 @@ export function useSwipeAction({
     trailing: createSidePanel(),
   }));
   const dragRef = useRef<Drag | null>(null);
+  /** The side whose outermost entry the last touch landed on. */
+  const landedOnRef = useRef<SwipeSide | null>(null);
   /** The shared drag on the root. */
   const snapRef = useRef<SnapDrag | null>(null);
   /** The frame that draws a finger's lead in flight. */
@@ -1017,18 +1020,21 @@ export function useSwipeAction({
     layoutRef.current = layout;
     snapRef.current?.setSnapPoints(stopsOf(layout));
     // With two or more entries, a side confirms a full swipe only from the row
-    // open on that side. A panel its outermost entry covers confirms too. A
-    // drag from a closed row opens it instead.
+    // open on that side. A touch that lands on its outermost entry counts too,
+    // since a scroll can start the row's close before that touch moves. A panel
+    // its outermost entry covers confirms too. A drag from a closed row opens it
+    // instead.
     const current = stateRef.current;
-    const isFromOpen =
-      current.side === side &&
-      (isSwipeOpen(current) ||
-        current.cover === latestRef.current.sides[side] - 1);
+    const isDeliberate =
+      (move.input !== 'scroll' && landedOnRef.current === side) ||
+      (current.side === side &&
+        (isSwipeOpen(current) ||
+          current.cover === latestRef.current.sides[side] - 1));
     dragRef.current = {
       baseTravel: 0,
       canConfirm:
         latestRef.current.canConfirm(side) &&
-        (latestRef.current.sides[side] < 2 || isFromOpen),
+        (latestRef.current.sides[side] < 2 || isDeliberate),
       confirmAt: confirmPoint(layout.openWidth, layout.rowWidth),
       isArmed: false,
       isScroll: move.input === 'scroll',
@@ -1315,7 +1321,19 @@ export function useSwipeAction({
       model: {begin, move: track, release, cancel},
     });
     snapRef.current = snap;
+    const onPointerDown = (event: PointerEvent) => {
+      const {target} = event;
+      landedOnRef.current = !(target instanceof Node)
+        ? null
+        : panels.leading.outer?.contains(target) === true
+          ? 'leading'
+          : panels.trailing.outer?.contains(target) === true
+            ? 'trailing'
+            : null;
+    };
+    root.addEventListener('pointerdown', onPointerDown, true);
     return () => {
+      root.removeEventListener('pointerdown', onPointerDown, true);
       snapRef.current = null;
       snap.destroy();
       // The root outlives the swipe: it gets its own styles back.

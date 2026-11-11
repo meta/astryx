@@ -997,6 +997,44 @@ test('with the row open, a drag that starts on Delete itself and drags on past t
   await expect(rows).toHaveCount(before - 1);
 });
 
+test('with the row open, a drag that lands on Delete fires it past the confirm point even when a scroll starts closing the row first (spec:AST-057 DEC-9)', async ({
+  page,
+}) => {
+  const opened = await openRow(page);
+  const {driver, rest, panel} = opened;
+  const openWidth = await restOpen(opened);
+  const rows = page.locator('.astryx-item');
+  const before = await rows.count();
+  const box = await panel.getByRole('button', {name: 'Delete'}).boundingBox();
+  if (box == null) {
+    throw new Error('no Delete');
+  }
+  const from = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+  // The page scrolls while the finger rests on Delete, before the drag
+  // claims it, as a finger's first drift can scroll a phone's page. The
+  // scroll starts the row's close.
+  await page.evaluate(() => {
+    document.addEventListener(
+      'touchstart',
+      () => {
+        setTimeout(() => document.dispatchEvent(new Event('scroll')), 30);
+      },
+      {once: true, capture: true},
+    );
+  });
+  // Far enough to pass the confirm point from wherever the drag catches the
+  // closing row.
+  const confirmAt = confirmPointOf(openWidth, rest.width);
+  await driver.play(
+    drag(
+      from,
+      {x: from.x - (confirmAt + swipeActions.hysteresis + 20), y: from.y},
+      {durationMs: 1100, hz: 60, holdMs: 150, restMs: 300},
+    ),
+  );
+  await expect(rows).toHaveCount(before - 1);
+});
+
 test('a release settles on the compositor: the row keeps moving through a 1 s main-thread block (spec:AST-094 FR5)', async ({
   page,
 }) => {
