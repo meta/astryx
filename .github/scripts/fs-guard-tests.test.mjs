@@ -12,6 +12,7 @@ import {
   scopedExtraTests,
   specReaderTests,
   uiTestRoots,
+  withReached,
   withoutAlreadyRun,
 } from './fs-guard-tests.mjs';
 import os from 'node:os';
@@ -502,6 +503,23 @@ describe('a test the --changed run already ran runs once', () => {
         ['scripts/a.test.mjs', 'scripts/other.test.mjs'],
       ),
     ).toEqual(['scripts/guard.test.mjs']);
+  });
+
+  it('lists the reached tests first, then the other tests, each once', () => {
+    expect(
+      withReached(
+        ['scripts/guard.test.mjs', 'scripts/a.test.mjs'],
+        [
+          'scripts/a.test.mjs',
+          'scripts/changed.test.mjs',
+          'scripts/a.test.mjs',
+        ],
+      ),
+    ).toEqual([
+      'scripts/a.test.mjs',
+      'scripts/changed.test.mjs',
+      'scripts/guard.test.mjs',
+    ]);
   });
 
   it('the lister drops a guard the changed run listed, and keeps the rest', () => {

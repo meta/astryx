@@ -19,6 +19,33 @@ const total = leg => leg.reduce((sum, file) => sum + recorded[file], 0);
 const slowest = [...files].sort((a, b) => recorded[b] - recorded[a]);
 
 describe('duration-balanced Node legs', () => {
+  it('balances a slow changed test with the guards when one run lists both', () => {
+    // A scoped run with one slow changed test (packed-gather-cache) and a
+    // set of slow guards. Split as two runs, leg 1 takes the changed test
+    // on top of a full share of the guards; split as one run, it does not.
+    const changed = ['packages/cli/test/packed-gather-cache.test.mjs'];
+    expect(recorded[changed[0]]).toBeGreaterThan(300);
+    const guards = Object.entries(recorded)
+      .filter(([file]) => file !== changed[0])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 40)
+      .map(([file]) => file);
+    const load = leg => leg.reduce((sum, file) => sum + recorded[file], 0);
+    const twoRuns = partitionByDuration(changed, 4, recorded).map(
+      (leg, index) =>
+        load(leg) + load(partitionByDuration(guards, 4, recorded)[index]),
+    );
+    const oneRun = partitionByDuration(
+      [...changed, ...guards],
+      4,
+      recorded,
+    ).map(load);
+    expect(Math.max(...oneRun)).toBeLessThan(Math.max(...twoRuns));
+    expect(Math.max(...twoRuns)).toBeGreaterThan(
+      recorded[changed[0]] + load(guards) / 4 - 60,
+    );
+  });
+
   it('records a time for the whole Node suite', () => {
     expect(files.length).toBeGreaterThan(500);
     for (const file of files) {

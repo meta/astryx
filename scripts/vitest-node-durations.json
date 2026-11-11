@@ -1058,6 +1058,12 @@
     "scripts/touch-support-bundle.test.mjs": 7.3,
     "scripts/typecheck-sharded.test.mjs": 0.1,
     "scripts/verify-exports.test.mjs": 0.7,
-    "scripts/vitest-shard-sequencer.test.mjs": 0.1
+    "scripts/vitest-shard-sequencer.test.mjs": 0.1,
+    "packages/cli/test/packed-gather-cache.test.mjs": 410.8,
+    "packages/cli/assets/codemods/mentions.test.mjs": 0.1,
+    "packages/cli/scripts/same-beside-lockfiles.test.mjs": 0,
+    "packages/cli/test/packed-manifest.test.mjs": 3.2,
+    "packages/cli/foundation/fs/gather-cache.test.mjs": 0,
+    "packages/cli/api/theme-edit/theme-hunt3.test.mjs": 79.9
   }
 }
