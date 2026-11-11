@@ -281,6 +281,40 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
     });
   });
 
+  for (const order of [
+    'the second over the first',
+    'the first over the second',
+  ]) {
+    test(`in the empty gap between two loose 24 px buttons, a tap goes to the nearer box, ${order}`, async ({
+      page,
+    }) => {
+      await openStory(page, storybook(), STORY);
+      if (order === 'the first over the second') {
+        // The first button paints over the second, so its band is on top.
+        await page
+          .locator('#storybook-root')
+          .getByTestId('cut')
+          .evaluate(element => {
+            (element as HTMLElement).style.zIndex = '1';
+          });
+      }
+      const cut = await boxOf(page, 'cut');
+      const copy = await boxOf(page, 'copy');
+      expect(copy.left - cut.right).toBeCloseTo(4, 0);
+      const y = Math.round((cut.top + cut.bottom) / 2);
+      const output = page.locator(
+        '#storybook-root output[aria-label="Reach taps"]',
+      );
+      const driver = await touchDriver(page);
+      // 1 px past Cut's edge, in the gap: Cut's box is nearer.
+      await tapAt(driver, {x: Math.round(cut.right + 1), y});
+      await expect(output).toHaveText('Lone 0, Link 0, Cut 1, Copy 0');
+      // 1 px before Copy's edge, in the gap: Copy's box is nearer.
+      await tapAt(driver, {x: Math.round(copy.left - 1), y});
+      await expect(output).toHaveText('Lone 0, Link 0, Cut 1, Copy 1');
+    });
+  }
+
   test('a NavigationStack push reads no layout and writes no hit size on either screen’s rows, through the frames after it lands', async ({
     page,
   }) => {

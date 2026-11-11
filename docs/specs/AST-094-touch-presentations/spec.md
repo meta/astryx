@@ -807,8 +807,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   pressed control's box, and only when the finger landed on its band outside
   that box, the elements under the finger within the control's container, in
   one read. Where the finger is on another target's visible box, that target
-  takes the tap, as it does without the band (owner decision, 2026-11-10;
-  DEC-32). A hit area a component or module
+  takes the tap, as it does without the band. In empty space where bands
+  overlap, the target whose box is nearest the finger takes the tap (owner
+  decision, 2026-11-10; DEC-32). A hit area a component or module
   record sets on purpose, such as `component:Thumbnail` AR4's, is unaffected.
   Mobile size increases belong to theme adaptations (DEC-20).
 - **FR43 — Gestures work on the web.** Gestures attach for every pointer, a
@@ -1544,7 +1545,9 @@ measured, at the press's click; and the check never reacts to layers or
 animations. The band's size is CSS, with room per side (FR42). Where a band
 lies over another target's visible box, the visible box wins: that target
 takes the tap, as it does without the band, and the band only claims empty
-space. A tap that works without the band works the same with it.
+space. In empty space where bands overlap, the target whose box is nearest the
+finger takes the tap. A tap that works without the band works the same with
+it.
 
 Rejected: a measured, page-wide watch of every control's neighbors.
 

@@ -212,6 +212,21 @@ describe('at a tap', () => {
     expect(onA).toHaveBeenCalledTimes(1);
   });
 
+  it('gives a tap in the empty gap to the candidate whose box is nearest the finger', () => {
+    const {a, b, container, onA, onB} = setUp();
+    // The control ends at 124 and the link starts at 128. Both bands lie over
+    // the gap; the finger is on neither box.
+    elementsAtPoint = [a, b, container, document.body];
+    // 1 px before the link: the link's box is nearer.
+    expect(tap(a, 127)).toBe(true);
+    expect(onB).toHaveBeenCalledTimes(1);
+    expect(onA).not.toHaveBeenCalled();
+    // 1 px past the control: the control's box is nearer.
+    expect(tap(a, 125)).toBe(false);
+    expect(onA).toHaveBeenCalledTimes(1);
+    expect(onB).toHaveBeenCalledTimes(1);
+  });
+
   it('stops at the control’s own container: what paints below it, such as the page under a layer, is not beside it', () => {
     const {a, b, container, onA} = setUp();
     elementsAtPoint = [a, container, b, document.body];

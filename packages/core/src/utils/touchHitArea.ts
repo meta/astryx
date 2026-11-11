@@ -7,7 +7,8 @@
  * @input Whether an element takes taps, the window's input stream and the
  *   geometry of utils/hitArea.ts
  * @output `useTouchHitArea`, a callback ref that gives a tap on its element's
- *   touch band to another target when the finger is on that target's box
+ *   touch band to another target when the finger is on that target's box or
+ *   nearer it
  * @position Core-internal hook for the coarse-only 44 px target. The band is
  *   CSS (`touchHitAreaStyles`, internal/touchHitArea.stylex.ts). This module
  *   reads layout only at a tap's click: the pressed control, and what lies
@@ -19,7 +20,7 @@
  */
 
 import {useCallback, type RefCallback} from 'react';
-import {INTERACTIVE_SELECTOR} from './hitArea';
+import {distanceTo, INTERACTIVE_SELECTOR} from './hitArea';
 import {subscribeInput} from './inputStream';
 import {isElement} from './nodeType';
 
@@ -52,51 +53,57 @@ function isOwn(host: Element, candidate: Element): boolean {
   return control != null && host.contains(control);
 }
 
-/** Whether `element`'s own box holds the point (x, y). */
-function contains(element: Element, x: number, y: number): boolean {
-  const box = element.getBoundingClientRect();
-  return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
-}
-
 /**
- * The other target whose visible box is under the finger at (x, y), or null.
- * A visible box under the finger wins; the band only claims empty space. It
- * reads the host's box, and only when the press is outside it, the elements
- * under the finger, up to the host's own container: what paints below that,
- * such as the page under a layer, is not beside the host. One layout flush
- * serves every read.
+ * Where a tap on `host`'s band at (x, y) goes, or null for the host itself. A
+ * visible box under the finger wins; the band only claims empty space. In
+ * empty space where bands overlap, the target whose box is nearest the finger
+ * wins. It reads the host's box, and only when the press is outside it, the
+ * elements under the finger and their targets' boxes, up to the host's own
+ * container: what paints below that, such as the page under a layer, is not
+ * beside the host. One layout flush serves every read.
  */
 function targetUnderFinger(
   host: Element,
   x: number,
   y: number,
 ): HTMLElement | null {
-  if (contains(host, x, y)) {
+  let nearestDistance = distanceTo(host.getBoundingClientRect(), x, y);
+  if (nearestDistance === 0) {
     return null;
   }
+  let nearest: HTMLElement | null = null;
   for (const element of host.ownerDocument.elementsFromPoint?.(x, y) ?? []) {
     if (host.contains(element)) {
       continue;
     }
     if (element.contains(host)) {
-      return null;
+      break;
     }
     // The browser also lists an element whose band, not its box, is under
     // the finger.
     const target = element.closest(INTERACTIVE_SELECTOR);
-    if (target != null && !isOwn(host, target) && contains(target, x, y)) {
+    if (target == null || isOwn(host, target)) {
+      continue;
+    }
+    const distance = distanceTo(target.getBoundingClientRect(), x, y);
+    if (distance === 0) {
       return target as HTMLElement;
     }
+    if (distance < nearestDistance) {
+      nearest = target as HTMLElement;
+      nearestDistance = distance;
+    }
   }
-  return null;
+  return nearest;
 }
 
 /**
  * Checks each finger's tap on `host` until the returned function runs. The
  * press notes where the finger landed and reads nothing, so a scroll that it
  * starts never waits. When the tap began on the band over another target's
- * visible box, its click goes to that target, as it does without the band. A
- * keyboard or assistive-technology click (detail 0) goes through.
+ * visible box, or in empty space nearer another target's box, its click goes
+ * to that target. A keyboard or assistive-technology click (detail 0) goes
+ * through.
  */
 function checkTaps(host: Element, ownsDescendantTouches: boolean): () => void {
   const view = host.ownerDocument.defaultView;
@@ -152,9 +159,10 @@ function checkTaps(host: Element, ownsDescendantTouches: boolean): () => void {
 /**
  * A callback ref for an element that takes taps (`enabled`) and draws a touch
  * band (`touchHitAreaStyles.layer`, or `band` on a descendant with
- * `BAND_ON_DESCENDANT`). Under a finger, a tap on the band over empty space
- * acts on the element; over another target's visible box, it acts on that
- * target. Keep `options` stable, as a module constant.
+ * `BAND_ON_DESCENDANT`). Under a finger, a tap on the band over another
+ * target's visible box acts on that target; in empty space, it acts on the
+ * target whose box is nearest, the element when no other is nearer. Keep
+ * `options` stable, as a module constant.
  *
  * @example
  * ```
