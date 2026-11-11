@@ -91,7 +91,12 @@ if (!isNodeVersionSupported(process.versions.node)) {
 // does it load and dispatch the command. See clients/cli/run.mjs,
 // foundation/release/handoff.mjs, and spec AST-081 FR2 and FR9.
 const {runCli} = await importSrc('run.mjs');
-await runCli({
-  cliRoot: join(binDir, '..', '..', '..'),
-  argv: process.argv.slice(2),
-});
+const {recordRunFor} = await importSrc('../../foundation/fs/gather-cache.mjs');
+// A search or build records what it reads, so a later run with the same
+// inputs can reuse its gathered catalog (foundation/fs/gather-cache.mjs).
+await recordRunFor(process.argv.slice(2), () =>
+  runCli({
+    cliRoot: join(binDir, '..', '..', '..'),
+    argv: process.argv.slice(2),
+  }),
+);
