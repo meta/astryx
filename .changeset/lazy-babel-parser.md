@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[perf] Commands that load a project's integrations no longer load `@babel/parser` unless they validate a contribution's source; it loads on first use. Every command prints the same output.
+[perf] Contribution validation now loads `@babel/parser` on first use, so a run that parses no source, such as `component <Name> --json` or `template --list`, no longer loads it. Every command prints the same output.
 
 @josephfarina
