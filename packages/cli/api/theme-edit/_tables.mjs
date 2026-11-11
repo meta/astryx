@@ -9,22 +9,18 @@
  * @position api/theme-edit — data read by the engine and the help text
  */
 
+import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
+
 /** The command prefix every suggested command starts with. */
 export const P = 'astryx experimental theme editor';
 
 /** The lookup command: what a part reads, a setting, a question, a picture. */
 export const HOW = `${P} how`;
 
-/** The built-in themes a theme can build on (`new --like`, `set base`). */
-export const LIKE = [
-  'neutral',
-  'stone',
-  'matcha',
-  'y2k',
-  'gothic',
-  'chocolate',
-  'butter',
-];
+/** The built-in themes a theme can build on (`new --like`, `set base`), neutral first. */
+export const LIKE = discoverBundledThemes()
+  .map(t => t.slug)
+  .sort((a, b) => Number(b === 'neutral') - Number(a === 'neutral'));
 
 /**
  * Parts that should look alike. `--on <family>` styles every member.
@@ -351,14 +347,42 @@ export const DIALS = {
       'spacing space room roomy airy dense density compact tight padding gap gaps margin breathing cramped spread spacious',
   },
   accent: {
-    help: 'The main brand color (primary buttons, links, selection, focus). Keeps the color EXACT and derives the rest: text-accent (darkened if needed for 4.5:1 text), a lighter text/icon accent for dark mode, accent-muted, and on-accent (white or black, whichever reads). With --mode: only that mode.',
+    help: 'The main brand color: primary buttons, links, selection and the focus ring. The color seeds the accent family of the theme palette (palette.config.json, grown by the same generator as `theme palette generate`), and the accent tokens point at its stops, light and dark from the one color: --color-accent, --color-on-accent, --color-text-accent, --color-icon-accent, --color-accent-muted and --focus-outline-color. A token moves to a nearer stop when it needs to: text to 4.5:1, the focus ring to 3:1, the fill until the text on it reads. `how palette` lists the stops. For an exact color, set the token itself (set my --color-accent "#7c3aed"): an exact token always wins over the palette.',
     values: '<color>',
-    examples: [
-      'set my accent "#7c3aed"',
-      'set my accent "#16a34a" --mode dark',
-    ],
+    examples: ['set my accent "#7c3aed"', 'set my accent rebeccapurple'],
     words:
-      'accent brand primary main color colour key highlight link selection',
+      'accent brand primary main color colour key highlight link selection palette seed',
+  },
+  neutral: {
+    help: 'The gray of the theme: surfaces, text, borders and hover tints. The color seeds the neutral family of the theme palette (its hue and how much of it shows), and the surface, text, icon, border, skeleton and overlay tokens point at its stops, light and dark from the one color. Secondary text and icons move to a stop that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how palette` lists the stops.',
+    values: '<color>',
+    examples: ['set my neutral "#64748b"', 'set my neutral "#78716c"'],
+    words:
+      'neutral gray grey surface surfaces background text border tint warm cool slate stone palette',
+  },
+  success: {
+    help: 'The success color (done, valid, positive). It seeds the success family of the theme palette, and --color-success, --color-on-success, --color-text-success, --color-icon-success, --color-success-muted, --color-on-success-muted and --color-border-success point at its stops, light and dark. `how palette` lists the stops.',
+    values: '<color>',
+    examples: ['set my success "#16a34a"'],
+    words: 'success green ok valid positive done status palette',
+  },
+  warning: {
+    help: 'The warning color (caution). It seeds the warning family of the theme palette, and the --color-warning tokens (fill, on, text, icon, muted, on-muted, border) point at its stops, light and dark. `how palette` lists the stops.',
+    values: '<color>',
+    examples: ['set my warning "#f59e0b"'],
+    words: 'warning caution yellow amber status palette',
+  },
+  danger: {
+    help: 'The danger color (errors, destructive actions). It seeds the danger family of the theme palette, and the --color-error tokens (fill, on, text, icon, muted, on-muted, border) point at its stops, light and dark. `how palette` lists the stops.',
+    values: '<color>',
+    examples: ['set my danger "#dc2626"'],
+    words: 'danger error destructive red invalid negative status palette',
+  },
+  info: {
+    help: 'The info color (notices, help). It seeds the info family of the theme palette, and the --color-info tokens (fill, on, text, icon, muted, on-muted, border) point at its stops, light and dark. `how palette` lists the stops.',
+    values: '<color>',
+    examples: ['set my info "#0284c7"'],
+    words: 'info information notice help blue status palette',
   },
   font: {
     help:

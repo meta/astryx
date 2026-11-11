@@ -82,7 +82,7 @@
  * @property {string[]} styled - Part styles and typography the change wrote.
  * @property {string[]} kept - Part settings a whole-theme dial left in place (a part setting wins).
  * @property {string[]} lifted - Variant keys the setting was newly repeated on, so a more specific base rule cannot beat it.
- * @property {string[]} notes - What else to know: accent text per mode, font loading, what a token feeds.
+ * @property {string[]} notes - What else to know: the palette stops a color dial feeds and any stop contrast moved, font loading, what a token feeds.
  * @property {string[]} problems - Text this theme made unreadable (below 4.5:1, and not that low in the base theme).
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string} preview
@@ -109,6 +109,7 @@
  * @property {string} data.mode
  * @property {Array<ThemeEditSetting & {parts: string[]}>} data.settings
  * @property {Record<string, Record<string, string | null>>} data.resolved - Key tokens, per mode.
+ * @property {ThemeEditPaletteReport | null} data.palette - The palette the color dials grow; null when the theme sets no color dial.
  * @property {string[]} data.problems
  * @property {string[]} data.notes
  * @property {string} data.preview
@@ -117,6 +118,18 @@
  * @property {string[]} data.skipped - Template pages left out, with the install line each needs.
  * @property {string[]} data.pictures
  * @property {string | null} data.pictureProblem
+ */
+
+/**
+ * The palette behind the color dials, as `show` reports it.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPaletteReport
+ * @property {string} config - The palette config, in the shape `theme palette generate` reads.
+ * @property {string} file - The generated palette module the theme imports.
+ * @property {string} receipt - The generation receipt beside it.
+ * @property {Array<{family: string, seed: string, value: string, exactToken: string, tokens: Record<string, {light: string, dark: string}>}>} families - Each color dial's family: its seed, the value as set, the token that sets its main color exactly, and the stop that feeds each token in each mode.
+ * @property {string[]} contrast - Each contrast check behind a stop choice, with its ratio and whether it passes.
+ * @property {string[]} overridden - Palette-fed tokens an exact token setting replaces.
  */
 
 /**
@@ -161,7 +174,7 @@
  * @property {string} data.folder - The preview route folder.
  * @property {string | null} data.theme - The theme the pages wear; null for the app's own theme.
  * @property {string[]} data.added - Pages added by this call.
- * @property {Array<{page: string, missingPackages: string[], installCommand: string | null}>} data.skipped - Template pages not added because the app lacks packages they import, with the command that installs them.
+ * @property {Array<{page: string, missingPackages: string[], installCommand: string | null, stylexCompiler: boolean}>} data.skipped - Template pages not added: the packages they import that the app lacks, with the command that installs them, and whether the page needs a StyleX compiler the app does not have.
  * @property {string[]} data.notes - What else to know.
  * @property {string[]} data.pages - Every page of the preview, in order.
  * @property {string[]} data.files - Every file the preview wrote.

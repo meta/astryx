@@ -108,7 +108,7 @@ one trusted GitHub workflow per package.
   release branch, version, head, tag, and plan digest. It publishes `latest`.
 - **Canary:** at most hourly from main's tip, or on demand from `main` (a
   dispatch with `channel: canary`). It publishes
-  `<declared-version>-canary.<short-sha>` to `canary` only while the declaration is
+  `<declared-version>-canary.g<short-sha>` to `canary` only while the declaration is
   strictly above the newest stable tag. It never authorizes or mutates stable release
   state.
 

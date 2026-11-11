@@ -13,7 +13,7 @@ export const doc = {
   summary:
     'Add pages to the theme preview in the app: the default pages, the best template pages for a description, or one template.',
   description:
-    'Writes the theme preview into the app: one route, a normal page of the app that keeps its layout, global CSS and providers, in an app shell with a side nav item per preview page and a top bar with the theme name and, when it wears a theme made by `editor`, a light, dark and system switch. A description ("a sales dashboard") asks the same page ranking `build` uses for the template pages that fit it best (`top` of them, default 1), and adds each as a page; `template` names one page template instead; with neither, it adds the default pages: the sample app page and every component grouped. The route goes in theme-preview/ in the app\'s routes folder (app/ or src/app/), or in `path`; the first add records the pages and the files it wrote in theme-preview.json beside the route, so later calls find it. With no routes folder and no `path`, it refuses and names both ways on: `path`, or `themeEditPreviewApp`, which makes a new starter app with the preview in it. Every check (the theme, the template, the ranking and every file it writes) runs before the first write, so a refusal changes nothing. A template page that imports a package the app lacks is not added: the result lists it in `skipped` with the command that installs it. A file the preview did not write is never replaced. The pages wear `theme` (default: the only theme under themes/; with none or several, the app\'s own theme). Experimental: it may change or be removed in a patch release.',
+    'Writes the theme preview into the app: one route, a normal page of the app that keeps its layout, global CSS and providers, in an app shell with a side nav item per preview page and a top bar with the theme name and, when it wears a theme made by `editor`, a light, dark and system switch. A description ("a sales dashboard") asks the same page ranking `build` uses for the template pages that fit it best (`top` of them, default 1), and adds each as a page; `template` names one page template instead; with neither, it adds the default pages: the sample app page and every component grouped. The route goes in theme-preview/ in the app\'s routes folder (app/ or src/app/), or in `path`; the first add records the pages and the files it wrote in theme-preview.json beside the route, so later calls find it. With no routes folder and no `path`, it refuses and names both ways on: `path`, or `themeEditPreviewApp`, which makes a new starter app with the preview in it. Every check (the theme, the template, the ranking and every file it writes) runs before the first write, so a refusal changes nothing. A template page that imports a package the app lacks, or that uses StyleX in an app with no StyleX compiler, is not added: the result lists it in `skipped`, with the command that installs what it needs. A file the preview did not write is never replaced. The pages wear `theme` (default: the only theme under themes/; with none or several, the app\'s own theme). Experimental: it may change or be removed in a patch release.',
   importPath: '@astryxdesign/cli/api/experimental',
   signature:
     'themeEditPreviewAdd(description?: string, options?: object): Promise<object>',
@@ -78,7 +78,15 @@ export const doc = {
     },
     {
       code: 'ERR_DEP_MISSING',
-      when: 'every template page asked for imports a package the app lacks; the suggestion is the install command',
+      when: 'every template page asked for imports a package the app lacks or needs a StyleX compiler it lacks; the suggestion is the install command',
+    },
+    {
+      code: 'ERR_UNKNOWN_TEMPLATE',
+      when: '`template` names no page template',
+    },
+    {
+      code: 'ERR_THEME_LOAD',
+      when: 'the theme the pages wear has no build and does not build; nothing is written',
     },
     {
       code: 'ERR_UNKNOWN_THEME',

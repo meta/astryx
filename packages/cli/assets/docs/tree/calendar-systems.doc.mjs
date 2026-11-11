@@ -59,20 +59,21 @@ import {Calendar} from '@astryxdesign/core/Calendar';
           headers: ['Calendar', 'Identifiers', 'Needs Temporal'],
           rows: [
             ['Gregorian', '`gregory`, `iso8601`', 'No'],
-            ['Buddhist (Thai)', '`buddhist`', 'No'],
+            ['Buddhist', '`buddhist`', 'No'],
             ['Minguo', '`roc`', 'No'],
-            ['Japanese (eras)', '`japanese`', 'No'],
-            ['Persian (Solar Hijri)', '`persian`', 'Yes'],
-            ['Indian national (Saka)', '`indian`', 'Yes'],
+            ['Japanese', '`japanese`', 'No'],
+            ['Persian', '`persian`', 'Yes'],
+            ['Indian National', '`indian`', 'Yes'],
             ['Hebrew', '`hebrew`', 'Yes'],
             [
-              'Islamic (Hijri)',
+              'Hijri',
               '`islamic-umalqura`, `islamic-civil`, `islamic-tbla`',
               'Yes',
             ],
-            ['Lunisolar', '`chinese`, `dangi`', 'Yes'],
+            ['Chinese', '`chinese`', 'Yes'],
+            ['Dangi', '`dangi`', 'Yes'],
             ['Coptic', '`coptic`', 'Yes'],
-            ['Ethiopian', '`ethiopic`, `ethioaa`', 'Yes'],
+            ['Ethiopic', '`ethiopic`, `ethioaa`', 'Yes'],
           ],
         },
         {
@@ -90,7 +91,7 @@ import {Calendar} from '@astryxdesign/core/Calendar';
         },
         {
           type: 'prose',
-          text: 'Where `Temporal` is missing, load the full build of `temporal-polyfill` before your app renders. The default build has no non-ISO calendars. Load it only where `Temporal` is missing: a native implementation is more accurate for the lunisolar calendars.',
+          text: 'Where `Temporal` is missing, load the full build of `temporal-polyfill` before your app renders. The default build has only the Gregorian calendar (`gregory` and `iso8601`). Load it only where `Temporal` is missing: a native implementation is more accurate for the lunisolar calendars.',
         },
         {
           type: 'code',
@@ -107,7 +108,7 @@ if (!('Temporal' in globalThis)) {
         },
         {
           type: 'prose',
-          text: 'Without a `Temporal` that supports it, a calendar that needs one shows Gregorian dates and warns once in development, on the server and in the browser. The Gregorian-aligned calendars (`buddhist`, `roc`, `japanese`) work everywhere without it.',
+          text: 'Without a `Temporal` that supports it, a calendar that needs one shows Gregorian dates and warns once in development, on the server and in the browser. The Gregorian-aligned calendars (Buddhist, Minguo, and Japanese) work everywhere without it.',
         },
       ],
     },
@@ -123,7 +124,7 @@ if (!('Temporal' in globalThis)) {
           style: 'unordered',
           items: [
             'Native `Temporal` in Chrome, Edge, Firefox, and Node.js 26 agrees with official observatory data from 1900 through 2100.',
-            "A polyfill reads the platform's `Intl` data instead. Under a polyfill, Node.js 24 starts nine `chinese` and four `dangi` months in that range one day apart from the native result: the first month of the 2027 `chinese` year starts on February 6 with native `Temporal` and on February 7 under the polyfill. Safari uses the same kind of `Intl` data, so expect the same differences there.",
+            "A polyfill reads the platform's `Intl` data instead. Under a polyfill, Node.js 24 starts nine Chinese calendar months and four Dangi calendar months in that range one day apart from the native result: the first month of the 2027 Chinese calendar year starts on February 6 with native `Temporal` and on February 7 under the polyfill. Safari uses the same kind of `Intl` data, so expect the same differences there.",
             'Within one browser, the day numbers a person sees, the dates a screen reader announces, and the value they pick agree. Only two different runtimes can disagree.',
           ],
         },
@@ -138,7 +139,7 @@ if (!('Temporal' in globalThis)) {
       content: [
         {
           type: 'prose',
-          text: "`Calendar`'s `hasWeekNumbers` shows ISO 8601 week numbers in every calendar. Temporal defines week numbering only for the ISO calendar.",
+          text: "`Calendar`'s `hasWeekNumbers` shows ISO 8601 week numbers in every calendar. Temporal defines week numbering only for `iso8601`, the Gregorian calendar with ISO 8601 weeks.",
         },
       ],
     },

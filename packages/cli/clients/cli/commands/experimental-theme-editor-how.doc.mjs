@@ -12,7 +12,7 @@ export const doc = {
   summary:
     "Look up a part, family, setting or aspect; answer a question in plain words; read a picture's colors; or list what you can set",
   description:
-    'One command for every question. With nothing named, it prints its usage and examples. A part (button, card; --list parts): what it reads for each aspect (text, background, border, corners, shadow, spacing, font, size) and under which variant or state, its variants (--when) and states (--state), the parts inside it (a token set --on the part reaches them), and its family. A family (inputs, containers, checks, menus): its members and whether styling one styles all. A setting: a dial\'s rungs and examples, a token\'s type, default and the parts that read it, or a CSS property and the parts that set it. An aspect (colors, text, background, border, corners, shadow, spacing, font, size): the dial and the whole-theme tokens most parts read for it. A question in plain words ("bold white text in the header", "glossy gradient header"): it finds the parts (header, nav links, banner, cards, inputs, buttons and their variants...) and aspects (text color, background, gradient, corners, border, shadow or bevel, spacing, font, bold, letter spacing) and answers with exact commands from what each part really reads: the direct property (always works) and the token route; a part with variants says a change without --when reaches every variant. A PNG picture: its main colors, biggest share first, with where each sits (a number after the file sets how many, default 14), or with --at the exact color at pixel points (no browser needed). --list dials|tokens|parts|families|properties lists what a change can name; a subject then filters the list. Experimental: it may change or be removed in a patch release.',
+    'One command for every question. With nothing named, it prints its usage and examples. A part (button, card; --list parts): what it reads for each aspect (text, background, border, corners, shadow, spacing, font, size) and under which variant or state, its variants (--when) and states (--state), the parts inside it (a token set --on the part reaches them), and its family. A family (inputs, containers, checks, menus): its members and whether styling one styles all. A setting: a dial\'s rungs and examples, a token\'s type, default and the parts that read it, or a CSS property and the parts that set it. An aspect (colors, text, background, border, corners, shadow, spacing, font, size): the dial and the whole-theme tokens most parts read for it. `palette`: how the color dials grow the theme palette and which stop feeds each token; a color dial (accent, neutral, success, warning, danger, info) also lists its stops. A question in plain words ("bold white text in the header", "glossy gradient header"): it finds the parts (header, nav links, banner, cards, inputs, buttons and their variants...) and aspects (text color, background, gradient, corners, border, shadow or bevel, spacing, font, bold, letter spacing) and answers with exact commands from what each part really reads: the direct property (always works) and the token route; a part with variants says a change without --when reaches every variant. A PNG picture: its main colors, biggest share first, with where each sits (a number after the file sets how many, default 14), or with --at the exact color at pixel points (no browser needed). --list dials|tokens|parts|families|properties lists what a change can name; a subject then filters the list. Experimental: it may change or be removed in a patch release.',
   fn: 'themeEditHow',
   args: [
     {
@@ -52,6 +52,10 @@ export const doc = {
     {
       label: 'Colors in a picture',
       cli: 'astryx experimental theme editor how target.png --at "40,20;300,180"',
+    },
+    {
+      label: 'The palette the color dials grow',
+      cli: 'astryx experimental theme editor how palette',
     },
     {
       label: 'Every dial',
