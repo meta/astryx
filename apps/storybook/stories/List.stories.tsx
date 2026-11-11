@@ -7,10 +7,11 @@
  * @position Storybook demonstrations for List consumers
  */
 
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {List, ListItem} from '@astryxdesign/core/List';
+import {createReorderable} from '@astryxdesign/core';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
@@ -19,7 +20,9 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Switch} from '@astryxdesign/core/Switch';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
+import {useAnimatedLayout} from '@astryxdesign/core/hooks';
 import {rtlStyles} from '@astryxdesign/core/utils';
+import {ContextMenu} from '@astryxdesign/core/ContextMenu';
 import {
   Cog6ToothIcon,
   BellIcon,
@@ -758,6 +761,332 @@ export const HeaderInFlexParent: Story = {
         story:
           'Demonstrates the list with a header inside a flex parent. ' +
           'The header should appear above the list, not beside it.',
+      },
+    },
+  },
+};
+
+function AnimatedChangesDemo() {
+  const [rows, setRows] = useState([
+    'Inbox',
+    'Sent',
+    'Drafts',
+    'Archive',
+    'Spam',
+  ]);
+  const [next, setNext] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const animatedLayout = useAnimatedLayout({containerRef});
+  return (
+    <div ref={containerRef}>
+      <VStack gap={4}>
+        <List animatedLayout={animatedLayout} hasDividers>
+          {rows.map(label => (
+            <ListItem
+              key={label}
+              itemKey={label}
+              label={label}
+              onClick={() => {}}
+            />
+          ))}
+        </List>
+        <Text data-testid="after-list">{`${rows.length} folders`}</Text>
+        <Button
+          label="Insert a row second"
+          onClick={() => {
+            setRows(current => [
+              current[0],
+              `Folder ${next}`,
+              ...current.slice(1),
+            ]);
+            setNext(n => n + 1);
+          }}
+        />
+        <Button
+          label="Remove the second row"
+          onClick={() =>
+            setRows(current => current.filter((_, index) => index !== 1))
+          }
+        />
+        <Button
+          label="Move the last row first"
+          onClick={() =>
+            setRows(current => [
+              current[current.length - 1],
+              ...current.slice(0, -1),
+            ])
+          }
+        />
+      </VStack>
+    </div>
+  );
+}
+
+export const AnimatedChanges: Story = {
+  render: () => <AnimatedChangesDemo />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `animatedLayout` (the handle from `useAnimatedLayout`) and ' +
+          'an `itemKey` on each row, an inserted row enters, a removed row ' +
+          'collapses in place, a row crossing rows that move the other way ' +
+          'rides above them with the surface color behind it, and the rows ' +
+          'after a change and the buttons below the list glide to their new ' +
+          'places, all on one shared motion, under every pointer.',
+      },
+    },
+  },
+};
+
+/** The swipe story's row with no swipe actions. */
+const PLAIN_ROW = 'Notes';
+
+function AnimatedChangesSwipeDemo() {
+  const [rows, setRows] = useState([
+    'Inbox',
+    'Sent',
+    'Drafts',
+    'Archive',
+    PLAIN_ROW,
+  ]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const animatedLayout = useAnimatedLayout({containerRef});
+  const moveFirst = (label: string) =>
+    setRows(current =>
+      current.includes(label)
+        ? [label, ...current.filter(row => row !== label)]
+        : current,
+    );
+  return (
+    <div ref={containerRef}>
+      <List animatedLayout={animatedLayout} hasDividers>
+        {rows.map(label => (
+          <ListItem
+            key={label}
+            itemKey={label}
+            label={label}
+            onClick={() => {}}
+            swipeActions={
+              label === PLAIN_ROW
+                ? undefined
+                : {
+                    trailing: [
+                      {
+                        label: 'Delete',
+                        variant: 'destructive',
+                        hasRemoval: true,
+                        onActivate: () =>
+                          setRows(current =>
+                            current.filter(row => row !== label),
+                          ),
+                      },
+                    ],
+                  }
+            }
+          />
+        ))}
+      </List>
+      <Button
+        label="Move Archive first"
+        variant="secondary"
+        onClick={() => moveFirst('Archive')}
+      />
+      <Button
+        label="Move Notes first"
+        variant="secondary"
+        onClick={() => moveFirst(PLAIN_ROW)}
+      />
+    </div>
+  );
+}
+
+export const AnimatedChangesSwipe: Story = {
+  render: () => <AnimatedChangesSwipeDemo />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `animatedLayout`, a row swiped away with a removal action ' +
+          'collapses in place, its action showing, while the rows below ' +
+          'glide up into its gap on the shared motion. A row moved up ' +
+          'across the swipeable rows, with swipe actions (Archive) or ' +
+          'without (Notes), rides above the rows it crosses.',
+      },
+    },
+  },
+};
+
+function moveKey(
+  rows: ReadonlyArray<string>,
+  key: unknown,
+  to: number,
+): string[] {
+  const next = rows.filter(row => row !== key);
+  next.splice(to, 0, key as string);
+  return next;
+}
+
+function ReorderDemo({
+  initial,
+  pinned = [],
+  edge,
+}: {
+  initial: ReadonlyArray<string>;
+  pinned?: ReadonlyArray<string>;
+  edge?: 'padded' | 'flush';
+}) {
+  const [rows, setRows] = useState(initial);
+  return (
+    <List
+      hasDividers
+      edge={edge}
+      reorderable={createReorderable({
+        onReorder: ({key, to}) => setRows(current => moveKey(current, key, to)),
+        isReorderable: key => !pinned.includes(key as string),
+      })}>
+      {rows.map(label => (
+        <ListItem key={label} itemKey={label} label={label} />
+      ))}
+    </List>
+  );
+}
+
+export const Reorderable: Story = {
+  render: () => (
+    <ReorderDemo
+      initial={['Inbox', 'Sent', 'Drafts', 'Archive', 'Spam', 'Trash']}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `reorderable` (from `createReorderable`), each row with an ' +
+          '`itemKey` gets a reorder handle. On a touch screen, hold a handle ' +
+          'for a moment, then drag: the row dims in place, a copy follows ' +
+          'your finger and a line marks where it will land, and the rows ' +
+          'rearrange on release. A mouse drags a handle at once, the same ' +
+          'way. Or activate a handle (click it, or press Space ' +
+          'or Enter) to turn on reorder mode for its row: each arrow key, or ' +
+          'each move in the hint below the handle, moves it a place, and ' +
+          'Escape or Done ends the mode.',
+      },
+    },
+  },
+};
+
+export const ReorderFlush: Story = {
+  render: () => (
+    <ReorderDemo
+      initial={['Inbox', 'Sent', 'Drafts', 'Archive']}
+      edge="flush"
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `edge="flush"` the rows have no side padding, so each ' +
+          "reorder handle ends at the row's edge, inside the list.",
+      },
+    },
+  },
+};
+
+export const ReorderWithPinnedRows: Story = {
+  render: () => (
+    <ReorderDemo
+      initial={['Favorites', 'Inbox', 'Sent', 'All mail', 'Drafts', 'Spam']}
+      pinned={['Favorites', 'All mail']}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A row the object’s `isReorderable` rejects has no handle. At an ' +
+          'end of the list it also bounds the others (nothing drops above ' +
+          'Favorites); in the middle, other rows move past it.',
+      },
+    },
+  },
+};
+
+function ReorderFromYourUIDemo() {
+  const [rows, setRows] = useState([
+    'Inbox',
+    'Sent',
+    'Drafts',
+    'Archive',
+    'Spam',
+    'Trash',
+  ]);
+  const [selected, setSelected] = useState('Sent');
+  const reorderable = useMemo(
+    () =>
+      createReorderable({
+        onReorder: ({key, to}) => setRows(current => moveKey(current, key, to)),
+      }),
+    [],
+  );
+  return (
+    <VStack gap={2}>
+      <Button
+        label={`Move ${selected}`}
+        onClick={() => reorderable.start(selected)}
+      />
+      <ContextMenu
+        label="Row actions"
+        items={[
+          {
+            label: `Move ${selected}`,
+            onClick: () => reorderable.start(selected),
+          },
+        ]}>
+        <List hasDividers reorderable={reorderable}>
+          {rows.map(label => (
+            <ListItem
+              key={label}
+              itemKey={label}
+              label={label}
+              isSelected={label === selected}
+              onClick={() => setSelected(label)}
+            />
+          ))}
+        </List>
+      </ContextMenu>
+    </VStack>
+  );
+}
+
+export const ReorderFromYourUI: Story = {
+  render: () => <ReorderFromYourUIDemo />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The object’s `start(key)` turns on reorder mode for a row from ' +
+          'your own UI, here a button and the list’s context menu: the ' +
+          'focus moves to the row’s handle, and its arrow keys, hint and ' +
+          'Done work as they do from the handle.',
+      },
+    },
+  },
+};
+
+export const ReorderLongList: Story = {
+  render: () => (
+    <ReorderDemo
+      initial={Array.from({length: 30}, (_, index) => `Item ${index + 1}`)}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Dragging a row near the top or bottom of the screen scrolls the ' +
+          'page, faster the further past the edge the row goes.',
       },
     },
   },

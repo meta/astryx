@@ -112,6 +112,7 @@ component BaseTypeahead(props: BaseTypeaheadProps)
   prop ariaLabelledBy?: string
   prop debounceMs?: number = 150
   prop emptySearchText?: ReactNode = 'No results found'
+  prop handleRef?: React.Ref<BaseTypeaheadHandle>
   prop hasAutoFocus?: boolean = false
   prop hasEntriesOnFocus?: boolean = false
   prop inputId?: string
@@ -120,6 +121,7 @@ component BaseTypeahead(props: BaseTypeaheadProps)
   prop isDisabled?: boolean = false
   prop isFocusableDisabled?: boolean = false
   prop maxMenuItems?: number = 10
+  prop menu?: BaseTypeaheadMenu
   prop menuWidth?: number
   prop minQueryLength?: number = 1 — every non-empty query is searched.
   prop onChange: (item: T | null) => void
@@ -234,10 +236,12 @@ component BreadcrumbMenuRadioItem(props: DropdownMenuRadioItemProps)
 component BreadcrumbMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -337,7 +341,7 @@ component Carousel(props: CarouselProps)
   prop hasButtons?: boolean = true
   prop hasEdgeFade?: boolean = true
   prop hasLoop?: boolean = false
-  prop hasSnap?: boolean = false
+  prop hasSnap?: boolean | SnapPaging = false
   prop padding?: SpacingStep = undefined (no padding)
   prop ref?: React.Ref<HTMLDivElement>
   prop xstyle?: StyleXStyles
@@ -641,6 +645,7 @@ component CodeBlock(props: CodeBlockProps)
   prop language?: string | CodeLanguage = 'plaintext'
   prop maxHeight?: number | string
   prop onCopy?: () => void
+  prop onCopyError?: (error: unknown) => void
   prop ref?: React.Ref<HTMLPreElement>
   prop size?: 'sm' | 'md'
   prop startLineNumber?: number = 1
@@ -850,10 +855,12 @@ component ContextMenuRadioItem(props: DropdownMenuRadioItemProps)
 component ContextMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -1113,10 +1120,12 @@ component DropdownMenuRadioItem(props: DropdownMenuRadioItemProps)
 component DropdownMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -1504,6 +1513,7 @@ component LinkProvider(props: LinkProviderProps)
   prop children: ReactNode
   prop component: LinkComponentType
 component List(props: ListProps)
+  prop animatedLayout?: AnimatedLayout
   prop children: ReactNode
   prop data-testid?: string
   prop density?: ListDensity = 'balanced'
@@ -1513,6 +1523,7 @@ component List(props: ListProps)
   prop header?: ReactNode
   prop listStyle?: ListMarkerStyle = 'none'
   prop ref?: React.Ref<HTMLUListElement | HTMLOListElement>
+  prop reorderable?: Reorderable
   prop start?: number = 1
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -1524,6 +1535,7 @@ component ListItem(props: ListItemProps)
   prop interactiveRef?: React.RefObject<HTMLElement | null>
   prop isDisabled?: boolean = false
   prop isSelected?: boolean = false
+  prop itemKey?: string | number
   prop label: ReactNode
   prop onClick?: (e: React.MouseEvent) => void
   prop ref?: React.Ref<HTMLLIElement>
@@ -2331,6 +2343,7 @@ component Table
   prop scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   prop textOverflow?: 'wrap' | 'truncate' = 'wrap'
   prop verticalAlign?: TableVerticalAlign = 'middle'
+  prop virtualization?: BaseTableProps<T>['virtualization']
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component TableBody(props: TableBodyProps)
@@ -2558,6 +2571,7 @@ component Timestamp(props: TimestampProps)
   prop isTimezoneShown?: boolean = false
   prop ref?: React.Ref<HTMLTimeElement>
   prop size?: TextSize
+  prop timezoneID?: string
   prop tooltipEntries?: ReadonlyArray<TimestampTooltipEntry> = undefined — a single default row with the full absolute time in the viewer's own time zone
   prop type?: TextType = 'supporting'
   prop value: string | number
@@ -2645,6 +2659,7 @@ component Tokenizer(props: TokenizerProps)
   prop labelTooltip?: string
   prop maxEntries?: number
   prop maxMenuItems?: number = 10
+  prop menu?: BaseTypeaheadMenu
   prop menuWidth?: number
   prop minQueryLength?: number = 1
   prop onBlur?: (e: React.FocusEvent) => void
@@ -2652,6 +2667,7 @@ component Tokenizer(props: TokenizerProps)
   prop onChangeQuery?: (query: string) => void
   prop onFocus?: (e: React.FocusEvent) => void
   prop onKeyDown?: React.KeyboardEventHandler<HTMLElement>
+  prop onOpenChange?: (isOpen: boolean) => void
   prop placeholder?: string
   prop presentation?: TokenizerPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLInputElement>
@@ -2796,6 +2812,7 @@ component Typeahead(props: TypeaheadProps)
   prop description?: string
   prop disabledMessage?: string
   prop emptySearchText?: ReactNode = 'No results found'
+  prop handleRef?: React.Ref<BaseTypeaheadHandle>
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = true
   prop hasEntriesOnFocus?: boolean = false
@@ -2806,6 +2823,7 @@ component Typeahead(props: TypeaheadProps)
   prop label: string
   prop labelTooltip?: string
   prop maxMenuItems?: number = 10
+  prop menu?: BaseTypeaheadMenu
   prop minQueryLength?: number = 1
   prop onChange: (item: T | null) => void
   prop onChangeQuery?: (query: string) => void
@@ -2883,7 +2901,7 @@ hook useChatLayoutContext: () => ChatLayoutContextValue | null
 hook useChatNewMessages: ({…}: UseChatNewMessagesOptions) => UseChatNewMessagesReturn
 hook useChatPasteAsToken: ({…}: UseChatPasteAsTokenOptions) => UseChatPasteAsTokenReturn
 hook useChatStreamScroll: ({…}: UseChatStreamScrollOptions) => UseChatStreamScrollReturn
-hook useClickableContainer: ({…}: UseClickableContainerOptions) => ClickableContainerResult
+hook useClickableContainer: (options: UseClickableContainerOptions) => ClickableContainerResult
 hook useClipboard: (options?: UseClipboardOptions) => UseClipboardReturn
 hook useCollapsible: (options: UseCollapsibleOptions) => UseCollapsibleReturn
 hook useCollator: (options?: Intl.CollatorOptions) => Intl.Collator
@@ -2892,6 +2910,7 @@ hook useCommandPaletteContext: () => CommandPaletteContextValue | null
 hook useContainerReveal: (options?: UseContainerRevealOptions) => UseContainerRevealReturn
 hook useDevWarning: (component: string, message: string, condition?: boolean) => void
 hook useDirection: () => 'ltr' | 'rtl'
+hook useDragToSnapPoints: (ref: RefObject<HTMLElement | null>, options: DragToSnapPointsOptions) => UseDragToSnapPointsResult
 hook useDropdownMenuContext: () => DropdownMenuContextValue | null
 hook useEntryAnimation: (preset?: EntryAnimationPreset) => StyleXStyles | null
 hook useFocusTrap: <T extends HTMLElement = HTMLElement>(options: UseFocusTrapOptions) => UseFocusTrapReturn<T>
@@ -2945,6 +2964,7 @@ hook useSelectedItemOffset: ({…}: UseSelectedItemOffsetOptions) => UseSelected
 hook useSideNavCollapse: () => SideNavCollapseState
 hook useSideNavRenderMode: () => SideNavRenderMode
 hook useSize: <T extends string = ElementSize>(sizeProp?: T, defaultSize?: T) => T
+hook useSnapPaging: (options?: SnapPagingOptions) => SnapPaging
 hook useSpeechRecognition: (options?: UseSpeechRecognitionOptions) => UseSpeechRecognitionReturn
 hook useStepperContext: () => StepperContextValue
 hook useStreamingText: (targetText: string, isStreaming: boolean, options?: UseStreamingTextOptions) => string
@@ -2958,8 +2978,9 @@ hook useTableFiltering: <T extends Record<string, unknown>>(config: UseTableFilt
 hook useTableGroupedRows: <T extends Record<string, unknown>>(config: UseTableGroupedRowsConfig<T>) => UseTableGroupedRowsResult<T>
 hook useTablePagination: <T extends Record<string, unknown>>(config: UseTablePaginationConfig) => TablePlugin<T>
 hook useTableRowExpansion: <T extends Record<string, unknown>>(config: UseTableRowExpansionConfig<T>) => TablePlugin<T>
-hook useTableRowIndex: <T extends Record<string, unknown>>(config: UseTableRowIndexConfig<T>) => TablePlugin<T>
+hook useTableRowIndex: <T extends Record<string, unknown>>(config?: UseTableRowIndexConfig<T>) => TablePlugin<T>
 hook useTableRowStatus: <T extends Record<string, unknown>>(config: UseTableRowStatusConfig<T>) => TablePlugin<T>
+hook useTableRowsVirtualization: ({…}: UseTableRowsVirtualizationConfig) => TableVirtualizationCapability
 hook useTableSelection: <T extends Record<string, unknown>>(config: UseTableSelectionConfig<T>) => TablePlugin<T>
 hook useTableSelectionState: <T extends Record<string, unknown>>(config: UseTableSelectionStateConfig<T>) => UseTableSelectionStateResult<T>
 hook useTableSortable: <T extends Record<string, unknown>, TSortKey extends string = string>(config: UseTableSortableConfig<TSortKey>) => TablePlugin<T>
@@ -2994,10 +3015,12 @@ function composeEventHandlers: <E extends SyntheticEvent>(...handlers: (((event:
 function container: ({…}: ContainerOptions) => readonly [Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly paddingInlineStart: stylex.StyleXClassNameFor<"paddingIn … #72b9b91f
 function createAnimator: (element: HTMLElement) => Animator
 function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
+function createDragToSnapPoints: (element: HTMLElement, options: DragToSnapPointsOptions) => DragToSnapPoints
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
 function createPanGesture: (element: Element, options: PanGestureOptions) => PanGesture
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
+function createReorderable: <TKey extends string | number = string | number, TTo = number>(options: ReorderableOptions<TKey, TTo>) => Reorderable<TKey, TTo>
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
 function dateToISO: (pd: PlainDate) => ISODateString
 function decodeMarkdownCharacterReferences: (text: string) => string
@@ -3284,7 +3307,7 @@ const colorDefaults: object
   --color-border-yellow: 'light-dark(#C58600, #B47700)'
   --color-icon-yellow: 'light-dark(#FBC02D, #FFEE58)'
   --color-text-yellow: 'light-dark(#753F07, #FBCE03)'
-const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #0171E3)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #a042f923
+const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #0171E3)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #9de1262f
 const dataTokenDefaults: object
   --color-data-categorical-blue: 'light-dark(#0171E3, #0171E3)'
   --color-data-categorical-orange: 'light-dark(#EB6E00, #EB6E00)'
@@ -3380,7 +3403,7 @@ const inputStatusBorderStyles: Readonly<{ readonly warning: Readonly<{ readonly 
 const inputStatusFocusStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)"> }>; readonly error: Readonly … #a9ac1cbc
 const inputStatusFocusWithinStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)" | "Highlight"> }>; readonly e … #739ff723
 const inputStatusHoverShadowStyles: Readonly<{ readonly warning: Readonly<{ readonly boxShadow: stylex.StyleXClassNameFor<"boxShadow", "none" | { readonly '@media (hover: hover)': stylex.StyleXVar … #de6f47e5
-const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #90a96087
+const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #ba795170
 const interactionOverlayStyles: Readonly<{ readonly backgroundColor: Readonly<{ readonly backgroundColor: stylex.StyleXClassNameFor<"backgroundColor", "light-dark(#0536590C, #FFFFFF0C)" | "lig … #3522ad34
 const overlayPaddingReset: Readonly<{ readonly reset: Readonly<{ readonly '--container-padding-inline-start': stylex.StyleXClassNameFor<"--container-padding-inline-start", "0px">; readonl … #15cd7287
 const radiusDefaults: object
@@ -3514,7 +3537,7 @@ const typographyVars: stylex.VarGroup<Readonly<{ readonly '--font-family-body': 
 ```text
 interface AlertDialogProps extends BaseProps<HTMLDialogElement> (props of AlertDialog)
 interface AnimatedLayout
-  [AREA]: () => Element | null
+  @astryxdesign/core/animated-layout/v1?: never
 interface Animator extends AnimatorHandle
   animate: (target: AnimatorValues, options?: AnimatorAnimateOptions) => Promise<void>
   decay: (velocity: AnimatorDecayVelocity) => Promise<void>
@@ -3618,8 +3641,22 @@ interface BaseTableProps<T extends Record<string, unknown>> extends BaseProps<HT
   rowIndexStart?: number = 1
   scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   textOverflow?: 'wrap' | 'truncate' = 'wrap'
+  virtualization?: TableVirtualizationCapability
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface BaseTypeaheadDialogMenuInfo
+  close: () => void
+  query: string
+interface BaseTypeaheadHandle
+  close: () => void
+  open: () => void
+interface BaseTypeaheadListboxMenuInfo
+  close: () => void
+  isBusy: boolean
+  isEmptySearch: boolean
+  listbox: ReactNode
+  query: string
+type BaseTypeaheadMenu = { role: 'listbox'; render?: (info: BaseTypeaheadListboxMenuInfo) => ReactNode } | { role: 'dialog'; label: string; render: (info: BaseTypeaheadDialogMenuInfo) => ReactNode }
 interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<BaseProps<HTMLElement>, 'onChange'> (props of BaseTypeahead)
 type BlockNode<Extension extends MarkdownExtensionNode = never> = LegacyBlockNodeKind<Extension> & BlockMetadata
 type BlockNodeWithMath<Extension extends MarkdownExtensionNode = never> = MathEnabledBlockNodeKind<Extension> & BlockMetadata
@@ -3724,10 +3761,12 @@ interface BreadcrumbMenuSection
 interface BreadcrumbMenuSubMenuProps extends DropdownMenuSubMenuBaseProps
   children: ReactNode
   data-testid?: string
+  delay?: number = 150
   description?: ReactNode
   footer?: ReactNode
   hasSpinner?: boolean = false
   header?: ReactNode
+  hideDelay?: number = 200
   icon?: ReactNode | IconType
   isDisabled?: boolean = false
   label: ReactNode
@@ -3883,7 +3922,7 @@ interface ClickableContainerResult
 interface CodeBlockProps extends BaseProps<HTMLPreElement> (props of CodeBlock)
 type CodeColor = 'primary' | 'secondary' | 'inherit'
 type CodeLanguage
-  [LANGUAGE]: true
+  @astryxdesign/core/code-language/v1?: never
   fileExtensions: ReadonlyArray<string>
   fileNames: ReadonlyArray<string>
   identifiers: ReadonlyArray<string>
@@ -4068,10 +4107,12 @@ type ContextMenuSection = DropdownMenuSection
 interface ContextMenuSubMenuProps extends DropdownMenuSubMenuBaseProps
   children: ReactNode
   data-testid?: string
+  delay?: number = 150
   description?: ReactNode
   footer?: ReactNode
   hasSpinner?: boolean = false
   header?: ReactNode
+  hideDelay?: number = 200
   icon?: ReactNode | IconType
   isDisabled?: boolean = false
   label: ReactNode
@@ -4212,6 +4253,14 @@ interface DividerVariantMap
   strong: true
   subtle: true
 type DomainTokenName = SyntaxTokenName | DataTokenName
+interface DragToSnapPoints
+  destroy: () => void
+  settleTo: (index: number) => void
+interface DragToSnapPointsOptions
+  axis: 'x' | 'y'
+  flickThreshold?: number
+  onSettle: (index: number) => void
+  snapPoints: ReadonlyArray<number>
 interface DrawerHeaderProps extends BaseProps<HTMLDivElement> (props of DrawerHeader)
 interface DrawerProps extends BaseProps<HTMLDialogElement> (props of Drawer)
 type DropdownMenuButtonProps = Omit<ButtonProps, 'onClick'>
@@ -5060,6 +5109,15 @@ type RadiusVarName = keyof typeof radiusDefaults
 interface RelativeDateFilterPreset
   label: string
   value: string
+interface ReorderMove<TKey extends string | number = string | number, TTo = number>
+  key: TKey
+  to: TTo
+interface Reorderable<TKey extends string | number = string | number, TTo = number>
+  [reorderableBrand]: { readonly key: TKey; readonly to: TTo }
+  start: (key: TKey) => void
+interface ReorderableOptions<TKey extends string | number = string | number, TTo = number>
+  isReorderable?: (key: TKey) => boolean
+  onReorder: (move: ReorderMove<TKey, TTo>) => void
 interface ResizableConfig
   autoSaveId?: string
   defaultIsCollapsed?: boolean
@@ -5292,6 +5350,10 @@ interface SliderSingleProps extends SliderBaseProps
   valueDisplay?: 'tooltip' | 'text' | 'none' = "tooltip"
   width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface SnapPaging
+  @astryxdesign/core/snap-paging/v1?: never
+interface SnapPagingOptions
+  pages?: 'view' | 'item' = 'view'
 type SourceRange
   end: number
   start: number
@@ -5433,15 +5495,16 @@ interface TableFooterProps extends BaseProps<HTMLTableSectionElement> (props of 
 interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> (props of TableHeaderCell)
 interface TableHeaderProps extends BaseProps<HTMLTableSectionElement> (props of TableHeader)
 interface TablePlugin<T extends Record<string, unknown> = Record<string, unknown>>
-  transformBodyCell?: (props: BodyCellRenderProps, column: TableColumn<T>, item: T, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>) => BodyCellRenderProps
-  transformBodyRow?: (props: BodyRowRenderProps, item: T, index: number) => BodyRowRenderProps
+  rowModel?: TableRenderContext['rowModel']
+  transformBodyCell?: (props: BodyCellRenderProps, column: TableColumn<T>, item: T, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>, context?: TableRowContext) => BodyCellRenderProps
+  transformBodyRow?: (props: BodyRowRenderProps, item: T, index: number, context?: TableRowContext) => BodyRowRenderProps
   transformColumns?: (columns: TableColumn<T>[]) => TableColumn<T>[]
   transformHeaderCell?: (props: HeaderCellRenderProps, column: TableColumn<T>, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>) => HeaderCellRenderProps
   transformHeaderRow?: (props: HeaderRowRenderProps) => HeaderRowRenderProps
-  transformScrollWrapper?: (props: ScrollWrapperRenderProps) => ScrollWrapperRenderProps
+  transformScrollWrapper?: (props: ScrollWrapperRenderProps, context?: TableRenderContext) => ScrollWrapperRenderProps
   transformTable?: (props: TableRenderProps) => TableRenderProps
   transformTableContext?: (children: ReactNode) => ReactNode
-interface TableProps<T extends Record<string, unknown>> extends Omit<BaseTableProps<T>, 'plugins' | 'components'>
+interface TableProps<T extends Record<string, unknown>> extends TableAppearanceProps<T>
   children?: ReactNode
   columns?: TableColumn<T>[]
   data?: T[]
@@ -5458,11 +5521,26 @@ interface TableProps<T extends Record<string, unknown>> extends Omit<BaseTablePr
   scrollWrapper?: ComponentType<{ children: ReactNode; htmlProps?: HTMLAttributes<HTMLDivElement> & { ref?: Ref<HTMLDivElement> }; xstyle?: StyleXStyles[]; beforeTable?: ReactNode; afterTable?: ReactNode }>
   textOverflow?: 'wrap' | 'truncate' = 'wrap'
   verticalAlign?: TableVerticalAlign = 'middle'
+  virtualization?: BaseTableProps<T>['virtualization']
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface TableRenderContext
+  headerRowCount: number
+  logicalRowCount: number
+  mode: 'data' | 'children'
+  rowModel: 'flat' | 'tree' | 'grouped' | 'detail' | 'custom'
+  viewport: React.RefObject<HTMLDivElement | null>
 interface TableRenderProps
   htmlProps: HTMLAttributes<HTMLTableElement>
   xstyle: StyleXStyles[]
+interface TableRowContext
+  headerRowCount: number
+  identityStatus: 'valid' | 'missing' | 'invalid' | 'duplicate'
+  key: string | number | undefined
+  kind: 'product' | 'synthetic' | 'unknown'
+  logicalIndex: number
+  logicalRowCount: number
+  render: TableRenderContext
 interface TableRowProps extends BaseProps<HTMLTableRowElement> (props of TableRow)
 interface TableRowStatus
   color: TableRowStatusColor | (string & {})
@@ -5494,6 +5572,8 @@ interface TableTreeRowMeta
   isExpanded: boolean
   level: number
 type TableVerticalAlign = 'middle' | 'top' | 'bottom'
+interface TableVirtualizationCapability
+  @astryxdesign/core/table-virtualization/v1: never
 interface TextAreaProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>, TextEntryTraitProps (props of TextArea)
 type TextAreaSize = 'sm' | 'md' | 'lg'
 interface TextAreaStatus
@@ -5687,7 +5767,9 @@ type TokenValue = string | [light: string, dark: string]
 type TokenizerChange<T extends SearchableItem> = { item: T; type: 'add' } | { item: T; type: 'create' } | { item: T; type: 'remove' } | { type: 'reorder' }
 interface TokenizerHandle
   blur: () => void
+  close: () => void
   focus: () => void
+  open: () => void
 type TokenizerOverflowBehavior = 'none' | 'unfocusedInline' | 'unfocusedLayer'
 type TokenizerPresentation = AdaptivePresentation
 interface TokenizerProps<T extends SearchableItem> extends Omit<FieldInputBaseProps<HTMLInputElement>, 'onChange' | 'onFocus' | 'onBlur' | 'onKeyDown'> (props of Tokenizer)
@@ -5823,7 +5905,7 @@ interface UseCalendarNavigationReturn
   monthYearLabel: string
   navigateMonth: (delta: number, focusedDate?: ISODateString, offset?: number) => void
   pendingFocus: ISODateString | null
-  visibleCalendarMonths: Array<{ year: number; month: number }>
+  visibleCalendarMonths: { year: number; month: number }[]
   visibleMonths: PlainDate[]
 interface UseChatComposerTokensOptions
   editableRef: React.RefObject<HTMLDivElement | null>
@@ -5915,6 +5997,8 @@ interface UseContainerRevealOptions
 interface UseContainerRevealReturn
   getContainerProps: (options?: ContainerRevealOptions) => { className?: string; style?: CSSProperties }
   getContentRevealProps: (options?: ContentRevealOptions) => { className?: string; style?: CSSProperties }
+interface UseDragToSnapPointsResult
+  settleTo: (index: number) => void
 interface UseFocusTrapOptions
   isActive: boolean
   onEscape?: () => void
@@ -6202,6 +6286,9 @@ interface UseTableRowIndexConfig<T extends Record<string, unknown>>
   startFrom?: number = 1
 interface UseTableRowStatusConfig<T extends Record<string, unknown>>
   getStatus: (item: T) => (TableRowStatus & { status?: never }) | TableSemanticRowStatus | null
+interface UseTableRowsVirtualizationConfig
+  initialViewportHeight: number
+  rowHeight: number
 interface UseTableSelectionConfig<T extends Record<string, unknown>>
   getIsAllSelected: () => boolean
   getIsIndeterminate?: () => boolean
@@ -6213,7 +6300,7 @@ interface UseTableSelectionConfig<T extends Record<string, unknown>>
   onSelectAll: (event: { isAllSelected: boolean }) => void
   onSelectItem: (event: { item: T; isSelected: boolean }) => void
 interface UseTableSelectionStateConfig<T extends Record<string, unknown>>
-  data: T[]
+  data?: T[]
   getIsItemEnabled?: (item: T) => boolean = () => true
   getIsItemSelectable?: (item: T) => boolean = () => true
   idKey: (keyof T & string) | ((item: T) => string)
@@ -7306,7 +7393,7 @@ function isActionTrigger: (element: HTMLElement) => boolean
 
 ```text
 context LayerContext: Context<LayerContextValue | null>
-const layerAnimations: Readonly<{ readonly below: Readonly<{ readonly animationDuration: stylex.StyleXClassNameFor<"animationDuration", string>; readonly animationTimingFunction: styl … #b637e434
+const layerAnimations: Readonly<{ readonly below: Readonly<{ readonly animationDuration: stylex.StyleXClassNameFor<"animationDuration", string>; readonly animationTimingFunction: styl … #3a6b9939
 ```
 
 ### Types
@@ -7765,7 +7852,7 @@ interface MarkdownPluginCapabilities
 type MarkdownPluginData = MarkdownAstDataValue
 type MarkdownPluginDefinition<Name extends string, Node extends MarkdownExtensionNode<Name> = never> = MarkdownSyntaxPluginDefinition<Name, Node> | MarkdownTransformPluginDefinition<Name, Node>
 interface MarkdownPluginEntry<Node extends MarkdownExtensionNode = MarkdownExtensionNode>
-  [markdownPluginNode]: Node
+  @astryxdesign/core/markdown-plugin-node/v1: Node
   apiVersion: 1
   name: string
 interface MarkdownSourceDecoration
@@ -7809,7 +7896,7 @@ interface MarkdownTokenizerInput
   offset: number
   source: string
 interface MarkdownTransform<Node extends MarkdownExtensionNode = never>
-  [markdownTransformNode]?: Node
+  @astryxdesign/core/markdown-transform-node/v1?: Node
 interface MarkdownTransformContext
   display: 'inline' | 'block'
   isFinal: boolean
@@ -8517,6 +8604,16 @@ SliderRangeProps (.)
 SliderSingleProps (.)
 ```
 
+## `./SnapPaging`
+
+### Also exported from an earlier entry point
+
+```text
+SnapPaging (.)
+SnapPagingOptions (.)
+useSnapPaging (.)
+```
+
 ## `./Spinner`
 
 ### Also exported from an earlier entry point
@@ -8671,8 +8768,10 @@ TableHeaderCellProps (.)
 TableHeaderProps (.)
 TablePlugin (.)
 TableProps (.)
+TableRenderContext (.)
 TableRenderProps (.)
 TableRow (.)
+TableRowContext (.)
 TableRowProps (.)
 TableRowStatus (.)
 TableSelectionState (.)
@@ -8687,6 +8786,7 @@ TableSortableColumnConfig (.)
 TableTextOverflow (.)
 TableTreeRowMeta (.)
 TableVerticalAlign (.)
+TableVirtualizationCapability (.)
 UseTableColumnResizeConfig (.)
 UseTableColumnSettingsConfig (.)
 UseTableColumnSettingsStateConfig (.)
@@ -8698,6 +8798,7 @@ UseTablePaginationConfig (.)
 UseTableRowExpansionConfig (.)
 UseTableRowIndexConfig (.)
 UseTableRowStatusConfig (.)
+UseTableRowsVirtualizationConfig (.)
 UseTableSelectionConfig (.)
 UseTableSelectionStateConfig (.)
 UseTableSelectionStateResult (.)
@@ -8726,6 +8827,7 @@ useTablePagination (.)
 useTableRowExpansion (.)
 useTableRowIndex (.)
 useTableRowStatus (.)
+useTableRowsVirtualization (.)
 useTableSelection (.)
 useTableSelectionState (.)
 useTableSortable (.)
@@ -9025,6 +9127,10 @@ TreeListVariantMap (.)
 
 ```text
 BaseTypeahead (.)
+BaseTypeaheadDialogMenuInfo (.)
+BaseTypeaheadHandle (.)
+BaseTypeaheadListboxMenuInfo (.)
+BaseTypeaheadMenu (.)
 BaseTypeaheadProps (.)
 CreateStaticSourceOptions (.)
 SearchContext (.)
@@ -9096,6 +9202,8 @@ AnnouncePoliteness (.)
 ClickableContainerResult (.)
 ContainerRevealOptions (.)
 ContentRevealOptions (.)
+DragToSnapPoints (.)
+DragToSnapPointsOptions (.)
 EntryAnimationPreset (.)
 Hotkey (.)
 INTERACTIVE_SELECTORS (.)
@@ -9130,6 +9238,7 @@ UseClipboardOptions (.)
 UseClipboardReturn (.)
 UseContainerRevealOptions (.)
 UseContainerRevealReturn (.)
+UseDragToSnapPointsResult (.)
 UseFocusTrapOptions (.)
 UseFocusTrapReturn (.)
 UseGridFocusOptions (.)
@@ -9168,6 +9277,7 @@ useClickableContainer (.)
 useClipboard (.)
 useContainerReveal (.)
 useDevWarning (.)
+useDragToSnapPoints (.)
 useEntryAnimation (.)
 useFocusTrap (.)
 useGridFocus (.)

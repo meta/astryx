@@ -347,7 +347,12 @@ describe('ComponentIcon', () => {
 describe('component icon slot types', () => {
   it('types slot names, values, and the static view', () => {
     expectTypeOf<ComponentIconSlotName>().toEqualTypeOf<
-      'code-block-copy' | 'example-panel-dismiss' | 'example-nav-item-leading'
+      | 'code-block-copy'
+      | 'timestamp-copy'
+      | 'table-sort-indicator'
+      | 'table-row-expand'
+      | 'example-panel-dismiss'
+      | 'example-nav-item-leading'
     >();
     expectTypeOf<ComponentIconSlotMap[typeof COPY]>().toEqualTypeOf<{
       readonly copied: boolean;

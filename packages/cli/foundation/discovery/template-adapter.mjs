@@ -28,6 +28,7 @@ import {createRequire} from 'node:module';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
 import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
+import {listDirEntries} from '../fs/listing-cache.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {Project} from '../config/project.mjs';
 import {
@@ -1115,8 +1116,7 @@ export function listTemplates() {
   const all = [];
   if (fs.existsSync(PAGES_DIR)) {
     all.push(
-      ...fs
-        .readdirSync(PAGES_DIR, {withFileTypes: true})
+      ...listDirEntries(PAGES_DIR)
         .filter(e => e.isDirectory())
         .map(e => e.name),
     );
@@ -1133,7 +1133,7 @@ function findDocFiles(dir, pattern) {
   /** @type {string[]} */
   const results = [];
   if (!fs.existsSync(dir)) return results;
-  for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+  for (const entry of listDirEntries(dir)) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       results.push(...findDocFiles(full, pattern));
@@ -1160,9 +1160,7 @@ export function findPageDocFile(dirPath) {
 
 async function discoverPages() {
   if (!fs.existsSync(PAGES_DIR)) return [];
-  const dirs = fs
-    .readdirSync(PAGES_DIR, {withFileTypes: true})
-    .filter(e => e.isDirectory());
+  const dirs = listDirEntries(PAGES_DIR).filter(e => e.isDirectory());
 
   /** @type {DiscoveredTemplate[]} */
   const templates = [];
@@ -1602,7 +1600,7 @@ function findIntegrationDocFiles(root) {
   if (!fs.existsSync(root)) return results;
   /** @param {string} dir */
   const walk = dir => {
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+    for (const entry of listDirEntries(dir)) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(full);
@@ -2102,8 +2100,8 @@ export function extractComponents(pagePath) {
  */
 export function componentsInSource(src) {
   // Match JSX opening tags, e.g. `<Section` or the legacy `<XDSSection`.
-  // Templates author bare component names post un-prefix migration
-  // (P2380608025), so the `XDS` prefix is optional. Anchoring on the `<`
+  // Templates author bare component names post un-prefix migration,
+  // so the `XDS` prefix is optional. Anchoring on the `<`
   // JSX-tag boundary keeps this precise (avoids matching imports/comments/
   // identifiers) while remaining prefix-agnostic.
   //

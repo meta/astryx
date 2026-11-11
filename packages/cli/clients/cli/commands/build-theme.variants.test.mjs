@@ -99,6 +99,33 @@ describe('theme build custom-variant augmentations', () => {
     expect(dts).not.toMatch(/XDSButtonVariantMap/);
   });
 
+  it('targets CustomTextTypes in core/theme for a custom text type', async () => {
+    const themeFile = writeTheme(
+      tmpDir,
+      `export default {
+        name: 'variants-theme',
+        tokens: { '--color-bg': '#fff' },
+        components: {
+          text: { 'type:customTextType': { fontSize: '24px' } },
+        },
+      };\n`,
+    );
+
+    const result = await runCli(
+      ['theme', 'build', path.relative(tmpDir, themeFile)],
+      tmpDir,
+    );
+    expect(result.code).toBe(0);
+
+    const variantsPath = path.join(tmpDir, 'variants-theme.variants.d.ts');
+    expect(fs.existsSync(variantsPath)).toBe(true);
+    const dts = fs.readFileSync(variantsPath, 'utf-8');
+
+    expect(dts).toContain("declare module '@astryxdesign/core/theme'");
+    expect(dts).toMatch(/interface CustomTextTypes\b/);
+    expect(dts).toContain("'customTextType': true;");
+  });
+
   it('emits Heading custom types and skips props with no augmentation point', async () => {
     const themeFile = writeTheme(
       tmpDir,
@@ -428,7 +455,10 @@ describe('theme build custom-variant augmentations', () => {
           section: { 'variant:customSection': { backgroundColor: 'transparent' } },
           'status-dot': { 'variant:customStatusDot': { backgroundColor: 'transparent' } },
           heading: { 'type:customHeading': { fontSize: '3rem' } },
-          text: { 'color:customTextColor': { color: 'currentColor' } },
+          text: {
+            'color:customTextColor': { color: 'currentColor' },
+            'type:customTextType': { fontSize: '24px' },
+          },
           token: { 'color:customTokenColor': { backgroundColor: 'transparent' } },
         },
       };
@@ -491,7 +521,7 @@ describe('theme build custom-variant augmentations', () => {
         `      <Section variant="customSection">Section</Section>\n` +
         `      <StatusDot label="Status" variant="customStatusDot" />\n` +
         `      <Heading level={2} type="customHeading">Heading</Heading>\n` +
-        `      <Text color="customTextColor">Text</Text>\n` +
+        `      <Text color="customTextColor" type="customTextType">Text</Text>\n` +
         `      <Token label="Token" color="customTokenColor" />\n` +
         `    </>\n` +
         `  );\n` +

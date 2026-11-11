@@ -102,6 +102,10 @@
         },
         {
           "kind": "component",
+          "name": "ChatVirtualizer"
+        },
+        {
+          "kind": "component",
           "name": "CircleCheckIndicator"
         },
         {
@@ -130,6 +134,10 @@
         },
         {
           "kind": "component",
+          "name": "DialogHeroHeader"
+        },
+        {
+          "kind": "component",
           "name": "DiffViewer"
         },
         {
@@ -138,11 +146,27 @@
         },
         {
           "kind": "component",
+          "name": "LineClamp"
+        },
+        {
+          "kind": "component",
           "name": "ListInput"
         },
         {
           "kind": "component",
           "name": "LogStream"
+        },
+        {
+          "kind": "component",
+          "name": "NavigationScreen"
+        },
+        {
+          "kind": "component",
+          "name": "NavigationStack"
+        },
+        {
+          "kind": "component",
+          "name": "PageControl"
         },
         {
           "kind": "component",
@@ -167,6 +191,18 @@
         {
           "kind": "component",
           "name": "SVGIcon"
+        },
+        {
+          "kind": "component",
+          "name": "TabBar"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarItem"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarMoreList"
         },
         {
           "kind": "component",
@@ -238,6 +274,10 @@
         },
         {
           "kind": "template",
+          "name": "DialogHeroHeaderShowcase"
+        },
+        {
+          "kind": "template",
           "name": "DiffViewerShowcase"
         },
         {
@@ -274,6 +314,18 @@
         {
           "kind": "component",
           "name": "RichTextEditor"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorAutoLinkPlugin"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextEditorToolbar"
+        },
+        {
+          "kind": "component",
+          "name": "RichTextView"
         },
         {
           "kind": "template",

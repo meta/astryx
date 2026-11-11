@@ -528,6 +528,37 @@ export const Scrim: Story = {
 };
 
 /**
+ * A drawer rendered only while open: Save removes it without a close. Focus
+ * goes back to the button that opened it, as a close returns it.
+ */
+export const UnmountWhileOpen: Story = {
+  render: () => {
+    const [isEditing, setIsEditing] = useState(false);
+    return (
+      <>
+        <Button label="Edit row" onClick={() => setIsEditing(true)} />
+        {isEditing ? (
+          <Drawer
+            isOpen
+            onOpenChange={setIsEditing}
+            label="Edit row"
+            hasScrim={false}>
+            <Section padding={4}>
+              <VStack gap={3}>
+                <Text type="body">
+                  This drawer renders only while open. Save removes it.
+                </Text>
+                <Button label="Save" onClick={() => setIsEditing(false)} />
+              </VStack>
+            </Section>
+          </Drawer>
+        ) : null}
+      </>
+    );
+  },
+};
+
+/**
  * `purpose` matches Dialog. `info` (default) closes on Escape and a scrim
  * click; `form` ignores the scrim click so a stray click cannot discard input;
  * `required` ignores both and is exposed as an `alertdialog`, so its content
