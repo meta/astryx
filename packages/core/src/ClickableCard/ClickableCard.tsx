@@ -52,6 +52,7 @@ import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
 import type {BaseProps} from '../BaseProps';
 import {useLinkComponent} from '../Link/useLinkComponent';
+import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -268,6 +269,12 @@ export interface ClickableCardProps extends BaseProps {
   target?: string;
 
   /**
+   * HTML rel attribute for the link. When `target="_blank"`,
+   * `noopener noreferrer` is added automatically (matching Link and Item).
+   */
+  rel?: string;
+
+  /**
    * Set to true to disable the card.
    * Disabled cards keep their tab stop and expose aria-disabled; activation is
    * blocked, and disabled link cards render no live destination.
@@ -353,6 +360,7 @@ export function ClickableCard({
   onPointerDown: onPointerDownProp,
   href,
   target,
+  rel,
   isDisabled = false,
   children,
   padding,
@@ -406,6 +414,7 @@ export function ClickableCard({
   );
 
   const LinkComponent = useLinkComponent();
+  const {target: computedTarget, rel: computedRel} = computeTargetAndRel(target, rel);
 
   const {onClick, onMouseUp, onPointerDown} = useClickableContainer({
     containerRef,
@@ -474,7 +483,8 @@ export function ClickableCard({
         <LinkRoot
           ref={setInteractiveRef}
           href={isDisabled ? undefined : href}
-          target={isDisabled ? undefined : target}
+          target={isDisabled ? undefined : computedTarget}
+          rel={isDisabled ? undefined : computedRel}
           role={isDisabled ? 'link' : undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}
           aria-label={label}
