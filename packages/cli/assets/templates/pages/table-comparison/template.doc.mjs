@@ -19,6 +19,7 @@ export const doc = {
     Image: 'image',
     Plus: 'add',
     Sparkles: 'sparkles',
+    Type: 'text',
     Video: 'video',
     Zap: 'bolt',
   },

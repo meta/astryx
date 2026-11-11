@@ -17,6 +17,7 @@ import {isCoarsePointer} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {nearestScroller, scrollingAncestor} from '../utils/scrollingAncestor';
+import {sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
 import {
   KEYBOARD_EPSILON,
   claimTapFocus,
@@ -48,7 +49,7 @@ export const FIELD_OFFSET = 10;
 
 // Targets that keep their own fields above the keyboard. A field inside one
 // moves nothing itself, so nothing moves twice.
-const targets = new WeakSet<Element>();
+const targets = sharedWeakSet<Element>('keyboard/keyboard-target/targets', 1);
 
 /** Registers `element` as a keyboard target until the returned call. */
 export function registerKeyboardTarget(element: Element): () => void {
@@ -159,7 +160,10 @@ function dockOf(
 
 // The animator each ridden target moves with. A translate it draws is the
 // ride's, not the app's.
-const riddenAnimators = new WeakMap<HTMLElement, Animator>();
+const riddenAnimators = sharedWeakMap<HTMLElement, Animator>(
+  'keyboard/keyboard-target/ridden-animators',
+  1,
+);
 
 // Whether the app positions `node` with its own `translate`, such as `-50% 0`
 // to centre it. A translate the ride draws is not the app's.
@@ -624,7 +628,10 @@ function fieldLift(
 // The ride that moves each target. A new ride on the same target takes over,
 // whether the old one still rides or waits for the keyboard to go. So two never
 // move one target, and the one taken over never moves it again.
-const currentRides = new WeakMap<HTMLElement, () => void>();
+const currentRides = sharedWeakMap<HTMLElement, () => void>(
+  'keyboard/keyboard-target/current-rides',
+  1,
+);
 
 // Rides `target` with the keyboard until the returned call (see liftFor).
 // `isHostOwned` is true for a Core host's own element, and false for an app's

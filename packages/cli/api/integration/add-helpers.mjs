@@ -486,7 +486,7 @@ export async function loadCurrentManifest(manifestFile, manifestExists) {
  * @param {string} manifestPath
  * @param {string[]} files
  * @param {boolean} dryRun
- * @returns {{type: 'integration.add', data: Omit<import('./integration-authoring.type.mjs').IntegrationAddData, 'kind'> & {kind: K, icons?: number, refreshed?: boolean, updated?: boolean, renamed?: Array<{from: string, to: string}>, moved?: Array<{id: string, from: string, to: string}>, licenseNoticeMissing?: {library: string, path: string}, mapped?: Array<{definition: string, icon: string}>, suggestions?: Array<{definition: string, icon: string, word: string}>, notes?: string[]}}}
+ * @returns {{type: 'integration.add', data: Omit<import('./integration-authoring.type.mjs').IntegrationAddData, 'kind'> & {kind: K, icons?: number, refreshed?: boolean, updated?: boolean, renamed?: Array<{from: string, to: string}>, moved?: Array<{id: string, from: string, to: string}>, licenseNoticeMissing?: {library: string, path: string}, mapped?: Array<{definition: string, icon: string}>, suggestions?: Array<{definition: string, icon: string, word: string}>, notes?: string[], moduleUpdate?: {previous: string, module: string}}}}
  */
 export function receipt(kind, name, root, manifestPath, files, dryRun) {
   return {

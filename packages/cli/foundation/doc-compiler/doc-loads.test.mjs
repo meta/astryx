@@ -60,6 +60,18 @@ const RUNNERS = {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
   },
+  'api/theme-edit/_preview.mjs': {
+    runs: 'a Playwright the project has installed, or a Chrome found on the machine, to picture a preview only with --png',
+    sites: ['child_process.spawnSync', 'import(<computed>)'],
+  },
+  'api/theme-edit/_project.mjs': {
+    runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
+    sites: ['import(<computed>) ×2', 'require'],
+  },
+  'api/theme-edit/_settings.mjs': {
+    runs: 'the built theme module, to read its resolved tokens after a build',
+    sites: ['import(<computed>)'],
+  },
   'api/theme/build/build.mjs': {
     runs: "theme source modules, through jiti; the project's installed Core, and a Core's root entry once a theme imports it",
     sites: [
@@ -118,6 +130,40 @@ const RUNNERS = {
   'clients/cli/commands/experimental/index.mjs': {
     runs: SELF_DOCS,
     sites: ['import ../experimental.doc.mjs'],
+  },
+  'clients/cli/commands/experimental/theme.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/theme-edit/themeEditHow.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditNew.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewAdd.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewApp.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewList.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditSet.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditShow.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditUndo.doc.mjs',
+      'import ../experimental-theme-add.doc.mjs',
+      'import ../experimental-theme-compile.doc.mjs',
+      'import ../experimental-theme-editor-how.doc.mjs',
+      'import ../experimental-theme-editor-new.doc.mjs',
+      'import ../experimental-theme-editor-set.doc.mjs',
+      'import ../experimental-theme-editor-show.doc.mjs',
+      'import ../experimental-theme-editor-undo.doc.mjs',
+      'import ../experimental-theme-editor.doc.mjs',
+      'import ../experimental-theme-eject.doc.mjs',
+      'import ../experimental-theme-list.doc.mjs',
+      'import ../experimental-theme-preview-add.doc.mjs',
+      'import ../experimental-theme-preview-app.doc.mjs',
+      'import ../experimental-theme-preview-list.doc.mjs',
+      'import ../experimental-theme-preview-remove.doc.mjs',
+      'import ../experimental-theme-preview.doc.mjs',
+      'import ../experimental-theme-remove.doc.mjs',
+      'import ../experimental-theme-targets.doc.mjs',
+      'import ../experimental-theme-template.doc.mjs',
+      'import ../experimental-theme-use.doc.mjs',
+      'import ../experimental-theme.doc.mjs',
+    ],
   },
   'clients/cli/commands/experimental/render.mjs': {
     runs: SELF_DOCS,
@@ -329,6 +375,10 @@ const RUNNERS = {
       'require(typescript/package.json)',
     ],
   },
+  'foundation/discovery/module-exports.mjs': {
+    runs: "@babel/parser, loaded on first use, to read a module's exports",
+    sites: ['require(@babel/parser)'],
+  },
   'foundation/discovery/template-adapter.mjs': {
     runs: '@babel/parser, to find the fixture references and page-local bindings in template source; and a template doc that does not validate, to read the replacement it declares',
     sites: ['importDocModule', 'require(@babel/parser)'],
@@ -345,11 +395,11 @@ const RUNNERS = {
     runs: 'authored doc files, for the doc reader and discovery, and again after an edit, without the cache entry of a CommonJS doc',
     sites: [
       '.import() ×2',
-      'createJiti ×2',
       'importUrl ×2',
       'importUserModule ×2',
       'readFreshInTurn',
       'readInTurn',
+      'require(jiti)',
     ],
   },
   'foundation/doc-compiler/read.mjs': {
@@ -357,7 +407,7 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
+    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
     sites: [
       '.import() ×6',
       'createJiti ×2',
@@ -367,21 +417,20 @@ const RUNNERS = {
     ],
   },
   'foundation/render/render-page.mjs': {
-    runs: 'the render worker, so a page that never finishes can be stopped',
+    runs: 'the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, and a one-line Intl.Segmenter check after a crash',
+    sites: ['child_process.fork', 'child_process.spawnSync'],
+  },
+  'foundation/render/page-host.mjs': {
+    runs: 'the render worker, in a thread of the host process, so the host can exit with the CLI or at its own time limit while a page loops',
     sites: ['worker_threads.Worker'],
   },
   'foundation/fs/import-url.mjs': {
-    runs: 'the doc file at a file URL, for the doc importers',
+    runs: 'the module at a file URL, for the doc importers and the module loader',
     sites: ['import(<computed>)'],
   },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache',
-    sites: [
-      '.import() ×3',
-      'createJiti ×3',
-      'import(<computed>) ×2',
-      'require.cache',
-    ],
+    sites: ['.import() ×3', 'importUrl ×2', 'require(jiti)', 'require.cache'],
   },
   'foundation/fs/read-record.mjs': {
     runs: "nothing; it wraps node:fs's read calls to record the paths an operation reads, and republishes them to ESM imports",
@@ -426,6 +475,18 @@ const RUNNERS = {
   'scripts/generate-cli-readme.mjs': {
     runs: '`astryx manifest` and the error-code and response-type docs, to write the README tables (build time, not shipped)',
     sites: ['child_process.spawnSync', 'import(<computed>)'],
+  },
+  'scripts/generate-manifest.mjs': {
+    runs: "`astryx manifest --json`, from a folder beside each package manager's lockfile, to store the manifest at `prepack` (build time)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-self-audit.mjs': {
+    runs: "`npm pack --dry-run --json --ignore-scripts`, to list the files the package publishes, and node, to run Doctor's audit of the CLI's own files on a copy of exactly those files (at `prepack`)",
+    sites: ['child_process.spawnSync ×2'],
+  },
+  'scripts/generate-stored-docs.mjs': {
+    runs: 'each shipped doc file that imports nothing and runs nothing as it loads, to store its exports (build time, not shipped)',
+    sites: ['import(<computed>)'],
   },
   'scripts/sync-api-types.mjs': {
     runs: '`tsc`, to emit the API declarations (build time, not shipped)',
