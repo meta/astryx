@@ -1276,7 +1276,14 @@ export function useSheetGestures({
   );
 
   const beginDrag = useCallback(
-    (event: ReactPointerEvent, sheetHeight: number, startCoord?: number) => {
+    (
+      event: ReactPointerEvent,
+      sheetHeight: number,
+      startCoord?: number,
+      // The contact's samples since it landed. A pull that begins past the
+      // promotion slop still releases at the speed of the whole motion.
+      tracker: VelocityTracker = new VelocityTracker(),
+    ) => {
       const target = event.currentTarget as HTMLElement;
       const syntheticTouch = isSyntheticTouch(event);
       // Never capture for a touch drag. The id came from `Touch.identifier`,
@@ -1294,7 +1301,6 @@ export function useSheetGestures({
       const start = startCoord ?? event.clientY;
       const naturalEndGap = naturalEndGapFor(bodyNodeRef.current);
       const baseLayoutOffset = settledLayoutOffsetRef.current;
-      const tracker = new VelocityTracker();
       tracker.add(0, event.clientY, event.timeStamp);
       dragStateRef.current = {
         syntheticTouch,
@@ -1508,13 +1514,14 @@ export function useSheetGestures({
     [settleFromDrag],
   );
 
-  // Pointer path for the body at-top pull-down (desktop / mouse). Touch uses
-  // the non-passive listener below, since pointer events are cancelled once a
-  // native pan starts.
+  // Pointer path for the body at-top pull-down, for a mouse or a pen. A
+  // finger's drag belongs to the non-passive touch listeners below, so its
+  // touch-down drops this arm.
   const armedBodyRef = useRef<{
     pointerId: number;
     startCoord: number;
     scrollers: HTMLElement[];
+    tracker: VelocityTracker;
   } | null>(null);
 
   const handleBodyPointerDown = useCallback((event: ReactPointerEvent) => {
@@ -1532,10 +1539,13 @@ export function useSheetGestures({
       armedBodyRef.current = null;
       return;
     }
+    const tracker = new VelocityTracker();
+    tracker.add(0, event.clientY, event.timeStamp);
     armedBodyRef.current = {
       pointerId: event.pointerId,
       startCoord: event.clientY,
       scrollers,
+      tracker,
     };
   }, []);
 
@@ -1550,11 +1560,12 @@ export function useSheetGestures({
         return;
       }
       const delta = event.clientY - armed.startCoord;
+      armed.tracker.add(0, event.clientY, event.timeStamp);
       if (delta > DRAG_PROMOTION_SLOP && chainAtTop(armed.scrollers)) {
         // Downward pull at the top: promote to a sheet drag, anchored at the
         // original pointer-down position so the pull distance carries over.
         armedBodyRef.current = null;
-        beginDrag(event, measureHeight(), armed.startCoord);
+        beginDrag(event, measureHeight(), armed.startCoord, armed.tracker);
         handlePointerMove(event);
       } else if (delta < 0) {
         // Upward move = the user is scrolling; disarm so we don't hijack it.
@@ -1606,6 +1617,9 @@ export function useSheetGestures({
     promotedAtContentEnd: boolean;
     // Null while no hold is set.
     releaseContentHold: (() => void) | null;
+    // The finger's positions since it landed, for the release velocity of a
+    // drag that this touch begins.
+    tracker: VelocityTracker;
   } | null>(null);
   const previousTouchHandlersRef = useRef<{
     start: (e: TouchEvent) => void;
@@ -1663,6 +1677,12 @@ export function useSheetGestures({
         yieldToPinchRef.current(body);
         return;
       }
+      // A finger raises pointer events before its touch events, so the
+      // pointer path arms for it too. That path begins the drag first and
+      // takes pointer capture from the element under the finger. The capture
+      // change then cancels the drag. So a contact that raises touch events
+      // belongs to this path.
+      armedBodyRef.current = null;
       const touch = event.changedTouches[0];
       // Record where the gesture began and whether it began at a scroll edge.
       // At the top, a pull DOWN hands off (collapse); at the bottom, a pull UP
@@ -1685,6 +1705,8 @@ export function useSheetGestures({
       const bottom =
         chainAtBottom(scrollers) &&
         (activeOffsetRef.current > 0 || !chainScrolls(scrollers));
+      const tracker = new VelocityTracker();
+      tracker.add(0, touch.clientY, event.timeStamp);
       touchDragRef.current = {
         id: touch.identifier,
         startX: touch.clientX,
@@ -1695,6 +1717,7 @@ export function useSheetGestures({
         contentEndY: null,
         promotedAtContentEnd: false,
         releaseContentHold: null,
+        tracker,
       };
     };
 
@@ -1746,6 +1769,7 @@ export function useSheetGestures({
         return;
       }
       const delta = t.clientY - armed.startY;
+      armed.tracker.add(0, t.clientY, event.timeStamp);
       // A pull against the armed edge can never scroll: the chain is at that
       // edge. Its native pan is cancelled before the promotion slop, once the
       // pull passes a tap's wobble, because a later cancel no longer stops a
@@ -1779,6 +1803,7 @@ export function useSheetGestures({
           asPointer(t, scroller, event),
           measureHeightRef.current(),
           armed.startY,
+          armed.tracker,
         );
         pointerMoveRef.current(asPointer(t, scroller, event));
         return;
@@ -1807,6 +1832,7 @@ export function useSheetGestures({
             asPointer(t, scroller, event),
             measureHeightRef.current(),
             armed.contentEndY,
+            armed.tracker,
           );
           pointerMoveRef.current(asPointer(t, scroller, event));
         }

@@ -1277,6 +1277,20 @@ describe('useSheetGestures', () => {
       expect(hook.result.current.isDragging).toBe(true);
     });
 
+    it('releases a quick mouse pull from the content at the speed of the whole pull', () => {
+      const {hook, onDismiss} = setup();
+      const body = makeBody(0);
+      bodyDown(hook, 0, 0, body);
+      bodyMove(hook, 40, 16, body);
+      bodyMove(hook, 100, 32, body);
+      act(() =>
+        hook.result.current.bodyProps.onPointerUp(pointerEvent(100, 33, body)),
+      );
+      // 0.2 x 3,750 + 0.8 x 2,500 = 2,750 px/s coasts past the dismiss line,
+      // as the same pull does on the grab handle.
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
     it('does not hijack scrolling when the body is scrolled down', () => {
       const {hook} = setup({snapHeights: () => [200]});
       const body = makeBody(120); // scrolled, not at the top
@@ -1534,6 +1548,122 @@ describe('useSheetGestures', () => {
       });
       expect(onDismiss).not.toHaveBeenCalled();
       expect(onSnap).toHaveBeenLastCalledWith(200);
+    });
+
+    // A finger raises a pointer event before each of its touch events. The
+    // pointer's id is the touch's identifier in WebKit and another number in
+    // Chromium.
+    function finger(hook: Hook, el: HTMLElement, pointerId: number, id = 7) {
+      const pointer = (y: number, t: number) =>
+        pointerEvent(y, t, el, pointerId, 0, true, 'touch');
+      return {
+        down(y: number, t: number) {
+          act(() => {
+            hook.result.current.bodyProps.onPointerDown(pointer(y, t));
+            touch(el, 'touchstart', y, id, 'direct', t);
+          });
+        },
+        move(y: number, t: number): Event {
+          let moved!: Event;
+          act(() => {
+            hook.result.current.bodyProps.onPointerMove(pointer(y, t));
+            moved = touch(el, 'touchmove', y, id, 'direct', t);
+          });
+          return moved;
+        },
+        up(y: number, t: number) {
+          act(() => {
+            hook.result.current.bodyProps.onPointerUp(pointer(y, t));
+            touch(el, 'touchend', y, id, 'direct', t);
+          });
+        },
+      };
+    }
+
+    it("keeps a finger's pull out of the pointer path, so a pointer capture change cannot cancel it", () => {
+      const {hook} = setup();
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      el.setPointerCapture = vi.fn();
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      const pull = finger(hook, el, 7);
+      pull.down(0, 0);
+      pull.move(12, 16);
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(el.setPointerCapture).not.toHaveBeenCalled();
+      // The capture a finger's pointer has by default ends on the element
+      // under the finger. Its event bubbles through the body.
+      act(() => {
+        hook.result.current.bodyProps.onLostPointerCapture(
+          pointerEvent(12, 16, el, 7),
+        );
+      });
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBe(12);
+      pull.move(60, 32);
+      expect(liveOffset(hook)).toBe(60);
+    });
+
+    it("cancels the native pan of a finger's pull whose pointer id is not its touch id", () => {
+      const {hook} = setup();
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      const pull = finger(hook, el, 3, 0);
+      pull.down(0, 0);
+      const first = pull.move(12, 16);
+      expect(first.defaultPrevented).toBe(true);
+      expect(hook.result.current.isDragging).toBe(true);
+      const second = pull.move(60, 32);
+      expect(second.defaultPrevented).toBe(true);
+      expect(liveOffset(hook)).toBe(60);
+    });
+
+    it('closes on a fast content flick of two moves, counted from the touch-down', () => {
+      const {hook, onDismiss} = setup();
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      // 30 px then 60 px in 16 ms each: 0.2 x 3,750 + 0.8 x 1,875 = 2,250 px/s.
+      act(() => {
+        touch(el, 'touchstart', 0, 1, 'direct', 0);
+        touch(el, 'touchmove', 30, 1, 'direct', 16);
+        touch(el, 'touchmove', 90, 1, 'direct', 32);
+        touch(el, 'touchend', 90, 1, 'direct', 33);
+      });
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it('springs back a slow content pull of two moves that stops short of halfway', () => {
+      const {hook, onDismiss} = setup();
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      // 100 px/s: under the speed a release is projected from.
+      act(() => {
+        touch(el, 'touchstart', 0, 1, 'direct', 0);
+        touch(el, 'touchmove', 30, 1, 'direct', 300);
+        touch(el, 'touchmove', 90, 1, 'direct', 900);
+        touch(el, 'touchend', 90, 1, 'direct', 910);
+      });
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(hook.result.current.settledOffset).toBe(0);
     });
 
     it('stretches the sheet with a pull up past a list already at its end, at the tallest detent, without claiming the touch', () => {
