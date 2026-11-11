@@ -52,6 +52,16 @@ describe('useLinkify', () => {
     expect(link?.getAttribute('href')).toBe('mailto:hi@example.com');
   });
 
+  it('does not backtrack across a long token with no email address', () => {
+    const text = 'a'.repeat(100_000);
+    const startedAt = performance.now();
+
+    const {result} = renderHook(() => useLinkify(text));
+
+    expect(result.current).toEqual([text]);
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
+  });
+
   it('detects multiple links in one string', () => {
     const {result} = renderHook(() =>
       useLinkify('Go to https://a.com and https://b.com now'),

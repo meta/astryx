@@ -79,7 +79,8 @@ const URL_PATTERN: LinkifyPattern = {
 
 // Email pattern: matches email addresses
 const EMAIL_PATTERN: LinkifyPattern = {
-  pattern: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+  pattern:
+    /(?=[^\s@]{1,64}@[^\s]{1,253}(?:\s|$))[a-zA-Z0-9._%+-]{1,64}@[a-zA-Z0-9.-]{1,253}\.[a-zA-Z]{2,63}/g,
   href: (match) => `mailto:${match[0]}`,
 };
 

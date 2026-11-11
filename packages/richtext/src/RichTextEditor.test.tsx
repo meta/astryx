@@ -2034,6 +2034,14 @@ describe('RichTextEditorAutoLinkPlugin', () => {
     expect(emailMatch?.attributes).toEqual(NEW_TAB_LINK_ATTRIBUTES);
   });
 
+  it('does not backtrack across a long token with no email address', () => {
+    const text = 'a'.repeat(100_000);
+    const startedAt = performance.now();
+
+    expect(DEFAULT_LINK_MATCHERS[1](text)).toBeNull();
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
+  });
+
   it('auto-links a typed URL as an AutoLinkNode', async () => {
     let editor!: LexicalEditor;
     render(
