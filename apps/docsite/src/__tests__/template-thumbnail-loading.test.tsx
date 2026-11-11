@@ -17,6 +17,12 @@ const transitionState = vi.hoisted(() => ({
   callbacks: [] as Array<() => void>,
   deferred: false,
 }));
+const scrollGate = vi.hoisted(() => ({
+  isCalm: true,
+  waiting: new Set<() => void>(),
+}));
+// One near-viewport listener for each mounted thumbnail, in mount order.
+const nearListeners = vi.hoisted(() => [] as Array<(isNear: boolean) => void>);
 const startTransitionMock = vi.hoisted(() =>
   vi.fn((callback: () => void) => {
     if (transitionState.deferred) {
@@ -84,6 +90,26 @@ vi.mock('../components/templateComponents', () => {
   };
 });
 
+vi.mock('../components/templatePrefetch', () => ({
+  observeNearViewport: (
+    _element: Element,
+    onChange: (isNear: boolean) => void,
+  ) => {
+    nearListeners.push(onChange);
+    return () => {};
+  },
+  whenScrollIsCalm: (run: () => void) => {
+    if (scrollGate.isCalm) {
+      run();
+      return () => {};
+    }
+    scrollGate.waiting.add(run);
+    return () => {
+      scrollGate.waiting.delete(run);
+    };
+  },
+}));
+
 import {TemplateThumbnail} from '../components/TemplateThumbnail';
 
 type IntersectionCallback = IntersectionObserverCallback;
@@ -97,6 +123,9 @@ beforeEach(() => {
   loadState.isLoaded = true;
   loadState.preloads.length = 0;
   loadState.resolvers.length = 0;
+  scrollGate.isCalm = true;
+  scrollGate.waiting.clear();
+  nearListeners.length = 0;
   startTransitionMock.mockClear();
   transitionState.callbacks.length = 0;
   transitionState.deferred = false;
@@ -284,7 +313,7 @@ describe('TemplateThumbnail loading', () => {
     expect(startTransitionMock).not.toHaveBeenCalled();
     expect(previewState.renders).toEqual([]);
   });
-  it('starts every visible template import before its render turn', async () => {
+  it('starts every visible template import before its render turn', () => {
     loadState.isLoaded = false;
     const view = render(
       <>
@@ -299,8 +328,6 @@ describe('TemplateThumbnail loading', () => {
         callback([visibleEntry], {} as IntersectionObserver);
       }
     });
-    expect(loadState.preloads).toEqual([]);
-    await act(() => new Promise(resolve => setTimeout(resolve, 200)));
 
     expect(loadState.preloads).toEqual(['first', 'second']);
     expect(idleCallbacks).toHaveLength(1);
@@ -311,21 +338,74 @@ describe('TemplateThumbnail loading', () => {
     expect(startTransitionMock).not.toHaveBeenCalled();
   });
 
-  it('starts no import for a tile that leaves the viewport at once', async () => {
+  it('downloads a tile near the viewport in idle time, before the tile is visible', () => {
     loadState.isLoaded = false;
     render(<TemplateThumbnail slug="first" />);
 
-    act(() =>
-      intersectionCallbacks[0]?.([visibleEntry], {} as IntersectionObserver),
+    act(() => nearListeners[0]?.(true));
+    expect(loadState.preloads).toEqual([]);
+    expect(idleCallbacks).toHaveLength(1);
+
+    act(() => idleCallbacks.shift()?.(idleDeadline));
+    expect(loadState.preloads).toEqual(['first']);
+    expect(startTransitionMock).not.toHaveBeenCalled();
+    expect(previewState.renders).toEqual([]);
+  });
+
+  it('renders a visible tile before it downloads a tile that is only near', async () => {
+    render(
+      <>
+        <TemplateThumbnail slug="first" />
+        <TemplateThumbnail slug="second" />
+      </>,
     );
-    act(() =>
-      intersectionCallbacks[0]?.([hiddenEntry], {} as IntersectionObserver),
+
+    // The first tile is only near the viewport. The second tile is visible.
+    act(() => {
+      nearListeners[0]?.(true);
+      nearListeners[1]?.(true);
+      intersectionCallbacks[1]?.([visibleEntry], {} as IntersectionObserver);
+    });
+    expect(loadState.preloads).toEqual(['second']);
+
+    act(() => idleCallbacks.shift()?.(idleDeadline));
+    await waitFor(() =>
+      expect(screen.queryByText('Second preview')).not.toBeNull(),
     );
-    await act(() => new Promise(resolve => setTimeout(resolve, 200)));
+    expect(loadState.preloads).toEqual(['second']);
+
+    act(() => idleCallbacks.shift()?.(idleDeadline));
+    expect(loadState.preloads).toEqual(['second', 'first']);
+    expect(previewState.renders).toEqual(['second']);
+  });
+
+  it('holds the download during a fast scroll', () => {
+    loadState.isLoaded = false;
+    scrollGate.isCalm = false;
+    render(
+      <>
+        <TemplateThumbnail slug="first" />
+        <TemplateThumbnail slug="second" />
+      </>,
+    );
+
+    act(() => {
+      nearListeners[0]?.(true);
+      nearListeners[1]?.(true);
+    });
+    expect(idleCallbacks).toHaveLength(0);
+
+    // The first tile leaves before the scroll slows down; the second stays.
+    act(() => nearListeners[0]?.(false));
+    act(() => {
+      for (const run of [...scrollGate.waiting]) {
+        run();
+      }
+    });
     act(() => idleCallbacks.shift()?.(idleDeadline));
 
-    expect(loadState.preloads).toEqual([]);
-    expect(startTransitionMock).not.toHaveBeenCalled();
+    expect(loadState.preloads).toEqual(['second']);
+    expect(idleCallbacks).toHaveLength(0);
   });
 
   it('releases the queue when a thumbnail unmounts during its import', async () => {
