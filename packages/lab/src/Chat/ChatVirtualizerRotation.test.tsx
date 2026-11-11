@@ -220,6 +220,21 @@ describe('ChatVirtualizer on the page scroller: rotation', () => {
     return -1;
   }
 
+  /**
+   * Where a row's top edge is painted, relative to the top of the view, or
+   * null when it is not mounted.
+   */
+  function rowTop(key: number): number | null {
+    const row = document.querySelector<HTMLElement>(`[data-pkey="${key}"]`);
+    return row === null ? null : row.getBoundingClientRect().top;
+  }
+
+  /** Whether the row's top edge sits at the top of the view. */
+  function isAtTop(key: number): boolean {
+    const top = rowTop(key);
+    return top !== null && Math.abs(top) < 2;
+  }
+
   /** The page scrolls: its scroll event fires at the document. */
   function pageScroll(at: number): void {
     el.scrollTop = at;
@@ -292,7 +307,7 @@ describe('ChatVirtualizer on the page scroller: rotation', () => {
       rowHeight: PORTRAIT_ROW,
       browserScrollTop: 50 * ROW * (PORTRAIT_ROW / ROW),
     });
-    expect(Math.abs(topRow() - 50)).toBeLessThanOrEqual(1);
+    expect(isAtTop(50)).toBe(true);
   });
 
   it('keeps the row that was at the top of the view after a rotation to portrait, when the browser keeps scrollTop', async () => {
@@ -301,7 +316,7 @@ describe('ChatVirtualizer on the page scroller: rotation', () => {
     pageScroll(50 * ROW);
     await nextFrame();
     await rotate({viewHeight: 700, rowHeight: PORTRAIT_ROW});
-    expect(Math.abs(topRow() - 50)).toBeLessThanOrEqual(1);
+    expect(isAtTop(50)).toBe(true);
   });
 
   it('keeps the row that was at the top of the view after a rotation back to landscape', async () => {
@@ -314,13 +329,59 @@ describe('ChatVirtualizer on the page scroller: rotation', () => {
       rowHeight: PORTRAIT_ROW,
       browserScrollTop: 50 * PORTRAIT_ROW,
     });
-    const portraitTop = topRow();
+    expect(isAtTop(50)).toBe(true);
     await rotate({
       viewHeight: 400,
       rowHeight: ROW,
       browserScrollTop: Math.round(el.scrollTop * (ROW / PORTRAIT_ROW)),
     });
-    expect(Math.abs(topRow() - portraitTop)).toBeLessThanOrEqual(1);
+    expect(isAtTop(50)).toBe(true);
+  });
+
+  it('keeps the row at the top when Safari writes its scroll position after the pass settles', async () => {
+    render(list(rows(200)));
+    await settled();
+    pageScroll(50 * ROW);
+    await nextFrame();
+    await rotate({viewHeight: 700, rowHeight: PORTRAIT_ROW});
+    expect(isAtTop(50)).toBe(true);
+    // Safari's last scroll write of the rotation lands after the pass has
+    // settled.
+    await settled();
+    pageScroll(el.scrollTop + 125);
+    await nextFrame();
+    await nextFrame();
+    expect(isAtTop(50)).toBe(true);
+  });
+
+  it('keeps the row at the top when Safari scrolls before the resize event', async () => {
+    render(list(rows(200)));
+    await settled();
+    pageScroll(50 * ROW);
+    await nextFrame();
+    // The viewport is already portrait when Safari's scroll event arrives,
+    // and the resize event follows it.
+    viewHeight = 700;
+    rowHeight = PORTRAIT_ROW;
+    pageScroll(50 * PORTRAIT_ROW + 300);
+    await rotate({viewHeight: 700, rowHeight: PORTRAIT_ROW});
+    expect(isAtTop(50)).toBe(true);
+  });
+
+  it('follows a wheel scroll right after a rotation', async () => {
+    render(list(rows(200)));
+    await settled();
+    pageScroll(50 * ROW);
+    await nextFrame();
+    await rotate({viewHeight: 700, rowHeight: PORTRAIT_ROW});
+    const before = topRow();
+    act(() => {
+      el.dispatchEvent(new Event('wheel'));
+    });
+    pageScroll(el.scrollTop + 10 * PORTRAIT_ROW);
+    await nextFrame();
+    await nextFrame();
+    expect(topRow()).toBeGreaterThanOrEqual(before + 9);
   });
 
   it('keeps following the end through a rotation to landscape', async () => {
