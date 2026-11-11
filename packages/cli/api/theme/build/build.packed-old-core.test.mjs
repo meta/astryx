@@ -44,6 +44,7 @@ import {
   tarballFiles,
 } from '../../../test-utils/global-local-fixtures.mjs';
 import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
+import {PREPACK_FILES} from '../../../test-utils/pack-cli.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../../../..');
@@ -1184,7 +1185,14 @@ afterAll(() => {
 describe('the packed CLI fixture', () => {
   it("holds the CLI's packed files, three asset folders as links", () => {
     const cli = path.join(root, 'node_modules/@astryxdesign/cli');
-    const published = tarballFiles(cliTarball());
+    // A linked folder is the checkout's, which holds none of what `prepack`
+    // writes into it (the fixture's CLI then reads its sources instead).
+    const prepackInLinked = new Set(
+      PREPACK_FILES.map(({file}) => file).filter(inLinkedFolder),
+    );
+    const published = tarballFiles(cliTarball()).filter(
+      file => !prepackInLinked.has(file),
+    );
     const unresolved = published.filter(
       file => !fs.existsSync(path.join(cli, file)),
     );
