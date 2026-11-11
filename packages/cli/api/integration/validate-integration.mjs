@@ -41,7 +41,11 @@ import {
   iconSetIssues,
 } from '../../foundation/discovery/icon-set-checks.mjs';
 import {olderCliNotes} from '../../foundation/discovery/doc-stability.mjs';
-import {templateIconNotes} from '../../foundation/discovery/template-icon-notes.mjs';
+import {templateIconMeanings} from '../../foundation/discovery/template-icon-meanings.mjs';
+import {
+  templateIconNotes,
+  templateIconUndeclaredNotes,
+} from '../../foundation/discovery/template-icon-notes.mjs';
 import {integrationDocConsistency} from '../../foundation/discovery/doc-consistency.mjs';
 import {
   integrationDocCommands,
@@ -123,6 +127,8 @@ export {validateLoadedIntegration, isListedIssue};
  * @property {import('../../foundation/discovery/doc-stability.mjs').OlderCliNote[]} [olderCliNotes]
  * @property {import('./validate-integration.type.mjs').PublicImportsReport} [publicImports]
  *   what the public-import check could not judge
+ * @property {import('../../foundation/discovery/template-icon-notes.mjs').TemplateIconUnchecked[]} [templateIconsUnchecked]
+ *   the template icon imports the undeclared-icon check could not judge
  */
 
 /**
@@ -498,7 +504,11 @@ async function validateAtPackageDir(
     issues.push(...iconSetIssues(packageDir, loaded, unchecked));
     // Which definitions each set leaves unmapped, and what the checks could
     // not judge: listed, never an issue.
-    result.iconSets = iconSetCoverage(loaded, unchecked);
+    result.iconSets = iconSetCoverage(
+      loaded,
+      unchecked,
+      await templateIconMeanings(),
+    );
   }
   // What the docs say that no reader serves: a prop listed twice, an
   // overlay's text for a prop the doc lacks, an empty or unreachable section,
@@ -554,6 +564,16 @@ async function validateAtPackageDir(
     // with its fix, never an issue (spec:AST-084 FR10).
     const iconNotes = await templateIconNotes(loaded, packageDir);
     if (iconNotes.length > 0) (result.notes ??= []).push(...iconNotes);
+    // An icon a template imports but never declares, in a package whose
+    // templates declare `icons`: a note until the next minor makes it a
+    // warning.
+    const undeclared = await templateIconUndeclaredNotes(loaded, packageDir);
+    if (undeclared.notes.length > 0)
+      (result.notes ??= []).push(
+        ...undeclared.notes.map(note => ({...note, next: true})),
+      );
+    if (undeclared.unchecked.length > 0)
+      result.templateIconsUnchecked = undeclared.unchecked;
   }
 
   return result;
@@ -900,7 +920,10 @@ export async function validateIntegration(pkg, options = {}) {
   if (integration?.docs) {
     notes.push(...(await docCommandNotes(integration)));
     notes.push(
-      ...(await docTargetNotes(integration)).map(note => ({...note, next: true})),
+      ...(await docTargetNotes(integration)).map(note => ({
+        ...note,
+        next: true,
+      })),
     );
   }
   return {
@@ -939,6 +962,18 @@ export async function validateIntegration(pkg, options = {}) {
               status: 'checked',
               findings: [],
               unchecked: examples.unchecked,
+            },
+          }
+        : {}),
+      // Template icon imports the check cannot judge (a name-only match, a
+      // generic renderer, or an import not used as an icon): listed, never
+      // failed on.
+      ...(result.found && result.templateIconsUnchecked
+        ? {
+            templateIcons: {
+              status: 'checked',
+              findings: [],
+              unchecked: result.templateIconsUnchecked,
             },
           }
         : {}),

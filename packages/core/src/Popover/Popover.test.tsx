@@ -954,6 +954,32 @@ describe('Popover', () => {
       }
     });
 
+    it('focuses the first content control in document order, a field before its buttons', () => {
+      render(
+        <Popover
+          content={
+            <div>
+              <input aria-label="URL" />
+              <button type="button">Apply</button>
+              <button type="button">Cancel</button>
+            </div>
+          }
+          label="Link">
+          <button type="button">Open link</button>
+        </Popover>,
+      );
+
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: 'Open link'}), {
+          detail: 1,
+        });
+      });
+
+      expect(
+        screen.getByRole('textbox', {name: 'URL', hidden: true}),
+      ).toHaveFocus();
+    });
+
     it('still focuses the content when the opening handler swaps it in', async () => {
       function Swapped() {
         const [mode, setMode] = useState<'view' | 'edit'>('view');

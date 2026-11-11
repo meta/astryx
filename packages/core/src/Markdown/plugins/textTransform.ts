@@ -18,6 +18,7 @@ import {
   getMarkdownHelperOwnership,
   adoptMarkdownHelperNode,
   adoptMarkdownHelperNodes,
+  normalizeAstDestinations,
   markMarkdownTransformClaim,
   markMarkdownTransformTrusted,
   type MarkdownExtensionNode,
@@ -233,8 +234,8 @@ function replaceTextNode<Node extends MarkdownExtensionNode>(
       adoptMarkdownHelperNodes(adopted, ownership);
       for (const node of adopted) {
         adoptedReplacements.add(node);
+        output.push(normalizeAstDestinations(node));
       }
-      output.push(...adopted);
     } else {
       // One node is the overwhelmingly common reply, and it is worth its
       // own path: wrapping it in an array to share the loop above would
@@ -246,7 +247,8 @@ function replaceTextNode<Node extends MarkdownExtensionNode>(
         : single;
       adoptMarkdownHelperNode(adopted, ownership);
       adoptedReplacements.add(adopted);
-      output.push(adopted);
+      // A callback may author a link or an image; store its URL normalized.
+      output.push(normalizeAstDestinations(adopted));
     }
     cursor = resolvedEnd;
     pattern.lastIndex =

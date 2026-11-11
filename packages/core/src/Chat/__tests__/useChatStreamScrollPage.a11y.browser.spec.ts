@@ -105,9 +105,9 @@ async function restingTop(page: Page) {
   return last;
 }
 
-async function scrollPageUp(page: Page) {
+async function scrollPageUp(page: Page, distance = 600) {
   await page.mouse.move(200, 200);
-  await page.mouse.wheel(0, -600);
+  await page.mouse.wheel(0, -distance);
   await expect
     .poll(async () => pageGap(page), {timeout: SETTLE_TIMEOUT_MS})
     .toBeGreaterThan(100);
@@ -153,4 +153,22 @@ test('leaves a reader who scrolled up in place when messages arrive', async ({
   await page.waitForTimeout(300);
   const after = await page.evaluate(() => document.documentElement.scrollTop);
   expect(Math.abs(after - before)).toBeLessThanOrEqual(1);
+});
+
+test('puts a message at the top of the viewport with scrollToMessage', async ({
+  page,
+}) => {
+  // A reader's scroll, not a script's. A script's scroll can land between two
+  // frames of the opening follow, which then takes the page back to its end.
+  await scrollPageUp(page, 1300);
+  await page.getByRole('button', {name: 'Scroll to the message'}).click();
+  await expect
+    .poll(
+      async () =>
+        page
+          .locator('[data-message]')
+          .evaluate(element => Math.round(element.getBoundingClientRect().top)),
+      {timeout: SETTLE_TIMEOUT_MS},
+    )
+    .toBe(0);
 });

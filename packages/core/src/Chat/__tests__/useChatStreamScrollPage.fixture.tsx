@@ -15,19 +15,31 @@ import {useChatStreamScroll} from '../useChatStreamScroll';
 
 function App() {
   const scrollRef = useRef<HTMLElement>(document.documentElement);
-  const {scrollIfLocked, isLocked, isScrolledUp} = useChatStreamScroll({
-    scrollRef,
-  });
+  const {scrollIfLocked, scrollToMessage, isLocked, isScrolledUp} =
+    useChatStreamScroll({scrollRef});
+  const messageRef = useRef<HTMLDivElement>(null);
   const [extra, setExtra] = useState(0);
   useEffect(() => scrollIfLocked(), [extra, scrollIfLocked]);
   return (
     <main style={{paddingBlockEnd: 64}}>
-      <div style={{height: 2400}}>Earlier messages</div>
+      <div style={{height: 1200}}>Earlier messages</div>
+      <div ref={messageRef} data-message style={{height: 1200}}>
+        A message to scroll to
+      </div>
       <div>Latest message</div>
       {extra > 0 && <div style={{height: extra}}>New messages</div>}
       <div style={{position: 'fixed', insetInline: 0, bottom: 0}}>
         <button type="button" onClick={() => setExtra(value => value + 400)}>
           Append messages
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (messageRef.current) {
+              scrollToMessage(messageRef.current);
+            }
+          }}>
+          Scroll to the message
         </button>
         <output
           data-locked={String(isLocked)}

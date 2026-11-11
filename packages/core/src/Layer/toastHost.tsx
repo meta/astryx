@@ -16,6 +16,7 @@
  */
 
 import {
+  createContext,
   use,
   useEffect,
   useState,
@@ -26,6 +27,7 @@ import {
 import type {ToastDismissReason, ToastEntry} from '../Toast/types';
 import type {LayerInset, LayerToastConfig} from './LayerContext';
 import {createSharedContext} from '../utils/sharedContext';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 
 /** Internal context value for toast state management. */
 export interface ToastContextValue {
@@ -78,8 +80,27 @@ export interface ToastHostProps {
   children?: ReactNode;
 }
 
-let registeredHost: ComponentType<ToastHostProps> | null = null;
-const hostListeners = new Set<() => void>();
+interface ToastHostRegistry {
+  host: ComponentType<ToastHostProps> | null;
+  readonly listeners: Set<() => void>;
+}
+
+// Every copy of Core on this React uses one registry, so a swizzled
+// LayerProvider renders the viewport the package's Toast registers. The
+// registry holds a component, so a copy on another React keeps its own.
+const hostRegistry = (() => {
+  const byReact = realmValue(
+    sharedKey('layer/toast-host', 1),
+    () => new WeakMap<typeof createContext, ToastHostRegistry>(),
+    value => value instanceof WeakMap,
+  );
+  let registry = byReact.get(createContext);
+  if (registry == null) {
+    registry = {host: null, listeners: new Set()};
+    byReact.set(createContext, registry);
+  }
+  return registry;
+})();
 
 /**
  * Registers the toast viewport, which every LayerProvider renders from then
@@ -87,23 +108,28 @@ const hostListeners = new Set<() => void>();
  * imports Toast carries none of it.
  */
 export function registerToastHost(host: ComponentType<ToastHostProps>): void {
-  if (registeredHost === host) {
+  if (hostRegistry.host === host) {
     return;
   }
-  registeredHost = host;
-  for (const listener of hostListeners) {
+  hostRegistry.host = host;
+  for (const listener of hostRegistry.listeners) {
     listener();
   }
 }
 
+/** Test-only: forget the registered viewport, as on a fresh page. */
+export function __resetToastHostForTest(): void {
+  hostRegistry.host = null;
+}
+
 function subscribeToHost(listener: () => void): () => void {
-  hostListeners.add(listener);
+  hostRegistry.listeners.add(listener);
   return () => {
-    hostListeners.delete(listener);
+    hostRegistry.listeners.delete(listener);
   };
 }
 
-const readHost = () => registeredHost;
+const readHost = () => hostRegistry.host;
 // The server and the hydrating render show no viewport. The viewport has
 // nothing to show there, and it mounts right after hydration.
 const readNoHost = () => null;
