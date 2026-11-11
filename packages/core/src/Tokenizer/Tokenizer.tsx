@@ -1133,41 +1133,37 @@ export function Tokenizer<T extends SearchableItem>({
   // A finger's tap on a token's remove button with the keyboard down keeps
   // focus out of the field. Chrome focuses a pressed button on the tap's
   // compatibility mouse events. That focus would expand an `unfocusedInline`
-  // field and remount the control under the finger. Cancelling the press's
-  // focus, as InputClearButton does, leaves the field as it was. The tap's
-  // click still removes the token. Custom `renderToken` controls and
-  // `endContent` keep the default focus rules. Only a finger's press arms the
-  // stop: a pen's press keeps the default, as a mouse's does.
+  // field and remount the control under the finger. Cancelling it, as
+  // InputClearButton does, leaves the field as it was. The stop sees every
+  // press, so a press that turns into a scroll leaves no arm behind.
   const {onPointerDown: armTapStop, onMouseDown: stopTap} =
     useTapStop('mousedown');
   const handlePointerDownCapture = useCallback(
     (e: React.PointerEvent) => {
-      const press = {
+      armTapStop(e);
+      lastPressRef.current = {
         inputHadFocus:
           inputRef.current != null &&
           inputRef.current.ownerDocument.activeElement === inputRef.current,
         isFinger: e.pointerType === 'touch',
         pressedTokenRemove: removeControlOf(e.target),
       };
-      lastPressRef.current = press;
-      if (
-        press.isFinger &&
-        press.pressedTokenRemove != null &&
-        !press.inputHadFocus
-      ) {
-        armTapStop(e);
-      }
     },
     [armTapStop],
   );
   const handleMouseDownCapture = useCallback(
     (e: React.MouseEvent) => {
-      if (removeControlOf(e.target) != null) {
+      if (removeControlOf(e.target) != null && wasKeyboardDown()) {
         stopTap(e);
       }
     },
-    [stopTap],
+    [stopTap, wasKeyboardDown],
   );
+  // The press record ends with its tap: after the click's task, or when the
+  // browser takes the press over for a scroll.
+  const endPress = useCallback(() => {
+    lastPressRef.current = null;
+  }, []);
   // `adaptive` resolves through the policy the selection controls share. An
   // open sheet keeps its presentation until it closes. A resolution change
   // during a task does not replace the open surface.
@@ -1939,7 +1935,16 @@ export function Tokenizer<T extends SearchableItem>({
             }
           }, 0);
         }
+        const press = lastPressRef.current;
+        if (press != null) {
+          setTimeout(() => {
+            if (lastPressRef.current === press) {
+              endPress();
+            }
+          }, 0);
+        }
       }}
+      onPointerCancelCapture={endPress}
       onFocusCapture={handleFocusCapture}
       onBlurCapture={handleBlurCapture}
       // Keys on the field's other controls (clear button, tokens) reach a

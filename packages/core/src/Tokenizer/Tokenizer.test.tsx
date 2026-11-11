@@ -462,6 +462,43 @@ describe('Tokenizer', () => {
       expect(fireEvent.mouseDown(remove)).toBe(true);
     });
 
+    it('focuses the input when a script activates another token’s × after a finger removal', async () => {
+      const {input} = renderPair();
+      const alice = screen.getByRole('button', {name: 'Remove Alice'});
+      const bob = screen.getByRole('button', {name: 'Remove Bob'});
+      fireEvent.pointerDown(alice, {pointerType: 'touch'});
+      fireEvent.click(alice);
+      // The tap's record ends with its click's task.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      act(() => bob.focus());
+      fireEvent.click(bob, {detail: 0});
+      expect(input).toHaveFocus();
+    });
+
+    it('leaves a mouse’s and a pen’s press on a token’s × alone after a finger press on a × turns into a scroll', () => {
+      const {remove} = renderPair();
+      const bob = screen.getByRole('button', {name: 'Remove Bob'});
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.pointerCancel(remove, {pointerType: 'touch'});
+      fireEvent.pointerDown(bob, {pointerType: 'mouse'});
+      expect(fireEvent.mouseDown(bob)).toBe(true);
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.pointerCancel(remove, {pointerType: 'touch'});
+      fireEvent.pointerDown(bob, {pointerType: 'pen'});
+      expect(fireEvent.mouseDown(bob)).toBe(true);
+    });
+
+    it('moves a script’s focus on a token’s × to the input after a finger press turns into a scroll', () => {
+      const {input, remove} = renderPair();
+      const bob = screen.getByRole('button', {name: 'Remove Bob'});
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.pointerCancel(remove, {pointerType: 'touch'});
+      act(() => bob.focus());
+      expect(input).toHaveFocus();
+    });
+
     it('keeps the input focused after a finger removes a token while typing', () => {
       const {input, remove} = renderPair();
       act(() => input.focus());
