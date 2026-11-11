@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The type check of one `set` or `reset`: the part, the variant, the
+ * @file The type check of one `set` or `undo <theme> <thing>`: the part, the variant, the
  * state, the mode, the token's type, and whether the part (or anything in
  * it) reads the token. A change that cannot take effect is refused, and the
  * refusal leads with the command that works. Also `how`, which answers a
@@ -26,6 +26,7 @@ import {
   HEADING_WEIGHTS,
   INTENTS,
   LIKE,
+  HOW,
   P,
   PART_WORDS,
   SPACING,
@@ -35,6 +36,13 @@ import {
 } from './_tables.mjs';
 import {isColorValue, isNumber, isSize} from './_color.mjs';
 import {MODAL} from './_compiler.mjs';
+import {
+  PALETTE_DIALS,
+  PALETTE_TOKENS,
+  VIBRANCY_DEFAULT,
+  paletteToken,
+  seedOf,
+} from './_palette.mjs';
 import {
   camel,
   kebab,
@@ -89,7 +97,7 @@ function checkTypedValue(type, value, name) {
  * @param {string} thing
  * @param {string | undefined} value
  * @param {SetFlags} flags
- * @param {boolean} [unset] a reset: only the identity of the setting is checked
+ * @param {boolean} [unset] an undo of one setting: only the identity of the setting is checked
  * @returns {import('./_settings.mjs').Setting}
  */
 export function checkSetting(
@@ -106,7 +114,7 @@ export function checkSetting(
   const TOKENS = ctx.project.core.tokenDefaults;
   if (!thing)
     refuse(E.ERR_MISSING_ARGUMENT, 'Name the thing to change.', {
-      run: [`${P} ${unset ? 'reset' : 'set'} --help`],
+      run: [`${P} ${unset ? 'undo' : 'set'} --help`],
     });
   if (!unset && (value === undefined || value === ''))
     refuse(E.ERR_MISSING_ARGUMENT, `Give a value for ${thing}.`, {
@@ -136,23 +144,25 @@ export function checkSetting(
     );
   if ((s.when || s.state) && !s.on)
     refuse(E.ERR_MISSING_ARGUMENT, '--when and --state need --on <part>.', {
-      run: [`${P} explain <part>`],
+      run: [`${HOW} <part>`],
     });
   if (s.only) {
     const fam = s.on ? familyOf(s.on) : null;
     if (!fam || FAMILIES[/** @type {string} */ (s.on)])
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        '--only is for one member of a family, such as text-input (explain --list families).',
-        {run: [`${P} explain --list families`]},
+        '--only is for one member of a group, such as text-input (how --list groups).',
+        {run: [`${HOW} --list groups`]},
       );
     if (!AUTO_SPREAD.includes(/** @type {string} */ (fam)))
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        `${s.on} is styled on its own already: only ${AUTO_SPREAD.join(' and ')} spread to their family, so drop --only.`,
+        `${s.on} is styled on its own already: only ${AUTO_SPREAD.join(' and ')} spread to their group, so drop --only.`,
         {
           run: [
-            `${P} ${unset ? 'reset' : 'set'} ${slug} ${thing} ${q(v)} --on ${s.on}`,
+            unset
+              ? `${P} undo ${slug} ${thing}${v ? ` ${q(v)}` : ''} --on ${s.on}`
+              : `${P} set ${slug} ${thing} ${q(v)} --on ${s.on}`,
           ],
         },
       );
@@ -171,8 +181,8 @@ export function checkSetting(
             ...Object.keys(FAMILIES),
           ]),
           run: [
-            `${P} explain ${s.on.split('-')[0]} --list parts`,
-            `${P} explain "${s.on}"`,
+            `${HOW} ${s.on.split('-')[0]} --list parts`,
+            `${HOW} "${s.on}"`,
           ],
         },
       );
@@ -183,20 +193,20 @@ export function checkSetting(
         refuse(
           E.ERR_THEME_BAD_VALUE,
           '--when takes <prop>:<value>, such as variant:primary.',
-          {run: [`${P} explain ${s.on}`]},
+          {run: [`${HOW} ${s.on}`]},
         );
       if (!t.props.includes(p))
         refuse(
           E.ERR_THEME_UNKNOWN_VARIANT,
           `${s.on} has no prop "${p}". It has: ${t.props.join(', ') || 'none'}.`,
-          {didYouMean: nearest(p, t.props), run: [`${P} explain ${s.on}`]},
+          {didYouMean: nearest(p, t.props), run: [`${HOW} ${s.on}`]},
         );
       const vals = C.variantValues(s.on)[p] ?? [];
       if (vals.length && !vals.includes(wv))
         refuse(
           E.ERR_THEME_UNKNOWN_VARIANT,
           `${s.on} has no ${p} "${wv}". ${p} is one of: ${vals.join(', ')}.`,
-          {didYouMean: nearest(wv, vals), run: [`${P} explain ${s.on}`]},
+          {didYouMean: nearest(wv, vals), run: [`${HOW} ${s.on}`]},
         );
     }
     const states = [...t.states, ...COMMON_STATES];
@@ -288,7 +298,19 @@ export function checkSetting(
         Math.max(0, Math.min(L.length - 1, i + (v === 'more' ? 1 : -1)))
       ][0];
     };
-    if (s.mode && thing !== 'accent')
+    if (PALETTE_DIALS.includes(thing) && (s.on || s.mode)) {
+      const token = paletteToken(thing);
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${thing} generates the colors of the whole theme, light and dark from one color; drop ${s.on ? '--on' : '--mode'}. For an exact color on one part or in one mode, set the token itself.`,
+        {
+          run: [
+            `${P} set ${slug} ${token} ${q(v || '#7c3aed')}${onFlag}${s.mode ? ` --mode ${s.mode}` : ''}`,
+          ],
+        },
+      );
+    }
+    if (s.mode)
       refuse(
         E.ERR_THEME_NO_MODE,
         `${thing} is not a color, so it is the same in light and dark; drop --mode.`,
@@ -334,15 +356,55 @@ export function checkSetting(
           E.ERR_THEME_BAD_VALUE,
           `text-size takes ${DIALS['text-size'].values}, not "${v}".`,
         );
-    } else if (thing === 'accent') {
+    } else if (PALETTE_DIALS.includes(thing)) {
       if (step)
-        refuse(E.ERR_THEME_BAD_VALUE, 'accent takes a color, not a step.', {
-          run: [`${P} set ${slug} accent "#7c3aed"`],
+        refuse(E.ERR_THEME_BAD_VALUE, `${thing} takes a color, not a step.`, {
+          run: [`${P} set ${slug} ${thing} "#7c3aed"`],
         });
       if (!isColorValue(v))
         refuse(E.ERR_THEME_BAD_VALUE, `"${v}" is not a CSS color.`, {
           fix: 'give one like "#7c3aed"',
         });
+      if (!seedOf(v))
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${v}" has no fixed color, so no shades can be generated from it.`,
+          {
+            fix: 'give a hex, a color name, or an rgb(), hsl(), hwb(), lab(), lch(), oklab() or oklch() color',
+          },
+        );
+    } else if (thing === 'vibrancy') {
+      if (s.on)
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          'vibrancy applies to every generated color of the theme; drop --on.',
+          {run: [`${P} set ${slug} vibrancy ${q(v)}`]},
+        );
+      if (step) {
+        const cur = Number(
+          [...data.settings].reverse().find(x => x.thing === 'vibrancy')
+            ?.value ?? VIBRANCY_DEFAULT,
+        );
+        s.value = String(
+          Math.max(0, Math.min(100, cur + (v === 'more' ? 10 : -10))),
+        );
+      } else if (!/^\d{1,3}$/.test(v) || Number(v) > 100)
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `vibrancy takes a whole number from 0 (gray) to 100 (most vivid), or more or less, not "${v}".`,
+          {run: [`${P} set ${slug} vibrancy 60`]},
+        );
+      else s.value = String(Number(v));
+      if (
+        !data.settings.some(
+          x => x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
+        )
+      )
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          'vibrancy sets how saturated the generated colors are, and this theme sets no color yet. Set one first.',
+          {run: [`${P} set ${slug} accent "#7c3aed"`]},
+        );
     } else if (thing === 'font') {
       if (s.on && !isRole)
         refuse(
@@ -390,13 +452,13 @@ export function checkSetting(
       refuse(
         E.ERR_THEME_PRIVATE_TOKEN,
         `"${thing}" is private to a component; themes cannot set it.`,
-        {run: [`${P} explain "<what you want>"`]},
+        {run: [`${HOW} "<what you want>"`]},
       );
     if (!(thing in TOKENS)) {
       refuse(E.ERR_THEME_UNKNOWN_TOKEN, `"${thing}" is not a design token.`, {
         didYouMean: nearest(thing, Object.keys(TOKENS)),
         run: [
-          `${P} explain ${thing.replace(/^--(color-)?/, '').split('-')[0]} --list tokens`,
+          `${HOW} ${thing.replace(/^--(color-)?/, '').split('-')[0]} --list tokens`,
         ],
       });
     }
@@ -415,6 +477,8 @@ export function checkSetting(
         `"more"/"less" work only on dials (${Object.keys(DIALS).join(', ')}). Give ${thing} a ${type} value.`,
       );
     checkTypedValue(type, v, thing);
+    // With no part data, what reads the token is unknown: save, unchecked.
+    if (ctx.unchecked) return s;
     const parts = partsOf(ctx, s);
     if (parts.length) {
       const results = parts.map(
@@ -429,8 +493,8 @@ export function checkSetting(
       const spread = Boolean(
         FAMILIES[s.on ?? ''] || (familyOf(s.on ?? '') && parts.length > 1),
       );
-      // A part with no record is judged by its family: refused when no
-      // member that has a record reads the token, as the family form is.
+      // A part with no record is judged by its group: refused when no
+      // member that has a record reads the token, as the group form is.
       const fam = s.on ? familyOf(s.on) : null;
       if (!recorded.length && fam && !spread) {
         const siblings = FAMILIES[fam].filter(t => C.MAP[t]);
@@ -447,7 +511,7 @@ export function checkSetting(
           );
           refuse(
             E.ERR_THEME_NO_EFFECT,
-            `No part of the ${fam} family reads ${thing}, so ${s.on} cannot either. ${r.message}`,
+            `No part of the ${fam} group reads ${thing}, so ${s.on} cannot either. ${r.message}`,
             {
               run: r.run.map(x =>
                 x.replace(`--on ${famResults[0][0]}`, `--on ${s.on}`),
@@ -457,7 +521,7 @@ export function checkSetting(
           );
         }
         if (famResults.length)
-          s.note = `${s.on} has no compiled record; checked against the ${fam} family, where ${famResults
+          s.note = `${s.on} has no compiled record; checked against the ${fam} group, where ${famResults
             .filter(([, r]) => !r)
             .map(([t]) => t)
             .join(', ')} read ${thing}`;
@@ -485,7 +549,11 @@ export function checkSetting(
         ).message;
     } else {
       const r = C.checkTokenGlobal(thing, P);
-      if (r)
+      // A token a dial writes is always accepted, so a dial's notes never
+      // name a token `set` refuses.
+      if (r && dialWrites(thing))
+        s.note = `no part reads ${thing} directly in this Core; a dial writes it too, so it is set as asked`;
+      else if (r)
         refuse(E.ERR_THEME_NO_EFFECT, r.message, {run: r.run, also: r.also});
     }
     return s;
@@ -495,11 +563,11 @@ export function checkSetting(
     if (!s.on)
       refuse(
         E.ERR_MISSING_ARGUMENT,
-        `${prop} is a CSS property, so it needs --on <part|family>. For the whole theme use a dial or a token.`,
+        `${prop} is a CSS property, so it needs --on <part|group>. For the whole theme use a dial or a token.`,
         {
           run: [
             `${P} set ${slug} ${prop} ${q(v || '<value>')} --on <part>`,
-            `${P} explain "${prop}"`,
+            `${HOW} "${prop}"`,
           ],
         },
       );
@@ -567,7 +635,7 @@ export function checkSetting(
     {
       run: hint
         ? hint(v, s.on)
-        : [`${P} explain "${thing}${s.on ? ` on ${s.on}` : ''}"`],
+        : [`${HOW} "${thing}${s.on ? ` on ${s.on}` : ''}"`],
       didYouMean: hint
         ? []
         : nearest(prop, [...Object.keys(DIALS), ...CSS_PROPERTIES]),
@@ -583,6 +651,7 @@ export function checkSetting(
  * @param {import('./_settings.mjs').Setting} s
  */
 function refuseInvisibleCorners(ctx, slug, s) {
+  if (ctx.unchecked) return;
   const parts = partsOf(ctx, s);
   if (!parts.length || parts.some(t => ctx.C.showsCorners(t))) return;
   const kids = (ctx.C.MAP[parts[0]]?.contains ?? [])
@@ -596,10 +665,22 @@ function refuseInvisibleCorners(ctx, slug, s) {
         ? kids.map(
             k => `${P} set ${slug} corners ${q(s.value || 'round')} --on ${k}`,
           )
-        : [`${P} explain ${s.on}`],
+        : [`${HOW} ${s.on}`],
     },
   );
 }
+
+/**
+ * Whether a dial writes the token: a color, a heading weight (type,
+ * headings), a radius (corners), a spacing or control size (spacing), or a
+ * font size (type, text-size).
+ * @param {string} token
+ */
+const dialWrites = token =>
+  PALETTE_TOKENS.has(token) ||
+  /^--(text-(heading|display)-\d-weight|radius-|spacing-|size-element-|font-size-)/.test(
+    token,
+  );
 
 /**
  * Answer a plain-words question with exact commands: the parts it names,
@@ -613,22 +694,38 @@ export function answerHow(ctx, question) {
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
   const text = question.toLowerCase();
-  /** @type {string[]} */
-  const parts = [];
-  for (const [re, ts] of PART_WORDS)
-    if (re.test(text))
-      for (const t of ts) if (!parts.includes(t)) parts.push(t);
   /** @type {Array<string | null>} */
   let intents = INTENTS.filter(([, re]) => re.test(text)).map(([g]) => g);
+  // "pill" is a corner shape when the question is about corners.
+  const partText = intents.includes('corners')
+    ? text.replace(/\bpills?\b/g, '')
+    : text;
+  /** @type {string[]} */
+  let parts = [];
+  for (const [re, ts] of PART_WORDS)
+    if (re.test(partText))
+      for (const t of ts) if (!parts.includes(t)) parts.push(t);
+  // A variant of a part ("secondary button") answers for the part.
+  parts = parts.filter(p => !parts.some(x => x.startsWith(`${p}:`)));
+  const whiteText =
+    /\bwhite (text|labels?|writing|words)\b|\b(text|labels?|writing|words) (in |is |are )?white\b/.test(
+      text,
+    );
   if (
     intents.includes('text') &&
     intents.includes('background') &&
-    !/background|fill|gradient|glossy/.test(text)
+    !/background|fill|gradient|glossy/.test(text) &&
+    !(/\bwhite\b/.test(text) && !whiteText)
   )
     intents = intents.filter(g => g !== 'background');
   if (!intents.length && parts.length) intents = [null];
   const design = Object.keys(DESIGN).filter(w => text.includes(w));
   const tracking = /letter ?spacing|tracking|kerning/.test(text);
+  // Letter spacing is a font answer, so a spacing intent it raised goes.
+  if (tracking && intents.includes('font'))
+    intents = intents.filter(g => g !== 'spacing');
+  const weight = /\b(bold|weight|heav\w*|light(er)?|thin)\b/.test(text);
+  const px = /\b(\d+(?:\.\d+)?px)\b/.exec(text)?.[1];
   /** @type {Array<{text: string, commands: string[]}>} */
   const results = [];
   /** @param {string | null} g */
@@ -642,14 +739,33 @@ export function answerHow(ctx, question) {
     if (g === 'font' && tracking)
       return /tight/.test(text) ? '-0.02em' : '0.04em';
     if (g === 'font' && /bold|heav/.test(text)) return '700';
-    if (g === 'text' && /white/.test(text)) return '"#ffffff"';
+    if (g === 'font' && /\b(light(er)?|thin)\b/.test(text)) return '300';
+    if (g === 'text' && whiteText) return '"#ffffff"';
+    if (g === 'text' && /\baccent (text|labels?)\b/.test(text))
+      return '"var(--color-text-accent)"';
+    if (g === 'background' && /\bwhite\b/.test(text) && !whiteText)
+      return '"#ffffff"';
     return '<value>';
   };
   for (const raw of parts.slice(0, 3)) {
-    const [part, wp, wv] = raw.split(':');
-    const when = wp ? ` --when ${wp}:${wv}` : '';
+    let [part, wp, wv] = raw.split(':');
+    const named = Boolean(wp);
     const one = FAMILIES[part] ? FAMILIES[part][0] : part;
     if (!TARGET.has(one)) continue;
+    // A size in the question ("small buttons") is a --when condition.
+    if (!wp) {
+      const sizes = C.variantValues(one).size ?? [];
+      const word = /\b(small|sm)\b/.test(text)
+        ? ['sm', 'small']
+        : /\b(large|lg|big)\b/.test(text)
+          ? ['lg', 'large']
+          : /\b(medium|md)\b/.test(text)
+            ? ['md', 'medium']
+            : [];
+      const hit = word.find(w => sizes.includes(w));
+      if (hit) [wp, wv] = ['size', hit];
+    }
+    const when = wp ? ` --when ${wp}:${wv}` : '';
     // A part with variants: a change without --when reaches every variant.
     const variants = Object.entries(C.variantValues(one)).filter(
       ([p, vals]) =>
@@ -658,17 +774,52 @@ export function answerHow(ctx, question) {
     for (const g of intents.slice(0, 3)) {
       if (g === null) {
         results.push({
-          text: `what ${one} reads:`,
-          commands: C.explain(one, P).slice(1),
+          text: `what ${one} reads`,
+          commands: [`${HOW} ${one}`],
         });
         continue;
+      }
+      if (g === 'corners' && !named) {
+        // Each clause with its own size ("small 6px, large stay pill").
+        const sizes = C.variantValues(one).size ?? [];
+        const clauses = text
+          .split(/,|;|\bbut\b|\band\b/)
+          .map(c => {
+            const size = /\b(small|sm)\b/.test(c)
+              ? 'sm'
+              : /\b(large|lg|big)\b/.test(c)
+                ? 'lg'
+                : /\b(medium|md)\b/.test(c)
+                  ? 'md'
+                  : null;
+            const value =
+              /\b(\d+(?:\.\d+)?px)\b/.exec(c)?.[1] ??
+              (/pill|circ/.test(c)
+                ? 'pill'
+                : /sharp|square/.test(c)
+                  ? 'square'
+                  : null);
+            return {size, value};
+          })
+          .filter(c => c.size && sizes.includes(c.size) && c.value);
+        if (clauses.length > 1) {
+          results.push({
+            text: `corners on ${part}, by size`,
+            commands: clauses.map(c =>
+              /px$/.test(/** @type {string} */ (c.value))
+                ? `${P} set <theme> border-radius ${c.value} --on ${part} --when size:${c.size}`
+                : `${P} set <theme> corners ${c.value} --on ${part} --when size:${c.size}`,
+            ),
+          });
+          continue;
+        }
       }
       if (g === 'corners') {
         results.push({
           text: `corners on ${part}${when ? ` (${wp} ${wv})` : ''}`,
           commands: [
             `${P} set <theme> corners ${/pill|circ/.test(text) ? 'pill' : /sharp|square/.test(text) ? 'square' : 'round'} --on ${part}${when}`,
-            `${P} set <theme> border-radius 6px --on ${part}${when}`,
+            `${P} set <theme> border-radius ${px ?? '6px'} --on ${part}${when}`,
           ],
         });
         continue;
@@ -701,12 +852,24 @@ export function answerHow(ctx, question) {
           text: `room inside ${part}`,
           commands: [
             `${P} set <theme> spacing ${/dense|compact|tight|cramped/.test(text) ? 'compact' : 'roomy'} --on ${part}`,
-            `${P} set <theme> padding 12px --on ${part}${when}`,
+            `${P} set <theme> padding ${px ?? '12px'} --on ${part}${when}`,
           ],
         });
         continue;
       }
       const group = g === 'spacing' ? 'font' : g;
+      if (group === 'font' && tracking && weight)
+        results.push({
+          text: `${part} weight: font-weight on the part${part === 'heading' ? ', or the headings dial for every heading' : ''}`,
+          commands: [
+            `${P} set <theme> font-weight ${/\b(light(er)?|thin)\b/.test(text) ? 300 : 700} --on ${part}${when}`,
+            ...(part === 'heading'
+              ? [
+                  `${P} set <theme> headings ${/\b(light(er)?|thin)\b/.test(text) ? 'light' : 'bold'}`,
+                ]
+              : []),
+          ],
+        });
       const reads = C.partReads(one, group);
       const filtered = wv
         ? reads.filter(
@@ -715,7 +878,22 @@ export function answerHow(ctx, question) {
               r.when.includes(''),
           )
         : reads;
-      const list = (filtered.length ? filtered : reads).slice(0, 4);
+      // Weight and tracking questions name only the tokens for them.
+      const aspect =
+        group === 'font' && tracking
+          ? /letter|tracking/
+          : group === 'font' && weight
+            ? /weight/
+            : null;
+      const fitting = aspect
+        ? (filtered.length ? filtered : reads).filter(r => aspect.test(r.token))
+        : filtered.length
+          ? filtered
+          : reads;
+      // Text with no color token of its own takes the page's text color.
+      const inherited =
+        !fitting.length && group === 'text' ? '--color-text-primary' : null;
+      const list = fitting.slice(0, 4);
       const direct =
         group === 'font' && tracking
           ? 'letter-spacing'
@@ -728,9 +906,12 @@ export function answerHow(ctx, question) {
         (group === 'text' || group === 'background' || group === 'border') &&
         !/gradient|inset/.test(V(group));
       results.push({
-        text: `${part} ${group}${when ? ` (${wp} ${wv})` : ''}: ${list.length ? `comes from ${list.map(r => r.token + C.fmtWhen(r.when) + C.statusNote(one, r.token)).join(', ')}` : 'no token; set the property directly'}`,
+        text: `${part} ${aspect ? (tracking ? 'letter spacing' : 'weight') : group}${when ? ` (${wp} ${wv})` : ''}: ${list.length ? `comes from ${list.map(r => r.token + C.fmtWhen(r.when) + C.statusNote(one, r.token)).join(', ')}` : inherited ? `inherits the page's text color (${inherited} for the whole theme); set the property for this part alone` : 'no token of its own; set the property directly'}`,
         commands: [
           `${P} set <theme> ${direct} ${V(group)} --on ${part}${when}   # direct: always works`,
+          ...(inherited
+            ? [`${P} set <theme> ${inherited} ${V(group)}   # the whole theme`]
+            : []),
           ...(tokenRoute
             ? list
                 .slice(0, 2)
@@ -763,7 +944,7 @@ export function answerHow(ctx, question) {
       if (kids.length && group === 'text') {
         results.push({
           text: `parts inside ${part} with their own text color: ${kids.join(', ')}. A text token set --on ${part} reaches them; a color property does not.`,
-          commands: kids.slice(0, 1).map(k => `${P} explain ${k}`),
+          commands: kids.slice(0, 1).map(k => `${HOW} ${k}`),
         });
       }
     }
@@ -792,12 +973,14 @@ export function answerHow(ctx, question) {
           text: DIALS[dial].help,
           commands: DIALS[dial].examples.map(e => `${P} ${e}`),
         });
+      // Text and background colors come from their tokens first; the brand
+      // color after.
+      results.push(...wholeThemeTokens(ctx, g));
       if (g === 'background' || g === 'text')
         results.push({
           text: DIALS.accent.help,
           commands: DIALS.accent.examples.map(e => `${P} ${e}`),
         });
-      results.push(...wholeThemeTokens(ctx, g));
     }
   }
   if (!results.length) {
@@ -810,10 +993,18 @@ export function answerHow(ctx, question) {
     }
   }
   void TOKENS;
+  const seen = new Set();
   return {
     parts,
     aspects: /** @type {string[]} */ (intents.filter(Boolean)),
-    results: results.slice(0, 10),
+    results: results
+      .filter(r => {
+        const key = `${r.text}\n${r.commands.join('\n')}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 10),
   };
 }
 
@@ -838,5 +1029,5 @@ export function wholeThemeTokens(ctx, aspect) {
   ];
 }
 
-/** The aspects `explain` answers at the whole-theme level. */
+/** The aspects `how` answers at the whole-theme level. */
 export const ASPECTS = [...Object.keys(GROUPS), 'colors'];

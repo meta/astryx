@@ -20,9 +20,10 @@ import {
   afterEach,
 } from 'vitest';
 import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
-import {createRef, Profiler, useState} from 'react';
+import {createRef, Profiler, startTransition, useRef, useState} from 'react';
 import userEvent from '@testing-library/user-event';
-import {Tokenizer} from './Tokenizer';
+import {Tokenizer, type TokenizerHandle} from './Tokenizer';
+import {Typeahead} from '../Typeahead/Typeahead';
 import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
@@ -1230,11 +1231,532 @@ describe('Tokenizer', () => {
       });
       expect(input).toHaveAttribute('aria-expanded', 'true');
 
-      // Select an item
+      // Select an item. The caller does not commit it, so it stays eligible
+      // (component:Tokenizer FR13) and the list keeps its choices.
       fireEvent.click(screen.getByText('Alice'));
       expect(onChange).toHaveBeenCalled();
 
-      // Popover should not reopen with an empty menu after selection
+      // The popover never shows an empty menu after selection.
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.getByRole('option', {name: 'Alice', hidden: true}),
+      ).toBeInTheDocument();
+    });
+  });
+
+  // component:Tokenizer FR14, FR15, AR5: a pick from the focus list keeps the
+  // input focused and the list open while another loaded choice remains.
+  describe('focus list kept open after a pick', () => {
+    const NO_MEMBERS: SearchableItem[] = [];
+    function Members({
+      initial = NO_MEMBERS,
+      maxEntries,
+      source,
+    }: {
+      initial?: SearchableItem[];
+      maxEntries?: number;
+      source: SearchSource;
+    }) {
+      const [value, setValue] = useState(initial);
+      const [isDisabled, setIsDisabled] = useState(false);
+      return (
+        <>
+          <Tokenizer
+            label="Members"
+            searchSource={source}
+            value={value}
+            onChange={setValue}
+            hasEntriesOnFocus
+            maxEntries={maxEntries}
+            isDisabled={isDisabled}
+            debounceMs={0}
+          />
+          <button type="button">Elsewhere</button>
+          <button type="button" onClick={() => setIsDisabled(true)}>
+            Disable
+          </button>
+        </>
+      );
+    }
+    function countingSource() {
+      const bootstrap = vi.fn(() => users.slice(0, 3));
+      return {bootstrap, source: {search: userSource.search, bootstrap}};
+    }
+    const option = (name: string) =>
+      screen.queryByRole('option', {name, hidden: true});
+    function activeOptionName(input: HTMLElement): string | null {
+      const id = input.getAttribute('aria-activedescendant');
+      return id == null
+        ? null
+        : (document.getElementById(id)?.textContent ?? null);
+    }
+    async function openFocusList(user: ReturnType<typeof userEvent.setup>) {
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await waitFor(() => {
+        expect(option('Charlie')).toBeInTheDocument();
+      });
+      return input;
+    }
+
+    it('keeps focus and the list after a pointer pick, makes the next choice active, and does not fetch again', async () => {
+      const user = userEvent.setup();
+      const {bootstrap, source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+      expect(bootstrap).toHaveBeenCalledTimes(1);
+
+      await user.click(option('Bob')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(
+        screen.getByRole('button', {name: 'Remove Bob'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(option('Bob')).not.toBeInTheDocument();
+      expect(option('Alice')).toBeInTheDocument();
+      expect(activeOptionName(input)).toBe('Charlie');
+      expect(bootstrap).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the list open through picks in a row by pointer, until no choice remains', async () => {
+      const user = userEvent.setup();
+      const {bootstrap, source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Bob');
+
+      await user.click(option('Bob')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Charlie');
+
+      await user.click(option('Charlie')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      for (const name of ['Alice', 'Bob', 'Charlie']) {
+        expect(
+          screen.getByRole('button', {name: `Remove ${name}`}),
+        ).toBeInTheDocument();
+      }
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(bootstrap).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes after Enter on typed results while the cleared query waits for its debounce', async () => {
+      const user = userEvent.setup();
+      function Debounced() {
+        const [value, setValue] = useState<SearchableItem[]>([]);
+        return (
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={value}
+            onChange={setValue}
+            hasEntriesOnFocus
+            debounceMs={300}
+          />
+        );
+      }
+      render(<Debounced />);
+      const input = await openFocusList(user);
+
+      await user.type(input, 'i');
+      await waitFor(() => {
+        expect(option('Diana')).toBeInTheDocument();
+      });
+      // Clearing the text starts a focus-list reload that waits for the
+      // debounce. Enter acts before it runs.
+      await user.keyboard('{Backspace}{Enter}');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 400));
+      });
+      await user.keyboard('{ArrowDown}');
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+      });
+      expect(option('Bob')).toBeInTheDocument();
+      expect(option('Diana')).not.toBeInTheDocument();
+    });
+
+    it('keeps the list open through picks in a row by keyboard', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.keyboard('{Enter}');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Bob');
+
+      await user.keyboard('{Enter}');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Charlie');
+
+      await user.keyboard('{Enter}');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(
+        screen.getByRole('button', {name: 'Remove Charlie'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('keeps a choice the caller does not commit, and a later search still loads', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={source}
+          value={[]}
+          onChange={() => {}}
+          hasEntriesOnFocus
+          debounceMs={0}
+        />,
+      );
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(option('Alice')).toBeInTheDocument();
+      expect(activeOptionName(input)).toBe('Bob');
+
+      await user.type(input, 'di');
+      await waitFor(() => {
+        expect(option('Diana')).toBeInTheDocument();
+      });
+      expect(option('Alice')).not.toBeInTheDocument();
+    });
+
+    it('keeps the list open when the caller commits each pick in a transition', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      function InTransition() {
+        const [value, setValue] = useState<SearchableItem[]>([]);
+        return (
+          <Tokenizer
+            label="Members"
+            searchSource={source}
+            value={value}
+            onChange={items => startTransition(() => setValue(items))}
+            hasEntriesOnFocus
+            debounceMs={0}
+          />
+        );
+      }
+      render(<InTransition />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(
+        screen.getByRole('button', {name: 'Remove Alice'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(option('Alice')).not.toBeInTheDocument();
+      expect(activeOptionName(input)).toBe('Bob');
+
+      await user.click(option('Bob')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(
+        screen.getByRole('button', {name: 'Remove Bob'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Charlie');
+    });
+
+    it('makes the next choice active after a keyboard pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      // The first choice is active when the list opens.
+      expect(activeOptionName(input)).toBe('Alice');
+      await user.keyboard('{ArrowDown}');
+      expect(activeOptionName(input)).toBe('Bob');
+      await user.keyboard('{Enter}');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(
+        screen.getByRole('button', {name: 'Remove Bob'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Charlie');
+    });
+
+    it('makes the nearest preceding choice active when the last one is picked', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Charlie')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Bob');
+    });
+
+    it('closes and clears the active option when no loaded choice remains', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members initial={[users[0], users[1]]} source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Charlie')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('closes when the pick reaches maxEntries', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members initial={[users[0]]} maxEntries={2} source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Bob')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('still closes after a pick from typed search results', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.type(input, 'ali');
+      await waitFor(() => {
+        expect(option('Alice')).toBeInTheDocument();
+      });
+
+      await user.click(option('Alice')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('lets a press on another control take focus after a pointer pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await user.click(screen.getByRole('button', {name: 'Elsewhere'}));
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('lets a press on the page take focus from the field after a pointer pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      expect(input).toHaveFocus();
+      await user.click(document.body);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).not.toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('closes on Escape after a pick, keeping focus in the field', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await user.keyboard('{Escape}');
+
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('closes when the field becomes disabled after a pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      act(() => {
+        screen.getByRole('button', {name: 'Disable'}).click();
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('cancels the source once when the field becomes disabled, not on each later render', async () => {
+      const cancel = vi.fn();
+      const source: SearchSource = {...userSource, cancel};
+      function Parent() {
+        const [renders, setRenders] = useState(0);
+        return (
+          <>
+            <Tokenizer
+              label="Members"
+              searchSource={source}
+              value={[]}
+              onChange={() => {}}
+              hasEntriesOnFocus
+              isDisabled
+            />
+            <button type="button" onClick={() => setRenders(renders + 1)}>
+              Rerender {renders}
+            </button>
+          </>
+        );
+      }
+      render(<Parent />);
+      const before = cancel.mock.calls.length;
+      for (let i = 0; i < 5; i++) {
+        act(() => {
+          screen.getByRole('button', {name: /Rerender/}).click();
+        });
+      }
+      expect(cancel.mock.calls.length).toBe(before);
+    });
+
+    it('leaves a single-select field inside its dialog menu closing after a pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      function WithDialogMenu() {
+        const handleRef = useRef<TokenizerHandle>(null);
+        const [inner, setInner] = useState<SearchableItem | null>(null);
+        return (
+          <>
+            <button type="button" onClick={() => handleRef.current?.open()}>
+              Open menu
+            </button>
+            <Tokenizer
+              label="Members"
+              searchSource={source}
+              value={[]}
+              onChange={() => {}}
+              hasEntriesOnFocus
+              handleRef={handleRef}
+              menu={{
+                role: 'dialog',
+                label: 'Pick a lead',
+                render: () => (
+                  <Typeahead
+                    label="Lead"
+                    searchSource={source}
+                    value={inner}
+                    onChange={setInner}
+                    hasEntriesOnFocus
+                    debounceMs={0}
+                  />
+                ),
+              }}
+            />
+          </>
+        );
+      }
+      render(<WithDialogMenu />);
+      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      const lead = await screen.findByRole('combobox', {
+        name: 'Lead',
+        hidden: true,
+      });
+      await user.click(lead);
+      await waitFor(() => {
+        expect(lead).toHaveAttribute('aria-expanded', 'true');
+      });
+
+      await user.click(
+        screen.getAllByRole('option', {name: 'Bob', hidden: true}).at(-1)!,
+      );
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+
+      expect(lead).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('closes when focus leaves by Tab after a pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await user.tab();
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).not.toHaveFocus();
       expect(input).toHaveAttribute('aria-expanded', 'false');
     });
   });

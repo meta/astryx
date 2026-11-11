@@ -12,7 +12,7 @@
  * It needs no browser. It is cached per Core version (and stylesheet) under
  * node_modules/.cache/astryx-theme/, so it is built once per install.
  *
- * @position api/theme-edit — part data for the checks, `how`, and `explain`
+ * @position api/theme-edit — part data for the checks, and `how`
  */
 
 import * as fs from 'node:fs';

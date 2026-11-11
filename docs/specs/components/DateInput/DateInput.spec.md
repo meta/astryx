@@ -370,20 +370,20 @@ clear-glyph target of its own.
 
 ### `spec:AST-013` FR12 exception — calendars that need `Temporal`
 
-- **Capability:** typed entry, committed text, and the bottom sheet in
-  calendars other than `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese`,
+- **Capability:** typed entry, committed text, and the bottom sheet in calendars
+  other than the Gregorian, Buddhist, Minguo, and Japanese calendars,
   which need the runtime's `Temporal`.
-- **Reduction:** where `Temporal` is missing, as in Safari on macOS and iOS,
-  the field reads, writes, and shows Gregorian dates, its presentations resolve
-  as they do for `gregory`, and it warns once in development, naming a polyfill
-  (`spec:AST-111` FR5). An application that loads a
-  `Temporal` polyfill gets the full calendar. When a server and a browser use
-  `chinese` or `dangi` implementations that disagree on a month start, React
-  renders the differing text again on the client (`spec:AST-111` FR19).
+- **Reduction:** where `Temporal` is missing, as in Safari on macOS and iOS, the
+  field reads, writes, and shows Gregorian dates, its presentations resolve as
+  they do for `gregory`, and it warns once in development, naming a polyfill
+  (`spec:AST-111` FR5). An application that loads a `Temporal` polyfill gets the
+  full calendar. When a server and a browser use implementations of the Chinese
+  or Dangi calendar that disagree on a month start, React renders the differing
+  text again on the client (`spec:AST-111` FR19).
 - **Preserved obligations:** `spec:AST-013` FR7 and FR8, and FR9 outside that
-  `chinese` and `dangi` case. The Gregorian field keeps every interaction,
-  label, and announcement, and Buddhist, Minguo, and Japanese entry and bottom
-  sheets work without `Temporal`.
+  case of the Chinese and Dangi calendars. The Gregorian field keeps every
+  interaction, label, and announcement, and Buddhist, Minguo, and Japanese entry
+  and bottom sheets work without `Temporal`.
 - **Evidence:** real Chromium and Firefox typing in Persian, Hebrew, Japanese,
   and Buddhist fields with native `Temporal`, with `Temporal` removed and a
   polyfill loaded, and with `Temporal` removed and no polyfill; the Persian

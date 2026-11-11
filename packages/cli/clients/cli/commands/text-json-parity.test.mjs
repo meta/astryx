@@ -33,6 +33,15 @@ import * as crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {writeIconPackage} from '../../../test-utils/icon-set-fixture.mjs';
+import {makeLinkedFixture, removeLinkedFixture} from '../../../test-utils/linked-fixture.mjs';
+import {FIXTURE_PACKAGES, writeFixtureBaseTheme} from '../../../test-utils/base-theme-fixture.mjs';
+import {
+  themeEditNew,
+  themeEditPreviewAdd,
+  themeEditPreviewRemove,
+  themeEditSet,
+  themeEditUndo,
+} from '../../../api/theme-edit/theme-edit.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../../../../..');
@@ -278,7 +287,28 @@ function jsonContainsKey(obj, target) {
  * @property {string[]} [jsonFieldAllowlist] - JSON keys forgiven from text.
  * @property {boolean} [skipFieldChecks] - Skip both record-key and field checks.
  * @property {boolean} [errorExpected] - The command is expected to error.
+ * @property {() => Promise<string>} [prepare] - Make the working directory (instead of `cwd`).
+ * @property {(cwd: string) => Promise<void>} [beforeEachRun] - Run before the text run and before the JSON run.
  */
+
+/** @type {Promise<string> | null} */
+let themeProjectMade = null;
+/**
+ * One app with Core and a theme `brand` made by the editor, shared by the
+ * editor and preview cases, and a routes folder for the preview.
+ * @returns {Promise<string>}
+ */
+function themeProject() {
+  themeProjectMade ??= (async () => {
+    const dir = makeLinkedFixture('astryx-parity-theme-', FIXTURE_PACKAGES);
+    // CI builds only Core, so the base theme is a fixture, not a built package.
+    writeFixtureBaseTheme(dir, 'neutral');
+    fs.mkdirSync(path.join(dir, 'src', 'app'), {recursive: true});
+    await themeEditNew('brand', {cwd: dir, like: 'neutral'});
+    return dir;
+  })();
+  return themeProjectMade;
+}
 
 /** @type {ParityCase[]} */
 const CASES = [
@@ -630,12 +660,6 @@ const CASES = [
     skipFieldChecks: true,
   },
   {
-    name: 'experimental theme palette generate',
-    args: ['experimental', 'theme', 'palette', 'generate', 'nonexistent.json'],
-    errorExpected: true,
-    skipFieldChecks: true,
-  },
-  {
     name: 'experimental theme targets',
     args: ['experimental', 'theme', 'targets'],
     jsonFieldAllowlist: [
@@ -655,45 +679,117 @@ const CASES = [
   },
   // The theme editor: refusals before any build, and a list.
   {
-    name: 'experimental theme new',
-    args: ['experimental', 'theme', 'new', 'Not-Kebab'],
+    name: 'experimental theme editor new',
+    args: ['experimental', 'theme', 'editor', 'new', 'Not-Kebab'],
     errorExpected: true,
     skipFieldChecks: true,
   },
   {
-    name: 'experimental theme set',
-    args: ['experimental', 'theme', 'set', 'does-not-exist', 'corners', 'pill'],
+    name: 'experimental theme editor new',
+    args: ['experimental', 'theme', 'editor', 'new', 'fresh', '--like', 'neutral'],
+    prepare: themeProject,
+    beforeEachRun: async cwd => fs.rmSync(path.join(cwd, 'themes', 'fresh'), {recursive: true, force: true}),
+  },
+  {
+    name: 'experimental theme editor new',
+    args: ['experimental', 'theme', 'editor', 'new', 'flagged', '--like', 'neutral', '--accent', '#7c3aed', '--corners', 'round'],
+    prepare: themeProject,
+    beforeEachRun: async cwd => fs.rmSync(path.join(cwd, 'themes', 'flagged'), {recursive: true, force: true}),
+  },
+  {
+    name: 'experimental theme editor set',
+    args: ['experimental', 'theme', 'editor', 'set', 'brand', 'corners', 'pill'],
+    prepare: themeProject,
+    // Both runs start from the same theme, so both make the same change.
+    beforeEachRun: async cwd => {
+      await themeEditUndo('brand', {cwd, thing: 'corners'}).catch(() => null);
+    },
+  },
+  {
+    name: 'experimental theme editor show',
+    args: ['experimental', 'theme', 'editor', 'show', 'brand'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor undo',
+    args: ['experimental', 'theme', 'editor', 'undo', 'brand'],
+    prepare: themeProject,
+    beforeEachRun: async cwd => {
+      await themeEditSet('brand', 'spacing', 'roomy', {cwd});
+    },
+  },
+  {
+    name: 'experimental theme editor undo',
+    args: ['experimental', 'theme', 'editor', 'undo', 'brand', 'accent'],
+    prepare: themeProject,
+    beforeEachRun: async cwd => {
+      await themeEditSet('brand', 'accent', '#7c3aed', {cwd});
+    },
+  },
+  {
+    name: 'experimental theme editor how',
+    args: ['experimental', 'theme', 'editor', 'how', 'banner'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor how',
+    args: ['experimental', 'theme', 'editor', 'how', 'white text in the banner'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor how',
+    args: ['experimental', 'theme', 'editor', 'how', '--color-accent'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor how',
+    args: ['experimental', 'theme', 'editor', 'how', 'corners'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor how',
+    args: ['experimental', 'theme', 'editor', 'how', '--list', 'dials'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor how',
+    args: ['experimental', 'theme', 'editor', 'how', '--list', 'parts'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme preview add',
+    args: ['experimental', 'theme', 'preview', 'add'],
+    cwd: '__TMP__',
     errorExpected: true,
     skipFieldChecks: true,
   },
   {
-    name: 'experimental theme reset',
-    args: ['experimental', 'theme', 'reset', 'does-not-exist', 'corners'],
+    name: 'experimental theme preview app',
+    args: ['experimental', 'theme', 'preview', 'app', 'theme-app', '--theme', 'nope'],
+    cwd: '__TMP__',
     errorExpected: true,
     skipFieldChecks: true,
   },
   {
-    name: 'experimental theme show',
-    args: ['experimental', 'theme', 'show', 'does-not-exist'],
-    errorExpected: true,
-    skipFieldChecks: true,
+    name: 'experimental theme preview add',
+    args: ['experimental', 'theme', 'preview', 'add'],
+    prepare: themeProject,
+    beforeEachRun: async cwd => {
+      await themeEditPreviewRemove(undefined, {cwd}).catch(() => null);
+    },
   },
   {
-    name: 'experimental theme undo',
-    args: ['experimental', 'theme', 'undo', 'does-not-exist'],
-    errorExpected: true,
-    skipFieldChecks: true,
+    name: 'experimental theme preview list',
+    args: ['experimental', 'theme', 'preview', 'list'],
+    prepare: themeProject,
   },
   {
-    name: 'experimental theme preview',
-    args: ['experimental', 'theme', 'preview', 'does-not-exist'],
-    errorExpected: true,
-    skipFieldChecks: true,
-  },
-  {
-    name: 'experimental theme explain',
-    args: ['experimental', 'theme', 'explain', '--list', 'dials'],
-    skipFieldChecks: true,
+    name: 'experimental theme preview remove',
+    args: ['experimental', 'theme', 'preview', 'remove'],
+    prepare: themeProject,
+    beforeEachRun: async cwd => {
+      await themeEditPreviewAdd(undefined, {cwd});
+    },
   },
   {
     name: 'upgrade',
@@ -717,8 +813,9 @@ describe('text-json-parity', () => {
     manifestCommands = manifest.data.jsonSupported;
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     fs.rmSync(tmpDir, {recursive: true, force: true});
+    if (themeProjectMade) removeLinkedFixture(await themeProjectMade);
   });
 
   // ── Gate: every JSON-capable command has a parity case ──────────────
@@ -751,10 +848,13 @@ describe('text-json-parity', () => {
           if (tc.setup) tc.setup(sub);
           cwd = sub;
         }
+        if (tc.prepare) cwd = await tc.prepare();
 
         // Run sequentially: runCli uses process.chdir, which is global
         // state and races under Promise.all.
+        await tc.beforeEachRun?.(cwd);
         const textResult = await runCli(tc.args, {cwd});
+        await tc.beforeEachRun?.(cwd);
         const jsonResult = await runCli([...tc.args, '--json'], {cwd});
 
         let jsonData;

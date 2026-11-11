@@ -119,4 +119,4 @@ only. The module stays private while OQ1 is open.
 | --------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | INV1      | `packages/core/src/virtualization/useListWindow.test.tsx`; review of each Core list that windows                | A Core component keeps its own windowing implementation beside the module  |
 | INV2      | Public export review of every package entry point; the module is exported only from `./internal/virtualization` | The module, or a type only it uses, is reachable from a public entry point |
-| INV3      | The public-API report (`packages/core/api-report.md`) for `useTableRowsVirtualization` and each consumer        | Adopting the module changes a consumer's public props, types, or exports   |
+| INV3      | The pull request's API delta for `useTableRowsVirtualization` and each consumer                                 | Adopting the module changes a consumer's public props, types, or exports   |

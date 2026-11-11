@@ -2,29 +2,28 @@
 
 /**
  * @file The data behind `astryx experimental theme`: the dials and their
- * rungs, the part families, the built-in themes a theme can build on, and the
- * words `how` understands. A new dial, rung, family or word is a table entry
+ * rungs, the part groups, the built-in themes a theme can build on, and the
+ * words `how` understands. A new dial, rung, group or word is a table entry
  * here with a test, not new code.
  *
  * @position api/theme-edit — data read by the engine and the help text
  */
 
-/** The command prefix every suggested command starts with. */
-export const P = 'astryx experimental theme';
+import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
 
-/** The built-in themes a theme can build on (`new --like`, `set base`). */
-export const LIKE = [
-  'neutral',
-  'stone',
-  'matcha',
-  'y2k',
-  'gothic',
-  'chocolate',
-  'butter',
-];
+/** The command prefix every suggested command starts with. */
+export const P = 'astryx experimental theme editor';
+
+/** The lookup command: what a part reads, a setting, a question, a picture. */
+export const HOW = `${P} how`;
+
+/** The built-in themes a theme can build on (`new --like`, `set base`), neutral first. */
+export const LIKE = discoverBundledThemes()
+  .map(t => t.slug)
+  .sort((a, b) => Number(b === 'neutral') - Number(a === 'neutral'));
 
 /**
- * Parts that should look alike. `--on <family>` styles every member.
+ * Groups of parts that should look alike. `--on <group>` styles every member.
  * @type {Record<string, string[]>}
  */
 export const FAMILIES = {
@@ -63,9 +62,9 @@ export const FAMILIES = {
 };
 
 /**
- * Families whose members always look alike: styling one member styles them
- * all unless `--only` is given. Other families spread only when `--on`
- * names the family itself.
+ * Groups whose members always look alike: styling one member styles them
+ * all unless `--only` is given. Other groups spread only when `--on`
+ * names the group itself.
  */
 export const AUTO_SPREAD = ['inputs', 'checks'];
 
@@ -322,7 +321,7 @@ export const DIALS = {
       CORNERS.map(
         ([n, v]) => `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
       ).join(', ') +
-      ", or a size like 6px. Whole theme: sets the 4 corner tokens in fixed ratios. With --on <part or family>: that part's border-radius. Corners are a size, so they are the same in light and dark.",
+      ", or a size like 6px. Whole theme: sets the 4 corner tokens in fixed ratios. With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.",
     values: 'square|small|medium|large|round|pill|more|less|<size like 6px>',
     examples: [
       'set my corners pill',
@@ -337,7 +336,7 @@ export const DIALS = {
     help:
       'How much room there is: padding, gaps and control heights together. Rungs: ' +
       SPACING.map(([n, f]) => `${n} (x${f})`).join(', ') +
-      '. Whole theme: scales every spacing token and control height. With --on <part or family>: only inside it.',
+      '. Whole theme: scales every spacing token and control height. With --on <part or group>: only inside it.',
     values: 'tight|compact|medium|roomy|spacious|more|less',
     examples: [
       'set my spacing compact',
@@ -348,14 +347,49 @@ export const DIALS = {
       'spacing space room roomy airy dense density compact tight padding gap gaps margin breathing cramped spread spacious',
   },
   accent: {
-    help: 'The main brand color (primary buttons, links, selection, focus). Keeps the color EXACT and derives the rest: text-accent (darkened if needed for 4.5:1 text), a lighter text/icon accent for dark mode, accent-muted, and on-accent (white or black, whichever reads). With --mode: only that mode.',
+    help: 'The main brand color: primary buttons, links, selection and the focus ring. From the one color the editor generates its shades, light and dark, and points the accent tokens at them: --color-accent, --color-on-accent, --color-text-accent, --color-icon-accent, --color-accent-muted and --focus-outline-color. The fill keeps the exact color you gave. A token moves to a nearby shade when it must read: text at 4.5:1, the focus ring at 3:1, the fill until the text on it reads. `how colors` explains it; the Colors preview page (`preview add`) shows every shade. For an exact color, set the token itself (set my --color-accent "#7c3aed"): an exact token always wins over the generated colors.',
     values: '<color>',
-    examples: [
-      'set my accent "#7c3aed"',
-      'set my accent "#16a34a" --mode dark',
-    ],
+    examples: ['set my accent "#7c3aed"', 'set my accent rebeccapurple'],
     words:
-      'accent brand primary main color colour key highlight link selection',
+      'accent brand primary main color colour key highlight link selection seed',
+  },
+  neutral: {
+    help: 'The gray of the theme: surfaces (cards, panels, popovers, muted fills), text, icons, borders, skeletons and hover tints. The page background stays the base theme\'s, so a tinted gray never tints the page; set --color-background-body for it. From the one color the editor generates light and dark shades (its hue and how much of it shows), and the surface, text, icon, border, skeleton and overlay tokens point at them. Secondary text and icons move to a shade that reads on the surfaces. Give a gray with a little color ("#64748b") for a cool or warm neutral; a strong color makes colored surfaces. `how colors` explains it.',
+    values: '<color>',
+    examples: ['set my neutral "#64748b"', 'set my neutral "#78716c"'],
+    words:
+      'neutral gray grey surface surfaces background text border tint warm cool slate stone',
+  },
+  success: {
+    help: 'The success color (done, valid, positive). From it the editor generates light and dark shades, and --color-success, --color-on-success, --color-text-success, --color-icon-success, --color-success-muted, --color-on-success-muted and --color-border-success point at them. `how colors` explains it.',
+    values: '<color>',
+    examples: ['set my success "#16a34a"'],
+    words: 'success green ok valid positive done status',
+  },
+  warning: {
+    help: 'The warning color (caution). From it the editor generates light and dark shades, and the --color-warning tokens (fill, on, text, icon, muted, on-muted, border) point at them. `how colors` explains it.',
+    values: '<color>',
+    examples: ['set my warning "#f59e0b"'],
+    words: 'warning caution yellow amber status',
+  },
+  danger: {
+    help: 'The danger color (errors, destructive actions). From it the editor generates light and dark shades, and the --color-error tokens (fill, on, text, icon, muted, on-muted, border) point at them. `how colors` explains it.',
+    values: '<color>',
+    examples: ['set my danger "#dc2626"'],
+    words: 'danger error destructive red invalid negative status',
+  },
+  info: {
+    help: 'The info color (notices, help). From it the editor generates light and dark shades, and the --color-info tokens (fill, on, text, icon, muted, on-muted, border) point at them. `how colors` explains it.',
+    values: '<color>',
+    examples: ['set my info "#0284c7"'],
+    words: 'info information notice help blue status',
+  },
+  vibrancy: {
+    help: 'How saturated the generated colors are: 0 is gray, 100 the most vivid, 50 the default; more and less step by 10. Every color the theme sets (accent, neutral, success, warning, danger, info) is generated again; the accent and status fills keep the exact color you gave, and the shades around them get more or less color. The whole theme only, and only once the theme sets a color.',
+    values: '<0-100>|more|less',
+    examples: ['set my vibrancy 70', 'set my vibrancy less'],
+    words:
+      'vibrancy vibrant saturation saturated colorful colourful vivid muted dull washed pastel intense',
   },
   font: {
     help:
@@ -363,7 +397,7 @@ export const DIALS = {
       SYSTEM_FONTS.join(', ') +
       '. Open fonts with a loading package: ' +
       Object.keys(OPEN_FONTS).join(', ') +
-      ' (previews show them when the package is installed; the result names the import line for the app). Also: rounded, comic, any family name in quotes, or a whole stack with commas ("Inter, Helvetica, sans-serif"). Whole theme: body and headings. With --on heading|body|code: only that role. Any other font must be loaded by the app.',
+      ' (previews show them when the package is installed; the result names the import line for the app). Also: rounded, comic, any family name in quotes, or a whole stack with commas ("Inter, Helvetica, sans-serif"). Whole theme: body and headings. With --on heading|body|code: only that role. An open font loads only once its package is installed (the result of set names the install line for your package manager, and the closest font that needs no install); any other font must be loaded by the app.',
     values: `${[...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)].join('|')}|"<family or stack>"`,
     examples: [
       'set my font mono',
@@ -383,7 +417,7 @@ export const DIALS = {
       Object.entries(HEADING_TRACKING)
         .map(([n, v]) => `${n} (${v})`)
         .join(', ') +
-      '. Set one word at a time: weight words and tracking words are separate settings. Whole theme only; for one heading level use font-weight --on heading --when level:<1-6>.',
+      '. Set one word at a time: weight words and tracking words are separate settings. headings always wins over type for weight and tracking, whatever the order. Whole theme only; for one heading level use font-weight --on heading --when level:<1-6>.',
     values: [
       ...Object.keys(HEADING_WEIGHTS),
       ...Object.keys(HEADING_TRACKING),
@@ -406,7 +440,7 @@ export const DIALS = {
     words: 'cta solid outline outlined soft tint caps uppercase filled',
   },
   type: {
-    help: 'The type personality: how far headings step up from body text and how they are set. compact: small steps (x1.15), semibold. standard: the default (x1.2). editorial: bigger steps (x1.3), tight tracking, semibold. display: big steps (x1.4), heavy weight, tighter tracking (a marketing feel). Works with text-size and headings.',
+    help: 'The type personality: how far headings step up from body text and how they are set. compact: small steps (x1.15), semibold. standard: the default (x1.2). editorial: bigger steps (x1.3), tight tracking, semibold. display: big steps (x1.4), heavy weight, tighter tracking (a marketing feel). Text below the base size keeps its standard sizes, so small text stays readable. Works with text-size; a headings setting keeps its weight or tracking whatever the order.',
     values: Object.keys(TYPE_STYLES).join('|'),
     examples: ['set my type display', 'set my type editorial'],
     words:
@@ -531,7 +565,7 @@ export const KEY_TOKENS = [
   '--font-family-body',
 ];
 
-/** The CSS properties `explain --list properties` shows without a filter. */
+/** The CSS properties `how --list properties` shows without a filter. */
 export const COMMON_PROPERTIES = [
   'background',
   'background-color',
@@ -581,11 +615,11 @@ export const THING_HINTS = {
   ],
   density: () => [`${P} set <theme> spacing compact`],
   bold: (_v, on) => [`${P} set <theme> font-weight 700 --on ${on ?? '<part>'}`],
-  'text-color': (_v, on) => [`${P} explain "text color on ${on ?? '<part>'}"`],
+  'text-color': (_v, on) => [`${HOW} "text color on ${on ?? '<part>'}"`],
 };
 
 /**
- * Words for parts, and the parts (or families, or `part:prop:value`) they
+ * Words for parts, and the parts (or groups, or `part:prop:value`) they
  * mean. The first match order is the answer order.
  * @type {Array<[RegExp, string[]]>}
  */
