@@ -31,6 +31,11 @@ import {
   isReleaseInFlight,
 } from './gestureCounter';
 
+/** The browser's click for a release: `detail` counts the clicks. */
+function browserClick(target: Element): void {
+  target.dispatchEvent(new MouseEvent('click', {bubbles: true, detail: 1}));
+}
+
 /** A pointer event of `type` for `pointerId`, which jsdom's events lack. */
 function pointerEvent(
   type: string,
@@ -420,6 +425,29 @@ describe('the release in flight and afterRelease', () => {
     });
     release();
     expect(duringRelease).toBe(true);
+    browserClick(button);
+    expect(isReleaseInFlight()).toBe(false);
+  });
+
+  it('stays in flight through a click the page dispatches inside the release', () => {
+    const {button, release} = press();
+    let afterDispatch = false;
+    button.addEventListener('pointerup', () => {
+      // A menu row's activation: a dispatched click, `detail` 0.
+      button.click();
+      afterDispatch = isReleaseInFlight();
+    });
+    release();
+    expect(afterDispatch).toBe(true);
+    browserClick(button);
+    expect(isReleaseInFlight()).toBe(false);
+  });
+
+  it('ends at a click the page dispatches after the release', () => {
+    const {button, release} = press();
+    release();
+    expect(isReleaseInFlight()).toBe(true);
+    // A dispatched click in a later task, as a test or an app sends one.
     button.click();
     expect(isReleaseInFlight()).toBe(false);
   });
@@ -442,7 +470,7 @@ describe('the release in flight and afterRelease', () => {
     });
     release();
     expect(callback).not.toHaveBeenCalled();
-    button.click();
+    browserClick(button);
     expect(callback).toHaveBeenCalledTimes(1);
     vi.runOnlyPendingTimers();
     expect(callback).toHaveBeenCalledTimes(1);
@@ -458,7 +486,7 @@ describe('the release in flight and afterRelease', () => {
     release();
     vi.runOnlyPendingTimers();
     expect(callback).toHaveBeenCalledTimes(1);
-    button.click();
+    browserClick(button);
     expect(callback).toHaveBeenCalledTimes(1);
   });
 
@@ -472,7 +500,7 @@ describe('the release in flight and afterRelease', () => {
     });
     release();
     cancel();
-    button.click();
+    browserClick(button);
     vi.runOnlyPendingTimers();
     expect(callback).not.toHaveBeenCalled();
   });
@@ -514,7 +542,7 @@ describe('press marks', () => {
     button.dispatchEvent(pointerEvent('pointerdown', 8));
     button.dispatchEvent(pointerEvent('pointerup', 8));
     expect(currentPressMark()).not.toBeNull();
-    button.click();
+    browserClick(button);
     // A layer opened now, with no press in flight, keeps no mark, so its
     // next click is not taken for the old press's.
     expect(currentPressMark()).toBeNull();

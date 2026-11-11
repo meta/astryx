@@ -35,6 +35,9 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
   // The gesture whose release is being handled: from its pointerup until
   // its click, or the next task when no click comes.
   releasingGesture: null as number | null,
+  // Whether a pointerup is being dispatched now: from the window's capture
+  // phase to its bubble phase.
+  isDispatchingRelease: false,
   // Each pointer's latest press, so a mark survives another pointer's press.
   pointerGestures: new Map<number, number>(),
   claimedPress: null as {
@@ -46,6 +49,22 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
   unsubscribePress: null as (() => void) | null,
 }));
 
+/**
+ * Adds the fields an older copy of Core may have made the shared slot
+ * without, so a page with both copies does not throw.
+ */
+function ensureFields(): void {
+  if (!(state.pointerGestures instanceof Map)) {
+    state.pointerGestures = new Map();
+  }
+  if (state.releasingGesture === undefined) {
+    state.releasingGesture = null;
+  }
+  if (state.isDispatchingRelease === undefined) {
+    state.isDispatchingRelease = false;
+  }
+}
+
 /** How many pointers' latest presses the counter remembers. */
 const MAX_TRACKED_POINTERS = 8;
 
@@ -56,6 +75,8 @@ function advance() {
 // The page listens for a press's end and its context menu only while a press
 // is down, so at rest it keeps no pointerup listener of its own.
 function startPress(event: PointerEvent) {
+  ensureFields();
+  state.isDispatchingRelease = false;
   advance();
   state.pressPointerId = event.pointerId;
   state.pointerGestures.delete(event.pointerId);
@@ -84,9 +105,11 @@ function startPress(event: PointerEvent) {
 }
 
 function endPress(event: PointerEvent) {
+  ensureFields();
   if (event.type === 'pointerup') {
     const gesture = state.gesture;
     state.releasingGesture = gesture;
+    state.isDispatchingRelease = true;
     // A release that brings no click (a touch whose touchend was cancelled)
     // ends at the next task.
     setTimeout(() => {
@@ -104,14 +127,26 @@ function markContextMenu() {
   state.contextMenuGesture = state.gesture;
 }
 
-function markClicked() {
+function markClicked(event: MouseEvent) {
+  ensureFields();
   state.clickedGesture = state.gesture;
-  if (state.releasingGesture === state.gesture) {
+  // A click the page dispatches while the release itself is dispatched (a
+  // menu row's activation) comes before the release's light dismiss, so it
+  // does not end the release. Any other click does.
+  if (
+    state.releasingGesture === state.gesture &&
+    !(state.isDispatchingRelease && event.detail === 0)
+  ) {
     state.releasingGesture = null;
   }
 }
 
+function endReleaseDispatch() {
+  state.isDispatchingRelease = false;
+}
+
 function listen() {
+  ensureFields();
   if (state.isListening || typeof document === 'undefined') {
     return;
   }
@@ -120,6 +155,8 @@ function listen() {
   const view = document.defaultView;
   if (view != null) {
     subscribeInput(view, 'pointerdown', startPress, {first: true});
+    // The window's bubble phase comes after every handler of the release.
+    view.addEventListener('pointerup', endReleaseDispatch);
   }
   document.addEventListener('keydown', advance, true);
   // Capture phase observes the click even when a consumer stops propagation.
@@ -143,8 +180,9 @@ export function currentGestureHasClicked(): boolean {
 
 /**
  * Whether the page is handling a press's release: from its `pointerup` until
- * its click, or the next task when no click comes. The browser's light
- * dismiss for that release has not run yet.
+ * the browser's click for it, or the next task when no click comes. The
+ * browser's light dismiss for that release has not run yet. A click the page
+ * dispatches while the release is dispatched does not end it.
  */
 export function isReleaseInFlight(): boolean {
   listen();
@@ -168,13 +206,19 @@ export function afterRelease(doc: Document, callback: () => void): () => void {
     callback();
   };
   // Bubble phase on the window: the click has passed every handler, and the
-  // browser's light dismiss for the release has run.
+  // browser's light dismiss for the release has run. A click dispatched
+  // while the release is dispatched is not the release's own.
   const view = doc.defaultView;
-  view?.addEventListener('click', run, {once: true});
+  const onClick = (event: MouseEvent) => {
+    if (!(state.isDispatchingRelease && event.detail === 0)) {
+      run();
+    }
+  };
+  view?.addEventListener('click', onClick);
   const timer = setTimeout(run, 0);
   function cancel() {
     isDone = true;
-    view?.removeEventListener('click', run);
+    view?.removeEventListener('click', onClick);
     clearTimeout(timer);
   }
   return cancel;

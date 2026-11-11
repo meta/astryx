@@ -25,6 +25,19 @@ import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
 const storybook = withStorybook(test);
 const STORY = 'core-layer-same-press--menu-row-opens-layer';
 
+/** A mouse click held as a person holds one: a hover, then 90 ms down. */
+async function heldClick(page: Page, target: Locator): Promise<void> {
+  const box = await target.boundingBox();
+  if (box == null) {
+    throw new Error('no box');
+  }
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(60);
+  await page.mouse.down();
+  await page.waitForTimeout(90);
+  await page.mouse.up();
+}
+
 const dialog = (page: Page, name: string) =>
   page.getByRole('dialog', {name, exact: true});
 
@@ -40,10 +53,13 @@ for (const pointer of ['mouse', 'finger'] as const) {
         : {hasTouch: true, isMobile: true, viewport: {width: 390, height: 844}},
     );
 
-    /** A click with the mouse, or a tap with a finger. */
-    const press = async (_page: Page, target: Locator) => {
+    /**
+     * A held click with the mouse (a hover, then 90 ms down, as a person
+     * clicks), or a tap with a finger.
+     */
+    const press = async (page: Page, target: Locator) => {
       if (pointer === 'mouse') {
-        await target.click();
+        await heldClick(page, target);
       } else {
         await target.tap();
       }
@@ -115,7 +131,10 @@ test.describe('with a mouse, a context menu', () => {
   }) => {
     await openStory(page, storybook(), STORY);
     await page.getByTestId('context-region').click({button: 'right'});
-    await page.getByRole('menuitem', {name: 'Open context popover'}).click();
+    await heldClick(
+      page,
+      page.getByRole('menuitem', {name: 'Open context popover'}),
+    );
     await page.waitForTimeout(400);
     await expect(dialog(page, 'Context popover')).toBeVisible();
   });
