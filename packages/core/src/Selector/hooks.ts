@@ -18,8 +18,13 @@
  */
 
 import {useCallback, useState} from 'react';
+import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {
+  readLayerEntranceSide,
+  writeLayerEntranceSide,
+} from '../Layer/layerEntranceSide';
 import {LAYER_KEYBOARD_INSET_PROPERTY} from '../Layer/useLayerKeyboardClearance';
 import {isImeKeyEvent} from '../utils/ime';
 import {layoutViewportHeight} from '../utils/layoutViewport';
@@ -256,6 +261,17 @@ export function useSelectedItemOverlayMargin({
     setIsPositioned(isOpen);
   }, [isOpen, selectedItemIndex, listboxId, listboxRef, anchorRef]);
 
+  // The list moves over its trigger in the commit that applies the margin.
+  // The runtime skips its read at the show (`writesEntranceSide`), so the
+  // entrance takes its side here, once, before the first paint.
+  useIsomorphicLayoutEffect(() => {
+    const layer = listboxRef.current?.closest<HTMLElement>('[popover]');
+    const anchor = anchorRef.current;
+    if (isOpen && isPositioned && layer != null && anchor != null) {
+      writeLayerEntranceSide(layer, readLayerEntranceSide(layer, anchor));
+    }
+  }, [isOpen, isPositioned, listboxRef, anchorRef]);
+
   return {marginBlockStart, isPositioned};
 }
 
@@ -404,14 +420,9 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
       if (selectedIndex >= 0 && !selectableItems[selectedIndex].disabled) {
         return selectedIndex;
       }
-      const enabledIndices = getEnabledIndices();
-      return (
-        (fromEnd
-          ? enabledIndices[enabledIndices.length - 1]
-          : enabledIndices[0]) ?? -1
-      );
+      return enabledEdgeIndex(selectableItems, fromEnd);
     },
-    [findSelectedIndex, getEnabledIndices, selectableItems],
+    [findSelectedIndex, selectableItems],
   );
 
   const closeAndReset = useCallback(() => {

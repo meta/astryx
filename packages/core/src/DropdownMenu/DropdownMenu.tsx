@@ -47,7 +47,7 @@ import React, {
 } from 'react';
 import {readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {
   claimPress,
@@ -82,7 +82,7 @@ import {useDropdownMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
-import {returnFocusForLastInput} from '../utils/focusReturn';
+import {focusForLastInput, returnFocusForLastInput} from '../utils/focusReturn';
 import {PressGroupContext} from '../hooks/pressGroupContext';
 import {useMenuOverflow} from './useMenuOverflow';
 import {moveRegionsTab} from './menuRegionStops';
@@ -1108,10 +1108,12 @@ function DropdownMenuPopover({
         ? button.label
         : undefined;
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     hasLightDismiss: true,
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     hasCloseButton: false,
     hasAutoFocus: false,
     // Without a header or footer the popup's own role="menu" is the exposed
@@ -1439,8 +1441,11 @@ function DropdownMenuPopover({
       // remember whatever was focused BEFORE the press as the element to hand
       // focus back to when it closes. Focusing the trigger first gives the
       // popover the state a click-open already has: the trigger is where
-      // Escape or a pick returns focus (the APG menu-button pattern).
-      buttonRef.current?.focus({preventScroll: true});
+      // Escape or a pick returns focus (the APG menu-button pattern). A
+      // finger's press shows no ring here.
+      if (buttonRef.current != null) {
+        focusForLastInput(buttonRef.current, {preventScroll: true});
+      }
       openingPressRef.current = {gesture: currentGesture()};
       const didOpen = openAndFocus('pointer', true);
       // A mouse can release away from the trigger, or the trigger can move

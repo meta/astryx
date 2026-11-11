@@ -2,7 +2,7 @@
 
 /**
  * @file Tests for `astryx theme build <a> <b> …` — several themes per
- * invocation (kt-lc9s).
+ * invocation.
  *
  * The load-bearing guarantee is equivalence: one invocation over N theme files
  * must write exactly the bytes N serial invocations write. Everything else here

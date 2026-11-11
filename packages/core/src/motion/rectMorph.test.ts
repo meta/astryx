@@ -16,7 +16,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createMotionEngine} from './animator';
 import {cubicBezier} from './bezier';
-import {easedProgress, progressCurve} from './progress';
+import {progressCurve, timedCurve} from './progress';
 import {
   createRectMorph,
   edgeGrowPath,
@@ -282,7 +282,13 @@ describe('createRectMorph', () => {
     morph.present(path, {duration: 300, easing}, {velocity: 6});
     await playFrame();
     expect(live(element, 'scale').length).toBe(1);
-    const progress = easedProgress(0.3, cubicBezier(easing), {velocity: 6});
+    const progress = timedCurve({
+      from: 0,
+      to: 1,
+      durationMs: 300,
+      easing,
+      velocity: 6,
+    });
     const start = clock;
     for (const t of [0, 0.05, 0.12, 0.2, 0.29]) {
       clock = start + t * 1000;
