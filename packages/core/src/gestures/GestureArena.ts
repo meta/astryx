@@ -181,6 +181,14 @@ export class GestureArena {
     return this.currentTime ?? Math.max(this.latestTime, this.clock.now());
   }
 
+  /**
+   * The injected clock's own reading: when the page runs now. Behind a block,
+   * the event clock lags it.
+   */
+  pageTime(): number {
+    return this.clock.now();
+  }
+
   /** Whether a recognizer owns this touch, so the browser must not pan or zoom it. */
   isClaimed(id: number): boolean {
     return this.records.get(id)?.isClaimed === true;
