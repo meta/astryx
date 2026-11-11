@@ -277,18 +277,13 @@ export function useTypedDate({
             locale,
             calendar,
           );
-        const isBeforeMin =
-          min != null && plainDateIsBefore(result.date, plainDateFromISO(min));
-        const isAfterMax =
-          max != null && plainDateIsAfter(result.date, plainDateFromISO(max));
-        const bounds =
-          !isBeforeMin && !isAfterMax
-            ? 'none'
-            : min != null && max != null
-              ? 'both'
-              : min != null
-                ? 'min'
-                : 'max';
+        const bounds = !isOutsideBounds(result.date, min, max)
+          ? 'none'
+          : min != null && max != null
+            ? 'both'
+            : min != null
+              ? 'min'
+              : 'max';
         return t('@astryx.dateInput.outOfRangeDate', {
           bounds,
           min: min != null ? writeBound(min) : '',
@@ -466,7 +461,7 @@ export function useTypedDateField({
     message: string | null;
     isRepeatable: boolean;
   }>({message: shownErrorMessage, isRepeatable: true});
-  // Updated during render, like the `value` check below, not in an Effect.
+  // The alert and the status change in the same render.
   const statusRecordInput = `${entryError != null}:${shownErrorMessage}`;
   const prevStatusRecordInputRef = useRef(statusRecordInput);
   if (
