@@ -426,11 +426,10 @@ export function Link({
   );
 
   const renderLink = (
-    trigger: OnDemandTooltipTriggerProps | null,
+    trigger: OnDemandTooltipTriggerProps,
   ): React.ReactElement => {
-    // The tooltip's ref already holds the caller's.
-    const {ref: tooltipRef, ...tooltipTrigger} = trigger ?? {ref: undefined};
-    const elementRef: React.Ref<HTMLElement> | undefined = tooltipRef ?? ref;
+    // The part's ref already holds the caller's.
+    const {ref: elementRef, ...tooltipTrigger} = trigger;
     if (renderAsButton) {
       return (
         <button
@@ -537,19 +536,17 @@ export function Link({
 
   // The tooltip attaches to the link element itself, with no wrapper; its
   // module loads on the first hover, tap or focus.
-  if (tooltip) {
-    return (
-      <OnDemandTooltip
-        tooltip={tooltip}
-        isDescription
-        callerRef={ref}
-        callerProps={props}>
-        {renderLink}
-      </OnDemandTooltip>
-    );
-  }
-
-  return renderLink(null);
+  // Rendered through the part with or without a tooltip, so turning the
+  // tooltip on or off keeps the element and its focus.
+  return (
+    <OnDemandTooltip
+      tooltip={tooltip}
+      isDescription
+      callerRef={ref}
+      callerProps={props}>
+      {renderLink}
+    </OnDemandTooltip>
+  );
 }
 
 Link.displayName = 'Link';
