@@ -3480,6 +3480,22 @@ describe('DropdownMenu press model', () => {
     }
   });
 
+  it('presentation="popover": a blur during a finger\u2019s tap on the trigger still lets the tap\u2019s click open the menu', () => {
+    render(
+      <DropdownMenu button={{label: 'Pinned'}} presentation="popover">
+        <DropdownMenuItem label="Edit" />
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', {name: /Pinned/});
+    fireEvent.pointerDown(trigger, touch);
+    act(() => {
+      window.dispatchEvent(new FocusEvent('blur'));
+    });
+    fireEvent.pointerUp(trigger, touch);
+    fireEvent.click(trigger, {detail: 1});
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('presentation="popover" pins the settle rule under a finger: once the opening press has settled, a still lift picks the row under it', () => {
     // A moved touch default comes back through
     // `presentation`, never through a public threshold.
