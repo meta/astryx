@@ -27,7 +27,7 @@ export const doc = {
     },
     {
       label: 'Change a theme, checked',
-      cli: 'astryx experimental theme set brand corners pill',
+      cli: 'astryx experimental theme editor set brand corners pill',
     },
   ],
   exitCodes: [

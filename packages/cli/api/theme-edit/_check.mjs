@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The type check of one `set` or `reset`: the part, the variant, the
+ * @file The type check of one `set` or `undo <theme> <thing>`: the part, the variant, the
  * state, the mode, the token's type, and whether the part (or anything in
  * it) reads the token. A change that cannot take effect is refused, and the
  * refusal leads with the command that works. Also `how`, which answers a
@@ -26,6 +26,7 @@ import {
   HEADING_WEIGHTS,
   INTENTS,
   LIKE,
+  HOW,
   P,
   PART_WORDS,
   SPACING,
@@ -35,6 +36,7 @@ import {
 } from './_tables.mjs';
 import {isColorValue, isNumber, isSize} from './_color.mjs';
 import {MODAL} from './_compiler.mjs';
+import {PALETTE_DIALS, paletteToken, seedOf} from './_palette.mjs';
 import {
   camel,
   kebab,
@@ -89,7 +91,7 @@ function checkTypedValue(type, value, name) {
  * @param {string} thing
  * @param {string | undefined} value
  * @param {SetFlags} flags
- * @param {boolean} [unset] a reset: only the identity of the setting is checked
+ * @param {boolean} [unset] an undo of one setting: only the identity of the setting is checked
  * @returns {import('./_settings.mjs').Setting}
  */
 export function checkSetting(
@@ -106,7 +108,7 @@ export function checkSetting(
   const TOKENS = ctx.project.core.tokenDefaults;
   if (!thing)
     refuse(E.ERR_MISSING_ARGUMENT, 'Name the thing to change.', {
-      run: [`${P} ${unset ? 'reset' : 'set'} --help`],
+      run: [`${P} ${unset ? 'undo' : 'set'} --help`],
     });
   if (!unset && (value === undefined || value === ''))
     refuse(E.ERR_MISSING_ARGUMENT, `Give a value for ${thing}.`, {
@@ -136,15 +138,15 @@ export function checkSetting(
     );
   if ((s.when || s.state) && !s.on)
     refuse(E.ERR_MISSING_ARGUMENT, '--when and --state need --on <part>.', {
-      run: [`${P} explain <part>`],
+      run: [`${HOW} <part>`],
     });
   if (s.only) {
     const fam = s.on ? familyOf(s.on) : null;
     if (!fam || FAMILIES[/** @type {string} */ (s.on)])
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        '--only is for one member of a family, such as text-input (explain --list families).',
-        {run: [`${P} explain --list families`]},
+        '--only is for one member of a family, such as text-input (how --list families).',
+        {run: [`${HOW} --list families`]},
       );
     if (!AUTO_SPREAD.includes(/** @type {string} */ (fam)))
       refuse(
@@ -152,7 +154,9 @@ export function checkSetting(
         `${s.on} is styled on its own already: only ${AUTO_SPREAD.join(' and ')} spread to their family, so drop --only.`,
         {
           run: [
-            `${P} ${unset ? 'reset' : 'set'} ${slug} ${thing} ${q(v)} --on ${s.on}`,
+            unset
+              ? `${P} undo ${slug} ${thing}${v ? ` ${q(v)}` : ''} --on ${s.on}`
+              : `${P} set ${slug} ${thing} ${q(v)} --on ${s.on}`,
           ],
         },
       );
@@ -171,8 +175,8 @@ export function checkSetting(
             ...Object.keys(FAMILIES),
           ]),
           run: [
-            `${P} explain ${s.on.split('-')[0]} --list parts`,
-            `${P} explain "${s.on}"`,
+            `${HOW} ${s.on.split('-')[0]} --list parts`,
+            `${HOW} "${s.on}"`,
           ],
         },
       );
@@ -183,20 +187,20 @@ export function checkSetting(
         refuse(
           E.ERR_THEME_BAD_VALUE,
           '--when takes <prop>:<value>, such as variant:primary.',
-          {run: [`${P} explain ${s.on}`]},
+          {run: [`${HOW} ${s.on}`]},
         );
       if (!t.props.includes(p))
         refuse(
           E.ERR_THEME_UNKNOWN_VARIANT,
           `${s.on} has no prop "${p}". It has: ${t.props.join(', ') || 'none'}.`,
-          {didYouMean: nearest(p, t.props), run: [`${P} explain ${s.on}`]},
+          {didYouMean: nearest(p, t.props), run: [`${HOW} ${s.on}`]},
         );
       const vals = C.variantValues(s.on)[p] ?? [];
       if (vals.length && !vals.includes(wv))
         refuse(
           E.ERR_THEME_UNKNOWN_VARIANT,
           `${s.on} has no ${p} "${wv}". ${p} is one of: ${vals.join(', ')}.`,
-          {didYouMean: nearest(wv, vals), run: [`${P} explain ${s.on}`]},
+          {didYouMean: nearest(wv, vals), run: [`${HOW} ${s.on}`]},
         );
     }
     const states = [...t.states, ...COMMON_STATES];
@@ -288,7 +292,19 @@ export function checkSetting(
         Math.max(0, Math.min(L.length - 1, i + (v === 'more' ? 1 : -1)))
       ][0];
     };
-    if (s.mode && thing !== 'accent')
+    if (PALETTE_DIALS.includes(thing) && (s.on || s.mode)) {
+      const token = paletteToken(thing);
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${thing} grows one palette for the whole theme, light and dark from one color; drop ${s.on ? '--on' : '--mode'}. For an exact color on one part or in one mode, set the token itself.`,
+        {
+          run: [
+            `${P} set ${slug} ${token} ${q(v || '#7c3aed')}${onFlag}${s.mode ? ` --mode ${s.mode}` : ''}`,
+          ],
+        },
+      );
+    }
+    if (s.mode)
       refuse(
         E.ERR_THEME_NO_MODE,
         `${thing} is not a color, so it is the same in light and dark; drop --mode.`,
@@ -334,15 +350,23 @@ export function checkSetting(
           E.ERR_THEME_BAD_VALUE,
           `text-size takes ${DIALS['text-size'].values}, not "${v}".`,
         );
-    } else if (thing === 'accent') {
+    } else if (PALETTE_DIALS.includes(thing)) {
       if (step)
-        refuse(E.ERR_THEME_BAD_VALUE, 'accent takes a color, not a step.', {
-          run: [`${P} set ${slug} accent "#7c3aed"`],
+        refuse(E.ERR_THEME_BAD_VALUE, `${thing} takes a color, not a step.`, {
+          run: [`${P} set ${slug} ${thing} "#7c3aed"`],
         });
       if (!isColorValue(v))
         refuse(E.ERR_THEME_BAD_VALUE, `"${v}" is not a CSS color.`, {
           fix: 'give one like "#7c3aed"',
         });
+      if (!seedOf(v))
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${v}" has no fixed color, so the palette cannot grow from it.`,
+          {
+            fix: 'give a hex, a color name, or an rgb(), hsl(), hwb(), lab(), lch(), oklab() or oklch() color',
+          },
+        );
     } else if (thing === 'font') {
       if (s.on && !isRole)
         refuse(
@@ -390,13 +414,13 @@ export function checkSetting(
       refuse(
         E.ERR_THEME_PRIVATE_TOKEN,
         `"${thing}" is private to a component; themes cannot set it.`,
-        {run: [`${P} explain "<what you want>"`]},
+        {run: [`${HOW} "<what you want>"`]},
       );
     if (!(thing in TOKENS)) {
       refuse(E.ERR_THEME_UNKNOWN_TOKEN, `"${thing}" is not a design token.`, {
         didYouMean: nearest(thing, Object.keys(TOKENS)),
         run: [
-          `${P} explain ${thing.replace(/^--(color-)?/, '').split('-')[0]} --list tokens`,
+          `${HOW} ${thing.replace(/^--(color-)?/, '').split('-')[0]} --list tokens`,
         ],
       });
     }
@@ -499,7 +523,7 @@ export function checkSetting(
         {
           run: [
             `${P} set ${slug} ${prop} ${q(v || '<value>')} --on <part>`,
-            `${P} explain "${prop}"`,
+            `${HOW} "${prop}"`,
           ],
         },
       );
@@ -567,7 +591,7 @@ export function checkSetting(
     {
       run: hint
         ? hint(v, s.on)
-        : [`${P} explain "${thing}${s.on ? ` on ${s.on}` : ''}"`],
+        : [`${HOW} "${thing}${s.on ? ` on ${s.on}` : ''}"`],
       didYouMean: hint
         ? []
         : nearest(prop, [...Object.keys(DIALS), ...CSS_PROPERTIES]),
@@ -596,7 +620,7 @@ function refuseInvisibleCorners(ctx, slug, s) {
         ? kids.map(
             k => `${P} set ${slug} corners ${q(s.value || 'round')} --on ${k}`,
           )
-        : [`${P} explain ${s.on}`],
+        : [`${HOW} ${s.on}`],
     },
   );
 }
@@ -658,8 +682,8 @@ export function answerHow(ctx, question) {
     for (const g of intents.slice(0, 3)) {
       if (g === null) {
         results.push({
-          text: `what ${one} reads:`,
-          commands: C.explain(one, P).slice(1),
+          text: `what ${one} reads`,
+          commands: [`${HOW} ${one}`],
         });
         continue;
       }
@@ -763,7 +787,7 @@ export function answerHow(ctx, question) {
       if (kids.length && group === 'text') {
         results.push({
           text: `parts inside ${part} with their own text color: ${kids.join(', ')}. A text token set --on ${part} reaches them; a color property does not.`,
-          commands: kids.slice(0, 1).map(k => `${P} explain ${k}`),
+          commands: kids.slice(0, 1).map(k => `${HOW} ${k}`),
         });
       }
     }
@@ -838,5 +862,5 @@ export function wholeThemeTokens(ctx, aspect) {
   ];
 }
 
-/** The aspects `explain` answers at the whole-theme level. */
+/** The aspects `how` answers at the whole-theme level. */
 export const ASPECTS = [...Object.keys(GROUPS), 'colors'];

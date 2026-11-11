@@ -26,7 +26,7 @@ verified_by:
     packages/core/src/Selector/Selector.test.tsx,
     packages/core/src/Slider/Slider.test.tsx,
   ]
-deciding_specs: [spec:AST-100/DEC-1, spec:AST-094/DEC-17]
+deciding_specs: [spec:AST-100/DEC-1, spec:AST-094/DEC-17, spec:AST-020/DEC-6]
 ---
 
 # Interaction modality architecture
@@ -60,7 +60,7 @@ deciding_specs: [spec:AST-100/DEC-1, spec:AST-094/DEC-17]
     },
     "press-tracking": {
       "names": ["createActionGroupTracker", "useMenuPress"],
-      "claims": ["INV13"]
+      "claims": ["INV13", "INV14"]
     }
   }
 }
@@ -244,7 +244,18 @@ work.
   `module:DropdownMenu/useMenuPress` (OQ1; implementation gap: MultiSelector
   does not mount it yet). No other member keeps its own copy of the tracking. It is not exported (`spec:AST-017`
   FR21).
-- **INV14 — A clip never cuts a focus indicator.** When an Astryx element
+- **INV14 — A one-axis group that chooses tracks a press along its axis.** A
+  group that chooses, whose options sit in one row or one column and whose lift
+  selects one, may track a press along that axis (`tracksAlong`). Button groups
+  and menus do not: `family:action-groups` FR3 still binds them.
+  `actionGroupTracker` then counts a held pointer on the group's center line,
+  clamped to its ends. A drift off the group never cancels the press: the
+  option under the pointer's position along the axis stays highlighted, and
+  the lift selects it. Only a cancel ends the press with no selection: the
+  browser takes the pointer (`pointercancel`), or the person presses Escape.
+  The highlight then returns at once. SegmentedControl, the family's named
+  exception, is the one such group (`spec:AST-020` DEC-6).
+- **INV15 — A clip never cuts a focus indicator.** When an Astryx element
   clips overflow, such as a List clipping for swipe actions or a Layout region
   clipping its content, the focus indicator of each focusable descendant stays
   whole: the clip leaves room for the indicator's width and offset on every
@@ -320,8 +331,8 @@ review (`architecture:knowledge-contracts` change coupling step 6).
 - `architecture:react-component-runtime` owns shared lifecycle and resource
   mechanisms. This record owns only the cross-cutting modality-path,
   no-stale-interaction-outcome, gesture-velocity-source, hover-intent
-  (INV11), scroll-progress-source (INV12), and group press-tracking (INV13)
-  requirements.
+  (INV11), scroll-progress-source (INV12), and group press-tracking (INV13,
+  INV14) requirements.
 - The Core velocity tracker and its release filter (INV10) — the one source of
   gesture velocity for Core components; not exported.
 - The hover recognizer, `HoverGestureRecognizer`, and its `intent` setting
@@ -330,13 +341,14 @@ review (`architecture:knowledge-contracts` change coupling step 6).
 - The native-scroll module's progress and its subscription (INV12) — the one
   source of scroll progress for Core components; not exported.
 - The action-group tracker (INV13) — the one press tracker for action groups
-  outside menus and Selector's and MultiSelector's options; not exported.
+  outside menus and Selector's and MultiSelector's options, with its one-axis
+  tracking (INV14); not exported.
 
 ## Deciding specs
 
 `spec:AST-100/DEC-1` decides one release velocity per kind of surface (INV10),
 and `spec:AST-094/DEC-17` decides one press tracking for every action group
-(INV13). Otherwise no separate specification changes this record. The last-input rule was approved as
+(INV13). `spec:AST-020/DEC-6` decides one-axis tracking (INV14). Otherwise no separate specification changes this record. The last-input rule was approved as
 a system architecture decision by `cixzhang` on 2026-08-30. Essential-action
 reachability, newer-intent precedence, and the evidence/scope guard were approved by
 `cixzhang` on 2026-09-10.
@@ -358,7 +370,6 @@ decide, which keeps the cut rings that exist today.
 
 | Invariant  | Evidence                                                                                                                                                                                                                                                                              | Failure signal                                                                                                                                                                                                                                                                                              |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV14      | Real-browser computed-geometry checks: keyboard focus on a List row under each edge value, and on a control inside a padded LayoutContent and LayoutPanel                                                                                                                             | A focus outline whose painted box is cut on any edge                                                                                                                                                                                                                                                        |
 | INV1, INV2 | Programmatic-focus cases after keyboard and pointer input in representative component tests                                                                                                                                                                                           | Programmatic focus invents a modality, or pointer history paints the keyboard indicator                                                                                                                                                                                                                     |
 | INV3       | Direct-owner, wrapper-owner, replaceable-indicator, and nested-action cases, including a Token inside an Item and a control inside a card; `FocusRingOwner.a11y.chromium.spec.ts` covers the shared module in Selector, and the other wrappers that the gap names are not covered yet | No indicator, two indicators, replacement content that can opt out, or a component that writes the focus-owner attribute or selector itself                                                                                                                                                                 |
 | INV4       | Keyboard, mouse, touch, and pen browser paths where applicable; tap cases on an action trigger with a label tooltip and on a hint-only trigger under `touchTrigger="auto"`                                                                                                            | Hover-only behavior, sticky touch hover, unreachable action, a tap on an action trigger that opens its label tooltip, or hint-only information with no touch path                                                                                                                                           |
@@ -371,6 +382,8 @@ decide, which keeps the cut rings that exist today.
 | INV11      | Evidence gap: not implemented yet; the shared hover recognizer and its adopters' move onto it are pending. Then: unit tests of the hover recognizer's intent and browser tests of its adopters with a mouse, a pen, a finger, and the keyboard                                        | A show without the owner's entry delay, a missed handoff within a group, a delayed keyboard show, a hover-shown surface that closes before the pointer reaches it, a finger served by it, or a second hover-timing implementation fails                                                                     |
 | INV12      | Unit tests of native scroll's progress and real-browser proofs of its adopters                                                                                                                                                                                                        | Progress routed through React state, a missing edge, travel under Reduce Motion, use where native scroll-driven animation is supported, or a public export fails                                                                                                                                            |
 | INV13      | Source boundary check over Core and each family member's pointer-stream tests                                                                                                                                                                                                         | A member outside menus and Selector's and MultiSelector's options that tracks a held pointer across its actions with its own code, or a public export of the tracker, fails                                                                                                                                 |
+| INV14      | `actionGroupTracker.test.ts` one-axis cases and SegmentedControl's drift, past-the-end, cancel and Escape browser cases                                                                                                                                                               | A one-axis group that cancels a press on a drift off it, loses its end action past an end, or keeps its highlight after a cancel or Escape, fails                                                                                                                                                           |
+| INV15      | Real-browser computed-geometry checks: keyboard focus on a List row under each edge value, and on a control inside a padded LayoutContent and LayoutPanel                                                                                                                             | A focus outline whose painted box is cut on any edge                                                                                                                                                                                                                                                        |
 
 Real-browser evidence is required when the behavior depends on
 `:focus-visible`, pointer capability, touch or pen synthesis, rendered focus

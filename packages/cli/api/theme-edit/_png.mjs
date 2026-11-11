@@ -4,7 +4,7 @@
  * @file Read a PNG in plain Node: decompress with zlib, undo the row
  * filters, and give RGBA pixels. Then the main colors of a picture, or the
  * exact color at given points.
- * @position api/theme-edit — pure helpers for `experimental theme explain <picture.png>`
+ * @position api/theme-edit — pure helpers for `experimental theme editor how <picture.png>`
  */
 
 import * as zlib from 'node:zlib';
