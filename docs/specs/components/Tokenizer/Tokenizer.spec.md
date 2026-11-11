@@ -376,9 +376,10 @@ presentation.
   remove, clear, overflow expansion/collapse, and related-surface open/close.
   Exception: when the field's input isn't focused, a finger tap on the remove
   button Token renders removes the token and leaves focus where it was, so the
-  on-screen keyboard stays down; if that remove button held focus, focus moves
-  to the input; a pen, mouse or keyboard removal, and a remove control a custom
-  `renderToken` draws, keep the focus behavior above.
+  on-screen keyboard stays down; if that remove button or another control in
+  its token held focus, focus moves to the input; a pen, mouse or keyboard
+  removal, and a remove control a custom `renderToken` draws, keep the focus
+  behavior above.
 - **AR4 — No visible placement error.** A person MUST NOT see a surface first
   paint at an outer-start or stale position and then jump to its resolved edge.
   Invalid identity falls back before show rather than flashing or showing wrong.
