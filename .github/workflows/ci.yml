@@ -7,9 +7,11 @@
 # merge queue can gate on them before landing a PR.
 name: CI
 # Main's nightly full interaction run and the weekly full WebKit run name
-# their commit, so the main heavy lanes tell them from a release-check. Every
-# other run keeps its default name.
-run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && format('WebKit weekly of {0}', github.sha) || '' }}"
+# their commit, so the main heavy lanes tell them from a release-check. A
+# cut-evidence release-check names its commit too, so people reading Actions
+# tell it from a monitoring release-check. Every other run keeps its default
+# name.
+run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && format('WebKit weekly of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && inputs.evidence && format('Release evidence of {0}', github.sha) || '' }}"
 
 on:
   pull_request:
@@ -49,6 +51,10 @@ on:
         description: 'Release re-check, sent by the release re-check workflow: takes the main check lane at once'
         type: boolean
         default: false
+      evidence:
+        description: 'Cut evidence, sent by the pre-cut release-check and the release re-check: the run is named Release evidence of <sha>'
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -78,7 +84,7 @@ permissions: {}
 # cannot starve them: release-bump, release-merge-back on a merge-back branch
 # (chore/merge-v*), and the build and audit jobs of a release-check a person or
 # the release tooling dispatches (one dispatched by github-actions[bot] stays
-# on standard runners). The release-check's short gating and join jobs
+# on standard runners, a cut-evidence run included). The release-check's short gating and join jobs
 # (release-authority, pr-a11y, a11y-contracts, pr-rtl, release-check) stay on ubuntu-slim. Arm jobs stay arm and x64 stay x64 on
 # both pools, so visual baselines and native builds see the same architecture.
 #
@@ -2509,7 +2515,10 @@ jobs:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           A11Y_CONTRACT_WORKERS: 4
           # The Table release proof's timing budgets hold on 4-core-ubuntu only;
-          # on the scheduled ubuntu-latest checks its receipt reports timing.
+          # on the bot's ubuntu-latest checks, cut-evidence runs included, its
+          # receipt reports timing (spec:AST-030 DEC-17). Moving cut-evidence
+          # runs to the release runner adds `inputs.evidence` to this one
+          # condition, which runs-on shares (ci-table-timing-gate.test.mjs).
           ASTRYX_TABLE_TIMING_GATE: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '1' || '0' }}
         # Tests are split by recorded duration (a11y-contract-shard.mjs), not
         # Playwright's count-based --shard; every listed test runs in one leg.
