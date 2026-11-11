@@ -547,6 +547,51 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
   });
 });
 
+describe('useFocusTrap chorded Tab', () => {
+  function renderEnds() {
+    render(
+      <Trap>
+        <button type="button" data-testid="first">
+          First
+        </button>
+        <button type="button" data-testid="last">
+          Last
+        </button>
+      </Trap>,
+    );
+    return {
+      first: screen.getByTestId('first'),
+      last: screen.getByTestId('last'),
+    };
+  }
+
+  it('leaves Ctrl+Tab and Meta+Tab at either end to the browser', () => {
+    const {first, last} = renderEnds();
+
+    last.focus();
+    expect(fireEvent.keyDown(last, {key: 'Tab', ctrlKey: true})).toBe(true);
+    expect(fireEvent.keyDown(last, {key: 'Tab', metaKey: true})).toBe(true);
+    expect(last).toHaveFocus();
+
+    first.focus();
+    expect(
+      fireEvent.keyDown(first, {key: 'Tab', ctrlKey: true, shiftKey: true}),
+    ).toBe(true);
+    expect(
+      fireEvent.keyDown(first, {key: 'Tab', metaKey: true, shiftKey: true}),
+    ).toBe(true);
+    expect(first).toHaveFocus();
+  });
+
+  it('still wraps Alt+Tab, which moves focus in Safari', () => {
+    const {first, last} = renderEnds();
+    last.focus();
+
+    expect(fireEvent.keyDown(last, {key: 'Tab', altKey: true})).toBe(false);
+    expect(first).toHaveFocus();
+  });
+});
+
 describe('FOCUSABLE_SELECTOR href matching', () => {
   // Only real links (<a href>/<area href>) are focusable via href. A bare
   // [href] term also matched non-focusable elements carrying href (e.g. a
