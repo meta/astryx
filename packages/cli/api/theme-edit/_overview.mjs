@@ -58,6 +58,48 @@ const ROWS = [
 /** @type {Array<{title: string, tree: Tree}>} */
 export const OVERVIEW_SECTIONS = [
   {
+    title: 'Open layers',
+    // First on the page, so the layers open below their anchors on load,
+    // into space kept free for them: nothing on the page sits under them.
+    tree: h(
+      'Card',
+      {variant: 'transparent', minHeight: 180},
+      h(
+        'Grid',
+        {columns: {minWidth: 280, repeat: 'fit'}, gap: 4},
+        h(
+          'HStack',
+          {},
+          h(
+            'Popover',
+            {
+              isOpen: true,
+              label: 'Menu',
+              placement: 'below',
+              content: h(
+                'VStack',
+                {gap: 1},
+                h('Text', {type: 'label'}, 'A popover shown open'),
+                h('Button', {label: 'Rename', variant: 'ghost', size: 'sm'}),
+                h('Button', {label: 'Delete', variant: 'ghost', size: 'sm'}),
+              ),
+            },
+            h('Button', {label: 'Anchor', variant: 'secondary'}),
+          ),
+        ),
+        h(
+          'HStack',
+          {},
+          h(
+            'Tooltip',
+            {isOpen: true, placement: 'below', content: 'A tooltip shown open'},
+            h('Button', {label: 'Tooltip anchor', variant: 'secondary'}),
+          ),
+        ),
+      ),
+    ),
+  },
+  {
     title: 'Type',
     tree: h(
       'VStack',
@@ -249,33 +291,5 @@ export const OVERVIEW_SECTIONS = [
         {key: 'status', header: 'Status'},
       ],
     }),
-  },
-  {
-    title: 'Open layers',
-    tree: h(
-      'HStack',
-      {gap: 10, align: 'start', wrap: 'wrap'},
-      h(
-        'Popover',
-        {
-          isOpen: true,
-          label: 'Menu',
-          placement: 'end',
-          content: h(
-            'VStack',
-            {gap: 1},
-            h('Text', {type: 'label'}, 'A popover shown open'),
-            h('Button', {label: 'Rename', variant: 'ghost', size: 'sm'}),
-            h('Button', {label: 'Delete', variant: 'ghost', size: 'sm'}),
-          ),
-        },
-        h('Button', {label: 'Anchor', variant: 'secondary'}),
-      ),
-      h(
-        'Tooltip',
-        {isOpen: true, placement: 'end', content: 'A tooltip shown open'},
-        h('Button', {label: 'Tooltip anchor', variant: 'secondary'}),
-      ),
-    ),
   },
 ];

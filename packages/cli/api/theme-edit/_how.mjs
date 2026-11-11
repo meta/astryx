@@ -408,8 +408,13 @@ const COLOR_QUESTIONS = [
 export function colorQuestion(question) {
   const q = question.toLowerCase();
   // A question about another aspect ("make the text red", "override the
-  // corner radius") is answered for that aspect, not as a color question.
-  if (INTENTS.some(([aspect, re]) => aspect !== 'background' && re.test(q)))
+  // corner radius", "a yellow background") is answered for that aspect, not
+  // as a color question. Color words alone raise the background aspect, so
+  // only a background named outright counts.
+  if (
+    INTENTS.some(([aspect, re]) => aspect !== 'background' && re.test(q)) ||
+    /\b(background|bg|backdrop|fill)\b/.test(q)
+  )
     return null;
   const hit = COLOR_QUESTIONS.find(([re]) => re.test(q));
   return hit ? [hit[1](q)] : null;
