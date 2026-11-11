@@ -54,12 +54,24 @@ describe('optimizeTemplateImages', () => {
     expect(optimizeTemplateImages(source, isServed)).toBe(source);
   });
 
+  it('agrees with the copy on what a fixture reference is', () => {
+    const source = [
+      "const a = '/template-assets/light-product-1.png?v=2';",
+      "const b = '/template-assets/light-product-1.PNG#top';",
+    ].join('\n');
+    expect(optimizeTemplateImages(source, () => true)).toBe(
+      [
+        `const a = '${OPTIMIZED}';`,
+        "const b = '/_next/image?url=%2Ftemplate-assets%2Flight-product-1.PNG&w=1920&q=75';",
+      ].join('\n'),
+    );
+  });
+
   it('leaves vector images, video, other hosts, and text', () => {
     const source = [
       "const a = '/template-assets/placeholder.svg';",
       "const b = '/template-assets/Nature-1.mp4';",
       "const c = 'https://example.com/template-assets/hero.png';",
-      "const d = '/template-assets/light-product-1.png?v=2';",
       '<Text>Photos live in /template-assets/light-product-1.png today.</Text>',
     ].join('\n');
     expect(optimizeTemplateImages(source, () => true)).toBe(source);

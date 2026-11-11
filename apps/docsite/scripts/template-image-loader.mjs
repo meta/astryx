@@ -13,6 +13,7 @@
 
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
+import {mapFixtureRefs} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 
 // The optimizer does not enlarge, so this width keeps the pixel size of every
 // image that is not wider. It must be a width the optimizer allows
@@ -21,9 +22,8 @@ export const TEMPLATE_IMAGE_WIDTH = 1920;
 // Must be in `images.qualities`.
 export const TEMPLATE_IMAGE_QUALITY = 75;
 
-// A whole quoted or `url()` value, the two forms the CLI replaces on copy.
-const TEMPLATE_IMAGE =
-  /(?<=['"`(])\/template-assets\/[\w@.-]+\.(?:png|jpe?g)(?=['"`)])/gu;
+// The formats the optimizer converts. It refuses a vector image.
+const OPTIMIZED_FORMAT = /\.(?:png|jpe?g)$/iu;
 
 /**
  * The optimizer URL for a template image: the same picture in the format the
@@ -38,8 +38,10 @@ export function templateImageUrl(path) {
 
 /**
  * Address each template image the optimizer can serve by its optimizer URL.
- * Other references stay as written: vector images, video, and the missing
- * files that fallback examples name.
+ * The CLI's scanner finds the references, so a preview and a copy agree on
+ * what a fixture reference is. Other references stay as written: vector
+ * images, video, a mention in text, and the missing files that fallback
+ * examples name.
  *
  * @param {string} source
  * @param {(path: string) => boolean} isServed whether `public` serves a file
@@ -47,9 +49,16 @@ export function templateImageUrl(path) {
  * @returns {string}
  */
 export function optimizeTemplateImages(source, isServed) {
-  return source.replace(TEMPLATE_IMAGE, path =>
-    isServed(path) ? templateImageUrl(path) : path,
-  );
+  return mapFixtureRefs(source, ({reference, kind, isValue}) => {
+    if (kind !== 'image' || !isValue) {
+      return null;
+    }
+    // A query or a fragment does not select another file.
+    const path = reference.split(/[?#]/u)[0];
+    return OPTIMIZED_FORMAT.test(path) && isServed(path)
+      ? templateImageUrl(path)
+      : null;
+  }).source;
 }
 
 /**
