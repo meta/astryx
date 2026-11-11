@@ -31,7 +31,7 @@ import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import {Text} from '../Text/Text';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
-import {textDirectionProps} from '../utils/textDirection';
+import {withTextDirection} from '../utils/textDirection';
 import type {FieldStatusPlacement} from './fieldStatusPlacement';
 
 const styles = stylex.create({
@@ -321,11 +321,7 @@ export function Field({
                 id={resolvedDescriptionID}>
                 {/* As in FieldLabel: plain left-to-right text keeps its
                     written order on a right-to-left page. */}
-                {textDirectionProps(description).dir == null ? (
-                  description
-                ) : (
-                  <span dir="ltr">{description}</span>
-                )}
+                {withTextDirection(description)}
               </Text>
             ))}
           {children}

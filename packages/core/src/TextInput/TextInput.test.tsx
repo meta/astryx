@@ -1562,4 +1562,22 @@ describe('TextInput in a narrow row', () => {
     const root = container.querySelector('.astryx-field')!;
     expect(getComputedStyle(root).minWidth).toBe('0');
   });
+
+  it('keeps the written order of a tooltip-placement status message under right-to-left', () => {
+    render(
+      <div dir="rtl">
+        <TextInput
+          label="Website"
+          value=""
+          onChange={() => {}}
+          status={{type: 'error', message: 'Prefix https://'}}
+          statusVariant="tooltip"
+        />
+      </div>,
+    );
+    expect(screen.getByText('Prefix https://')).toHaveAttribute('dir', 'ltr');
+    expect(
+      screen.getByRole('textbox', {name: 'Website'}),
+    ).toHaveAccessibleDescription('Prefix https://');
+  });
 });
