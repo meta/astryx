@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -28,6 +29,28 @@ describe('duration-balanced Node legs', () => {
     // The slowest files still exist, so the split they steer is real.
     for (const file of slowest.slice(0, 6))
       expect(fs.existsSync(path.join(ROOT, file)), file).toBe(true);
+  });
+
+  it("records a time for nine in ten of the Node project's test files, so new slow suites cannot pile into one leg", () => {
+    // The `node` project's include and exclude globs (vitest.config.ts). A
+    // file with no recorded time counts as the median, about 0 s, so slow
+    // files left out of the record all look cheap and can share one leg.
+    const include =
+      /^(?:packages\/[^/]+\/src\/.+|packages\/cli\/.+|internal\/.+|scripts\/.+|\.github\/scripts\/.+|apps\/storybook\/\.storybook\/.+|apps\/sandbox\/src\/.+)\.test\.(?:ts|tsx|mjs)$/;
+    const exclude =
+      /^packages\/(?:core|lab|charts|richtext|vega)\/|(?:^|\/)node_modules\//;
+    const nodeFiles = execFileSync('git', ['ls-files'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .filter(file => include.test(file) && !exclude.test(file));
+    const missing = nodeFiles.filter(file => !(file in recorded));
+    expect(nodeFiles.length).toBeGreaterThan(500);
+    expect(
+      missing.length / nodeFiles.length,
+      `unrecorded: ${missing.slice(0, 10).join(', ')}`,
+    ).toBeLessThanOrEqual(0.1);
   });
 
   it.each([4, 6])(
