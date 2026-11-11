@@ -10,11 +10,16 @@
  *   turn off that control's label tooltip, so the control never shows two.
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from './sharedContext';
 
 /**
  * True while an owner shows its own tooltip on the controls inside. Button
  * then shows no `tooltip` of its own. ComplexSelector sets it around a
  * `renderTrigger` control while its disabled reason shows.
  */
-export const LabelTooltipSuppressionContext = createContext(false);
+export const LabelTooltipSuppressionContext = createSharedContext(
+  'LabelTooltipSuppressionContext',
+  1,
+  false,
+);
+LabelTooltipSuppressionContext.displayName = 'LabelTooltipSuppressionContext';
