@@ -651,6 +651,21 @@ they are separately named.
   requests (the `vjeux` lane's spike set) MUST show that selective runs catch
   every failure the full runs caught (DEC-28). FR31 gap: the selection and its tests have no implementation yet; the lane runs every interaction spec.
 
+- **FR32 — A changed release spec runs in full before merge.** A pull request
+  runs a release spec in full, alone (`--workers=1`), on `4-core-ubuntu`, the
+  runner class whose release-check timings gate, in the `release-specs (changed)` job, when it adds
+  or changes the spec, changes a module the spec imports where the
+  touched-component mapping can see it, or changes a component the spec
+  visits. A release spec is a `*.release.*.spec.ts` file or a spec tagged
+  `@pr-a11y release-only`. A spec visits a component through a story id
+  (`core-<component>--…`) or a sandbox path that maps to the component's
+  folder; a visit that cannot be resolved runs the spec. A Lab-only pull request (FR26) runs the job for the release specs it triggers. The job MUST NOT drop a spec as not run. Merge-guard requires the job only when a pull request
+  triggers it; a missing, skipped, or stale-head result waits and fails
+  closed. A timing-budget miss in the job is a failure, not a flake; it is not
+  retried automatically, and a budget question goes to the specification
+  owner (DEC-29). FR32 gap: no workflow job runs changed release specs on a
+  pull request.
+
 ### Platform support
 
 - Supported feature/engine floor: GitHub pull-request and merge-group workflows
@@ -737,6 +752,7 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR30     | `test-scope-action.test.mjs` release-branch cases and the required release-validator contract                                                                                                 | generated outputs only; one test-repair path; mixed or product paths; empty, failed, and truncated file lists                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a non-generated release candidate gets the narrow lane, uncertainty skips broad CI, or the required release validator disappears                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FR31     | Chromium interaction selection cases in `playwright-legs.test.mjs` and the CI workflow contract                                                                                               | a change to one component; a component that another component's folder renders; a type-only importer; a changed interaction spec file; a `shared-or-unknown` path; a listed shared primitive; a changed source path in no component folder; a dependency graph that cannot be computed; a release check, a nightly run of `main` and a merge-group entry                                                                                                                                                                                                                                                                                                                                                                                                                                         | a dependent's spec is left out, a type-only importer's spec runs, a shared, unmapped or fail-closed change runs less than the full suite, or a full-suite event is narrowed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | FR31     | a replay of the `vjeux` lane's spike set: each selective plan against its full run's failures. FR31 gap: the replay validation has no committed record yet                                    | every failure a full run caught in that set                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | a failure that a full run caught is outside the selective plan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| FR32     | workflow contract tests for the `release-specs (changed)` job                                                                                                                                 | an added, a changed, and an unchanged release spec; a changed module a release spec imports; a spec tagged `@pr-a11y release-only`; a changed component a spec visits by story id or sandbox path, and an unresolvable visit; a Lab-only pull request; merge-guard's required-when-triggered check with a missing, skipped, and stale-head result                                                                                                                                                                                                                                                                                                                                                                                                                                                | a changed release spec not run, a skipped or stale result that passes, or a timing miss retried automatically                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ## Decision log
 
@@ -1339,6 +1355,26 @@ release checks and a nightly run of `main` keep the full suite.
 Rejected: running the full interaction suite on every pull request.
 
 Amended by the same delegated authority (chief ruling 11/09 22:24, refined 11/09 23:19): a component folder's unit tests, docs and accessibility specs select nothing for the interaction lanes unless an interaction spec or proof page imports them.
+
+### DEC-29 — A changed release spec runs in full on its pull request
+
+**Reference:** `spec:AST-030/DEC-29`
+**Decider:** Chief of staff (delegated CI authority), `2026-11-10`
+
+A pull request that adds or changes a release spec runs it in full, alone, on `4-core-ubuntu` (FR32). This extends DEC-28's
+rule that a changed spec always runs to release specs, because FR12's
+contract plan can drop a changed release spec as not run, so the spec first
+runs at a release check after it merged. Running alone on `4-core-ubuntu`, the runner class whose release-check timings gate, keeps other specs' load out of its timings; a spec whose record needs the same isolation in the release check names it there.
+
+Rejected: keeping changed release specs inside the contract plan (it can drop
+them), and running them only at release checks (a broken release spec then
+reaches `main`).
+
+Amended by the same delegated authority (chief ruling 11/10 10:09): FR32
+also covers specs tagged `@pr-a11y release-only` and runs a release spec when
+a pull request changes a component it visits, because a release spec that
+renders a component through a page imports none of it; a visit that cannot be
+resolved runs the spec.
 
 ## Open questions
 
