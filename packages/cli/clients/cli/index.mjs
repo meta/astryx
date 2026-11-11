@@ -123,7 +123,6 @@ export const JSON_SUPPORTED = new Set([
   'experimental theme eject',
   'experimental theme template',
   'experimental theme targets',
-  'experimental theme palette generate',
   'build',
   'swizzle',
   'gap-report',

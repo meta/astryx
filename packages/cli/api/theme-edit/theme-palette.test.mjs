@@ -113,15 +113,23 @@ describe('color dials through the palette generator', () => {
       /"--color-accent": \[\s*palette\.accent\.light\[\d+\],\s*palette\.accent\.dark\[\d+\]\s*\]/,
     );
     const show = await themeEditShow('p', {cwd});
-    const pal = /** @type {any} */ (show.data.palette);
-    const tokens = pal.families[0].tokens;
+    expect(show.data.colors[0]).toMatchObject({
+      color: 'accent',
+      seed: '#7c3aed',
+    });
+    const tokens = show.data.colors[0].tokens;
     const candidate = generateTonalPalette(
       JSON.parse(read('palette.config.json')),
     );
-    for (const mode of /** @type {const} */ (['light', 'dark'])) {
-      const [, stop, color] =
-        /^stop (\d+) (#[0-9a-f]{6})$/.exec(tokens['--color-accent'][mode]) ??
-        [];
+    const shades =
+      /^light (\d+) (#[0-9a-f]{6}), dark (\d+) (#[0-9a-f]{6})$/.exec(
+        tokens['--color-accent'],
+      );
+    for (const [i, mode] of /** @type {const} */ ([
+      [1, 'light'],
+      [3, 'dark'],
+    ])) {
+      const [stop, color] = [shades?.[i], shades?.[i + 1]];
       expect(/** @type {any} */ (candidate.palette.accent)[mode][stop]).toBe(
         color,
       );
@@ -137,9 +145,13 @@ describe('color dials through the palette generator', () => {
         '--focus-outline-color',
       ]),
     );
-    expect(pal.contrast.join('\n')).toMatch(
-      /--color-text-accent light: .*pass/,
-    );
+    expect(show.data.vibrancy).toBe(50);
+    expect(show.data.colorFiles).toEqual({
+      config: 'themes/p/palette.config.json',
+      module: 'themes/p/tokens/p.palette.ts',
+      receipt: 'themes/p/tokens/p.palette.receipt.json',
+    });
+    expect(Object.keys(show.data).at(-1)).toBe('colorFiles');
   });
 
   it('round-trips: the receipt regenerates the same palette bytes', async () => {
@@ -172,8 +184,8 @@ describe('color dials through the palette generator', () => {
       light: '#ff0000',
       dark: '#ff0000',
     });
-    expect(/** @type {any} */ (show.data.palette).overridden).toContain(
-      '--color-accent',
+    expect(show.data.colors[0].tokens['--color-accent']).toContain(
+      '(your exact setting wins)',
     );
     const source = read('p.settings.ts');
     expect(source).toContain('"--color-accent": "#ff0000"');
@@ -183,12 +195,12 @@ describe('color dials through the palette generator', () => {
 
   it('keeps config fields and families the editor does not own', async () => {
     const config = JSON.parse(read('palette.config.json'));
-    config.vibrancy = 70;
+    config.stops = [0, 10, 25, 45, 60, 70, 80, 90, 95, 100];
     config.families.push({id: 'brand-pink', seed: '#db2777'});
     fs.writeFileSync(file('palette.config.json'), JSON.stringify(config));
     await themeEditSet('p', 'accent', '#0d9488', {cwd});
     const next = JSON.parse(read('palette.config.json'));
-    expect(next.vibrancy).toBe(70);
+    expect(next.stops).toEqual(config.stops);
     expect(next.families.map((/** @type {any} */ f) => f.id)).toEqual([
       'accent',
       'brand-pink',
@@ -196,14 +208,14 @@ describe('color dials through the palette generator', () => {
     expect(next.families[0].seed).toBe('#0d9488');
     expect(read('tokens/p.palette.ts')).toContain('"brand-pink"');
     next.families.pop();
-    delete next.vibrancy;
+    delete next.stops;
     fs.writeFileSync(file('palette.config.json'), JSON.stringify(next));
   });
 
   it('grows neutral and status families with their token words', async () => {
     await themeEditSet('p', 'neutral', '#64748b', {cwd});
     const r = await themeEditSet('p', 'danger', 'crimson', {cwd});
-    expect(r.data.notes.join(' ')).toContain('--color-error is danger stop');
+    expect(r.data.notes.join(' ')).toContain('--color-error uses danger shade');
     const config = JSON.parse(read('palette.config.json'));
     expect(config.neutralProfile).toBe('custom');
     expect(config.families).toEqual(
@@ -230,13 +242,17 @@ describe('color dials through the palette generator', () => {
 
   it('undo removes the family, its tokens and, with no family left, the palette files', async () => {
     const r = await themeEditUndo('p', {cwd, thing: 'accent'});
-    expect(r.data.notes.join(' ')).toContain('accent family');
+    expect(r.data.notes.join(' ')).toContain(
+      'the accent color is no longer generated',
+    );
     expect(fs.existsSync(file('palette.config.json'))).toBe(false);
     expect(fs.existsSync(file('tokens/p.palette.ts'))).toBe(false);
     expect(fs.existsSync(file('tokens/p.palette.receipt.json'))).toBe(false);
     expect(read('p.settings.ts')).not.toContain('palette');
     const show = await themeEditShow('p', {cwd});
-    expect(show.data.palette).toBe(null);
+    expect(show.data.colors).toEqual([]);
+    expect(show.data.vibrancy).toBe(null);
+    expect(show.data.colorFiles).toBe(null);
   });
 
   it('a step back with plain undo brings the family and its files back', async () => {
@@ -273,11 +289,124 @@ describe('color dials through the palette generator', () => {
     expect(fs.existsSync(file('palette.config.json'))).toBe(false);
   });
 
-  it('how explains the palette and a color dial', async () => {
-    const pal = await themeEditHow('palette', {cwd});
-    expect(JSON.stringify(pal.data)).toContain('palette.config.json');
+  it('how explains the colors and a color dial', async () => {
+    for (const subject of ['palette', 'colors']) {
+      const r = await themeEditHow(subject, {cwd});
+      const first = r.data.results[0];
+      expect(first.text).toContain('one seed');
+      expect(first.text).toContain('light and dark');
+      expect(first.text).toContain('theme palette generate');
+    }
     const accent = await themeEditHow('accent', {cwd});
-    expect(accent.data.stops.join(' ')).toContain('--color-text-accent');
+    expect(accent.data.shades.join(' ')).toContain('--color-text-accent');
+  });
+
+  it('vibrancy regenerates the colors, steps by 10, and is checked', async () => {
+    const none = await refusal(() =>
+      themeEditSet('p', 'vibrancy', '60', {cwd}),
+    );
+    expect(none.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(none.run[0]).toContain('set p accent');
+    await themeEditSet('p', 'accent', '#7c3aed', {cwd});
+    const before = read('tokens/p.palette.ts');
+    const r = await themeEditSet('p', 'vibrancy', '80', {cwd});
+    expect(r.data.notes.join(' ')).toContain('vibrancy 80');
+    expect(JSON.parse(read('palette.config.json')).vibrancy).toBe(80);
+    expect(read('tokens/p.palette.ts')).not.toBe(before);
+    const less = await themeEditSet('p', 'vibrancy', 'less', {cwd});
+    expect(less.data.setting.value).toBe('70');
+    for (const v of ['101', '-1', '4.5', 'loud'])
+      expect(
+        (await refusal(() => themeEditSet('p', 'vibrancy', v, {cwd}))).code,
+        v,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('p', 'vibrancy', '60', {cwd, on: 'card'}),
+        )
+      ).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+    expect((await themeEditShow('p', {cwd})).data.vibrancy).toBe(70);
+    await themeEditUndo('p', {cwd, thing: 'vibrancy'});
+    expect(JSON.parse(read('palette.config.json')).vibrancy).toBeUndefined();
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
+  it('new takes any dial as a setting, checked, in one build', async () => {
+    const r = await themeEditNew('n', {
+      cwd,
+      settings: {
+        vibrancy: '60',
+        accent: '#7c3aed',
+        corners: 'round',
+        mode: 'light-only',
+      },
+    });
+    expect(r.data.settings).toEqual([
+      'corners = round (whole theme)',
+      'accent = #7c3aed (whole theme)',
+      'vibrancy = 60 (whole theme)',
+    ]);
+    const data = JSON.parse(
+      fs.readFileSync(path.join(cwd, 'themes/n/n.settings.json'), 'utf8'),
+    );
+    expect(data.mode).toBe('light-only');
+    expect(
+      JSON.parse(
+        fs.readFileSync(path.join(cwd, 'themes/n/palette.config.json'), 'utf8'),
+      ).vibrancy,
+    ).toBe(60);
+    expect(fs.existsSync(path.join(cwd, 'themes/n/n.history.json'))).toBe(
+      false,
+    );
+    for (const [settings, code] of /** @type {const} */ ([
+      [{vibrancy: '60'}, 'ERR_THEME_NO_EFFECT'],
+      [{corners: 'wobbly'}, 'ERR_THEME_BAD_VALUE'],
+      [{base: 'neutral'}, 'ERR_INVALID_ARGUMENT'],
+      [{sparkle: 'yes'}, 'ERR_INVALID_ARGUMENT'],
+    ])) {
+      expect(
+        (await refusal(() => themeEditNew('m', {cwd, settings}))).code,
+        JSON.stringify(settings),
+      ).toBe(code);
+      expect(fs.existsSync(path.join(cwd, 'themes/m'))).toBe(false);
+    }
+    fs.rmSync(path.join(cwd, 'themes/n'), {recursive: true, force: true});
+  });
+
+  it('answers color questions with exact commands and plain words', async () => {
+    /** @param {string} q */
+    const ask = async q => {
+      const r = await themeEditHow(q, {cwd});
+      const out = JSON.stringify(r.data.results);
+      expect(out, q).not.toMatch(/palette|famil/i);
+      return {
+        text: r.data.results.map(x => x.text).join(' '),
+        commands: r.data.results.flatMap(x => x.commands).join('\n'),
+      };
+    };
+    expect((await ask('brand color')).commands).toContain('set <theme> accent');
+    const more = await ask('make it more colorful');
+    expect(more.commands).toContain('set <theme> vibrancy more');
+    expect((await ask('less saturated')).commands).toContain(
+      'set <theme> vibrancy less',
+    );
+    expect((await ask('dark mode colors')).commands).toContain('--mode dark');
+    const status = await ask('status colors');
+    for (const d of ['danger', 'success', 'warning', 'info'])
+      expect(status.commands).toContain(`set <theme> ${d}`);
+    expect((await ask('error red')).commands.split('\n')[0]).toContain(
+      'set <theme> danger',
+    );
+    expect((await ask('see all shades')).commands).toContain('preview add');
+    const exact = await ask('exact color for one token');
+    expect(exact.commands).toContain('set <theme> --color-accent');
+    expect(exact.text).toContain('wins over the generated colors');
+    const parts = await themeEditHow('white text in the banner', {cwd});
+    expect(/** @type {any} */ (parts.data).understood.parts).toContain(
+      'banner',
+    );
   });
 });
 
