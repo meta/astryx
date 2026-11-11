@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+'use client';
+
 /**
  * @file labelTooltipSuppression.ts
  * @input Uses React context
