@@ -678,8 +678,15 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         </Text>,
       );
       expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+      // Tab focus matches :focus-visible in a browser; jsdom does not model it
+      // for a tab.
+      const link = screen.getByRole('link', {name: LABEL});
+      const realMatches = link.matches.bind(link);
+      vi.spyOn(link, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? true : realMatches(selector),
+      );
       await user.tab();
-      expect(screen.getByRole('link', {name: LABEL})).toHaveFocus();
+      expect(link).toHaveFocus();
       await waitFor(
         () => {
           expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
@@ -690,6 +697,45 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       restore();
     }
   });
+
+  // Chrome on Android focuses a focusable element between a press and its
+  // click. That focus is not :focus-visible, so it must not take the tap.
+  it.each([
+    ['loaded', false],
+    ['still loading', true],
+  ])(
+    'opens on the first tap on a focusable child, though the tap focuses it first (Tooltip %s)',
+    async (_state, isFresh) => {
+      const {showPopover, restore} = withOverflowAndPopover();
+      try {
+        render(
+          <Text type="body" maxLines={1}>
+            {LABEL} <button type="button">Edit</button>
+          </Text>,
+        );
+        if (!isFresh) {
+          // Let the Tooltip module load, as it does once text is truncated.
+          await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 300));
+          });
+        }
+        const child = screen.getByRole('button', {name: 'Edit'});
+        const realMatches = child.matches.bind(child);
+        vi.spyOn(child, 'matches').mockImplementation((selector: string) =>
+          selector === ':focus-visible' ? false : realMatches(selector),
+        );
+        fireEvent.pointerDown(child, {pointerType: 'touch'});
+        fireEvent.pointerUp(child, {pointerType: 'touch'});
+        act(() => child.focus());
+        fireEvent.click(child);
+        await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
+          timeout: 3000,
+        });
+      } finally {
+        restore();
+      }
+    },
+  );
 
   it('opens nothing for a click that follows a scroll with no press of its own', async () => {
     const {showPopover, restore} = withOverflowAndPopover();

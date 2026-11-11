@@ -140,7 +140,21 @@ export function useTruncationTooltipInterest(
     },
     [isEnabled, tapRecognizer, want, forget],
   );
-  const onFocus = useCallback(() => want('focus'), [want]);
+  // Only a focus a mounted tooltip opens on is held: one that matches
+  // :focus-visible. A press focuses a focusable child before its click on
+  // some browsers (Chrome on Android); holding that focus would mount the
+  // tooltip too late to see the press, and the tap would open nothing.
+  const onFocus = useCallback(
+    (event: FocusEvent<HTMLElement>) => {
+      if (
+        event.target instanceof Element &&
+        event.target.matches(':focus-visible')
+      ) {
+        want('focus');
+      }
+    },
+    [want],
+  );
   const onBlur = useCallback(() => forget('focus'), [forget]);
   return {
     isWanted,
