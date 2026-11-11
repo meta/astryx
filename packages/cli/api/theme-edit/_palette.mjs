@@ -344,7 +344,10 @@ export function syncPalette(cwd, slug, data) {
     fs.existsSync(abs(f.palette)) &&
     fs.existsSync(abs(f.receipt));
   if (same) return;
-  fs.writeFileSync(abs(f.config), text);
+  // Written whole and renamed in, never through a link.
+  const tmp = `${abs(f.config)}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, abs(f.config));
   themePaletteGenerate(f.config, {out: f.palette, overwrite: true}, {cwd});
 }
 

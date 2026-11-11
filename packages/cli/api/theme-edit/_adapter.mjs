@@ -40,18 +40,87 @@ import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {findAstryxProject} from '../../foundation/fs/paths.mjs';
+import {q} from './_settings.mjs';
 
 export {themeEditHow, parsePoints} from './_how.mjs';
 export const {themeEditPreviewApp} = preview;
 
 /**
- * The project a command acts on: the Astryx project at or above `cwd` (the
- * same walk `upgrade` uses), else `cwd` itself. Run from a subfolder of an
- * app, a command still finds the app's themes.
+ * The project a command acts on: the nearest folder at or above `cwd` with a
+ * package.json. Run from a subfolder of an app, a command still finds the
+ * app's themes; it never walks past the nearest package into another
+ * project; a folder with Core installed counts as one. That package must
+ * name Core (in any dependency list) or hold editor themes; a package that
+ * does not, inside a project that does, is refused with the folder to run
+ * from. Otherwise, `cwd` itself.
  * @param {string} cwd
  */
 export function projectRoot(cwd) {
-  return findAstryxProject(cwd) ?? path.resolve(cwd);
+  const start = path.resolve(cwd);
+  for (let dir = start; ; dir = path.dirname(dir)) {
+    const pkg = path.join(dir, 'package.json');
+    // A folder with Core installed is a project, with or without a
+    // package.json of its own.
+    if (
+      !fs.existsSync(pkg) &&
+      fs.existsSync(
+        path.join(dir, 'node_modules', '@astryxdesign', 'core', 'package.json'),
+      )
+    )
+      return dir;
+    if (fs.existsSync(pkg)) {
+      /** @type {any} */
+      let json;
+      try {
+        json = JSON.parse(fs.readFileSync(pkg, 'utf8').replace(/^\uFEFF/, ''));
+      } catch {
+        throw new AstryxError(
+          `${path.relative(start, pkg) || 'package.json'} is not valid JSON, so the app it belongs to is unknown. Fix it, then run the command again. Nothing was written.`,
+          [],
+          ERROR_CODES.ERR_PROJECT_REQUIRED,
+        );
+      }
+      if (usesCore(dir, json)) return dir;
+      const parent =
+        path.dirname(dir) === dir ? null : findAstryxProject(path.dirname(dir));
+      if (parent)
+        throw new AstryxError(
+          `${path.relative(start, pkg) || 'package.json'} is a package that does not use @astryxdesign/core; the app that does is ${path.relative(start, parent) || '.'}. Run the command from there, so the theme lands in that app. Nothing was written.`,
+          [
+            {
+              name: `cd ${q(path.relative(start, parent))}`,
+              reason: 'do this first',
+            },
+          ],
+          ERROR_CODES.ERR_PROJECT_REQUIRED,
+        );
+      return start;
+    }
+    if (path.dirname(dir) === dir) return start;
+  }
+}
+
+/**
+ * Whether the package in `dir` uses Core: it names it in a dependency list
+ * (peer included), or already holds editor themes.
+ * @param {string} dir
+ * @param {any} json its package.json
+ */
+function usesCore(dir, json) {
+  const core = '@astryxdesign/core';
+  if (
+    ['dependencies', 'devDependencies', 'peerDependencies'].some(
+      k => json?.[k]?.[core] != null,
+    )
+  )
+    return true;
+  const themes = path.join(dir, 'themes');
+  return (
+    fs.existsSync(themes) &&
+    fs
+      .readdirSync(themes)
+      .some(t => fs.existsSync(path.join(themes, t, `${t}.settings.json`)))
+  );
 }
 
 /** @param {number} ms */
@@ -204,6 +273,7 @@ async function withLock(root, name, fn) {
 function atRoot(options) {
   const from = options.cwd ?? process.cwd();
   const cwd = projectRoot(from);
+  sweepLeftovers(cwd);
   return {
     ...options,
     cwd,
@@ -211,6 +281,51 @@ function atRoot(options) {
       ? {path: path.relative(cwd, path.resolve(from, options.path)) || '.'}
       : {}),
   };
+}
+
+/**
+ * Remove what commands that are no longer running left behind: render
+ * folders, load copies and half-written files, each named with the process
+ * id that made it.
+ * @param {string} root
+ */
+function sweepLeftovers(root) {
+  const dead = (/** @type {string} */ pid) => {
+    if (Number(pid) === process.pid) return false;
+    try {
+      process.kill(Number(pid), 0);
+      return false;
+    } catch (e) {
+      return /** @type {any} */ (e)?.code === 'ESRCH';
+    }
+  };
+  /** @param {string} dir @param {RegExp} pattern */
+  const sweep = (dir, pattern) => {
+    /** @type {string[]} */
+    let names;
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      const m = pattern.exec(name);
+      const pid = m?.[1] ?? m?.[2];
+      if (pid && dead(pid))
+        fs.rmSync(path.join(dir, name), {recursive: true, force: true});
+    }
+  };
+  try {
+    const themes = path.join(root, 'themes');
+    sweep(themes, /^\.astryx-render-(\d+)-/);
+    for (const t of fs.existsSync(themes) ? fs.readdirSync(themes) : [])
+      sweep(path.join(themes, t), /(?:\.load-(\d+)-|\.(\d+)\.tmp$)/);
+    const cache = path.join(root, 'node_modules', '.cache', 'astryx-theme');
+    for (const v of fs.existsSync(cache) ? fs.readdirSync(cache) : [])
+      sweep(path.join(cache, v), /\.load-(\d+)-/);
+  } catch {
+    // A leftover that cannot be removed is no reason to refuse a command.
+  }
 }
 
 /** @param {any} name */

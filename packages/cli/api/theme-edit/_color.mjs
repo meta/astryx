@@ -443,14 +443,21 @@ export const isNumber = (v, name = '') => {
 };
 
 /**
- * Whether a value can sit in a CSS declaration as it is: no `;{}<>`, no
- * newline or comment, no `!important`, and brackets and quotes closed.
+ * Whether a value can sit in a CSS declaration as it is: no `<>`, control
+ * character, comment or `!important` anywhere; outside a quoted string or a
+ * `url(data:…)`, no `;{}`; brackets and quotes closed. So `content: "a;b"`
+ * and a base64 data URL are values, and nothing can end the declaration.
  * @param {string} v
  */
 export function isSafeValue(v) {
-  if (/[;{}<>\n\r]|\/\*|!important/i.test(v)) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[<>\u0000-\u001f\u007f]|\/\*|!important/i.test(v)) return false;
+  const outside = v
+    .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""')
+    .replace(/url\(data:[^\s"'()\\]*\)/gi, 'url()');
+  if (/[;{}\\]/.test(outside)) return false;
   let depth = 0;
-  for (const c of v.replace(/"[^"]*"|'[^']*'/g, '')) {
+  for (const c of outside.replace(/""/g, '')) {
     if (c === '"' || c === "'") return false;
     if (c === '(') depth++;
     if (c === ')' && --depth < 0) return false;

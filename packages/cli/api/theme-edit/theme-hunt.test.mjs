@@ -219,16 +219,17 @@ describe('settings edited by hand', () => {
     await themeEditSet('bv', 'text-size', 'large', {cwd});
     const file = path.join(cwd, 'themes/bv/bv.settings.json');
     const good = fs.readFileSync(file, 'utf8');
-    for (const bad of [
-      good.replace('"large"', '"huge"'),
-      JSON.stringify({name: 'bv', mode: 'both', settings: 5}),
-    ]) {
+    // A value names the setting to remove; a broken shape, the step back.
+    for (const [bad, fix] of /** @type {const} */ ([
+      [good.replace('"large"', '"huge"'), /undo bv text-size$/],
+      [JSON.stringify({name: 'bv', mode: 'both', settings: 5}), /undo bv$/],
+    ])) {
       fs.writeFileSync(file, bad);
       const r = await refusal(() =>
         themeEditSet('bv', 'corners', 'small', {cwd}),
       );
       expect(r.code).toBe('ERR_THEME_INVALID');
-      expect(r.run[0]).toMatch(/undo bv$/);
+      expect(r.run[0]).toMatch(fix);
       expect(fs.readFileSync(file, 'utf8')).toBe(bad);
     }
     fs.rmSync(path.join(cwd, 'themes/bv'), {recursive: true, force: true});
@@ -378,6 +379,48 @@ describe('where commands act', () => {
     }
   });
 
+  it('never walks past the nearest package into another project', () => {
+    const mono = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-mono-'));
+    /** @param {string} rel @param {object} json */
+    const pkg = (rel, json) => {
+      fs.mkdirSync(path.join(mono, rel), {recursive: true});
+      fs.writeFileSync(
+        path.join(mono, rel, 'package.json'),
+        JSON.stringify(json),
+      );
+    };
+    try {
+      pkg('.', {devDependencies: {'@astryxdesign/core': '*'}});
+      pkg('packages/lib', {peerDependencies: {'@astryxdesign/core': '*'}});
+      pkg('packages/tool', {name: 'tool'});
+      fs.mkdirSync(path.join(mono, 'packages/lib/src'), {recursive: true});
+      // Core only as a peer: the package itself.
+      expect(projectRoot(path.join(mono, 'packages/lib/src'))).toBe(
+        path.join(mono, 'packages/lib'),
+      );
+      // A package without Core inside an app with it: refused, naming it.
+      let err;
+      try {
+        projectRoot(path.join(mono, 'packages/tool'));
+      } catch (e) {
+        err = /** @type {any} */ (e);
+      }
+      expect(err?.code).toBe('ERR_PROJECT_REQUIRED');
+      expect(err?.suggestions?.[0]?.name).toBe('cd ../..');
+      // A package.json that does not parse is never walked past.
+      fs.writeFileSync(path.join(mono, 'packages/tool/package.json'), '{,}');
+      err = undefined;
+      try {
+        projectRoot(path.join(mono, 'packages/tool'));
+      } catch (e) {
+        err = /** @type {any} */ (e);
+      }
+      expect(err?.message).toContain('not valid JSON');
+    } finally {
+      fs.rmSync(mono, {recursive: true, force: true});
+    }
+  });
+
   it('reading a built theme leaves no copy in the theme folder', async () => {
     await themeEditShow('h', {cwd});
     expect(
@@ -386,4 +429,106 @@ describe('where commands act', () => {
         .filter(f => /\.load[-.]/.test(f)),
     ).toEqual([]);
   }, 120_000);
+});
+
+describe('rollback and recovery', () => {
+  it('refuses a theme folder that is a link, and writes nothing through it', async () => {
+    await themeEditNew('l1', {cwd});
+    const away = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-away-'));
+    fs.renameSync(path.join(cwd, 'themes/l1'), path.join(away, 'l1'));
+    fs.symlinkSync(path.join(away, 'l1'), path.join(cwd, 'themes/l1'));
+    const before = fs.readFileSync(
+      path.join(away, 'l1/l1.settings.ts'),
+      'utf8',
+    );
+    expect(
+      (await refusal(() => themeEditSet('l1', 'corners', 'pill', {cwd}))).code,
+    ).toBe('ERR_THEME_INVALID');
+    expect(fs.readFileSync(path.join(away, 'l1/l1.settings.ts'), 'utf8')).toBe(
+      before,
+    );
+    fs.rmSync(path.join(cwd, 'themes/l1'));
+    fs.rmSync(away, {recursive: true, force: true});
+  }, 120_000);
+
+  it('a failed history write undoes the whole change', async () => {
+    await themeEditNew('w1', {cwd});
+    await themeEditSet('w1', 'corners', 'small', {cwd});
+    const css = read('themes/w1/w1.css');
+    const settings = read('themes/w1/w1.settings.json');
+    fs.rmSync(path.join(cwd, 'themes/w1/w1.history.json'));
+    fs.mkdirSync(path.join(cwd, 'themes/w1/w1.history.json'));
+    expect(
+      (await refusal(() => themeEditSet('w1', 'corners', 'pill', {cwd}))).code,
+    ).toBe('ERR_WRITE_FAILED');
+    expect(read('themes/w1/w1.css')).toBe(css);
+    expect(read('themes/w1/w1.settings.json')).toBe(settings);
+    fs.rmSync(path.join(cwd, 'themes/w1'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('a refused build leaves files it does not own alone, even read-only ones', async () => {
+    await themeEditNew('w2', {cwd});
+    const dir = path.join(cwd, 'themes/w2');
+    fs.writeFileSync(path.join(dir, 'NOTES.md'), 'mine');
+    fs.chmodSync(path.join(dir, 'NOTES.md'), 0o444);
+    const ts = path.join(dir, 'w2.theme.ts');
+    fs.appendFileSync(ts, '\nexport const broken = ;\n');
+    const own = fs.readFileSync(ts, 'utf8');
+    const settingsTs = read('themes/w2/w2.settings.ts');
+    expect(
+      (await refusal(() => themeEditSet('w2', 'corners', 'pill', {cwd}))).code,
+    ).toBe('ERR_THEME_INVALID');
+    expect(read('themes/w2/w2.settings.ts')).toBe(settingsTs);
+    expect(fs.readFileSync(ts, 'utf8')).toBe(own);
+    expect(read('themes/w2/NOTES.md')).toBe('mine');
+    fs.chmodSync(path.join(dir, 'NOTES.md'), 0o644);
+    fs.rmSync(dir, {recursive: true, force: true});
+  }, 240_000);
+
+  it('a value made under looser rules names the command that fixes it', async () => {
+    await themeEditNew('v1', {cwd});
+    const file = path.join(cwd, 'themes/v1/v1.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.settings.push({thing: 'text-size', value: '0', source: 'dial'});
+    fs.writeFileSync(file, JSON.stringify(data));
+    const r = await refusal(() => themeEditShow('v1', {cwd}));
+    expect(r.message).not.toContain('damaged');
+    expect(r.run[0]).toMatch(/undo v1 text-size$/);
+    await themeEditUndo('v1', {cwd, thing: 'text-size'});
+    await themeEditShow('v1', {cwd});
+    fs.rmSync(path.join(cwd, 'themes/v1'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('keeps the good undo steps after a damaged one', async () => {
+    await themeEditNew('v2', {cwd});
+    await themeEditSet('v2', 'corners', 'small', {cwd});
+    await themeEditSet('v2', 'corners', 'large', {cwd});
+    const hist = path.join(cwd, 'themes/v2/v2.history.json');
+    const steps = JSON.parse(fs.readFileSync(hist, 'utf8'));
+    fs.writeFileSync(hist, `\uFEFF${JSON.stringify(['not json', ...steps])}`);
+    const r = await themeEditSet('v2', 'spacing', 'roomy', {cwd});
+    expect(r.data.notes.join(' ')).toContain('1 damaged step');
+    expect(JSON.parse(fs.readFileSync(hist, 'utf8'))).toHaveLength(
+      steps.length + 1,
+    );
+    fs.rmSync(path.join(cwd, 'themes/v2'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('removes what a stopped command left behind', async () => {
+    const left = path.join(cwd, 'themes/.astryx-render-4194311-abc');
+    fs.mkdirSync(left, {recursive: true});
+    fs.writeFileSync(path.join(left, 'x.mjs'), '');
+    await themeEditShow('h', {cwd});
+    expect(fs.existsSync(left)).toBe(false);
+  }, 120_000);
+
+  it('takes quoted text and data URLs with a semicolon, never a breakout', async () => {
+    const {isSafeValue} = await import('./_color.mjs');
+    expect(isSafeValue('"a;b"')).toBe(true);
+    expect(isSafeValue('url(data:image/png;base64,iVBOR==)')).toBe(true);
+    expect(isSafeValue('"a\\"; color: red"')).toBe(true);
+    expect(isSafeValue('red; color: blue')).toBe(false);
+    expect(isSafeValue('"a"; b')).toBe(false);
+    expect(isSafeValue('"</style>"')).toBe(false);
+  });
 });

@@ -36,6 +36,7 @@ import {
   partDefault,
   partsOf,
   q,
+  badThing,
   readHistory,
   refuse,
   settingsProblem,
@@ -309,7 +310,7 @@ export async function themeEditSet(theme, thing, value, options = {}) {
 async function change(sub, slug, thing, value, options) {
   const {cwd = process.cwd(), png = false} = options;
   requireProject(cwd);
-  const data = loadTheme(cwd, slug);
+  const data = loadTheme(cwd, slug, thing);
   const ctx = await context(cwd);
   const flags = {
     on: options.on,
@@ -797,8 +798,8 @@ export async function themeEditUndo(theme, options = {}) {
     if (!(e instanceof AstryxError && e.code === E.ERR_THEME_INVALID)) throw e;
   }
   const f = themeFiles(cwd, theme);
-  const history = readHistory(f.history);
-  if (history == null)
+  const {steps: history, dropped} = readHistory(f.history);
+  if (!history.length && dropped)
     refuse(
       E.ERR_THEME_INVALID,
       `${theme}.history.json is damaged, so there is no step to go back to.`,
@@ -816,21 +817,28 @@ export async function themeEditUndo(theme, options = {}) {
   const ctx = await context(cwd);
   const prevText = /** @type {string} */ (history.pop());
   const prev = /** @type {import('./_settings.mjs').ThemeData} */ (
-    JSON.parse(prevText)
+    JSON.parse(prevText.replace(/^\uFEFF/, ''))
   );
-  // The step it goes back to is checked like the settings file itself.
+  // A step always restores into this theme, whatever name it holds.
+  prev.name = theme;
+  // The step it goes back to is checked like the settings file itself. A
+  // value the editor no longer accepts is not damage: name the setting.
   const bad = settingsProblem(prev);
-  if (bad)
+  if (bad) {
+    const thing = badThing(prev);
     refuse(
       E.ERR_THEME_INVALID,
-      `The settings before the last change, in ${theme}.history.json, are damaged: ${bad}.`,
-      {
-        fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
-        run: [`${P} show ${theme}`],
-      },
+      `The step before the last change holds a value the editor no longer accepts: ${bad}.`,
+      thing && current
+        ? {run: [`${P} undo ${theme} ${thing}`, `${P} show ${theme}`]}
+        : {
+            fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
+            run: [`${P} show ${theme}`],
+          },
     );
-  await commitTheme(ctx, theme, prev, {history: false});
-  fs.writeFileSync(f.history, JSON.stringify(history));
+  }
+  // The popped history is written with the change, inside its rollback.
+  await commitTheme(ctx, theme, prev, {history: false, historyAfter: history});
   /** @type {string[]} */
   const undone = current
     ? []
