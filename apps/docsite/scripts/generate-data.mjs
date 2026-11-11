@@ -20,6 +20,7 @@
  *   - blogRegistry.ts      — blog posts (plus canary-only test fixtures)
  *   - blogExampleAssets.ts — each post's live-example assets, loaded on demand
  *   - searchLinks.json     — search destinations and document presentation metadata
+ *   - searchIndex.ts       — the candidates the search API ranks
  */
 
 import * as fs from 'node:fs';
@@ -2171,6 +2172,21 @@ function generateSearchLinks({
   );
 }
 
+/**
+ * The candidates the search API ranks (generate-search-index.mjs). A process
+ * of its own gathers them. This process reads docs with the site's package
+ * manager, and the CLI keeps the docs it has read. `astryx search` reads them
+ * with this project's package manager.
+ */
+function generateSearchIndex() {
+  console.log('Generating search index...');
+  execFileSync(
+    process.execPath,
+    [path.join(__dirname, 'generate-search-index.mjs')],
+    {stdio: 'inherit'},
+  );
+}
+
 async function generateThemeRegistry(packages) {
   console.log('Generating theme registry...');
   const themePackages = packages.filter(p =>
@@ -2778,6 +2794,7 @@ async function main() {
   const {templates, templateCount} = await generateTemplateRegistry();
   const {docTopics, docsCount} = await generateDocsRegistry();
   generateSearchLinks({docTopics, allComponents, templates, blocks, packages});
+  generateSearchIndex();
   const {blogPostCount} = await generateBlogRegistry();
   const shadcnCounts = generateShadcnRegistryForTarget({
     target: DOCSITE_TARGET,

@@ -54,6 +54,30 @@ export const Default: Story = {
   },
 };
 
+/**
+ * Caller text that holds only weak and neutral characters, or that mixes a
+ * Latin word into right-to-left text. `MixedDirectionText.a11y.chromium.spec.ts`
+ * reads its character order under RTL and LTR.
+ */
+const MIXED_DIRECTION_TEXTS = [
+  'https://',
+  '.com',
+  '+3',
+  '@alice',
+  'iPhone جديد',
+  'example.com موقع',
+];
+
+export const MixedDirection: Story = {
+  render: () => (
+    <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+      {MIXED_DIRECTION_TEXTS.map(text => (
+        <Token key={text} label={text} />
+      ))}
+    </div>
+  ),
+};
+
 const allColors: TokenColor[] = [
   'default',
   'red',
@@ -121,16 +145,8 @@ export const WithRemove: Story = {
   render: () => (
     <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
       <Token label="Removable" onRemove={() => alert('Removed!')} />
-      <Token
-        label="Red tag"
-        color="red"
-        onRemove={() => alert('Removed!')}
-      />
-      <Token
-        label="Blue tag"
-        color="blue"
-        onRemove={() => alert('Removed!')}
-      />
+      <Token label="Red tag" color="red" onRemove={() => alert('Removed!')} />
+      <Token label="Blue tag" color="blue" onRemove={() => alert('Removed!')} />
     </div>
   ),
 };
@@ -270,12 +286,7 @@ export const AllVariations: Story = {
         <h4 style={{margin: '0 0 8px'}}>Clickable</h4>
         <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
           {allColors.map(color => (
-            <Token
-              key={color}
-              label={color}
-              color={color}
-              onClick={() => {}}
-            />
+            <Token key={color} label={color} color={color} onClick={() => {}} />
           ))}
         </div>
       </div>

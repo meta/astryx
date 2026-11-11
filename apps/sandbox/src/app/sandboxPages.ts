@@ -106,6 +106,12 @@ export const categories: SandboxCategory[] = [
           'An alert over a toast and a dialog closed after a save, on a page that scrolls with the document, to check on a phone',
       },
       {
+        name: 'Menu Press Cases',
+        href: '/pages/menu-press-cases/',
+        description:
+          'A DropdownMenu in a fixed top bar that opens as a finger presses it, and one in the content, on a page that scrolls with the document',
+      },
+      {
         name: 'BottomSheet Pull',
         href: '/pages/bottom-sheet-pull/',
         description:
@@ -175,6 +181,12 @@ export const categories: SandboxCategory[] = [
         href: '/pages/tap-targets/',
         description:
           'WCAG 2.5.8 AA touch-target sizes visualized on real components',
+      },
+      {
+        name: 'Minute Wheel Loop',
+        href: '/pages/minute-wheel-loop/',
+        description:
+          'A TimeInput sheet at 11:58 AM whose minute wheel loops and keeps the hour, on a page that scrolls with the document',
       },
       {
         name: 'Text Types',

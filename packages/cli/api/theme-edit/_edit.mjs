@@ -18,12 +18,14 @@ import {
   KEY_TOKENS,
   LIKE,
   P,
+  SPACING,
   TYPE_STYLES,
   familyOf,
 } from './_tables.mjs';
 import {
   commitTheme,
   compileTheme,
+  cornerPx,
   contrastProblems,
   describe,
   keyOf,
@@ -31,7 +33,9 @@ import {
   maskedSettings,
   modesOf,
   nearest,
+  partDefault,
   partsOf,
+  readHistory,
   refuse,
   resolvedTokens,
   shown,
@@ -40,6 +44,7 @@ import {
   buildTheme,
 } from './_settings.mjs';
 import {checkSetting} from './_check.mjs';
+import {MODAL} from './_compiler.mjs';
 import {
   PALETTE_DIALS,
   VIBRANCY_DEFAULT,
@@ -122,7 +127,11 @@ export async function themeEditNew(name, options = {}) {
         css: shown(cwd, f.css),
         module: shown(cwd, f.js),
       },
-      settings: data.settings.map(describe),
+      // Every setting it applied: mode is the theme's, not a setting entry.
+      settings: [
+        ...(settings.mode != null ? [`mode = ${data.mode} (whole theme)`] : []),
+        ...data.settings.map(describe),
+      ],
       notes,
       problems: r.problems,
       ...p,
@@ -256,7 +265,14 @@ async function change(sub, slug, thing, value, options) {
         styled: [],
         kept: [],
         lifted: r.lifted,
-        notes: [`your ${data.settings.length} settings are kept`],
+        notes: [
+          ...(r.unchanged
+            ? [`no change: ${s.thing} is already ${s.value}`]
+            : []),
+          ...r.notes,
+          `your ${data.settings.length} settings are kept`,
+          ...otherModeNotes(data),
+        ],
         problems: r.problems,
         warnings: r.warnings,
         ...p,
@@ -291,7 +307,14 @@ async function change(sub, slug, thing, value, options) {
       ? data.settings.filter(x => x.thing === s.thing && x.on).map(describe)
       : [];
   /** @type {string[]} */
-  const notes = [];
+  const notes = [
+    ...(r.unchanged
+      ? [
+          `no change: ${describe(s)} is already set, so nothing was built and no undo step was added`,
+        ]
+      : []),
+    ...r.notes,
+  ];
   const group = s.on
     ? FAMILIES[s.on]
       ? s.on
@@ -306,23 +329,41 @@ async function change(sub, slug, thing, value, options) {
         paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults),
         s.thing,
         slug,
+        modesOf(data),
       ),
     );
   if (PALETTE_DIALS.includes(s.thing) && sub === 'undo')
     notes.push(
       `the ${s.thing} color is no longer generated, and the tokens it fed go back to the base theme's values`,
     );
-  if (s.thing === 'vibrancy')
+  if (s.thing === 'neutral' && sub === 'set') {
+    // Only the theme's own modes; a dark theme gets no white-page offer.
+    const modes = modesOf(data);
+    const pages = modes
+      .map(m => [m, base[m]['--color-background-body']])
+      .filter(([, v]) => v)
+      .map(([m, v]) => `${v} in ${m}`);
+    notes.push(
+      `the page background stays the base theme's${pages.length ? ` (${pages.join(', ')})` : ''}${
+        modes.includes('light')
+          ? `; for a white or off-white page: ${P} set ${slug} --color-background-body "#ffffff"${modes.length > 1 ? ' --mode light' : ''}`
+          : `; for another page color: ${P} set ${slug} --color-background-body "<color>"`
+      }`,
+    );
+  }
+  if (s.thing === 'vibrancy') {
     notes.push(
       sub === 'set'
-        ? `every generated color is made again at vibrancy ${s.value} (0 is gray, 100 the most vivid, ${VIBRANCY_DEFAULT} the default)`
-        : `every generated color is made again at the default vibrancy, ${VIBRANCY_DEFAULT}`,
+        ? `every color this theme sets is made again at vibrancy ${s.value} (0 is gray, 100 the most vivid, ${VIBRANCY_DEFAULT} the default)`
+        : `every color this theme sets is made again at the default vibrancy, ${VIBRANCY_DEFAULT}`,
     );
+    notes.push(...unsetColorNotes(data, base, slug));
+  }
   if (s.thing === 'font' && sub === 'set')
     notes.unshift(...fontNotes(ctx, {...data, settings: [s]}));
   if (s.thing === 'type' || s.thing === 'headings')
     for (const [m, why] of maskedSettings(data))
-      notes.push(`${describe(m)} is partly hidden: ${why}`);
+      notes.push(`${describe(m)}: ${why}`);
   if (s.thing === 'type' && sub === 'set' && TYPE_STYLES[s.value].ratio > 1.2)
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
@@ -337,6 +378,10 @@ async function change(sub, slug, thing, value, options) {
         sub === 'set'
           ? s
           : /** @type {import('./_settings.mjs').Setting} */ (prev),
+      // On undo, the setting above is the one removed, named as such.
+      ...(sub === 'undo' && prev
+        ? {removed: prev, now: nowApplies(data, prev)}
+        : {}),
       replaced: sub === 'set' ? prev : null,
       was: null,
       notes,
@@ -357,6 +402,34 @@ async function change(sub, slug, thing, value, options) {
       ...p,
     },
   };
+}
+
+/**
+ * Which status colors the theme does not set, so they keep the base theme's
+ * values whatever the vibrancy, with the commands that bring them in: each
+ * seeded with the base theme's own color, so it is then generated at the
+ * theme's vibrancy. Colored cards and other info-tinted surfaces follow info.
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @param {string} slug
+ * @returns {string[]}
+ */
+function unsetColorNotes(data, base, slug) {
+  const word = /** @type {Record<string, string>} */ ({
+    info: '--color-info',
+    success: '--color-success',
+    warning: '--color-warning',
+    danger: '--color-error',
+  });
+  const unset = Object.keys(word).filter(
+    d => !data.settings.some(x => x.source === 'dial' && x.thing === d),
+  );
+  if (!unset.length) return [];
+  return [
+    `${unset.join(', ')} ${unset.length > 1 ? 'are' : 'is'} not set by this theme, so ${unset.length > 1 ? 'they keep' : 'it keeps'} the base theme's colors at any vibrancy${unset.includes('info') ? ', and so do surfaces tinted with info, such as colored cards' : ''}. To include ${unset.length > 1 ? 'them' : 'it'}: ${unset
+      .map(d => `${P} set ${slug} ${d} "${base.light[word[d]] ?? '<color>'}"`)
+      .join('; ')}`,
+  ];
 }
 
 /**
@@ -409,12 +482,16 @@ export async function themeEditShow(theme, options = {}) {
         return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
       }),
       notes: fontNotes(ctx, data),
+      // A size, number or font is the same in both modes: one value.
       resolved: Object.fromEntries(
         KEY_TOKENS.map(k => [
           k,
-          Object.fromEntries(modes.map(m => [m, res[m][k] ?? null])),
+          MODAL.has(ctx.C.typeOf(k))
+            ? Object.fromEntries(modes.map(m => [m, res[m][k] ?? null]))
+            : (res[modes[0]][k] ?? null),
         ]),
       ),
+      partValues: partValues(ctx, data, res, modes[0]),
       ...colorsReport(pal, data),
       problems,
       preview,
@@ -426,6 +503,108 @@ export async function themeEditShow(theme, options = {}) {
       colorFiles: pal ? colorFiles(theme) : null,
     },
   };
+}
+
+/**
+ * What applies once `removed` is gone: a whole-theme setting of the same
+ * thing for a part setting, or the base theme's value.
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} removed
+ * @returns {string}
+ */
+function nowApplies(data, removed) {
+  const whole =
+    removed.on || removed.when || removed.state || removed.mode
+      ? [...data.settings]
+          .reverse()
+          .find(
+            x =>
+              x.thing === removed.thing &&
+              x.source === removed.source &&
+              !x.on &&
+              !x.when &&
+              !x.state &&
+              (!x.mode || x.mode === removed.mode),
+          )
+      : null;
+  return whole ? describe(whole) : "the base theme's value";
+}
+
+/**
+ * Settings saved for a mode a one-mode theme does not have: they stay saved
+ * and apply again when the theme has that mode.
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+function otherModeNotes(data) {
+  const modes = modesOf(data);
+  const off = data.settings.filter(
+    s => s.mode && !modes.includes(/** @type {'light' | 'dark'} */ (s.mode)),
+  );
+  if (!off.length) return [];
+  return [
+    `not applied in a ${data.mode} theme, kept for when it has that mode again: ${off
+      .slice(0, 4)
+      .map(describe)
+      .join(', ')}${off.length > 4 ? `, and ${off.length - 4} more` : ''}`,
+  ];
+}
+
+/**
+ * Each corners or spacing dial set on a part or group, with what its parts
+ * get, beside the whole-theme value: `corners large on containers ->
+ * border-radius 12px on card, dialog, ... (whole theme: --radius-container
+ * 10px)`.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @param {'light' | 'dark'} mode
+ * @returns {string[]}
+ */
+function partValues(ctx, data, res, mode) {
+  return data.settings
+    .filter(
+      s =>
+        s.source === 'dial' && s.on && ['corners', 'spacing'].includes(s.thing),
+    )
+    .map(s => {
+      const parts = partsOf(ctx, s);
+      const listed = `${parts.slice(0, 4).join(', ')}${parts.length > 4 ? `, and ${parts.length - 4} more` : ''}`;
+      if (s.thing === 'corners') {
+        const px = cornerPx(s.value);
+        // The radius token each part's resting corners read, as the whole-
+        // theme value they would have without this setting.
+        // The token each part's resting corners read. A part the census saw
+        // closed (a menu, a popover) has none recorded: a container or menu
+        // reads the container radius, like every Core surface; any other
+        // part's is unknown.
+        /** @type {Map<string, string[]>} */
+        const byToken = new Map();
+        for (const t of parts) {
+          const token =
+            /var\((--[\w-]+)\)/.exec(
+              partDefault(ctx, t, 'borderRadius', undefined) ?? '',
+            )?.[1] ??
+            // Every variant reads it (none is the resting one).
+            ctx.C.partReads(t, 'corners').find(x =>
+              x.props.includes('border-radius'),
+            )?.token ??
+            (['containers', 'menus'].includes(familyOf(t) ?? '')
+              ? '--radius-container'
+              : 'unknown');
+          byToken.set(token, [...(byToken.get(token) ?? []), t]);
+        }
+        const whole = [...byToken]
+          .map(
+            ([token, ts]) =>
+              `${token === 'unknown' ? 'unknown' : `${token} ${res[mode][token] ?? 'unset'}`}${byToken.size > 1 ? ` for ${ts.join(', ')}` : ''}`,
+          )
+          .join('; ');
+        return `${describe(s)} -> border-radius ${px >= 9999 ? 'fully round' : `${px}px`} on ${listed} (whole theme: ${whole})`;
+      }
+      const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
+      return `${describe(s)} -> spacing x${f} inside ${listed} (whole theme: --spacing-4 ${res[mode]['--spacing-4'] ?? 'unset'})`;
+    });
 }
 
 /**
@@ -443,7 +622,19 @@ function colorsReport(pal, data) {
   );
   /** @param {import('./_palette.mjs').StopRef} r */
   const shade = r =>
-    `${r.stop}${r.alpha ? ` at opacity ${r.alpha}` : ''} ${r.color}`;
+    `${r.stop}${r.alpha ? ` at opacity ${r.alpha}` : ''} ${r.color}${r.from ? ' (your exact color)' : ''}`;
+  /** What the user set for each token exactly, by mode when it differs. */
+  const exactValue = /** @type {Record<string, string>} */ ({});
+  for (const s of data.settings)
+    if (s.source === 'token' && !s.on)
+      exactValue[s.thing] = [
+        ...(exactValue[s.thing] ? [exactValue[s.thing]] : []),
+        s.mode ? `${s.mode} ${s.value}` : s.value,
+      ].join(', ');
+  // A theme with one mode lists only that mode's shades.
+  const modes = modesOf(data);
+  /** @param {{light: import('./_palette.mjs').StopRef, dark: import('./_palette.mjs').StopRef}} v */
+  const shades = v => modes.map(m => `${m} ${shade(v[m])}`).join(', ');
   return {
     vibrancy: pal.vibrancy,
     colors: pal.families.map(fam => ({
@@ -454,16 +645,21 @@ function colorsReport(pal, data) {
           .filter(([, v]) => v.family === fam.id)
           .map(([k, v]) => [
             k,
-            `light ${shade(v.light)}, dark ${shade(v.dark)}${exact.has(k) ? ' (your exact setting wins)' : ''}`,
+            exact.has(k)
+              ? `${exactValue[k]} (your exact setting wins over the generated ${shades(v)})`
+              : shades(v),
           ]),
       ),
     })),
     colorNotes: pal.contrast
+      .filter(c => modes.includes(c.mode))
       .filter(c => !c.pass || c.stop !== c.preferred)
       .map(c =>
-        c.pass
-          ? `${c.token} ${c.mode}: shade ${c.stop}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`
-          : `${c.token} ${c.mode}: only ${c.ratio}:1 on ${c.against} at shade ${c.stop} (needs ${c.needs}:1)`,
+        c.against.startsWith('the text on it')
+          ? `${c.token} ${c.mode}: shade ${c.stop}, not your exact color: ${c.against.slice('the text on it: '.length)}`
+          : c.pass
+            ? `${c.token} ${c.mode}: shade ${c.stop}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`
+            : `${c.token} ${c.mode}: only ${c.ratio}:1 on ${c.against} at shade ${c.stop} (needs ${c.needs}:1)`,
       ),
   };
 }
@@ -501,9 +697,16 @@ export async function themeEditUndo(theme, options = {}) {
     if (!(e instanceof AstryxError && e.code === E.ERR_THEME_INVALID)) throw e;
   }
   const f = themeFiles(cwd, theme);
-  const history = fs.existsSync(f.history)
-    ? JSON.parse(fs.readFileSync(f.history, 'utf8'))
-    : [];
+  const history = readHistory(f.history);
+  if (history == null)
+    refuse(
+      E.ERR_THEME_INVALID,
+      `${theme}.history.json is damaged, so there is no step to go back to.`,
+      {
+        fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
+        run: [`${P} show ${theme}`],
+      },
+    );
   if (!history.length)
     refuse(
       E.ERR_THEME_NOTHING_TO_UNDO,
@@ -511,7 +714,7 @@ export async function themeEditUndo(theme, options = {}) {
       {run: [`${P} show ${theme}`]},
     );
   const ctx = await context(cwd);
-  const prevText = history.pop();
+  const prevText = /** @type {string} */ (history.pop());
   const prev = /** @type {import('./_settings.mjs').ThemeData} */ (
     JSON.parse(prevText)
   );
