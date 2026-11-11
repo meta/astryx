@@ -127,10 +127,23 @@ describe('extractImportedPackages reads only real module specifiers', () => {
       "import data from '#internal/data';",
       "import x from 'not a package';",
       "import JSONStream from 'JSONStream';",
+      "import a1 from '@scope/_private';",
+      "import a2 from '@_scope/pkg';",
+      "import a3 from '@-scope/pkg';",
+      "import a4 from '@.scope/pkg';",
+      "import a5 from '@scope/-dash';",
       "import {a} from 'valid-pkg';",
     ].join('\n');
     expect(extractImportedPackages(source)).toEqual(
-      new Set(['JSONStream', 'valid-pkg']),
+      new Set([
+        'JSONStream',
+        '@scope/_private',
+        '@_scope/pkg',
+        '@-scope/pkg',
+        '@.scope/pkg',
+        '@scope/-dash',
+        'valid-pkg',
+      ]),
     );
   });
 
@@ -153,10 +166,21 @@ describe('extractImportedPackages reads only real module specifiers', () => {
       "} from 'recharts';",
       "export const name = 'not-a-pkg';",
       "export {c} from 'reexported-pkg';",
+      "const glob = 'images/*';",
+      "import {d} from 'after-glob-pkg';",
+      '/* a note */',
+      "const url = 'https://example.com'; // import {e} from 'comment-pkg';",
+      "import {f} from 'after-url-pkg';",
       'const = ;',
     ].join('\n');
     expect(extractImportedPackages(source)).toEqual(
-      new Set(['kept-pkg', 'recharts', 'reexported-pkg']),
+      new Set([
+        'kept-pkg',
+        'recharts',
+        'reexported-pkg',
+        'after-glob-pkg',
+        'after-url-pkg',
+      ]),
     );
   });
 

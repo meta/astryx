@@ -41,7 +41,7 @@ const NODE_BUILTINS = new Set(module.builtinModules);
  * (`JSONStream`). A name has no `~`, so `~/lib` is a path alias, as are
  * `@/components` and `#internal`.
  */
-const NPM_NAME = /^(?:@[A-Za-z0-9][\w.-]*\/)?[A-Za-z0-9][\w.-]*$/;
+const NPM_NAME = /^(?:@[\w.-]+\/[\w-][\w.-]*|[A-Za-z0-9][\w.-]*)$/;
 
 /**
  * Extract bare (non-relative) package names from ES import statements.
@@ -125,11 +125,42 @@ function moduleSpecifiers(source) {
   return specs;
 }
 
+/**
+ * A source with its comments removed. Strings and template literals are kept
+ * whole, so a `/*` or `//` inside one (`'images/*'`) does not start a comment.
+ * @param {string} source
+ * @returns {string}
+ */
+function withoutComments(source) {
+  let out = '';
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+    const next = source[i + 1];
+    if (ch === '/' && next === '/') {
+      while (i < source.length && source[i] !== '\n') i += 1;
+      out += '\n';
+    } else if (ch === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2);
+      i = end === -1 ? source.length : end + 1;
+    } else if (ch === "'" || ch === '"' || ch === '`') {
+      let j = i + 1;
+      while (j < source.length && source[j] !== ch) {
+        if (source[j] === '\\') j += 1;
+        else if (ch !== '`' && source[j] === '\n') break;
+        j += 1;
+      }
+      out += source.slice(i, j + 1);
+      i = j;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
 /** @param {string} source @returns {string[]} */
 function scannedSpecifiers(source) {
-  const code = source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = withoutComments(source);
   // A statement starts a line: `import '…'`, or `import`/`export` with a
   // clause, which may span lines, then `from '…'`.
   const re =
