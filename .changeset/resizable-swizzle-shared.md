@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A swizzled ResizeHandle or LayoutPanel now works with the package's resizable parts: a copy reads a controller the package's `createResizable` made, finds a package panel lent beside its handle, and hears the package's pane changes, and the reverse. Before, each copy kept its own records, so a copied handle beside a package panel (or the reverse) resized nothing. No API changes.
+[fix] A swizzled ResizeHandle or LayoutPanel now finds the package's panel or handle beside it, and the reverse. When the region collapses, focus inside the panel moves to the handle and the panel goes inert. Before, each copy kept its own records of lent panels and handles, so the panel resized, but focus could drop to the page as it collapsed. No API changes.
 
 @cixzhang

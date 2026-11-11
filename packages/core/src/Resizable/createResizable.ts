@@ -327,8 +327,7 @@ interface ResizableInternals {
   followRegion(slot: RegionPaneSlot): () => void;
 }
 
-// Every copy of Core reads a controller through one channel, so a swizzled
-// handle or panel works with a controller the package made, and the reverse.
+// Every copy of Core reads a controller through this one channel.
 const internals = sharedWeakMap<ResizableController, ResizableInternals>(
   'resizable/create-resizable/internals',
   1,
