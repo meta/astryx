@@ -81,6 +81,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 **Owns**
 
 - The Trigger area's context-menu invocation wiring (FR10).
+- The touch hold under a coarse pointer (FR12). `ContextMenuPressRecognizer`,
+  in `contextMenuPress.ts`, times the commit, the display and the drift.
+  `ContextMenuTouchLayer.tsx` attaches it to the Trigger area and opens the
+  menu.
 - The alternative Pointer menu surface and Touch menu surface and their shared
   `context-menu` target.
 - Cursor-anchor placement across the two presentation paths, and open state
