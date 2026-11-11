@@ -7,7 +7,14 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {hex, isColorValue, parseColor, ratio} from './_color.mjs';
+import {
+  alphaOf,
+  compositeOver,
+  hex,
+  isColorValue,
+  parseColor,
+  ratio,
+} from './_color.mjs';
 
 describe('parseColor', () => {
   it('reads every fixed CSS color form', () => {
@@ -64,5 +71,21 @@ describe('isColorValue', () => {
 describe('contrast math', () => {
   it('gives black on white 21:1', () => {
     expect(ratio([0, 0, 0], [255, 255, 255])).toBeCloseTo(21, 5);
+  });
+});
+
+describe('see-through colors', () => {
+  it('reads the opacity of every form', () => {
+    expect(alphaOf('#11111122')).toBeCloseTo(0x22 / 255, 5);
+    expect(alphaOf('#0008')).toBeCloseTo(0x88 / 255, 5);
+    expect(alphaOf('rgba(0,0,0,0.15)')).toBe(0.15);
+    expect(alphaOf('rgb(0 0 0 / 15%)')).toBe(0.15);
+    expect(alphaOf('transparent')).toBe(0);
+    expect(alphaOf('#111111')).toBe(1);
+  });
+
+  it('measures translucent text over what is under it', () => {
+    const seen = compositeOver([0, 0, 0], 0.15, [255, 255, 255]);
+    expect(ratio(seen, [255, 255, 255])).toBeLessThan(1.5);
   });
 });
