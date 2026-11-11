@@ -75,8 +75,8 @@ export default function ChatPageScrollerPage() {
         <Text color="secondary">
           A long conversation on the page&apos;s own scroller. The heading and
           the card sit above the list, in the same scroller. Scroll with a
-          finger, fling, and let the momentum end. At the end of the
-          conversation, Add message appends one more.
+          finger, fling, and let the momentum end. Below the last message, Add
+          message appends one more.
         </Text>
         <Card>
           <VStack gap={1}>
@@ -112,14 +112,14 @@ export default function ChatPageScrollerPage() {
           </VStack>
         )}
       />
-      <div style={{position: 'fixed', insetInlineEnd: 16, insetBlockEnd: 16}}>
+      <VStack padding={4}>
         <Button
           label="Add message"
           onClick={() =>
             setMessages(current => [...current, messageAt(current.length)])
           }
         />
-      </div>
+      </VStack>
     </VStack>
   );
 }
