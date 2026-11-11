@@ -14,7 +14,6 @@ import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {
   themeEditHow,
@@ -1290,22 +1289,40 @@ describe('color settings, refused well', () => {
   });
 
   it("replays an official theme's per-mode focus color, and the theme stays usable", async () => {
-    // The official Neutral theme, resolved as an app gets it.
-    const pkg = (/** @type {string} */ rel) =>
-      import(
-        pathToFileURL(path.join(cwd, '../node_modules/@astryxdesign', rel)).href
+    // The official Neutral theme's focus color, read from its source (no
+    // built package needed): Core's --focus-outline-color is
+    // var(--color-accent), which neutralTheme.ts maps to a neutral stop per
+    // mode; the stops' colors are in neutralPaletteRefs.generated.ts.
+    const src = path.resolve(
+      import.meta.dirname,
+      '../../../themes/neutral/src',
+    );
+    const theme = fs.readFileSync(path.join(src, 'neutralTheme.ts'), 'utf8');
+    const refs = fs.readFileSync(
+      path.join(src, 'neutralPaletteRefs.generated.ts'),
+      'utf8',
+    );
+    const stops =
+      /'--color-accent':\s*\[\s*neutral\.light\[(\d+)\],\s*neutral\.dark\[(\d+)\]/.exec(
+        theme,
       );
-    const core = await pkg('core/dist/theme/index.js');
-    const {neutralTheme} = await pkg('theme-neutral/dist/neutral.js');
+    const ramp = refs.slice(refs.search(/\bneutral:\s*\{/));
+    /** @param {'light' | 'dark'} mode @param {string | undefined} stop */
+    const colorAt = (mode, stop) =>
+      String(
+        new RegExp(`\\b${stop}:\\s*'(#[0-9a-f]{6})'`).exec(
+          /** @type {string} */ (
+            new RegExp(`\\b${mode}:\\s*\\{([^}]*)\\}`).exec(ramp)?.[1]
+          ),
+        )?.[1],
+      );
     /** @type {Record<'light' | 'dark', string>} */
     const focus = {
-      light: core.resolveThemeTokens(neutralTheme, {mode: 'light'})[
-        '--focus-outline-color'
-      ],
-      dark: core.resolveThemeTokens(neutralTheme, {mode: 'dark'})[
-        '--focus-outline-color'
-      ],
+      light: colorAt('light', stops?.[1]),
+      dark: colorAt('dark', stops?.[2]),
     };
+    for (const mode of /** @type {const} */ (['light', 'dark']))
+      expect(focus[mode], mode).toMatch(/^#[0-9a-f]{6}$/);
     expect(focus.light).not.toBe(focus.dark);
     for (const mode of /** @type {const} */ (['light', 'dark']))
       await themeEditSet('p', '--focus-outline-color', focus[mode], {
