@@ -38,7 +38,7 @@ only** (DEC-4). Approved DEC-5 removes the requirement to separate visual fields
 surface/group membership stops as a whole under FR7/FR8. Unrelated ARIA, focus,
 keyboard ownership, dismissal, semantic/data/interaction contexts, and authored
 DOM/accessibility-tree semantics remain unchanged. `cixzhang` approved DEC-4 and
-authorized its spec-only merge on 2026-09-23. [Implementation PR #6457](https://github.com/facebook/astryx/pull/6457)
+authorized its spec-only merge on 2026-09-23. [Implementation PR #6457](https://github.com/meta/astryx/pull/6457)
 may align to this accepted contract. Neither this record nor test success
 authorizes implementation merge. Architecture
 projects the decision rather than independently approving it.

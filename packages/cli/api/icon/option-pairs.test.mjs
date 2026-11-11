@@ -18,6 +18,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {writeIconSetProject} from '../../test-utils/icon-set-fixture.mjs';
+import {runFolder} from '../../test-utils/global-local-fixtures.mjs';
 import {icon} from './icon.mjs';
 import {iconAdd} from './add/add.mjs';
 import {iconMap} from './map/map.mjs';
@@ -40,10 +41,14 @@ import {doc as useFn} from './iconUse.doc.mjs';
 /** @type {string} */
 let tmp;
 beforeAll(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-icon-pairs-'));
+  // In a run's folder, the node project's global teardown removes every
+  // package the pairs made with the run's other fixtures.
+  tmp = fs.mkdtempSync(
+    path.join(runFolder() ?? os.tmpdir(), 'astryx-icon-pairs-'),
+  );
 });
 afterAll(() => {
-  fs.rmSync(tmp, {recursive: true, force: true});
+  if (!runFolder()) fs.rmSync(tmp, {recursive: true, force: true});
 });
 
 const FROM = '@acme/glyph-library';
@@ -75,6 +80,10 @@ async function makePackage({bare = false} = {}) {
     'export const Bin = props => null;\nexport const Close = props => null;\n';
   fs.writeFileSync(path.join(lib, 'index.js'), icons);
   fs.writeFileSync(path.join(lib, 'solid.js'), icons);
+  fs.writeFileSync(
+    path.join(dir, 'adapt.js'),
+    'export const adaptIcon = data => () => null;\n',
+  );
   if (!bare) {
     await iconNewSet('glyphs', {
       cwd: dir,
@@ -120,7 +129,6 @@ const CASES = {
       ['--list', '--limit'],
       ['--list', '--definitions'],
       ['--list', '--all-icons'],
-      ['--set', '--definitions'],
       ['--limit', '--definitions'],
       ['--limit', '--all-icons'],
       ['--definitions', '--all-icons'],
@@ -129,6 +137,7 @@ const CASES = {
       ['query', '--set'],
       ['query', '--limit'],
       ['--set', '--all-icons'],
+      ['--set', '--definitions'],
     ],
   },
   'experimental icon add': {
@@ -211,6 +220,7 @@ const CASES = {
       'options.dryRun': true,
       'options.from': FROM,
       'options.exclude': 'Close',
+      'options.adapter': './adapt.js#adaptIcon',
       'options.variants': 'outline,solid',
       'options.defaultVariant': 'solid',
       'options.displayName': 'Glyphs',
@@ -227,6 +237,8 @@ const CASES = {
       ['--from', '--default-variant'],
       ['--default-variant', '--display-name'],
       ['--default-variant', '--description'],
+      ['--exclude', '--adapter'],
+      ['--adapter', '--default-variant'],
     ],
     composes: [
       ['--dry-run', '--from'],
@@ -241,6 +253,11 @@ const CASES = {
       ['--variants', '--display-name'],
       ['--variants', '--description'],
       ['--display-name', '--description'],
+      ['--dry-run', '--adapter'],
+      ['--from', '--adapter'],
+      ['--adapter', '--variants'],
+      ['--adapter', '--display-name'],
+      ['--adapter', '--description'],
     ],
   },
   'experimental icon new-definition': {
@@ -264,8 +281,10 @@ const CASES = {
     fn: useFn,
     call: iconUse,
     cwd: async () =>
-      writeIconSetProject(fs.mkdtempSync(path.join(tmp, 'app-'))),
-    values: {set: 'glyphs'},
+      writeIconSetProject(fs.mkdtempSync(path.join(tmp, 'app-')), {
+        packages: [{}, {name: '@acme/lines'}],
+      }),
+    values: {set: 'glyphs', 'options.backups': ['lines']},
     refused: [],
     composes: [],
   },

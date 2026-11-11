@@ -4,42 +4,10 @@
 
 /**
  * @file useContainerReveal.ts
- * @input Uses the containerReveal styles
- * @output Exports useContainerReveal — a headless hover/focus reveal primitive
- * @position Core hook. Consumed by any component that reveals (or conceals)
- *   content when its container is hovered or focused — e.g. Thumbnail's remove
- *   button, TreeList row actions.
- *
- * Gives a container a scoped hover/focus-within trigger that reveals or
- * conceals content inside it, entirely in CSS (no hover state in JS, no
- * re-render on hover). The caller authors NO StyleX: the hook hands out the
- * container style and the matching content styles.
- *
- * Scoping is by inheritance: the container publishes its reveal state as
- * custom properties on itself and the content reads them, so a nested
- * container shadows its ancestor's state for its own subtree. See
- * containerReveal.stylex.ts.
- *
- * Two levers sit on top of the pointer, both still CSS-only. On the container:
- * `hoverDelay` (dwell before the reveal starts — the Tooltip / HoverCard
- * intent gate applied to a reveal) and `forceState` (pin the trigger state a
- * caller owns: a motion gate, a scroll, an open menu). On a single piece of
- * content: `forceVisibility`, which pins how THAT element looks. State belongs
- * to the container because one container feeds children whose looks are
- * opposite; appearance belongs to the element, where it is unambiguous.
- * Neither lever can hide content from a keyboard user — see ACCESSIBILITY.
- *
- * ACCESSIBILITY (WCAG 2.2 by construction):
- * - Revealed content is visually hidden at rest via position + opacity, so it
- *   stays in the accessibility tree and tab order — never display:none.
- * - Keyboard: revealed on :focus-within, so tabbing in shows it — with no dwell
- *   to wait through, and neither an inactive container nor a forced-hidden
- *   element can keep it dark.
- * - Touch: always visible on coarse pointers; never gated behind hover.
- * - Concealed (inverted) content is a mouse-only visual swap: it ignores
- *   :focus-within (a keyboard user must never watch content vanish) and stays
- *   visible on touch and in the a11y tree.
- * - Motion: honors prefers-reduced-motion.
+ * @input The containerReveal styles
+ * @output useContainerReveal, a headless hover and focus reveal primitive
+ * @position Core hook for content that shows or hides when its container is
+ *   hovered or focused, such as Thumbnail's remove button
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts (export)
@@ -137,6 +105,11 @@ const EMPTY = Object.freeze({});
 
 /**
  * Scoped, CSS-only hover/focus reveal for content inside a container.
+ *
+ * Revealed content stays in the accessibility tree and the tab order. It
+ * shows on :focus-within without a delay, and it always shows on touch.
+ * Concealed content hides only for a mouse. Motion honors
+ * prefers-reduced-motion.
  *
  * @example
  * ```

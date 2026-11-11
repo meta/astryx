@@ -1,18 +1,18 @@
 {
   "name": "@astryxdesign/cli",
-  "version": "0.7.5",
+  "version": "0.7.14",
   "displayName": "CLI",
   "description": "Scaffold projects, browse templates, generate themes, and get agent-ready docs from the command line.",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/cli"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -91,7 +91,20 @@
     "foundation",
     "host",
     "scripts/postinstall.mjs",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
     "astryx": "node clients/cli/bin/astryx.mjs",
@@ -116,32 +129,21 @@
     "@stylexjs/babel-plugin": "catalog:",
     "ast-types": "0.16.3",
     "commander": "^12.1.0",
-    "ignore": "^7.0.5",
+    "ignore": "^7.0.14",
     "jiti": "^2.7.0",
-    "jscodeshift": "^17.3.0",
+    "jscodeshift": "^17.4.0",
+    "linkedom": "^0.18.15",
     "node-diff3": "3.2.1",
     "postcss": "^8.5.23",
     "postcss-selector-parser": "^7.1.6",
     "recast": "0.23.21",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "peerDependencies": {
-    "@astryxdesign/charts": "*",
-    "@astryxdesign/core": "*",
-    "@astryxdesign/lab": "*",
-    "@astryxdesign/theme-neutral": "*"
+    "@astryxdesign/core": "*"
   },
   "peerDependenciesMeta": {
-    "@astryxdesign/charts": {
-      "optional": true
-    },
     "@astryxdesign/core": {
-      "optional": true
-    },
-    "@astryxdesign/lab": {
-      "optional": true
-    },
-    "@astryxdesign/theme-neutral": {
       "optional": true
     }
   },
@@ -153,7 +155,7 @@
     "@heroicons/react": "^2.2.0",
     "@stylexjs/stylex": "catalog:",
     "@types/babel__core": "^7.20.5",
-    "lucide-react": "^1.18.0",
-    "recharts": "^3.9.2"
+    "lucide-react": "^1.66.0",
+    "recharts": "^3.10.1"
   }
 }

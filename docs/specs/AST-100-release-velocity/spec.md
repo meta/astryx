@@ -49,7 +49,8 @@ means for them.
   record.
 - Pinch scale velocity and scroll physics the browser owns.
 - Public API: the velocity source, its filter values, and every threshold stay
-  internal (`spec:AST-002` FR3).
+  internal (`spec:AST-002` FR3), except the public `flickThreshold` of
+  `spec:AST-107`'s snap-point drag (FR3).
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 
@@ -74,7 +75,8 @@ means for them.
 - **FR3 — Thresholds sit on top of the one velocity.** A component's flick,
   fling, or commit threshold compares the FR2 velocity, possibly with travel
   or projection the component owns. Thresholds are per-component tuning that
-  stays internal (`spec:AST-002` FR3); a component never derives a second
+  stays internal (`spec:AST-002` FR3), except the public `flickThreshold` a
+  product passes to `spec:AST-107`'s snap-point drag; a component never derives a second
   velocity to compare against.
 - **FR4 — Event time for every pointer.** The velocity follows the input
   events' own timestamps, so a handler that runs late does not change it, and
@@ -113,16 +115,26 @@ means for them.
   (FR3).
 - A component that later reads gesture velocity, such as paging, a wheel
   picker, a navigation pop, or interactive dismiss, reads it from the tracker.
+- **Sparse move streams.** The filter weighs the interval from touch-down to the
+  first move like any other, as UIKit does. For a touch-down and three moves,
+  that interval carries 0.6 of a scrolling surface's release. A stream whose
+  first move comes late, with later moves on cadence, reads lower. Engines that
+  stamp that move differently can read one flick on either side of a component's
+  threshold.
 
 ## Verification
 
-| Contract | Verification                                                                                                                          | Representative states                                                                                                               | Mutation or failure expectation                                                                                            |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | One recorded sample stream read through two different components, plus a unit check                                                   | a sheet drag and a row swipe fed the same stream; a Lab gesture and a Core gesture fed the same stream; steady motion in x and y    | Two components of the same kind reporting different velocities for the same stream, or a unit other than pixels per second |
-| FR2      | Release velocity tests through a component over recorded iOS streams                                                                  | recorded pan and scroll-view releases; acceleration before lift; a pause longer than the stillness interval before lift; one sample | A release that differs from the velocity iOS recorded for the same stream, or a non-zero release after a still pause       |
-| FR3      | Component tests at each threshold                                                                                                     | a flick just under and just over a component's threshold; the same velocity across two components                                   | Two components of the same kind reading different velocities for the same flick, or a threshold reachable from public API  |
-| FR4      | Unit tests with handler delay and per-pointer streams, plus real-browser pointer-event streams in Safari on iOS and Chrome on Android | delayed handlers with fixed event timestamps; touch, pen, and mouse streams                                                         | Velocity that changes with handler delay or pointer type                                                                   |
-| FR5      | Component tests in both directions                                                                                                    | a flick toward the inline end in left-to-right and right-to-left                                                                    | A flick toward the inline end treated as the opposite action in right-to-left                                              |
+| Contract | Verification                                                                                                                          | Representative states                                                                                                               | Mutation or failure expectation                                                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | One recorded sample stream read through two different components, plus a unit check                                                   | a sheet drag and a row swipe fed the same stream; a Lab gesture and a Core gesture fed the same stream; steady motion in x and y    | Two components of the same kind reporting different velocities for the same stream, or a unit other than pixels per second                                             |
+| FR2      | Release velocity tests through a component over recorded iOS streams                                                                  | recorded pan and scroll-view releases; acceleration before lift; a pause longer than the stillness interval before lift; one sample | A release that differs from the velocity iOS recorded for the same stream, or a non-zero release after a still pause                                                   |
+| FR3      | Component tests at each threshold                                                                                                     | a flick just under and just over a component's threshold; the same velocity across two components                                   | Two components of the same kind reading different velocities for the same flick, or a threshold other than `spec:AST-107`'s `flickThreshold` reachable from public API |
+| FR4      | Unit tests with handler delay and per-pointer streams, plus real-browser pointer-event streams in Safari on iOS and Chrome on Android | delayed handlers with fixed event timestamps; touch, pen, and mouse streams                                                         | Velocity that changes with handler delay or pointer type                                                                                                               |
+| FR5      | Component tests in both directions                                                                                                    | a flick toward the inline end in left-to-right and right-to-left                                                                    | A flick toward the inline end treated as the opposite action in right-to-left                                                                                          |
+
+A three-move flick whose first move comes late is informational in WebKit, not a
+required row. WebKit's injected touches carry their arrival time, so its release
+can fall on either side of a component's threshold.
 
 ## Decision log
 
@@ -142,6 +154,16 @@ with each component as internal tuning, so components keep their feel without
 a second estimator.
 
 Rejected: a fixed time window, which reads quick flicks much faster than iOS; iOS's blend with no stillness reset, which flings after a rest; and several selectable estimators or per-component filters, which reintroduce the disagreement this record removes.
+
+### DEC-2 — Release velocity stays cadence-dependent
+
+**Reference:** `spec:AST-100/DEC-2`
+**Decider:** Specs consistency ruling, 2026-11-08, applying DEC-1
+
+Coalesced samples and time-weighted intervals would make release speed
+independent of how many moves an engine delivers, but they read quick flicks
+faster than iOS, which DEC-1's reason rejects; the filter stays as DEC-1 records
+it, and the engine split is the Sparse move streams gap.
 
 ## Open questions
 

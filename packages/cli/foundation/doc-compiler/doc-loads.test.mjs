@@ -56,27 +56,35 @@ const RUNNERS = {
     runs: "`npm pack`, `tar`, and a Node script that resolves the packed specifiers, to check a package as published, and the package's doc modules, to see which need a newer CLI",
     sites: ['child_process.spawnSync ×3', 'loadTopicModule'],
   },
-  'api/swizzle/_github.mjs': {
-    runs: '`gh auth status`, to check the GitHub CLI is signed in',
-    sites: ['child_process.execFileSync'],
-  },
   'api/theme/_adapter.mjs': {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
   },
+  'api/theme-edit/_preview.mjs': {
+    runs: 'a Playwright the project has installed, or a Chrome found on the machine, to picture a preview only with --png',
+    sites: ['child_process.spawnSync', 'import(<computed>)'],
+  },
+  'api/theme-edit/_project.mjs': {
+    runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
+    sites: ['import(<computed>) ×2', 'require'],
+  },
+  'api/theme-edit/_settings.mjs': {
+    runs: 'the built theme module, to read its resolved tokens after a build',
+    sites: ['import(<computed>)'],
+  },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti; eval for legacy theme object literals; the project's installed Core",
+    runs: "theme source modules, through jiti; the project's installed Core, and a Core's root entry once a theme imports it",
     sites: [
       '.evalModule() ×2',
       '.import()',
       'createJiti ×5',
-      'eval ×2',
-      'import(<computed>) ×3',
+      'import(<computed>) ×2',
+      'require(<computed>)',
     ],
   },
   'api/theme/build/core-interception.mjs': {
-    runs: "@astryxdesign/core as a theme's CommonJS dependencies require it, to wrap defineTheme",
-    sites: ['require(<computed>)'],
+    runs: "@astryxdesign/core/theme beside a theme whose CommonJS dependencies may require Core, to wrap defineTheme; Module._load is watched during the load so the root is wrapped only as the load requires it; require.resolve for Core's entries",
+    sites: ['module', 'require(<computed>)'],
   },
   'api/upgrade/_adapter.mjs': {
     runs: 'the commands a codemod declares as its post-codemod hooks',
@@ -122,6 +130,40 @@ const RUNNERS = {
   'clients/cli/commands/experimental/index.mjs': {
     runs: SELF_DOCS,
     sites: ['import ../experimental.doc.mjs'],
+  },
+  'clients/cli/commands/experimental/theme.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/theme-edit/themeEditHow.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditNew.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewAdd.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewApp.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewList.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditSet.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditShow.doc.mjs',
+      'import ../../../../api/theme-edit/themeEditUndo.doc.mjs',
+      'import ../experimental-theme-add.doc.mjs',
+      'import ../experimental-theme-compile.doc.mjs',
+      'import ../experimental-theme-editor-how.doc.mjs',
+      'import ../experimental-theme-editor-new.doc.mjs',
+      'import ../experimental-theme-editor-set.doc.mjs',
+      'import ../experimental-theme-editor-show.doc.mjs',
+      'import ../experimental-theme-editor-undo.doc.mjs',
+      'import ../experimental-theme-editor.doc.mjs',
+      'import ../experimental-theme-eject.doc.mjs',
+      'import ../experimental-theme-list.doc.mjs',
+      'import ../experimental-theme-preview-add.doc.mjs',
+      'import ../experimental-theme-preview-app.doc.mjs',
+      'import ../experimental-theme-preview-list.doc.mjs',
+      'import ../experimental-theme-preview-remove.doc.mjs',
+      'import ../experimental-theme-preview.doc.mjs',
+      'import ../experimental-theme-remove.doc.mjs',
+      'import ../experimental-theme-targets.doc.mjs',
+      'import ../experimental-theme-template.doc.mjs',
+      'import ../experimental-theme-use.doc.mjs',
+      'import ../experimental-theme.doc.mjs',
+    ],
   },
   'clients/cli/commands/experimental/render.mjs': {
     runs: SELF_DOCS,
@@ -218,10 +260,7 @@ const RUNNERS = {
   },
   'clients/cli/commands/hook.mjs': {
     runs: SELF_DOCS,
-    sites: [
-      'import ../../../api/hook/hook.doc.mjs',
-      'import ./hook.doc.mjs',
-    ],
+    sites: ['import ../../../api/hook/hook.doc.mjs', 'import ./hook.doc.mjs'],
   },
   'clients/cli/commands/init.mjs': {
     runs: SELF_DOCS,
@@ -340,17 +379,23 @@ const RUNNERS = {
     runs: '@babel/parser, to find the fixture references and page-local bindings in template source; and a template doc that does not validate, to read the replacement it declares',
     sites: ['importDocModule', 'require(@babel/parser)'],
   },
+  'foundation/discovery/template-source-tree.mjs': {
+    runs: '@babel/parser and @babel/core (CommonJS), each on first use, to read template source and resolve its bindings for demo-content replacement and icon mapping',
+    sites: ['require(@babel/core)', 'require(@babel/parser)'],
+  },
   'foundation/discovery/theme-discovery.mjs': {
     runs: '@babel/parser and jscodeshift (CommonJS), each on first use, so listing bundled themes never loads jscodeshift',
     sites: ['require(@babel/parser)', 'require(jscodeshift)'],
   },
   'foundation/doc-compiler/import.mjs': {
-    runs: 'authored doc files, for the doc reader and discovery, and again after an edit',
+    runs: 'authored doc files, for the doc reader and discovery, and again after an edit, without the cache entry of a CommonJS doc',
     sites: [
       '.import() ×2',
       'createJiti ×2',
-      'import(<computed>) ×4',
+      'importUrl ×2',
       'importUserModule ×2',
+      'readFreshInTurn',
+      'readInTurn',
     ],
   },
   'foundation/doc-compiler/read.mjs': {
@@ -358,22 +403,30 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker',
-    sites: ['.import() ×3', 'createJiti ×2', 'require(@stylexjs/babel-plugin)'],
+    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
+    sites: [
+      '.import() ×6',
+      'createJiti ×2',
+      'module',
+      'module.register',
+      'require(@stylexjs/babel-plugin)',
+    ],
   },
   'foundation/render/render-page.mjs': {
-    runs: 'the render worker, so a page that never finishes can be stopped',
+    runs: 'the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, and a one-line Intl.Segmenter check after a crash',
+    sites: ['child_process.fork', 'child_process.spawnSync'],
+  },
+  'foundation/render/page-host.mjs': {
+    runs: 'the render worker, in a thread of the host process, so the host can exit with the CLI or at its own time limit while a page loops',
     sites: ['worker_threads.Worker'],
   },
+  'foundation/fs/import-url.mjs': {
+    runs: 'the module at a file URL, for the doc importers and the module loader',
+    sites: ['import(<computed>)'],
+  },
   'foundation/fs/module-loader.mjs': {
-    runs: 'user modules (config, manifests, handlers, codemods): natively, through jiti, or by require for a fresh CommonJS read',
-    sites: [
-      '.import() ×3',
-      'createJiti ×3',
-      'import(<computed>)',
-      'require(<computed>)',
-      'require.cache',
-    ],
+    runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache',
+    sites: ['.import() ×3', 'createJiti ×3', 'importUrl ×2', 'require.cache'],
   },
   'foundation/fs/read-record.mjs': {
     runs: "nothing; it wraps node:fs's read calls to record the paths an operation reads, and republishes them to ESM imports",
@@ -382,6 +435,10 @@ const RUNNERS = {
   'foundation/fs/paths.mjs': {
     runs: "Yarn's pnpapi, under Plug'n'Play, to find an installed package",
     sites: ['require(pnpapi)'],
+  },
+  'foundation/integrations/contribution-fixes.mjs': {
+    runs: 'jscodeshift (CommonJS) on first use, so loading the project never loads it',
+    sites: ['require(jscodeshift)'],
   },
   'foundation/integrations/integrations.mjs': {
     runs: "each installed integration's manifest",
@@ -428,6 +485,7 @@ const RUNNERS = {
  */
 const LOADER_MODULES = {
   'foundation/doc-compiler/import.mjs': [],
+  'foundation/fs/import-url.mjs': [],
   'foundation/fs/module-loader.mjs': ['findPresentFiles'],
   // loadTopicModule hands back a topic's raw doc.
   'foundation/discovery/docs-discovery.mjs': [

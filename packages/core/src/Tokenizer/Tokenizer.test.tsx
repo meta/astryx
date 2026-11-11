@@ -20,14 +20,19 @@ import {
   afterEach,
 } from 'vitest';
 import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
-import {createRef, Profiler, useState} from 'react';
+import {createRef, Profiler, startTransition, useRef, useState} from 'react';
 import userEvent from '@testing-library/user-event';
-import {Tokenizer} from './Tokenizer';
+import {Tokenizer, type TokenizerHandle} from './Tokenizer';
+import {Typeahead} from '../Typeahead/Typeahead';
+import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
+import {InputGroup} from '../InputGroup/InputGroup';
+import {InputGroupText} from '../InputGroup/InputGroupText';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
 import type * as TokenModule from '../Token';
+import {FormLayout} from '../FormLayout/FormLayout';
 
 // Every Token render, in order, by label.
 //
@@ -57,6 +62,16 @@ const TOKEN_MESSAGES = {
 
 function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
+}
+
+// A grouped row's token strip is a viewport of the shared scroll capability
+// (AST-025), which marks the element with the axis it scrolls on.
+function getTokenStrip(row: HTMLElement): HTMLElement {
+  const strip = row.querySelector<HTMLElement>('[data-scroll-axis="inline"]');
+  if (strip == null) {
+    throw new Error('The grouped row has no scrolling token strip');
+  }
+  return strip;
 }
 
 // Store original matches to restore later
@@ -164,7 +179,67 @@ describe('Tokenizer minQueryLength', () => {
   });
 });
 
+// component:BaseTypeahead FR12 through Tokenizer: a press in the field keeps the list open.
+describe('Tokenizer press inside and outside', () => {
+  it('keeps the list open on a press in its input and closes it on a press elsewhere', async () => {
+    render(
+      <>
+        <Tokenizer
+          label="People"
+          searchSource={userSource}
+          value={[]}
+          onChange={() => {}}
+          debounceMs={0}
+        />
+        <p>Elsewhere</p>
+      </>,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'Ali'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    fireEvent.pointerDown(input);
+    fireEvent.pointerUp(input);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.pointerDown(screen.getByText('Elsewhere'));
+    fireEvent.pointerUp(screen.getByText('Elsewhere'));
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+});
+
 describe('Tokenizer', () => {
+  it('asks a touch keyboard for its Search key and no autocorrection, and Enter still adds the highlighted result', async () => {
+    const onChange = vi.fn();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={userSource}
+        value={[users[0]]}
+        onChange={onChange}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    expect(input).toHaveAttribute('enterkeyhint', 'search');
+    expect(input).toHaveAttribute('autocorrect', 'off');
+
+    fireEvent.change(input, {target: {value: 'Bob'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledWith(
+      [users[0], expect.objectContaining({label: 'Bob'})],
+      expect.objectContaining({type: 'add'}),
+    );
+  });
+
   it('forwards DOM props and ref to the combobox input while preserving focus callbacks', () => {
     const ref = createRef<HTMLInputElement>();
     const onClick = vi.fn();
@@ -405,7 +480,11 @@ describe('Tokenizer', () => {
         isDisabled
       />,
     );
-    expect(screen.getByRole('combobox')).toBeDisabled();
+    // The input keeps its tab stop (spec:AST-085 FR1).
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     // Remove button should not be present when disabled
     expect(
       screen.queryByRole('button', {name: 'Remove Alice'}),
@@ -722,6 +801,54 @@ describe('Tokenizer', () => {
       search: () => [],
       bootstrap: () => [],
     };
+
+    it('labels the inline create row from the catalog, following the locale', async () => {
+      const overrides = {
+        de: {'@astryx.tokenizer.create': '„{value}“ erstellen'},
+      };
+      const {rerender} = render(
+        <InternationalizationProvider locale="de" overrides={overrides}>
+          <Tokenizer
+            label="Obst"
+            searchSource={emptySource}
+            value={[]}
+            onChange={() => {}}
+            hasCreate
+            debounceMs={0}
+          />
+        </InternationalizationProvider>,
+      );
+      await act(async () => {
+        fireEvent.change(screen.getByRole('combobox'), {
+          target: {value: 'Kiwi'},
+        });
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+      expect(screen.getByText('„Kiwi“ erstellen')).toBeInTheDocument();
+      expect(screen.queryByText('Create "Kiwi"')).not.toBeInTheDocument();
+
+      rerender(
+        <InternationalizationProvider locale="en" overrides={overrides}>
+          <Tokenizer
+            label="Obst"
+            searchSource={emptySource}
+            value={[]}
+            onChange={() => {}}
+            hasCreate
+            debounceMs={0}
+          />
+        </InternationalizationProvider>,
+      );
+      // The row is derived per query, so the next query takes the new locale.
+      await act(async () => {
+        fireEvent.change(screen.getByRole('combobox'), {
+          target: {value: 'Kiwis'},
+        });
+      });
+      expect(await screen.findByText('Create "Kiwis"')).toBeInTheDocument();
+    });
 
     it('still offers Create below minQueryLength, and does not search', async () => {
       // The threshold exists to avoid a fetch too broad to be worth making.
@@ -1116,12 +1243,841 @@ describe('Tokenizer', () => {
       });
       expect(input).toHaveAttribute('aria-expanded', 'true');
 
-      // Select an item
+      // Select an item. The caller does not commit it, so it stays eligible
+      // (component:Tokenizer FR13) and the list keeps its choices.
       fireEvent.click(screen.getByText('Alice'));
       expect(onChange).toHaveBeenCalled();
 
-      // Popover should not reopen with an empty menu after selection
+      // The popover never shows an empty menu after selection.
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.getByRole('option', {name: 'Alice', hidden: true}),
+      ).toBeInTheDocument();
+    });
+  });
+
+  // component:Tokenizer FR14, FR15, AR5: a pick from the focus list keeps the
+  // input focused and the list open while another loaded choice remains.
+  describe('focus list kept open after a pick', () => {
+    const NO_MEMBERS: SearchableItem[] = [];
+    function Members({
+      initial = NO_MEMBERS,
+      maxEntries,
+      source,
+    }: {
+      initial?: SearchableItem[];
+      maxEntries?: number;
+      source: SearchSource;
+    }) {
+      const [value, setValue] = useState(initial);
+      const [isDisabled, setIsDisabled] = useState(false);
+      return (
+        <>
+          <Tokenizer
+            label="Members"
+            searchSource={source}
+            value={value}
+            onChange={setValue}
+            hasEntriesOnFocus
+            maxEntries={maxEntries}
+            isDisabled={isDisabled}
+            debounceMs={0}
+          />
+          <button type="button">Elsewhere</button>
+          <button type="button" onClick={() => setIsDisabled(true)}>
+            Disable
+          </button>
+        </>
+      );
+    }
+    function countingSource() {
+      const bootstrap = vi.fn(() => users.slice(0, 3));
+      return {bootstrap, source: {search: userSource.search, bootstrap}};
+    }
+    const option = (name: string) =>
+      screen.queryByRole('option', {name, hidden: true});
+    function activeOptionName(input: HTMLElement): string | null {
+      const id = input.getAttribute('aria-activedescendant');
+      return id == null
+        ? null
+        : (document.getElementById(id)?.textContent ?? null);
+    }
+    async function openFocusList(user: ReturnType<typeof userEvent.setup>) {
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await waitFor(() => {
+        expect(option('Charlie')).toBeInTheDocument();
+      });
+      return input;
+    }
+
+    it('keeps focus and the list after a pointer pick, makes the next choice active, and does not fetch again', async () => {
+      const user = userEvent.setup();
+      const {bootstrap, source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+      expect(bootstrap).toHaveBeenCalledTimes(1);
+
+      await user.click(option('Bob')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(
+        screen.getByRole('button', {name: 'Remove Bob'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(option('Bob')).not.toBeInTheDocument();
+      expect(option('Alice')).toBeInTheDocument();
+      expect(activeOptionName(input)).toBe('Charlie');
+      expect(bootstrap).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the list open through picks in a row by pointer, until no choice remains', async () => {
+      const user = userEvent.setup();
+      const {bootstrap, source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Bob');
+
+      await user.click(option('Bob')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Charlie');
+
+      await user.click(option('Charlie')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      for (const name of ['Alice', 'Bob', 'Charlie']) {
+        expect(
+          screen.getByRole('button', {name: `Remove ${name}`}),
+        ).toBeInTheDocument();
+      }
+      expect(input).toHaveFocus();
       expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(bootstrap).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes after Enter on typed results while the cleared query waits for its debounce', async () => {
+      const user = userEvent.setup();
+      function Debounced() {
+        const [value, setValue] = useState<SearchableItem[]>([]);
+        return (
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={value}
+            onChange={setValue}
+            hasEntriesOnFocus
+            debounceMs={300}
+          />
+        );
+      }
+      render(<Debounced />);
+      const input = await openFocusList(user);
+
+      await user.type(input, 'i');
+      await waitFor(() => {
+        expect(option('Diana')).toBeInTheDocument();
+      });
+      // Clearing the text starts a focus-list reload that waits for the
+      // debounce. Enter acts before it runs.
+      await user.keyboard('{Backspace}{Enter}');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 400));
+      });
+      await user.keyboard('{ArrowDown}');
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+      });
+      expect(option('Bob')).toBeInTheDocument();
+      expect(option('Diana')).not.toBeInTheDocument();
+    });
+
+    it('keeps the list open through picks in a row by keyboard', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.keyboard('{Enter}');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Bob');
+
+      await user.keyboard('{Enter}');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Charlie');
+
+      await user.keyboard('{Enter}');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(
+        screen.getByRole('button', {name: 'Remove Charlie'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('keeps a choice the caller does not commit, and a later search still loads', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={source}
+          value={[]}
+          onChange={() => {}}
+          hasEntriesOnFocus
+          debounceMs={0}
+        />,
+      );
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(option('Alice')).toBeInTheDocument();
+      expect(activeOptionName(input)).toBe('Bob');
+
+      await user.type(input, 'di');
+      await waitFor(() => {
+        expect(option('Diana')).toBeInTheDocument();
+      });
+      expect(option('Alice')).not.toBeInTheDocument();
+    });
+
+    it('keeps the list open when the caller commits each pick in a transition', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      function InTransition() {
+        const [value, setValue] = useState<SearchableItem[]>([]);
+        return (
+          <Tokenizer
+            label="Members"
+            searchSource={source}
+            value={value}
+            onChange={items => startTransition(() => setValue(items))}
+            hasEntriesOnFocus
+            debounceMs={0}
+          />
+        );
+      }
+      render(<InTransition />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(
+        screen.getByRole('button', {name: 'Remove Alice'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(option('Alice')).not.toBeInTheDocument();
+      expect(activeOptionName(input)).toBe('Bob');
+
+      await user.click(option('Bob')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+      expect(
+        screen.getByRole('button', {name: 'Remove Bob'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Charlie');
+    });
+
+    it('makes the next choice active after a keyboard pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      // The first choice is active when the list opens.
+      expect(activeOptionName(input)).toBe('Alice');
+      await user.keyboard('{ArrowDown}');
+      expect(activeOptionName(input)).toBe('Bob');
+      await user.keyboard('{Enter}');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(
+        screen.getByRole('button', {name: 'Remove Bob'}),
+      ).toBeInTheDocument();
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Charlie');
+    });
+
+    it('makes the nearest preceding choice active when the last one is picked', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Charlie')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(activeOptionName(input)).toBe('Bob');
+    });
+
+    it('closes and clears the active option when no loaded choice remains', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members initial={[users[0], users[1]]} source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Charlie')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('closes when the pick reaches maxEntries', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members initial={[users[0]]} maxEntries={2} source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Bob')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('still closes after a pick from typed search results', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.type(input, 'ali');
+      await waitFor(() => {
+        expect(option('Alice')).toBeInTheDocument();
+      });
+
+      await user.click(option('Alice')!);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('lets a press on another control take focus after a pointer pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await user.click(screen.getByRole('button', {name: 'Elsewhere'}));
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('lets a press on the page take focus from the field after a pointer pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      expect(input).toHaveFocus();
+      await user.click(document.body);
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).not.toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('closes on Escape after a pick, keeping focus in the field', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await user.keyboard('{Escape}');
+
+      expect(input).toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('closes when the field becomes disabled after a pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      act(() => {
+        screen.getByRole('button', {name: 'Disable'}).click();
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('cancels the source once when the field becomes disabled, not on each later render', async () => {
+      const cancel = vi.fn();
+      const source: SearchSource = {...userSource, cancel};
+      function Parent() {
+        const [renders, setRenders] = useState(0);
+        return (
+          <>
+            <Tokenizer
+              label="Members"
+              searchSource={source}
+              value={[]}
+              onChange={() => {}}
+              hasEntriesOnFocus
+              isDisabled
+            />
+            <button type="button" onClick={() => setRenders(renders + 1)}>
+              Rerender {renders}
+            </button>
+          </>
+        );
+      }
+      render(<Parent />);
+      const before = cancel.mock.calls.length;
+      for (let i = 0; i < 5; i++) {
+        act(() => {
+          screen.getByRole('button', {name: /Rerender/}).click();
+        });
+      }
+      expect(cancel.mock.calls.length).toBe(before);
+    });
+
+    it('leaves a single-select field inside its dialog menu closing after a pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      function WithDialogMenu() {
+        const handleRef = useRef<TokenizerHandle>(null);
+        const [inner, setInner] = useState<SearchableItem | null>(null);
+        return (
+          <>
+            <button type="button" onClick={() => handleRef.current?.open()}>
+              Open menu
+            </button>
+            <Tokenizer
+              label="Members"
+              searchSource={source}
+              value={[]}
+              onChange={() => {}}
+              hasEntriesOnFocus
+              handleRef={handleRef}
+              menu={{
+                role: 'dialog',
+                label: 'Pick a lead',
+                render: () => (
+                  <Typeahead
+                    label="Lead"
+                    searchSource={source}
+                    value={inner}
+                    onChange={setInner}
+                    hasEntriesOnFocus
+                    debounceMs={0}
+                  />
+                ),
+              }}
+            />
+          </>
+        );
+      }
+      render(<WithDialogMenu />);
+      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      const lead = await screen.findByRole('combobox', {
+        name: 'Lead',
+        hidden: true,
+      });
+      await user.click(lead);
+      await waitFor(() => {
+        expect(lead).toHaveAttribute('aria-expanded', 'true');
+      });
+
+      await user.click(
+        screen.getAllByRole('option', {name: 'Bob', hidden: true}).at(-1)!,
+      );
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 20));
+      });
+
+      expect(lead).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('closes when focus leaves by Tab after a pick', async () => {
+      const user = userEvent.setup();
+      const {source} = countingSource();
+      render(<Members source={source} />);
+      const input = await openFocusList(user);
+
+      await user.click(option('Alice')!);
+      await user.tab();
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+
+      expect(input).not.toHaveFocus();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
+  // After the tokens change, the list the field shows is the current one
+  // (spec:AST-092 FR4; component:Tokenizer FR13, FR15). Each row is one
+  // situation from the state table in the pull request: the list open or
+  // closed, a focus list or typed text, a typed search waiting for its
+  // debounce, a reload that is slow or fails, a token added or removed from
+  // inside or outside, and the limit.
+  describe('list after the tokens change', () => {
+    const slowSource: SearchSource = {
+      search: async query =>
+        users.filter(u => u.label.toLowerCase().includes(query.toLowerCase())),
+      bootstrap: async () => {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return users.slice(0, 3);
+      },
+    };
+    function failsOnReload(): SearchSource {
+      let calls = 0;
+      return {
+        search: userSource.search,
+        bootstrap: async () => {
+          calls += 1;
+          if (calls > 1) {
+            throw new Error('offline');
+          }
+          return users.slice(0, 3);
+        },
+      };
+    }
+
+    function Controlled({
+      initial,
+      maxEntries,
+      source = userSource,
+    }: {
+      initial: SearchableItem[];
+      maxEntries?: number;
+      source?: SearchSource;
+    }) {
+      const [value, setValue] = useState(initial);
+      return (
+        <>
+          <Tokenizer
+            label="Members"
+            searchSource={source}
+            value={value}
+            onChange={setValue}
+            hasEntriesOnFocus
+            maxEntries={maxEntries}
+          />
+          <button type="button" onClick={() => setValue([users[2]])}>
+            Set Charlie
+          </button>
+          <button type="button" onClick={() => setValue([users[0]])}>
+            Set Alice
+          </button>
+          <button
+            type="button"
+            onClick={() => setValue([users[0], users[1], users[2]])}>
+            Set all three
+          </button>
+        </>
+      );
+    }
+
+    // Steps: `open` (click the field and wait for its list), `type:<text>`
+    // (type without waiting for the debounce), `listed:<name>` (wait until
+    // listed), `noResults` (wait for the empty-search message), `escape`,
+    // `set:<button>` (a value set from outside, focus stays in the field),
+    // `remove:<name>` (the token's remove button), `pick:<name>` (choose an
+    // option), `absent:<name>` (not listed right now).
+    type Row = {
+      situation: string;
+      initial: SearchableItem[];
+      maxEntries?: number;
+      source?: () => SearchSource;
+      steps: string[];
+      expanded?: boolean;
+      listed?: string[];
+      notListed?: string[];
+    };
+    const rows: Row[] = [
+      {
+        situation:
+          'focus list open, outside adds a token, choices remain: reload',
+        initial: [users[0]],
+        steps: ['open', 'listed:Charlie', 'set:Set Charlie', 'listed:Alice'],
+        expanded: true,
+        listed: ['Alice', 'Bob'],
+        notListed: ['Charlie'],
+      },
+      {
+        situation: 'focus list open, outside commits its last row: close',
+        initial: [users[0], users[1]],
+        steps: ['open', 'listed:Charlie', 'set:Set all three'],
+        expanded: false,
+      },
+      {
+        situation: 'focus list open, token removed with its button: reload',
+        initial: [users[0], users[1]],
+        steps: ['open', 'escape', 'remove:Alice', 'listed:Alice'],
+        expanded: true,
+        listed: ['Alice', 'Charlie'],
+      },
+      {
+        situation: 'focus list closed, outside change: stays closed',
+        initial: [users[0]],
+        steps: ['open', 'escape', 'set:Set Charlie'],
+        expanded: false,
+      },
+      {
+        // Whether a pick keeps the list open is FR14's, not this table's.
+        situation: 'token picked from the list (inside add): not offered again',
+        initial: [users[0]],
+        steps: ['open', 'listed:Charlie', 'pick:Charlie'],
+        notListed: ['Charlie'],
+      },
+      {
+        situation: 'focus list open, slow reload: new token never listed',
+        initial: [users[0]],
+        source: () => slowSource,
+        steps: [
+          'open',
+          'listed:Charlie',
+          'set:Set Charlie',
+          'absent:Charlie',
+          'listed:Alice',
+        ],
+        expanded: true,
+        notListed: ['Charlie'],
+      },
+      {
+        situation: 'focus list open, reload fails: close',
+        initial: [users[0]],
+        source: failsOnReload,
+        steps: ['open', 'listed:Charlie', 'set:Set Charlie'],
+        expanded: false,
+      },
+      {
+        situation: 'typed text, limit reached from outside: close',
+        initial: [users[0]],
+        maxEntries: 3,
+        steps: ['type:i', 'listed:Diana', 'set:Set all three'],
+        expanded: false,
+      },
+      {
+        situation: 'typed text matched only a token, token removed: re-search',
+        initial: [users[0], users[1]],
+        steps: ['type:ali', 'noResults', 'set:Set Charlie', 'listed:Alice'],
+        expanded: true,
+        listed: ['Alice'],
+      },
+      {
+        situation:
+          'typed text, tokens return to a set that once emptied the list: re-search',
+        initial: [users[0], users[1]],
+        steps: [
+          'open',
+          'listed:Charlie',
+          'set:Set all three',
+          'set:Set Alice',
+          'type:i',
+          'listed:Diana',
+          'set:Set all three',
+          'listed:Diana',
+        ],
+        expanded: true,
+        listed: ['Diana'],
+        notListed: ['Charlie'],
+      },
+      {
+        situation:
+          'typed search waiting for its debounce, outside commit: re-search',
+        initial: [users[0]],
+        steps: ['type:char', 'set:Set Charlie', 'absent:Charlie'],
+        expanded: true,
+        notListed: ['Charlie'],
+      },
+      {
+        situation:
+          'typed search waiting for its debounce, commit empties the shown rows: re-search',
+        initial: [users[0], users[1]],
+        steps: [
+          'open',
+          'listed:Charlie',
+          'type:d',
+          'set:Set all three',
+          'listed:Diana',
+        ],
+        expanded: true,
+        listed: ['Diana'],
+      },
+    ];
+
+    it.each(rows)('$situation', async row => {
+      const user = userEvent.setup();
+      render(
+        <Controlled
+          initial={row.initial}
+          maxEntries={row.maxEntries}
+          source={row.source?.()}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      const option = (name: string) =>
+        screen.queryByRole('option', {name, hidden: true});
+      for (const step of row.steps) {
+        const [action, arg = ''] = step.split(/:(.*)/s);
+        if (action === 'open') {
+          await user.click(input);
+          await waitFor(() => {
+            expect(input).toHaveAttribute('aria-expanded', 'true');
+          });
+        } else if (action === 'type') {
+          await user.type(input, arg);
+        } else if (action === 'listed') {
+          await waitFor(() => {
+            expect(option(arg)).toBeInTheDocument();
+          });
+        } else if (action === 'noResults') {
+          await waitFor(() => {
+            expect(screen.getByText('No results found')).toBeInTheDocument();
+          });
+        } else if (action === 'escape') {
+          await user.keyboard('{Escape}');
+        } else if (action === 'set') {
+          act(() => {
+            screen.getByRole('button', {name: arg}).click();
+          });
+        } else if (action === 'remove') {
+          await user.click(screen.getByRole('button', {name: `Remove ${arg}`}));
+        } else if (action === 'pick') {
+          await user.click(
+            screen.getByRole('option', {name: arg, hidden: true}),
+          );
+        } else if (action === 'absent') {
+          expect(option(arg)).not.toBeInTheDocument();
+        } else {
+          throw new Error(`Unknown step: ${step}`);
+        }
+      }
+      // Let any reload or debounced search settle.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+
+      if (row.expanded != null) {
+        expect(input).toHaveAttribute(
+          'aria-expanded',
+          row.expanded ? 'true' : 'false',
+        );
+      }
+      for (const name of row.listed ?? []) {
+        expect(option(name)).toBeInTheDocument();
+      }
+      for (const name of row.notListed ?? []) {
+        expect(option(name)).not.toBeInTheDocument();
+      }
+    });
+
+    it('never shows a value set from outside while an async reload is pending', async () => {
+      const user = userEvent.setup();
+      // Whether each commit after the change painted Charlie as a choice.
+      const commitsListingCharlie: boolean[] = [];
+      let isWatching = false;
+      render(
+        <Profiler
+          id="tokenizer"
+          onRender={() => {
+            if (isWatching) {
+              commitsListingCharlie.push(
+                Array.from(document.querySelectorAll('[role="option"]')).some(
+                  option => option.textContent?.includes('Charlie'),
+                ),
+              );
+            }
+          }}>
+          <Controlled initial={[users[0]]} source={slowSource} />
+        </Profiler>,
+      );
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Charlie', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      isWatching = true;
+      act(() => {
+        screen.getByRole('button', {name: 'Set Charlie'}).click();
+      });
+      isWatching = false;
+
+      // No commit, not even the one that adds the token, lists Charlie.
+      expect(commitsListingCharlie.length).toBeGreaterThan(0);
+      expect(commitsListingCharlie).not.toContain(true);
+      expect(
+        screen.queryByRole('option', {name: 'Charlie', hidden: true}),
+      ).not.toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Alice', hidden: true}),
+        ).toBeInTheDocument();
+      });
     });
   });
 
@@ -1341,20 +2297,60 @@ describe('Tokenizer', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('keeps the input natively disabled when disabled without a reason', () => {
+    it("keeps the input's tab stop when disabled without a reason", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
       render(
-        <Tokenizer
-          label="Members"
-          searchSource={userSource}
-          value={[]}
-          onChange={() => {}}
-          isDisabled
-        />,
+        <>
+          <button type="button">Before</button>
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={[]}
+            onChange={onChange}
+            isDisabled
+          />
+        </>,
       );
-      expect(screen.getByRole('combobox')).toBeDisabled();
+      const input = screen.getByRole('combobox');
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
+      screen.getByRole('button', {name: 'Before'}).focus();
+      await user.tab();
+      expect(input).toHaveFocus();
+      await user.keyboard('Ali{Enter}');
+      expect(input).toHaveValue('');
+      expect(onChange).not.toHaveBeenCalled();
     });
   });
   describe('announcements', () => {
+    it("announces Clear all politely, in the sheet's words", async () => {
+      const onChange = vi.fn();
+      render(
+        <InternationalizationProvider
+          locale="fr"
+          overrides={{
+            fr: {'@astryx.tokenizer.allRemoved': 'Tout a été retiré'},
+          }}>
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={onChange}
+            hasClear
+          />
+        </InternationalizationProvider>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: /clear/i}));
+      expect(onChange).toHaveBeenCalledWith(
+        [],
+        expect.objectContaining({type: 'remove'}),
+      );
+      await waitFor(() => {
+        expect(politeRegion()?.textContent).toBe('Tout a été retiré');
+      });
+    });
+
     it('announces removal politely on Backspace with an empty input', async () => {
       const onChange = vi.fn();
       render(
@@ -1522,6 +2518,745 @@ describe('Tokenizer', () => {
       expect(form.querySelector('input[type="hidden"]')).toBeNull();
       expect(form.checkValidity()).toBe(true);
     });
+  });
+
+  describe('InputGroup', () => {
+    it('uses group ARIA and skips standalone Field chrome when grouped', () => {
+      render(
+        <InputGroup
+          label="Recipients"
+          description="Who receives the digest"
+          status={{type: 'error', message: 'Pick at least one person'}}>
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[]}
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+
+      const group = screen.getByRole('group', {name: 'Recipients'});
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+
+      // The group owns the only Field chrome — the Tokenizer must not render a
+      // second Field wrapper or a duplicate label inside the group.
+      expect(document.querySelectorAll('.astryx-field')).toHaveLength(1);
+      expect(document.querySelectorAll('.astryx-field-label')).toHaveLength(1);
+      expect(screen.getByText('People')).not.toHaveClass('astryx-field-label');
+
+      const labelledByIDs =
+        input.getAttribute('aria-labelledby')?.split(' ') ?? [];
+      expect(labelledByIDs).toHaveLength(2);
+      expect(labelledByIDs[0]).toBe(group.getAttribute('aria-labelledby'));
+      expect(document.getElementById(labelledByIDs[1])).toHaveTextContent(
+        'People',
+      );
+      expect(input).not.toHaveAttribute('aria-label');
+      expect(input).toHaveAttribute(
+        'aria-describedby',
+        group.getAttribute('aria-describedby'),
+      );
+      expect(screen.getByText('Pick at least one person')).toBeInTheDocument();
+    });
+
+    it('composes the group described-by with the disabled reason instead of clobbering it', () => {
+      render(
+        <InputGroup label="Recipients" description="Who receives the digest">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[]}
+            onChange={() => {}}
+            isDisabled
+            disabledMessage="You need edit access to change recipients"
+          />
+        </InputGroup>,
+      );
+
+      const group = screen.getByRole('group', {name: 'Recipients'});
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const describedByIDs =
+        input.getAttribute('aria-describedby')?.split(' ') ?? [];
+
+      // Both the group's description and the input-local disabled reason are
+      // present — neither one replaces the other.
+      expect(describedByIDs).toContain(group.getAttribute('aria-describedby'));
+      expect(describedByIDs).toContain(tooltip.id);
+      expect(describedByIDs).toHaveLength(2);
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('keeps token removal working inside a group', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0]]}
+            onChange={onChange}
+          />
+        </InputGroup>,
+      );
+
+      await user.click(screen.getByRole('button', {name: /remove alice/i}));
+      expect(onChange).toHaveBeenCalledWith([], {
+        item: users[0],
+        type: 'remove',
+      });
+    });
+
+    it('takes the group size over an explicit mismatched size', () => {
+      render(
+        <InputGroup label="Recipients" size="sm">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            size="lg"
+            searchSource={userSource}
+            value={[users[0]]}
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+
+      // The group row has a fixed `sm` height; an `lg` control or token would
+      // escape it, so the group's size governs the whole grouped Tokenizer.
+      expect(screen.getByRole('group', {name: 'People'})).toHaveAttribute(
+        'data-size',
+        'sm',
+      );
+      expect(document.querySelector('.astryx-token')).toHaveAttribute(
+        'data-size',
+        'sm',
+      );
+    });
+
+    it('keeps an explicit size outside a group', () => {
+      render(
+        <Tokenizer
+          label="People"
+          size="lg"
+          searchSource={userSource}
+          value={[users[0]]}
+          onChange={() => {}}
+        />,
+      );
+
+      expect(screen.getByRole('group', {name: 'People'})).toHaveAttribute(
+        'data-size',
+        'lg',
+      );
+      expect(document.querySelector('.astryx-token')).toHaveAttribute(
+        'data-size',
+        'lg',
+      );
+    });
+
+    it.each(['none', 'unfocusedLayer'] as const)(
+      'drops local description and status in favor of the group (tokenOverflowBehavior=%s)',
+      tokenOverflowBehavior => {
+        const renderGrouped = (local: {
+          description?: string;
+          status?: {type: 'warning'; message: string};
+        }) =>
+          render(
+            <InputGroup
+              label="Recipients"
+              description="Who receives the digest"
+              status={{type: 'error', message: 'Pick at least one person'}}>
+              <InputGroupText>To</InputGroupText>
+              <Tokenizer
+                label="People"
+                isLabelHidden
+                searchSource={userSource}
+                value={[users[0]]}
+                onChange={() => {}}
+                tokenOverflowBehavior={tokenOverflowBehavior}
+                {...local}
+              />
+            </InputGroup>,
+          );
+        const tokenizerClasses = () =>
+          Array.from(
+            document.querySelectorAll('.astryx-tokenizer'),
+            el => el.className,
+          );
+
+        const {unmount} = renderGrouped({});
+        const classesWithoutLocal = tokenizerClasses();
+        unmount();
+
+        renderGrouped({
+          description: 'Local help',
+          status: {type: 'warning', message: 'Local warning'},
+        });
+
+        const group = screen.getByRole('group', {name: 'Recipients'});
+        const input = screen.getByRole('combobox', {
+          name: 'Recipients People',
+          hidden: true,
+        });
+        const describedByIDs =
+          input.getAttribute('aria-describedby')?.split(' ') ?? [];
+
+        // No Field renders the local text inside a group, so referencing it
+        // would leave dangling IDs — the group's text is the description.
+        expect(input).toHaveAttribute(
+          'aria-describedby',
+          group.getAttribute('aria-describedby'),
+        );
+        for (const id of describedByIDs) {
+          expect(document.getElementById(id)).not.toBeNull();
+        }
+        expect(screen.queryByText('Local help')).not.toBeInTheDocument();
+        expect(screen.queryByText('Local warning')).not.toBeInTheDocument();
+
+        // The local warning must not paint beside the group's error: every
+        // tokenizer surface (row, layer placeholder, layer content) renders
+        // exactly as it does without a local status.
+        for (const el of document.querySelectorAll('.astryx-tokenizer')) {
+          expect(el).not.toHaveAttribute('data-status');
+        }
+        expect(tokenizerClasses()).toEqual(classesWithoutLocal);
+      },
+    );
+
+    it('keeps the disabled reason while dropping local metadata in a group', () => {
+      render(
+        <InputGroup
+          label="Recipients"
+          description="Who receives the digest"
+          status={{type: 'error', message: 'Pick at least one person'}}>
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            description="Local help"
+            status={{type: 'warning', message: 'Local warning'}}
+            searchSource={userSource}
+            value={[]}
+            onChange={() => {}}
+            isDisabled
+            disabledMessage="You need edit access to change recipients"
+          />
+        </InputGroup>,
+      );
+
+      const group = screen.getByRole('group', {name: 'Recipients'});
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+
+      expect(input.getAttribute('aria-describedby')?.split(' ')).toEqual([
+        ...(group.getAttribute('aria-describedby')?.split(' ') ?? []),
+        tooltip.id,
+      ]);
+    });
+
+    it('joins a caller aria-labelledby with the group naming in a group', () => {
+      render(
+        <>
+          <span id="digest-heading">Weekly digest</span>
+          <InputGroup label="Recipients">
+            <InputGroupText>To</InputGroupText>
+            <Tokenizer
+              label="People"
+              isLabelHidden
+              aria-labelledby="digest-heading"
+              searchSource={userSource}
+              value={[]}
+              onChange={() => {}}
+            />
+          </InputGroup>
+        </>,
+      );
+
+      expect(
+        screen.getByRole('combobox', {name: 'Recipients People Weekly digest'}),
+      ).toBeInTheDocument();
+    });
+
+    it('does not mark the input invalid from a local status the group drops', () => {
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            status={{type: 'error', message: 'Local error'}}
+            searchSource={userSource}
+            value={[]}
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+      expect(input).not.toHaveAttribute('aria-invalid', 'true');
+      expect(screen.queryByText('Local error')).not.toBeInTheDocument();
+    });
+
+    it('forwards the ref and DOM props to the combobox input in a group', () => {
+      const ref = vi.fn();
+      const renderGrouped = () => (
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            ref={ref}
+            data-testid="people"
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0]]}
+            onChange={() => {}}
+          />
+        </InputGroup>
+      );
+      const {rerender} = render(renderGrouped());
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+
+      // Grouped or not, base props reach the primary semantic control — never
+      // the grouped row (family:input-fields FR10).
+      expect(ref).toHaveBeenLastCalledWith(input);
+      expect(screen.getByTestId('people')).toBe(input);
+
+      // A ref merged during render is a new callback every render, so React
+      // detaches and re-attaches it on each update.
+      ref.mockClear();
+      rerender(renderGrouped());
+      expect(ref).not.toHaveBeenCalled();
+    });
+
+    it('keeps end controls outside the scrolling token row in a group', () => {
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+            hasClear
+            endContent={<span>2 selected</span>}
+          />
+        </InputGroup>,
+      );
+
+      const row = screen.getByRole('group', {name: 'People'});
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+      const clearButton = screen.getByRole('button', {name: 'Clear all'});
+      const track = getTokenStrip(row);
+
+      // Tokens and the input share one track inside the row: the part that
+      // scrolls. jsdom has no layout, so the rendered half of this contract is
+      // the play function of the WithTokenizerOverflowEndControls story.
+      expect(track.parentElement).toBe(row);
+      expect(track).toContainElement(input);
+      const tokens = row.querySelectorAll<HTMLElement>('.astryx-token');
+      expect(tokens).toHaveLength(2);
+      for (const token of tokens) {
+        expect(track).toContainElement(token);
+      }
+
+      // The end controls are the track's siblings, so they can neither scroll
+      // with the tokens nor sit over them.
+      expect(row).toContainElement(clearButton);
+      expect(track).not.toContainElement(clearButton);
+      expect(track).not.toContainElement(screen.getByText('2 selected'));
+    });
+
+    it('leaves the keyboard path to the remove buttons when enabled in a group', () => {
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+
+      // Every token keeps a native remove button in the Tab order: entering the
+      // field lands on its input, and Shift+Tab walks back through the tokens,
+      // scrolling each into view. So the strip adds no stop of its own
+      // (AST-025 FR12: an existing focusable path reaches all the overflow).
+      const row = screen.getByRole('group', {name: 'People'});
+      const strip = getTokenStrip(row);
+      expect(strip).not.toHaveAttribute('role');
+      expect(strip).not.toHaveAttribute('aria-label');
+      expect(strip).not.toHaveAttribute('tabindex');
+      for (const label of ['Remove Alice', 'Remove Bob']) {
+        expect(strip).toContainElement(
+          screen.getByRole('button', {name: label}),
+        );
+      }
+    });
+
+    it('reveals the whole token when keyboard focus reaches its remove button in a group', async () => {
+      // jsdom has no scrollIntoView; record the calls instead.
+      const scrollIntoView = vi.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+      try {
+        const user = userEvent.setup();
+        render(
+          <InputGroup label="Recipients">
+            <InputGroupText>To</InputGroupText>
+            <Tokenizer
+              label="People"
+              isLabelHidden
+              searchSource={userSource}
+              value={[users[0], users[1]]}
+              onChange={() => {}}
+            />
+          </InputGroup>,
+        );
+        act(() => {
+          screen.getByRole('combobox', {name: 'Recipients People'}).focus();
+        });
+        // The keyboard path to a token: back from the input.
+        await user.tab({shift: true});
+        const removeBob = screen.getByRole('button', {name: 'Remove Bob'});
+        expect(removeBob).toHaveFocus();
+
+        // Browsers scroll a focused control into view only as far as the
+        // control, which can leave the token's label cut off or under a fade.
+        // The scroll padding the token is revealed against is the fade width.
+        expect(scrollIntoView).toHaveBeenLastCalledWith({
+          block: 'nearest',
+          inline: 'nearest',
+        });
+        expect(scrollIntoView.mock.contexts.at(-1)).toBe(
+          removeBob.closest('.astryx-token'),
+        );
+      } finally {
+        delete (Element.prototype as Partial<Element>).scrollIntoView;
+      }
+    });
+
+    it('names the strip as the keyboard path when disabled in a group', () => {
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+            isDisabled
+          />
+        </InputGroup>,
+      );
+
+      // A disabled field has no remove buttons and no focusable input, so the
+      // strip itself is how a keyboard reaches tokens scrolled out of view.
+      expect(screen.queryAllByRole('button', {name: /^Remove /})).toHaveLength(
+        0,
+      );
+      // The strip carries the Tokenizer's own name, as the field does.
+      const [field] = screen.getAllByRole('group', {name: 'People'});
+      const strip = getTokenStrip(field);
+      expect(strip).toHaveAttribute('role', 'group');
+      expect(strip).toHaveAccessibleName('People');
+      // It joins the Tab order only while it overflows. jsdom has no layout, so
+      // that half is browser evidence: TokenizerGroupScroll.a11y.browser.spec.ts.
+      expect(strip).not.toHaveAttribute('tabindex');
+    });
+
+    it('keeps tokens and the input as direct children of the field outside a group', () => {
+      render(
+        <Tokenizer
+          label="People"
+          searchSource={userSource}
+          value={[users[0]]}
+          onChange={() => {}}
+          hasClear
+        />,
+      );
+
+      const row = screen.getByRole('group', {name: 'People'});
+      expect(screen.getByRole('combobox').parentElement).toBe(row);
+      expect(document.querySelector('.astryx-token')?.parentElement).toBe(row);
+    });
+  });
+});
+
+describe('Tokenizer search cancellation', () => {
+  // A source that records each call and answers only when the test says so.
+  function pendingSource() {
+    const events: string[] = [];
+    const answers = new Map<string, (items: SearchableItem[]) => void>();
+    const source: SearchSource = {
+      search: async query => {
+        events.push(`search:${query}`);
+        return new Promise(resolve => answers.set(query, resolve));
+      },
+      bootstrap: () => [],
+      cancel: () => {
+        events.push('cancel');
+      },
+    };
+    return {events, answers, source};
+  }
+
+  async function type(input: HTMLElement, value: string) {
+    fireEvent.change(input, {target: {value}});
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 0));
+    });
+  }
+
+  it('cancels the previous search on the consumer source when a newer one starts', async () => {
+    const {events, source} = pendingSource();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await type(input, 'a');
+    await type(input, 'al');
+    const first = events.indexOf('search:a');
+    const second = events.indexOf('search:al');
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(events.slice(first + 1, second)).toContain('cancel');
+  });
+
+  it('cancels a running search on the consumer source when the menu closes with Escape', async () => {
+    const {events, answers, source} = pendingSource();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await type(input, 'a');
+    await act(async () => {
+      answers.get('a')?.([users[0]]);
+    });
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    await type(input, 'al');
+    const before = events.filter(e => e === 'cancel').length;
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(events.filter(e => e === 'cancel').length).toBeGreaterThan(before);
+  });
+
+  it('cancels a running search on the consumer source when focus leaves the field', async () => {
+    const {events, answers, source} = pendingSource();
+    render(
+      <>
+        <Tokenizer
+          label="Members"
+          searchSource={source}
+          value={[]}
+          onChange={vi.fn()}
+          debounceMs={0}
+        />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    const input = screen.getByRole('combobox');
+    await type(input, 'a');
+    await act(async () => {
+      answers.get('a')?.([users[0]]);
+    });
+    await type(input, 'al');
+    const before = events.filter(e => e === 'cancel').length;
+    fireEvent.blur(input, {
+      relatedTarget: screen.getByRole('button', {name: 'Elsewhere'}),
+    });
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(events.filter(e => e === 'cancel').length).toBeGreaterThan(before);
+  });
+
+  it('cancels a running search on the consumer source on unmount', async () => {
+    const {events, source} = pendingSource();
+    const {unmount} = render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    await type(screen.getByRole('combobox'), 'a');
+    const before = events.filter(e => e === 'cancel').length;
+    unmount();
+    expect(events.filter(e => e === 'cancel').length).toBeGreaterThan(before);
+  });
+
+  it('calls cancel with the consumer source as its receiver', async () => {
+    const aborted: string[] = [];
+    const source = {
+      current: 'none',
+      async search(query: string) {
+        this.current = query;
+        return new Promise<SearchableItem[]>(() => {});
+      },
+      bootstrap: () => [] as SearchableItem[],
+      cancel() {
+        aborted.push(this.current);
+      },
+    };
+    const {unmount} = render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    await type(screen.getByRole('combobox'), 'a');
+    unmount();
+    expect(aborted).toContain('a');
+  });
+
+  it("ignores a cancelled search's late answer when the source can't abort it", async () => {
+    const {answers, source} = pendingSource();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={source}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await type(input, 'a');
+    await type(input, 'b');
+    await act(async () => {
+      answers.get('b')?.([users[1]]);
+    });
+    await act(async () => {
+      answers.get('a')?.([users[0]]);
+    });
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+  });
+
+  it('works with a source that has no cancel', async () => {
+    const {unmount} = render(
+      <Tokenizer
+        label="Members"
+        searchSource={userSource}
+        value={[]}
+        onChange={vi.fn()}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await type(input, 'a');
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    unmount();
+  });
+});
+
+describe('Tokenizer required state (FormLayout FR5, AR2)', () => {
+  it('exposes the resolved required state on the combobox', () => {
+    const field = (props: {
+      isRequired?: boolean;
+      isOptional?: boolean;
+      label: string;
+    }) => (
+      <Tokenizer
+        {...props}
+        searchSource={userSource}
+        value={[]}
+        onChange={() => {}}
+      />
+    );
+    render(
+      <>
+        {field({label: 'Plain'})}
+        {field({label: 'Explicit', isRequired: true})}
+        <FormLayout defaultOptionality="required">
+          {field({label: 'By default'})}
+          {field({label: 'Opted out', isOptional: true})}
+        </FormLayout>
+      </>,
+    );
+    const required = (name: string) =>
+      screen
+        .getByRole('combobox', {name: new RegExp(`^${name}`)})
+        .getAttribute('aria-required');
+    expect(required('Plain')).toBeNull();
+    expect(required('Explicit')).toBe('true');
+    expect(required('By default')).toBe('true');
+    expect(required('Opted out')).toBeNull();
+  });
+});
+
+describe('Tokenizer invalid state', () => {
+  it('marks the combobox invalid for an error status only (WCAG 4.1.2)', () => {
+    const field = (
+      label: string,
+      status?: {type: 'error' | 'warning'; message: string},
+    ) => (
+      <Tokenizer
+        label={label}
+        status={status}
+        searchSource={userSource}
+        value={[]}
+        onChange={() => {}}
+      />
+    );
+    render(
+      <>
+        {field('None')}
+        {field('Warned', {type: 'warning', message: 'Check this'})}
+        {field('Failed', {type: 'error', message: 'Pick one'})}
+      </>,
+    );
+    const invalid = (name: string) =>
+      screen.getByRole('combobox', {name}).getAttribute('aria-invalid');
+    expect(invalid('None')).toBeNull();
+    expect(invalid('Warned')).toBeNull();
+    expect(invalid('Failed')).toBe('true');
+  });
+
+  it("keeps a caller's own aria-invalid and aria-required when the field's own state is off", () => {
+    render(
+      <Tokenizer
+        label="Caller"
+        aria-invalid="true"
+        aria-required="true"
+        searchSource={userSource}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+    const combobox = screen.getByRole('combobox', {name: 'Caller'});
+    expect(combobox).toHaveAttribute('aria-invalid', 'true');
+    expect(combobox).toHaveAttribute('aria-required', 'true');
   });
 });
 
@@ -2117,5 +3852,196 @@ describe('Tokenizer consumer key handler order', () => {
     });
     expect(onKeyDown).toHaveBeenCalledOnce();
     expect(currentTarget).toBe(screen.getByRole('combobox'));
+  });
+});
+
+describe('Tokenizer caller aria-labelledby', () => {
+  it('names the input by its label and a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="billing-heading">Billing</span>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[]}
+          onChange={() => {}}
+          aria-labelledby="billing-heading"
+        />
+      </>,
+    );
+    expect(
+      screen.getByRole('combobox', {name: 'Members Billing'}),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('Tokenizer incremental results (spec:AST-092)', () => {
+  const ben = {id: 'u2', label: 'Ben'};
+  const benita = {id: 'u3', label: 'Benita'};
+  const benShah = {id: 'u7', label: 'Ben Shah'};
+
+  function pendingSource() {
+    let settle: (items: SearchableItem[]) => void = () => {};
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(_query, context) {
+        context?.update([ben, benita]);
+        return new Promise<SearchableItem[]>(resolve => {
+          settle = resolve;
+        });
+      },
+    };
+    return {source, settle: (items: SearchableItem[]) => settle(items)};
+  }
+
+  function optionLabels() {
+    return screen
+      .queryAllByRole('option', {hidden: true})
+      .map(option => option.textContent);
+  }
+
+  it('removes committed values from partial lists too (FR1, component:Tokenizer FR13)', async () => {
+    const {source, settle} = pendingSource();
+    render(
+      <Tokenizer
+        label="People"
+        searchSource={source}
+        value={[benita]}
+        onChange={() => {}}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'ben'}});
+    });
+    expect(optionLabels()).toEqual(['Ben']);
+
+    await act(async () => {
+      settle([ben, benita, benShah]);
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Ben Shah']);
+  });
+
+  it('offers the create row only once a searched query settles (FR1)', async () => {
+    const {source, settle} = pendingSource();
+    render(
+      <Tokenizer
+        label="People"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        hasCreate
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'ben s'}});
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Benita']);
+
+    await act(async () => {
+      settle([ben, benita]);
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Benita', 'Create "ben s"']);
+  });
+
+  it('keeps grouped rows in place and shows the create row after them when the query settles (FR1, FR2)', async () => {
+    const people = {id: 'p1', label: 'Ben', auxiliaryData: {group: 'People'}};
+    const teams = {id: 't1', label: 'Bento', auxiliaryData: {group: 'Teams'}};
+    let settle: (items: SearchableItem[]) => void = () => {};
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(_query, context) {
+        context?.update([people]);
+        return new Promise<SearchableItem[]>(resolve => {
+          settle = resolve;
+        });
+      },
+    };
+    render(
+      <Tokenizer
+        label="People"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        hasCreate
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'ben x'}});
+    });
+    expect(optionLabels()).toEqual(['Ben']);
+    await act(async () => {
+      settle([people, teams]);
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Bento', 'Create "ben x"']);
+  });
+});
+
+describe('Tokenizer locked tokens (internal removable context)', () => {
+  it('Clear all keeps a locked token and reports the last removed one', () => {
+    const onChange = vi.fn();
+    render(
+      <TokenizerItemRemovableContext value={item => item.id !== '1'}>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1], users[2]]}
+          onChange={onChange}
+          hasClear
+        />
+      </TokenizerItemRemovableContext>,
+    );
+    expect(
+      screen.queryByRole('button', {name: 'Remove Alice'}),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'Remove Bob'}),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: /clear/i}));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith([users[0]], {
+      item: users[2],
+      type: 'remove',
+    });
+  });
+
+  it('has no Clear all when every token is locked', () => {
+    render(
+      <TokenizerItemRemovableContext value={() => false}>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0]]}
+          onChange={() => {}}
+          hasClear
+        />
+      </TokenizerItemRemovableContext>,
+    );
+    expect(
+      screen.queryByRole('button', {name: /clear/i}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('Backspace on an empty input removes nothing while the last token is locked', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <TokenizerItemRemovableContext value={item => item.id !== '2'}>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={onChange}
+        />
+      </TokenizerItemRemovableContext>,
+    );
+    await user.click(screen.getByRole('combobox'));
+    await user.keyboard('{Backspace}');
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

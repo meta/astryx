@@ -38,6 +38,7 @@ import {
   spacingVars,
   typeScaleVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {LayerProvider} from '@astryxdesign/core/Layer';
 
 const GRID_CELL_SELECTOR = '[role="gridcell"]';
 
@@ -250,6 +251,18 @@ const categoryTree: DestinationNode[] = [
 ];
 
 const styles = stylex.create({
+  // Stands in for the app's bottom bar that LayerProvider's inset keeps the
+  // popup clear of.
+  appBar: {
+    position: 'fixed',
+    insetInline: 0,
+    insetBlockEnd: 0,
+    blockSize: 80,
+    backgroundColor: colorVars['--color-background-muted'],
+    borderBlockStartWidth: borderVars['--border-width'],
+    borderBlockStartStyle: 'solid',
+    borderBlockStartColor: colorVars['--color-border'],
+  },
   wrapper: {
     width: 340,
   },
@@ -409,8 +422,10 @@ const styles = stylex.create({
     width: 280,
     padding: spacingVars['--spacing-3'],
   },
+  // Bounded inside the centered story frame's 32px padding on each side, so
+  // the 320px captures measure the component rather than a frame overflow.
   auditMatrix: {
-    width: 'min(720px, calc(100vw - 32px))',
+    width: 'min(720px, calc(100vw - 64px))',
   },
   auditPopupContent: {
     width: 220,
@@ -686,38 +701,40 @@ export const FruitRipenessGrid: Story = {
   },
 };
 
+function TreeListWithSearchExample() {
+  const [value, setValue] = useState<DestinationValue>({
+    id: 'teams-design-systems-accessibility',
+    label: 'Accessibility',
+    path: '/Teams/Design systems/Accessibility',
+  });
+
+  return (
+    <VStack gap={4} xstyle={styles.wrapper}>
+      <ComplexSelector<DestinationValue>
+        label="Project destination"
+        description="Search and browse nested folders from one selector."
+        value={value}
+        onChange={setValue}
+        triggerLabel={formatDestinationValue(value)}
+        contentXstyle={styles.treeContent}>
+        {(selectedValue, onChange, close) => (
+          <TreeSearchContent
+            label="destinations"
+            value={selectedValue}
+            tree={destinationTree}
+            searchPlaceholder="Search folders or teams"
+            onChange={onChange}
+            close={close}
+          />
+        )}
+      </ComplexSelector>
+    </VStack>
+  );
+}
+
 export const TreeListWithSearch: Story = {
   name: 'Tree list with search',
-  render: () => {
-    const [value, setValue] = useState<DestinationValue>({
-      id: 'teams-design-systems-accessibility',
-      label: 'Accessibility',
-      path: '/Teams/Design systems/Accessibility',
-    });
-
-    return (
-      <VStack gap={4} xstyle={styles.wrapper}>
-        <ComplexSelector<DestinationValue>
-          label="Project destination"
-          description="Search and browse nested folders from one selector."
-          value={value}
-          onChange={setValue}
-          triggerLabel={formatDestinationValue(value)}
-          contentXstyle={styles.treeContent}>
-          {(selectedValue, onChange, close) => (
-            <TreeSearchContent
-              label="destinations"
-              value={selectedValue}
-              tree={destinationTree}
-              searchPlaceholder="Search folders or teams"
-              onChange={onChange}
-              close={close}
-            />
-          )}
-        </ComplexSelector>
-      </VStack>
-    );
-  },
+  render: () => <TreeListWithSearchExample />,
   parameters: {
     docs: {
       description: {
@@ -726,6 +743,23 @@ export const TreeListWithSearch: Story = {
       },
     },
   },
+};
+
+/**
+ * The same selector in an app whose bottom bar covers the block-end edge,
+ * declared once through LayerProvider's `inset`, so the popup stays clear of it.
+ */
+export const TreeListWithSearchAboveAppBar: Story = {
+  name: 'Tree list with search above an app bar',
+  render: () => (
+    <LayerProvider inset={{blockEnd: 80}}>
+      <TreeListWithSearchExample />
+      <div aria-hidden {...stylex.props(styles.appBar)} />
+    </LayerProvider>
+  ),
+  // The bar is fixed to the viewport, so on the docs page the story gets its
+  // own frame instead of covering the page.
+  parameters: {docs: {story: {inline: false, height: '360px'}}},
 };
 
 export const CategoryTreeSelector: Story = {

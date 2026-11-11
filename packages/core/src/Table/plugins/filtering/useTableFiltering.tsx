@@ -14,7 +14,6 @@
  */
 
 import {
-  createContext,
   use,
   useRef,
   useMemo,
@@ -49,7 +48,7 @@ import type {
   HeaderCellRenderProps,
 } from '../../types';
 import {proportional} from '../../columnUtils';
-import {useLocale, useTranslator} from '../../../i18n';
+import {useLocale} from '../../../i18n';
 import type {
   PowerSearchConfig,
   PowerSearchField,
@@ -64,6 +63,14 @@ import type {
   StringListOperatorValue,
   EntityListOperatorValue,
 } from '../../../PowerSearch/types';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/filtering/useTableFiltering.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Filter Value Types
@@ -331,7 +338,11 @@ interface FilterStore {
   getConfig: () => UseTableFilteringConfig;
 }
 
-const FilterStoreContext = createContext<FilterStore | null>(null);
+const FilterStoreContext = createSharedContext<FilterStore | null>(
+  'FilterStoreContext',
+  1,
+  null,
+);
 FilterStoreContext.displayName = 'FilterStoreContext';
 
 function useFilterStore(): FilterStore {
@@ -346,7 +357,11 @@ function useFilterStore(): FilterStore {
 
 /** Variant is stable per plugin instance — kept in a separate context so
  *  slot components can read it without going through the mutable store. */
-const FilterVariantContext = createContext<TableFilterVariant>('popover');
+const FilterVariantContext = createSharedContext<TableFilterVariant>(
+  'FilterVariantContext',
+  1,
+  'popover',
+);
 FilterVariantContext.displayName = 'FilterVariantContext';
 
 // =============================================================================
@@ -430,7 +445,7 @@ function TextFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -540,7 +555,7 @@ function NumberFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -615,7 +630,7 @@ function SelectorFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -679,7 +694,7 @@ function MultiSelectorFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -721,7 +736,7 @@ function DateFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const value = store.getConfig().filters[columnKey] as string | undefined;
 
@@ -750,7 +765,7 @@ function TimeFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const value = store.getConfig().filters[columnKey] as string | undefined;
 
@@ -781,7 +796,7 @@ function StringListFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const value =
     (store.getConfig().filters[columnKey] as string[] | undefined) ?? [];
@@ -813,6 +828,7 @@ function StringListFilterControl({
       }}
       size={size}
       hasClear={hasClear}
+      presentation="popover"
     />
   );
 }
@@ -923,7 +939,7 @@ function PopoverFilterTrigger({
   header: string;
   operatorValue: OperatorValue;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];

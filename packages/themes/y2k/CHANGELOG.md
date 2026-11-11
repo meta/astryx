@@ -1,5 +1,106 @@
 # @xds/theme-y2k
 
+# 0.7.13
+
+#### Fixes
+
+- dependency floors move to current releases: the build package needs autoprefixer 10.6.2, browserslist 4.29.5 and lightningcss 1.33.0; the CLI needs ignore 7.0.14, jscodeshift 17.4.0, linkedom 0.18.15, zod 4.6.7 and @stylexjs/babel-plugin 0.19.1; each theme needs lucide-react 1.66.0. Peer ranges do not change. (#10709)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.12
+
+#### Fixes
+
+- Theme packages publish the declarations of their `./theme.css` export. The export pointed `types` at `theme.css.d.ts`, which the package didn't ship, so TypeScript found no types for `import '@astryxdesign/theme-<name>/theme.css'`. The export is unchanged; the file is now published. (#10903)
+- Theme packages declare `"type": "module"`, so bundlers and Node read the `./built` entry as the ES module it is. Before, it was an ES module in a `.js` file in a package without a `type`, which tools that follow the package's `type` read as CommonJS. Every export subpath stays the same. The CommonJS build of the source entry is now `dist/source.cjs` behind the same `require` condition, with its own CommonJS declarations (`dist/source.d.cts`), so TypeScript types each condition in the format it loads. As before, `require('…/built')` loads an ES module, so it needs a Node version with `require(esm)` (22.12 or later). Deep imports that reach past `exports` into `dist/` change too: `dist/source.js` is now `dist/source.cjs`, and a `require` of `dist/<theme>.js` gets an ES module (`require(esm)`, Node 22.12 or later). (#10876)
+- Matcha: light-mode secondary text is slightly darker (Neutral Light 30), so it meets 4.5:1 on the body (5.11:1, was 3.83:1), the surface and the card. (#10932)
+  [fix] Y2K: light-mode secondary text is slightly darker (Neutral Light 35), so it meets 4.5:1 on the Periwinkle body (5.14:1, was 4.25:1). The CLI's Matcha and Y2K theme templates match.
+- The Butter, Stone and Y2K themes set supporting text (`--text-supporting-size`) in rem instead of a fixed 12px, so it grows when a reader raises the browser's default font size, like the rest of the text. At the default size it is still 12px. The CLI's copies of these themes match. (#10320)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.11
+
+---
+
+# 0.7.10
+
+---
+
+# 0.7.9
+
+---
+
+# 0.7.8
+
+---
+
+# 0.7.7
+
+---
+
+# 0.7.6
+
+#### Fixes
+
+- Published packages no longer include repository test and benchmark files, reducing install size without changing exports. (#9153)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @parinith-web
+
+---
+
+# 0.7.5
+
+#### New Features
+
+- Status colors are readable everywhere they appear, and Info is a status of its own. Each status (info, success, warning, error) now has a strong fill (`--color-<status>`) with content on it (`--color-on-<status>`, at least 4.5:1), a pale fill (`--color-<status>-muted`) with its content (`--color-on-<status>-muted`), and readable text for the page and cards (`--color-text-<status>`). Status icons (`--color-icon-<status>`) and borders (`--color-border-<status>`) default to the readable text color. The Info roles (`--color-info`, `--color-on-info`, `--color-info-muted`, …) are new and no longer borrow your accent color.
+
+  `--color-success`, `--color-warning`, and `--color-error` and `bg-<status>` keep their meaning as the strong fills. In Tailwind, `bg-info`, `bg-info-muted`, `text-on-<status>`, `text-on-<status>-muted`, and `text-status-<status>` are new; `text-`, `decoration-`, `placeholder-`, and `caret-<status>` now use the readable text shade, and `border-`, `divide-`, `outline-`, and `ring-<status>` use the border shade, while `bg-`, `accent-`, `fill-`, `stroke-<status>`, shadows, and gradients keep the strong fill. For example, Core's light `text-warning` is now `#753F07` instead of `#E9AF08`. To keep the fill color on text, write `text-[var(--color-warning)]`.
+
+  What changes on screen:
+
+  - Core's dark Error content (`--color-on-error`) is now `#0A1317` instead of white, so text on dark-mode error fills reaches 4.5:1. Core's Info Badge uses `#0064E0` instead of the accent (`#2694FE` in dark mode).
+  - Status icons (Icon `color="info|success|warning|error"`), Stepper status glyphs, and Chat tool-call status icons use the readable shades. Core's light success icon is now `#09441F` instead of `#0D8626`.
+  - Input and FileInput status borders use the border shades. Core's light warning border is now `#753F07` instead of `#E9AF08`, and Butter's light success and warning input borders reach 3:1.
+  - Banner draws its title, description, icon, and controls in the on-muted colors, and fills Info with `--color-info-muted`.
+  - Status fills keep a visible edge in forced-colors mode.
+  - Content on Chocolate and Matcha success and error fills, and on Stone success, warning, and error fills, now reaches 4.5:1.
+  - Every first-party theme sets a blue Info. Chocolate and Matcha Info Badges move from the accent to that blue; Butter keeps its own Info Badge colors.
+  - Neutral's `--color-success`, `--color-warning`, and `--color-error` are now the fills its Badges already showed, and its `--color-info` is `#0074E2` (`#6D9CFE` in dark mode). Its Badges, StatusDots, progress fills, and Stepper badges look the same; its accent ProgressBar, StatusDot, and Stepper now use Neutral's accent instead of blue.
+  - Neutral no longer defines its undocumented local status tokens. Use the standard roles instead: `--astryx-theme-neutral-color-status-fill-success`, `-status-fill-warning`, and `-status-fill-error` → `--color-success`, `--color-warning`, `--color-error`; `-status-muted-accent` → `--color-info-muted`; `-on-tint-neutral` → `--color-neutral`; the `-on-tint-overlay-*` and `-destructive-overlay-*` tokens → `--color-overlay-hover` and `--color-overlay-pressed`. `--astryx-theme-neutral-color-status-fill-accent` keeps its value but is deprecated.
+
+  Custom themes get the content and text roles they don't set: they are derived from the theme's status fills. To keep a component's previous color, set the matching role, for example `--color-icon-success` to your old `--color-success`.
+
+#### Documentation
+
+- Package links now point to the project's GitHub home, `meta/astryx`.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @rubyycheung
+
+---
+
 # 0.7.4
 
 #### New Features
