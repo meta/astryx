@@ -40,7 +40,7 @@ while it rises turns it with its velocity too. A
 tap or a drag that lands while the lift grows and the surface enters reaches nothing
 (FR35). The close holds the layer until the trigger is back and every press
 on the layer has lifted. Its timers and
-document listeners end with it, and an unmount ends everything at once
+listeners end with it, and an unmount ends everything at once
 (FR24). Reduce Motion is the animator's (`design:reduced-motion`).
 
 ## Files

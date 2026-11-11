@@ -75,7 +75,8 @@ export interface LiftFromTriggerOptions {
    * Called once the layer shows and before the source's writes, with where
    * the source lands. A surface shown here sits above the tint. Its reads find
    * the page as it was, apart from the shown layer and what `release` changed.
-   * The source then lifts above it.
+   * The source then lifts above it. `presentSurface`, `drop` and `dispose` do
+   * nothing inside it, since the lift records its state once it returns.
    */
   readonly onLayerShown?: (lifted: LiftFromTriggerResult) => void;
   /**
