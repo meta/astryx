@@ -414,6 +414,7 @@ describe('Node-tooling CI routing', () => {
     for (const name of [
       'Build docsite workspace dependencies',
       'Build the docsite',
+      "Write the docsite's API surface",
       'test-docsite (data tests)',
     ]) {
       expect(step(ci.jobs['docsite-build'], name).if).toContain(TOOLING_FALSE);
@@ -585,17 +586,34 @@ describe('Node-tooling CI routing', () => {
   });
 
   it.each([
-    ['built', 'base-build.done', true, '::notice title=Merge base built::'],
+    [
+      'built',
+      'base-build.done',
+      'true',
+      true,
+      '::notice title=Merge base built::',
+    ],
     [
       'failed',
       'base-build.failed',
+      'true',
       false,
-      '::warning title=Merge base not built::',
+      '::warning title=Merge base not built::Building the merge base failed or timed out; Before and Delta stay empty.',
     ],
-  ])('collects a merge base that %s', (_label, marker, kept, message) => {
+    [
+      "failed while building only for its API surface, keeping Main's size record,",
+      'base-build.failed',
+      'false',
+      true,
+      '::warning title=Merge base not built::Building the merge base failed or timed out; the API changes are not compared.',
+    ],
+  ])('collects a merge base that %s', (_label, marker, needSizes, kept, message) => {
     const wait = step(
       ci.jobs['build-storybook'],
       "Wait for the merge base's sizes",
+    );
+    expect(wait.env.NEED_SIZES).toBe(
+      "${{ steps.component-download.outcome != 'success' }}",
     );
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
     try {
@@ -609,6 +627,7 @@ describe('Node-tooling CI routing', () => {
       const out = execFileSync('bash', ['-e', '-c', wait.run], {
         cwd: root,
         encoding: 'utf8',
+        env: {...process.env, NEED_SIZES: needSizes},
       });
       expect(out).toContain(message);
       expect(
@@ -664,10 +683,15 @@ describe('Node-tooling CI routing', () => {
       path: '.api-surface-base',
     });
     const start = step(job, 'Start building the merge base without a record');
-    // A missing API surface alone starts no build (the API report's budget):
-    // the base builds only for a missing size record, and then also writes
-    // its API surface when Main kept none and the head can.
-    expect(start.if).not.toContain('api-download');
+    // A missing API surface alone also starts the build when the pull
+    // request can change a published package: without a surface of the
+    // merge base, no API changes are compared.
+    expect(start.if).toContain(
+      "(steps.component-download.outcome != 'success' || (steps.api-download.outcome != 'success' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')))",
+    );
+    expect(start.env.NEED_SIZES).toBe(
+      "${{ steps.component-download.outcome != 'success' }}",
+    );
     // The head's API report script runs only in the step guarded for it.
     expect(start.run).not.toContain('scripts/api-report/cli.mjs');
     expect(start.env.NEED_API).toBe(
@@ -683,6 +707,116 @@ describe('Node-tooling CI routing', () => {
       at('Report API changes'),
     );
     expect(step(job, 'Report API changes')['continue-on-error']).toBe(true);
+  });
+
+  // The merge base's background build, run with stub git, pnpm and node:
+  // git reports which paths the pull request changes, and pnpm records each
+  // build it is asked for.
+  const runBaseBuild = ({needApi, changed, needSizes = true}) => {
+    const start = step(
+      ci.jobs['build-storybook'],
+      'Start building the merge base without a record',
+    );
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
+    const bin = path.join(root, '.bin');
+    try {
+      fs.mkdirSync(bin);
+      const stub = (name, body) => {
+        fs.writeFileSync(path.join(bin, name), `#!/bin/bash\n${body}\n`);
+        fs.chmodSync(path.join(bin, name), 0o755);
+      };
+      stub(
+        'git',
+        [
+          'if [ "$1" = worktree ]; then mkdir -p "$4"; exit 0; fi',
+          'if [ "$1" = diff ]; then',
+          '  for p in "${@:6}"; do',
+          `    case " ${changed.join(' ')} " in *" \${p%/} "*) exit 1;; esac`,
+          '  done',
+          '  exit 0',
+          'fi',
+        ].join('\n'),
+      );
+      stub('pnpm', `echo "$*" >> "${root}/pnpm.log"`);
+      stub('node', `echo "$*" >> "${root}/node.log"`);
+      // The step's script runs in the merge base's worktree.
+      fs.mkdirSync(path.join(root, '.size-base/packages/themes/neutral'), {
+        recursive: true,
+      });
+      execFileSync('bash', ['-e', '-c', start.run], {
+        cwd: root,
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          GITHUB_OUTPUT: path.join(root, 'output'),
+          BASE_SHA: 'base',
+          HEAD_SHA: 'head',
+          NEED_API: String(needApi),
+          NEED_SIZES: String(needSizes),
+        },
+      });
+      const deadline = Date.now() + 20_000;
+      while (
+        !fs.existsSync(path.join(root, 'base-build.done')) &&
+        !fs.existsSync(path.join(root, 'base-build.failed'))
+      ) {
+        if (Date.now() > deadline)
+          throw new Error('the base build did not finish');
+        execFileSync('sleep', ['0.1']);
+      }
+      expect(fs.existsSync(path.join(root, 'base-build.done'))).toBe(true);
+      const lines = name => {
+        const log = path.join(root, name);
+        return fs.existsSync(log)
+          ? fs.readFileSync(log, 'utf8').trim().split('\n')
+          : [];
+      };
+      return {builds: lines('pnpm.log'), scripts: lines('node.log')};
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  };
+
+  it.each([
+    ['changes only Core', ['packages/core']],
+    ['changes only a theme', ['packages/themes/neutral']],
+    ['changes the CLI', ['packages/cli']],
+  ])(
+    "writes the CLI's API declarations for a merge base without Main's surface when a pull request %s",
+    (_label, changed) => {
+      // The head build always writes them, so the base must too: without
+      // them the API changes report the CLI as unknown.
+      const {builds} = runBaseBuild({needApi: true, changed});
+      expect(builds).toContain('-F @astryxdesign/cli sync:api-types');
+      // A theme still builds only when its own directory changes.
+      expect(builds.includes('-F ./packages/themes/neutral/ build')).toBe(
+        changed.includes('packages/themes/neutral'),
+      );
+    },
+  );
+
+  it("builds no published package's API for a merge base whose surface Main kept", () => {
+    const {builds, scripts} = runBaseBuild({
+      needApi: false,
+      changed: ['packages/cli'],
+    });
+    expect(builds).not.toContain('-F @astryxdesign/cli sync:api-types');
+    expect(builds).toContain('-F @astryxdesign/core build');
+    expect(scripts.some(s => s.includes('analyze-pr.js --main-record'))).toBe(
+      true,
+    );
+  });
+
+  it("builds only the published packages' API for a merge base whose sizes Main kept", () => {
+    const {builds, scripts} = runBaseBuild({
+      needApi: true,
+      needSizes: false,
+      changed: ['packages/core'],
+    });
+    expect(builds).toContain('-F @astryxdesign/core build');
+    expect(builds).toContain('-F @astryxdesign/cli sync:api-types');
+    // Main's downloaded size record stays: the analyzer does not rewrite it.
+    expect(scripts.some(s => s.includes('analyze-pr.js'))).toBe(false);
   });
 
   // The stub CLI writes a surface when asked for one (or fails to, for a

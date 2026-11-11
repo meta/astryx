@@ -2,18 +2,20 @@
 
 /**
  * @file busy.webkitclock.test.ts
- * @input Synthetic WebKit casts (no browser)
- * @output A WebKit busy proof with a control judges each frame at its time on
- *   the controls' clock. A frame stamped late after a delivery gap passes. A
+ * @input Synthetic WebKit and Chromium casts, and a recorded Chromium cast
+ *   (no browser)
+ * @output A busy proof with a control judges each frame at its time on the
+ *   controls' clock. A frame stamped late after a delivery gap passes. A
  *   half-rate fade, on a full cast or a sparse one, and a frozen fade still
  *   fail. Near a turn, the control ahead dates a late frame; without it, the
  *   frame keeps its lateness. A frame with no reading takes its time from a
  *   neighbour whose stamp agrees with its reading. A measured cast keeps its
  *   order, no two frames share a time, and its judged part stays on its
- *   stamps. It keeps one frame per display interval and notes that it judges
- *   no 30 Hz cadence. Chromium casts and casts with no control get their
- *   stamps' proof.
- * @position Unit test of ./busy's busyWindowProof on WebKit casts
+ *   stamps. WebKit keeps one frame per display interval and notes that it
+ *   judges no 30 Hz cadence; Chromium keeps every frame. A recorded Chromium
+ *   coast passes at its display interval, which its uneven stamps misread.
+ *   Casts with no control get their stamps' proof.
+ * @position Unit test of ./busy's busyWindowProof on casts it dates
  */
 
 import {describe, expect, it} from 'vitest';
@@ -392,7 +394,7 @@ describe('busyWindowProof on a WebKit cast with a control', () => {
     };
     const halfRate = (at: number) =>
       eased(800 + 2 * FRAME * Math.floor((at - 800) / (2 * FRAME) + 1e-6));
-    const proof = (engine?: 'webkit') => {
+    const proof = (engine?: 'chromium' | 'webkit') => {
       const frames = cast(onTime(), halfRate, engine);
       return busyWindowProof(frames.tracked, BLOCK, {
         axis: 'x',
@@ -403,8 +405,10 @@ describe('busyWindowProof on a WebKit cast with a control', () => {
     expect(proof('webkit').summary).toMatch(
       /cadence not judged: [1-9]\d* display-interval pairs/,
     );
-    expect(proof().verdict.failures).not.toEqual([]);
-    expect(proof().summary).not.toContain('cadence not judged');
+    for (const engine of [undefined, 'chromium'] as const) {
+      expect(proof(engine).verdict.failures).not.toEqual([]);
+      expect(proof(engine).summary).not.toContain('cadence not judged');
+    }
   });
 
   it('matches each frame to its control frame by time, and names the pairs that have none', () => {
@@ -459,18 +463,15 @@ describe('busyWindowProof on a WebKit cast with a control', () => {
     expect(proof([0, -200]).verdict.failures).toEqual([]);
   });
 
-  it('judges a Chromium cast and a WebKit cast with no control on their stamps, as before', () => {
+  it('judges a cast with no control on its stamps, in either engine', () => {
     const shots = lateAfterGap(11);
     const stamped = cast(shots, fade(0.6));
     const chromium = cast(shots, fade(0.6), 'chromium');
     const webkit = cast(shots, fade(0.6), 'webkit');
-    const proof = (frames: ReturnType<typeof cast>, control: boolean) =>
-      busyWindowProof(frames.tracked, BLOCK, {
-        axis: 'x',
-        control: control ? frames.control : undefined,
-      });
-    expect(proof(chromium, true)).toEqual(proof(stamped, true));
-    expect(proof(webkit, false)).toEqual(proof(stamped, false));
+    const proof = (frames: ReturnType<typeof cast>) =>
+      busyWindowProof(frames.tracked, BLOCK, {axis: 'x'});
+    expect(proof(chromium)).toEqual(proof(stamped));
+    expect(proof(webkit)).toEqual(proof(stamped));
   });
 
   it('measures the cast on every frame it drew, so a frame the display-rate keep leaves out never lengthens its longest gap', () => {
@@ -507,5 +508,92 @@ describe('busyWindowProof on a WebKit cast with a control', () => {
       expect(numbers.longestGapMs).toBeGreaterThan(45);
       expect(numbers.longestGapMs).toBeLessThanOrEqual(50);
     }
+  });
+});
+
+describe('busyWindowProof on a Chromium cast with a control', () => {
+  it("judges a frame stamped late after a delivery gap at its time on the controls' clock, as in WebKit", () => {
+    const shots = lateAfterGap(11);
+    expect(failures(cast(shots, fade(0.6))).join('\n')).toMatch(
+      /longest stall 57\.0 ms, longer than the control's 40\.0 ms/,
+    );
+    expect(failures(cast(shots, fade(0.6), 'chromium'))).toEqual([]);
+  });
+
+  it('judges a recorded slider coast at its display interval, which its uneven stamps misread', () => {
+    // Recorded in Chromium on a loaded runner: SliderTouch's coast through a
+    // 400 ms block, with the busy control. Each row is [ms from the block's
+    // start, thumb x, control x] on one cast frame. The stamps trail the
+    // frames unevenly: +184.8 and +187.0 are a whole control step apart. So
+    // the frame interval read from the stamps is 23 ms, where the display
+    // drew every 17 ms. At that interval, the slow tail's 2 px catch-up after
+    // its held frame at +184.8 reads as over two cast steps a frame. The held
+    // frame then reads as a miss. On the controls' clock, the interval is
+    // 17 ms. The held frame is then a step that the cast could not show.
+    const recorded: ReadonlyArray<readonly [number, number, number]> = [
+      [-246.1, 156, 30],
+      [-218.9, 156, 20],
+      [-209.4, 156, 10],
+      [-184.9, 156, 0],
+      [-143.1, 163, 20],
+      [-142.4, 163, 30],
+      [-120.9, 163, 40],
+      [-96.5, 163, 60],
+      [-61.1, 163, 80],
+      [-58, 163, 90],
+      [-22.2, 212, 120],
+      [10.7, 218, 130],
+      [34.3, 224, 140],
+      [56.1, 228, 150],
+      [63.4, 232, 160],
+      [86.6, 235, 170],
+      [90.9, 238, 180],
+      [126.6, 239, 190],
+      [168, 243, 210],
+      [184.8, 243, 220],
+      [187, 245, 230],
+      [220.2, 245, 240],
+      [228.5, 246, 220],
+      [257.8, 247, 210],
+      [278.7, 247, 190],
+    ];
+    const from = 10_000;
+    const frames = (engine?: 'chromium') => ({
+      thumb: recorded.map(([t, x]): TrackedFrame => ({
+        t: from + t,
+        box: {x, y: 0, width: 28, height: 28},
+        pixels: 784,
+        step: {x: 1, y: 1},
+        ...(engine == null ? {} : {engine}),
+      })),
+      control: recorded.map(([t, , x]): TrackedFrame => ({
+        t: from + t,
+        box: {x, y: 0, width: 12, height: 12},
+        pixels: 144,
+        ...(engine == null ? {} : {engine}),
+      })),
+    });
+    const window = {
+      from,
+      to: from + 400,
+      animation: {from: from - 109.6, to: from + 454.9, holds: true},
+    };
+    const judge = (engine?: 'chromium') => {
+      const {thumb, control} = frames(engine);
+      return busyWindowProof(thumb, window, {
+        axis: 'x',
+        settledWithinSteps: 2,
+        control,
+      });
+    };
+    const stamped = judge();
+    expect(stamped.cadenceMs).toBeGreaterThan(22);
+    expect(stamped.verdict.failures).toEqual([
+      'moved on 8 of the 9 frames the control moved (89%)',
+    ]);
+    const dated = judge('chromium');
+    expect(dated.cadenceMs).toBeLessThan(17.5);
+    expect(dated.verdict.failures).toEqual([]);
+    expect(dated.control?.belowStep).toBe(1);
   });
 });
