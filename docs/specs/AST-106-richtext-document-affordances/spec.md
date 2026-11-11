@@ -24,12 +24,13 @@ affects_consumer_docs: [RichTextEditor, RichTextView]
 
 A person writing in `RichTextEditor` can do the document work they expect of a
 writing surface: size a table's columns, mention someone or insert a block from
-a menu they type, change a link where it sits, add an image, write a formula,
-fold a long section away, and format on a phone. A product turns each of these
-on by passing its plugin to the existing `plugins` prop. With none turned on,
-`RichTextEditor` is the form field that `spec:AST-061/DEC-7` describes. Content
-an affordance adds reads the same in `RichTextView`, and in core `Markdown`
-wherever Markdown can express it.
+a menu they type, change a link where it sits, show a link as a card, add an
+image, write a formula, fold a long section away, format a selection or format
+on a phone, and move a block. A product turns each of these on by passing its
+plugin to the existing `plugins` prop. With none turned on, `RichTextEditor` is
+the form field that `spec:AST-061/DEC-7` describes. Content an affordance adds
+reads the same in `RichTextView`, and in core `Markdown` wherever Markdown can
+express it.
 
 ## Non-goals
 
@@ -91,15 +92,32 @@ wherever Markdown can express it.
 
 The admitted affordances:
 
-| Affordance           | What a person does                                                                  | What the value keeps                  | Markdown form                        |
-| -------------------- | ----------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------ |
-| Table sizing         | Drags a column or row border, or uses the table's size commands from the keyboard   | Column widths and row minimum heights | The table, without its sizes (DEC-3) |
-| Typed menus          | Types `@`, `/`, or `:` and picks a person, a block, or an emoji from caller sources | What the pick inserts                 | The inserted content's own form      |
-| Link popover         | Opens, edits, or removes the link at the caret or under the pointer                 | Links                                 | Links                                |
-| Images               | Pastes, drops, or picks an image that the caller uploads, and moves it in the text  | Source, alternative text, and size    | `![alt](src)`, without its size      |
-| Math                 | Types inline or display formulas                                                    | Formula source                        | Core `Markdown`'s opt-in math syntax |
-| Collapsible headings | Folds the section under a heading while reading or editing                          | Nothing (FR3)                         | None                                 |
-| Phone keyboard bar   | Formats from a bar docked above the on-screen keyboard                              | Nothing                               | None                                 |
+| Affordance           | What a person does                                                                           | What the value keeps                  | Markdown form                        |
+| -------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------ |
+| Table sizing         | Drags a column or row border, or uses the table's size commands from the keyboard            | Column widths and row minimum heights | The table, without its sizes (DEC-3) |
+| Typed menus          | Types `@`, `/`, or `:` and picks a person, a block, or an emoji from caller sources          | What the pick inserts                 | The inserted content's own form      |
+| Link popover         | Opens, edits, or removes the link at the caret or under the pointer                          | Links                                 | Links                                |
+| Images               | Pastes, drops, or picks an image that the caller uploads, and moves it in the text           | Source, alternative text, and size    | `![alt](src)`, without its size      |
+| Math                 | Types inline or display formulas                                                             | Formula source                        | Core `Markdown`'s opt-in math syntax |
+| Collapsible headings | Folds the section under a heading while reading or editing                                   | Nothing (FR3)                         | None                                 |
+| Phone keyboard bar   | Formats from a bar docked above the on-screen keyboard                                       | Nothing                               | None                                 |
+| Link card            | Shows a link as a card with the product's preview, and edits or removes it as a link (DEC-1) | The URL                               | The plain link                       |
+| Selection format bar | Formats selected text from a bar beside the selection (DEC-1)                                | Nothing                               | No new Markdown form                 |
+| Block move           | Moves a block by dragging its handle or by a keyboard command (DEC-1)                        | The new block order                   | The reordered content                |
+
+The three affordances DEC-1 added also hold these:
+
+- **Link card.** The product supplies the preview for a URL (FR8), and the value
+  never keeps it (DEC-2). `RichTextView` shows the card when the product
+  supplies the preview, and the plain link otherwise (FR5). The card is reached
+  and acted on by keyboard as a link is, and its preview text is exposed to
+  assistive technology (FR7).
+- **Selection format bar.** Every control on the bar is reachable by keyboard
+  from the selection and named for assistive technology (FR7). It adds no
+  content, so `RichTextView` shows nothing for it.
+- **Block move.** A keyboard command moves the focused block up or down, and the
+  move is announced to assistive technology; dragging is never the only way
+  (FR7). `RichTextView` shows the blocks in their moved order (FR5).
 
 ### Platform support
 
@@ -120,17 +138,18 @@ The admitted affordances:
 
 ## Verification
 
-| Contract | Verification                                                                                                                   | Representative states                              | Mutation or failure expectation                       |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------- | ----------------------------------------------------- |
-| FR1      | The `spec:AST-061` parity fixture and `spec:AST-062` corpus, all off                                                           | Default editor and view                            | An affordance that is on by default fails             |
-| FR2, FR3 | Serialized-state tests per affordance                                                                                          | A mention, an image, a folded section              | A stored name, image bytes, or fold state fails       |
-| FR4      | Export tests per affordance                                                                                                    | Each row of the affordance table                   | An export that drops more than the table states fails |
-| FR5      | Parity fixture rows per affordance                                                                                             | Light and dark, left-to-right and right-to-left    | A view that draws the content differently fails       |
-| FR6      | Reading and editing geometry with the affordance's chrome open                                                                 | Phone and desktop widths                           | A reflowed block fails                                |
-| FR7      | Keyboard-only runs and accessibility-tree assertions                                                                           | An open menu, a resize, a fold                     | An action reachable only by pointer fails             |
-| FR8      | Tests with caller services replaced by fakes                                                                                   | Slow, failing, and empty sources                   | A network request made by RichText fails              |
-| FR9      | The `spec:AST-099` verification states with the keyboard bar shown                                                             | On-screen keyboards opening, resizing, and closing | A second keyboard measurement fails                   |
-| FR10     | The exhaustive props-list tests of both components, and each affordance's tests mounting it through `plugins` and `nodes` only | Every affordance on, one at a time and together    | A new component prop for an affordance fails          |
+| Contract   | Verification                                                                                                                   | Representative states                                                                                      | Mutation or failure expectation                                                          |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| FR1        | The `spec:AST-061` parity fixture and `spec:AST-062` corpus, all off                                                           | Default editor and view                                                                                    | An affordance that is on by default fails                                                |
+| FR2, FR3   | Serialized-state tests per affordance                                                                                          | A mention, an image, a folded section                                                                      | A stored name, image bytes, or fold state fails                                          |
+| FR4        | Export tests per affordance                                                                                                    | Each row of the affordance table                                                                           | An export that drops more than the table states fails                                    |
+| FR5        | Parity fixture rows per affordance                                                                                             | Light and dark, left-to-right and right-to-left                                                            | A view that draws the content differently fails                                          |
+| FR6        | Reading and editing geometry with the affordance's chrome open                                                                 | Phone and desktop widths                                                                                   | A reflowed block fails                                                                   |
+| FR7        | Keyboard-only runs and accessibility-tree assertions                                                                           | An open menu, a resize, a fold                                                                             | An action reachable only by pointer fails                                                |
+| FR8        | Tests with caller services replaced by fakes                                                                                   | Slow, failing, and empty sources                                                                           | A network request made by RichText fails                                                 |
+| FR9        | The `spec:AST-099` verification states with the keyboard bar shown                                                             | On-screen keyboards opening, resizing, and closing                                                         | A second keyboard measurement fails                                                      |
+| DEC-1 rows | Per added affordance: export tests, view parity rows, and keyboard-only runs with accessibility-tree assertions                | A link card with and without a preview, a format bar on a selection, a block moved by keyboard and by drag | A stored preview, a bar control unreachable by keyboard, or a drag-only block move fails |
+| FR10       | The exhaustive props-list tests of both components, and each affordance's tests mounting it through `plugins` and `nodes` only | Every affordance on, one at a time and together                                                            | A new component prop for an affordance fails                                             |
 
 ## Decision log
 
@@ -146,7 +165,10 @@ RichText already provides. Each affordance's editing interaction is generic
 while its data and services stay with the product, so each belongs with
 RichText. Each one ships as a plugin through the existing `plugins` and `nodes`
 props, so RichText's public surface stays Lexical's and stays small
-(`spec:AST-061/DEC-8`), and a product takes only the affordances it passes.
+(`spec:AST-061/DEC-8`), and a product takes only the affordances it passes. The
+question the owner answered also named link cards, a selection format bar, and
+block moves, so the same choice admits them as plugin affordances beside the
+others.
 
 Rejected: a separate document-editor package, because two editors would each
 owe the parity contract. Rejected: one prop per affordance, which grows the
