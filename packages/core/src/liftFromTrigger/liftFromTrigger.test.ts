@@ -56,7 +56,6 @@ function options(
       drop: SPRING,
       clear: SPRING,
       surfaceIn: SPRING,
-      surfaceOut: SPRING,
     },
     scale: {maxScale: 1.15, scaleUpPoints: 26},
     surfaceStartWidth: 44,

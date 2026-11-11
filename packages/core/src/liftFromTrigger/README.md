@@ -3,15 +3,13 @@
 The one lift-from-trigger presentation, internal to core and opt-in. A
 surface that chooses it (ContextMenu's touch invocation) lifts its trigger
 out of the page above a tinted backdrop, grows a surface (a menu) out of the
-press beside it, shrinks that surface back into the press when it closes, and
-returns the trigger to its place. Nothing else gets it by default, and any
+press beside it, and returns the trigger to its place. Nothing else gets it by default, and any
 surface that lifts uses this module, never a copy of it.
 Nothing here is exported from the package entry point; components import it
 by path.
 
-Layer stays generic. The top layer, dismissal, the input hold
-(`Layer/inputHold.ts`) and the shared exit copy
-(`Layer/layerExitCopy.ts`) belong to Layer; the lift only uses them. Its
+Layer stays generic. The top layer, dismissal and the input hold
+(`Layer/inputHold.ts`) belong to Layer; the lift only uses them. Its
 motion is the rect morph's (`motion/rectMorph.ts`), and its springs, scale
 rule and gap are the caller's own.
 
@@ -29,9 +27,8 @@ is the tint); an empty box at the lifted rect for the surface to be placed
 against (anchor positioning follows transforms, so a box inside the trigger
 would move with it); and the placeholder. The lifted trigger casts no
 shadow. The input hold's shield joins while the lift grows and while it
-closes: never more than four (`spec:AST-017` FR60, DEC-29). The
-exit copy the surface shrinks on is the layer runtime's transient copy. At
-rest there is nothing.
+closes: never more than four (`spec:AST-017` FR60, DEC-29). At rest there
+is nothing.
 
 ## Motion
 
@@ -41,8 +38,8 @@ which continues an interrupted motion with the velocity on screen (FR6); the
 tint on the animator, as the opacity of the layer's `::backdrop`, so a drop
 while it rises turns it with its velocity too. A
 tap or a drag that lands while the lift and the surface grow reaches nothing
-(FR35). The close holds the layer until the trigger is back, the surface's
-exit is done and every press on the layer has lifted. Its timers and
+(FR35). The close holds the layer until the trigger is back and every press
+on the layer has lifted. Its timers and
 document listeners end with it, and an unmount ends everything at once
 (FR24). Reduce Motion is the animator's (`design:reduced-motion`).
 
@@ -50,7 +47,7 @@ document listeners end with it, and an unmount ends everything at once
 
 | File                                                    | What it is                                                                                                     |
 | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `liftFromTrigger.ts`                                    | `createLiftFromTrigger`: lift a trigger, grow and close a surface beside it, drop, end.                        |
+| `liftFromTrigger.ts`                                    | `createLiftFromTrigger`: lift a trigger, grow a surface beside it, drop, end.                                  |
 | `useLiftFromTrigger.ts`                                 | A component's one lift, ended when it unmounts.                                                                |
 | `liftFromTriggerGeometry.ts`                            | How far the trigger grows, where it lands inside the layer runtime's gutter, which side the surface takes.     |
 | `__tests__/liftFromTrigger.interaction.browser.spec.ts` | Browser proofs (Chromium and WebKit): the top layer, the placeholder, the properties that move, counts, leaks. |

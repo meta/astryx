@@ -16,7 +16,6 @@
  */
 
 import type {LayerInset} from '../Layer/LayerContext';
-import {placeLayerExitCopy} from '../Layer/layerExitCopy';
 import {layerInsetProperties} from '../Layer/layerInset';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {holdInput} from '../Layer/inputHold';
@@ -28,7 +27,6 @@ import {
 import {
   createRectMorph,
   lerpPath,
-  type MorphPath,
   type MorphRect,
   type RectMorph,
 } from '../motion/rectMorph';
@@ -58,8 +56,6 @@ export interface LiftFromTriggerMotion {
   readonly clear: SpringDescription;
   /** A surface grows out of the press on it. */
   readonly surfaceIn: SpringDescription;
-  /** A surface shrinks back into the press on it. */
-  readonly surfaceOut: SpringDescription;
 }
 
 export interface LiftFromTriggerOptions {
@@ -144,11 +140,6 @@ export interface LiftFromTrigger {
     surface: HTMLElement,
     press?: {x: number; y: number} | null,
   ): void;
-  /**
-   * The surface is closing: its exit copy shrinks back into the press from
-   * wherever it stands. Call it while the surface still shows.
-   */
-  dismissSurface(surface: HTMLElement): void;
   /** Returns the source to its place; the layer leaves once it is back. */
   drop(): void;
   /** Ends everything at once and leaves the page as it was. */
@@ -190,10 +181,6 @@ type SavedStyle = [property: string, value: string, priority: string][];
 interface LiftedSurface {
   readonly element: HTMLElement;
   readonly morph: RectMorph;
-  readonly path: MorphPath;
-  readonly press: {x: number; y: number};
-  presenting: MotionHandle | null;
-  dismissing: MotionHandle | null;
 }
 
 interface LiftState {
@@ -309,7 +296,6 @@ function resolvedMotion(
     drop: resolve(motion.drop),
     clear: resolve(motion.clear),
     surfaceIn: resolve(motion.surfaceIn),
-    surfaceOut: resolve(motion.surfaceOut),
   };
 }
 
@@ -903,80 +889,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       {crossfadeAs: 'entrance'},
     );
     void presenting.finished.then(surfaceSettled, surfaceSettled);
-    current.surface = {
-      element,
-      morph,
-      path,
-      press: {x: press.x, y: press.y},
-      presenting,
-      dismissing: null,
-    };
-  };
-
-  const dismissSurface = (surfaceElement: HTMLElement) => {
-    const current = state;
-    if (current == null) {
-      return;
-    }
-    const element =
-      surfaceElement.closest<HTMLElement>('[popover]') ?? surfaceElement;
-    // A close of a surface that no longer shows (a second tap on the fading
-    // tint) leaves the running exit alone.
-    const shown = element.getBoundingClientRect();
-    if (shown.width <= 0 || shown.height <= 0) {
-      return;
-    }
-    let surface = current.surface;
-    if (surface == null || surface.element !== element) {
-      // A surface that showed without growing: it shrinks from rest into the
-      // source's center.
-      endSurface(current);
-      const box: MorphRect = {
-        x: shown.left,
-        y: shown.top,
-        width: shown.width,
-        height: shown.height,
-      };
-      const press = {
-        x: current.lifted.x + current.lifted.width / 2,
-        y: current.lifted.y + current.lifted.height / 2,
-      };
-      const startWidth = Math.min(
-        current.options.surfaceStartWidth ?? 0,
-        box.width,
-      );
-      const startHeight = (startWidth * box.height) / box.width;
-      surface = {
-        element,
-        morph: createRectMorph(element),
-        path: lerpPath(
-          {
-            x: press.x - startWidth / 2,
-            y: press.y - startHeight / 2,
-            width: startWidth,
-            height: startHeight,
-          },
-          box,
-          {box, scale: 'uniform', opacity: [0, 1]},
-        ),
-        press,
-        presenting: null,
-        dismissing: null,
-      };
-      current.surface = surface;
-    }
-    // The layer runtime's exit copy (inert, unnamed, in the top layer where
-    // the surface is drawn), taken while it still shows. Without a top layer
-    // there is no copy, and the close is immediate.
-    const copy = placeLayerExitCopy(element, `${current.attribute}-exit`);
-    if (copy == null) {
-      return;
-    }
-    surface.dismissing = surface.morph.dismiss(
-      surface.path,
-      {spring: current.motion.surfaceOut},
-      {target: copy, crossfadeAs: 'exit'},
-    );
+    current.surface = {element, morph};
   };
 
   const drop = () => {
@@ -995,8 +908,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       {spring: motion.drop},
       {target: source, crossfadeAs: 'exit'},
     );
-    const exit = current.surface?.dismissing;
-    const settled = Promise.all([returning.finished, exit?.finished]);
+    const settled = returning.finished;
     void settled.then(() => {
       if (state !== current) {
         return;
@@ -1014,8 +926,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       }
     });
     // The close holds the layer, so nothing reaches the page under it. The
-    // hold ends when the source is back, the surface's exit is done and every
-    // press has lifted.
+    // hold ends when the source is back and every press has lifted.
     const ended = settled.then(async () => current.untilPointersLift());
     current.releaseHold?.();
     current.releaseHold = holdInput(layer, {
@@ -1032,7 +943,6 @@ export function createLiftFromTrigger(): LiftFromTrigger {
   return {
     lift,
     presentSurface,
-    dismissSurface,
     drop,
     dispose: () => {
       if (state != null) {

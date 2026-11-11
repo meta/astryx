@@ -7,7 +7,7 @@
  * @output Proof in real engines of the lift. A row lifts
  *   into the top layer while a placeholder holds its spot. Every motion is
  *   `translate`, `scale`, `transform` or `opacity`. The menu grows out of the
- *   press and shrinks back into it on close. The page has at most four more
+ *   press. The page has at most four more
  *   elements while lifted, and none after the drop. A tap while it grows
  *   reaches nothing
  * @position Browser proof for liftFromTrigger.ts, run by `pnpm test:interaction`; jsdom
@@ -385,7 +385,7 @@ test('a drop puts the row back with no transition running, whatever transitions 
   await page.evaluate(() => window.__lift.dispose());
 });
 
-test('every motion the lift plays, the menu’s growth and close included, is translate, scale, transform or opacity (spec:AST-094 FR5)', async ({
+test('every motion the lift plays, the menu’s growth included, is translate, scale, transform or opacity (spec:AST-094 FR5)', async ({
   page,
 }) => {
   await open(page);
@@ -421,7 +421,6 @@ test('every motion the lift plays, the menu’s growth and close included, is tr
     await frame();
     await frame();
     collect();
-    window.__lift.dismissMenu();
     window.__lift.closeMenu();
     window.__lift.drop();
     collect();
@@ -439,7 +438,7 @@ test('every motion the lift plays, the menu’s growth and close included, is tr
   ).toEqual([]);
 });
 
-test('the menu grows out of the press into its box and keeps nothing inline at rest; its close shrinks the exit copy back into the press', async ({
+test('the menu grows out of the press into its box and keeps nothing inline at rest', async ({
   page,
 }) => {
   await open(page);
@@ -492,36 +491,6 @@ test('the menu grows out of the press into its box and keeps nothing inline at r
   expect(rest.translate).toBe('');
   expect(rest.scale).toBe('');
   expect(rest.opacity).toBe('1');
-  const copy = await page.evaluate(async () => {
-    window.__lift.dismissMenu();
-    window.__lift.closeMenu();
-    const placed = document.querySelector<HTMLElement>('[data-lift-exit]');
-    if (placed == null) {
-      return null;
-    }
-    // Its narrowest over the next frames: it starts as the menu stands.
-    let width = Infinity;
-    for (let i = 0; i < 20 && width >= 250; i++) {
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      width = Math.min(width, placed.getBoundingClientRect().width);
-    }
-    return {
-      isOpen: placed.matches(':popover-open'),
-      inert: placed.inert,
-      hidden: placed.getAttribute('aria-hidden'),
-      width,
-    };
-  });
-  expect(copy).not.toBeNull();
-  expect(copy?.isOpen).toBe(true);
-  expect(copy?.inert).toBe(true);
-  expect(copy?.hidden).toBe('true');
-  // Shrinking already.
-  expect(copy?.width ?? 0).toBeLessThan(250);
-  await page.waitForTimeout(900);
-  expect(
-    await page.evaluate(() => document.querySelector('[data-lift-exit]')),
-  ).toBeNull();
   await page.evaluate(() => window.__lift.dispose());
 });
 
@@ -574,12 +543,7 @@ test('while lifted the page has the layer, the anchor and the placeholder more, 
 }) => {
   await open(page);
   const counts = await page.evaluate(async () => {
-    // The layer runtime's exit copy is not one of the lift's elements: the
-    // runtime makes it, and it is gone within a second.
-    const count = () =>
-      [...document.body.querySelectorAll('*')].filter(
-        element => element.closest('[data-lift-exit]') == null,
-      ).length;
+    const count = () => document.body.querySelectorAll('*').length;
     const wait = async (ms: number) =>
       new Promise(resolve => setTimeout(resolve, ms));
     const row = document.getElementById('row2') as HTMLElement;
@@ -600,7 +564,6 @@ test('while lifted the page has the layer, the anchor and the placeholder more, 
     window.__lift.presentMenu({x: 180, y: 330});
     await wait(700);
     const open = count() - rest;
-    window.__lift.dismissMenu();
     window.__lift.closeMenu();
     window.__lift.drop();
     await wait(1200);
@@ -654,7 +617,6 @@ test('ten lifts and drops leave the DOM node and event listener counts where the
       window.__lift.lift('row2', 0.15);
       window.__lift.presentMenu({x: 180, y: 330});
       await wait(400);
-      window.__lift.dismissMenu();
       window.__lift.closeMenu();
       window.__lift.drop();
       await wait(700);

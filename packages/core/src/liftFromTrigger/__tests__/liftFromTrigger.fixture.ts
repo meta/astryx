@@ -26,7 +26,6 @@ export interface LiftFixture {
   log: LiftLog;
   lift: (id: string, springResponse?: number) => LiftFromTriggerResult | null;
   presentMenu: (press: {x: number; y: number} | null) => void;
-  dismissMenu: () => void;
   closeMenu: () => void;
   showMenu: () => void;
   drop: () => void;
@@ -99,7 +98,6 @@ function options(response: number): LiftFromTriggerOptions {
       drop: spring,
       clear: spring,
       surfaceIn: spring,
-      surfaceOut: spring,
     },
     scale: {maxScale: 1.15, scaleUpPoints: 26},
     surfaceStartWidth: 44,
@@ -123,7 +121,6 @@ window.__lift = {
       press,
     );
   },
-  dismissMenu: () => lift.dismissSurface(element('menu')),
   closeMenu: () => element('menu').hidePopover(),
   drop: () => lift.drop(),
   dispose: () => lift.dispose(),
