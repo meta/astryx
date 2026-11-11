@@ -316,7 +316,6 @@ export function physicalSign(side: SwipeSide, inlineSign: 1 | -1): 1 | -1 {
   return side === 'leading' ? inlineSign : inlineSign === 1 ? -1 : 1;
 }
 
-/** How far out a row goes when an entry fires and the row leaves (logical px). */
 /**
  * The finger's travel from touch-down at which its swipe begins: the row's
  * claim on the touch. From there the row is at the finger's travel.
@@ -346,6 +345,7 @@ function leadVelocity(drag: Drag, now: number): number {
     : motion.curve.velocity((now - motion.start) / 1000);
 }
 
+/** How far out a row goes when an entry fires and the row leaves (logical px). */
 function outTravel(layout: SwipeLayout): number {
   return layout.rowWidth + SWIPE.slideOutOvershoot;
 }

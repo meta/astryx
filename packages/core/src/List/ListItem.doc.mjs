@@ -117,7 +117,7 @@ export const docs = {
       name: 'swipe',
       type: 'Swipe',
       description:
-        "Swipe actions for touch, made by createSwipe({leading?, trailing?, swipeBehavior?}) and passed through to Item unchanged: the verbs a sideways drag uncovers on each side, each `{id, label, icon?, onActivate({id, itemKey}), isDisabled?, variant?: ItemSwipeActionVariant, hasRemoval?}`, where `itemKey` is this row's. One definition at module scope serves every row. See Item.swipe; List clips its rows in the inline axis for them. A verb reachable only by swipe is unreachable by keyboard and by mouse, so give each entry a second home in the row.",
+        "Swipe actions for touch, made by createSwipe({leading?, trailing?, swipeBehavior?}) and passed to Item with this row's itemKey added: the verbs a sideways drag uncovers on each side, each `{id, label, icon?, onActivate({id, itemKey}), isDisabled?, variant?: ItemSwipeActionVariant, hasRemoval?}`, where `itemKey` is this row's. One definition at module scope serves every row. See Item.swipe; List clips its rows in the inline axis for them. A verb reachable only by swipe is unreachable by keyboard and by mouse, so give each entry a second home in the row.",
     },
     {
       name: 'swipeActions',
@@ -221,7 +221,7 @@ export const docsZh = {
       name: 'swipe',
       type: 'Swipe',
       description:
-        "触摸滑动操作，由 createSwipe({leading?, trailing?, swipeBehavior?}) 创建并原样传递给 Item：横向拖动在每一侧揭示的操作，每项为 `{id, label, icon?, onActivate({id, itemKey}), isDisabled?, variant?: ItemSwipeActionVariant, hasRemoval?}`，其中 `itemKey` 是本行的 itemKey。在模块作用域定义一次即可供每一行使用。参见 Item.swipe；List 会在行内轴上裁剪行。只能通过滑动触达的操作无法用键盘或鼠标触达，因此请在行内为每项再提供一个入口。",
+        "触摸滑动操作，由 createSwipe({leading?, trailing?, swipeBehavior?}) 创建，加入本行的 itemKey 后传递给 Item：横向拖动在每一侧揭示的操作，每项为 `{id, label, icon?, onActivate({id, itemKey}), isDisabled?, variant?: ItemSwipeActionVariant, hasRemoval?}`，其中 `itemKey` 是本行的 itemKey。在模块作用域定义一次即可供每一行使用。参见 Item.swipe；List 会在行内轴上裁剪行。只能通过滑动触达的操作无法用键盘或鼠标触达，因此请在行内为每项再提供一个入口。",
     },
     {
       name: 'swipeActions',

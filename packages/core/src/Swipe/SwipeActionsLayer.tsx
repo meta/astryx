@@ -240,10 +240,6 @@ const swipeTrackFillStyles = stylex.create({
 // Component
 // =============================================================================
 
-/**
- * The swipe half of a row with swipe actions: both panels, rendered into the
- * root the row owns, and the gesture that drives that root.
- */
 /** A row's actions as their ids, side by side: what tells a change of actions. */
 function idsKeyOf(
   leading: ReadonlyArray<SwipeEntry>,
@@ -254,6 +250,10 @@ function idsKeyOf(
   return `${ids(leading)}\u0001${ids(trailing)}`;
 }
 
+/**
+ * The swipe half of a row with swipe actions: both panels, rendered into the
+ * root the row owns, and the gesture that drives that root.
+ */
 export default function SwipeActionsLayer({
   onBridge,
   leading,
@@ -303,7 +303,8 @@ export default function SwipeActionsLayer({
   const idsKey = idsKeyOf(leading, trailing);
   const idsRef = useRef(idsKey);
   const {close} = swipe;
-  // The Effect syncs the row's open panel with the ids of its actions.
+  // The Effect settles the row's snap-point drag to rest when the actions'
+  // ids change.
   useEffect(() => {
     if (idsRef.current !== idsKey) {
       idsRef.current = idsKey;
