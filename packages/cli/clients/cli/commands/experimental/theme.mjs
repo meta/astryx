@@ -683,7 +683,7 @@ export function registerExperimentalTheme(group, program) {
     defineCommand(editor, howDoc, {
       fn: howFn,
       action: async (/** @type {string[]} */ words, /** @type {any} */ o) => {
-        if (!words.length && o.list == null && !(o.at ?? []).length) {
+        if (!words.length && !o.list && !(o.at ?? []).length) {
           const c = editor.commands.find(
             x => x.name() === howDoc.name.split(' ').pop(),
           );
@@ -691,7 +691,7 @@ export function registerExperimentalTheme(group, program) {
           if (program.opts().json) c?.outputHelp();
           else
             print([
-              `Usage: ${HOW} [<part|setting|"question"|picture.png>] [--at x,y] [--list dials|tokens|parts|groups|properties]`,
+              `Usage: ${HOW} [<part|setting|"question"|picture.png>] [--at x,y] [--list dials|tokens|parts|groups|properties [filter]]`,
               '',
               'Examples:',
               ...(howDoc.examples ?? []).flatMap(e => [
@@ -710,13 +710,19 @@ export function registerExperimentalTheme(group, program) {
           /^\d+$/.test(words[1])
             ? Number(words[1])
             : undefined;
-        const subject = count == null ? words.join(' ') : words[0];
+        // --list is a switch, as everywhere in the CLI: the first word is
+        // what to list, and the rest filters it.
+        const subject = o.list
+          ? words.slice(1).join(' ')
+          : count == null
+            ? words.join(' ')
+            : words[0];
         return run(
           program,
           () =>
             themeEditHow(subject, {
               cwd: process.cwd(),
-              list: o.list === true ? '' : o.list,
+              list: o.list ? (words[0] ?? '') : undefined,
               at: o.at ?? [],
               count,
             }),

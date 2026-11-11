@@ -787,10 +787,19 @@ async function runBuild(ctx, slug) {
 export async function resolvedTokens(ctx, slug) {
   const f = themeFiles(ctx.project.cwd, slug);
   // The built module is ESM in a .js file, and an app's package.json may not
-  // say "type": "module": an .mjs copy beside it loads as ESM with no Node
-  // warning. The query keeps it out of the module cache.
-  const copy = path.join(f.dir, `.${slug}.load.mjs`);
-  fs.copyFileSync(f.js, copy);
+  // say "type": "module": an .mjs copy loads as ESM with no Node warning,
+  // and the query keeps it out of the module cache. The copy goes in the
+  // project's cache folder, where package imports still resolve; only a
+  // module with relative imports is copied beside itself. (The shared theme
+  // loader caches a .js module of an ESM app by URL, so a second read in one
+  // command would return the first build.)
+  const source = fs.readFileSync(f.js, 'utf8');
+  const dir = /\bfrom\s+['"]\.\.?\//.test(source)
+    ? f.dir
+    : ctx.project.cacheDir;
+  fs.mkdirSync(dir, {recursive: true});
+  const copy = path.join(dir, `.${slug}.load.mjs`);
+  fs.writeFileSync(copy, source);
   /** @type {Record<string, any>} */
   let mod;
   try {
