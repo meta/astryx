@@ -23,9 +23,8 @@ import {Selector} from '@astryxdesign/core/Selector';
 import {ThemeShowcaseStore} from '../../../../packages/cli/assets/templates/pages/theme-showcase/page';
 import {getThemeShowcaseContent} from './themeShowcaseContent';
 import {buildPlaygroundHref} from './playgroundLink';
-import {packages} from '../generated/packageRegistry';
 import {themeObjects} from '../generated/themeRegistry';
-import {templates} from '../generated/templateRegistry';
+import type {ThemeExplorerPackage} from './themeExplorerData';
 import {trackCopy, trackOpenPlayground, trackToggle} from '../lib/analytics';
 import {useThemeMode} from '../app/providers';
 import {ThemeHeading} from './ThemeHeading';
@@ -43,28 +42,8 @@ import {
   ThemeExplorerSidebarSurface,
 } from './ThemeExplorerLayout';
 
-// Raw source of the theme-showcase page template (embedded as a string in
-// the generated template registry). Used to prepopulate the playground's
-// code editor when the user clicks "Open in Playground" from a theme.
-const THEME_SHOWCASE_SOURCE =
-  templates.find(t => t.slug === 'theme-showcase')?.source ?? '';
-
 // Per-theme picker banners are self-hosted under the docsite's /public/images
 // dir (same location as the showcase product photos).
-
-// Gallery order — themes are listed in the same canonical visual-
-// closeness order used elsewhere (most restrained → most expressive).
-// Lives here so the sidebar's theme list reads in the same order as
-// /themes (Neutral → Stone → Gothic → Matcha → Y2K → Butter). Any
-// theme not in this list falls to the end alphabetically.
-const THEME_ORDER: ReadonlyArray<string> = [
-  '@astryxdesign/theme-neutral',
-  '@astryxdesign/theme-stone',
-  '@astryxdesign/theme-gothic',
-  '@astryxdesign/theme-matcha',
-  '@astryxdesign/theme-y2k',
-  '@astryxdesign/theme-butter',
-];
 
 // The package whose selection corresponds to the canonical bare
 // `/themes` URL (no `?theme=` query string). Must agree with the
@@ -436,9 +415,18 @@ interface ThemePackagePageProps {
   /** Full npm package name — seeds the initial selected theme. */
   packageName: string;
   theme: DefinedTheme;
+  /** Theme packages in gallery order. They feed the sidebar and the mobile carousel. */
+  themePackages: ThemeExplorerPackage[];
+  /** Theme-showcase template source that seeds the playground code editor. */
+  showcaseSource: string;
 }
 
-export function ThemePackagePage({packageName, theme}: ThemePackagePageProps) {
+export function ThemePackagePage({
+  packageName,
+  theme,
+  themePackages,
+  showcaseSource,
+}: ThemePackagePageProps) {
   // Preview color mode. `siteMode` is the docsite's already-resolved concrete
   // light/dark — the provider maps its default `system` to the OS preference
   // (falling back to light on the first paint), so the preview never sees
@@ -516,27 +504,6 @@ export function ThemePackagePage({packageName, theme}: ThemePackagePageProps) {
     [router, pathname],
   );
 
-  // Sorted list of all theme packages — feeds the sidebar list and
-  // the mobile dropdown. Order matches the /themes overview gallery.
-  const themePackages = useMemo(() => {
-    return packages
-      .filter(p => p.name.startsWith('@astryxdesign/theme-'))
-      .sort((a, b) => {
-        const ai = THEME_ORDER.indexOf(a.name);
-        const bi = THEME_ORDER.indexOf(b.name);
-        if (ai === -1 && bi === -1) {
-          return a.name.localeCompare(b.name);
-        }
-        if (ai === -1) {
-          return 1;
-        }
-        if (bi === -1) {
-          return -1;
-        }
-        return ai - bi;
-      });
-  }, []);
-
   // Resolve the currently-selected theme object. Falls back to the
   // SSR-seeded prop if the lookup ever misses (shouldn't happen —
   // the selector only offers options sourced from the same packages
@@ -591,7 +558,7 @@ export function ThemePackagePage({packageName, theme}: ThemePackagePageProps) {
   // the query string), which runs after the navigation has committed the
   // new URL, so the hash is reliably present when it's read.
   const customizeHref = buildPlaygroundHref(
-    THEME_SHOWCASE_SOURCE,
+    showcaseSource,
     packageNameToSlug(selectedPkgName),
   );
 

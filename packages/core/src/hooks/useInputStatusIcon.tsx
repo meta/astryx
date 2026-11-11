@@ -15,9 +15,10 @@
 import {useCallback, useEffect, useState} from 'react';
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Icon, type IconName, type IconSize} from '../Icon';
+import {Icon, type IconSize} from '../Icon/Icon';
+import type {IconName} from '../Icon/globalIconRegistry';
 import type {InputStatus, InputStatusType} from '../Field/types';
-import {useTooltip} from '../Tooltip';
+import {useTooltip} from '../Tooltip/useTooltip';
 import {radiusVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';

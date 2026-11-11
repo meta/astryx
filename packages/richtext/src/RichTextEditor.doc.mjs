@@ -85,7 +85,7 @@ export const docs = {
       name: 'isDisabled',
       type: 'boolean',
       description:
-        'Whether the editor is disabled: non-editable, dimmed, out of the tab order, and announced as disabled. Wins when isReadOnly is also set. Takes effect when changed after mount.',
+        'Whether the editor is disabled: non-editable, dimmed, out of the tab order, and announced as disabled. Its links do not navigate and are not tab stops. Wins when isReadOnly is also set. Takes effect when changed after mount.',
       default: 'false',
     },
     {
@@ -241,6 +241,26 @@ export const docs = {
       {
         guidance: true,
         description:
+          'In a code block, Tab and Shift+Tab indent and outdent every line the selection touches, by the indent the block already uses: a tab when one of its lines starts with a tab, otherwise the fewest spaces an indented line starts with (2 to 8), otherwise 2 spaces. The selection stays on the same characters, and each press is one undo step. Escape then Tab still moves focus out of the editor.',
+      },
+      {
+        guidance: true,
+        description:
+          'Backspace at the very start of a code block turns it into a paragraph holding its lines, each on its own line, with the caret at its start. The code never merges into the block above, so a heading above keeps its own text. Backspace anywhere else in a code block deletes as usual.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pasting into a code block inserts plain code. Rich content, such as a web page, a word processor document, or blocks copied from another editor, goes in as the plain text on the clipboard; when the clipboard has no plain text, each pasted block goes in as one line of its text. Headings, lists, tables, and formatting never land inside a code block.',
+      },
+      {
+        guidance: true,
+        description:
+          'Cmd+A (Ctrl+A on other platforms) in a code block or a table cell selects the code or the cell text first; pressing it again selects the whole document. Anywhere else it selects the whole document at once.',
+      },
+      {
+        guidance: true,
+        description:
           'Thematic breaks (---, ***, ___, with or without spaces between) import as horizontal rules and export as ---. A dash line directly under a paragraph line stays with that paragraph, as in Markdown. Click a rule or arrow onto it to select it; Backspace removes it. RichTextView draws the same rules. Install @lexical/extension with the other lexical peers.',
       },
       {
@@ -261,7 +281,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Links: the toolbar Link button (on by default; disable with hasLink={false}) and Cmd/Ctrl+K open a non-modal Astryx Popover anchored to the button. It holds one URL field, applied with Enter, and Apply, Remove (when the selection is in a link), and Cancel icon buttons with tooltips. It keeps the Lexical selection while focus is in the field: Escape or Cancel closes it and returns focus and the selection to the editor, and a URL that cannot be linked shows an error under the field, which keeps focus. While the editor is editable, a card also shows under the link holding the caret, or the one the pointer rests on for 300ms: the address without its scheme (opening the link in a new tab), Open in new tab, Edit (Text and Link fields, also Cmd/Ctrl+K with the caret in the link; an empty address removes the link and keeps its text), Remove, and a reminder that Cmd-click (Ctrl-click off Apple platforms) opens a link. The card overlays the document without reflowing it, and Escape in it returns to the editor. Read-only and disabled editors show no card. Pass promptForUrl only when integrating an existing synchronous URL flow; it replaces the popover and the card. Entered URLs are sanitized (only http/https/mailto/tel are written; javascript:/data: are rejected). Links open in a new tab by default: target=_blank and rel=noopener noreferrer are written into the link node data; set hasNewTabLinks={false} for same-tab links. The toolbar takes base props and passes them to the Astryx Toolbar it renders: ref, className, style and xstyle on its root; data-*, other aria-* attributes and DOM handlers on the toolbar element (name it with label, not aria-label).',
+          'Links: the toolbar Link button (on by default; disable with hasLink={false}) and Cmd/Ctrl+K open a non-modal Astryx Popover anchored to the button. It holds one URL field, applied with Enter, and Apply, Remove (when the selection is in a link), and Cancel icon buttons with tooltips. It keeps the Lexical selection while focus is in the field: Escape or Cancel closes it and returns focus and the selection to the editor, and a URL that cannot be linked shows an error under the field, which keeps focus. Pass promptForUrl only when integrating an existing synchronous URL flow; it replaces the popover. For a popover on the link at the caret, pass the opt-in RichTextEditorLinkPopoverPlugin through plugins: with the caret in a link it shows the address (opening the link in a new tab), Open in new tab, Edit (the same link form, also Cmd/Ctrl+K in the link) and Remove; Cmd-click (Ctrl-click off Apple platforms) opens a link in a new tab; hovering a link does nothing. Entered URLs are sanitized (only http/https/mailto/tel are written; javascript:/data: are rejected). Links open in a new tab by default: target=_blank and rel=noopener noreferrer are written into the link node data; set hasNewTabLinks={false} for same-tab links. The toolbar takes base props and passes them to the Astryx Toolbar it renders: ref, className, style and xstyle on its root; data-*, other aria-* attributes and DOM handlers on the toolbar element (name it with label, not aria-label).',
       },
       {
         guidance: true,
@@ -277,6 +297,11 @@ export const docs = {
         guidance: true,
         description:
           "The toolbar's glyphs are themeable. Each control resolves its icon from the core icon registry under a stable richtext:* key (see RICHTEXT_ICON_KEYS), falling back to a bundled inline SVG. A theme restyles any glyph without forking the toolbar by naming its key: defineTheme({icons: {'richtext:bold': <MyBoldIcon />}}). Undo and redo mirror under right-to-left direction, whichever glyph draws them.",
+      },
+      {
+        guidance: true,
+        description:
+          "To switch between reading (Markdown or RichTextView) and editing the same document in place, give the editor's field its inset and border outside the reading width, so every paragraph keeps its line count across the switch. Define the frame with stylex.create, for example const inPlace = stylex.create({editorFrame: {marginInline: `calc(-1 * (${spacingVars['--spacing-2']} + ${borderVars['--border-width']}))`}}), with spacingVars and borderVars from @astryxdesign/core/theme/tokens.stylex, and pass xstyle={inPlace.editorFrame} to the RichTextEditor. The recipe assumes no status: a status icon reserves another spacing-6 at the inline end. The field then extends past the column on both sides; leave room for it in the surrounding padding. A standalone editor in a form keeps its default width, so its border lines up with the fields around it.",
       },
       {
         guidance: false,

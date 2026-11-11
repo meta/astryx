@@ -5,10 +5,10 @@
  * @input vitest (jsdom), React Testing Library, Collapsible, TreeList,
  *   useAnimatedLayout, a recording stand-in for Element.animate and stubbed
  *   rectangles for the content after the changed component
- * @output Checks each adopting component with and without a handle
- *   (`spec:AST-105` FR1, FR2): with one, a toggle glides the content after it
- *   inside the container and the chevron takes the spring; without one,
- *   nothing animates and the chevron keeps its own transition
+ * @output Checks each adopting component with and without a handle. With
+ *   one, a toggle glides the content after it inside the container, and the
+ *   chevron takes the move curve. Without one, nothing animates and the
+ *   chevron keeps its own transition
  * @position Testing; the walk and the motion are covered in
  *   animatedLayout.test.ts and, in real browsers,
  *   __tests__/animatedLayout.interaction.browser.spec.ts
@@ -157,7 +157,7 @@ describe.each([
     expect(animated).toContain(after);
     expect(
       component.chevron()?.style.getPropertyValue('transition-timing-function'),
-    ).toMatch(/^linear\(/);
+    ).toBe('cubic-bezier(0.24, 1, 0.4, 1)');
   });
 
   it('changes nothing without a handle', async () => {
@@ -170,6 +170,117 @@ describe.each([
     expect(
       component.chevron()?.style.getPropertyValue('transition-duration'),
     ).toBe('');
+  });
+});
+
+describe('a TreeList under a finger with no handle (component:TreeList FR8)', () => {
+  const originalMatchMedia = window.matchMedia;
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+  });
+
+  function stubPointer(isCoarse: boolean) {
+    window.matchMedia = (query: string) =>
+      ({
+        matches: isCoarse && query.includes('coarse'),
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+      }) as unknown as MediaQueryList;
+  }
+
+  function Page() {
+    return (
+      <div>
+        <TreeList
+          items={
+            [
+              {
+                id: 'src',
+                label: 'src',
+                children: [{id: 'index', label: 'index.ts'}],
+              },
+              {id: 'readme', label: 'README.md'},
+            ] satisfies TreeListItemData[]
+          }
+        />
+        <p data-testid="after">Notes</p>
+      </div>
+    );
+  }
+
+  /** The row after the folder and the content after the tree each sit 80 px lower once measured. */
+  function stubTreeGeometry() {
+    vi.spyOn(screen.getByRole('tree'), 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 0, 400, 600),
+    );
+    const below =
+      document.querySelector<HTMLElement>('[data-tree-id="readme"]') ??
+      document.body;
+    const after = screen.getByTestId('after');
+    for (const element of [below, after]) {
+      let reads = 0;
+      vi.spyOn(element, 'getBoundingClientRect').mockImplementation(() => {
+        reads += 1;
+        return new DOMRect(0, reads === 1 ? 40 : 120, 400, 20);
+      });
+    }
+    return {below, after};
+  }
+
+  it('glides the rows after a toggled row inside the tree, and leaves the content after the tree in place', async () => {
+    stubPointer(true);
+    const user = userEvent.setup();
+    render(<Page />);
+    const {below, after} = stubTreeGeometry();
+    await user.click(
+      document.querySelector<HTMLElement>('[data-tree-toggle]') ??
+        document.body,
+    );
+    await flush();
+    expect(animated).toContain(below);
+    expect(animated).not.toContain(after);
+  });
+
+  it('clips the bottom edge of the tree while its own motion runs, and not at rest', async () => {
+    stubPointer(true);
+    const user = userEvent.setup();
+    render(<Page />);
+    stubTreeGeometry();
+    const tree = screen.getByRole('tree');
+    let settle = () => {};
+    const motion = {
+      playState: 'running',
+      effect: {getComputedTiming: () => ({endTime: 300})},
+      finished: new Promise<void>(resolve => {
+        settle = resolve;
+      }),
+    } as unknown as Animation;
+    tree.getAnimations = () => [motion];
+    await user.click(
+      document.querySelector<HTMLElement>('[data-tree-toggle]') ??
+        document.body,
+    );
+    await flush();
+    expect(tree.style.clipPath).toMatch(/^inset\(-100vmax -100vmax calc/);
+    settle();
+    await flush();
+    expect(tree.style.clipPath).toBe('');
+  });
+
+  it('changes nothing under a mouse', async () => {
+    stubPointer(false);
+    const user = userEvent.setup();
+    render(<Page />);
+    stubTreeGeometry();
+    await user.click(
+      document.querySelector<HTMLElement>('[data-tree-toggle]') ??
+        document.body,
+    );
+    await flush();
+    expect(animated).toEqual([]);
+    expect(screen.getByRole('tree').style.clipPath).toBe('');
   });
 });
 
@@ -516,7 +627,7 @@ describe("a close plays the content's exit (spec:AST-105 FR4)", () => {
     expect(groupOf('photos')).toBeNull();
   });
 
-  it("drops the chevron's spring when the handle is removed", async () => {
+  it("drops the chevron's move curve when the handle is removed", async () => {
     const user = userEvent.setup();
     const {rerender} = render(
       <Area withHandle>

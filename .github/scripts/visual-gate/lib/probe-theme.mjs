@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {PROBE_TOKENS} from './probe-axes.mjs';
+
 /**
  * @file The probe theme: a theme that styles every declared theming target.
  *
@@ -45,6 +47,53 @@ export function probeColor(seed, options = {}) {
   const lightness = options.lightness ?? 45 + (Math.abs(hash >> 16) % 20);
   return `hsl(${hue.toFixed(1)} ${saturation}% ${lightness}%)`;
 }
+
+/**
+ * Parse `hsl(h s% l%)` or `rgb(r, g, b)` into 0–255 channels.
+ * @param {string} color
+ * @returns {[number, number, number]}
+ */
+function toRgb(color) {
+  const rgb = /^rgb\(\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\s*\)$/.exec(color);
+  if (rgb) {
+    return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  }
+  const hsl = /^hsl\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%\s*\)$/.exec(color);
+  if (!hsl) {
+    throw new Error(`probe-theme: cannot read colour ${color}`);
+  }
+  const hue = Number(hsl[1]);
+  const saturation = Number(hsl[2]) / 100;
+  const lightness = Number(hsl[3]) / 100;
+  const chroma = saturation * Math.min(lightness, 1 - lightness);
+  const channel = n => {
+    const k = (n + hue / 30) % 12;
+    return 255 * (lightness - chroma * Math.max(-1, Math.min(k - 3, 9 - k, 1)));
+  };
+  return [channel(0), channel(8), channel(4)];
+}
+
+/**
+ * How far apart two colours are as pixels: the Euclidean distance between
+ * their 0–255 RGB channels. The gate compares pixels, so this is the distance
+ * that decides whether it can tell two colours apart.
+ * @param {string} first
+ * @param {string} second
+ * @returns {number}
+ */
+export function colorDistance(first, second) {
+  const [a, b] = [toRgb(first), toRgb(second)];
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+}
+
+/**
+ * The fixed probe text colour a child keeps when its own style does not set
+ * one. A generated background stays at least `MIN_TEXT_DISTANCE` away from it,
+ * or text that keeps the token draws in its own background's colour and the
+ * gate cannot see it reach the pixels.
+ */
+const FIXED_TEXT_COLORS = [PROBE_TOKENS['--color-text-primary']];
+const MIN_TEXT_DISTANCE = 60;
 
 /**
  * Prop values from a doc's `type` union — `'a' | 'b' | 'c'` → ['a','b','c'].
@@ -158,8 +207,18 @@ export function buildProbeComponents(targets, propsByComponent, aliases = {}) {
  * @returns {{backgroundColor: string, color: string, borderColor: string, outlineColor: string}}
  */
 export function paint(seed) {
+  let backgroundColor = probeColor(seed);
+  for (
+    let attempt = 1;
+    FIXED_TEXT_COLORS.some(
+      text => colorDistance(backgroundColor, text) < MIN_TEXT_DISTANCE,
+    );
+    attempt += 1
+  ) {
+    backgroundColor = probeColor(`${seed}/background-${attempt}`);
+  }
   return {
-    backgroundColor: probeColor(seed),
+    backgroundColor,
     color: probeColor(`${seed}/text`, {lightness: 12}),
     borderColor: probeColor(`${seed}/border`, {lightness: 25}),
     outlineColor: probeColor(`${seed}/outline`, {lightness: 25}),

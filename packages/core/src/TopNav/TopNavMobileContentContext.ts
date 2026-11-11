@@ -4,7 +4,7 @@
 
 /**
  * @file TopNavMobileContentContext.ts
- * @input React createContext, use
+ * @input createSharedContext, use
  * @output Exports TopNavMobileContentContext and useTopNavMobileContent
  * @position Internal context for passing additional drawer content to TopNav
  *
@@ -13,9 +13,14 @@
  * mobile drawer, producing a single combined drawer.
  */
 
-import {createContext, use, type ReactNode} from 'react';
+import {use, type ReactNode} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
-export const TopNavMobileContentContext = createContext<ReactNode>(null);
+export const TopNavMobileContentContext = createSharedContext<ReactNode>(
+  'TopNavMobileContentContext',
+  1,
+  null,
+);
 TopNavMobileContentContext.displayName = 'TopNavMobileContentContext';
 
 /**

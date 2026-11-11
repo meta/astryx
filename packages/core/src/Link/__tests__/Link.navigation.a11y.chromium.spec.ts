@@ -8,7 +8,7 @@
  * @position Browser proof for the shared navigation-destination contract
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -149,10 +149,13 @@ test('ordinary schemes keep native attributes, custom routing, and downloads', a
       'download',
       'note.txt',
     );
-    await expect(page.getByTestId('markdown').locator('a')).toHaveAttribute(
-      'href',
-      href,
-    );
+    const markdown = page.getByTestId('markdown');
+    if (href.startsWith('data:')) {
+      await expect(markdown.locator('a')).toHaveCount(0);
+      await expect(markdown).toHaveText(`[Markdown link](${href})`);
+    } else {
+      await expect(markdown.locator('a')).toHaveAttribute('href', href);
+    }
   }
 });
 

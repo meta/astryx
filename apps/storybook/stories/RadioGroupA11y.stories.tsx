@@ -96,6 +96,10 @@ export const SegmentedOptionGroupDisabledWithMessage = storyFor(
   'segmented-option-group-disabled-with-message',
 );
 
+export const PaginationDotsGroup = storyFor('pagination-dots-group');
+export const PaginationDotUnselected = storyFor('pagination-dot-unselected');
+export const PaginationDotSelected = storyFor('pagination-dot-selected');
+
 export const MenuGroupSelected = storyFor('menu-group-selected');
 export const MenuGroupNoneSelected = storyFor('menu-group-none-selected');
 export const MenuOptionUnselectedDescribed = storyFor(

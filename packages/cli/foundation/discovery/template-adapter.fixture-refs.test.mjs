@@ -13,6 +13,14 @@ const PLACEHOLDER = stripTemplateAssetRefs("'/template-assets/x.png'").slice(
 );
 
 describe('stripTemplateAssetRefs fixture references', () => {
+  it('uses a placeholder that takes its tone from the surface behind it', () => {
+    const placeholder = decodeURIComponent(
+      stripTemplateAssetRefs("'/template-assets/x.png'").slice(1, -1),
+    );
+    expect(placeholder).toContain('fill-opacity');
+    expect(placeholder).not.toContain('#f5f6f8');
+  });
+
   it('replaces an image with a self-contained placeholder', () => {
     expect(PLACEHOLDER).toMatch(/^data:image\/svg\+xml,[^\s'"`()]+$/u);
   });

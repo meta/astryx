@@ -7,16 +7,14 @@
  * @input Uses React, @lexical/react (composer context), @lexical/rich-text,
  *   @lexical/selection, @lexical/list, @lexical/utils, and the lexical core
  *   command constants, plus Astryx Toolbar / IconButton / Selector /
- *   ToggleButton / Divider / Layout primitives, ToolbarLinkPopover, and
- *   LinkCard.
+ *   ToggleButton / Divider / Layout primitives, and the link popover in
+ *   ToolbarLinkPopover.
  * @output Exports RichTextEditorToolbar (a compact formatting toolbar with a
  *   RichText-owned 4px control gutter, a horizontally scrollable action row,
- *   a link popover anchored to its Link button, and the link card LinkCard
- *   draws for the link at the caret or under the pointer),
- *   RichTextEditorToolbarProps, and RICHTEXT_ICON_KEYS. Also exports, for
- *   RichTextEditorSelectionToolbar only, the glyph resolver and the inline
- *   formats with their labels, state, and command; the package entry does
- *   not re-export those.
+ *   and a link popover anchored to its Link button) and
+ *   RichTextEditorToolbarProps, plus the inline formats, their labels, the
+ *   formats a selection carries, the format command, and the glyph resolver,
+ *   which the package shares internally.
  * @position @astryxdesign/richtext. Drop into RichTextEditor's `toolbar` slot to
  *   add a flush top formatting toolbar. Themed via Astryx Toolbar, Selector,
  *   IconButton, and ToggleButton, so it inherits the active theme. Base props
@@ -25,10 +23,6 @@
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/index.ts (exports)
- * - /packages/richtext/src/LinkCard.tsx (the link card it renders)
- * - /packages/richtext/src/ToolbarLinkPopover.tsx (its link popover)
- * - /packages/richtext/src/RichTextEditorSelectionToolbar.tsx (shares its
- *   glyphs and inline formats)
  * - /packages/richtext/src/RichTextEditor.doc.mjs (usage notes)
  * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
  * - /apps/storybook/stories/RichTextEditor.stories.tsx (WithToolbar story)
@@ -101,13 +95,12 @@ import {
   COMMAND_PRIORITY_NORMAL,
   $getSelection,
   $isNodeSelection,
+  type LexicalEditor,
+  type NodeSelection,
+  type RangeSelection,
   $isRangeSelection,
   $createParagraphNode,
-  type BaseSelection,
-  type LexicalEditor,
-  type TextFormatType,
 } from 'lexical';
-import {LinkCard} from './LinkCard';
 import {
   ToolbarLinkPopover,
   isInsertLink,
@@ -192,14 +185,9 @@ export const RICHTEXT_ICON_KEYS = {
   number: 'richtext:number',
   undo: 'richtext:undo',
   redo: 'richtext:redo',
-  applyLink: 'richtext:applyLink',
-  removeLink: 'richtext:removeLink',
-  cancel: 'richtext:cancel',
-  openLink: 'richtext:openLink',
-  editLink: 'richtext:editLink',
 } as const;
 
-/** The inline formats, in the order the toolbars offer them. */
+/** The inline formats, in the order a toolbar offers them. */
 export const INLINE_FORMAT_ACTIONS = [
   {format: 'bold', icon: 'bold'},
   {format: 'italic', icon: 'italic'},
@@ -225,33 +213,21 @@ export function inlineFormatLabels(
 }
 
 /**
- * The inline formats `selection` carries, which their buttons show pressed.
- * A selection of Markdown plugin nodes alone (a range around them, or a node
- * selection from a click) shows their formats; any other node selection,
- * such as a rule, has none. A selection of table cells reports the formats
- * every selected cell's text carries.
+ * The inline formats a range or node selection carries, which their buttons
+ * show pressed. A selection of Markdown plugin nodes alone (a range around
+ * them, or a node selection from a click) shows their formats. Any other
+ * node selection, such as a rule, has none.
  */
 export function $inlineFormatsOf(
-  selection: BaseSelection | null,
+  selection: RangeSelection | NodeSelection,
 ): Set<InlineFormat> {
   const formats = new Set<InlineFormat>();
-  if (selection == null) {
-    return formats;
-  }
-  const nodesOnly =
-    $isRangeSelection(selection) || $isNodeSelection(selection)
-      ? $selectedExtensionNodesOnly(selection)
-      : null;
-  const hasFormat =
-    'hasFormat' in selection && typeof selection.hasFormat === 'function'
-      ? (format: TextFormatType) =>
-          (selection.hasFormat as (format: TextFormatType) => boolean)(format)
-      : () => false;
+  const nodesOnly = $selectedExtensionNodesOnly(selection);
   for (const {format} of INLINE_FORMAT_ACTIONS) {
     if (
       nodesOnly != null
         ? nodesOnly.every(node => node.hasFormat(format))
-        : hasFormat(format)
+        : $isRangeSelection(selection) && selection.hasFormat(format)
     ) {
       formats.add(format);
     }
@@ -458,85 +434,6 @@ const defaultToolbarIcons: Record<string, ReactNode> = {
       />
     </svg>
   ),
-  applyLink: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M5 12.5l4.5 4.5L19 7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-  removeLink: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M18 13l2-2a5 5 0 0 0-7-7l-2 2M6 11l-2 2a5 5 0 0 0 7 7l2-2M8 2v3M2 8h3M16 22v-3M22 16h-3"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-  cancel: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M6 6l12 12M18 6L6 18"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  ),
-  openLink: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
-  editLink: (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true">
-      <path
-        d="M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16zM13.5 6.5l4 4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  ),
 };
 
 /** Renders a short text label as a toolbar glyph (for heading buttons). */
@@ -614,13 +511,9 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
    * one URL field, applied with Enter, with Remove when the selection is in a
    * link. The popover is not modal. Escape or Cancel closes it and returns
    * focus and the selection to the editor; a URL that cannot be linked shows
-   * an error under the field, which keeps focus.
-   *
-   * While the editor is editable, a card also shows for the link holding the
-   * caret, or the one the pointer rests on: its address (which opens it in a
-   * new tab), Open in new tab, Edit (its text and address, also Cmd/Ctrl+K
-   * with the caret in the link), and Remove. Cmd-click (Ctrl-click off Apple
-   * platforms) follows a link. `promptForUrl` replaces the card too.
+   * an error under the field, which keeps focus. With a collapsed selection,
+   * applying inserts the entered URL as link text at the caret; with a
+   * non-empty selection it links the selected text.
    *
    * Requires `LinkNode` to be registered (it is, by default) — no extra setup.
    * The entered URL is sanitized (see `sanitizeUrl`) so only
@@ -632,7 +525,7 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
    * Called to obtain a URL when the link button is pressed on a non-link
    * selection. Return the URL string to link, or `null`/`''` to cancel.
    * Receives the currently selected text as a hint. When omitted, the built-in
-   * link popover and link card are used. This synchronous override is retained
+   * link popover is used. This synchronous override is retained
    * for consumers that already provide their own URL UI.
    */
   promptForUrl?: (selectedText: string) => string | null | undefined;
@@ -705,7 +598,11 @@ export function RichTextEditorToolbar({
   const [canRedo, setCanRedo] = useState(false);
   const [isEditable, setIsEditable] = useState(() => editor.isEditable());
   const linkButtonRef = useRef<HTMLButtonElement>(null);
-  const link = useToolbarLink(editor, {hasNewTabLinks, promptForUrl});
+  const link = useToolbarLink(editor, {
+    anchorRef: linkButtonRef,
+    hasNewTabLinks,
+    promptForUrl,
+  });
   const {toggle: toggleLink} = link;
 
   const $syncToolbar = useCallback(() => {
@@ -722,13 +619,7 @@ export function RichTextEditorToolbar({
     // sits inside a LinkNode (or its immediate parent is one):
     // `$isLinkNode(parent) || $isLinkNode(node)`.
     const node = selection.anchor.getNode();
-    const parent = node.getParent();
-    const linkNode = $isLinkNode(node)
-      ? node
-      : $isLinkNode(parent)
-        ? parent
-        : null;
-    setIsLink(linkNode != null);
+    setIsLink($isLinkNode(node) || $isLinkNode(node.getParent()));
     const anchorNode = selection.anchor.getNode();
     const element =
       anchorNode.getKey() === 'root'
@@ -941,7 +832,7 @@ export function RichTextEditorToolbar({
                 onMouseDown={event => event.preventDefault()}
                 // The link popover owns a press on the button, and with it
                 // the button's popup state; `promptForUrl` replaces both.
-                onPressedChange={promptForUrl ? link.toggle : undefined}
+                onPressedChange={promptForUrl ? toggleLink : undefined}
               />
             )}
             {isRenderable(endContent) && (
@@ -956,32 +847,7 @@ export function RichTextEditorToolbar({
       {/* A sibling of the toolbar, not inside it: the toolbar is one roving
           tab stop, which would leave the form's controls out of Tab. */}
       {hasLink && promptForUrl == null && (
-        <ToolbarLinkPopover
-          link={link}
-          anchorRef={linkButtonRef}
-          size={size}
-          icons={{
-            applyLink: icon('applyLink'),
-            removeLink: icon('removeLink'),
-            cancel: icon('cancel'),
-          }}
-        />
-      )}
-      {/* The card renders into the editor's own positioned element, beside
-          the editable text, while the editor is editable. */}
-      {hasLink && promptForUrl == null && isEditable && (
-        <LinkCard
-          size={size}
-          isHidden={link.isOpen}
-          icons={{
-            link: icon('link'),
-            openLink: icon('openLink'),
-            editLink: icon('editLink'),
-            removeLink: icon('removeLink'),
-            applyLink: icon('applyLink'),
-            cancel: icon('cancel'),
-          }}
-        />
+        <ToolbarLinkPopover link={link} anchorRef={linkButtonRef} size={size} />
       )}
     </>
   );

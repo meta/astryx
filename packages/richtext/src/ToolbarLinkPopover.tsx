@@ -4,40 +4,28 @@
 
 /**
  * @file ToolbarLinkPopover.tsx
- * @input Uses React, @lexical/link (TOGGLE_LINK_COMMAND, link nodes), the
- *   lexical selection API, linkUtils' sanitizeUrl, and core Popover,
- *   IconButton, TextInput, HStack, StackItem, isImeKeyEvent, and
- *   useTranslator.
+ * @input Uses React, @lexical/link, the lexical selection API, core Popover,
+ *   useTranslator, linkEditing's toLinkHref, and linkForm's LinkForm.
  * @output Exports useToolbarLink, the link popover's state and actions for an
- *   editor, ToolbarLinkPopover, the non-modal popover with its URL form, and
- *   isInsertLink, the Cmd/Ctrl+K test.
+ *   editor, ToolbarLinkPopover, the non-modal popover that holds the URL
+ *   form, and isInsertLink, the Cmd/Ctrl+K test.
  * @position Internal to @astryxdesign/richtext; the package entry exports
- *   none of it. RichTextEditorToolbar and RichTextEditorSelectionToolbar each
- *   hold one popover, anchored to their own Link button and passed the
- *   glyphs they resolve, so both open the same form with the same rules.
+ *   none of it. A toolbar holds one link popover, anchored to its own Link
+ *   button, so every Link button opens the same form with the same rules.
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/RichTextEditorToolbar.tsx (its Link button)
- * - /packages/richtext/src/RichTextEditorSelectionToolbar.tsx (its Link button)
  * - /packages/richtext/src/RichTextEditorToolbarLink.test.tsx (tests)
  */
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-  type RefObject,
-} from 'react';
+import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
+import {mergeRegister} from '@lexical/utils';
 import {TOGGLE_LINK_COMMAND, $isLinkNode, $createLinkNode} from '@lexical/link';
 import {Popover} from '@astryxdesign/core/Popover';
-import {IconButton} from '@astryxdesign/core/IconButton';
-import {TextInput} from '@astryxdesign/core/TextInput';
-import {HStack, StackItem} from '@astryxdesign/core/Layout';
-import {isImeKeyEvent} from '@astryxdesign/core/utils';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {
+  SELECTION_CHANGE_COMMAND,
+  COMMAND_PRIORITY_CRITICAL,
   IS_APPLE,
   isExactShortcutMatch,
   $createTextNode,
@@ -47,7 +35,8 @@ import {
   type LexicalEditor,
   type RangeSelection,
 } from 'lexical';
-import {sanitizeUrl} from './linkUtils';
+import {toLinkHref} from './linkEditing';
+import {LinkForm} from './linkForm';
 
 /**
  * The platform-primary modifier for shortcuts: Cmd on Apple, Ctrl elsewhere.
@@ -75,152 +64,18 @@ interface LinkContext {
 /** Room for a typical address beside the link form's icon buttons. */
 const LINK_POPOVER_WIDTH = 320;
 
-/** The glyphs the link form draws, resolved by the toolbar that holds it. */
-export interface ToolbarLinkIcons {
-  readonly applyLink: ReactNode;
-  readonly removeLink: ReactNode;
-  readonly cancel: ReactNode;
-}
-
-interface ToolbarLinkFormProps {
-  /** The field's value: the address being entered. */
-  url: string;
-  /** The message for an address the toolbar refused, or empty. */
-  error: string;
-  /** Whether the selection is in a link, which Remove then unlinks. */
-  isEditing: boolean;
-  /** The toolbar's size, so the form's controls match its buttons. */
-  size: 'sm' | 'md' | 'lg';
-  /** The resolved glyphs for the form's icon buttons. */
-  icons: ToolbarLinkIcons;
-  onUrlChange: (url: string) => void;
-  /** Applies the field's address; false when it was refused. */
-  onApply: () => boolean;
-  onRemove: () => void;
-  onCancel: () => void;
-}
-
-/**
- * The link popover's content: one URL field, then Apply, Remove (only when
- * the selection is in a link), and Cancel as icon buttons. Enter in the field
- * applies, and Escape anywhere in the form cancels. A refused address shows
- * the field's error status and keeps focus in the field.
- */
-function ToolbarLinkForm({
-  url,
-  error,
-  isEditing,
-  size,
-  icons,
-  onUrlChange,
-  onApply,
-  onRemove,
-  onCancel,
-}: ToolbarLinkFormProps) {
-  const t = useTranslator();
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const setInput = useCallback((input: HTMLInputElement | null) => {
-    inputRef.current = input;
-    // TextInput has no props for these native hints: a URL keyboard on touch
-    // screens, and no spelling marks under an address. The field stays plain
-    // text, so a bare domain is not refused before the toolbar's own check
-    // turns it into an https link.
-    input?.setAttribute('inputmode', 'url');
-    input?.setAttribute('spellcheck', 'false');
-  }, []);
-  // The field takes focus as the form opens, a frame later so the popover is
-  // shown by then, whichever control comes first in its markup.
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, []);
-  const apply = () => {
-    if (!onApply()) {
-      inputRef.current?.focus();
-    }
-  };
-  const applyLabel = isEditing
-    ? t('@astryx.richTextEditor.link.update')
-    : t('@astryx.richTextEditor.link.add');
-  const removeLabel = t('@astryx.richTextEditor.link.remove');
-  const cancelLabel = t('@astryx.richTextEditor.link.cancel');
-  return (
-    <HStack
-      gap={1}
-      vAlign="start"
-      onKeyDown={event => {
-        // Escape that ends an IME composition is the input method's.
-        if (event.key === 'Escape' && !isImeKeyEvent(event.nativeEvent)) {
-          // Claimed here, so the popover's own Escape handling leaves it to
-          // Cancel, which also gives the editor back its selection.
-          event.preventDefault();
-          onCancel();
-        }
-      }}>
-      <StackItem size="fill">
-        <TextInput
-          ref={setInput}
-          label={t('@astryx.richTextEditor.link.url')}
-          isLabelHidden
-          value={url}
-          size={size}
-          width="100%"
-          autoComplete="url"
-          placeholder={t('@astryx.richTextEditor.link.urlPlaceholder')}
-          status={error ? {type: 'error', message: error} : undefined}
-          statusVariant="detached"
-          onChange={onUrlChange}
-          onEnter={apply}
-          onKeyDown={event => {
-            // Applying hands focus to the editor, which must not receive the
-            // rest of this Enter as a new line over the linked words.
-            if (event.key === 'Enter' && !isImeKeyEvent(event.nativeEvent)) {
-              event.preventDefault();
-            }
-          }}
-        />
-      </StackItem>
-      <IconButton
-        label={applyLabel}
-        icon={icons.applyLink}
-        variant="ghost"
-        size={size}
-        tooltip={applyLabel}
-        onClick={apply}
-      />
-      {isEditing && (
-        <IconButton
-          label={removeLabel}
-          icon={icons.removeLink}
-          variant="ghost"
-          size={size}
-          tooltip={removeLabel}
-          onClick={onRemove}
-        />
-      )}
-      <IconButton
-        label={cancelLabel}
-        icon={icons.cancel}
-        variant="ghost"
-        size={size}
-        tooltip={cancelLabel}
-        onClick={onCancel}
-      />
-    </HStack>
-  );
-}
-
 /** The link popover's state and actions for one editor. */
 export interface ToolbarLink {
   /** Whether the popover is open. */
   readonly isOpen: boolean;
-  /** Whether it opened for a link, which Apply then retargets. */
+  /** Whether it opened for a link, which Remove then unlinks. */
   readonly isEditing: boolean;
+  /** The field's value: the address being entered. */
   readonly url: string;
+  /** The message for an address the rules refused, or empty. */
   readonly error: string;
   /**
-   * Opens the popover for the selection, from its link's address or from
-   * selected text that already reads as one. With `promptForUrl`, asks it
+   * Opens the popover for the selection. With `promptForUrl`, asks it
    * instead, or unlinks a selection that is in a link.
    */
   readonly toggle: () => void;
@@ -237,14 +92,17 @@ export interface ToolbarLink {
  * The link popover's state for `editor`. It remembers the selection the
  * popover opened for, because focus in the field takes the page's selection
  * from the editor, and puts it back before linking, unlinking, or giving
- * focus back to the editor.
+ * focus back to the editor. `anchorRef` is the Link button the popover opens
+ * beside.
  */
 export function useToolbarLink(
   editor: LexicalEditor,
   {
+    anchorRef,
     hasNewTabLinks,
     promptForUrl,
   }: {
+    anchorRef: RefObject<HTMLElement | null>;
     hasNewTabLinks: boolean;
     promptForUrl?: (selectedText: string) => string | null | undefined;
   },
@@ -261,9 +119,9 @@ export function useToolbarLink(
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
 
-  // The selection as the popover will find it: the last range selection, so
-  // a press that moved the editor's selection elsewhere first still links
-  // the words that were selected.
+  // The selection the popover will act on: the last range selection, so a
+  // press that moved the editor's selection elsewhere first still links the
+  // words that were selected.
   const $noteSelection = useCallback((): LinkContext | null => {
     const selection = $getSelection();
     if (!$isRangeSelection(selection)) {
@@ -287,9 +145,19 @@ export function useToolbarLink(
 
   useEffect(
     () =>
-      editor.registerUpdateListener(({editorState}) => {
-        editorState.read($noteSelection);
-      }),
+      mergeRegister(
+        editor.registerUpdateListener(({editorState}) => {
+          editorState.read($noteSelection);
+        }),
+        editor.registerCommand(
+          SELECTION_CHANGE_COMMAND,
+          () => {
+            $noteSelection();
+            return false;
+          },
+          COMMAND_PRIORITY_CRITICAL,
+        ),
+      ),
     [$noteSelection, editor],
   );
 
@@ -313,32 +181,44 @@ export function useToolbarLink(
   const applyLinkValue = useCallback(
     (entered: string): boolean => {
       const trimmed = entered.trim();
-      const href = sanitizeUrl(trimmed);
-      if (href === 'about:blank') {
+      const href = toLinkHref(trimmed);
+      if (href == null) {
         return false;
       }
 
-      restoreLinkSelection();
       const linkAttributes = hasNewTabLinks
         ? {target: '_blank', rel: 'noopener noreferrer'}
         : {};
-      const handled = editor.dispatchCommand(TOGGLE_LINK_COMMAND, {
-        url: href,
-        ...linkAttributes,
-      });
-      if (!handled) {
-        editor.update(() => {
-          const selection = $getSelection();
-          if ($isRangeSelection(selection) && selection.isCollapsed()) {
+      const savedSelection = savedSelectionRef.current;
+      // One update restores the selection, decides, and applies. Inside a
+      // command listener (Cmd/Ctrl+K) Lexical queues an update, so a flag set
+      // in one update cannot steer code that runs after it.
+      editor.update(() => {
+        if (savedSelection) {
+          $setSelection(savedSelection.clone());
+        }
+        const selection = $getSelection();
+        if ($isRangeSelection(selection) && selection.isCollapsed()) {
+          const node = selection.anchor.getNode();
+          const isInLink = $isLinkNode(node) || $isLinkNode(node.getParent());
+          // At a caret outside a link there is no text to link, so the URL
+          // becomes the link's text. The toggle command would link the whole
+          // text node around the caret instead.
+          if (!isInLink) {
             const linkNode = $createLinkNode(href, linkAttributes);
             linkNode.append($createTextNode(trimmed));
             selection.insertNodes([linkNode]);
+            return;
           }
+        }
+        editor.dispatchCommand(TOGGLE_LINK_COMMAND, {
+          url: href,
+          ...linkAttributes,
         });
-      }
+      });
       return true;
     },
-    [editor, hasNewTabLinks, restoreLinkSelection],
+    [editor, hasNewTabLinks],
   );
 
   const toggle = useCallback(() => {
@@ -370,8 +250,16 @@ export function useToolbarLink(
     );
     setIsEditing(context.isLink);
     setError('');
+    // Cmd/Ctrl+K can open the form while the Link button is scrolled out of
+    // view, in the page or in the toolbar's own row. Bring it back so the
+    // popover opens beside it.
+    anchorRef.current?.scrollIntoView?.({
+      block: 'nearest',
+      inline: 'nearest',
+    });
     setIsOpen(true);
   }, [
+    anchorRef,
     applyLinkValue,
     editor,
     promptForUrl,
@@ -446,22 +334,21 @@ export function useToolbarLink(
 }
 
 /**
- * The non-modal popover the Link button opens, anchored to it, holding the
- * URL form. It is the button's popup: it sets the button's popup state and
- * opens on a press of it. Render it beside the toolbar that holds the button,
- * not inside it: the toolbar is one roving tab stop, which would leave the
- * form's controls out of Tab and take its arrow keys.
+ * The non-modal popover a Link button opens, anchored to it, holding the URL
+ * form. It is the button's popup: it sets the button's popup state and opens
+ * on a press of it. Render it beside the toolbar that holds the button, not
+ * inside it: the toolbar is one roving tab stop, which would leave the form's
+ * controls out of Tab and take its arrow keys.
  */
 export function ToolbarLinkPopover({
   link,
   anchorRef,
   size,
-  icons,
 }: {
   link: ToolbarLink;
   anchorRef: RefObject<HTMLElement | null>;
+  /** The toolbar's size, so the form's controls match its buttons. */
   size: 'sm' | 'md' | 'lg';
-  icons: ToolbarLinkIcons;
 }) {
   const t = useTranslator();
   return (
@@ -478,18 +365,20 @@ export function ToolbarLinkPopover({
       // The form focuses its field, and Cancel is its close control.
       hasAutoFocus={false}
       hasCloseButton={false}
-      placement="below"
+      // Above the toolbar, so the popover does not cover the editor's
+      // first lines, where the linked words often are. It flips below
+      // only when there is no room above.
+      placement="above"
       alignment="start"
       width={LINK_POPOVER_WIDTH}
       padding={2}
       content={
         link.isOpen ? (
-          <ToolbarLinkForm
+          <LinkForm
             url={link.url}
             error={link.error}
             isEditing={link.isEditing}
             size={size}
-            icons={icons}
             onUrlChange={link.onUrlChange}
             onApply={link.apply}
             onRemove={link.remove}

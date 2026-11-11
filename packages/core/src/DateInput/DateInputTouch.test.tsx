@@ -49,12 +49,15 @@ import {
   monthIndexOf,
   fromMonthIndex,
   clampIndex,
+  createMonthModel,
+  dateInMonth,
   rowAtScrollOffset,
   scrollOffsetForRow,
   paneWindow,
   rowsIn,
   DEFAULT_MONTH_REACH,
 } from './monthGeometry';
+import {WHEEL_ROW_HEIGHT} from './wheelOptions';
 import {SWIPE_DISTANCE} from './useOwnScrollGesture';
 import {DRAG_SLOP} from './usePointerDragScroll';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
@@ -129,6 +132,15 @@ function stubMedia({
       dispatchEvent: () => false,
     };
   });
+}
+
+/**
+ * A touchscreen laptop with the sheet pinned (`presentation="bottom-sheet"`).
+ * Its primary pointer is fine, so the sheet's wheels are the scrolling
+ * columns. A finger can still turn them.
+ */
+function stubTouchscreenLaptop(): void {
+  stubMedia({pointer: 'fine', anyPointer: 'coarse', width: 1280});
 }
 
 function setViewport(kind: 'mobile' | 'desktop'): void {
@@ -470,6 +482,25 @@ describe('DateInput — surface selection', () => {
       ).toHaveTextContent('Abril de 2026');
     });
   });
+
+  it.each([
+    ['fa-IR', '۲۱'],
+    ['ar-EG', '٢١'],
+    ['en-US', '21'],
+  ])(
+    'shows month-pane day numbers in the locale digits in %s',
+    (locale, day) => {
+      renderAndOpen(
+        <InternationalizationProvider locale={locale}>
+          <Controlled initial="2026-03-21" />
+        </InternationalizationProvider>,
+      );
+      const march21 = document.querySelector(
+        'button[data-date="2026-03-21"]:not([data-outside])',
+      );
+      expect(march21).toHaveTextContent(new RegExp(`^${day}$`));
+    },
+  );
 
   it('forwards ref to the input on both surfaces', () => {
     const desktopRef = {current: null as HTMLInputElement | null};
@@ -1015,10 +1046,62 @@ describe('DateInput — calendar surface', () => {
     for (const name of ['Previous month', 'Next month']) {
       // Still mounted, so the header cannot reflow...
       expect(arrow(name)).toBeInTheDocument();
-      expect(arrow(name)).toBeDisabled();
+      expect(arrow(name)).toHaveAttribute('aria-disabled', 'true');
       // ...but gone from the accessibility tree, and so unreachable.
       expect(screen.queryByRole('button', {name})).toBeNull();
     }
+  });
+
+  it('moves focus to the other arrow when the focused arrow reaches the end of the range and hides', () => {
+    renderAndOpen(
+      <Controlled initial="2026-03-10" min="2026-02-01" max="2026-04-30" />,
+    );
+    const previous = screen.getByRole('button', {name: 'Previous month'});
+    act(() => previous.focus());
+    fireEvent.click(previous);
+    // February is the first month: the arrow hides, and focus stays in the
+    // sheet, on the other arrow.
+    expect(screen.getByRole('button', {name: 'Next month'})).toHaveFocus();
+
+    const next = screen.getByRole('button', {name: 'Next month'});
+    fireEvent.click(next);
+    fireEvent.click(next);
+    // April is the last month.
+    expect(screen.getByRole('button', {name: 'Previous month'})).toHaveFocus();
+  });
+
+  it('moves focus to the other arrow when a swipe reaches the end of the range while an arrow holds focus', async () => {
+    await withLayout(async () => {
+      render(
+        <Controlled initial="2026-03-10" min="2026-01-01" max="2026-04-30" />,
+      );
+      fireEvent.click(field());
+      const previous = screen.getByRole('button', {name: 'Previous month'});
+      act(() => previous.focus());
+      fireEvent.click(previous);
+      // February: the arrow is still shown, and keeps focus.
+      expect(
+        screen.getByRole('button', {name: 'Previous month'}),
+      ).toHaveFocus();
+      const scroller = document.querySelector<HTMLElement>(
+        '[data-scroller="months"]',
+      )!;
+      // A finger takes the scroller from the steer, then swipes to January,
+      // the first month: Previous month hides.
+      const touchStart = new Event('touchstart', {bubbles: true});
+      const point = {identifier: 1, clientX: 100, clientY: 100};
+      Object.defineProperties(touchStart, {
+        touches: {value: [point]},
+        targetTouches: {value: [point]},
+        changedTouches: {value: [point]},
+      });
+      scroller.dispatchEvent(touchStart);
+      scroller.scrollLeft = 0;
+      fireEvent.scroll(scroller);
+      await waitFor(() =>
+        expect(screen.getByRole('button', {name: 'Next month'})).toHaveFocus(),
+      );
+    });
   });
 
   it('shows both arrows when there is somewhere to go in each direction', () => {
@@ -1208,15 +1291,11 @@ describe('DateInput — calendar surface', () => {
     [...weekdayRow().children].map(c => c.textContent?.trim());
 
   /**
-   * Three letters, where Calendar's own header uses two.
-   *
-   * The sheet is full width — ~51px a column against Calendar's popover — so
-   * there is room for the form people actually read, and a picker driven by
-   * thumb should not make anyone decode "Tu" against "Th".
+   * The sheet labels its columns with the names Calendar's header uses, so a
+   * locale reads the same in both pickers.
    *
    * Exact equality, not `toHaveTextContent`: that matches substrings, so it
-   * passes against "Sun" while asserting "Su" and would not have noticed this
-   * change at all.
+   * passes against "Sun" while asserting "Su".
    */
   it('labels the columns with three-letter weekday names', () => {
     renderAndOpen();
@@ -1229,6 +1308,46 @@ describe('DateInput — calendar surface', () => {
       'Fri',
       'Sat',
     ]);
+  });
+
+  it.each([
+    ['fr-FR', ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']],
+    ['pt-PT', ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.']],
+    ['pl-PL', ['nie', 'pon', 'wto', 'śro', 'czw', 'pią', 'sob']],
+    ['id-ID', ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']],
+  ])(
+    'labels the columns in %s with the same names as the Calendar header',
+    (locale, names) => {
+      renderAndOpen(
+        <InternationalizationProvider locale={locale}>
+          <Controlled initial="2026-03-21" />
+        </InternationalizationProvider>,
+      );
+      expect(weekdayNames()).toEqual(names);
+    },
+  );
+
+  it('keeps seven aligned columns when repeated narrow names rotate in an open sheet', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const ui = (weekStartsOn: 0 | 1) => (
+        <InternationalizationProvider locale="sw-KE">
+          <Controlled initial="2026-03-21" weekStartsOn={weekStartsOn} />
+        </InternationalizationProvider>
+      );
+      withLayout(() => {
+        const {rerender} = render(ui(0));
+        fireEvent.click(field());
+        expect(weekdayNames()).toEqual(['S', 'M', 'T', 'W', 'T', 'F', 'S']);
+        rerender(ui(1));
+      });
+      expect(weekdayNames()).toEqual(['M', 'T', 'W', 'T', 'F', 'S', 'S']);
+      expect(
+        errors.mock.calls.some(call => String(call[0]).includes('same key')),
+      ).toBe(false);
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it('rotates the weekday header with weekStartsOn', () => {
@@ -1689,6 +1808,165 @@ describe('DateInput — month/year wheels', () => {
       within(screen.getByRole('listbox', {name: 'Year'})).getByText('2025'),
     );
     expect(title()).toHaveTextContent('March 2025');
+  });
+
+  /**
+   * UIDatePicker's inline calendar: turning the month or year wheel changes
+   * the date, keeping its day (datePicker.calendar.monthYearWheels
+   * .changesDate), clamped to the month and the bounds.
+   */
+  it('with a mouse the scrolling wheels move only the calendar, not the date', () => {
+    stubTouchscreenLaptop();
+    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2026-03-21"
+        {...ONE_YEAR}
+        presentation="bottom-sheet"
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field()).toHaveValue('March 21, 2026');
+  });
+
+  it('under a finger: keeps a date a custom constraint refuses, while the calendar moves', () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2026-03-21"
+        {...ONE_YEAR}
+        // May 21, 2026 is refused; the wheels must not choose it.
+        dateConstraints={[
+          date => !(date.getMonth() === 4 && date.getDate() === 21),
+        ]}
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field()).toHaveValue('March 21, 2026');
+    expect(title()).toHaveTextContent('May 2026');
+  });
+
+  it('under a finger: moves the chosen date with the wheels, keeping its day', () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled initial="2026-03-21" {...ONE_YEAR} onChange={onChange} />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(onChange).toHaveBeenLastCalledWith('2026-05-21');
+    expect(field()).toHaveValue('May 21, 2026');
+  });
+
+  it('under a finger: a date the wheels move runs changeAction after onChange, shows at once, and is busy (family:input-fields FR6)', async () => {
+    const calls: string[] = [];
+    let resolve: () => void = () => {};
+    const changeAction = vi.fn(async (value: string | undefined) => {
+      calls.push(`changeAction ${value}`);
+      return new Promise<void>(done => {
+        resolve = done;
+      });
+    });
+    renderAndOpen(
+      <DateInput
+        nativePicker="never"
+        label="Ship date"
+        value="2026-03-21"
+        {...ONE_YEAR}
+        onChange={value => calls.push(`onChange ${value}`)}
+        changeAction={changeAction}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    await waitFor(() => {
+      expect(calls).toEqual(['onChange 2026-05-21', 'changeAction 2026-05-21']);
+    });
+    // Optimistic: the moved date shows while the Action runs, the field busy.
+    expect(field()).toHaveValue('May 21, 2026');
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+    await act(async () => {
+      resolve();
+    });
+  });
+
+  it('under a finger: clamps a day the new month lacks to its last day', () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled initial="2026-03-31" {...ONE_YEAR} onChange={onChange} />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('April'),
+    );
+    expect(onChange).toHaveBeenLastCalledWith('2026-04-30');
+  });
+
+  it('under a finger: takes a year change past the range on to its nearest reachable month, date and month wheel too', async () => {
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2026-03-21"
+        min="2025-06-01"
+        max="2026-12-31"
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Year'})).getByText('2025'),
+    );
+    // March 2025 is before the range: June 2025, the first reachable month.
+    expect(title()).toHaveTextContent('June 2025');
+    expect(onChange).toHaveBeenLastCalledWith('2025-06-21');
+    const months = screen.getByRole('listbox', {name: 'Month'});
+    await waitFor(() =>
+      expect(
+        document.getElementById(months.getAttribute('aria-activedescendant')!),
+      ).toHaveTextContent('June'),
+    );
+  });
+
+  it('under a finger: opening the wheels on a date outside the range changes nothing until a wheel moves', () => {
+    // An untouched value is never changed by opening: the wheels show the
+    // calendar's month, inside the range, and nothing commits.
+    const onChange = vi.fn();
+    renderAndOpen(
+      <Controlled
+        initial="2025-12-15"
+        min="2026-01-01"
+        max="2026-12-31"
+        onChange={onChange}
+      />,
+    );
+    openWheels();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(field()).toHaveValue('December 15, 2025');
+  });
+
+  it('only moves the calendar when no date is chosen', () => {
+    const onChange = vi.fn();
+    renderAndOpen(<Controlled {...ONE_YEAR} onChange={onChange} />);
+    openWheels();
+    fireEvent.click(
+      within(screen.getByRole('listbox', {name: 'Month'})).getByText('May'),
+    );
+    expect(title()).toHaveTextContent('May 2026');
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('is a single tab stop driven by the arrow keys', () => {
@@ -2196,6 +2474,19 @@ describe('DateInput — a mouse can drag a wheel', () => {
   const title = () =>
     document.querySelector<HTMLElement>('[data-title="month-year"]')!;
 
+  // Today's column is the fine pointer's (a finger gets the touch column):
+  // a desktop whose field asks for the sheet.
+  beforeEach(() => {
+    setViewport('desktop');
+  });
+
+  function openWheels() {
+    renderAndOpen(
+      <Controlled initial="2026-03-21" presentation="bottom-sheet" />,
+    );
+    fireEvent.click(title());
+  }
+
   /** jsdom has no layout: give the rows a height and the wheel a scrollTop. */
   function withWheelLayout<T>(fn: () => T): T {
     Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
@@ -2252,8 +2543,7 @@ describe('DateInput — a mouse can drag a wheel', () => {
   }
 
   it('scrolls the wheel when a mouse drags it', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       const el = wheel();
       const track = trackable(el);
@@ -2268,8 +2558,7 @@ describe('DateInput — a mouse can drag a wheel', () => {
   });
 
   it('ignores movement too small to be a drag, so a click is still a click', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       const el = wheel();
       const track = trackable(el);
@@ -2280,8 +2569,7 @@ describe('DateInput — a mouse can drag a wheel', () => {
   });
 
   it('leaves touch and pen alone — they pan natively, and better', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       for (const pointerType of ['touch', 'pen']) {
         const el = wheel();
@@ -2295,8 +2583,7 @@ describe('DateInput — a mouse can drag a wheel', () => {
   });
 
   it('ignores a secondary button, which belongs to the context menu', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       const el = wheel();
       const track = trackable(el);
@@ -2313,8 +2600,7 @@ describe('DateInput — a mouse can drag a wheel', () => {
    * jumped a whole one.
    */
   it('suspends snapping for the drag, and restores it after', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       const el = wheel();
       trackable(el);
@@ -2339,7 +2625,12 @@ describe('DateInput — a mouse can drag a wheel', () => {
     try {
       // A year of months, so May is reachable (the default range ends in April).
       renderAndOpen(
-        <Controlled initial="2026-03-21" min="2026-01-01" max="2026-12-31" />,
+        <Controlled
+          initial="2026-03-21"
+          min="2026-01-01"
+          max="2026-12-31"
+          presentation="bottom-sheet"
+        />,
       );
       fireEvent.click(title());
       withWheelLayout(() => {
@@ -2379,8 +2670,7 @@ describe('DateInput — a mouse can drag a wheel', () => {
    * that wobbled more than a pixel selected nothing at all.
    */
   it('keeps the press away from the sheet, which would capture the pointer', () => {
-    renderAndOpen();
-    fireEvent.click(title());
+    openWheels();
     withWheelLayout(() => {
       const el = wheel();
       trackable(el);
@@ -2418,6 +2708,41 @@ describe('monthGeometry', () => {
     expect(monthIndexOf({year: 2026, month: 3, day: 1})).toBe(
       monthIndexOf({year: 2026, month: 3, day: 31}),
     );
+  });
+
+  it('moves a date to another month keeping its day, within the month and the bounds', () => {
+    const d = (year: number, month: number, day: number) => ({
+      year,
+      month,
+      day,
+    });
+    const gregory = createMonthModel('gregory');
+    expect(
+      dateInMonth(gregory, d(2026, 10, 15), toMonthIndex(2026, 5)),
+    ).toEqual(d(2026, 5, 15));
+    expect(dateInMonth(gregory, d(2026, 1, 31), toMonthIndex(2026, 2))).toEqual(
+      d(2026, 2, 28),
+    );
+    expect(dateInMonth(gregory, d(2024, 1, 31), toMonthIndex(2024, 2))).toEqual(
+      d(2024, 2, 29),
+    );
+    expect(
+      dateInMonth(
+        gregory,
+        d(2026, 6, 10),
+        toMonthIndex(2026, 5),
+        d(2026, 5, 20),
+      ),
+    ).toEqual(d(2026, 5, 20));
+    expect(
+      dateInMonth(
+        gregory,
+        d(2026, 6, 25),
+        toMonthIndex(2026, 7),
+        null,
+        d(2026, 7, 4),
+      ),
+    ).toEqual(d(2026, 7, 4));
   });
 
   it('clamps to the reachable range', () => {
@@ -2695,15 +3020,39 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(item).not.toContain("overflow: 'hidden'");
   });
 
+  it('keeps the published tokens module to its released names', async () => {
+    // @astryxdesign/core/DateInput/tokens.stylex is a public subpath: the touch
+    // wheel's geometry lives in an unexported module beside it.
+    const tokens = await import('./tokens.stylex');
+    expect(Object.keys(tokens).sort()).toEqual([
+      'WEEKS_PER_PANE',
+      'dateInputTouchGeometry',
+      'dateInputTouchSizes',
+    ]);
+  });
+
+  it('sizes the touch wheels as today’s column, with the large text of the theme', () => {
+    // The wheel's row pitch is today's token, in numbers (`wheelItemSize`),
+    // and its column is today's pane of six day rows.
+    const tokens = read('tokens.stylex.ts');
+    expect(tokens).toContain(`wheelItemSize: '${WHEEL_ROW_HEIGHT}px'`);
+    expect(tokens).toContain("daySize: '44px'");
+    expect(tokens).toContain('export const WEEKS_PER_PANE = 6;');
+    const source = read('PickerWheel.tsx');
+    expect(source).toContain('blockSize: dateInputTouchGeometry.paneBlockSize');
+    expect(source).toContain("fontSize: typeScaleVars['--text-large-size']");
+  });
+
   it('insets the sheet content equally on every edge', () => {
     const source = read('TouchDateField.tsx');
     // One inset, and the header/footer must not add their own on top of it —
     // that is what put the title and Done 4px off the day grid's line.
     expect(source).toContain("paddingInline: spacingVars['--spacing-4']");
     expect(source).toContain("paddingBlockEnd: spacingVars['--spacing-4']");
-    // The block-start is the documented exception: the grab handle floats out
-    // of flow, so the content wrapper owes it the height it occupies.
-    expect(source).toContain("paddingBlockStart: spacingVars['--spacing-6']");
+    // The block-start is the documented exception: BottomSheet keeps the band
+    // under its grab bar (component:BottomSheet, Content area inset), so the
+    // content wrapper adds nothing above.
+    expect(source).toContain('paddingBlockStart: 0,');
     const header = source.slice(
       source.indexOf('  header: {'),
       source.indexOf('  title: {'),

@@ -37,7 +37,11 @@ import {
 } from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {$isLinkNode} from '@lexical/link';
-import {$isTableCellNode, $isTableSelection} from '@lexical/table';
+import {
+  $isTableCellNode,
+  $isTableSelection,
+  type TableSelection,
+} from '@lexical/table';
 import {mergeRegister} from '@lexical/utils';
 import {
   $getSelection,
@@ -76,6 +80,7 @@ import {
   isInsertLink,
   useToolbarLink,
 } from './ToolbarLinkPopover';
+import {useEditorFocusAndDrag} from './useEditorFocusAndDrag';
 
 /** One of the inline formats the toolbar offers. */
 export type RichTextEditorSelectionToolbarFormat = InlineFormat;
@@ -135,6 +140,11 @@ interface SelectionFacts {
   readonly formats: ReadonlySet<InlineFormat>;
 }
 
+/** The inline formats every selected cell's text carries. */
+function $tableFormatsOf(selection: TableSelection): Set<InlineFormat> {
+  return new Set(ALL_FORMATS.filter(format => selection.hasFormat(format)));
+}
+
 function $readFacts(): SelectionFacts | null {
   const selection = $getSelection();
   if ($isTableSelection(selection)) {
@@ -145,7 +155,7 @@ function $readFacts(): SelectionFacts | null {
       key: `table:${selection.tableKey}:${selection.anchor.key}:${selection.focus.key}`,
       isTable: true,
       isLink: false,
-      formats: $inlineFormatsOf(selection),
+      formats: $tableFormatsOf(selection),
     };
   }
   if (
@@ -372,14 +382,12 @@ export function RichTextEditorSelectionToolbar({
     labelFromProps ?? t('@astryx.richTextEditor.selectionToolbar.label');
   const formatLabels = inlineFormatLabels(t);
 
-  const [root, setRoot] = useState(() => editor.getRootElement());
   const [isEditable, setIsEditable] = useState(() => editor.isEditable());
   const [facts, setFacts] = useState<SelectionFacts | null>(() =>
     editor.getEditorState().read($readFacts),
   );
   const factsRef = useRef(facts);
-  const [isFocused, setIsFocused] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const {isFocusWithin, isDragging} = useEditorFocusAndDrag(editor);
   const [placement, setPlacement] = useState<LayerPlacement>('above');
   const surfaceRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLSpanElement | null>(null);
@@ -387,13 +395,19 @@ export function RichTextEditorSelectionToolbar({
   // The selection as it was when focus left the editor for the toolbar,
   // which Escape gives back.
   const heldSelectionRef = useRef<BaseSelection | null>(null);
-  const link = useToolbarLink(editor, {hasNewTabLinks});
+  const link = useToolbarLink(editor, {
+    anchorRef: linkButtonRef,
+    hasNewTabLinks,
+  });
   const {toggle: toggleLink} = link;
   const layer = useLayer({mode: 'context'});
   const {ref: anchorLayerTo, show: showLayer, hide: hideLayer} = layer;
 
   const isShown =
-    isEditable && facts != null && !isDragging && (isFocused || link.isOpen);
+    isEditable &&
+    facts != null &&
+    !isDragging &&
+    (isFocusWithin || link.isOpen);
 
   // Moves the anchor to the selection. A selection the page no longer shows
   // in the editor (focus is in the link field) keeps the anchor where it is.
@@ -432,7 +446,6 @@ export function RichTextEditorSelectionToolbar({
   useEffect(
     () =>
       mergeRegister(
-        editor.registerRootListener(next => setRoot(next)),
         editor.registerEditableListener(editable => setIsEditable(editable)),
         editor.registerUpdateListener(({editorState}) => {
           const next = editorState.read($readFacts);
@@ -447,65 +460,28 @@ export function RichTextEditorSelectionToolbar({
   );
 
   // Text that wraps differently (a narrower field, a font that loads) moves
-  // the selection inside the editor, so the anchor moves with it.
+  // the selection inside the editor, so the anchor moves with it. Syncs with
+  // the root element Lexical attaches.
   useEffect(() => {
-    if (root == null || typeof ResizeObserver === 'undefined') {
+    if (typeof ResizeObserver === 'undefined') {
       return;
     }
     const observer = new ResizeObserver(() =>
       placeAtSelection(factsRef.current),
     );
-    observer.observe(root);
-    return () => observer.disconnect();
-  }, [root, placeAtSelection]);
-
-  // Focus in the editor, or in anything rendered beside it (this toolbar,
-  // its link popover), keeps the toolbar.
-  useEffect(() => {
-    if (root == null) {
-      return;
-    }
-    const frame = root.parentElement ?? root;
-    const onFocusIn = (event: FocusEvent) => {
-      if (
-        root.contains(event.relatedTarget as Node | null) &&
-        surfaceRef.current?.contains(event.target as Node | null)
-      ) {
-        heldSelectionRef.current = editor
-          .getEditorState()
-          .read(() => $getSelection()?.clone() ?? null);
+    const unregister = editor.registerRootListener((next, previous) => {
+      if (previous != null) {
+        observer.unobserve(previous);
       }
-      setIsFocused(true);
-    };
-    // Where focus is going, not where it is: mid-move it is on the body.
-    const onFocusOut = (event: FocusEvent) => {
-      const next = event.relatedTarget;
-      setIsFocused(next instanceof Node && frame.contains(next));
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      // A drag in the text changes the selection: the toolbar waits for it.
-      if (event.button === 0) {
-        setIsDragging(true);
+      if (next != null) {
+        observer.observe(next);
       }
-    };
-    const onPointerUp = () => setIsDragging(false);
-    const view = root.ownerDocument.defaultView;
-    frame.addEventListener('focusin', onFocusIn);
-    frame.addEventListener('focusout', onFocusOut);
-    root.addEventListener('pointerdown', onPointerDown);
-    view?.addEventListener('pointerup', onPointerUp);
-    view?.addEventListener('pointercancel', onPointerUp);
-    const active = root.ownerDocument.activeElement;
-    // eslint-disable-next-line @eslint-react/set-state-in-effect -- reads where focus is, which only the DOM holds
-    setIsFocused(active != null && frame.contains(active));
+    });
     return () => {
-      frame.removeEventListener('focusin', onFocusIn);
-      frame.removeEventListener('focusout', onFocusOut);
-      root.removeEventListener('pointerdown', onPointerDown);
-      view?.removeEventListener('pointerup', onPointerUp);
-      view?.removeEventListener('pointercancel', onPointerUp);
+      unregister();
+      observer.disconnect();
     };
-  }, [editor, root]);
+  }, [editor, placeAtSelection]);
 
   // Shows the anchored layer while the toolbar is shown.
   useEffect(() => {
@@ -582,7 +558,7 @@ export function RichTextEditorSelectionToolbar({
         $setSelection(held.clone());
       });
     }
-    root?.focus({preventScroll: true});
+    editor.getRootElement()?.focus({preventScroll: true});
     editor.focus();
   };
 
@@ -594,6 +570,19 @@ export function RichTextEditorSelectionToolbar({
         layer.render(
           <div
             ref={surfaceRef}
+            // Focus that comes from the text keeps its selection, which
+            // Escape gives back.
+            onFocus={event => {
+              const from = event.relatedTarget;
+              if (
+                from instanceof Node &&
+                editor.getRootElement()?.contains(from) === true
+              ) {
+                heldSelectionRef.current = editor
+                  .getEditorState()
+                  .read(() => $getSelection()?.clone() ?? null);
+              }
+            }}
             // Pressing a control keeps the editor's focus and selection.
             onMouseDown={event => {
               if (!(event.target instanceof HTMLInputElement)) {
@@ -662,11 +651,6 @@ export function RichTextEditorSelectionToolbar({
                 link={link}
                 anchorRef={linkButtonRef}
                 size="sm"
-                icons={{
-                  applyLink: icon('applyLink'),
-                  removeLink: icon('removeLink'),
-                  cancel: icon('cancel'),
-                }}
               />
             )}
           </div>,

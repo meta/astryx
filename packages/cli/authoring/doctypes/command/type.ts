@@ -97,6 +97,9 @@ export interface CommandDoc extends AuthoredDocGraphFields {
   outsideProject?: CommandOutsideProject;
   /** Deprecation notice — a DEP-* id and the replacement. */
   deprecated?: string;
+  /** The commands this command is meant to replace, by command path (`theme build`). Help shows them as one line ("Will replace: astryx theme build"), and a later deprecation of those commands reads this list. It marks nothing as deprecated.
+   *  @experimental May change or be removed in a patch release. */
+  replaces?: string[];
   /** Related command names; the CLI links each to its doc. */
   related?: string[];
   /** Freeform prose/notes. */

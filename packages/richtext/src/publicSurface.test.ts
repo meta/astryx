@@ -22,6 +22,7 @@ describe('@astryxdesign/richtext public surface', () => {
         'RICHTEXT_ICON_KEYS',
         'RichTextEditor',
         'RichTextEditorAutoLinkPlugin',
+        'RichTextEditorLinkPopoverPlugin',
         'RichTextEditorSelectionToolbar',
         'RichTextEditorToolbar',
         'RichTextExtensionError',

@@ -5,6 +5,7 @@ import {execFileSync} from 'node:child_process';
 // prettier-ignore
 import {afterEach, beforeAll, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -28,8 +29,19 @@ beforeAll(() => ensureCoreBuilt(), 200_000);
 beforeEach(() => (dirs = []));
 // prettier-ignore
 afterEach(() => { for (const dir of dirs) fs.rmSync(dir, {recursive: true, force: true}); });
+const require = createRequire(import.meta.url);
+const TSC = require.resolve('typescript/bin/tsc');
+// A fixture lives in the OS temp directory: scanners walk the CLI's source
+// tree, and a fixture there can vanish under them. Its real path counts,
+// because the temp directory can be a link (macOS: /var to /private/var).
+// Links give the fixture's imports the packages that the CLI resolves.
+const FIXTURE_LINKS = {
+  '@astryxdesign': path.join(CLI_ROOT, 'node_modules/@astryxdesign'),
+  react: path.dirname(require.resolve('react/package.json')),
+  '@types/react': path.dirname(require.resolve('@types/react/package.json')),
+};
 // prettier-ignore
-function makeDir() { const dir = fs.mkdtempSync(path.join(CLI_ROOT, '.tmp-theme-family-')); dirs.push(dir); fs.mkdirSync(path.join(dir, 'themes'), {recursive: true}); fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}\n'); return dir; }
+function makeDir() { const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-theme-family-'))); dirs.push(dir); fs.mkdirSync(path.join(dir, 'themes'), {recursive: true}); fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}\n'); for (const [name, target] of Object.entries(FIXTURE_LINKS)) { const link = path.join(dir, 'node_modules', name); fs.mkdirSync(path.dirname(link), {recursive: true}); fs.symlinkSync(target, link, 'dir'); } return dir; }
 function writeFamily(dir) {
   const themes = path.join(dir, 'themes');
   const hidden = path.join(themes, '.hidden');
@@ -211,8 +223,8 @@ describe('themeBuildFamily()', () => {
       }),
     );
     execFileSync(
-      'pnpm',
-      ['exec', 'tsc', '--project', 'tsconfig.json', '--noEmit'],
+      process.execPath,
+      [TSC, '--project', 'tsconfig.json', '--noEmit'],
       {cwd: path.join(first, 'themes'), stdio: 'pipe'},
     );
     // prettier-ignore
