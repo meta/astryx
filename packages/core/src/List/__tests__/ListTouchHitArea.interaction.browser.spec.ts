@@ -320,9 +320,11 @@ test('under a finger, a row’s end control keeps its taps, and the interactive 
       .first()
       .evaluate(row => getComputedStyle(row).transform),
   ).not.toBe('none');
-  expect(await owner(above.bottom - 0.5)).toBe('Network');
-  expect(await owner(above.bottom + above.layer.bottom + 0.5)).toBe('Wi-Fi');
-  expect(await owner(below.top + 0.5)).toBe('Bluetooth');
+  // The switch's own grown target can lie over the rows' facing edges. A
+  // tap there nearer a row does nothing (utils/touchHitArea.ts), so each
+  // row keeps the middle of its box.
+  expect(await owner((above.top + above.bottom) / 2)).toBe('Network');
+  expect(await owner((below.top + below.bottom) / 2)).toBe('Bluetooth');
   // The browser hit-tests the control there, and a real tap toggles it,
   // with no tap reaching the rows beside it.
   expect(
@@ -387,13 +389,15 @@ test('under a finger, a row’s band takes no tap from a control near the list: 
       {x, y},
     );
   // The button sits 4 px after the list. It paints after the list, so it
-  // keeps every point of its own box, over the last row's band.
+  // keeps every point of its own box, over the last row's band. Its own
+  // band can lie over the row's bottom edge, where a tap nearer the row
+  // does nothing (utils/touchHitArea.ts).
   expect(more.top - last.bottom, JSON.stringify({rows, more})).toBeCloseTo(
     4,
     0,
   );
   expect(await hit(more.x, more.top + 0.5)).toBe('Load more');
-  expect(await hit(last.x, last.bottom + 0.5)).toBe('Bluetooth');
+  expect(await hit(last.x, (last.top + last.bottom) / 2)).toBe('Bluetooth');
   // A finger on the header's button, even where the first row's band lies
   // over it, never activates the row: the button is nearer.
   await page.evaluate(() => {

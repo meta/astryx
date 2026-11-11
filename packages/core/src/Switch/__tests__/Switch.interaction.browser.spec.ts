@@ -1032,7 +1032,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     await expect(input).toBeChecked();
   });
 
-  test('under a coarse pointer a tap on the hit area that lies on a link beside it does nothing, and a tap nearer the switch toggles it', async ({
+  test('under a coarse pointer the hit area grows to 44 px on every side: a tap on the link beside it is the link’s, and a tap nearer the switch toggles it', async ({
     page,
   }) => {
     const {driver, input} = await openSwitch(
@@ -1067,14 +1067,16 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     }
     const gap = boxes.link.left - boxes.switch.right;
     expect(gap).toBeGreaterThan(0);
-    // The hit area grows to 44 px on every side, over the link's start.
-    expect(boxes.hit.right).toBeGreaterThan(boxes.link.left);
+    // The hit area grows to 44 px on every side. Here it stops short of the
+    // link; where it lies over a neighbour, a tap nearer that neighbour does
+    // nothing (utils/touchHitArea.ts).
     expect(boxes.hit.bottom - boxes.hit.top).toBeCloseTo(44, 0);
+    expect(boxes.hit.right).toBeLessThanOrEqual(boxes.link.left);
     const y = (boxes.switch.top + boxes.switch.bottom) / 2;
-    // 2 px inside the link: the link is nearer, so the tap does nothing.
+    // 2 px inside the link: the link's.
     await tapForClick(driver, {x: boxes.link.left + 2, y});
     await expect(input).not.toBeChecked();
-    await expect(page).not.toHaveURL(/#wifi-details$/);
+    await expect(page).toHaveURL(/#wifi-details$/);
     // 1.5 px from the switch: the switch's.
     await tapForClick(driver, {x: boxes.switch.right + 1.5, y});
     await expect(input).toBeChecked();

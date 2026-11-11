@@ -7,7 +7,7 @@
  * @output Real-browser evidence that a toggle group tracks a held pointer
  *   across its toggles (`family:action-groups` FR1–FR5). A slide toggles
  *   only the lifted toggle, and a lift outside toggles nothing. A finger's
- *   target reaches 44 px through the group's hit layer. Under a mouse, only
+ *   target reaches 44 px through each toggle's touch band. Under a mouse, only
  *   the highlighted toggle looks pressed. The keyboard is unchanged.
  * @position Beside ToggleButtonGroupTracking.test.tsx (the unit evidence)
  */
@@ -244,7 +244,7 @@ test("under a finger the pixels on a toggle's own edges are the toggle's: the gr
   );
 });
 
-test("under a finger an enabled group's root is positioned: a positioned child places against the group, and a child's z-index still beats a lower sibling's", async ({
+test("under a finger an enabled group's root keeps its stacking, as with a mouse: each toggle draws its own touch band", async ({
   page,
 }) => {
   for (const story of [STORY, 'core-togglebutton--group-single']) {
@@ -255,10 +255,10 @@ test("under a finger an enabled group's root is positioned: a positioned child p
       await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
     ).toBe(true);
     expect(await stackingOf(group)).toEqual({
-      position: 'relative',
+      position: 'static',
       isolation: 'auto',
       siblingOverChild: true,
-      childPlacesAgainstGroup: true,
+      childPlacesAgainstGroup: false,
       childAboveSibling: true,
     });
   }
