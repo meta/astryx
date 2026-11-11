@@ -903,6 +903,25 @@ export function registerExperimentalTheme(group, program) {
     }).allowExcessArguments(false),
     previewAppDoc,
   );
+  {
+    // A folder name that starts with "-" reads as an option: say how to
+    // pass it.
+    const app = /** @type {any} */ (
+      preview.commands.find(
+        (/** @type {any} */ x) =>
+          x.name() === previewAppDoc.name.split(' ').pop(),
+      )
+    );
+    const unknown = app?.unknownOption?.bind(app);
+    if (app && unknown)
+      app.unknownOption = (/** @type {string} */ flag) =>
+        /^-[^-]/.test(flag) && flag.length > 2
+          ? app.error(
+              `error: unknown option '${flag}'. A folder name that starts with "-" goes after --: ${PREFIX} preview app -- ${flag}`,
+              {code: 'commander.unknownOption'},
+            )
+          : unknown(flag);
+  }
 
   explained(
     defineCommand(preview, previewListDoc, {

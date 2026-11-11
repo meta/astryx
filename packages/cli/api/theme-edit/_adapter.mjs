@@ -341,17 +341,72 @@ function absolute(result, root, from) {
 async function inProject(options, lock, fn, bestEffort = false) {
   const from = options.cwd ?? process.cwd();
   const o = atRoot(options);
-  // Without the lock (it cannot be taken), a read-only command writes
-  // nothing.
-  const r = lock
-    ? await withLock(
-        o.cwd,
-        lock,
-        locked => fn(locked ? o : {...o, readOnly: true}),
-        bestEffort,
+  try {
+    // Without the lock (it cannot be taken), a read-only command writes
+    // nothing.
+    const r = lock
+      ? await withLock(
+          o.cwd,
+          lock,
+          locked => fn(locked ? o : {...o, readOnly: true}),
+          bestEffort,
+        )
+      : await fn(o);
+    return absolute(r, o.cwd, from);
+  } catch (e) {
+    throw fromCaller(e, o.cwd, from);
+  }
+}
+
+/**
+ * A refusal whose suggested preview commands name folders as the person
+ * types them where they ran the command: a `--path` and a `preview app`
+ * folder, read from the project root, are written from the caller's
+ * folder.
+ * @param {any} e
+ * @param {string} root
+ * @param {string} from
+ */
+function fromCaller(e, root, from) {
+  if (path.resolve(from) === root || !Array.isArray(e?.suggestions)) return e;
+  const ARG = String.raw`('(?:[^']|'\\'')*'|"[^"]*"|[^\s'"]+)`;
+  /** @param {string} v */
+  const unquote = v =>
+    v.startsWith("'")
+      ? v.slice(1, -1).replace(/'\\''/g, "'")
+      : v.startsWith('"')
+        ? v.slice(1, -1)
+        : v;
+  /** @param {string} v */
+  const rel = v =>
+    /^<.*>$/.test(v)
+      ? v
+      : quoteCommandArgument(
+          path.relative(path.resolve(from), path.resolve(root, unquote(v))) ||
+            '.',
+        );
+  for (const s of e.suggestions) {
+    if (typeof s?.name !== 'string') continue;
+    if (!s.name.startsWith('astryx experimental theme preview ')) continue;
+    s.name = s.name
+      .replace(
+        new RegExp(`(--path )${ARG}`, 'g'),
+        (
+          /** @type {string} */ _m,
+          /** @type {string} */ flag,
+          /** @type {string} */ v,
+        ) => flag + rel(v),
       )
-    : await fn(o);
-  return absolute(r, o.cwd, from);
+      .replace(
+        new RegExp(`^(astryx experimental theme preview app )${ARG}`),
+        (
+          /** @type {string} */ _m,
+          /** @type {string} */ cmd,
+          /** @type {string} */ v,
+        ) => cmd + rel(v),
+      );
+  }
+  return e;
 }
 
 /**

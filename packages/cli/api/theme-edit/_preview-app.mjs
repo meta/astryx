@@ -1244,6 +1244,16 @@ function commitPreview(cwd, dir, data, writes, deletes, again) {
           old,
           temps: [...temps.values()].map(t => path.relative(dir, t)),
           deletes,
+          // What each file to delete holds now: after a stop, it goes only
+          // when it still holds that.
+          deleteHashes: Object.fromEntries(
+            deletes.flatMap(rel => {
+              const text = before(
+                confined(path.join(dir, rel), dir, 'a preview file'),
+              );
+              return text ? [[rel, contentHash(text)]] : [];
+            }),
+          ),
         },
         null,
         2,
@@ -1264,6 +1274,7 @@ function commitPreview(cwd, dir, data, writes, deletes, again) {
       if (was == null) continue;
       touched.push({file: current, before: was});
       fs.rmSync(current);
+      commitStep('delete');
     }
     step = 'written';
     current = path.join(dir, PREVIEW_DATA);
@@ -1316,6 +1327,17 @@ export function stopPreviewCommitAt(when) {
   stopAt = when;
 }
 
+/** Whether a process is running here. @param {number} pid */
+function alive(pid) {
+  if (pid === process.pid) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return /** @type {any} */ (e)?.code === 'EPERM';
+  }
+}
+
 /** @param {string} step */
 function commitStep(step) {
   if (stopAt?.(step)) throw STOPPED;
@@ -1342,7 +1364,23 @@ function recoverPreview(cwd, dir) {
     p = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
   } catch (e) {
     if (/** @type {any} */ (e)?.code === 'ENOENT') return null;
-    // Unreadable: the change is treated as never started.
+    // Unreadable: the change is treated as never started. Its temp files
+    // are found by the names only the editor makes, when their process is
+    // gone.
+    for (const sub of ['', PAGES_DIR, LEGACY_PAGES_DIR]) {
+      /** @type {string[]} */
+      let names;
+      try {
+        names = fs.readdirSync(path.join(dir, sub));
+      } catch {
+        continue;
+      }
+      for (const name of names) {
+        const m = /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(name);
+        if (m && !alive(Number(m[1])))
+          fs.rmSync(path.join(dir, sub, name), {force: true});
+      }
+    }
     fs.rmSync(pendingFile, {force: true});
     return `removed ${shown(cwd, pendingFile)}, a damaged step record of a preview change that was stopped`;
   }
@@ -1357,6 +1395,19 @@ function recoverPreview(cwd, dir) {
     return null;
   }
   const old = p.old && !previewProblem(p.old) ? p.old : null;
+  // The route decides which way the change goes: a page.tsx that is not
+  // the new one means the route never changed, so the change is undone and
+  // the record stays as it was; else it is finished.
+  const route = (() => {
+    try {
+      return fs.readFileSync(inside('page.tsx'));
+    } catch {
+      return null;
+    }
+  })();
+  const newRoute = record.hashes?.['page.tsx'];
+  if (newRoute && !(route && hashMatches(route, newRoute)))
+    return undoStopped(cwd, dir, record, old);
   /** @param {string} rel */
   const onDisk = rel => {
     try {
@@ -1365,12 +1416,7 @@ function recoverPreview(cwd, dir) {
       return null;
     }
   };
-  /** @param {Buffer} text @param {string | undefined} h */
-  const matches = (text, h) =>
-    !!h &&
-    (h.startsWith('v2:')
-      ? contentHash(text) === h
-      : oldContentHash(text) === h || digest(text) === h);
+  const matches = hashMatches;
   const hashes = {...record.hashes};
   for (const rel of Object.keys(hashes)) {
     const text = onDisk(rel);
@@ -1380,8 +1426,9 @@ function recoverPreview(cwd, dir) {
       hashes[rel] = old.hashes[rel];
     else delete hashes[rel];
   }
-  // A page whose new file never landed keeps its old file.
-  for (const page of record.pages) {
+  // A page whose new file never landed keeps its old file, or else leaves
+  // the record, so the record never lists a page the route cannot show.
+  for (const page of [...record.pages]) {
     const rel = `${page.file}.tsx`;
     if (onDisk(rel)) continue;
     const was = old?.pages.find((/** @type {any} */ x) => x.id === page.id);
@@ -1393,10 +1440,19 @@ function recoverPreview(cwd, dir) {
       );
       delete hashes[rel];
       if (old.hashes?.[oldRel]) hashes[oldRel] = old.hashes[oldRel];
+    } else {
+      record.pages = record.pages.filter((/** @type {any} */ x) => x !== page);
+      record.files = record.files.filter(
+        (/** @type {string} */ f) => f !== rel,
+      );
+      delete hashes[rel];
     }
   }
-  // An old file being removed goes when the preview wrote it, unchanged,
-  // and no page of the record uses it now.
+  // An old file the change was removing goes when it still holds what it
+  // held when the change planned it, and no page of the record uses it now;
+  // one that changed since is kept and named.
+  /** @type {string[]} */
+  const left = [];
   for (const rel of Array.isArray(p.deletes) ? p.deletes : []) {
     if (typeof rel !== 'string' || record.files.includes(rel)) continue;
     const text = onDisk(rel);
@@ -1405,8 +1461,13 @@ function recoverPreview(cwd, dir) {
     // one holds the same text.
     const moved = /^pages\/([a-z0-9][a-z0-9-]*)\.tsx$/.exec(rel);
     const copy = moved && onDisk(`${PAGES_DIR}/${moved[1]}.tsx`);
-    if (matches(text, old?.hashes?.[rel]) || (copy && copy.equals(text)))
+    if (
+      matches(text, p.deleteHashes?.[rel]) ||
+      matches(text, old?.hashes?.[rel]) ||
+      (copy && copy.equals(text))
+    )
       fs.rmSync(inside(rel));
+    else left.push(shown(cwd, inside(rel)));
   }
   record.hashes = hashes;
   writeWhole(
@@ -1414,7 +1475,66 @@ function recoverPreview(cwd, dir) {
     `${JSON.stringify(record, null, 2)}\n`,
   );
   fs.rmSync(pendingFile, {force: true});
-  return `finished a preview change that was stopped part way (${shown(cwd, dir) || '.'}/${PENDING})`;
+  tidyPageFolders(dir);
+  return `finished a preview change that was stopped part way (${shown(cwd, dir) || '.'}/${PENDING})${left.length ? `; kept ${left.join(', ')}, which changed after the change began: delete ${left.length > 1 ? 'them' : 'it'} yourself if ${left.length > 1 ? 'they are' : 'it is'} the preview's` : ''}`;
+}
+
+/**
+ * Whether a file's text matches a recorded hash, of any kind a release
+ * wrote.
+ * @param {Buffer} text
+ * @param {string | undefined} h
+ */
+function hashMatches(text, h) {
+  return (
+    !!h &&
+    (h.startsWith('v2:')
+      ? contentHash(text) === h
+      : oldContentHash(text) === h || digest(text) === h)
+  );
+}
+
+/**
+ * Undo a preview change stopped before its route landed: the record stays
+ * as it was, each new file of the change that landed and the old record
+ * does not list goes (only when it is as the change wrote it), and a file
+ * both records list that now holds the change's text keeps that text's
+ * hash, so it is not taken for a hand edit.
+ * @param {string} cwd
+ * @param {string} dir
+ * @param {PreviewData} record the record the change was writing
+ * @param {PreviewData | null} old the record before it
+ * @returns {string}
+ */
+function undoStopped(cwd, dir, record, old) {
+  const inside = (/** @type {string} */ rel) =>
+    confined(path.join(dir, rel), dir, PENDING);
+  /** @param {string} rel */
+  const onDisk = rel => {
+    try {
+      return fs.readFileSync(inside(rel));
+    } catch {
+      return null;
+    }
+  };
+  const keep = new Set(old?.files ?? []);
+  const hashes = {...old?.hashes};
+  for (const [rel, h] of Object.entries(record.hashes ?? {})) {
+    const text = onDisk(rel);
+    if (!text || !hashMatches(text, h)) continue;
+    if (keep.has(rel)) hashes[rel] = h;
+    else if (rel !== PREVIEW_DATA) fs.rmSync(inside(rel));
+  }
+  if (old) {
+    old.hashes = hashes;
+    writeWhole(
+      path.join(dir, PREVIEW_DATA),
+      `${JSON.stringify(old, null, 2)}\n`,
+    );
+  }
+  fs.rmSync(path.join(dir, PENDING), {force: true});
+  tidyPageFolders(dir);
+  return `undid a preview change that was stopped before its route was written (${shown(cwd, dir) || '.'}/${PENDING})`;
 }
 
 /**
@@ -1694,14 +1814,16 @@ export async function refreshPreviewRoute(cwd, slug) {
     } catch {
       continue;
     }
-    // A change stopped part way is finished by the next preview command.
-    if (
-      !data ||
-      data.theme !== slug ||
-      !data.files.includes('page.tsx') ||
-      fs.existsSync(path.join(dir, PENDING))
-    )
+    if (!data || data.theme !== slug || !data.files.includes('page.tsx'))
       continue;
+    // A change stopped part way is finished by the next preview command;
+    // until then the preview is left as it is, and the result says so.
+    if (fs.existsSync(path.join(dir, PENDING))) {
+      stale.push(
+        `${shownDir(cwd, dir)}/ (a preview change was stopped part way; ${PREVIEW} add finishes it and brings the preview up to date)`,
+      );
+      continue;
+    }
     const writes = (
       await routeWrites(cwd, dir, data, await routeTheme(cwd, dir, data))
     ).filter(w => {
@@ -2054,8 +2176,19 @@ function installed(cwd, pkg) {
  * @param {string[]} pkgs
  */
 function addCommandOf(cwd, pkgs) {
-  const pm = installCommandOf(cwd).split(' ')[0];
+  const pm = packageManagerOf(cwd);
   return `${pm === 'npm' ? 'npm install' : `${pm} add`} ${pkgs.join(' ')}`;
+}
+
+/**
+ * The package manager the app uses, as every command finds it (workspaces,
+ * the packageManager field, lock files); npm when nothing says (the finder
+ * gives `npx` then, which is not a package manager).
+ * @param {string} cwd
+ */
+function packageManagerOf(cwd) {
+  const pm = detectPackageManager(cwd);
+  return pm === 'npx' ? 'npm' : pm;
 }
 
 /**
@@ -2115,9 +2248,7 @@ function pageNeeds(cwd, source) {
 
 /** The command that installs what the package.json names. @param {string} cwd */
 function installCommandOf(cwd) {
-  // The package manager the app uses, as every command finds it
-  // (workspaces, the packageManager field, lock files).
-  return `${detectPackageManager(cwd)} install`;
+  return `${packageManagerOf(cwd)} install`;
 }
 
 /**
@@ -2292,6 +2423,41 @@ async function pageAgain(cwd, id, defaultPage) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAddResponse>}
  */
 export async function themeEditPreviewAdd(description, options = {}) {
+  return reportingRecovery(box => addPreview(description, options, box));
+}
+
+/**
+ * Run a preview command that may first finish a change stopped part way:
+ * a refusal after that says what the recovery wrote, in place of "Nothing
+ * was changed".
+ * @template T
+ * @param {(box: {note: string | null}) => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function reportingRecovery(fn) {
+  /** @type {{note: string | null}} */
+  const box = {note: null};
+  try {
+    return await fn(box);
+  } catch (e) {
+    const err = /** @type {any} */ (e);
+    if (box.note && typeof err?.message === 'string' && err.code)
+      err.message = err.message.replace(
+        /Nothing was changed\.$/,
+        `Before that, it ${box.note}; nothing else was changed.`,
+      );
+    throw e;
+  }
+}
+
+/**
+ * {@link themeEditPreviewAdd}, with the note of a recovery in `box`.
+ * @param {string | undefined} description
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewAddOptions} options
+ * @param {{note: string | null}} box
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAddResponse>}
+ */
+async function addPreview(description, options, box) {
   const {cwd = process.cwd()} = options;
   if (isOutsideProject(cwd))
     refuse(
@@ -2380,6 +2546,7 @@ export async function themeEditPreviewAdd(description, options = {}) {
   const at = previewDir(cwd, options.path, {write: true, retry});
   const recovered = recoverPreview(cwd, at.dir);
   if (recovered) notes.push(recovered);
+  box.note = recovered;
   const existing = readPreview(cwd, at.dir, pf);
   /** @type {PreviewData} */
   const data = existing ?? {version: 1, theme: null, pages: [], files: []};
@@ -2908,6 +3075,17 @@ export async function themeEditPreviewList(options = {}) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewRemoveResponse>}
  */
 export async function themeEditPreviewRemove(page, options = {}) {
+  return reportingRecovery(box => removePreview(page, options, box));
+}
+
+/**
+ * {@link themeEditPreviewRemove}, with the note of a recovery in `box`.
+ * @param {string | undefined} page
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewListOptions} options
+ * @param {{note: string | null}} box
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewRemoveResponse>}
+ */
+async function removePreview(page, options, box) {
   const {cwd = process.cwd()} = options;
   requireProject(cwd);
   const pf =
@@ -2916,13 +3094,35 @@ export async function themeEditPreviewRemove(page, options = {}) {
     `${PREVIEW} remove${page != null ? ` ${quoteCommandArgument(page)}` : ''}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
   const at = previewDir(cwd, options.path, {retry});
   const recovered = recoverPreview(cwd, at.dir);
+  box.note = recovered;
   const data = readPreview(cwd, at.dir, pf);
-  if (!data)
+  if (!data) {
+    // A folder that holds the app takes no preview: the way on is the
+    // preview elsewhere, or a new one in its own folder.
+    /** @type {string | null} */
+    let other = null;
+    if (holdsApp(cwd, at.dir))
+      try {
+        const d = previewDir(cwd, undefined, {optional: true, retry})?.dir;
+        if (d && d !== at.dir && fs.existsSync(path.join(d, PREVIEW_DATA)))
+          other = d;
+      } catch {
+        // Several previews, or none: add is the way on.
+      }
     refuse(
       E.ERR_NOT_FOUND,
       `There is no theme preview in ${shownDir(cwd, at.dir)}/ (no ${PREVIEW_DATA}).`,
-      {run: [`${PREVIEW} add${pf}`]},
+      {
+        run: [
+          holdsApp(cwd, at.dir)
+            ? other
+              ? `${PREVIEW} remove${page != null ? ` ${quoteCommandArgument(page)}` : ''}  # the preview in ${shownDir(cwd, other)}/`
+              : `${PREVIEW} add`
+            : `${PREVIEW} add${pf}`,
+        ],
+      },
     );
+  }
   const folder = shownDir(cwd, at.dir);
   // theme-preview.json is a file anyone can edit: every path in it must
   // stay in the route folder before anything is removed.
