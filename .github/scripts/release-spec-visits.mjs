@@ -61,6 +61,9 @@ export function releaseSpecs(listed, read) {
 
 /** A page a spec opens on the served Storybook, other than a story. */
 const PAGE = /origin\}\/(?!iframe\.html)([\w.-]+)/g;
+/** A spec opens the sandbox app, whose paths name no component folder. */
+const OPENS_SANDBOX =
+  /apps\/sandbox\/|\bserveSandbox\b|\bsandbox\.origin\b|\bSANDBOX_(?:URL|ORIGIN)\b/;
 /** A spec opens Storybook stories, by id. */
 const OPENS_STORIES = /iframe\.html\?id=/;
 /** A spec's extra visits: `// @visits Markdown Citation`. */
@@ -158,6 +161,10 @@ export function specVisits(spec, {listed, read, stories, map}) {
       unresolved.push(`no story file names the component of ${id}--`);
     for (const folder of subjects) if (folder) folders.add(folder);
   }
+  if (texts.some(text => OPENS_SANDBOX.test(text)))
+    unresolved.push(
+      `${spec} opens the sandbox app, whose paths name no component folder`,
+    );
   if (ids.size === 0 && texts.some(text => OPENS_STORIES.test(text)))
     unresolved.push(`${spec} opens a story whose id it does not name`);
   for (const text of texts)

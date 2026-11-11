@@ -10,9 +10,19 @@
  */
 
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
+import {officialCitation} from './_palette.mjs';
 
 /** Only these token types may differ between light and dark. */
 export const MODAL = new Set(['color', 'shadow']);
+
+/**
+ * Whether a token is a color by its name, as Core's color groups and the
+ * token table type it: `--color-*`, `--syntax-*` and `--focus-outline-color`.
+ * Settings are checked by it where no installed Core is read.
+ * @param {string} name
+ */
+export const isColorToken = name =>
+  /^--color-|^--syntax-|^--focus-outline-color$/.test(name);
 
 /** Tokens a component may read only in some states: never refused globally. */
 /**
@@ -60,11 +70,10 @@ export function makeCompiler(project, parts) {
   put(groupVars(core.easeVars), 'easing');
   for (const k of Object.keys(core.tokenDefaults ?? {})) {
     if (TYPE[k]) continue;
-    if (/^--color-|^--syntax-/.test(k)) TYPE[k] = 'color';
+    if (isColorToken(k)) TYPE[k] = 'color';
     else if (/^--font-family/.test(k)) TYPE[k] = 'font';
     else if (/^--font-weight|^--text-.*-weight$/.test(k)) TYPE[k] = 'number';
     else if (/^--shadow/.test(k)) TYPE[k] = 'shadow';
-    else if (/^--focus-outline-color/.test(k)) TYPE[k] = 'color';
     else if (
       /^--(radius|spacing|size|text-.*-size|border-width|focus-outline-(width|offset))/.test(
         k,
@@ -401,9 +410,7 @@ export function makeCompiler(project, parts) {
       const bgAlpha = alphaOf(bg);
       const back = parseColor(bg);
       const under =
-        bgAlpha === 0
-          ? ground
-          : back && compositeOver(back, bgAlpha, ground);
+        bgAlpha === 0 ? ground : back && compositeOver(back, bgAlpha, ground);
       const top = parseColor(fg);
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
@@ -441,6 +448,21 @@ export function makeCompiler(project, parts) {
         }
         const r = ratio(pair[0], pair[1]);
         if (r >= 4.5) continue;
+        // Citation text on the accent tint is held to the bar the color
+        // mapping picks the tint by: what the official neutral theme's own
+        // pair reads (under 4.5:1 in dark), so a tint it picked is never
+        // reported against it.
+        if (
+          p.fg.tokens[0] === '--color-text-secondary' &&
+          p.bg.tokens[0] === '--color-accent-muted' &&
+          r >=
+            Math.min(
+              4.5,
+              officialCitation(m === 'dark' ? 'dark' : 'light') ?? 4.5,
+            ) -
+              0.005
+        )
+          continue;
         const was = drawn(baseValue(p, 'fg', m), baseValue(p, 'bg', m), m);
         if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
         const key = `${p.text}|${fg}|${bg}|${m}`;

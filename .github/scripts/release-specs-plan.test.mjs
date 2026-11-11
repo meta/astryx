@@ -174,6 +174,8 @@ describe('planReleaseSpecs', () => {
         "// @pr-a11y release-only\nconst id = 'core-nothing--default';\n",
       'a story id it never names':
         '// @pr-a11y release-only\nawait page.goto(`${storybook.origin}/iframe.html?id=${id}`);\n',
+      'a sandbox page':
+        "// @pr-a11y release-only\nconst id = 'core-link-navigation--destinations';\nawait page.goto(SANDBOX_URL + '/components/link');\n",
       'a @visits name no folder holds':
         "// @pr-a11y release-only\n// @visits Nothing\nconst id = 'core-link-navigation--destinations';\n",
     };

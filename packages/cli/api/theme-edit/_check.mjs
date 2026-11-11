@@ -26,6 +26,7 @@ import {
   LIKE,
   HOW,
   OPEN_FONTS,
+  CSS_WIDE_KEYWORDS,
   P,
   SPACING,
   TEXT_SIZE,
@@ -1028,6 +1029,34 @@ export function checkSetting(
       // (O'Reilly Sans); the dial quotes it when it writes it.
       const family = (/** @type {string} */ f) =>
         /^"[^"]+"$/.test(f) || /^'[^']+'$/.test(f) || /^[^"',\s][^"]*$/.test(f);
+      // A CSS-wide keyword inside a family list makes the browser drop
+      // the whole declaration.
+      const keyword = s.value
+        .split(',')
+        .map(f =>
+          f
+            .trim()
+            .replace(/^["']|["']$/g, '')
+            .toLowerCase(),
+        )
+        .find(f => CSS_WIDE_KEYWORDS.includes(f));
+      if (keyword)
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${keyword}" is a CSS keyword, not a font: inside a font list it makes the browser drop the whole font. Give a preset or a family name; to go back to the base theme's font, undo the font setting.`,
+          {
+            run: [
+              `${P} set ${slug} font system${s.on ? ` --on ${s.on}` : ''}`,
+              `${P} undo ${slug} font${s.on ? ` --on ${s.on}` : ''}`,
+            ],
+          },
+        );
+      if (s.value.split(',').some(f => f.trim().length > 100))
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          'A font family name is at most 100 characters.',
+          {run: [`${P} set ${slug} font inter`]},
+        );
       if (
         !s.value ||
         /[;{}<>\\\n]/.test(s.value) ||

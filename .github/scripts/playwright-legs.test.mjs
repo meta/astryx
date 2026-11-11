@@ -218,6 +218,17 @@ describe('storyComponentFolders', () => {
   };
   const SPEC = 'packages/core/src/Menu/__tests__/A.interaction.browser.spec.ts';
 
+  it('runs the full suite when a spec opens a story id no story file makes, as after a renamed title', () => {
+    expect(
+      scoped({
+        'packages/core/src/Menu/Menu.tsx': 'export const Menu = 1;\n',
+        [SPEC]: "await page.goto('/iframe.html?id=core-menu--default');\n",
+        'apps/storybook/stories/X.stories.tsx':
+          "import {Menu} from '@astryxdesign/core/Menu';\nexport default {title: 'Core/Menu Renamed'};\n",
+      }),
+    ).toBe(null);
+  });
+
   it('runs the full suite for a story with no id, or a whole-prefix template that could name it', () => {
     const menu = {
       'packages/core/src/Menu/Menu.tsx': 'export const Menu = 1;\n',

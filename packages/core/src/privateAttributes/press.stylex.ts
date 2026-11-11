@@ -369,14 +369,8 @@ export const rowPressPaintStyles = stylex.create({
   checkboxRow: {
     '--_checkbox-row-press-paint': {
       default: 'none',
-      ':is([data-astryx-press="on"])': {
-        default: 'none',
-        '@media (pointer: coarse)': 'var(--_press-paint-image)',
-      },
-      ':is([data-astryx-press="fading"])': {
-        default: 'none',
-        '@media (pointer: coarse)': 'var(--_press-paint-image)',
-      },
+      ':is([data-astryx-press="on"])': 'var(--_press-paint-image)',
+      ':is([data-astryx-press="fading"])': 'var(--_press-paint-image)',
     },
   },
 });
