@@ -15,7 +15,13 @@ import {DIRECT, GROUPS, HOW} from './_tables.mjs';
 export const MODAL = new Set(['color', 'shadow']);
 
 /** Tokens a component may read only in some states: never refused globally. */
-const SOFT = /^--(color-data|syntax|duration|ease|z-|layer|breakpoint)/;
+/**
+ * Tokens no catalog part is recorded reading, though Core reads them: code
+ * highlighting, the display text sizes and the colored icons read them only
+ * under a variant or in a global stylesheet. Never refused as unread.
+ */
+const SOFT =
+  /^--(color-data|color-syntax|syntax|duration|ease|z-|layer|breakpoint|text-display-\d|color-icon-[a-z]+$)/;
 
 /** @typedef {{token: string, props: string[], when: string[]}} Read */
 /** @typedef {{message: string, run: string[], also: string[], soft?: boolean}} CheckFailure */
@@ -54,7 +60,7 @@ export function makeCompiler(project, parts) {
     if (TYPE[k]) continue;
     if (/^--color-|^--syntax-/.test(k)) TYPE[k] = 'color';
     else if (/^--font-family/.test(k)) TYPE[k] = 'font';
-    else if (/^--font-weight/.test(k)) TYPE[k] = 'number';
+    else if (/^--font-weight|^--text-.*-weight$/.test(k)) TYPE[k] = 'number';
     else if (/^--shadow/.test(k)) TYPE[k] = 'shadow';
     else if (/^--focus-outline-color/.test(k)) TYPE[k] = 'color';
     else if (

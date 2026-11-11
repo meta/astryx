@@ -35,12 +35,16 @@ import {
   nearest,
   partDefault,
   partsOf,
+  q,
+  withoutBadValues,
   readHistory,
   refuse,
+  settingsProblem,
   resolvedTokens,
   shown,
   slugOk,
   themeFiles,
+  buildCurrent,
   buildTheme,
 } from './_settings.mjs';
 import {checkSetting} from './_check.mjs';
@@ -83,13 +87,37 @@ const E = ERROR_CODES;
 export async function themeEditNew(name, options = {}) {
   const {cwd = process.cwd(), like, png = false, settings = {}} = options;
   requireProject(cwd);
-  if (!slugOk(name))
+  if (!slugOk(name)) {
+    const fixed =
+      String(name ?? '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^[^a-z]+/, '')
+        .replace(/-+$/, '')
+        .slice(0, 64) || 'my-theme';
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `"${name ?? ''}" is not a theme name (lowercase letters, digits, dashes, starting with a letter).`,
-      {run: [`${P} new my-theme`]},
+      `"${String(name ?? '').slice(0, 80)}" is not a theme name (lowercase letters, digits and dashes, starting with a letter, 64 characters at most).`,
+      {run: [`${P} new ${fixed}`]},
     );
+  }
   const f = themeFiles(cwd, name);
+  // A link or a file where the theme goes is never written through or
+  // replaced.
+  for (const [p, what] of /** @type {const} */ ([
+    [f.root, 'themes/'],
+    [f.dir, `themes/${name}`],
+  ])) {
+    const st = fs.lstatSync(p, {throwIfNoEntry: false});
+    if (st && (st.isSymbolicLink() || !st.isDirectory()))
+      refuse(
+        E.ERR_FILE_EXISTS,
+        `${what} is ${st.isSymbolicLink() ? 'a link' : 'a file'}, so a theme is not made there.`,
+        {run: [`${P} new ${name}-copy`]},
+      );
+  }
   if (fs.existsSync(f.settings))
     refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.`, {
       run: [`${P} show ${name}`, `${P} set ${name} base <theme>`],
@@ -98,13 +126,16 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `themes/${name}/ already holds files this command did not make; choose another name.`,
-      {run: [`${P} new ${name}-2`]},
+      {run: [`${P} new ${name}-copy`]},
     );
-  if (like && !LIKE.includes(like))
+  if (like != null && !LIKE.includes(like))
     refuse(
       E.ERR_THEME_BAD_VALUE,
-      `--like takes ${LIKE.join(', ')}, not "${like}".`,
-      {didYouMean: nearest(like, LIKE)},
+      `--like takes a built-in theme (${LIKE.join(', ')}), not "${like}"${fs.existsSync(themeFiles(cwd, String(like)).settings) ? `; ${like} is a theme made here, and a new theme builds only on a built-in one` : ''}.`,
+      {
+        didYouMean: nearest(String(like).toLowerCase(), LIKE),
+        run: [`${P} new ${name}`],
+      },
     );
   const ctx = await context(cwd);
   /** @type {import('./_settings.mjs').ThemeData} */
@@ -145,7 +176,7 @@ export async function themeEditNew(name, options = {}) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @param {Record<string, string | undefined>} settings
+ * @param {Record<string, string | string[] | undefined>} settings
  */
 function applyNewSettings(ctx, slug, data, settings) {
   const given = Object.entries(settings).filter(([, v]) => v != null);
@@ -167,13 +198,63 @@ function applyNewSettings(ctx, slug, data, settings) {
       );
   const order = ['mode', ...Object.keys(DIALS).filter(d => d !== 'mode')];
   for (const thing of order) {
-    const value = settings[thing];
-    if (value == null) continue;
-    const s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
-    if (thing === 'mode')
-      data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (s.value);
-    else data.settings.push(s);
+    const given = settings[thing];
+    if (given == null) continue;
+    // `headings` takes a weight and a tracking: one value per axis.
+    for (const value of Array.isArray(given) ? given : [given]) {
+      /** @type {import('./_settings.mjs').Setting} */
+      let s;
+      try {
+        s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
+      } catch (e) {
+        throw asNewRefusal(e, slug, settings);
+      }
+      if (thing === 'mode')
+        data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (
+          s.value
+        );
+      else {
+        const same = data.settings.findIndex(x => keyOf(x) === keyOf(s));
+        if (same >= 0)
+          refuse(
+            E.ERR_INVALID_ARGUMENT,
+            `--${thing} was given two values for the same thing (${data.settings[same].value}, ${s.value}); give one.`,
+            {run: [`${P} new ${slug} --${thing} ${q(s.value)}`]},
+          );
+        data.settings.push(s);
+      }
+    }
   }
+}
+
+/**
+ * A refusal from a setting `new` was given, with its suggestions turned
+ * into `new` commands: the theme does not exist yet, so a `set` would fail.
+ * @param {unknown} e
+ * @param {string} slug
+ * @param {Record<string, string | string[] | undefined>} settings
+ */
+function asNewRefusal(e, slug, settings) {
+  if (!(e instanceof AstryxError)) return e;
+  const flags = Object.entries(settings)
+    .filter(([, v]) => v != null)
+    .flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map(x => [k, x]))
+    .map(([k, v]) => `--${k} ${q(v)}`);
+  const setPrefix = `${P} set ${slug} `;
+  e.suggestions = (e.suggestions ?? []).map(s => {
+    if (s.name === `${P} set --help`) return {...s, name: `${P} new --help`};
+    if (!s.name.startsWith(setPrefix)) return s;
+    const [thing, ...rest] = s.name.slice(setPrefix.length).split(' ');
+    if (thing.startsWith('--') || !DIALS[thing]) return s;
+    const keep = flags.filter(f => !f.startsWith(`--${thing} `));
+    return {
+      ...s,
+      name: [`${P} new ${slug}`, ...keep, `--${thing} ${rest.join(' ')}`].join(
+        ' ',
+      ),
+    };
+  });
+  return e;
 }
 
 /**
@@ -187,8 +268,7 @@ function applyNewSettings(ctx, slug, data, settings) {
  */
 async function previewAndRoute(ctx, slug, data, png) {
   const p = await previewAfter(ctx, slug, data, png);
-  await keepPreviewRoute(ctx, slug);
-  return p;
+  return {...p, previewStale: await keepPreviewRoute(ctx, slug)};
 }
 
 /**
@@ -197,12 +277,15 @@ async function previewAndRoute(ctx, slug, data, png) {
  * the next `preview add` writes the route again.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
+ * @returns {Promise<string[]>} preview files changed by hand, left showing
+ *   the theme as it was
  */
 async function keepPreviewRoute(ctx, slug) {
   try {
-    await refreshPreviewRoute(ctx.project.cwd, slug);
+    return (await refreshPreviewRoute(ctx.project.cwd, slug)).stale;
   } catch {
     // A damaged or moved preview.
+    return [];
   }
 }
 
@@ -230,7 +313,7 @@ export async function themeEditSet(theme, thing, value, options = {}) {
 async function change(sub, slug, thing, value, options) {
   const {cwd = process.cwd(), png = false} = options;
   requireProject(cwd);
-  const data = loadTheme(cwd, slug);
+  const data = loadTheme(cwd, slug, thing);
   const ctx = await context(cwd);
   const flags = {
     on: options.on,
@@ -281,6 +364,8 @@ async function change(sub, slug, thing, value, options) {
   }
   const k = keyOf(s);
   const prevIdx = data.settings.findIndex(x => keyOf(x) === k);
+  /** @type {string | null} */
+  let vibrancyGone = null;
   const prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
   if (sub === 'undo') {
     if (!prev) {
@@ -297,6 +382,22 @@ async function change(sub, slug, thing, value, options) {
       );
     }
     data.settings.splice(prevIdx, 1);
+    // Vibrancy needs a color: undoing the last one takes it along, so the
+    // theme never holds a state `set` refuses.
+    if (
+      PALETTE_DIALS.includes(s.thing) &&
+      !data.settings.some(
+        x => x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
+      )
+    ) {
+      const v = data.settings.findIndex(
+        x => x.source === 'dial' && x.thing === 'vibrancy',
+      );
+      if (v >= 0)
+        vibrancyGone = /** @type {string} */ (
+          data.settings.splice(v, 1)[0]?.value
+        );
+    }
   } else if (prev) data.settings[prevIdx] = s;
   else data.settings.push(s);
   const r = await commitTheme(ctx, slug, data, {history: true});
@@ -335,6 +436,11 @@ async function change(sub, slug, thing, value, options) {
   if (PALETTE_DIALS.includes(s.thing) && sub === 'undo')
     notes.push(
       `the ${s.thing} color is no longer generated, and the tokens it fed go back to the base theme's values`,
+      ...(vibrancyGone != null
+        ? [
+            `vibrancy ${vibrancyGone} is removed too: it sets how saturated the colors are, and the theme sets no color now`,
+          ]
+        : []),
     );
   if (s.thing === 'neutral' && sub === 'set') {
     // Only the theme's own modes; a dark theme gets no white-page offer.
@@ -380,10 +486,14 @@ async function change(sub, slug, thing, value, options) {
           : /** @type {import('./_settings.mjs').Setting} */ (prev),
       // On undo, the setting above is the one removed, named as such.
       ...(sub === 'undo' && prev
-        ? {removed: prev, now: nowApplies(data, prev)}
+        ? {removed: prev, now: nowApplies(ctx, data, prev, base)}
         : {}),
       replaced: sub === 'set' ? prev : null,
-      was: null,
+      // A whole-theme dial names the value it replaced, as base and mode do.
+      was:
+        sub === 'set' && prev && prev.source === 'dial' && !prev.on
+          ? prev.value
+          : null,
       notes,
       parts,
       group: group
@@ -447,7 +557,10 @@ export async function themeEditShow(theme, options = {}) {
   const data = loadTheme(cwd, theme);
   const ctx = await context(cwd);
   const f = themeFiles(cwd, theme);
-  if (!fs.existsSync(f.js)) await buildTheme(ctx, theme, data);
+  // A build that does not match the settings (a command stopped mid-build,
+  // a hand edit, another CLI) is made again from the settings, and said.
+  const stale = !buildCurrent(cwd, theme, data);
+  if (stale) await buildTheme(ctx, theme, data);
   const res = await resolvedTokens(ctx, theme);
   const problems = await contrastProblems(ctx, data, res);
   const pal = paletteMapping(
@@ -458,7 +571,7 @@ export async function themeEditShow(theme, options = {}) {
     ctx.project.core.tokenDefaults,
   );
   const preview = await renderPreview(ctx, theme, data);
-  await keepPreviewRoute(ctx, theme);
+  const previewStale = await keepPreviewRoute(ctx, theme);
   const sheet = await renderSheet(ctx, theme, data, {group: section});
   const modes = modesOf(data);
   const shots = png
@@ -481,7 +594,14 @@ export async function themeEditShow(theme, options = {}) {
         const masked = maskedSettings(data).get(s);
         return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
       }),
-      notes: fontNotes(ctx, data),
+      notes: [
+        ...(stale
+          ? [
+              `the build did not match ${theme}.settings.json (a command stopped while building, or a hand edit), so it was built again from the settings`,
+            ]
+          : []),
+        ...fontNotes(ctx, data),
+      ],
       // A size, number or font is the same in both modes: one value.
       resolved: Object.fromEntries(
         KEY_TOKENS.map(k => [
@@ -495,6 +615,7 @@ export async function themeEditShow(theme, options = {}) {
       ...colorsReport(pal, data),
       problems,
       preview,
+      previewStale,
       sheet: sheet.file,
       sheetComponents: sheet.components,
       skipped: sheet.skipped,
@@ -507,12 +628,33 @@ export async function themeEditShow(theme, options = {}) {
 
 /**
  * What applies once `removed` is gone: a whole-theme setting of the same
- * thing for a part setting, or the base theme's value.
+ * thing for a part setting, a dial that still writes the token, or the
+ * base theme's value.
+ * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {import('./_settings.mjs').Setting} removed
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
  * @returns {string}
  */
-function nowApplies(data, removed) {
+function nowApplies(ctx, data, removed, base) {
+  // A token a dial still writes (an accent color feeds --color-accent):
+  // name that dial.
+  if (removed.source === 'token' && !removed.on) {
+    const value = (/** @type {import('./_settings.mjs').ThemeData} */ d) =>
+      JSON.stringify(
+        compileTheme(ctx, d, base).tokens?.[removed.thing] ?? null,
+      );
+    const now = value(data);
+    if (now !== 'null')
+      for (const d of [...data.settings].reverse()) {
+        if (d.source !== 'dial' || d.on) continue;
+        const without = {...data, settings: data.settings.filter(x => x !== d)};
+        if (value(without) !== now)
+          return PALETTE_DIALS.includes(d.thing)
+            ? `the generated ${d.thing} color (${describe(d)})`
+            : describe(d);
+      }
+  }
   const whole =
     removed.on || removed.when || removed.state || removed.mode
       ? [...data.settings]
@@ -622,7 +764,9 @@ function colorsReport(pal, data) {
   );
   /** @param {import('./_palette.mjs').StopRef} r */
   const shade = r =>
-    `${r.stop}${r.alpha ? ` at opacity ${r.alpha}` : ''} ${r.color}${r.from ? ' (your exact color)' : ''}`;
+    r.family === 'black' || r.family === 'white'
+      ? `${r.family} ${r.color}`
+      : `${r.family ? `${r.family} ` : ''}${r.stop}${r.alpha ? ` at opacity ${r.alpha}` : ''} ${r.color}${r.exact ? ' (your exact color)' : ''}`;
   /** What the user set for each token exactly, by mode when it differs. */
   const exactValue = /** @type {Record<string, string>} */ ({});
   for (const s of data.settings)
@@ -651,16 +795,19 @@ function colorsReport(pal, data) {
           ]),
       ),
     })),
-    colorNotes: pal.contrast
-      .filter(c => modes.includes(c.mode))
-      .filter(c => !c.pass || c.stop !== c.preferred)
-      .map(c =>
-        c.against.startsWith('the text on it')
-          ? `${c.token} ${c.mode}: shade ${c.stop}, not your exact color: ${c.against.slice('the text on it: '.length)}`
-          : c.pass
-            ? `${c.token} ${c.mode}: shade ${c.stop}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`
-            : `${c.token} ${c.mode}: only ${c.ratio}:1 on ${c.against} at shade ${c.stop} (needs ${c.needs}:1)`,
-      ),
+    colorNotes: [
+      ...pal.notes,
+      ...pal.contrast
+        .filter(c => modes.includes(c.mode))
+        .filter(c => c.note || !c.pass || c.stop !== c.preferred)
+        .map(c =>
+          c.note
+            ? c.note
+            : c.pass
+              ? `${c.token} ${c.mode}: shade ${c.stop}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`
+              : `${c.token} ${c.mode}: only ${c.ratio}:1 on ${c.against} at shade ${c.stop} (needs ${c.needs}:1)`,
+        ),
+    ],
   };
 }
 
@@ -697,8 +844,8 @@ export async function themeEditUndo(theme, options = {}) {
     if (!(e instanceof AstryxError && e.code === E.ERR_THEME_INVALID)) throw e;
   }
   const f = themeFiles(cwd, theme);
-  const history = readHistory(f.history);
-  if (history == null)
+  const {steps: history, dropped} = readHistory(f.history);
+  if (!history.length && dropped)
     refuse(
       E.ERR_THEME_INVALID,
       `${theme}.history.json is damaged, so there is no step to go back to.`,
@@ -715,17 +862,43 @@ export async function themeEditUndo(theme, options = {}) {
     );
   const ctx = await context(cwd);
   const prevText = /** @type {string} */ (history.pop());
-  const prev = /** @type {import('./_settings.mjs').ThemeData} */ (
-    JSON.parse(prevText)
+  let prev = /** @type {import('./_settings.mjs').ThemeData} */ (
+    JSON.parse(prevText.replace(/^\uFEFF/, ''))
   );
-  await commitTheme(ctx, theme, prev, {history: false});
-  fs.writeFileSync(f.history, JSON.stringify(history));
+  // A step always restores into this theme, whatever name it holds.
+  prev.name = theme;
+  // The step it goes back to is checked like the settings file itself. A
+  // value the editor no longer accepts is left out of that step (with a
+  // note); a step whose shape is broken is refused.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  let leftOut = [];
+  if (settingsProblem(prev)) {
+    const repaired = withoutBadValues(prev);
+    const still = settingsProblem(repaired.data);
+    if (still)
+      refuse(
+        E.ERR_THEME_INVALID,
+        `The settings before the last change, in ${theme}.history.json, are damaged: ${still}.`,
+        {
+          fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
+          run: [`${P} show ${theme}`],
+        },
+      );
+    prev = repaired.data;
+    leftOut = repaired.dropped;
+  }
+  // The popped history is written with the change, inside its rollback.
+  await commitTheme(ctx, theme, prev, {history: false, historyAfter: history});
   /** @type {string[]} */
   const undone = current
     ? []
     : [
         `the damaged ${theme}.settings.json is replaced by the settings before the last change`,
       ];
+  for (const x of leftOut)
+    undone.push(
+      `left out ${describe(x)} from the step it went back to: a value the editor no longer accepts`,
+    );
   const now = new Map(prev.settings.map(s => [keyOf(s), s]));
   const was = new Map((current?.settings ?? []).map(s => [keyOf(s), s]));
   for (const [k, s] of was) {

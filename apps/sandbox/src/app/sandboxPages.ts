@@ -112,6 +112,12 @@ export const categories: SandboxCategory[] = [
           'A BottomSheet of rows over a page that scrolls with the document, to check a slow pull and a tap on a phone',
       },
       {
+        name: 'Scroll Edge Taps',
+        href: '/pages/scroll-edge-taps/',
+        description:
+          'A pushed NavigationStack screen with a Done row or a strip at its edge, and a RefreshControl list, on a page that scrolls with the document, to check taps and pulls on a phone',
+      },
+      {
         name: 'List Reorder Cases',
         href: '/pages/list-reorder-cases/',
         description:
@@ -175,6 +181,12 @@ export const categories: SandboxCategory[] = [
         href: '/pages/tap-targets/',
         description:
           'WCAG 2.5.8 AA touch-target sizes visualized on real components',
+      },
+      {
+        name: 'Minute Wheel Loop',
+        href: '/pages/minute-wheel-loop/',
+        description:
+          'A TimeInput sheet at 11:58 AM whose minute wheel loops and keeps the hour, on a page that scrolls with the document',
       },
       {
         name: 'Text Types',
