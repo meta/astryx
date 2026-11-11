@@ -22,7 +22,6 @@ import {
   isValidElement,
   use,
   useEffect,
-  useId,
   useRef,
   useState,
   useTransition,
@@ -31,10 +30,10 @@ import {
 import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
-import {TooltipPresentInterestContext} from '../Tooltip/tooltipPresentInterest';
-import {useDeferredTooltipInterest} from '../hooks/useDeferredTooltipInterest';
-import {attachedTooltipModule} from '../utils/attachedTooltipModule';
-import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {
+  OnDemandTooltip,
+  type OnDemandTooltipTriggerProps,
+} from '../utils/OnDemandTooltip';
 import {
   colorVars,
   sizeVars,
@@ -780,17 +779,6 @@ export function Button({
   // (credit @AKnassa, #4879), which is exactly the bug this PR fixes.
   const renderAsLink = href != null && !isTrueDisabled;
 
-  // The tooltip attaches to the button itself, with no wrapper element, so the
-  // button stays a direct child of its container (no layout shift, and the
-  // container's direct-child `:has()` selectors still find its markers). Its
-  // module loads on demand; the first hover, tap or focus mounts it.
-  const tooltipInterest = useDeferredTooltipInterest(
-    tooltip != null,
-    attachedTooltipModule,
-  );
-  const tooltipDescriptionId = useId();
-  const tooltipAnchorRef = useRef<HTMLElement | null>(null);
-
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     // The ref guard dedupes fire-once actions. Interruptible callers skip it so
     // a re-click while pending starts a fresh action that interrupts the prior.
@@ -961,91 +949,44 @@ export function Button({
     accessibleName != null &&
     tooltip.trim() === accessibleName.trim();
 
-  // The description is Button's own hidden copy of the tooltip text, after any
-  // caller value. The tooltip layer is not referenced, so a screen reader
-  // reads the text once, before and after the layer loads.
-  const describedByProp =
-    tooltip != null && !isTooltipName
-      ? {
-          'aria-describedby':
-            [props['aria-describedby'], tooltipDescriptionId]
-              .filter(Boolean)
-              .join(' ') || undefined,
-        }
-      : null;
-  // A closed manual popover beside the element, where the tooltip layer
-  // renders: a group's edge rules skip popovers, so the button keeps its place
-  // among its siblings, and the text stays out of the button's own content.
-  const tooltipDescription =
-    tooltip && !isTooltipName ? (
-      <span id={tooltipDescriptionId} popover="manual">
-        {tooltip}
-      </span>
-    ) : null;
-  const tooltipTriggerProps =
-    tooltip != null
-      ? {
-          onPointerEnter: composeEventHandlers(
-            tooltipInterest.onPointerEnter,
-            props.onPointerEnter,
-          ),
-          onPointerLeave: composeEventHandlers(
-            tooltipInterest.onPointerLeave,
-            props.onPointerLeave,
-          ),
-          onPointerDown: composeEventHandlers(
-            tooltipInterest.onPointerDown,
-            props.onPointerDown,
-          ),
-          onMouseEnter: composeEventHandlers(
-            tooltipInterest.onMouseEnter,
-            props.onMouseEnter,
-          ),
-          onMouseLeave: composeEventHandlers(
-            tooltipInterest.onMouseLeave,
-            props.onMouseLeave,
-          ),
-          onFocus: composeEventHandlers(tooltipInterest.onFocus, props.onFocus),
-          onBlur: composeEventHandlers(tooltipInterest.onBlur, props.onBlur),
-        }
-      : null;
+  const mergedButtonRef = useMergedRefs(ref, hitAreaRef);
 
-  // The tooltip's anchor is the same element as the consumer ref.
-  const mergedButtonRef = useMergedRefs(ref, tooltipAnchorRef, hitAreaRef);
-
-  let element: ReactNode;
-
-  if (renderAsLink) {
-    element = (
-      <LinkComponent
-        ref={mergedButtonRef as React.Ref<HTMLAnchorElement>}
-        href={href}
-        target={target}
-        rel={rel}
-        {...(inputGroup != null && buttonGroup == null
-          ? inputGroupItemProps
-          : undefined)}
-        {...sharedMergedProps}
-        {...pressFeedback}
-        {...groupItemProps}
-        {...props}
-        {...ariaLabelProp}
-        {...describedByProp}
-        {...tooltipTriggerProps}
-        {...edgeCompAttr}
-        // A caller's own busy or disabled state is kept, so a component that
-        // hands these props to a Button (a caller-rendered trigger) is heard.
-        aria-busy={isLoadingState || props['aria-busy'] || undefined}
-        aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
-        onClick={handleClick}
-        {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
-        {buttonContent}
-      </LinkComponent>
-    );
-  } else {
-    element = (
+  const renderElement = (
+    trigger: OnDemandTooltipTriggerProps | null,
+  ): ReactNode => {
+    // The tooltip's ref already holds the caller's.
+    const {ref: tooltipRef, ...tooltipTrigger} = trigger ?? {ref: undefined};
+    const elementRef = tooltipRef ?? mergedButtonRef;
+    if (renderAsLink) {
+      return (
+        <LinkComponent
+          ref={elementRef as React.Ref<HTMLAnchorElement>}
+          href={href}
+          target={target}
+          rel={rel}
+          {...(inputGroup != null && buttonGroup == null
+            ? inputGroupItemProps
+            : undefined)}
+          {...sharedMergedProps}
+          {...pressFeedback}
+          {...groupItemProps}
+          {...props}
+          {...ariaLabelProp}
+          {...tooltipTrigger}
+          {...edgeCompAttr}
+          // A caller's own busy or disabled state is kept, so a component that
+          // hands these props to a Button (a caller-rendered trigger) is heard.
+          aria-busy={isLoadingState || props['aria-busy'] || undefined}
+          aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
+          onClick={handleClick}
+          {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
+          {buttonContent}
+        </LinkComponent>
+      );
+    }
+    return (
       <button
-        ref={mergedButtonRef}
+        ref={elementRef as React.Ref<HTMLButtonElement>}
         type={type}
         {...(inputGroup != null && buttonGroup == null
           ? inputGroupItemProps
@@ -1056,8 +997,7 @@ export function Button({
         {...props}
         {...(isTrueDisabled ? {name: undefined} : null)}
         {...ariaLabelProp}
-        {...describedByProp}
-        {...tooltipTriggerProps}
+        {...tooltipTrigger}
         {...edgeCompAttr}
         // A caller's own busy or disabled state is kept, so a component that
         // hands these props to a Button (a caller-rendered trigger) is heard.
@@ -1068,28 +1008,26 @@ export function Button({
         {buttonContent}
       </button>
     );
-  }
+  };
 
+  // The tooltip attaches to the button itself, with no wrapper element, so the
+  // button stays a direct child of its container (no layout shift, and the
+  // container's direct-child `:has()` selectors still find its markers). Its
+  // module loads on demand; the first hover, tap or focus mounts it. A tooltip
+  // that repeats the name is not a description, so it is not read twice.
   if (tooltip) {
-    const AttachedTooltip = tooltipInterest.loadedModule?.AttachedTooltip;
     return (
-      <>
-        {element}
-        {tooltipDescription}
-        {tooltipInterest.isWanted && AttachedTooltip != null && (
-          <TooltipPresentInterestContext value={tooltipInterest.interestRef}>
-            <AttachedTooltip
-              anchorRef={tooltipAnchorRef}
-              content={tooltip}
-              placement="above"
-            />
-          </TooltipPresentInterestContext>
-        )}
-      </>
+      <OnDemandTooltip
+        tooltip={tooltip}
+        isDescription={!isTooltipName}
+        callerRef={mergedButtonRef}
+        callerProps={props}>
+        {renderElement}
+      </OnDemandTooltip>
     );
   }
 
-  return element;
+  return renderElement(null);
 }
 
 Button.displayName = 'Button';

@@ -7,7 +7,8 @@
  * @input React, a module loader, the present-interest state
  * @output Exports useDeferredTooltipInterest and DeferredTooltipInterest
  * @position Internal to Core, not exported from any entry. A component that
- *   loads its tooltip on demand (truncated Text and Heading) holds the latest
+ *   loads its tooltip on demand (truncated Text and Heading, and Button through
+ *   utils/OnDemandTooltip) holds the latest
  *   hover, tap or focus here with native events only, and starts the load. The
  *   tooltip that loads answers the held interaction through
  *   TooltipPresentInterestContext. It imports neither the touch trigger nor

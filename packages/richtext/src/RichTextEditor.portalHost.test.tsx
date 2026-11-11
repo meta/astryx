@@ -8,7 +8,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {createRef, StrictMode, type ReactNode} from 'react';
 import {
   DecoratorNode,
@@ -80,16 +80,24 @@ describe('RichTextEditor portal ownership', () => {
       const trigger = await screen.findByRole('button', {
         name: 'Decorator action',
       });
-      const id = trigger.getAttribute('aria-describedby');
-      await waitFor(() => {
-        const tooltip = id ? document.getElementById(id) : null;
-        expect(tooltip).not.toBeNull();
-        expect(
-          screen.getByRole('textbox', {name: 'Editor'}),
-        ).not.toContainElement(tooltip);
-      });
+      expect(trigger).toHaveAccessibleDescription('Decorator hint');
+      // The layer mounts on the first hover.
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      let tooltip: HTMLElement | undefined;
+      await waitFor(
+        () => {
+          tooltip = screen
+            .getAllByRole('tooltip', {hidden: true})
+            .find(element => element.textContent === 'Decorator hint');
+          expect(tooltip).toBeDefined();
+          expect(
+            screen.getByRole('textbox', {name: 'Editor'}),
+          ).not.toContainElement(tooltip!);
+        },
+        {timeout: 5000},
+      );
       view.unmount();
-      expect(id && document.getElementById(id)).toBeNull();
+      expect(tooltip?.isConnected).toBe(false);
     },
   );
 });
