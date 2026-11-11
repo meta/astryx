@@ -35,10 +35,6 @@ import {contextMenu} from '../../motion/uikit/contextMenu';
 
 const storybook = withStorybook(test);
 const {menuDisplayMs} = contextMenu.press;
-// Core's press machine believes a press 150 ms after it lands
-// (`utils/pressGesture.ts`). That module loads a StyleX stylesheet, which
-// this Node-side spec cannot, so the onset is restated here.
-
 interface TouchStory {
   driver: TouchDriver;
   trigger: Locator;
