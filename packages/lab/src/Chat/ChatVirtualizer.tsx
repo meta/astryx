@@ -352,6 +352,11 @@ export function ChatVirtualizer<T>(
   // passes run between two scroll events, and clearing per pass re-created
   // the staleness class mid-gesture (measured: 5.2% jitter at 60px steps).
   const userScrolledRef = React.useRef(false);
+  // Set from a window resize on the page scroller until the next correction
+  // pass. A phone that rotates moves the page's scrollTop itself to keep the
+  // reader's place, against row heights the list has not measured yet. That
+  // move is not the reader's, and the pass restores the held row instead.
+  const viewportResizing = React.useRef(false);
   // Last scrollTop observed by a scroll event, and the px the user has moved
   // away from where the machinery last placed them — the end→anchor decision
   // runs on the latter (see onScroll).
@@ -940,6 +945,7 @@ export function ChatVirtualizer<T>(
     if (actual !== entryScrollTop) {
       progTarget.current = actual;
     }
+    viewportResizing.current = false;
   };
   // Latest-pass ref for once-created callers (see CLOSURE DISCIPLINE).
   const syncRef = React.useRef(syncAndRestore);
@@ -1226,8 +1232,14 @@ export function ChatVirtualizer<T>(
     // and against the previous event's value that net can still read as
     // "moved down" — the user's own upward step erased by the re-pin.
     const lastWrite = progTarget.current;
+    // A finger owns the position even while the viewport changes size.
+    const isViewportMove = viewportResizing.current && !isFingerScroll();
     const isEcho =
-      lastWrite !== null && Math.abs(vp.scrollTop - lastWrite) <= 1;
+      isViewportMove ||
+      (lastWrite !== null && Math.abs(vp.scrollTop - lastWrite) <= 1);
+    if (isViewportMove) {
+      userScrolledRef.current = false;
+    }
     // STICKY echo: k offset changes within one frame queue up to k scroll
     // events, dispatched across successive frames, EACH reading the same
     // final scrollTop. A consume-once slot matches the first and misreads
@@ -1361,6 +1373,23 @@ export function ChatVirtualizer<T>(
     if (viewportProbe !== null) {
       observeSize(viewportProbe);
     }
+    const view = viewportProbe !== null ? el.ownerDocument.defaultView : null;
+    let resizeFrame: number | null = null;
+    // Reads nothing. If no correction pass follows, the mark clears two
+    // frames later.
+    const onViewportResize = (): void => {
+      viewportResizing.current = true;
+      if (view === null || resizeFrame !== null) {
+        return;
+      }
+      resizeFrame = view.requestAnimationFrame(() => {
+        resizeFrame = view.requestAnimationFrame(() => {
+          resizeFrame = null;
+          viewportResizing.current = false;
+        });
+      });
+    };
+    view?.addEventListener('resize', onViewportResize, {passive: true});
     // Observe the CONTAINER too (rows alone miss clientHeight changes): a
     // window resize or a growing composer moves the end-mode target and the
     // window coverage without any row changing size. Container entries have
@@ -1374,6 +1403,12 @@ export function ChatVirtualizer<T>(
         unobserveSize(viewportProbe);
         viewportProbe.remove();
       }
+      view?.removeEventListener('resize', onViewportResize);
+      if (resizeFrame !== null) {
+        view?.cancelAnimationFrame(resizeFrame);
+        resizeFrame = null;
+      }
+      viewportResizing.current = false;
       // A replaced or unmounted scroller ends the gesture with it: the
       // finger-scroll watch moves to the new element and reports no end for
       // the old one. The adjustment is dropped rather than folded — the
