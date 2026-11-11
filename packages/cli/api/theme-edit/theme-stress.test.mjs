@@ -233,6 +233,9 @@ describe('how', () => {
       expect(JSON.stringify(bg.results), q).not.toContain('Status colors');
     }
     expect((await ask('error red')).understood.aspects).toEqual(['colors']);
+    const statusBg = await ask('make the error background red');
+    expect(statusBg.understood.aspects).toEqual(['colors']);
+    expect(statusBg.results[0].commands[0]).toContain('set <theme> danger');
   });
 
   it('takes each color from the word it belongs to', async () => {
@@ -260,7 +263,8 @@ describe('preview pages', () => {
     expect(r.data.added).toHaveLength(1);
     expect(r.data.added[0]).not.toMatch(/^shell-/);
     expect(r.data.matched[0].page).toBe(r.data.added[0]);
-    expect(r.data.matched[0].why).toContain('app frames');
+    expect(r.data.matched[0].why).toContain('the closest page');
+    expect(r.data.matched[0].why).toMatch(/it covers \w+/);
     expect(r.data.notes.join(' ')).toContain('app frames, not pages');
   }, 240_000);
 
@@ -322,8 +326,8 @@ describe('preview picker refusals', () => {
       themeEditPreviewAdd('a weather widget', {cwd, theme: 's'}),
     );
     expect(r.code).toBe('ERR_NOT_FOUND');
-    expect(r.message).toContain('Nothing was written');
-    expect(r.run[0]).toMatch(/preview add --template \S+/);
+    expect(r.message).toContain('No page template relates');
+    expect(r.run[0]).toMatch(/preview add --template \S+ --theme s$/);
     expect(
       fs.readFileSync(
         path.join(cwd, 'src/app/theme-preview/theme-preview.json'),
@@ -331,4 +335,105 @@ describe('preview picker refusals', () => {
       ),
     ).toBe(before);
   }, 120_000);
+});
+
+describe('round 3', () => {
+  it('skips a page the app cannot show and takes the next match', async () => {
+    const r = await themeEditPreviewAdd(
+      'dark issue tracker app: left sidebar navigation, issue detail with title, description, activity feed and a properties panel',
+      {cwd, theme: 's', path: 'src/app/r3'},
+    );
+    expect(r.data.skipped.map(x => x.page)).toContain('work-item-detail');
+    expect(r.data.added).toHaveLength(1);
+    expect(r.data.added[0]).not.toBe('work-item-detail');
+    expect(r.data.notes.join(' ')).toContain('instead');
+  }, 240_000);
+
+  it('labels a page by its template name, however it was added', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 's',
+      template: 'centered-hero',
+      path: 'src/app/r3',
+    });
+    expect(read('src/app/r3/page.tsx')).toContain(
+      '{id: "centered-hero", label: "Centered Hero"',
+    );
+  }, 240_000);
+
+  it('keeps the exact accent in dark when text on it reads', async () => {
+    await themeEditSet('s', 'accent', '#5e6ad2', {cwd});
+    const show = await themeEditShow('s', {cwd});
+    expect(show.data.resolved['--color-accent']).toEqual({
+      light: '#5e6ad2',
+      dark: '#5e6ad2',
+    });
+    expect(show.data.colors[0].tokens['--color-accent']).toContain(
+      '(your exact color)',
+    );
+    expect(show.data.resolved['--radius-element']).toMatch(/px$/);
+  }, 120_000);
+
+  it('says which colors keep the base theme at any vibrancy, with the commands', async () => {
+    const r = await themeEditSet('s', 'vibrancy', '0', {cwd});
+    const note = r.data.notes.join(' ');
+    expect(note).toContain('keep the base theme');
+    expect(note).toContain('colored cards');
+    expect(note).toMatch(/set s info "#[0-9a-fA-F]{6}"/);
+    await themeEditUndo('s', {cwd, thing: 'vibrancy'});
+    await themeEditUndo('s', {cwd, thing: 'accent'});
+  }, 120_000);
+
+  it('names parts inside the part a token is set on', async () => {
+    const r = await themeEditSet('s', '--color-text-primary', '#ffffff', {
+      cwd,
+      on: 'toast',
+    });
+    expect(r.data.notes.join(' ')).toContain('on button inside toast');
+    await themeEditUndo('s', {
+      cwd,
+      thing: '--color-text-primary',
+      on: 'toast',
+    });
+  }, 120_000);
+
+  it('answers the resting border, and a fill and text together', async () => {
+    const border = /** @type {any} */ (
+      (
+        await themeEditHow(
+          'secondary button with accent colored text and thin border',
+          {cwd},
+        )
+      ).data
+    );
+    const b = border.results.map((/** @type {any} */ x) => x.commands).flat();
+    expect(b.join('\n')).toContain(
+      'set <theme> border "1px solid <color>" --on button --when variant:secondary',
+    );
+    expect(b.join('\n')).toContain('color "var(--color-text-accent)"');
+    const fill = /** @type {any} */ (
+      (
+        await themeEditHow(
+          'make the primary button light gray with dark text',
+          {
+            cwd,
+          },
+        )
+      ).data
+    );
+    expect(fill.understood.aspects).toEqual(['text', 'background']);
+    const f = fill.results.map((/** @type {any} */ x) => x.commands).flat();
+    expect(f.join('\n')).toContain('background "#e5e7eb" --on button');
+    expect(f.join('\n')).toContain('color "#111827" --on button');
+  });
+
+  it('gives every controlled sample a change handler, so a click never throws', () => {
+    for (const page of ['overview', 'components']) {
+      const source = read(`src/app/theme-preview/pages/${page}.tsx`);
+      const tags =
+        source.match(/<C\.(TabList|SegmentedControl)\b[^\n]*/g) ?? [];
+      expect(tags.length, page).toBeGreaterThan(0);
+      for (const tag of tags) expect(tag, page).toContain('onChange={() =>');
+    }
+  });
 });

@@ -633,7 +633,7 @@ function settingsSource(slug, data, theme, pal) {
   const REF = '@@palette:';
   /** @param {string} family @param {'light' | 'dark'} m @param {import('./_palette.mjs').StopRef} r */
   const refOf = (family, m, r) =>
-    `${REF}${family}.${m}.${r.stop}${r.alpha ? `+${r.alpha}` : ''}`;
+    `${REF}${family}.${r.from ?? m}.${r.stop}${r.alpha ? `+${r.alpha}` : ''}`;
   const out = {...theme, name: `${slug}-settings`};
   if (pal && theme.tokens) {
     out.tokens = {...theme.tokens};
