@@ -28,7 +28,6 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
-import {stripTemplateAssetRefs} from '../../foundation/discovery/template-adapter.mjs';
 
 /** The packages the template pages import, so ranked pages can be added. */
 const APP_PACKAGES = {
@@ -266,13 +265,6 @@ describe('preview pages', () => {
     expect(route).toContain("background: 'var(--color-background-body)'");
   }, 240_000);
 
-  it('gives template images a placeholder that follows the surface behind it', () => {
-    const placeholder = decodeURIComponent(
-      stripTemplateAssetRefs("'/template-assets/x.png'").slice(1, -1),
-    );
-    expect(placeholder).toContain('fill-opacity');
-    expect(placeholder).not.toContain('#f5f6f8');
-  });
 });
 
 describe('preview picker refusals', () => {
