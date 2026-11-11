@@ -2757,6 +2757,48 @@ describe("Lightbox gallery caption's toggle", () => {
     }
   });
 
+  it('measures a new caption again when the caller replaces it', async () => {
+    const long =
+      'A winding path through the forest, past the old mill and down to the river';
+    // Two lines clamp the long caption: its text runs past them.
+    const inLongCaption = (element: Element) =>
+      element.classList.contains('astryx-text') && element.textContent === long;
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return inLongCaption(this) ? 120 : 0;
+      });
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return inLongCaption(this) ? 48 : 0;
+      });
+    const view = (caption: string) => (
+      <Lightbox
+        isOpen={true}
+        onOpenChange={() => {}}
+        index={0}
+        media={[
+          {src: '/a.jpg', alt: 'A', caption},
+          {src: '/b.jpg', alt: 'B'},
+        ]}
+      />
+    );
+    try {
+      const {rerender} = render(view('Golden hour'));
+      expect(screen.queryByRole('button', {name: 'more'})).toBeNull();
+      rerender(view(long));
+      await screen.findByRole('button', {name: 'more'});
+      rerender(view('Golden hour'));
+      await waitFor(() =>
+        expect(screen.queryByRole('button', {name: 'more'})).toBeNull(),
+      );
+    } finally {
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+    }
+  });
+
   it('renders the same caption elements with or without its toggle, clamped or open', async () => {
     const long =
       'A winding path through the forest, past the old mill and down to the river';

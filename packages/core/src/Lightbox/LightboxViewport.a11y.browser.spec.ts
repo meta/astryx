@@ -639,7 +639,7 @@ for (const width of [336, 375, 400, 874, 1440]) {
 }
 
 for (const width of [400, 874]) {
-  test(`an open caption puts "less" on a line of its own only where the last line leaves no room, after its text gets shorter and longer (${width}×874)`, async ({
+  test(`an open caption puts "less" on a line of its own only where the last line leaves no room, after the caller makes it shorter and longer (${width}×874)`, async ({
     page,
   }) => {
     await page.addInitScript(() => {
@@ -653,30 +653,31 @@ for (const width of [400, 874]) {
     await dialog.getByRole('button', {name: 'more'}).click();
     await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
     for (const change of ['shorter', 'longer'] as const) {
-      await dialog.evaluate((element, kind) => {
-        const text = element.querySelector(
-          '[data-current] [data-lightbox-caption] .astryx-text',
-        ) as HTMLElement;
-        const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
-        let last: Text | null = null;
-        for (
-          let node = walker.nextNode();
-          node != null;
-          node = walker.nextNode()
-        ) {
-          last = node as Text;
-        }
-        if (last == null) {
-          return;
-        }
-        if (kind === 'shorter') {
-          // About half the text, so the caption needs fewer lines.
-          last.data = last.data.slice(0, Math.ceil(last.data.length / 2));
-        } else {
-          last.appendData(
-            ' The trail climbs past the old mill, crosses the river on stepping stones, and winds back through the beeches to the car park.',
-          );
-        }
+      // The story's `media` arg gives the open page a new caption, as a
+      // caller's new prop does.
+      await page.evaluate(kind => {
+        const w = window as unknown as {
+          __STORYBOOK_PREVIEW__: {
+            currentRender: {
+              id: string;
+              story: {initialArgs: {media: {caption: string}[]}};
+            };
+          };
+          __STORYBOOK_ADDONS_CHANNEL__: {
+            emit: (event: string, payload: unknown) => void;
+          };
+        };
+        const render = w.__STORYBOOK_PREVIEW__.currentRender;
+        const [first, ...rest] = render.story.initialArgs.media;
+        const caption =
+          kind === 'shorter'
+            ? // About half the text, so the caption needs fewer lines.
+              first.caption.slice(0, Math.ceil(first.caption.length / 2))
+            : `${first.caption} The trail climbs past the old mill, crosses the river on stepping stones, and winds back through the beeches to the car park.`;
+        w.__STORYBOOK_ADDONS_CHANNEL__.emit('updateStoryArgs', {
+          storyId: render.id,
+          updatedArgs: {media: [{...first, caption}, ...rest]},
+        });
       }, change);
       await expect(async () => {
         const facts = await readOpenToggle(dialog);
