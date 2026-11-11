@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] On a phone, a finger that starts a scroll on a control no longer waits while touch hit areas measure the page. Hit areas no longer measure while the page scrolls or while a parent animates, such as a screen that slides in. A tap still never reaches a neighbor that is nearer the finger. No API changes.
+[fix] On a phone, a press on a control at rest no longer measures the page, so a scroll that starts there does not wait. Hit areas no longer measure while the page scrolls or while a parent's animation moves them, such as a screen that slides in. A press on a control that a parent moves still measures the page. When a parent starts to move after the last measurement, the browser's own hit test decides the tap. No API changes.
 
 @vjeux

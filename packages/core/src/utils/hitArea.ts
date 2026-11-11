@@ -773,14 +773,14 @@ export function whenSettled(
 }
 
 /**
- * Whether an animation on an ancestor holds the watch back. The animation
- * moves the control by transform, so a read now takes a box in motion. The
- * watch is measured once each such animation ends. The control's own motion,
- * such as a press's scale, is its owner's to wait out.
+ * Whether a running animation on an ancestor holds the watch back. It moves
+ * the control, so a read now takes a box in motion. The watch is measured
+ * once each such animation ends. The control's own motion, such as a press's
+ * scale, is its owner's to wait out.
  */
-function isHeldBack(watch: Watch, settling: ReadonlyArray<Animation>): boolean {
+function isHeldBack(watch: Watch, moving: ReadonlyArray<Animation>): boolean {
   let isHeld = false;
-  for (const animation of settling) {
+  for (const animation of moving) {
     const target = (animation.effect as KeyframeEffect | null)?.target;
     if (
       target == null ||
@@ -816,8 +816,13 @@ function measure(): void {
     return;
   }
   const doc = visible[0].element.ownerDocument;
-  const settling = settlingAnimations(doc);
-  const due = visible.filter(watch => !isHeldBack(watch, settling));
+  // A pass waits only while an ancestor's running animation moves boxes. A
+  // paused one, which an app can leave paused, and a fade or a tint move
+  // nothing now, so the pass measures.
+  const moving = settlingAnimations(doc).filter(
+    animation => animation.playState === 'running' && movesBoxes(animation),
+  );
+  const due = visible.filter(watch => !isHeldBack(watch, moving));
   if (due.length === 0) {
     return;
   }

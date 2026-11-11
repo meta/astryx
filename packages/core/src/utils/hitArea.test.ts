@@ -1282,6 +1282,65 @@ describe('watchHitArea', () => {
     }
   });
 
+  it('measures a control under a paused parent animation: an app can leave it paused, and a paused box does not move', () => {
+    const control = byId('switch');
+    const screen = control.closest('label') as HTMLElement;
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    const slide = {
+      playState: 'paused',
+      effect: {target: screen, getComputedTiming: () => ({endTime: 300})},
+      finished: new Promise<void>(() => {}),
+    };
+    Object.defineProperty(document, 'getAnimations', {
+      configurable: true,
+      value: () => [slide],
+    });
+    try {
+      const heard: HitInsets[] = [];
+      const stop = watchHitArea(control, insets => heard.push(insets));
+      show(control);
+      flush();
+      expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+      stop();
+    } finally {
+      delete (document as {getAnimations?: unknown}).getAnimations;
+    }
+  });
+
+  it('measures a control under a parent that only fades or tints: no box moves', () => {
+    const control = byId('switch');
+    const row = control.closest('label') as HTMLElement;
+    place(control, rect(100, 100, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    const tint = {
+      playState: 'running',
+      effect: {
+        target: row,
+        getComputedTiming: () => ({endTime: 300}),
+        getKeyframes: () => [
+          {offset: 0, opacity: '0', backgroundColor: 'rgba(0, 0, 0, 0)'},
+          {offset: 1, opacity: '1', backgroundColor: 'rgb(0, 0, 0)'},
+        ],
+      },
+      finished: new Promise<void>(() => {}),
+    };
+    Object.defineProperty(document, 'getAnimations', {
+      configurable: true,
+      value: () => [tint],
+    });
+    try {
+      const heard: HitInsets[] = [];
+      const stop = watchHitArea(control, insets => heard.push(insets));
+      show(control);
+      flush();
+      expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+      stop();
+    } finally {
+      delete (document as {getAnimations?: unknown}).getAnimations;
+    }
+  });
+
   it('keeps the page’s interactive elements across a layer’s open and close, and a row watched in it: it matches only what changed, never the whole page again', () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));
