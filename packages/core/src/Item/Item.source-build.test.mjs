@@ -74,7 +74,7 @@ async function compiledImportsOf(fileName) {
 
 /** The swipe's runtime: a static import of any of it is swipe code. */
 const SWIPE_CODE =
-  /SwipeActionsLayer|DeprecatedSwipeLayer|useSwipeAction|createSwipe|\/gestures\/|\/motion\/|dragToSnapPoints/;
+  /SwipeActionsLayer|useSwipeAction|createSwipe|\/gestures\/|\/motion\/|dragToSnapPoints/;
 
 describe('the shipped Item module and the swipe gesture', () => {
   it('imports no swipe code: the reader of a swipe value, and DEP-0017\u2019s released row style', async () => {
@@ -87,14 +87,14 @@ describe('the shipped Item module and the swipe gesture', () => {
 
   it('reaches swipe code only through DEP-0017\u2019s loader for the deprecated props', async () => {
     const {dynamics} = await compiledImportsOf('Item.tsx');
-    expect(dynamics).toEqual(['../Swipe/DeprecatedSwipeLayer.js']);
+    expect(dynamics).toEqual(['../Swipe/SwipeActionsLayer.js']);
   });
 
-  it('keeps the reader of a swipe value free of swipe code: it imports only the realm registry its host map is shared through', async () => {
+  it('keeps the reader of a swipe value free of swipe code: it imports nothing at run time', async () => {
     const {statics, dynamics} = await compiledImportsOf(
       '../Swipe/swipeHost.ts',
     );
-    expect(statics).toEqual(['../utils/sharedRealm.js']);
+    expect(statics).toEqual([]);
     expect(dynamics).toEqual([]);
   });
 

@@ -4,7 +4,7 @@
  * @file swipeLayerLoaded.ts
  *
  * @input The swipe layer Item's deprecated path loads
- *   (Swipe/DeprecatedSwipeLayer.tsx), and optionally a row that renders it
+ *   (Swipe/SwipeActionsLayer.tsx), and optionally a row that renders it
  * @output swipeLayerLoaded, which resolves once that layer has loaded and React
  *   has committed its panel (in `row`, when one is given)
  * @position Test helper for Item's and List's tests of the deprecated swipe
@@ -20,7 +20,7 @@ import {act, waitFor} from '@testing-library/react';
 
 export async function swipeLayerLoaded(row?: Element): Promise<void> {
   await act(async () => {
-    await import('../../Swipe/DeprecatedSwipeLayer');
+    await import('../../Swipe/SwipeActionsLayer');
   });
   if (row == null) {
     return;

@@ -5,8 +5,7 @@
 /**
  * @file createSwipe.ts
  * @input The declared actions per side and the behavior; SwipeActionsLayer
- *   (the panels and the gesture), the row root's style, and the runtime's
- *   root routing (swipeRoots.ts)
+ *   (the panels and the gesture), and the row root's style
  * @output Exports createSwipe, which makes the Swipe value a row takes as
  *   `swipe`, carrying the runtime a row hands its root to
  * @position The public entry of swipe actions. The module brings the gesture
@@ -25,7 +24,6 @@ import {
   type Swipe,
   type SwipeRowFacts,
 } from './swipeHost';
-import {swipeRootProps} from './swipeRoots';
 
 /**
  * Roles whose content model permits interactive descendants, so a swipe
@@ -93,20 +91,20 @@ export function createSwipe<const Id extends string>(
     trailing,
     behavior,
     serves: facts => hasEntries && serves(facts),
-    // A row hands its facts and its root: the swipe serves it or not, and
-    // brings everything it serves it with. Every value uses the same layer type
-    // and root handlers. So a new value from an inline call keeps the gesture
-    // and an open row as they are.
-    attach: facts =>
+    // A row hands its facts and its key bridge: the swipe serves it or not, and
+    // brings everything it serves it with. Every value uses the same layer type,
+    // so a new value from an inline call keeps the gesture and an open row as
+    // they are.
+    attach: (facts, onBridge) =>
       hasEntries && serves(facts)
         ? {
             rootStyle: swipeHostStyles.root,
-            rootProps: swipeRootProps,
             layer: createElement(SwipeActionsLayer, {
               leading,
               trailing,
               behavior,
               itemKey: facts.itemKey,
+              onBridge,
             }),
           }
         : null,

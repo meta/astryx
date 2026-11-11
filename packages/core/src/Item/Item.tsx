@@ -91,7 +91,7 @@ import {swipeHostStyles} from '../Swipe/swipeHost.stylex';
 // already painted and at rest. The panels show nothing at rest, so nothing
 // appears or moves when the layer mounts.
 const DeprecatedSwipeLayer = lazy(
-  async () => import('../Swipe/DeprecatedSwipeLayer'),
+  async () => import('../Swipe/SwipeActionsLayer'),
 );
 
 // =============================================================================
@@ -709,17 +709,22 @@ export function Item({
       href != null ? actionLinkRef.current : actionButtonRef.current,
     );
 
-  // Swipe actions given as `swipe`: the row hands the runtime its facts, and
-  // renders what it gets back. Whether the row is served, and everything it
-  // is served with, is the runtime's.
+  // The bridge the swipe layer fills, on a row given `swipe` and on the
+  // deprecated path. It is empty until the layer has mounted, when the
+  // forwarder below does nothing.
+  const swipeBridgeRef = useRef<SwipeBridge | null>(null);
+  const setSwipeBridge = useCallback((bridge: SwipeBridge | null) => {
+    swipeBridgeRef.current = bridge;
+  }, []);
+  // Swipe actions given as `swipe`: the row hands the runtime its facts and its
+  // key bridge, and renders what it gets back. Whether the row is served, and
+  // everything it is served with, is the runtime's.
   const swipeAttachment =
     swipe != null
-      ? (swipeHostOf(swipe)?.attach({
-          role,
-          isDisabled,
-          isDelegate,
-          isLinkRoot,
-        }) ?? null)
+      ? (swipeHostOf(swipe)?.attach(
+          {role, isDisabled, isDelegate, isLinkRoot},
+          setSwipeBridge,
+        ) ?? null)
       : null;
 
   // The deprecated path, as released, for the deprecated `swipeActions` and
@@ -735,19 +740,21 @@ export function Item({
     isLinkRoot,
     role,
   });
-  // The released `commit` warning comes with the loaded layer
-  // (DeprecatedSwipeLayer.tsx).
+  // The released warning for the released props.
+  useDevWarning(
+    'Item',
+    '`swipeBehavior="commit"` fires no entry on a side with two or more ' +
+      'entries. Give a committing side one entry, or use ' +
+      '`swipeBehavior="reveal"`.',
+    hasDeprecatedSwipe &&
+      swipeBehavior === 'commit' &&
+      (deprecatedLeading.length > 1 || deprecatedTrailing.length > 1),
+  );
   useDevWarning(
     'Item',
     '`swipe` is set, so the deprecated `swipeActions` and `swipeBehavior` are ignored.',
     swipe != null && (swipeActions != null || swipeBehavior != null),
   );
-  // The bridge the loaded layer fills. It is empty until then, and on a row
-  // without the deprecated props, when the forwarder below does nothing.
-  const swipeBridgeRef = useRef<SwipeBridge | null>(null);
-  const setSwipeBridge = useCallback((bridge: SwipeBridge | null) => {
-    swipeBridgeRef.current = bridge;
-  }, []);
   const linkRootProps = isLinkRoot
     ? {
         // A disabled row keeps its place in the tree but goes nowhere.
@@ -957,16 +964,16 @@ export function Item({
       : isInteractive
         ? handleContainerClick
         : undefined;
-  // The root's handlers: the ones the runtime gives a row given `swipe`. On
-  // the deprecated path, the forwarder of the root's key events into the
-  // bridge the loaded layer fills, as released. Until that layer has mounted
-  // the forwarder does nothing.
-  const swipeHandlers = hasDeprecatedSwipe
-    ? {
-        onKeyDown: (event: React.KeyboardEvent) =>
-          swipeBridgeRef.current?.onKeyDown(event),
-      }
-    : swipeAttachment?.rootProps;
+  // The root forwards its key events into the bridge the swipe layer fills, on
+  // both paths, as released. Until the layer has mounted the forwarder does
+  // nothing.
+  const swipeHandlers =
+    swipeAttachment != null || hasDeprecatedSwipe
+      ? {
+          onKeyDown: (event: React.KeyboardEvent) =>
+            swipeBridgeRef.current?.onKeyDown(event),
+        }
+      : undefined;
 
   return (
     <Component

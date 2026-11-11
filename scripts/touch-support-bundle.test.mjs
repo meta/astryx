@@ -104,7 +104,7 @@ const BUILD_OPTIONS = {
  */
 const DEPRECATED_SWIPE_LOADER = {
   importer: 'packages/core/src/Item/Item.tsx',
-  target: 'packages/core/src/Swipe/DeprecatedSwipeLayer',
+  target: 'packages/core/src/Swipe/SwipeActionsLayer',
 };
 
 /**
@@ -122,7 +122,7 @@ const DEPRECATED_SWIPE_STYLE = 'packages/core/src/Swipe/swipeHost.stylex';
 const DEPRECATED_SWIPE_LOADED_LATER = {
   name: 'deprecated-swipe-loader',
   setup(build) {
-    build.onResolve({filter: /DeprecatedSwipeLayer$/}, args =>
+    build.onResolve({filter: /SwipeActionsLayer$/}, args =>
       args.kind === 'dynamic-import' &&
       path.relative(REPO, args.importer) === DEPRECATED_SWIPE_LOADER.importer &&
       path.relative(REPO, path.resolve(args.resolveDir, args.path)) ===
@@ -600,7 +600,7 @@ describe('the swipe modules in bundles (spec:AST-057 FR10)', () => {
       'packages/core/src/Swipe/createSwipe.ts',
       'packages/core/src/Swipe/SwipeActionsLayer.tsx',
       'packages/core/src/Swipe/useSwipeAction.ts',
-      'packages/core/src/dragToSnapPoints/createSnapDrag.ts',
+      'packages/core/src/dragToSnapPoints/createDragToSnapPoints.ts',
       'packages/core/src/motion/animator.ts',
     ]) {
       expect(swipeModules).toContain(module);
@@ -704,6 +704,11 @@ describe('the touch module internals', () => {
     expect(imports).toEqual([
       [DEPRECATED_SWIPE_LOADER.importer, 'packages/core/src/Swipe/swipeHost'],
       [DEPRECATED_SWIPE_LOADER.importer, DEPRECATED_SWIPE_STYLE],
+      // ListItem keys its swipe value for its Item; it reads the value only.
+      [
+        'packages/core/src/List/ListItem.tsx',
+        'packages/core/src/Swipe/swipeHost',
+      ],
     ]);
   });
 });

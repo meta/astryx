@@ -9,14 +9,12 @@
  * @output Exports SwipeActionsLayer (default): the panels of a row's swipe
  *   actions and the gesture that uncovers them
  * @position Brought by createSwipe.ts, which hands it to a row the swipe
- *   serves; Item.tsx's deprecated path loads it with `import()`
- *   (DeprecatedSwipeLayer.tsx). Tested through Item.test.tsx and
- *   Item.source-build.test.mjs.
+ *   serves; Item.tsx's deprecated path loads it with `import()`. Tested
+ *   through Item.test.tsx and Item.source-build.test.mjs.
  *
- * The row's root stays the row's: it takes the root style the swipe brings. Its
- * key events reach this layer through the runtime's root registry
- * (swipeRoots.ts). On the deprecated path they come through the bridge Item
- * forwards into. The gesture attaches to the root itself, and the layer holds
+ * The row's root stays the row's: it takes the root style the swipe brings, and
+ * forwards its key events into the bridge this layer fills. The gesture
+ * attaches to the root itself, and the layer holds
  * the root's press while the row is open. This layer renders the two panels as
  * out-of-flow children of that root. So no element is added to the row for the
  * swipe.
@@ -52,7 +50,6 @@ import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {isSwipeOpen, useSwipeAction, type SwipeSide} from './useSwipeAction';
 import type {SwipeEntry, SwipeLayerProps} from './swipeHost';
-import {registerSwipeRoot} from './swipeRoots';
 
 // =============================================================================
 // Styles
@@ -291,23 +288,16 @@ export default function SwipeActionsLayer({
       trailing: trailing.length,
     },
   });
-  const {onKeyDown, rootRef} = swipe;
-  // The root's key events reach this layer's key handler. A row given `swipe`
-  // routes them through the runtime's registry. On the deprecated path, they
-  // come through the bridge Item forwards into. The Effect syncs the registry
-  // and the bridge with the root, which lives outside the layer. It publishes
-  // the handler once the root is known and releases it when the layer leaves.
-  // The handler and the bridge are stable, so it runs once per layer.
+  const {onKeyDown} = swipe;
+  // The root's key events reach this layer's key handler through the bridge
+  // the row's root forwards them into. The handler and the bridge are stable,
+  // so the Effect runs once per layer.
+  // The Effect syncs the row's bridge with this layer: it publishes the handler
+  // when the layer mounts and clears it when the layer leaves.
   useEffect(() => {
-    const root = rootRef.current;
-    const unregister =
-      root == null ? undefined : registerSwipeRoot(root, onKeyDown);
     onBridge?.({onKeyDown});
-    return () => {
-      unregister?.();
-      onBridge?.(null);
-    };
-  }, [onBridge, onKeyDown, rootRef]);
+    return () => onBridge?.(null);
+  }, [onBridge, onKeyDown]);
   // A new swipe value with the same ids keeps the row as it is. One with
   // other ids shows other actions, so an open row closes.
   const idsKey = idsKeyOf(leading, trailing);

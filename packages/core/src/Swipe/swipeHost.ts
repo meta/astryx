@@ -7,9 +7,10 @@
  *   ItemSwipeActionVariant, ItemSwipeBehavior, CreateSwipeOptions and the
  *   opaque Swipe.
  *   Also the contract between a row and the runtime a Swipe value carries
- *   (SwipeHost, SwipeRowFacts, SwipeAttachment), and the deprecated path's
- *   layer contract (SwipeBridge, SwipeLayerProps). makeSwipe makes a Swipe
- *   value for a host, and swipeHostOf finds it again
+ *   (SwipeHost, SwipeRowFacts, SwipeAttachment), and the layer contract
+ *   (SwipeBridge, SwipeLayerProps). makeSwipe makes a Swipe
+ *   value for a host, swipeHostOf finds it again, and swipeWithItemKey keys
+ *   one for a ListItem
  * @position The one swipe module a row imports at runtime: it holds no
  *   gesture, animation or rendering code, and no swipe rule. createSwipe.ts
  *   brings those, so they ship only with a caller that uses swipe actions.
@@ -17,7 +18,6 @@
 
 import type {KeyboardEvent, ReactNode} from 'react';
 import type {StyleXStyles} from '@stylexjs/stylex';
-import {realmValue, sharedKey} from '../utils/sharedRealm';
 
 /**
  * How the action looks: ordinary, the one you mean, the dangerous one. Not a
@@ -159,13 +159,12 @@ export interface SwipeRowFacts {
 
 /**
  * What the runtime gives a row it serves. The row's root takes its style: the
- * travel it moves by, and the touch it leaves the browser. The root also
- * carries its handlers. Inside its root, the row renders the layer: the panels
- * and the gesture, which attaches to the root itself.
+ * travel it moves by, and the touch it leaves the browser. Inside its root, the
+ * row renders the layer: the panels and the gesture, which attaches to the root
+ * itself. The root forwards its key events into the bridge the layer fills.
  */
 export interface SwipeAttachment {
   readonly rootStyle: StyleXStyles;
-  readonly rootProps: {readonly onKeyDown: (event: KeyboardEvent) => void};
   readonly layer: ReactNode;
 }
 
@@ -179,16 +178,20 @@ export interface SwipeHost {
   readonly behavior: ItemSwipeBehavior;
   /** Whether swipe actions serve a row with these facts. */
   readonly serves: (facts: SwipeRowFacts) => boolean;
-  /** Whether the row is served, and if so, how (createSwipe.ts). */
-  readonly attach: (facts: SwipeRowFacts) => SwipeAttachment | null;
+  /**
+   * Whether the row is served, and if so, how (createSwipe.ts). The row passes
+   * the setter of the bridge its root forwards key events into.
+   */
+  readonly attach: (
+    facts: SwipeRowFacts,
+    onBridge?: (bridge: SwipeBridge | null) => void,
+  ) => SwipeAttachment | null;
 }
 
 /**
- * The deprecated path's bridge: the key handler
- * Item's root forwards its key events into (Escape closes a resting row).
- * The layer writes it when it mounts and clears it when it leaves; the root
- * reads it on every event.
- * Leaves with the deprecated props.
+ * The bridge a row's root forwards its key events into (Escape closes a
+ * resting row). The layer writes it when it mounts and clears it when it
+ * leaves; the root reads it on every event.
  */
 export interface SwipeBridge {
   onKeyDown: (event: KeyboardEvent) => void;
@@ -197,10 +200,8 @@ export interface SwipeBridge {
 /** What the swipe layer takes. */
 export interface SwipeLayerProps {
   /**
-   * The deprecated path only. It is called when the layer mounts, with the
-   * gesture for Item's root to forward into, and with `null` when the layer
-   * leaves. A row given `swipe` routes its root's keys through the
-   * runtime instead (swipeRoots.ts).
+   * Called when the layer mounts, with the gesture for the row's root to
+   * forward its key events into, and with `null` when the layer leaves.
    */
   onBridge?: (bridge: SwipeBridge | null) => void;
   leading: ReadonlyArray<SwipeEntry>;
@@ -210,27 +211,29 @@ export interface SwipeLayerProps {
   itemKey?: string | number;
 }
 
-// The host of every Swipe value: the value itself carries nothing a caller
-// can read, and a value built by hand has none. Registered, so a swizzled
-// Item finds the host of the package's Swipe value.
-const hosts = realmValue(
-  sharedKey('swipe/hosts', 1),
-  () => new WeakMap<Swipe, SwipeHost>(),
-  value => value instanceof WeakMap,
-);
+// Each Swipe value carries its host under this key, not enumerable and not
+// writable. Every copy of the package makes the same key, so a swizzled Item
+// finds the host of the package's value. A value built by hand has none.
+const HOST = Symbol.for('@astryxdesign/core/swipe/host');
+
+/** A Swipe value as its makers read it. */
+interface HostedSwipe {
+  readonly [HOST]?: SwipeHost;
+}
 
 /** Makes a Swipe value for a host (createSwipe.ts). */
 export function makeSwipe<Id extends string = string>(
   host: SwipeHost,
 ): Swipe<Id> {
-  const swipe: Swipe<Id> = Object.freeze({});
-  hosts.set(swipe, host);
+  const swipe: Swipe<Id> = Object.freeze(
+    Object.defineProperty({}, HOST, {value: host}),
+  );
   return swipe;
 }
 
 /** The host of a Swipe value, or null for a value it did not make. */
 export function swipeHostOf(swipe: Swipe): SwipeHost | null {
-  return hosts.get(swipe) ?? null;
+  return (swipe as HostedSwipe)[HOST] ?? null;
 }
 
 /**
@@ -247,6 +250,6 @@ export function swipeWithItemKey(
   }
   return makeSwipe({
     ...host,
-    attach: facts => host.attach({...facts, itemKey}),
+    attach: (facts, onBridge) => host.attach({...facts, itemKey}, onBridge),
   });
 }

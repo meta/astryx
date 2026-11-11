@@ -101,14 +101,13 @@ describe('createSwipe', () => {
       ).toBeNull();
     });
 
-    it('gives every row and every value the same root handlers and layer type, so a new value changes nothing on the root (spec:AST-057 FR11)', () => {
+    it('gives every row and every value the same root style and layer type, so a new value changes nothing on the root (spec:AST-057 FR11)', () => {
       const first = swipeHostOf(createSwipe({trailing: [archive]}))?.attach(
         row,
       );
       const second = swipeHostOf(
         createSwipe({leading: [archive], swipeBehavior: 'commit'}),
       )?.attach(row);
-      expect(second?.rootProps).toBe(first?.rootProps);
       expect(second?.rootStyle).toBe(first?.rootStyle);
       expect(isValidElement(first?.layer)).toBe(true);
       expect(isValidElement(second?.layer)).toBe(true);

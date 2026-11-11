@@ -2,10 +2,10 @@
 
 /**
  * @file swipeRelease.test.ts
- * @input vitest; swipeRelease.ts and the UIKit constants table
+ * @input vitest; the release rules in useSwipeAction.ts and the UIKit constants table
  * @output The release rule against the UIKit lab's releases; where a full
  *   swipe confirms; the swipe spring is the one UIKit reported
- * @position Unit tests of packages/core/src/Swipe/swipeRelease.ts
+ * @position Unit tests of the release rules in packages/core/src/Swipe/useSwipeAction.ts
  */
 
 import {describe, expect, it} from 'vitest';
@@ -16,7 +16,7 @@ import {
   toSpring,
 } from '../motion/spring';
 import {swipeActions} from '../motion/uikit/swipeActions';
-import {confirmedOffset, confirmPoint, resolveRelease} from './swipeRelease';
+import {confirmedOffset, confirmPoint, resolveRelease} from './useSwipeAction';
 
 describe('resolveRelease', () => {
   // The UIKit lab's releases, as the swipe pan reported them when the finger
