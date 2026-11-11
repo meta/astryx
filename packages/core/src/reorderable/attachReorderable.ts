@@ -42,6 +42,7 @@ import {
 } from '../List/listReorderEngine';
 import type {ListReorderOptions, ReorderRows} from '../List/listReorderContext';
 import {markReorderHandle} from '../privateAttributes/listReorder.stylex';
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {readAccessibleName} from '../utils/accessibleName';
 import {devWarn} from '../utils/devWarning';
 
@@ -102,17 +103,6 @@ function nameOf(item: ReorderableItem): string {
   return readAccessibleName(item.element, {exclude: item.handle}) ?? '';
 }
 
-/** Whether `element` takes focus without a `tabindex`. */
-function isNativelyFocusable(element: HTMLElement): boolean {
-  return (
-    element instanceof HTMLButtonElement ||
-    element instanceof HTMLInputElement ||
-    element instanceof HTMLSelectElement ||
-    element instanceof HTMLTextAreaElement ||
-    (element instanceof HTMLAnchorElement && element.hasAttribute('href'))
-  );
-}
-
 /** Puts back the handle attributes and the container style `attach` set. */
 function snapshot(element: Element, names: ReadonlyArray<string>): () => void {
   const saved = names.map(name => [name, element.getAttribute(name)] as const);
@@ -162,7 +152,13 @@ export function attachReorderable(
   const named = new Map<HTMLElement, {name: string; release: () => void}>();
   let detached = false;
 
-  // The app's items that can move, in order, with a key and both elements.
+  // The app's items in order. A keyless item keeps its place in the order,
+  // so each move's index counts it, but it gets no handle.
+  const readRows = (): ReadonlyArray<HTMLElement> =>
+    items()
+      .map(item => item.element)
+      .filter(element => element instanceof HTMLElement);
+  // The items that can be wired: a key and both elements.
   const readItems = (): ReadonlyArray<ReorderableItem> =>
     items().filter(
       item =>
@@ -172,8 +168,8 @@ export function attachReorderable(
     );
 
   const rows: ReorderRows = {
-    read: () => readItems().map(item => item.element),
-    holds: element => readItems().some(item => item.element === element),
+    read: () => [...readRows()],
+    holds: element => readRows().includes(element as HTMLElement),
   };
   const controller = new AttachedController(() => container, hintId, rows);
 
@@ -182,12 +178,17 @@ export function attachReorderable(
   instructions.id = hintId;
   instructions.hidden = true;
   instructions.textContent = t('@astryx.list.reorderHint', {});
-  // The elements this module owns go in the nearest theme scope, not in or
-  // beside the container: a list holds only its items, an editable container
-  // would take them as content, and the container's parent keeps its
-  // children. The theme scope gives the hint its theme.
-  const ownedParent =
-    container.closest<HTMLElement>('[data-astryx-theme]') ?? doc.body;
+  // The elements this module owns go in the nearest dialog or theme scope,
+  // not in or beside the container: a list holds only its items, an editable
+  // container would take them as content, and the container's parent keeps
+  // its children. The theme scope gives the hint its theme.
+  // Inside a dialog they go in the dialog: a modal one makes everything
+  // outside it inert.
+  const ownedParentOf = (): HTMLElement =>
+    container.closest<HTMLElement>('dialog') ??
+    container.closest<HTMLElement>('[data-astryx-theme]') ??
+    doc.body;
+  const ownedParent = ownedParentOf();
   ownedParent.append(instructions);
 
   const announce = (message: string, politeness?: AnnouncePoliteness) => {
@@ -249,6 +250,8 @@ export function attachReorderable(
     current.forEach((item, handle) => {
       if (!wired.has(handle)) {
         wired.set(handle, wire(item));
+      } else {
+        relabel(item);
       }
     });
     if (
@@ -257,6 +260,21 @@ export function attachReorderable(
       [...wired.values()].some(entry => entry.key === modeKey)
     ) {
       controller.startByKey(modeKey);
+    }
+  };
+
+  // The handle's name: "Reorder" and the item's name, or its place when it
+  // has none. Set again at each read, so it follows a rename and a move.
+  const relabel = (item: ReorderableItem) => {
+    const name = nameOf(item);
+    const label =
+      name === ''
+        ? t('@astryx.list.reorderHandleAt', {
+            position: readRows().indexOf(item.element) + 1,
+          })
+        : t('@astryx.list.reorderHandle', {label: name});
+    if (item.handle.getAttribute('aria-label') !== label) {
+      item.handle.setAttribute('aria-label', label);
     }
   };
 
@@ -275,17 +293,11 @@ export function attachReorderable(
     if (!(handle instanceof HTMLButtonElement)) {
       handle.setAttribute('role', 'button');
     }
-    if (!isNativelyFocusable(handle) || handle.tabIndex < 0) {
+    if (!handle.matches(FOCUSABLE_SELECTOR) || handle.tabIndex < 0) {
       handle.setAttribute('tabindex', '0');
     }
     handle.setAttribute('aria-pressed', 'false');
-    const index = readItems().findIndex(entry => entry.handle === handle);
-    handle.setAttribute(
-      'aria-label',
-      name === ''
-        ? t('@astryx.list.reorderHandleAt', {position: index + 1})
-        : t('@astryx.list.reorderHandle', {label: name}),
-    );
+    relabel(item);
     const describedBy = handle.getAttribute('aria-describedby');
     handle.setAttribute(
       'aria-describedby',
@@ -342,7 +354,7 @@ export function attachReorderable(
       hintHost.style.inset = '0 auto auto 0';
       hintHost.style.inlineSize = '0';
       hintHost.style.blockSize = '0';
-      ownedParent.append(hintHost);
+      ownedParentOf().append(hintHost);
       hintRoot = createRoot(hintHost);
       hintRoot.render(createElement(ListReorderModeHint, {controller}));
     }

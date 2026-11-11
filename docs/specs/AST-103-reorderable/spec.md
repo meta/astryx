@@ -271,8 +271,9 @@ const {detach} = reorderable.attach(listElement, {
   rejected item's handle, or a keyless item's, gets none of this and starts no
   drag; `start(key)` reaches attached items as it reaches a collection's; and it renders FR4's hint as an element it owns. The elements `attach`
   owns, the hint and the handles' hidden instructions, sit in the nearest
-  theme scope, else the document body, so the container and its parent gain
-  no element. `attach` reads `items()` when it attaches, at each press, key
+  enclosing dialog, else the nearest theme scope, else the document body, so
+  a modal dialog does not make them inert and the container and its parent
+  gain no element. `attach` reads `items()` when it attaches, at each press, key
   or `start` on a handle, and after each move. Implementation gap: an item
   the app adds after `attach` gets no handle role, name, or Tab stop until
   the next such read. `attach` drives List's reorder engine: it reuses the

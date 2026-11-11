@@ -535,6 +535,142 @@ describe('createReorderable attach (spec:AST-103 FR4b)', () => {
     expect(document.body.children.length).toBeLessThan(before);
   });
 
+  it('puts its own elements in the dialog that encloses the container', () => {
+    const dialog = document.createElement('dialog');
+    const container = document.createElement('ul');
+    const row = document.createElement('li');
+    row.textContent = 'Milk';
+    const grip = document.createElement('button');
+    row.append(grip);
+    container.append(row);
+    dialog.append(container);
+    document.body.append(dialog);
+    attachments.push(
+      createReorderable({onReorder: () => {}}).attach(container, {
+        items: () => [{key: 'milk', element: row, handle: grip}],
+      }),
+    );
+    act(() => grip.click());
+    const owned = Array.from(dialog.children).filter(
+      child => child !== container,
+    );
+    expect(owned.length).toBe(2);
+    expect(document.body.children.length).toBe(1);
+  });
+
+  it("follows an item's rename and an unnamed item's move in its handle's name", async () => {
+    const container = document.createElement('ul');
+    const make = (key: string, text: string) => {
+      const row = document.createElement('li');
+      row.dataset.key = key;
+      const label = document.createElement('span');
+      label.textContent = text;
+      const grip = document.createElement('button');
+      row.append(label, grip);
+      container.append(row);
+      return {row, label, grip};
+    };
+    const milk = make('milk', 'Milk');
+    const blank = make('blank', '');
+    document.body.append(container);
+    const rows = () => Array.from(container.querySelectorAll('li'));
+    attachments.push(
+      createReorderable({
+        onReorder: ({key, to}) => {
+          const row = rows().find(element => element.dataset.key === key);
+          const rest = rows().filter(element => element !== row);
+          if (row != null) {
+            container.insertBefore(row, rest[to] ?? null);
+          }
+        },
+      }).attach(container, {
+        items: () =>
+          rows().map(row => ({
+            key: row.dataset.key ?? '',
+            element: row,
+            handle: row.querySelector('button') as HTMLElement,
+          })),
+      }),
+    );
+    expect(blank.grip).toHaveAccessibleName('Reorder item 2');
+    milk.label.textContent = 'Oat milk';
+    act(() => blank.grip.click());
+    expect(milk.grip).toHaveAccessibleName('Reorder Oat milk');
+    fireEvent.keyDown(blank.grip, {key: 'ArrowUp'});
+    await settle();
+    expect(blank.grip).toHaveAccessibleName('Reorder item 1');
+  });
+
+  it("counts a keyless item in each move's place, and an item passes it", async () => {
+    const container = document.createElement('ul');
+    for (const [key, text] of [
+      ['milk', 'Milk'],
+      ['', 'Note'],
+      ['eggs', 'Eggs'],
+    ]) {
+      const row = document.createElement('li');
+      row.dataset.key = key;
+      row.innerHTML = `<span>${text}</span><button type="button"></button>`;
+      container.append(row);
+    }
+    document.body.append(container);
+    const rows = () => Array.from(container.querySelectorAll('li'));
+    const moves: ReorderMove[] = [];
+    attachments.push(
+      createReorderable({
+        onReorder: move => {
+          moves.push(move);
+          const row = rows().find(element => element.dataset.key === move.key);
+          const rest = rows().filter(element => element !== row);
+          if (row != null) {
+            container.insertBefore(row, rest[move.to] ?? null);
+          }
+        },
+      }).attach(container, {
+        items: () =>
+          rows().map(row => ({
+            key: (row.dataset.key || undefined) as unknown as string,
+            element: row,
+            handle: row.querySelector('button') as HTMLElement,
+          })),
+      }),
+    );
+    const milkGrip = rows()[0].querySelector('button') as HTMLElement;
+    act(() => milkGrip.click());
+    fireEvent.keyDown(milkGrip, {key: 'ArrowDown'});
+    await settle();
+    fireEvent.keyDown(milkGrip, {key: 'ArrowDown'});
+    await settle();
+    expect(moves).toEqual([
+      {key: 'milk', to: 1},
+      {key: 'milk', to: 2},
+    ]);
+    expect(rows().map(row => row.textContent)).toEqual([
+      'Note',
+      'Eggs',
+      'Milk',
+    ]);
+    expect(announced()).not.toContain("Can't move Milk");
+  });
+
+  it('puts a handle with its own tabindex="-1" in the Tab order, and detach restores it', () => {
+    const container = document.createElement('ul');
+    const row = document.createElement('li');
+    row.textContent = 'Milk';
+    const grip = document.createElement('button');
+    grip.setAttribute('tabindex', '-1');
+    row.append(grip);
+    container.append(row);
+    document.body.append(container);
+    const attachment = createReorderable({onReorder: () => {}}).attach(
+      container,
+      {items: () => [{key: 'milk', element: row, handle: grip}]},
+    );
+    expect(grip).toHaveAttribute('tabindex', '0');
+    attachment.detach();
+    expect(grip).toHaveAttribute('tabindex', '-1');
+  });
+
   it('detach ends reorder mode without a word and restores the container', async () => {
     const {container, handle, attachment} = renderPlainList(['Milk', 'Eggs']);
     const className = container.className;
