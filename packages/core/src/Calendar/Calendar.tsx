@@ -275,9 +275,8 @@ function formatDateLabel(
 }
 
 /**
- * The Gregorian date of a week row's Thursday. ISO 8601 numbers a week by its
- * Thursday. For any week start, the row's Thursday is in the ISO week that
- * holds most of the row's days.
+ * ISO 8601 numbers a week by its Thursday. For any week start, the row's
+ * Thursday is in the ISO week that holds most of the row's days.
  */
 function rowThursday(week: ReadonlyArray<CalendarDay>): PlainDate {
   const first = week[0].date;
