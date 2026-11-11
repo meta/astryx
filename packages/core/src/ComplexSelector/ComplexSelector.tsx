@@ -42,7 +42,6 @@ import {Field, inputWrapperStyles} from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip/useTooltip';
-import {LabelTooltipSuppressionContext} from '../utils/labelTooltipSuppression';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {usePopover} from '../Popover/usePopover';
@@ -423,8 +422,9 @@ export interface ComplexSelectorProps<Value> extends Omit<
    * this text on hover and keyboard focus, and the text describes the trigger
    * through `aria-describedby`. The disabled trigger keeps its tab stop and
    * still cannot open. With `renderTrigger`, the tooltip and the description
-   * go to the control you render, and while the reason shows it replaces that
-   * control's own label tooltip.
+   * go to the control you render. Drop that control's own tooltip while the
+   * selector is disabled (for example `tooltip={isDisabled ? undefined :
+   * 'Filter'}`), so it never shows two.
    *
    * Use this instead of wrapping a disabled selector in `Tooltip`, whose text
    * would not describe the trigger.
@@ -902,13 +902,9 @@ export function ComplexSelector<Value>({
       'aria-required': isEffectivelyRequired ? 'true' : undefined,
       'aria-disabled': isDisabled ? 'true' : undefined,
     };
-    // While the reason shows, the control's own label tooltip stays off, so
-    // the control never shows two tooltips.
     return (
       <>
-        <LabelTooltipSuppressionContext value={showsDisabledMessage}>
-          {renderTrigger(triggerProps)}
-        </LabelTooltipSuppressionContext>
+        {renderTrigger(triggerProps)}
         {popup}
         {showsDisabledMessage &&
           disabledMessageTooltip.renderTooltip(disabledMessage)}

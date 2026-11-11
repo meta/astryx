@@ -31,7 +31,6 @@ import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {useTooltip} from '../Tooltip/useTooltip';
-import {LabelTooltipSuppressionContext} from '../utils/labelTooltipSuppression';
 import {
   colorVars,
   sizeVars,
@@ -691,7 +690,7 @@ export function Button({
   elevation = 'none',
   children,
   endContent,
-  tooltip: tooltipProp,
+  tooltip,
   href,
   as,
   target,
@@ -790,8 +789,6 @@ export function Button({
   // so no extra DOM node is inserted — the button stays a direct child of its
   // container (no layout shift, and edge-compensation markers remain
   // discoverable through the container's direct-child `:has()` selector).
-  // An owner that shows its own tooltip on this button turns this one off.
-  const tooltip = use(LabelTooltipSuppressionContext) ? undefined : tooltipProp;
   const tooltipHook = useTooltip({
     placement: 'above',
     isEnabled: tooltip != null,

@@ -21,7 +21,6 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from '../Button/Button';
-import {IconButton} from '../IconButton/IconButton';
 import * as stylex from '@stylexjs/stylex';
 import {focusVars} from '../theme/tokens.stylex';
 import {ComplexSelector, type ComplexSelectorHandle} from './ComplexSelector';
@@ -2068,41 +2067,6 @@ describe('ComplexSelector disabledMessage', () => {
       expect(document.getElementById(ids[1])).toHaveTextContent(
         'You need the Editor role',
       );
-    });
-
-    it('shows the reason instead of an IconButton label tooltip while disabled, and the label again when enabled', async () => {
-      const renderAssign = (isDisabled: boolean) => (
-        <ComplexSelector
-          label="Assign"
-          value={null}
-          isDisabled={isDisabled}
-          disabledMessage="You need the Editor role"
-          renderTrigger={props => (
-            <IconButton
-              label="Assign"
-              tooltip="Assign a reviewer"
-              icon={<span aria-hidden="true">+</span>}
-              {...props}
-            />
-          )}>
-          {() => <button type="button">Apply</button>}
-        </ComplexSelector>
-      );
-      const {rerender} = render(renderAssign(true));
-      const tooltips = () =>
-        screen.queryAllByRole('tooltip', h).map(tip => tip.textContent);
-      expect(tooltips()).toEqual(['You need the Editor role']);
-      const trigger = screen.getByRole('combobox', {name: 'Assign'});
-      expect(trigger.getAttribute('aria-describedby') ?? '').not.toContain(
-        'Assign a reviewer',
-      );
-
-      rerender(renderAssign(false));
-      expect(tooltips()).toEqual(['Assign a reviewer']);
-      fireEvent.mouseEnter(trigger);
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
-      });
     });
   });
 });
