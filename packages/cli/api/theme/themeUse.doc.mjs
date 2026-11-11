@@ -33,7 +33,7 @@ export const doc = {
     {
       type: 'theme.app',
       description:
-        'Every added theme and its imports, the selected default, the generated module path, and the use change.',
+        'Every added theme and its imports, the selected default, the generated module path, and the use change. Added themes whose folder or package is gone are left out of the record, and data.notes names each one.',
     },
   ],
   throws: [

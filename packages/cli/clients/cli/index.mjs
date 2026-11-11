@@ -398,6 +398,34 @@ export function commandsForArgs(program, argv) {
   return printsVersion ? new Set() : null;
 }
 
+/**
+ * Make `help <group> <command> ...` print the help of the deepest command the
+ * words name. Commander's help command reads only the first word, so
+ * `help theme build` printed the help of `theme`. Commander has no public hook
+ * for this; the override wraps its help dispatch and falls back to it.
+ * @param {import('commander').Command} program
+ */
+function resolveDeepHelp(program) {
+  const root = /** @type {any} */ (program);
+  const dispatch = root._dispatchHelpCommand.bind(root);
+  root._dispatchHelpCommand = (/** @type {string | undefined} */ name) => {
+    const words = (root.args ?? [])
+      .slice(1)
+      .filter((/** @type {string} */ word) => !word.startsWith('-'));
+    /** @type {any} */
+    let target = root;
+    for (const word of words) {
+      const next = target._findCommand(word);
+      if (!next) break;
+      target = next;
+    }
+    if (words.length > 1 && target !== root && !target._executableHandler) {
+      target.help();
+    }
+    return dispatch(name);
+  };
+}
+
 const SETUP_NUDGE_EXEMPT = new Set(['init', 'agent-docs']);
 
 /**
@@ -594,6 +622,7 @@ export async function createProgram({argv} = {}) {
       program.help();
     });
   markReportsResult(program);
+  resolveDeepHelp(program);
 
   /**
    * Pre-action hook: gate --json BEFORE any command body runs.

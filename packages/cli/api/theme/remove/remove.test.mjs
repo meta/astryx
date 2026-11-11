@@ -92,4 +92,28 @@ describe('themeRemove', () => {
       message: expect.stringContaining(' theme add missing`'),
     });
   });
+
+  it('removes a default whose source is gone and makes the next theme the default', async () => {
+    fs.rmSync(path.join(tmpDir, 'node_modules/@acme/themes/themes/ocean'), {
+      recursive: true,
+    });
+
+    const result = await themeRemove('ocean', {cwd: tmpDir});
+
+    expect(result.data.default).toBe('reef');
+    expect(result.data.notes).toEqual(['"reef" is now the default theme.']);
+    expect(
+      parseThemeModuleRecord(
+        fs.readFileSync(path.join(tmpDir, 'src/astryx-themes.ts'), 'utf-8'),
+      ),
+    ).toEqual({themes: {reef: '@acme/themes'}, defaultSlug: 'reef'});
+  });
+
+  it('removes a non-default theme whose source is gone', async () => {
+    fs.rmSync(path.join(tmpDir, 'node_modules/@acme/themes/themes/reef'), {
+      recursive: true,
+    });
+    const result = await themeRemove('reef', {cwd: tmpDir});
+    expect(result.data.themes.map(theme => theme.slug)).toEqual(['ocean']);
+  });
 });

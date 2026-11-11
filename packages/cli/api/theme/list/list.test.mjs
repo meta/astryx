@@ -3,11 +3,7 @@
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-  themeList,
-  themeListAvailable,
-  themeListCopySources,
-} from './list.mjs';
+import {themeList, themeListAvailable, themeListCopySources} from './list.mjs';
 import {renderThemeModule} from '../../../foundation/config/theme-state.mjs';
 import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
@@ -267,6 +263,34 @@ describe('themeListAvailable (project-aware API)', () => {
       'package',
       'slug',
       'source',
+    ]);
+  });
+});
+
+describe('themeListAvailable with a broken local theme folder', () => {
+  it('lists every other theme and reports the broken folder in meta', async () => {
+    const broken = path.join(tmpDir, 'src', 'themes', 'mine');
+    fs.mkdirSync(broken, {recursive: true});
+    fs.writeFileSync(
+      path.join(broken, 'mineTheme.ts'),
+      'export const mineTheme = {};\n',
+    );
+    fs.writeFileSync(
+      path.join(broken, 'mineTheme.doc.mjs'),
+      "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'other', displayName: 'x', description: 'x', maintained: false};\n",
+    );
+
+    const result = await themeListAvailable({cwd: tmpDir});
+
+    expect(result.data.some(theme => theme.slug === 'neutral')).toBe(true);
+    expect(result.meta?.skippedThemes).toEqual([
+      {
+        slug: 'mine',
+        path: 'src/themes/mine',
+        reason: expect.stringContaining(
+          'names "other" but its directory is "mine"',
+        ),
+      },
     ]);
   });
 });

@@ -37,13 +37,19 @@ describe('themeTemplate()', () => {
       type: 'theme.template',
       data: {path: THEME_TEMPLATE_DEFAULT_PATH, written: true, reason: null},
     });
-    const written = fs.readFileSync(path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH), 'utf-8');
+    const written = fs.readFileSync(
+      path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH),
+      'utf-8',
+    );
     expect(written).toMatch(/defineTheme/);
   });
 
   it('does not carry our copyright header into the consumer tree', () => {
     themeTemplate({cwd: tmpDir});
-    const written = fs.readFileSync(path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH), 'utf-8');
+    const written = fs.readFileSync(
+      path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH),
+      'utf-8',
+    );
     expect(written).not.toMatch(/Copyright \(c\) Meta Platforms/);
     expect(written.startsWith('/**')).toBe(true);
   });
@@ -73,17 +79,24 @@ describe('themeTemplate()', () => {
   });
 
   it('honors a custom path and creates its directory', () => {
-    const res = themeTemplate({cwd: tmpDir, targetPath: 'src/themes/starter.ts'});
+    const res = themeTemplate({
+      cwd: tmpDir,
+      targetPath: 'src/themes/starter.ts',
+    });
 
     expect(res.data.path).toBe(path.join('src', 'themes', 'starter.ts'));
-    expect(fs.existsSync(path.join(tmpDir, 'src/themes/starter.ts'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'src/themes/starter.ts'))).toBe(
+      true,
+    );
   });
 
   it('refuses a path that escapes the project', () => {
-    expect(() => themeTemplate({cwd: tmpDir, targetPath: '../escaped.ts'})).toThrow(
-      /theme template path/,
+    expect(() =>
+      themeTemplate({cwd: tmpDir, targetPath: '../escaped.ts'}),
+    ).toThrow(/theme template path/);
+    expect(fs.existsSync(path.join(path.dirname(tmpDir), 'escaped.ts'))).toBe(
+      false,
     );
-    expect(fs.existsSync(path.join(path.dirname(tmpDir), 'escaped.ts'))).toBe(false);
   });
 
   it('reports a failed write with a registered error code', () => {
@@ -98,5 +111,74 @@ describe('themeTemplate()', () => {
 
     expect(error).toMatchObject({code: 'ERR_WRITE_FAILED'});
     expect(isErrorCode(error.code)).toBe(true);
+  });
+
+  describe('never replaces a file that is not a theme source', () => {
+    it.each([
+      ['package.json', 'ERR_INVALID_ARGUMENT'],
+      ['styles/x.css', 'ERR_INVALID_ARGUMENT'],
+      ['src/app/layout.tsx', 'ERR_FILE_EXISTS'],
+    ])(
+      'refuses %s with --overwrite and leaves it as it was',
+      (target, code) => {
+        const dest = path.join(tmpDir, target);
+        fs.mkdirSync(path.dirname(dest), {recursive: true});
+        fs.writeFileSync(dest, 'mine\n');
+
+        expect(() =>
+          themeTemplate({cwd: tmpDir, targetPath: target, overwrite: true}),
+        ).toThrow(expect.objectContaining({code}));
+        expect(fs.readFileSync(dest, 'utf-8')).toBe('mine\n');
+      },
+    );
+
+    it('replaces an earlier copy of the template at any .ts path', () => {
+      const dest = path.join(tmpDir, 'starter.ts');
+      themeTemplate({cwd: tmpDir, targetPath: 'starter.ts'});
+      fs.appendFileSync(dest, '// edited\n');
+
+      const res = themeTemplate({
+        cwd: tmpDir,
+        targetPath: 'starter.ts',
+        overwrite: true,
+      });
+
+      expect(res.data.written).toBe(true);
+      expect(fs.readFileSync(dest, 'utf-8')).not.toMatch(/edited/);
+    });
+
+    it('replaces a file named like a theme source', () => {
+      fs.writeFileSync(path.join(tmpDir, 'ocean.theme.ts'), '// mine\n');
+      const res = themeTemplate({
+        cwd: tmpDir,
+        targetPath: 'ocean.theme.ts',
+        overwrite: true,
+      });
+      expect(res.data.written).toBe(true);
+    });
+
+    it('refuses a folder, with or without a trailing slash, and names the file path', () => {
+      fs.mkdirSync(path.join(tmpDir, 'src'));
+      for (const target of ['src', 'src/', 'newdir/']) {
+        let error;
+        try {
+          themeTemplate({cwd: tmpDir, targetPath: target, overwrite: true});
+        } catch (caught) {
+          error = caught;
+        }
+        expect(error).toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
+        expect(error.suggestions[0].name).toMatch(
+          /theme template (src|newdir)\/theme\.template\.ts$/,
+        );
+      }
+      expect(fs.existsSync(path.join(tmpDir, 'newdir'))).toBe(false);
+    });
+
+    it('refuses a blank path', () => {
+      expect(() => themeTemplate({cwd: tmpDir, targetPath: '  '})).toThrow(
+        expect.objectContaining({code: 'ERR_INVALID_ARGUMENT'}),
+      );
+      expect(fs.readdirSync(tmpDir)).toEqual([]);
+    });
   });
 });

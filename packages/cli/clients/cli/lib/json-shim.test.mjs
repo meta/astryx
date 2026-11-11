@@ -42,7 +42,7 @@ describe('--json shim: --help renders JSON envelope', () => {
     expect(parsed.data).toBeDefined();
     expect(parsed.data.command).toBe('astryx');
     // Should list known subcommands
-    const subNames = parsed.data.subcommands.map((s) => s.name);
+    const subNames = parsed.data.subcommands.map(s => s.name);
     expect(subNames).toContain('component');
     expect(subNames).toContain('theme');
   });
@@ -55,12 +55,17 @@ describe('--json shim: --help renders JSON envelope', () => {
     expect(parsed.type).toBe('help');
     expect(parsed.data.command).toBe('astryx component');
     // Should expose its options
-    const flags = parsed.data.options.map((o) => o.flags);
+    const flags = parsed.data.options.map(o => o.flags);
     expect(flags).toContain('--list');
   });
 
   it('astryx theme build --help --json emits a nested subcommand help envelope', async () => {
-    const {status, stdout} = await runCli(['theme', 'build', '--help', '--json']);
+    const {status, stdout} = await runCli([
+      'theme',
+      'build',
+      '--help',
+      '--json',
+    ]);
     expect(status).toBe(0);
     const parsed = parseJson(stdout);
     expect(parsed.apiVersion).toBe(1);
@@ -90,11 +95,76 @@ describe('--json shim: parse errors emit JSON error envelope', () => {
   });
 
   it('astryx component --json --bogus-flag (unknown option on subcmd) emits error envelope, exit 1', async () => {
-    const {status, stdout} = await runCli(['component', '--json', '--bogus-flag']);
+    const {status, stdout} = await runCli([
+      'component',
+      '--json',
+      '--bogus-flag',
+    ]);
     expect(status).toBe(1);
     const parsed = parseJson(stdout);
     expect(parsed.apiVersion).toBe(1);
     expect(parsed.error).toMatch(/unknown option/i);
+  });
+});
+
+describe('--json shim: an option given without its value', () => {
+  it('emits ERR_MISSING_ARGUMENT with the command usage, exit 1', async () => {
+    const {status, stdout, stderr} = await runCli([
+      '--json',
+      'theme',
+      'add',
+      '--package',
+    ]);
+    expect(status).toBe(1);
+    expect(stderr).toBe('');
+    const parsed = parseJson(stdout);
+    expect(parsed.code).toBe('ERR_MISSING_ARGUMENT');
+    expect(parsed.error).toMatch(/--package <package>' argument missing/);
+    expect(parsed.suggestions).toEqual([
+      {name: 'astryx theme add [options] [slug]', reason: 'usage'},
+    ]);
+  });
+
+  it('prints the usage line after the error in text mode', async () => {
+    const {status, stderr} = await runCli(['theme', 'build', 'x.ts', '--out']);
+    expect(status).toBe(1);
+    expect(stderr).toMatch(
+      /^Error: option '-o, --out <path>' argument missing\n/,
+    );
+    expect(stderr).toMatch(
+      /Usage: astryx theme build \[options\] <files\.\.\.>/,
+    );
+  });
+});
+
+describe('help <command words>', () => {
+  it('prints the help of the deepest command the words name', async () => {
+    const {status, stdout} = await runCli(['help', 'theme', 'build']);
+    expect(status).toBe(0);
+    expect(stdout).toMatch(
+      /^Usage: astryx theme build \[options\] <files\.\.\.>/,
+    );
+  });
+
+  it('answers a four-level command under --json', async () => {
+    const {status, stdout} = await runCli([
+      '--json',
+      'help',
+      'experimental',
+      'theme',
+      'editor',
+      'set',
+    ]);
+    expect(status).toBe(0);
+    expect(parseJson(stdout).data.command).toBe(
+      'astryx experimental theme editor set',
+    );
+  });
+
+  it('stops at the deepest known word', async () => {
+    const {status, stdout} = await runCli(['help', 'theme', 'nope']);
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/^Usage: astryx theme \[options\] \[command\]/);
   });
 });
 
@@ -108,7 +178,7 @@ describe('--json shim: unknown subcommand emits error envelope', () => {
     expect(parsed.error).toMatch(/bogus-cmd/);
     // Suggestions should list known commands
     expect(Array.isArray(parsed.suggestions)).toBe(true);
-    const names = parsed.suggestions.map((s) => s.name);
+    const names = parsed.suggestions.map(s => s.name);
     expect(names).toContain('component');
   });
 });
@@ -124,26 +194,37 @@ describe('--json shim: invalid --detail choice', () => {
     // Single emission only — stdout must be exactly one JSON document.
     // (parseJson would have thrown if there were two concatenated docs.)
     // Belt-and-suspenders: count opening braces at column 0.
-    const topLevelBraces = stdout.split('\n').filter((l) => l === '{').length;
+    const topLevelBraces = stdout.split('\n').filter(l => l === '{').length;
     expect(topLevelBraces).toBe(1);
   });
 });
 
 describe('--json shim: invalid --lang choice', () => {
   it('astryx docs color --lang fr --json emits a single error envelope, exit 1', async () => {
-    const {status, stdout} = await runCli(['docs', 'color', '--lang', 'fr', '--json']);
+    const {status, stdout} = await runCli([
+      'docs',
+      'color',
+      '--lang',
+      'fr',
+      '--json',
+    ]);
     expect(status).toBe(1);
     const parsed = parseJson(stdout);
     expect(parsed.apiVersion).toBe(1);
     expect(parsed.error).toMatch(/--lang/);
     expect(parsed.error).toMatch(/invalid|allowed/i);
     // Single emission only — stdout must be exactly one JSON document.
-    const topLevelBraces = stdout.split('\n').filter((l) => l === '{').length;
+    const topLevelBraces = stdout.split('\n').filter(l => l === '{').length;
     expect(topLevelBraces).toBe(1);
   });
 
   it('astryx docs color --lang fr (no --json) writes to stderr and exits 1', async () => {
-    const {status, stdout, stderr} = await runCli(['docs', 'color', '--lang', 'fr']);
+    const {status, stdout, stderr} = await runCli([
+      'docs',
+      'color',
+      '--lang',
+      'fr',
+    ]);
     expect(status).toBe(1);
     expect(stdout).toBe('');
     expect(stderr).toMatch(/--lang/);
@@ -250,7 +331,7 @@ describe('--json shim: help shown for a failed invocation is an error envelope',
     const writes = [];
     const origWrite = process.stdout.write;
     // @ts-expect-error - test-only capture
-    process.stdout.write = (chunk) => writes.push(String(chunk)) > 0;
+    process.stdout.write = chunk => writes.push(String(chunk)) > 0;
     setJsonMode(true);
     delete process.__xdsJsonHandled;
     try {
@@ -262,7 +343,8 @@ describe('--json shim: help shown for a failed invocation is an error envelope',
     }
     const parsed = parseJson(writes.join(''));
     expect(parsed.code).toBe('ERR_MISSING_ARGUMENT');
-    expect(parsed.suggestions).toEqual([{name: 'late child', reason: 'available subcommand'}]);
+    expect(parsed.suggestions).toEqual([
+      {name: 'late child', reason: 'available subcommand'},
+    ]);
   });
-
 });

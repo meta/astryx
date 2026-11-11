@@ -54,14 +54,18 @@ describe('astryx theme template', () => {
   it('replaces it with --overwrite', async () => {
     fs.writeFileSync(path.join(tmpDir, 'theme.template.ts'), '// mine\n');
 
-    const {status} = await runCli(['theme', 'template', '--overwrite'], {cwd: tmpDir});
+    const {status} = await runCli(['theme', 'template', '--overwrite'], {
+      cwd: tmpDir,
+    });
 
     expect(status).toBe(0);
     expect(read('theme.template.ts')).toMatch(/defineTheme/);
   });
 
   it('returns a theme.template envelope under --json', async () => {
-    const {status, stdout} = await runCli(['--json', 'theme', 'template'], {cwd: tmpDir});
+    const {status, stdout} = await runCli(['--json', 'theme', 'template'], {
+      cwd: tmpDir,
+    });
 
     expect(status).toBe(0);
     const payload = JSON.parse(stdout);
@@ -74,13 +78,18 @@ describe('astryx theme template', () => {
   });
 
   it('refuses a path that escapes the project', async () => {
-    const {status, stderr} = await runCli(['theme', 'template', '../escaped.ts'], {
-      cwd: tmpDir,
-    });
+    const {status, stderr} = await runCli(
+      ['theme', 'template', '../escaped.ts'],
+      {
+        cwd: tmpDir,
+      },
+    );
 
     expect(status).toBe(1);
     expect(stderr).toMatch(/outside the project root/);
-    expect(fs.existsSync(path.join(path.dirname(tmpDir), 'escaped.ts'))).toBe(false);
+    expect(fs.existsSync(path.join(path.dirname(tmpDir), 'escaped.ts'))).toBe(
+      false,
+    );
   });
 
   it('fails a write with ERR_WRITE_FAILED under --json', async () => {
@@ -93,5 +102,22 @@ describe('astryx theme template', () => {
 
     expect(status).toBe(1);
     expect(JSON.parse(stdout).code).toBe('ERR_WRITE_FAILED');
+  });
+});
+
+describe('theme subcommands refuse a stray word', () => {
+  it.each([
+    [['theme', 'template', 'a.ts', 'b.ts']],
+    [['theme', 'use', 'neutral', 'dark']],
+    [['theme', 'remove', 'neutral', 'extra']],
+    [['theme', 'list', 'neutral']],
+    [['theme', 'targets', 'Switch', 'Button']],
+    [['theme', 'eject', 'neutral', 'a', 'b']],
+  ])('%j exits 1 with ERR_INVALID_ARGUMENT and writes nothing', async args => {
+    const before = fs.readdirSync(tmpDir).sort();
+    const {status, stdout} = await runCli(['--json', ...args], {cwd: tmpDir});
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout).code).toBe('ERR_INVALID_ARGUMENT');
+    expect(fs.readdirSync(tmpDir).sort()).toEqual(before);
   });
 });

@@ -59,7 +59,7 @@ export const doc = {
     {
       type: 'theme.app',
       description:
-        'The complete generated-module state and add change. Its envelope package names the npm package that owns the added theme, except for a local theme.',
+        'The complete generated-module state and add change. Its envelope package names the npm package that owns the added theme, except for a local theme. data.notes, present only when needed, says which owner was chosen when a local theme shadows a package theme with the same slug, names a replaced recorded owner, and names added themes left out because their source is gone.',
     },
   ],
   throws: [

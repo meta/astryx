@@ -96,4 +96,19 @@ describe('themeUse', () => {
       message: expect.stringContaining(' theme add missing`'),
     });
   });
+
+  it('leaves out an added theme whose source is gone, and says so', async () => {
+    fs.rmSync(path.join(tmpDir, 'node_modules/@acme/themes/themes/reef'), {
+      recursive: true,
+    });
+
+    const result = await themeUse('ocean', {cwd: tmpDir});
+
+    expect(result.data.themes.map(theme => theme.slug)).toEqual(['ocean']);
+    expect(result.data.notes).toEqual([
+      expect.stringMatching(
+        /^Removed "reef" from the app themes: @acme\/themes no longer provides it\./,
+      ),
+    ]);
+  });
 });

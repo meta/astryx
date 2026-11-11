@@ -58,7 +58,7 @@ export const doc = {
       name: 'options.out',
       type: 'string',
       description:
-        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file.',
+        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. An existing folder, or a path that ends in a separator, names the folder: the CSS is written there as <name>.css.',
     },
     {
       name: 'options.check',
@@ -101,7 +101,15 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the resolved theme is invalid, for example it has no name, a custom Heading type has no standalone rule with a declaration the compiler can emit, or its icon registry cannot be preserved through an import (also rejected in check mode)',
+      when: 'the resolved theme is invalid, for example it has no name, a custom Heading type has no standalone rule with a declaration the compiler can emit, or its icon registry cannot be preserved through an import (also rejected in check mode); or an output would replace the theme source, two outputs share one path, or the file is itself an output of a build',
+    },
+    {
+      code: 'ERR_FILE_EXISTS',
+      when: 'an output path holds a non-empty file that a theme build did not write, such as package.json or app source; nothing is written',
+    },
+    {
+      code: 'ERR_INVALID_ARGUMENT',
+      when: 'the theme file is a folder',
     },
     {
       code: 'ERR_PATH_TRAVERSAL',

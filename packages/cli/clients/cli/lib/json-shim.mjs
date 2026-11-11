@@ -41,10 +41,18 @@
  * such as help printed as the failure report, still passes through.
  */
 
-import {API_VERSION, isJsonMode, toErrorEnvelope} from '../../../foundation/response/json.mjs';
+import {
+  API_VERSION,
+  isJsonMode,
+  toErrorEnvelope,
+} from '../../../foundation/response/json.mjs';
 import {answeredBy} from '../../../foundation/release/run-context.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {setCommand, setOutcome, recordHelp} from '../../../foundation/debug/index.mjs';
+import {
+  setCommand,
+  setOutcome,
+  recordHelp,
+} from '../../../foundation/debug/index.mjs';
 
 /**
  * Fully-qualified name of a command relative to the root program, e.g.
@@ -98,17 +106,18 @@ export function buildHelpEnvelope(cmd) {
   }
 
   /** @type {Array<{flags: string, description: string, defaultValue?: unknown, choices?: string[]}>} */
-  const options = cmd.options.map((o) => {
+  const options = cmd.options.map(o => {
     /** @type {any} */
     const opt = {flags: o.flags, description: o.description || ''};
     if (o.defaultValue !== undefined) opt.defaultValue = o.defaultValue;
-    if (Array.isArray(o.argChoices) && o.argChoices.length) opt.choices = o.argChoices;
+    if (Array.isArray(o.argChoices) && o.argChoices.length)
+      opt.choices = o.argChoices;
     return opt;
   });
 
   const subcommands = cmd.commands
-    .filter((s) => !(/** @type {any} */ (s))._hidden)
-    .map((s) => ({name: s.name(), description: s.description() || ''}));
+    .filter(s => !(/** @type {any} */ (s)._hidden))
+    .map(s => ({name: s.name(), description: s.description() || ''}));
 
   return {
     apiVersion: API_VERSION,
@@ -134,7 +143,7 @@ export function buildHelpEnvelope(cmd) {
  */
 export function buildHelpErrorEnvelope(cmd) {
   const available = cmd.commands
-    .filter(s => !(/** @type {any} */ (s))._hidden && s.name() !== 'help')
+    .filter(s => !(/** @type {any} */ (s)._hidden) && s.name() !== 'help')
     .map(s => s.name());
   if (!cmd.parent) {
     // Commander dispatches `help <name>` with ['help', <name>, ...] in args.
@@ -148,7 +157,10 @@ export function buildHelpErrorEnvelope(cmd) {
   const group = fullNameOf(cmd);
   return toErrorEnvelope(
     `'${group}' needs a subcommand`,
-    available.map(name => ({name: `${group} ${name}`, reason: 'available subcommand'})),
+    available.map(name => ({
+      name: `${group} ${name}`,
+      reason: 'available subcommand',
+    })),
     ERROR_CODES.ERR_MISSING_ARGUMENT,
   );
 }
@@ -188,6 +200,7 @@ function commanderCodeToErrorCode(commanderCode, message) {
     case 'commander.unknownOption':
       return ERROR_CODES.ERR_INVALID_OPTION;
     case 'commander.missingArgument':
+    case 'commander.optionMissingArgument':
     case 'commander.missingMandatoryOptionValue':
       return ERROR_CODES.ERR_MISSING_ARGUMENT;
     case 'commander.excessArguments':
@@ -249,10 +262,12 @@ function applyShimRecursively(cmd) {
     } catch {
       // Never let recording interfere with the error path.
     }
+    // The error handler names the rejected command's usage from it.
+    /** @type {any} */ (err)[REJECTED_COMMAND] = cmd;
     throw err;
   });
   cmd.configureOutput({
-    writeOut: (str) => process.stdout.write(str),
+    writeOut: str => process.stdout.write(str),
     // Commander's own "error: ..." line never reaches the user. Under --json a
     // consumer parsing both streams must not see it alongside the envelope;
     // in text mode it is Commander's format, not Astryx's, so an invalid
@@ -264,7 +279,7 @@ function applyShimRecursively(cmd) {
     // ONLY that line. Commander also writes HELP through this channel when it
     // shows help because the invocation failed (a command group with no
     // subcommand), and that output is still wanted in text mode.
-    writeErr: (str) => {
+    writeErr: str => {
       if (jsonActive()) return;
       if (/^error:\s/i.test(str)) return;
       process.stderr.write(str);
@@ -274,6 +289,25 @@ function applyShimRecursively(cmd) {
   for (const sub of cmd.commands) {
     applyShimRecursively(sub);
   }
+}
+
+/** Carries the command Commander rejected from exitOverride to the error handler. */
+const REJECTED_COMMAND = Symbol.for('astryx.jsonShim.rejectedCommand');
+
+/**
+ * The usage line of the command a parse error came from, as a suggestion, for
+ * an option given without its value.
+ * @param {unknown} err
+ * @param {string} code
+ * @returns {import('../../../foundation/response/base').Suggestion[] | undefined}
+ */
+function usageSuggestion(err, code) {
+  if (code !== 'commander.optionMissingArgument') return undefined;
+  const cmd = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+  if (!cmd) return undefined;
+  const parts = [];
+  for (let node = cmd; node; node = node.parent) parts.unshift(node.name());
+  return [{name: `${parts.join(' ')} ${cmd.usage()}`.trim(), reason: 'usage'}];
 }
 
 /** Marks a command whose `command`/`addCommand` already self-install the shim. */
@@ -351,7 +385,9 @@ function patchOutputHelp(cmd) {
   if (anyCmd.__xdsHelpPatched) return;
   anyCmd.__xdsHelpPatched = true;
   const original = cmd.outputHelp.bind(cmd);
-  anyCmd.outputHelp = function patchedOutputHelp(/** @type {any} */ contextOptions) {
+  anyCmd.outputHelp = function patchedOutputHelp(
+    /** @type {any} */ contextOptions,
+  ) {
     if (jsonActive()) {
       if (!process.__xdsJsonHandled) {
         process.__xdsJsonHandled = true;
@@ -377,7 +413,9 @@ function patchPrototype(CommandCtor) {
   if (proto.__xdsHelpPatched) return;
   proto.__xdsHelpPatched = true;
   const original = proto.outputHelp;
-  proto.outputHelp = function patchedProtoOutputHelp(/** @type {any} */ contextOptions) {
+  proto.outputHelp = function patchedProtoOutputHelp(
+    /** @type {any} */ contextOptions,
+  ) {
     if (jsonActive()) {
       if (!process.__xdsJsonHandled) {
         process.__xdsJsonHandled = true;
@@ -413,7 +451,9 @@ function patchPrototype(CommandCtor) {
  */
 export function handleCommanderError(err) {
   if (!err || typeof err !== 'object' || !('code' in err)) return false;
-  const code = /** @type {{code?: string, exitCode?: number, message?: string}} */ (err).code;
+  const code =
+    /** @type {{code?: string, exitCode?: number, message?: string}} */ (err)
+      .code;
   if (typeof code !== 'string' || !code.startsWith('commander.')) return false;
 
   const exitCode = /** @type {{exitCode?: number}} */ (err).exitCode ?? 1;
@@ -448,12 +488,18 @@ export function handleCommanderError(err) {
   // Real error paths. Strip Commander's "error: " prefix once: in the envelope
   // the key is already `error`, and in text mode the Astryx prefix replaces it.
   const cleaned = message.replace(/^error:\s*/i, '');
+  const suggestions = usageSuggestion(err, code);
   if (jsonActive()) {
-    emitJsonError(cleaned, undefined, commanderCodeToErrorCode(code, cleaned));
+    emitJsonError(
+      cleaned,
+      suggestions,
+      commanderCodeToErrorCode(code, cleaned),
+    );
   } else {
     // Commander's own line was suppressed above, so a parse failure reads the
     // same as every other CLI error — the `Error: …` line cliError prints.
     process.stderr.write(`Error: ${cleaned}\n`);
+    if (suggestions) process.stderr.write(`Usage: ${suggestions[0].name}\n`);
   }
   process.exit(exitCode || 1);
 }
