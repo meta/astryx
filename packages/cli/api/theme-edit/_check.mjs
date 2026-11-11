@@ -540,7 +540,7 @@ export function checkSetting(
         s.note = `no effect on ${hard.map(([t]) => t).join(', ')} (they never read ${thing})`;
       if (!s.note && recorded.length) {
         const fed = C.feeds(recorded[0][0], thing);
-        if (fed.length) s.note = `feeds ${C.fmtFeeds(fed)}`;
+        if (fed.length) s.note = `feeds ${C.fmtFeeds(fed, recorded[0][0])}`;
       }
       const soft = results.filter(([, r]) => r?.soft);
       if (!s.note && soft.length && soft.length === results.length)
@@ -549,10 +549,22 @@ export function checkSetting(
         ).message;
     } else {
       const r = C.checkTokenGlobal(thing, P);
+      // Tokens whose default is built from this one: a part that reads
+      // them sees the change.
+      const fed = r
+        ? Object.entries(TOKENS)
+            .filter(
+              ([k, v]) =>
+                k !== thing && new RegExp(`var\\(${thing}[,)]`).test(String(v)),
+            )
+            .map(([k]) => k)
+        : [];
       // A token a dial writes is always accepted, so a dial's notes never
       // name a token `set` refuses.
-      if (r && dialWrites(thing))
-        s.note = `no part reads ${thing} directly in this Core; a dial writes it too, so it is set as asked`;
+      if (r && fed.length)
+        s.note = `no part reads ${thing} itself, but ${fed.slice(0, 4).join(', ')} ${fed.length > 1 ? 'are' : 'is'} built from it, so the change shows wherever ${fed.length > 1 ? 'those are' : 'that is'} used${fed.some(k => k.startsWith('--color-syntax-')) ? ' (such as diff rows in code blocks)' : ''}`;
+      else if (r && dialWrites(thing))
+        s.note = `no part of this Core reads ${thing}, and no token it feeds is read, so it changes nothing you see now; it is set as asked because a dial writes it too`;
       else if (r)
         refuse(E.ERR_THEME_NO_EFFECT, r.message, {run: r.run, also: r.also});
     }
@@ -682,6 +694,62 @@ const dialWrites = token =>
     token,
   );
 
+/** Hues a question can name, each with or without light, dark or pale. */
+const HUES = [
+  'gray',
+  'grey',
+  'red',
+  'blue',
+  'green',
+  'yellow',
+  'orange',
+  'purple',
+  'pink',
+  'navy',
+];
+/** Color words that can name a part's fill, longest first. */
+const COLOR_WORDS = [
+  ...HUES.flatMap(h => ['light', 'dark', 'pale'].map(s => `${s} ${h}`)),
+  ...HUES,
+  'white',
+  'black',
+  'cream',
+  'beige',
+];
+/** Fills for the plain grays, so the command has a real value. */
+const NAMED_FILLS = /** @type {Record<string, string>} */ ({
+  'light gray': '#e5e7eb',
+  'light grey': '#e5e7eb',
+  gray: '#9ca3af',
+  grey: '#9ca3af',
+  'dark gray': '#374151',
+  'dark grey': '#374151',
+  'light blue': '#dbeafe',
+  'pale blue': '#eff6ff',
+  white: '#ffffff',
+  black: '#000000',
+});
+/** Nouns for parts that have a fill. */
+const PART_NOUNS = [
+  'button',
+  'card',
+  'panel',
+  'banner',
+  'header',
+  'input',
+  'field',
+  'badge',
+  'tab',
+  'chip',
+  'pill',
+  'toast',
+  'tooltip',
+  'dialog',
+  'modal',
+  'sidebar',
+  'row',
+];
+
 /**
  * Answer a plain-words question with exact commands: the parts it names,
  * the aspects it asks about, and what each part really reads for them.
@@ -711,11 +779,54 @@ export function answerHow(ctx, question) {
     /\bwhite (text|labels?|writing|words)\b|\b(text|labels?|writing|words) (in |is |are )?white\b/.test(
       text,
     );
+  // A color word right before a part ("light gray button") is the part's
+  // fill, so it keeps the background aspect beside text.
+  const fillMatch =
+    new RegExp(
+      `\\b(${COLOR_WORDS.join('|')})\\s+(?:${PART_NOUNS.join('|')})s?\\b`,
+    ).exec(text) ??
+    new RegExp(
+      `\\b(?:${PART_NOUNS.join('|')})s?\\s+(?:with\\s+an?\\s+|in\\s+|is\\s+)?(${COLOR_WORDS.join('|')})\\b(?!\\s+(?:text|labels?|writing|words))`,
+    ).exec(text);
+  const fillWord = Boolean(fillMatch);
+  // A fill named outright ("a blue tint") keeps the background aspect.
+  const namedFill =
+    /background|fill|gradient|glossy|\btint(ed)?\b|\bbg\b/.test(text) ||
+    fillWord;
   if (
     intents.includes('text') &&
     intents.includes('background') &&
-    !/background|fill|gradient|glossy/.test(text) &&
+    !namedFill &&
     !(/\bwhite\b/.test(text) && !whiteText)
+  )
+    intents = intents.filter(g => g !== 'background');
+  // "border color" or "a gray border" is the border's color, not a fill; a
+  // color word for anything else ("a dark card with a border", "the card
+  // color and its border", "colored buttons") is the fill's.
+  const fillWords = [...COLOR_WORDS, 'dark', 'light', 'colou?r(ed)?'].join('|');
+  // Take out every color word that belongs to the border, the text or the
+  // mode ("a light gray border", "the color of the border", "in dark
+  // mode"); a color word left over is the fill's.
+  const rest = text
+    .replace(/\b(dark|light) (mode|theme)\b/g, ' ')
+    .replace(
+      /\bcolou?r of (the |its |a )?(border|outline|stroke|edge|text|labels?)s?\b/g,
+      ' ',
+    )
+    .replace(/\b(border|outline|stroke|edge|text)s? colou?r\b/g, ' ')
+    .replace(
+      new RegExp(
+        `\\b((${fillWords}|thin|thick|subtle|bold)\\s+)+(border|outline|stroke|edge|text|labels?)s?\\b`,
+        'g',
+      ),
+      ' ',
+    );
+  const looseColor = new RegExp(`\\b(${fillWords})\\b`).test(rest);
+  if (
+    intents.includes('border') &&
+    intents.includes('background') &&
+    !namedFill &&
+    !looseColor
   )
     intents = intents.filter(g => g !== 'background');
   if (!intents.length && parts.length) intents = [null];
@@ -741,10 +852,34 @@ export function answerHow(ctx, question) {
     if (g === 'font' && /bold|heav/.test(text)) return '700';
     if (g === 'font' && /\b(light(er)?|thin)\b/.test(text)) return '300';
     if (g === 'text' && whiteText) return '"#ffffff"';
-    if (g === 'text' && /\baccent (text|labels?)\b/.test(text))
+    if (g === 'text' && /\bdark (text|labels?|writing|words)\b/.test(text))
+      return '"#111827"';
+    if (g === 'background' && fillMatch) {
+      const named = NAMED_FILLS[fillMatch[1]];
+      if (named) return `"${named}"`;
+    }
+    if (g === 'border')
+      return `"${/\bthick\b/.test(text) ? '2px' : '1px'} solid <color>"`;
+    if (g === 'text' && /\baccent[- ]?(colou?red )?(text|labels?)\b/.test(text))
       return '"var(--color-text-accent)"';
     if (g === 'background' && /\bwhite\b/.test(text) && !whiteText)
       return '"#ffffff"';
+    return '<value>';
+  };
+  /**
+   * A value for one token, of its own type: a whole border value suits only
+   * the border property, so a color token takes a color and a width token a
+   * width.
+   * @param {string} token @param {string} group
+   */
+  const tokenValue = (token, group) => {
+    const v = V(group);
+    const whole = /\s(solid|dashed|dotted)\s/.test(v);
+    if (!whole) return v;
+    const type = C.typeOf(token);
+    if (type === 'color') return '"<color>"';
+    if (type === 'size' || /width/.test(token))
+      return /\b2px\b/.test(v) ? '2px' : '1px';
     return '<value>';
   };
   for (const raw of parts.slice(0, 3)) {
@@ -902,11 +1037,14 @@ export function answerHow(ctx, question) {
             : group === 'font'
               ? 'font-family'
               : DIRECT[group];
+      const restingBorder =
+        group === 'border' && list.every(r => r.when.some(w => /:/.test(w)));
       const tokenRoute =
         (group === 'text' || group === 'background' || group === 'border') &&
+        !restingBorder &&
         !/gradient|inset/.test(V(group));
       results.push({
-        text: `${part} ${aspect ? (tracking ? 'letter spacing' : 'weight') : group}${when ? ` (${wp} ${wv})` : ''}: ${list.length ? `comes from ${list.map(r => r.token + C.fmtWhen(r.when) + C.statusNote(one, r.token)).join(', ')}` : inherited ? `inherits the page's text color (${inherited} for the whole theme); set the property for this part alone` : 'no token of its own; set the property directly'}`,
+        text: `${part} ${aspect ? (tracking ? 'letter spacing' : 'weight') : group}${when ? ` (${wp} ${wv})` : ''}: ${restingBorder ? `the resting border is the border property (no token sets it)${list.length ? `; in states it reads ${list.map(r => r.token + C.fmtWhen(r.when)).join(', ')}` : ''}` : list.length ? `comes from ${list.map(r => r.token + C.fmtWhen(r.when) + C.statusNote(one, r.token)).join(', ')}` : inherited ? `inherits the page's text color (${inherited} for the whole theme); set the property for this part alone` : 'no token of its own; set the property directly'}`,
         commands: [
           `${P} set <theme> ${direct} ${V(group)} --on ${part}${when}   # direct: always works`,
           ...(inherited
@@ -917,7 +1055,7 @@ export function answerHow(ctx, question) {
                 .slice(0, 2)
                 .map(
                   r =>
-                    `${P} set <theme> ${r.token} ${V(group)} --on ${part}   # via the token${C.fmtWhen(r.when)}`,
+                    `${P} set <theme> ${r.token} ${tokenValue(r.token, group)} --on ${part}   # via the token${C.fmtWhen(r.when)}`,
                 )
             : []),
         ],

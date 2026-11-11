@@ -16,6 +16,7 @@ import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {themeBuildForReport} from '../theme/build/build.mjs';
 import {
   AUTO_SPREAD,
@@ -33,7 +34,7 @@ import {
   TYPE_STYLES,
   familyOf,
 } from './_tables.mjs';
-import {parseColor, ratio} from './_color.mjs';
+import {alphaOf, compositeOver, parseColor, ratio} from './_color.mjs';
 import {
   PALETTE_DIALS,
   paletteFiles,
@@ -108,24 +109,6 @@ export function themeFiles(cwd, slug) {
 export const shown = (cwd, f) =>
   path.relative(cwd, f).split(path.sep).join('/');
 
-/** @param {string} a @param {string} b */
-function lev(a, b) {
-  const d = Array.from({length: a.length + 1}, (_, i) => [
-    i,
-    ...Array(b.length).fill(0),
-  ]);
-  for (let j = 1; j <= b.length; j++) d[0][j] = j;
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++)
-      d[i][j] = Math.min(
-        d[i - 1][j] + 1,
-        d[i][j - 1] + 1,
-        d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-  }
-  return d[a.length][b.length];
-}
-
 /**
  * Up to `n` names close to `x`.
  * @param {string} x
@@ -139,7 +122,7 @@ export function nearest(x, list, n = 3) {
       c =>
         /** @type {[string, number]} */ ([
           c,
-          c.includes(x) || x.includes(c) ? 1 : lev(x, c),
+          c.includes(x) || x.includes(c) ? 1 : levenshteinDistance(x, c),
         ]),
     )
     .filter(([, s]) => s <= Math.max(2, Math.floor(x.length / 3)))
@@ -358,6 +341,11 @@ export function compileTheme(ctx, data, base) {
   /** @param {string} name @param {string | [string, string]} v @param {string} [mode] */
   const putTok = (name, v, mode) => {
     const t = (tok[name] ??= {});
+    // A one-mode theme writes the value of its mode to both sides.
+    if (Array.isArray(v) && modeOnly) {
+      t.light = t.dark = v[modeOnly === 'light' ? 0 : 1];
+      return;
+    }
     if (Array.isArray(v)) {
       if (!mode || mode === 'light') t.light = v[0];
       if (!mode || mode === 'dark') t.dark = v[1];
@@ -411,6 +399,9 @@ export function compileTheme(ctx, data, base) {
     /^--text-(heading|display)-\d-weight$/.test(k),
   );
   for (const s of data.settings) {
+    // A setting for the mode a one-mode theme does not have stays saved but
+    // does not apply (maskedSettings names it).
+    if (modeOnly && s.mode && s.mode !== modeOnly) continue;
     const parts = partsOf(ctx, s);
     if (s.source === 'dial') {
       if (s.thing === 'corners') {
@@ -474,8 +465,14 @@ export function compileTheme(ctx, data, base) {
       } else if (s.thing === 'type') {
         const T = TYPE_STYLES[s.value];
         theme.typography ??= {};
+        // The base is text-size's wherever it sits in the settings.
+        const size = [...data.settings]
+          .reverse()
+          .find(x => x.source === 'dial' && x.thing === 'text-size' && !x.on);
         theme.typography.scale = {
-          base: theme.typography.scale?.base ?? 14,
+          base: size
+            ? textPx(size.value)
+            : (theme.typography.scale?.base ?? 14),
           ratio: T.ratio,
         };
         if (T.weight && !headingsAxis('weight'))
@@ -491,9 +488,15 @@ export function compileTheme(ctx, data, base) {
             putTok(k, HEADING_WEIGHTS[s.value]);
       } else if (s.thing === 'text-size') {
         theme.typography ??= {};
+        // The ratio is type's wherever it sits in the settings.
+        const type = [...data.settings]
+          .reverse()
+          .find(x => x.source === 'dial' && x.thing === 'type');
         theme.typography.scale = {
           base: textPx(s.value),
-          ratio: theme.typography.scale?.ratio ?? 1.2,
+          ratio: type
+            ? TYPE_STYLES[type.value].ratio
+            : (theme.typography.scale?.ratio ?? 1.2),
         };
       } else if (s.thing === 'spacing') {
         const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
@@ -562,6 +565,18 @@ export function maskedSettings(data) {
       .filter(x => x.thing === 'headings')
       .map(x => x.axis ?? 'weight'),
   );
+  const only =
+    data.mode === 'light-only'
+      ? 'light'
+      : data.mode === 'dark-only'
+        ? 'dark'
+        : null;
+  for (const s of data.settings)
+    if (only && s.mode && s.mode !== only)
+      out.set(
+        s,
+        `saved for ${s.mode} mode, which a ${data.mode} theme does not have, so it does not apply`,
+      );
   for (const s of data.settings) {
     if (s.thing !== 'type' || !axes.size) continue;
     const T = TYPE_STYLES[s.value];
@@ -572,7 +587,7 @@ export function maskedSettings(data) {
     if (hidden.length)
       out.set(
         s,
-        `heading ${hidden.join(' and ')} come${hidden.length > 1 ? '' : 's'} from headings, not type`,
+        `type still sets the heading sizes and line heights; heading ${hidden.join(' and ')} come${hidden.length > 1 ? '' : 's'} from headings`,
       );
   }
   return out;
@@ -633,12 +648,24 @@ function settingsSource(slug, data, theme, pal) {
   const REF = '@@palette:';
   /** @param {string} family @param {'light' | 'dark'} m @param {import('./_palette.mjs').StopRef} r */
   const refOf = (family, m, r) =>
-    `${REF}${family}.${m}.${r.stop}${r.alpha ? `+${r.alpha}` : ''}`;
+    `${REF}${family}.${r.from ?? m}.${r.stop}${r.alpha ? `+${r.alpha}` : ''}`;
   const out = {...theme, name: `${slug}-settings`};
+  const only =
+    data.mode === 'light-only'
+      ? 'light'
+      : data.mode === 'dark-only'
+        ? 'dark'
+        : null;
   if (pal && theme.tokens) {
     out.tokens = {...theme.tokens};
     for (const [k, v] of Object.entries(pal.tokens)) {
       const now = theme.tokens[k];
+      // A one-mode theme reads one shade, its mode's, on both sides.
+      if (only) {
+        if (now === v[only].color)
+          out.tokens[k] = refOf(v.family, only, v[only]);
+        continue;
+      }
       const [l, d] = Array.isArray(now) ? now : [now, now];
       if (l !== v.light.color || d !== v.dark.color) continue;
       out.tokens[k] = [
@@ -775,10 +802,26 @@ async function runBuild(ctx, slug) {
 export async function resolvedTokens(ctx, slug) {
   const f = themeFiles(ctx.project.cwd, slug);
   // The built module is ESM in a .js file, and an app's package.json may not
-  // say "type": "module": an .mjs copy beside it loads as ESM with no Node
-  // warning. The query keeps it out of the module cache.
-  const copy = path.join(f.dir, `.${slug}.load.mjs`);
-  fs.copyFileSync(f.js, copy);
+  // say "type": "module": an .mjs copy loads as ESM with no Node warning,
+  // and the query keeps it out of the module cache. The copy goes in the
+  // project's cache folder, where package imports still resolve; only a
+  // module with relative imports is copied beside itself. (The shared theme
+  // loader caches a .js module of an ESM app by URL, so a second read in one
+  // command would return the first build.)
+  const source = fs.readFileSync(f.js, 'utf8');
+  // Each copy has its own name, so two commands at once never share one; a
+  // read-only cache folder falls back to the theme folder.
+  const name = `.${slug}.load-${process.pid}-${Math.random().toString(36).slice(2, 8)}.mjs`;
+  let copy = path.join(f.dir, name);
+  if (!/\bfrom\s+['"]\.\.?\//.test(source))
+    try {
+      fs.mkdirSync(ctx.project.cacheDir, {recursive: true});
+      fs.writeFileSync(path.join(ctx.project.cacheDir, name), source);
+      copy = path.join(ctx.project.cacheDir, name);
+    } catch {
+      // The cache folder is not writable: use the theme folder.
+    }
+  if (copy.startsWith(f.dir)) fs.writeFileSync(copy, source);
   /** @type {Record<string, any>} */
   let mod;
   try {
@@ -847,17 +890,27 @@ export async function contrastProblems(ctx, data, res) {
       ? base[/** @type {'light' | 'dark'} */ (m)][s.tokens[0]]
       : s.raw;
   };
-  const {problems, unchecked} = ctx.C.contrast(
+  const {problems, more, unchecked} = ctx.C.contrast(
     value,
     baseValue,
     modesOf(data),
-    {parseColor, ratio},
+    {
+      parseColor,
+      ratio,
+      alphaOf,
+      compositeOver,
+      page: m =>
+        res[/** @type {'light' | 'dark'} */ (m)]['--color-background-body'],
+    },
   );
   return [
     ...problems.map(
       x =>
         `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}); text needs 4.5:1`,
     ),
+    ...(more
+      ? [`and ${more} more text pair${more > 1 ? 's' : ''} below 4.5:1`]
+      : []),
     ...(unchecked.length
       ? [
           `not checked: text on or in ${unchecked.slice(0, 3).join(', ')}${unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : ''}, which ${unchecked.length === 1 ? 'is' : 'are'} not a fixed color`,
@@ -881,6 +934,29 @@ function parseSettings(text) {
 }
 
 /**
+ * A theme's undo history: the settings text before each change, oldest
+ * first. Empty when there is none; null when the file is damaged.
+ * @param {string} file
+ * @returns {string[] | null}
+ */
+export function readHistory(file) {
+  if (!fs.existsSync(file)) return [];
+  try {
+    const h = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (
+      Array.isArray(h) &&
+      h.every(
+        x => typeof x === 'string' && Array.isArray(JSON.parse(x).settings),
+      )
+    )
+      return h;
+  } catch {
+    // Damaged: reported by the caller.
+  }
+  return null;
+}
+
+/**
  * Write the settings, build, and on a failed build put back what was there.
  * Returns what changed in the resolved tokens and the lifted keys that are
  * new since the last build.
@@ -895,6 +971,30 @@ export async function commitTheme(ctx, slug, data, {history}) {
   const snapBefore = fs.existsSync(f.settings)
     ? fs.readFileSync(f.settings, 'utf8')
     : null;
+  /** @type {string[]} */
+  const notes = [];
+  // The history is read and checked before anything is written.
+  const past = history ? readHistory(f.history) : [];
+  if (past == null)
+    notes.push(
+      `${path.basename(f.history)} was damaged, so a new undo history starts with this change (earlier steps cannot be undone)`,
+    );
+  // A change that leaves the settings as they were builds nothing and adds
+  // no undo step.
+  const same = (/** @type {ThemeData | null} */ a) =>
+    a != null &&
+    JSON.stringify({...a, lifted: undefined}) ===
+      JSON.stringify({...data, lifted: undefined});
+  if (history && same(parseSettings(snapBefore)) && fs.existsSync(f.js))
+    return {
+      changed: [],
+      res: {light: {}, dark: {}},
+      problems: [],
+      warnings: [],
+      lifted: [],
+      notes,
+      unchanged: true,
+    };
   const resBefore =
     snapBefore && fs.existsSync(f.js)
       ? await resolvedTokens(ctx, slug).catch(() => null)
@@ -923,34 +1023,45 @@ export async function commitTheme(ctx, slug, data, {history}) {
   data.lifted = built.lifted;
   fs.writeFileSync(f.settings, `${JSON.stringify(data, null, 2)}\n`);
   if (snapBefore && history) {
-    const h = fs.existsSync(f.history)
-      ? JSON.parse(fs.readFileSync(f.history, 'utf8'))
-      : [];
+    const h = past ?? [];
     h.push(snapBefore);
     fs.writeFileSync(f.history, JSON.stringify(h.slice(-80)));
   }
-  const res = await resolvedTokens(ctx, slug);
+  // The change is saved from here on: a failure to check it is reported
+  // as "saved, not checked", never as a failed change.
+  /** @type {Record<'light' | 'dark', Record<string, string>>} */
+  let res = {light: {}, dark: {}};
   /** @type {string[]} */
   const changed = [];
-  const modes = modesOf(data);
-  if (resBefore) {
-    for (const m of modes) {
-      for (const k of Object.keys(res[m])) {
-        if (resBefore[m][k] === res[m][k]) continue;
-        const modal = MODAL.has(ctx.C.typeOf(k));
-        if (!modal && m === 'dark' && modes.length > 1) continue;
-        changed.push(
-          `${k}${modal && modes.length > 1 ? ` (${m})` : ''}: ${resBefore[m][k]} -> ${res[m][k]}`,
-        );
+  /** @type {string[]} */
+  let problems = [];
+  try {
+    res = await resolvedTokens(ctx, slug);
+    const modes = modesOf(data);
+    if (resBefore) {
+      for (const m of modes) {
+        for (const k of Object.keys(res[m])) {
+          if (resBefore[m][k] === res[m][k]) continue;
+          const modal = MODAL.has(ctx.C.typeOf(k));
+          if (!modal && m === 'dark' && modes.length > 1) continue;
+          changed.push(
+            `${k}${modal && modes.length > 1 ? ` (${m})` : ''}: ${resBefore[m][k]} -> ${res[m][k]}`,
+          );
+        }
       }
     }
+    problems = await contrastProblems(ctx, data, res);
+  } catch (e) {
+    ctx.unchecked ??= `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   return {
     changed,
     res,
-    problems: await contrastProblems(ctx, data, res),
+    problems,
     warnings: built.warnings,
     lifted: built.lifted.filter(x => !liftedBefore.has(x)),
+    notes,
+    unchanged: false,
   };
 }
 

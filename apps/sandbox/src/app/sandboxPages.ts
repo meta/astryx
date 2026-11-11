@@ -177,6 +177,12 @@ export const categories: SandboxCategory[] = [
           'WCAG 2.5.8 AA touch-target sizes visualized on real components',
       },
       {
+        name: 'Minute Wheel Loop',
+        href: '/pages/minute-wheel-loop/',
+        description:
+          'A TimeInput sheet at 11:58 AM whose minute wheel loops and keeps the hour, on a page that scrolls with the document',
+      },
+      {
         name: 'Text Types',
         href: '/pages/text-types/',
         description:

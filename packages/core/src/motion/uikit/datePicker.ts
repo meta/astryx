@@ -5,8 +5,8 @@
  * @input Nothing; data only
  * @output Exports `datePicker`: the rules UIDatePicker adds to its calendar
  *   and wheels. Its calendar pages, selects and toggles to the wheels.
- *   The month/year wheels change the date, the AM/PM column follows the hour,
- *   a column turns back onto a bound, and a day clamps to its month.
+ *   The month/year wheels change the date, and the AM/PM column follows the
+ *   hour. A column turns back onto a bound, and a day clamps to its month.
  * @position The date picker domain of the UIKit constants table
  *   (motion/uikit), for the date and time touch sheets. Every leaf names its
  *   source, which uikit.test.ts checks.
@@ -128,11 +128,19 @@ export const datePicker = {
      * 11 to 12 turns the time from AM to PM, and back. From 12 to 1 it keeps
      * the half of the day.
      * @source measured: UIKit lab, iOS 26.2 simulator, `.time` `.wheels`,
-     *   en_US: 11:58 AM, hour wheel +1 row → `valueChanged` 12:58 PM; then
-     *   the minute wheel's +4 rows carried the hour from 12 to 1 → 1:02 PM,
+     *   en_US: 11:58 AM, hour wheel +1 row → `valueChanged` 12:58 PM,
      *   Oct 23 2026
      */
     meridiemFollowsHour: true,
+    /**
+     * The minute wheel loops, and a turn past its seam keeps the hour: each
+     * column sets only its own part of the time.
+     * @source measured: iOS 26.2 simulator, `.time` `.wheels`, en_US: 2:30 PM,
+     *   a flick of the minute wheel through 59 to 05 left the hour wheel on 2
+     *   throughout, and one `valueChanged` at rest carried 2:05 PM; Safari's
+     *   time input picker kept the hour too, Nov 10 2026
+     */
+    minuteSeamKeepsHour: true,
     /**
      * A column that comes to rest past `minimumDate` or `maximumDate` turns
      * back onto the bound. Its `valueChanged` already carries the bound. For

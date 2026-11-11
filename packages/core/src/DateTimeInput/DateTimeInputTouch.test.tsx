@@ -513,6 +513,24 @@ describe('DateTimeInput touch surface', () => {
     expect(timeField()).toHaveValue('3:45 PM');
   });
 
+  it('keeps the hour and the date as the minute wheel passes its seam at 11:59 PM', () => {
+    const onChange = vi.fn();
+    render(
+      <DateTimeInput
+        label="Meeting"
+        value={'2026-03-21T23:59' as ISODateTimeString}
+        onChange={onChange}
+      />,
+    );
+    openDateSheet();
+    switchToTimePanel();
+
+    fireEvent.keyDown(screen.getByRole('listbox', {name: 'Minute'}), {
+      key: 'ArrowDown',
+    });
+    expect(onChange).toHaveBeenCalledWith('2026-03-21T23:00');
+  });
+
   it('clears an uncommitted time draft when Time Save closes without a date', () => {
     render(<DateTimeInput label="Meeting" onChange={() => {}} />);
     openTimeSheet();

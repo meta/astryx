@@ -551,6 +551,42 @@ function withSources(project, v) {
   return v;
 }
 
+/** Controlled parts a sample gives a value: they call onChange on a click. */
+const CONTROLLED = new Set([
+  'TabList',
+  'SegmentedControl',
+  'RadioList',
+  'Switch',
+  'CheckboxInput',
+  'Selector',
+  'TextInput',
+  'TextArea',
+  'NumberInput',
+]);
+
+/**
+ * A copy of an element tree in which every controlled part with a value and
+ * no onChange gets one that does nothing, so a click on it never throws.
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withHandlers(v) {
+  if (Array.isArray(v)) return v.map(withHandlers);
+  if (isElement(v)) {
+    const props = Object.fromEntries(
+      Object.entries(v.props ?? {}).map(([k, x]) => [k, withHandlers(x)]),
+    );
+    if (CONTROLLED.has(v.__element) && 'value' in props && !props.onChange)
+      props.onChange = {__code: '() => {}'};
+    return {
+      ...v,
+      props,
+      ...(v.children === undefined ? {} : {children: withHandlers(v.children)}),
+    };
+  }
+  return v;
+}
+
 /**
  * Whether an element tree uses the page's sample search source.
  * @param {unknown} v
@@ -649,7 +685,7 @@ export function componentsPageSource(project, {theme = null, C} = {}) {
     .items.filter(it => it.group !== 'pages' && !PAGE_SKIP.has(it.name))
     .map(it => ({
       ...it,
-      tree: withSources(project, withCoreNames(project, it.tree)),
+      tree: withHandlers(withSources(project, withCoreNames(project, it.tree))),
     }))
     .filter(it => it.tree !== undefined);
   /** @type {Map<string, Map<string, import('./_catalog.mjs').CatalogItem[]>>} */
@@ -723,7 +759,7 @@ export function overviewPageSource(project, {theme = null} = {}) {
   const sections = OVERVIEW_SECTIONS.map(x => ({
     title: x.title,
     tree: /** @type {import('./_catalog.mjs').Tree | undefined} */ (
-      withCoreNames(project, x.tree)
+      withHandlers(withCoreNames(project, x.tree))
     ),
   })).filter(x => x.tree !== undefined);
   const body = sections
@@ -932,21 +968,24 @@ export function colorsPageSource({slug, module, seeds, uses}) {
  * preview page, a top bar with the theme name and, with a theme, a
  * light/dark/system switch, and the selected page in the content area. It is a normal page of
  * the app, so it keeps the app's layout, global CSS and providers.
- * @param {{pages: Array<{id: string, label: string, file: string}>, theme: {name: string, module: string, css: string[]} | null}} spec
- *   `file` relative to the route folder, without extension; no theme: the app's own theme
+ * @param {{pages: Array<{id: string, label: string, file: string}>, theme: {name: string, module: string, css: string[], mode?: 'system' | 'light' | 'dark'} | null}} spec
+ *   `file` relative to the route folder, without extension; no theme: the
+ *   app's own theme. A theme with one mode starts in it, with no switch.
  * @returns {string}
  */
 export function previewRouteSource({pages, theme}) {
   const name = theme?.name ?? 'app theme';
-  const mode = theme
-    ? [
-        '          <SegmentedControl label="Color mode" size="sm" value={mode} onChange={v => setMode(v as Mode)}>',
-        '            <SegmentedControlItem value="light" label="Light" />',
-        '            <SegmentedControlItem value="dark" label="Dark" />',
-        '            <SegmentedControlItem value="system" label="System" />',
-        '          </SegmentedControl>',
-      ]
-    : [];
+  const oneMode = theme?.mode && theme.mode !== 'system' ? theme.mode : null;
+  const mode =
+    theme && !oneMode
+      ? [
+          '          <SegmentedControl label="Color mode" size="sm" value={mode} onChange={v => setMode(v as Mode)}>',
+          '            <SegmentedControlItem value="light" label="Light" />',
+          '            <SegmentedControlItem value="dark" label="Dark" />',
+          '            <SegmentedControlItem value="system" label="System" />',
+          '          </SegmentedControl>',
+        ]
+      : [];
   // The frame fills the viewport with the theme's own page background, so
   // no root-layout background shows at the edges or on overscroll.
   const shell = [
@@ -1010,7 +1049,11 @@ export function previewRouteSource({pages, theme}) {
     'export default function ThemePreviewPage() {',
     '  const [page, setPage] = React.useState(PAGES[0]?.id);',
     ...(theme
-      ? ["  const [mode, setMode] = React.useState<Mode>('system');"]
+      ? [
+          oneMode
+            ? `  const mode: Mode = ${JSON.stringify(oneMode)};`
+            : "  const [mode, setMode] = React.useState<Mode>('system');",
+        ]
       : []),
     '  const current = PAGES.find(p => p.id === page) ?? PAGES[0];',
     '  return (',
