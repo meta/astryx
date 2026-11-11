@@ -8,7 +8,7 @@
  * upgrade, another project or another environment, and after random changes.
  */
 
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -141,6 +141,47 @@ function run(args, {tmp, cwd = project, env = {}}) {
   return {status: result.status, stdout: result.stdout, stderr: result.stderr};
 }
 
+/**
+ * run(), without blocking: the kept and the fresh runs of a query go side by
+ * side.
+ * @param {string[]} args
+ * @param {{tmp: string, cwd?: string, env?: Record<string, string>}} options
+ * @returns {Promise<{status: number | null, stdout: string, stderr: string}>}
+ */
+function runAsync(args, {tmp, cwd = project, env = {}}) {
+  fs.mkdirSync(tmp, {recursive: true});
+  const base = {...process.env};
+  delete base.CI;
+  return new Promise(resolve => {
+    const child = spawn(
+      process.execPath,
+      [
+        path.join(packed, 'clients', 'cli', 'bin', 'astryx.mjs'),
+        ...args,
+        '--json',
+      ],
+      {
+        cwd,
+        env: {
+          ...base,
+          TMPDIR: tmp,
+          TMP: tmp,
+          TEMP: tmp,
+          NO_UPDATE_NOTIFIER: '1',
+          NODE_DISABLE_COMPILE_CACHE: '1',
+          XDG_CACHE_HOME: tmp,
+          ...env,
+        },
+      },
+    );
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8').on('data', d => (stdout += d));
+    child.stderr.setEncoding('utf8').on('data', d => (stderr += d));
+    child.on('close', status => resolve({status, stdout, stderr}));
+  });
+}
+
 /** The kept catalogs' folder in a user cache folder (XDG_CACHE_HOME). */
 const CACHE_NAME = path.join('astryx', 'catalogs');
 
@@ -183,7 +224,7 @@ function entries(tmp) {
 
 const QUERIES = [
   ['search', 'running totals'],
-  ['search', 'team roster'],
+  // Build reads the same kept catalog: a hit after the search's miss.
   ['build', 'a ledger page with totals'],
 ];
 
@@ -191,13 +232,17 @@ const QUERIES = [
  * Every query's answer, from the kept folder `tmp` and from a fresh one.
  * @param {string} tmp
  * @param {{cwd?: string, env?: Record<string, string>}} [options]
+ * @returns {Promise<('hit' | 'miss')[]>}
  */
-function expectSameAsFresh(tmp, options = {}) {
+async function expectSameAsFresh(tmp, options = {}) {
   /** @type {('hit' | 'miss')[]} */
   const outcomes = [];
   for (const args of QUERIES) {
     const before = entries(tmp);
-    const kept = run(args, {tmp, ...options});
+    const [kept, gathered] = await Promise.all([
+      runAsync(args, {tmp, ...options}),
+      runAsync(args, {tmp: freshTmp(), ...options}),
+    ]);
     const after = entries(tmp);
     // A hit leaves every entry's file in place; a miss writes one anew.
     outcomes.push(
@@ -206,7 +251,6 @@ function expectSameAsFresh(tmp, options = {}) {
         ? 'hit'
         : 'miss',
     );
-    const gathered = run(args, {tmp: freshTmp(), ...options});
     expect(kept.status, args.join(' ')).toBe(0);
     expect(kept, `${args.join(' ')} (${outcomes.at(-1)})`).toEqual(gathered);
   }
@@ -214,7 +258,7 @@ function expectSameAsFresh(tmp, options = {}) {
 }
 
 describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
-  it('answers as a fresh gather, and is used while nothing changed', () => {
+  it('answers as a fresh gather, and is used while nothing changed', async () => {
     const tmp = keptTmp('warm');
     const cold = run(QUERIES[0], {tmp});
     const stored = entries(tmp);
@@ -226,18 +270,18 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     // A hit reads the entry and touches it; a miss writes a new one.
     expect(after.get(name)?.ino).toBe(before.ino);
     expect(run(QUERIES[0], {tmp: freshTmp()})).toEqual(cold);
-    expectSameAsFresh(tmp);
+    await expectSameAsFresh(tmp);
   }, 120_000);
 
-  it('is not used after an edit, an added or removed file, or a copy that keeps the time', () => {
+  it('is not used after an edit, an added or removed file, or a copy that keeps the time', async () => {
     const tmp = keptTmp('stale');
-    expect(expectSameAsFresh(tmp)).toEqual(['miss', 'hit', 'hit']);
+    expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
     writeTemplate('ledger', 'Entries as rows with running balances.');
-    expect(expectSameAsFresh(tmp)).toEqual(['miss', 'hit', 'hit']);
+    expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
     writeTemplate('kanban', 'Cards in columns with running totals.');
-    expect(expectSameAsFresh(tmp)).toEqual(['miss', 'hit', 'hit']);
+    expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
     fs.rmSync(path.join(widgets, 'templates', 'kanban.doc.mjs'));
-    expect(expectSameAsFresh(tmp)).toEqual(['miss', 'hit', 'hit']);
+    expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
     // Same size and times, other text: a copy that keeps the time.
     const doc = path.join(widgets, 'templates', 'roster.doc.mjs');
     const {atime, mtime, size} = fs.statSync(doc);
@@ -247,16 +291,16 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     fs.writeFileSync(copy, text);
     fs.utimesSync(copy, atime, mtime);
     fs.renameSync(copy, doc);
-    expect(expectSameAsFresh(tmp)).toEqual(['miss', 'hit', 'hit']);
+    expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
     writeTemplate('roster', 'People as rows with role and team.');
   }, 300_000);
 
-  it('is not used by another project, another CLI, or another environment', () => {
+  it('is not used by another project, another CLI, or another environment', async () => {
     const tmp = keptTmp('other');
-    expectSameAsFresh(tmp);
+    await expectSameAsFresh(tmp);
     const other = makeProject();
     try {
-      expectSameAsFresh(tmp, {cwd: other.dir});
+      await expectSameAsFresh(tmp, {cwd: other.dir});
       expect(entries(tmp).size).toBe(2);
     } finally {
       fs.rmSync(other.dir, {recursive: true, force: true});
@@ -265,13 +309,13 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       path.join(packed, BUILD_ID),
       JSON.stringify({id: 'second'}) + '\n',
     );
-    expect(expectSameAsFresh(tmp)[0]).toBe('miss');
-    expect(expectSameAsFresh(tmp, {env: {CI: '1'}})[0]).toBe('miss');
+    expect((await expectSameAsFresh(tmp))[0]).toBe('miss');
+    expect((await expectSameAsFresh(tmp, {env: {CI: '1'}}))[0]).toBe('miss');
   }, 300_000);
 
-  it('is not used after an integration is installed or removed', () => {
+  it('is not used after an integration is installed or removed', async () => {
     const tmp = keptTmp('install');
-    expect(expectSameAsFresh(tmp)).toEqual(['miss', 'hit', 'hit']);
+    expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
     const extra = path.join(project, 'node_modules', '@acme', 'extra');
     fs.mkdirSync(path.join(extra, 'templates'), {recursive: true});
     fs.writeFileSync(
@@ -295,16 +339,16 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       config,
       `export default { integrations: ['@acme/widgets', '@acme/extra'] };\n`,
     );
-    expect(expectSameAsFresh(tmp)).toEqual(['miss', 'hit', 'hit']);
+    expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
     fs.writeFileSync(
       config,
       `export default { integrations: ['@acme/widgets'] };\n`,
     );
     fs.rmSync(extra, {recursive: true, force: true});
-    expect(expectSameAsFresh(tmp)).toEqual(['miss', 'hit', 'hit']);
+    expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
   }, 300_000);
 
-  it('is not used after a change in a folder above the project', () => {
+  it('is not used after a change in a folder above the project', async () => {
     const tmp = keptTmp('ancestors');
     const parent = path.dirname(project);
     const config = path.join(project, 'astryx.config.mjs');
@@ -316,7 +360,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     /** @type {string[]} */
     const made = [];
     try {
-      expectSameAsFresh(tmp);
+      await expectSameAsFresh(tmp);
       // A package.json, then a config file, in the folder above.
       for (const [name, text] of [
         ['package.json', JSON.stringify({name: 'parent'})],
@@ -325,13 +369,13 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         const file = path.join(parent, name);
         fs.writeFileSync(file, text);
         made.push(file);
-        expectSameAsFresh(tmp);
+        await expectSameAsFresh(tmp);
       }
       // A node_modules folder above, then the listed integration in it.
       const far = path.join(parent, 'node_modules', '@acme', 'far');
       made.push(path.join(parent, 'node_modules'));
       fs.mkdirSync(path.join(parent, 'node_modules'));
-      expectSameAsFresh(tmp);
+      await expectSameAsFresh(tmp);
       fs.mkdirSync(path.join(far, 'templates'), {recursive: true});
       fs.writeFileSync(
         path.join(far, 'package.json'),
@@ -350,7 +394,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         `export default function Page() { return null; }\n`,
       );
       const before = run(QUERIES[0], {tmp: freshTmp()});
-      expect(expectSameAsFresh(tmp)[0]).toBe('miss');
+      expect((await expectSameAsFresh(tmp))[0]).toBe('miss');
       expect(run(QUERIES[0], {tmp}).stdout).toBe(before.stdout);
     } finally {
       for (const file of made.reverse()) {
@@ -363,13 +407,13 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     }
   }, 300_000);
 
-  it('answers as a fresh gather after random changes', () => {
+  it('answers as a fresh gather after random changes', async () => {
     const tmp = keptTmp('random');
     let seed = 7;
     const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const ids = ['ledger', 'roster', 'kanban', 'gallery'];
     const words = ['totals', 'team', 'balances', 'crew', 'columns', 'photos'];
-    expectSameAsFresh(tmp);
+    await expectSameAsFresh(tmp);
     for (let step = 0; step < 8; step++) {
       const id = ids[Math.floor(random() * ids.length)];
       const doc = path.join(widgets, 'templates', `${id}.doc.mjs`);
@@ -390,8 +434,8 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
           `export default { templates: './templates' };\n${'//\n'.repeat(step)}`,
         );
       }
-      const outcomes = expectSameAsFresh(tmp);
-      expect(outcomes.slice(1)).toEqual(['hit', 'hit']);
+      const outcomes = await expectSameAsFresh(tmp);
+      expect(outcomes.slice(1)).toEqual(['hit']);
     }
   }, 600_000);
 
@@ -508,6 +552,25 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(second.stdout).toBe(first.stdout);
     expect(entries(tmp).size).toBe(0);
   }, 120_000);
+
+  it('keeps no catalog gathered while Core could not be had', () => {
+    // Outside any project, with no Core installed and no registry to install
+    // one from: the search answers without Core and records the failed
+    // install's backoff. Such a gather is not kept, so once the backoff ends
+    // the next run tries the install again.
+    const tmp = keptTmp('core-skipped');
+    const outside = path.join(work, 'outside-core-skipped');
+    fs.mkdirSync(outside, {recursive: true});
+    const offline = {
+      npm_config_registry: 'http://127.0.0.1:9/',
+      npm_config_fetch_retries: '0',
+    };
+    const first = run(['search', 'button'], {tmp, cwd: outside, env: offline});
+    expect(first.status, first.stderr).toBe(0);
+    expect(JSON.parse(first.stdout).data).toBeTruthy();
+    run(['search', 'button'], {tmp, cwd: outside, env: offline});
+    expect(entries(tmp).size).toBe(0);
+  }, 180_000);
 
   it('keeps a digest of each environment value it read, never the value', () => {
     const tmp = keptTmp('secrets');

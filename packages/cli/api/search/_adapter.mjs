@@ -267,6 +267,10 @@ export function gatherCandidatesReused(options) {
           [realFolder(cwd), type ?? null],
           () => gatherCandidates({cwd, type}),
           GATHER_CODEC,
+          // A gather that skipped Core (a failed install still in its
+          // backoff, spec:AST-081 FR2) is not kept: once the backoff ends,
+          // the next run must try again.
+          value => value.coreSkipped == null,
         ),
       unchangedSince,
     );

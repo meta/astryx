@@ -430,9 +430,12 @@ function staleReason(stamps, env) {
  * @param {() => Promise<T>} load
  * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec - A
  *   plain-JSON form of the value and back.
+ * @param {(value: T) => boolean} [keep] whether a fresh gather may be
+ *   stored: one that depends on something its stamps cannot see (a retry
+ *   that waits on time) is used for this run only
  * @returns {Promise<T>}
  */
-export async function persistedGather(key, load, codec) {
+export async function persistedGather(key, load, codec, keep = () => true) {
   const id = withoutRecording(buildId);
   const dir = id == null ? null : withoutRecording(gatherCacheDir);
   if (id == null || dir == null) {
@@ -481,7 +484,9 @@ export async function persistedGather(key, load, codec) {
   const armed = run?.arm() ?? false;
   try {
     const value = await load();
-    if (run && armed) withoutRecording(() => store(dir, file, value, codec));
+    if (run && armed && keep(value)) {
+      withoutRecording(() => store(dir, file, value, codec));
+    }
     return value;
   } finally {
     run?.disarm();
