@@ -824,6 +824,7 @@ export function useTableTreeData<T extends Record<string, unknown>>(
                   nestedRow: false,
                   readonlyScope: false,
                   selection: 'contain',
+                  portal: false,
                 })
               ) {
                 return;
