@@ -17,6 +17,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
+  chosenSets,
   readBarrel,
   rewriteLibraryImports,
 } from '../../scripts/icon-library-import-loader.mjs';
@@ -88,7 +89,7 @@ describe('rewriteLibraryImports', () => {
     expect(out).toContain(`import {NopeIcon} from "${LIBRARY}";`);
   });
 
-  it('leaves default, namespace, type-only and star statements as they are', async () => {
+  it('leaves default, namespace and star statements as they are', async () => {
     const source = [
       `import Icons from '${LIBRARY}';`,
       `import * as All from '${LIBRARY}';`,
@@ -155,5 +156,18 @@ describe('next.config', () => {
     expect(rule?.include?.test('/repo/apps/docsite/src/app/page.js')).toBe(
       false,
     );
+  });
+});
+
+describe('chosenSets', () => {
+  it('takes only the sets the setting names, not every installed set', () => {
+    const main = {name: 'main'};
+    const backup = {name: 'backup'};
+    expect(chosenSets({order: [main, backup], set: main})).toEqual([
+      main,
+      backup,
+    ]);
+    expect(chosenSets({set: main})).toEqual([main]);
+    expect(chosenSets({set: null})).toEqual([]);
   });
 });

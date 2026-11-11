@@ -47,7 +47,6 @@ export function readBarrel(barrelFile) {
   });
   for (const node of ast.program.body) {
     if (node.type !== 'ExportNamedDeclaration' || !node.source) continue;
-    if (node.exportKind === 'type') continue;
     const from = node.source.value;
     if (!from.startsWith('./') && !from.startsWith('../')) continue;
     const file = path.resolve(path.dirname(barrelFile), from);
@@ -73,8 +72,8 @@ function binding(name) {
 /**
  * Rewrite a module's named imports and re-exports from the given libraries
  * into imports of the files the libraries' barrels map each name to. A name
- * the barrel does not map, a default or namespace import, and a type-only
- * statement stay as they are.
+ * the barrel does not map, and a default, namespace or star statement, stay
+ * as they are.
  * @param {string} source
  * @param {Set<string>} libraries the package names to rewrite
  * @param {(library: string) => Promise<string | null>} resolveBarrel the file
@@ -104,7 +103,6 @@ export async function rewriteLibraryImports(source, libraries, resolveBarrel) {
     if (!isImport && !isExport) continue;
     const library = node.source.value;
     if (!libraries.has(library)) continue;
-    if (node.importKind === 'type' || node.exportKind === 'type') continue;
     const specKind = isImport ? 'ImportSpecifier' : 'ExportSpecifier';
     if (node.specifiers.length === 0) continue;
     if (node.specifiers.some(spec => spec.type !== specKind)) continue;
@@ -116,7 +114,7 @@ export async function rewriteLibraryImports(source, libraries, resolveBarrel) {
       const [inner, outer] = isImport
         ? [nameOf(spec.imported), spec.local.name]
         : [nameOf(spec.local), nameOf(spec.exported)];
-      const entry = spec.importKind === 'type' ? null : barrel.get(inner);
+      const entry = barrel.get(inner);
       if (!entry) {
         kept.push(source.slice(spec.start, spec.end));
         continue;
@@ -153,6 +151,32 @@ export async function rewriteLibraryImports(source, libraries, resolveBarrel) {
 const scopesByKey = new Map();
 
 /**
+ * The sets the setting names, main first. The ordered list the template
+ * rewrite reads also holds every other installed set after these, and those
+ * are not rewritten.
+ * @template T
+ * @param {{order?: T[], set?: T | null}} choice
+ * @returns {T[]}
+ */
+export function chosenSets(choice) {
+  return choice.order ?? (choice.set ? [choice.set] : []);
+}
+
+/**
+ * @param {Array<{packageDir: string, data?: {source?: {package?: unknown}}}>} sets
+ */
+function scopeOf(sets) {
+  return {
+    dirs: [...new Set(sets.map(set => fs.realpathSync(set.packageDir)))],
+    libraries: new Set(
+      sets
+        .map(set => set.data?.source?.package)
+        .filter(library => typeof library === 'string'),
+    ),
+  };
+}
+
+/**
  * The chosen sets' package folders and the libraries their `source` names.
  * @param {string} projectDir
  * @param {string[]} list
@@ -161,14 +185,9 @@ function scopeFor(projectDir, list) {
   const key = `${projectDir}\0${list.join(',')}`;
   let found = scopesByKey.get(key);
   if (!found) {
-    found = previewIconSets(projectDir, list).then(({sets}) => ({
-      dirs: [...new Set(sets.map(set => fs.realpathSync(set.packageDir)))],
-      libraries: new Set(
-        sets
-          .map(set => set.data?.source?.package)
-          .filter(library => typeof library === 'string'),
-      ),
-    }));
+    found = previewIconSets(projectDir, list).then(({choice}) => {
+      return scopeOf(chosenSets(choice));
+    });
     scopesByKey.set(key, found);
   }
   return found;
