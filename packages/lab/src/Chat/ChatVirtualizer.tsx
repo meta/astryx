@@ -1039,6 +1039,9 @@ export function ChatVirtualizer<T>(
   // Sizes come through Core's shared resize observer, one callback per entry;
   // the sync they trigger runs once per batch, after the last entry.
   const syncQueued = React.useRef(false);
+  // Set when the scroller's own ResizeObserver entry arrives, so a window
+  // resize that also resizes the scroller's box runs no second pass.
+  const containerEntrySeen = React.useRef(false);
   const onResizeRef = React.useRef<
     ((entry: ResizeObserverEntry) => void) | null
   >(null);
@@ -1070,6 +1073,7 @@ export function ChatVirtualizer<T>(
         // the geometry dirty here, a window resize or a growing composer
         // would leave the pinned bottom stranded.
         geoChanged.current = true;
+        containerEntrySeen.current = true;
         return;
       }
       // Border box, the same box the sync path reads with offsetHeight —
@@ -1351,14 +1355,39 @@ export function ChatVirtualizer<T>(
     // layout: it marks the geometry dirty and runs one correction pass per frame.
     const view = isPageScroller(el) ? el.ownerDocument.defaultView : null;
     let viewportFrame: number | null = null;
+    let lastWidth = view?.innerWidth ?? 0;
+    let isWidthChanged = false;
     const onViewportResize = (): void => {
       geoChanged.current = true;
-      if (viewportFrame === null && view !== null) {
-        viewportFrame = view.requestAnimationFrame(() => {
+      if (view === null) {
+        return;
+      }
+      const width = view.innerWidth;
+      if (width !== lastWidth) {
+        lastWidth = width;
+        isWidthChanged = true;
+      }
+      if (viewportFrame !== null) {
+        return;
+      }
+      containerEntrySeen.current = false;
+      viewportFrame = view.requestAnimationFrame(() => {
+        if (!isWidthChanged) {
           viewportFrame = null;
           syncRef.current();
+          return;
+        }
+        // A width change resizes the page scroller's box, so its
+        // ResizeObserver entry runs this frame's pass. One frame later, a pass
+        // runs only if that entry did not arrive.
+        viewportFrame = view.requestAnimationFrame(() => {
+          viewportFrame = null;
+          isWidthChanged = false;
+          if (!containerEntrySeen.current) {
+            syncRef.current();
+          }
         });
-      }
+      });
     };
     view?.addEventListener('resize', onViewportResize, {passive: true});
     // Observe the CONTAINER too (rows alone miss clientHeight changes): a
