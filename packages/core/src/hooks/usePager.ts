@@ -371,7 +371,7 @@ function positionIn(
   return offsets[i] + (page - i) * (offsets[i + 1] - offsets[i]);
 }
 
-function mod(value: number, count: number): number {
+export function mod(value: number, count: number): number {
   return ((value % count) + count) % count;
 }
 
