@@ -583,6 +583,18 @@ interface InternalFocusTrapOptions extends UseFocusTrapOptions {
   getAnchor?: () => Element | null;
   /** The id the trigger's `aria-controls` names. */
   layerId?: string;
+  /**
+   * Whether Tab and Shift+Tab cycle inside the container while it is active.
+   * A non-modal overlay leaves Tab to the page's own order.
+   * @default true
+   */
+  isContaining?: boolean;
+  /**
+   * Whether the overlay takes an Escape press now, asked at press time. A
+   * non-modal overlay takes Escape only while it holds focus; otherwise the
+   * press passes to the layer or page beneath.
+   */
+  isEscapeInScope?: () => boolean;
 }
 
 export interface InternalFocusTrapReturn<
@@ -607,6 +619,8 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
     getTrigger,
     getAnchor,
     layerId,
+    isContaining = true,
+    isEscapeInScope,
   } = options;
   const getRestoreTargetRef = useRef(getRestoreTarget);
   getRestoreTargetRef.current = getRestoreTarget;
@@ -623,8 +637,9 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
 
   const containerRef = useRef<T | null>(null);
 
-  // Tab and Shift+Tab wrap inside the container while the trap is active.
-  useFocusRegionContainment(containerRef, isActive);
+  // Tab and Shift+Tab wrap inside the container while the trap is active and
+  // containing.
+  useFocusRegionContainment(containerRef, isActive && isContaining);
 
   // Join the shared layer dismissal stack. The trap no longer listens for
   // Escape itself: the stack owns one listener and routes each press to the
@@ -646,6 +661,7 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
     // content; hand the stack the container instead so two DOM-nested traps
     // still resolve in the right order.
     getContainer: () => containerRef.current,
+    isPresent: isEscapeInScope,
   });
 
   useFocusTrapEscapeCompatibilitySignal(isEscapeTrap);

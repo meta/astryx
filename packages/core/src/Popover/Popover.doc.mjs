@@ -132,7 +132,7 @@ export const docs = {
           name: 'isModal',
           type: 'boolean',
           description:
-            'Whether a dialog-style popover sets aria-modal. Only applies when role is dialog.',
+            'Whether the popover is modal. true holds Tab inside the open popover and marks a dialog popover aria-modal. false holds nothing: Tab moves from the anchor (else the trigger) into the popover and on to what follows the anchor, and Escape closes it only while focus is inside it or on its anchor or trigger. Use false for a coachmark or a tour step. As a sheet, false presents a sheet with no scrim that leaves the page interactive.',
           default: 'true',
         },
         {
@@ -173,7 +173,7 @@ export const docs = {
           name: 'presentation',
           type: "'popover' | 'bottom-sheet' | 'adaptive'",
           description:
-            "The surface that holds the content. 'popover' anchors it to the trigger, 'bottom-sheet' presents it in a modal BottomSheet labeled by label, and 'adaptive' uses the BottomSheet on a compact touch screen (a coarse pointer on a screen the theme counts as compact: narrower than its md width point or shorter than 500 px, so a phone in either orientation) and the anchored popover elsewhere. In a sheet, placement, alignment, width, role, isModal and hasAutoFocus do not apply, and xstyle, className and style style the sheet's panel; the sheet always light-dismisses (a tap outside it or a swipe down closes it, whatever hasLightDismiss says), Escape follows hasEscapeDismiss, and the fallback close stays hidden. The surface is chosen as it opens and kept until it closes.",
+            "The surface that holds the content. 'popover' anchors it to the trigger, 'bottom-sheet' presents it in a modal BottomSheet labeled by label, and 'adaptive' uses the BottomSheet on a compact touch screen (a coarse pointer on a screen the theme counts as compact: narrower than its md width point or shorter than 500 px, so a phone in either orientation) and the anchored popover elsewhere. In a sheet, placement, alignment, width, role and hasAutoFocus do not apply, and xstyle, className and style style the sheet's panel; the sheet always light-dismisses (a tap outside it or a swipe down closes it, whatever hasLightDismiss says), Escape follows hasEscapeDismiss, and the fallback close stays hidden. The surface is chosen as it opens and kept until it closes.",
           default: "'popover'",
         },
         {
@@ -419,7 +419,7 @@ export const docsZh = {
           name: 'isModal',
           type: 'boolean',
           description:
-            '对话框式弹出框是否设置 aria-modal。仅在 role 为 dialog 时适用。',
+            '弹出框是否为模态。true 时 Tab 在打开的弹出框内循环，对话框式弹出框带有 aria-modal。false 时不限制焦点：Tab 从锚点（否则为触发器）进入弹出框，再移到锚点之后的元素；仅当焦点在弹出框内或其锚点、触发器上时，Escape 才会关闭它。教学提示或导览步骤请使用 false。作为底部面板时，false 呈现无遮罩、页面仍可交互的面板。',
           default: 'true',
         },
         {
@@ -459,7 +459,7 @@ export const docsZh = {
           name: 'presentation',
           type: "'popover' | 'bottom-sheet' | 'adaptive'",
           description:
-            "承载内容的界面。'popover' 锚定在触发器上，'bottom-sheet' 以模态 BottomSheet 呈现（由 label 命名），'adaptive' 在紧凑触屏（粗指针，且屏幕按主题定义为紧凑：宽度小于其 md 断点或高度小于 500 px，即任意方向的手机）上使用 BottomSheet，在其他设备上使用锚定的弹出框。在底部面板中，placement、alignment、width、role、isModal 和 hasAutoFocus 不生效，xstyle、className 和 style 作用于面板；底部面板始终支持轻触关闭（点按面板外部或向下轻扫即可关闭，不受 hasLightDismiss 影响），Escape 遵循 hasEscapeDismiss，后备关闭按钮保持隐藏。界面在打开时选定，并保持到关闭。",
+            "承载内容的界面。'popover' 锚定在触发器上，'bottom-sheet' 以模态 BottomSheet 呈现（由 label 命名），'adaptive' 在紧凑触屏（粗指针，且屏幕按主题定义为紧凑：宽度小于其 md 断点或高度小于 500 px，即任意方向的手机）上使用 BottomSheet，在其他设备上使用锚定的弹出框。在底部面板中，placement、alignment、width、role 和 hasAutoFocus 不生效，xstyle、className 和 style 作用于面板；底部面板始终支持轻触关闭（点按面板外部或向下轻扫即可关闭，不受 hasLightDismiss 影响），Escape 遵循 hasEscapeDismiss，后备关闭按钮保持隐藏。界面在打开时选定，并保持到关闭。",
           default: "'popover'",
         },
       ],

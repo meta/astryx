@@ -105,7 +105,9 @@ function Filters({
   hasLightDismiss,
   hasEscapeDismiss,
   hasCloseButton,
+  isModal,
 }: {
+  isModal?: boolean;
   presentation?: PopoverPresentation;
   onOpenChange?: (isOpen: boolean) => void;
   hasLightDismiss?: boolean;
@@ -120,6 +122,7 @@ function Filters({
       hasLightDismiss={hasLightDismiss}
       hasEscapeDismiss={hasEscapeDismiss}
       hasCloseButton={hasCloseButton}
+      isModal={isModal}
       content={<button type="button">Apply</button>}>
       <Button label="Filter">Filter</Button>
     </Popover>
@@ -471,6 +474,26 @@ describe('Popover presentation', () => {
     await vi.waitFor(() => {
       expect(sheetDialog()).toHaveAttribute('open');
     });
+  });
+
+  it('a modal popover presents a modal sheet', async () => {
+    render(<Filters presentation="bottom-sheet" />);
+    await tapTrigger();
+    await vi.waitFor(() => {
+      expect(sheetDialog()).toHaveAttribute('open');
+    });
+    expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalled();
+  });
+
+  it('a non-modal popover presents a sheet with no scrim, never a modal one (FR16)', async () => {
+    isCompactTouch = true;
+    render(<Filters presentation="adaptive" isModal={false} />);
+    await tapTrigger();
+    await vi.waitFor(() => {
+      expect(sheetDialog()).not.toBeNull();
+    });
+    expect(HTMLDialogElement.prototype.showModal).not.toHaveBeenCalled();
+    expect(sheetDialog()).not.toHaveAttribute('aria-modal', 'true');
   });
 
   it('closing the sheet reports it and collapses the trigger', async () => {

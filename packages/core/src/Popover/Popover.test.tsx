@@ -1822,7 +1822,7 @@ describe('Popover touch presentation', () => {
   });
 });
 
-describe('Popover focus region (DEC-9)', () => {
+describe('Popover modality (DEC-9, AST-116 FR12–FR15)', () => {
   function Page({isModal}: {isModal: boolean}) {
     return (
       <div>
@@ -1882,27 +1882,6 @@ describe('Popover focus region (DEC-9)', () => {
       expect(screen.getByRole('button', {name: 'Elsewhere 1'})).toHaveFocus();
     });
 
-    it('cycles Tab and Shift+Tab inside the open popover', async () => {
-      const user = userEvent.setup();
-      render(<Page isModal={isModal} />);
-      await openDetails();
-      const first = screen.getByRole('button', {
-        name: 'First inside',
-        hidden: true,
-      });
-      const last = screen.getByRole('button', {
-        name: 'Last inside',
-        hidden: true,
-      });
-
-      await user.tab();
-      expect(last).toHaveFocus();
-      await user.tab();
-      expect(first).toHaveFocus();
-      await user.tab({shift: true});
-      expect(last).toHaveFocus();
-    });
-
     it('closes on Escape from inside and returns focus to the trigger', async () => {
       const user = userEvent.setup();
       render(<Page isModal={isModal} />);
@@ -1914,6 +1893,84 @@ describe('Popover focus region (DEC-9)', () => {
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       expect(trigger).toHaveFocus();
     });
+  });
+
+  it('cycles Tab and Shift+Tab inside a modal popover', async () => {
+    const user = userEvent.setup();
+    render(<Page isModal />);
+    await openDetails();
+    const first = screen.getByRole('button', {
+      name: 'First inside',
+      hidden: true,
+    });
+    const last = screen.getByRole('button', {
+      name: 'Last inside',
+      hidden: true,
+    });
+
+    await user.tab();
+    expect(last).toHaveFocus();
+    await user.tab();
+    expect(first).toHaveFocus();
+    await user.tab({shift: true});
+    expect(last).toHaveFocus();
+  });
+
+  it('lets Tab and Shift+Tab leave a non-modal popover in page order', async () => {
+    const user = userEvent.setup();
+    render(<Page isModal={false} />);
+    await openDetails();
+    const first = screen.getByRole('button', {
+      name: 'First inside',
+      hidden: true,
+    });
+    const trigger = screen.getByRole('button', {name: 'Open details'});
+
+    // jsdom matches no `:popover-open`, so the tab sequence skips the
+    // popover's controls; start from its last control.
+    screen.getByRole('button', {name: 'Last inside', hidden: true}).focus();
+    await user.tab();
+    // The popover renders after its trigger, so what follows it in the page
+    // follows its last control.
+    expect(screen.getByRole('button', {name: 'Elsewhere 1'})).toHaveFocus();
+    // Still open: leaving focus does not close a popover without light
+    // dismiss being involved.
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    first.focus();
+    await user.tab({shift: true});
+    expect(trigger).toHaveFocus();
+  });
+
+  it('marks only a modal dialog popover aria-modal', async () => {
+    const {unmount} = render(<Page isModal />);
+    await openDetails();
+    expect(screen.getByRole('dialog', {hidden: true})).toHaveAttribute(
+      'aria-modal',
+      'true',
+    );
+    unmount();
+    render(<Page isModal={false} />);
+    await openDetails();
+    expect(screen.getByRole('dialog', {hidden: true})).not.toHaveAttribute(
+      'aria-modal',
+    );
+  });
+
+  it('lets an Escape pressed elsewhere pass a non-modal popover', async () => {
+    const user = userEvent.setup();
+    render(<Page isModal={false} />);
+    await openDetails();
+    const trigger = screen.getByRole('button', {name: 'Open details'});
+
+    screen.getByRole('button', {name: 'Elsewhere 2'}).focus();
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    // On its trigger, the popover takes Escape again.
+    trigger.focus();
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 });
 

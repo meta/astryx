@@ -351,8 +351,13 @@ export interface PopoverProps extends Pick<
   role?: 'dialog' | 'none';
 
   /**
-   * Whether a dialog-style popover is modal (`aria-modal`). Only applies when
-   * `role` is `'dialog'`.
+   * Whether the popover is modal. `true` holds Tab inside the open popover
+   * and marks a dialog popover `aria-modal`. `false` holds nothing: Tab moves
+   * from the anchor (else the trigger) into the popover and on to what
+   * follows the anchor, and Escape closes it only while focus is inside it or
+   * on its anchor or trigger. Use `false` for a coachmark or a tour step. As
+   * a sheet (`presentation`), `false` presents a sheet with no scrim that
+   * leaves the page interactive.
    *
    * @default true
    */
@@ -409,7 +414,7 @@ export interface PopoverProps extends Pick<
    * either orientation) and the anchored popover elsewhere, which is what iOS
    * does with a popover by default.
    *
-   * In a sheet, `placement`, `alignment`, `width`, `role`, `isModal` and
+   * In a sheet, `placement`, `alignment`, `width`, `role` and
    * `hasAutoFocus` do not apply (the sheet is a modal dialog with its own
    * focus handling); `xstyle`, `className` and `style` style the sheet's
    * panel, as they style the anchored surface; `padding` insets the
@@ -1137,6 +1142,9 @@ export function Popover({
         id={sheetId}
         isOpen={isSheetOpen}
         onOpenChange={setSheetOpen}
+        // A non-modal popover stays non-modal as a sheet: no scrim, the page
+        // stays interactive, and focus is not held.
+        hasScrim={isModal !== false}
         label={label ?? triggerText}
         height="tall"
         padding={padding}
