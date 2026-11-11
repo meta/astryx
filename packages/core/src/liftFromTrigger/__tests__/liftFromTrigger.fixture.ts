@@ -5,8 +5,8 @@
  * @input Nothing: bundled by esbuild and injected into a blank page
  * @output A page with a list of rows in a clipping, transformed panel, and a
  *   menu popover beside it. The first row is rounded by `:first-child`, and
- *   the second holds twelve elements. `window.__lift` lifts a row, grows and
- *   closes the menu, drops and ends, and logs taps and clicks
+ *   the second holds twelve elements. `window.__lift` lifts a row, fades the
+ *   menu in and closes it, drops and ends, and logs taps and clicks
  * @position Browser fixture of liftFromTrigger.interaction.browser.spec.ts; test-only
  */
 
@@ -25,7 +25,7 @@ interface LiftLog {
 export interface LiftFixture {
   log: LiftLog;
   lift: (id: string, springResponse?: number) => LiftFromTriggerResult | null;
-  presentMenu: (press: {x: number; y: number} | null) => void;
+  presentMenu: () => void;
   closeMenu: () => void;
   showMenu: () => void;
   drop: () => void;
@@ -100,7 +100,6 @@ function options(response: number): LiftFromTriggerOptions {
       surfaceIn: spring,
     },
     scale: {maxScale: 1.15, scaleUpPoints: 26},
-    surfaceStartWidth: 44,
     attribute: 'data-lift',
     onBackdropTap: () => {
       log.backdropTaps += 1;
@@ -113,12 +112,11 @@ window.__lift = {
   lift: (id, springResponse = 0.3) =>
     lift.lift(element(id), options(springResponse)),
   showMenu: () => element('menu').showPopover(),
-  presentMenu: press => {
+  presentMenu: () => {
     element('menu').showPopover();
     lift.presentSurface(
       element('menu').querySelector<HTMLElement>('[role="menu"]') ??
         element('menu'),
-      press,
     );
   },
   closeMenu: () => element('menu').hidePopover(),

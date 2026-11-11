@@ -2,8 +2,8 @@
 
 The one lift-from-trigger presentation, internal to core and opt-in. A
 surface that chooses it (ContextMenu's touch invocation) lifts its trigger
-out of the page above a tinted backdrop, grows a surface (a menu) out of the
-press beside it, and returns the trigger to its place. Nothing else gets it by default, and any
+out of the page above a tinted backdrop, fades a surface (a menu) in beside it, and
+returns the trigger to its place. Nothing else gets it by default, and any
 surface that lifts uses this module, never a copy of it.
 Nothing here is exported from the package entry point; components import it
 by path.
@@ -37,7 +37,7 @@ Every motion is `translate`, `scale` or `opacity` on the compositor
 which continues an interrupted motion with the velocity on screen (FR6); the
 tint on the animator, as the opacity of the layer's `::backdrop`, so a drop
 while it rises turns it with its velocity too. A
-tap or a drag that lands while the lift and the surface grow reaches nothing
+tap or a drag that lands while the lift grows and the surface enters reaches nothing
 (FR35). The close holds the layer until the trigger is back and every press
 on the layer has lifted. Its timers and
 document listeners end with it, and an unmount ends everything at once
@@ -45,7 +45,7 @@ document listeners end with it, and an unmount ends everything at once
 
 ## Files
 
-| File                                                    | What it is                                                                                                                                                                                             |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `liftFromTrigger.ts`                                    | `createLiftFromTrigger`: lift a trigger, grow a surface beside it, drop, end. Its geometry: how far the trigger grows, where it lands inside the layer runtime's gutter, which side the surface takes. |
-| `__tests__/liftFromTrigger.interaction.browser.spec.ts` | Browser proofs (Chromium and WebKit): the top layer, the placeholder, the properties that move, counts, leaks.                                                                                         |
+| File                                                    | What it is                                                                                                                                                                                                |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `liftFromTrigger.ts`                                    | `createLiftFromTrigger`: lift a trigger, fade a surface in beside it, drop, end. Its geometry: how far the trigger grows, where it lands inside the layer runtime's gutter, which side the surface takes. |
+| `__tests__/liftFromTrigger.interaction.browser.spec.ts` | Browser proofs (Chromium and WebKit): the top layer, the placeholder, the properties that move, counts, leaks.                                                                                            |

@@ -7,8 +7,8 @@
  * @input A source to lift, a surface to grow beside it, the viewport and the
  *   layer runtime's gutter, and the caller's springs, scale rule, tint and
  *   attribute
- * @output createLiftFromTrigger, which lifts a source and grows a surface at
- *   the press; liftFromTriggerScale, liftFromTriggerRect and
+ * @output createLiftFromTrigger, which lifts a source and fades a surface in
+ *   beside it; liftFromTriggerScale, liftFromTriggerRect and
  *   surfacePlacement: a lifted source's growth, its place inside the gutter,
  *   and a surface's side
  * @position The one lift-from-trigger presentation, internal and opt-in.
@@ -52,7 +52,7 @@ export interface LiftFromTriggerMotion {
   readonly drop: SpringDescription;
   /** The tint clears on it. */
   readonly clear: SpringDescription;
-  /** A surface grows out of the press on it. */
+  /** A surface fades in on it. */
   readonly surfaceIn: SpringDescription;
 }
 
@@ -60,11 +60,6 @@ export interface LiftFromTriggerOptions {
   readonly motion: LiftFromTriggerMotion;
   /** How far the source grows. */
   readonly scale: LiftFromTriggerScaleRule;
-  /**
-   * The width a surface grows out of, centered on the press (its height
-   * keeps the surface's aspect); a point by default.
-   */
-  readonly surfaceStartWidth?: number;
   /**
    * The rect the source grows on from, viewport px: where a press feedback
    * left it. Its box as laid out by default.
@@ -128,16 +123,12 @@ export interface LiftFromTrigger {
     options: LiftFromTriggerOptions,
   ): LiftFromTriggerResult | null;
   /**
-   * Grows `surface` out of `press` (client px) into its box: a popover laid
-   * out at rest, or an element inside one. Without a press, it fades the
-   * surface in where it rests. The lift holds input until the lift and the
-   * surface settle, so a tap during the growth reaches nothing. A no-op when
+   * Fades `surface` in where it rests: a popover laid out at rest, or an
+   * element inside one. The lift holds input until the lift and the surface
+   * settle, so a tap during the entrance reaches nothing. A no-op when
    * nothing is lifted.
    */
-  presentSurface(
-    surface: HTMLElement,
-    press?: {x: number; y: number} | null,
-  ): void;
+  presentSurface(surface: HTMLElement): void;
   /** Returns the source to its place; the layer leaves once it is back. */
   drop(): void;
   /** Ends everything at once and leaves the page as it was. */
@@ -967,10 +958,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
     });
   };
 
-  const presentSurface = (
-    surfaceElement: HTMLElement,
-    pressAt?: {x: number; y: number} | null,
-  ) => {
+  const presentSurface = (surfaceElement: HTMLElement) => {
     const current = state;
     if (current == null || !current.isSourceLifted) {
       return;
@@ -988,27 +976,7 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       width: rect.width,
       height: rect.height,
     };
-    // Without a press it fades in where it rests, and a close shrinks it
-    // into the lifted source's center.
-    const press = pressAt ?? {
-      x: current.lifted.x + current.lifted.width / 2,
-      y: current.lifted.y + current.lifted.height / 2,
-    };
-    const startWidth = Math.min(
-      current.options.surfaceStartWidth ?? 0,
-      box.width,
-    );
-    const startHeight = (startWidth * box.height) / box.width;
-    const start: MorphRect =
-      pressAt == null
-        ? box
-        : {
-            x: press.x - startWidth / 2,
-            y: press.y - startHeight / 2,
-            width: startWidth,
-            height: startHeight,
-          };
-    const path = lerpPath(start, box, {
+    const path = lerpPath(box, box, {
       box,
       scale: 'uniform',
       opacity: [0, 1],

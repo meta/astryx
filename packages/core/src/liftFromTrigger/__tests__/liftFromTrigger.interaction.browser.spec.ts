@@ -6,8 +6,8 @@
  *   (liftFromTrigger.fixture.ts), in Chromium and WebKit
  * @output Proof in real engines of the lift. A row lifts
  *   into the top layer while a placeholder holds its spot. Every motion is
- *   `translate`, `scale`, `transform` or `opacity`. The menu grows out of the
- *   press. The page has at most four more
+ *   `translate`, `scale`, `transform` or `opacity`. The menu fades in where
+ *   it rests. The page has at most four more
  *   elements while lifted, and none after the drop. A tap while it grows
  *   reaches nothing
  * @position Browser proof for liftFromTrigger.ts, run by `pnpm test:interaction`; jsdom
@@ -385,7 +385,7 @@ test('a drop puts the row back with no transition running, whatever transitions 
   await page.evaluate(() => window.__lift.dispose());
 });
 
-test('every motion the lift plays, the menu’s growth included, is translate, scale, transform or opacity (spec:AST-094 FR5)', async ({
+test('every motion the lift plays, the menu’s entrance included, is translate, scale, transform or opacity (spec:AST-094 FR5)', async ({
   page,
 }) => {
   await open(page);
@@ -416,7 +416,7 @@ test('every motion the lift plays, the menu’s growth included, is translate, s
     const frame = async () =>
       new Promise(resolve => requestAnimationFrame(resolve));
     window.__lift.lift('row2', 0.4);
-    window.__lift.presentMenu({x: 180, y: 330});
+    window.__lift.presentMenu();
     collect();
     await frame();
     await frame();
@@ -438,70 +438,14 @@ test('every motion the lift plays, the menu’s growth included, is translate, s
   ).toEqual([]);
 });
 
-test('the menu grows out of the press into its box and keeps nothing inline at rest', async ({
-  page,
-}) => {
-  await open(page);
-  await page.evaluate(() => window.__lift.lift('row2', 0.3));
-  await page.waitForTimeout(600);
-  const press = {x: 180, y: 330};
-  const early = await page.evaluate(async at => {
-    window.__lift.presentMenu(at);
-    await new Promise(resolve =>
-      requestAnimationFrame(() => requestAnimationFrame(resolve)),
-    );
-    // The growth 30 ms in, read from its own animations: a late frame
-    // cannot move the sample. Then the growth ends at once.
-    const menu = document.getElementById('menu') as HTMLElement;
-    const animations = menu.getAnimations();
-    for (const animation of animations) {
-      animation.pause();
-      animation.currentTime = 30;
-    }
-    const r = menu.getBoundingClientRect();
-    for (const animation of animations) {
-      animation.finish();
-    }
-    return {
-      x: r.x + r.width / 2,
-      y: r.y + r.height / 2,
-      width: r.width,
-      animations: animations.length,
-    };
-  }, press);
-  // The growth runs on the menu itself, so the sample is 30 ms into it.
-  expect(early.animations).toBeGreaterThan(0);
-  // Small, and nearer the press than its own center.
-  expect(early.width).toBeLessThan(125);
-  const fromPress = Math.hypot(early.x - press.x, early.y - press.y);
-  const fromBox = Math.hypot(early.x - 165, early.y - 510);
-  expect(fromPress).toBeLessThan(fromBox);
-  await page.waitForTimeout(900);
-  const rest = await page.evaluate(() => {
-    const menu = document.getElementById('menu') as HTMLElement;
-    const r = menu.getBoundingClientRect();
-    return {
-      box: [r.x, r.y, r.width, r.height] as Box,
-      translate: menu.style.translate,
-      scale: menu.style.scale,
-      opacity: getComputedStyle(menu).opacity,
-    };
-  });
-  expectBox(rest.box, [40, 420, 250, 180]);
-  expect(rest.translate).toBe('');
-  expect(rest.scale).toBe('');
-  expect(rest.opacity).toBe('1');
-  await page.evaluate(() => window.__lift.dispose());
-});
-
-test('without a press the menu fades in where it rests: opacity only, no travel or growth', async ({
+test('the menu fades in where it rests: opacity only, no travel or growth', async ({
   page,
 }) => {
   await open(page);
   await page.evaluate(() => window.__lift.lift('row2', 0.3));
   await page.waitForTimeout(600);
   const early = await page.evaluate(async () => {
-    window.__lift.presentMenu(null);
+    window.__lift.presentMenu();
     await new Promise(resolve =>
       requestAnimationFrame(() => requestAnimationFrame(resolve)),
     );
@@ -561,7 +505,7 @@ test('while lifted the page has the layer, the anchor and the placeholder more, 
     window.__lift.lift('row2', 0.3);
     const deep = count() - rest;
     requestAnimationFrame(sample);
-    window.__lift.presentMenu({x: 180, y: 330});
+    window.__lift.presentMenu();
     await wait(700);
     const open = count() - rest;
     window.__lift.closeMenu();
@@ -615,7 +559,7 @@ test('ten lifts and drops leave the DOM node and event listener counts where the
       const wait = async (ms: number) =>
         new Promise(resolve => setTimeout(resolve, ms));
       window.__lift.lift('row2', 0.15);
-      window.__lift.presentMenu({x: 180, y: 330});
+      window.__lift.presentMenu();
       await wait(400);
       window.__lift.closeMenu();
       window.__lift.drop();
@@ -638,7 +582,7 @@ test('a tap while the row and the menu grow reaches nothing; one on the backdrop
   await open(page);
   await page.evaluate(() => {
     window.__lift.lift('row2', 0.8);
-    window.__lift.presentMenu({x: 180, y: 330});
+    window.__lift.presentMenu();
   });
   await page.touchscreen.tap(180, 700);
   const growing = await page.evaluate(() => ({...window.__lift.log}));

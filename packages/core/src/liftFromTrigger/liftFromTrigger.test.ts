@@ -64,7 +64,6 @@ function options(
       surfaceIn: SPRING,
     },
     scale: {maxScale: 1.15, scaleUpPoints: 26},
-    surfaceStartWidth: 44,
     attribute: 'data-test-lift',
     ...overrides,
   };
@@ -484,7 +483,6 @@ describe('lift', () => {
     vi.mocked(holdInput).mockClear();
     lift.presentSurface(
       menu.querySelector<HTMLElement>('[role="menu"]') as HTMLElement,
-      {x: 180, y: 330},
     );
     expect(vi.mocked(holdInput)).toHaveBeenLastCalledWith(layer, {
       scope: 'viewport',
