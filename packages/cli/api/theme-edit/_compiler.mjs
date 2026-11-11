@@ -10,7 +10,6 @@
  */
 
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
-import {officialCitation} from './_palette.mjs';
 
 /** Only these token types may differ between light and dark. */
 export const MODAL = new Set(['color', 'shadow']);
@@ -448,21 +447,6 @@ export function makeCompiler(project, parts) {
         }
         const r = ratio(pair[0], pair[1]);
         if (r >= 4.5) continue;
-        // Citation text on the accent tint is held to the bar the color
-        // mapping picks the tint by: what the official neutral theme's own
-        // pair reads (under 4.5:1 in dark), so a tint it picked is never
-        // reported against it.
-        if (
-          p.fg.tokens[0] === '--color-text-secondary' &&
-          p.bg.tokens[0] === '--color-accent-muted' &&
-          r >=
-            Math.min(
-              4.5,
-              officialCitation(m === 'dark' ? 'dark' : 'light') ?? 4.5,
-            ) -
-              0.005
-        )
-          continue;
         const was = drawn(baseValue(p, 'fg', m), baseValue(p, 'bg', m), m);
         if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
         const key = `${p.text}|${fg}|${bg}|${m}`;

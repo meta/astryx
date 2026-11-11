@@ -17,7 +17,6 @@
 
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -109,6 +108,7 @@ export function tempFor(file) {
  * @property {number} vibrancy - The generator's vibrancy, 0 to 100.
  * @property {Record<string, Partial<Record<Mode, string>>>} exact - Main tokens the theme sets exactly, the value per mode: the dial's fill gives way to them.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
+ * @property {Partial<Record<Mode, StopRef>> | null} lift - Secondary text on the parts that sit on the accent tint (LIFT_PARTS), per mode, from the neutral color; null without one.
  */
 
 /** The color dials. Each one is a palette family of the same id. */
@@ -208,6 +208,20 @@ const NEUTRAL_TINTS =
 const DARK_FILL = 70;
 const TEXT_STOP = /** @type {[number, number]} */ ([45, 80]);
 const ACCENT_MUTED = /** @type {[number, number]} */ ([85, 30]);
+/**
+ * The parts whose secondary text sits on the accent tint, with the block
+ * the official neutral theme lifts it in: selected items and tree rows, a
+ * dropzone, numbered citations and segmented-control items.
+ */
+export const LIFT_PARTS = /** @type {Array<[string, string]>} */ ([
+  ['item', 'selected'],
+  ['tree-list-item', 'selected'],
+  ['file-input', 'mode:dropzone'],
+  ['citation', 'variant:number'],
+  ['segmented-control-item', 'base'],
+]);
+const LIFT_WORDS =
+  'selected items and rows, a dropzone, numbered citations, segmented-control items';
 const STATUS_MUTED = /** @type {[number, [number, string]]} */ ([
   85,
   [75, '3d'],
@@ -594,81 +608,6 @@ function tools(candidate, data, base) {
   return {stops, at, ref, exactOf, surfaces, onFor, page, neutral};
 }
 
-/** @type {Partial<Record<Mode, number | null>>} */
-const citationCache = {};
-
-/**
- * How well citation text (`--color-text-secondary`) reads on the accent
- * tint (`--color-accent-muted`) in the official neutral theme, per mode:
- * both tokens' stops come from its theme source and their colors from its
- * selected palette stops, read from the installed package. Without the
- * package, the same official stops of a plain gray ramp from the
- * generator. Null when neither can be read.
- * @param {Mode} m
- * @returns {number | null}
- */
-export function officialCitation(m) {
-  if (m in citationCache)
-    return /** @type {number | null} */ (citationCache[m]);
-  const i = m === 'light' ? 0 : 1;
-  /** @type {number | null} */
-  let r = null;
-  try {
-    const dir = path.dirname(
-      path.dirname(
-        createRequire(import.meta.url).resolve('@astryxdesign/theme-neutral'),
-      ),
-    );
-    const theme = fs.readFileSync(
-      path.join(dir, 'src/neutralTheme.ts'),
-      'utf8',
-    );
-    const refs = fs.readFileSync(
-      path.join(dir, 'src/neutralPaletteRefs.generated.ts'),
-      'utf8',
-    );
-    /** @param {string} token */
-    const stopOf = token =>
-      new RegExp(
-        `'${token}':\\s*\\[\\s*neutral\\.light\\[(\\d+)\\],\\s*neutral\\.dark\\[(\\d+)\\]\\s*\\]`,
-      ).exec(theme)?.[i + 1];
-    // The first ramp of each mode after `neutral: {` is the neutral one.
-    const from = refs.search(/\bneutral:\s*\{/);
-    const ramp =
-      from < 0
-        ? ''
-        : (new RegExp(`\\b${m}:\\s*\\{([^}]*)\\}`).exec(
-            refs.slice(from),
-          )?.[1] ?? '');
-    /** @param {string | undefined} stop */
-    const colorOf = stop =>
-      stop == null
-        ? null
-        : new RegExp(`\\b${stop}:\\s*'(#[0-9a-f]{6})'`).exec(ramp)?.[1];
-    const text = colorOf(stopOf('--color-text-secondary'));
-    const tint = colorOf(stopOf('--color-accent-muted'));
-    if (text && tint) r = contrast(text, tint);
-  } catch {
-    r = null;
-  }
-  if (r == null)
-    try {
-      const gray = /** @type {any} */ (
-        generateTonalPalette({
-          families: [{id: 'n', seed: '#808080', kind: 'neutral'}],
-        }).palette.n
-      )[m];
-      r = contrast(
-        gray[NEUTRAL_STOPS['--color-text-secondary'][i]],
-        gray[ACCENT_MUTED[i]],
-      );
-    } catch {
-      r = null;
-    }
-  citationCache[m] = r;
-  return r;
-}
-
 /** A text shade, named for a sentence. @param {StopRef} r */
 const textName = r =>
   r.family === 'white' || (r.family === 'neutral' && r.stop >= 95)
@@ -1034,29 +973,21 @@ export function syncPalette(cwd, slug, data, base) {
     const mine = hash != null && (data.palette === hash || saved === hash);
     delete data.palette;
     if (!mine) return [];
-    // A file edited by hand is never deleted: it stays, and the result
-    // names it. Its config and receipt go, so the next color change asks
-    // whether to keep or discard it.
+    // A palette file edited by hand is never deleted: it stays, and the
+    // result names it. Its config and receipt go, so the next color change
+    // asks whether to keep or discard it.
+    // The selected-stops file is generated from the palette on every
+    // change, so it always goes.
     const editedPalette = paletteEdited(cwd, slug);
-    const shipped = fs.existsSync(abs(f.palette))
-      ? paletteData(fs.readFileSync(abs(f.palette), 'utf8'))?.palette
-      : null;
-    const editedRefs =
-      fs.existsSync(abs(f.refs)) && refsDiffer(cwd, slug, shipped) !== false;
     /** @type {string[]} */
     const notes = [];
-    for (const p of [f.config, f.receipt]) fs.rmSync(abs(p), {force: true});
+    for (const p of [f.config, f.receipt, f.refs])
+      fs.rmSync(abs(p), {force: true});
     if (editedPalette)
       notes.push(
         `${f.palette} was edited by hand, so it stays: the theme no longer reads it. Move it out of tokens/ to keep it as your own, or delete it`,
       );
     else fs.rmSync(abs(f.palette), {force: true});
-    if (editedRefs) {
-      KEPT_REFS.add(abs(f.refs));
-      notes.push(
-        `${f.refs} was edited by hand, so it stays: the theme no longer reads it. Move it out of tokens/ to keep it as your own, or delete it`,
-      );
-    } else fs.rmSync(abs(f.refs), {force: true});
     const tokensDir = path.dirname(abs(f.palette));
     if (fs.existsSync(tokensDir) && !fs.readdirSync(tokensDir).length)
       fs.rmdirSync(tokensDir);
@@ -1296,9 +1227,6 @@ function refsDiffer(cwd, slug, palette) {
   return false;
 }
 
-/** Selected-stops files an undo keeps because they were edited by hand. */
-const KEPT_REFS = new Set();
-
 /**
  * The stops a source reads: `palette.<family>.<mode>[<stop>]`, any number
  * as the stop (a layout may have 12.5), and `palette.black` / `palette.white`.
@@ -1401,7 +1329,6 @@ export function syncPaletteRefs(cwd, slug, source, pal) {
   const file = path.join(cwd, paletteFiles(slug).refs);
   const text = pal ? paletteRefsSource(slug, pal.candidate, source) : null;
   if (text == null) {
-    if (KEPT_REFS.delete(file)) return;
     fs.rmSync(file, {force: true});
     return;
   }
@@ -1488,18 +1415,6 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   const t = tools(candidate, data, base);
   const {stops, at, ref, exactOf, surfaces} = t;
   const modes = themeModes(data);
-  /**
-   * The secondary text color in a mode: an exact setting, else the neutral
-   * color's, else the base theme's; null when it is not a fixed color.
-   * @param {Mode} m
-   */
-  const textSecondary = m => {
-    const v =
-      exactOf('--color-text-secondary', m) ??
-      tokens['--color-text-secondary']?.[m].color ??
-      base?.[m]?.['--color-text-secondary'];
-    return v && parseColor(v) && alphaOf(v) >= 1 ? v : null;
-  };
   /** @type {PaletteMapping['tokens']} */
   const tokens = {};
   /** @type {ContrastCheck[]} */
@@ -1744,13 +1659,9 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         });
     }
 
-    // The tint: never the fill's own shade, see-through or not. The accent
-    // tint keeps the official stop (85 light, 30 dark) unless Core's
-    // citation text (--color-text-secondary) reads on it below both 4.5:1
-    // and the official neutral theme's own pair (text-secondary on the
-    // accent tint, read from the installed theme); only then it takes the
-    // nearest shade that reads that well (darker first in dark, lighter
-    // first in light), so it never ships below the official theme.
+    // The tint: the official stop, never the fill's own shade, see-through
+    // or not. Secondary text on the parts that sit on the accent tint is
+    // lifted instead, as the official neutral theme lifts it (`lift`).
     const muted = each(m => {
       const i = m === 'light' ? 0 : 1;
       const spec = word ? STATUS_MUTED[i] : ACCENT_MUTED[i];
@@ -1763,40 +1674,8 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           Math.abs(a - s) - Math.abs(b - s) ||
           (Math.sign(b - a) === usual ? 1 : -1),
       );
-      const start = order[0];
       const away = order.filter(x => x !== fill[m]?.stop);
-      const secondary = word ? null : textSecondary(m);
-      if (!secondary) return ref(f.id, m, away[0] ?? start, alpha);
-      const scored = away.map(x => ({
-        stop: x,
-        r: contrast(secondary, ref(f.id, m, x).color),
-      }));
-      const official = officialCitation(m);
-      if (official == null) return ref(f.id, m, away[0] ?? start, alpha);
-      // Readable text (4.5:1) or the official theme's own ratio, whichever
-      // asks less: in dark the official pair reads under 4.5:1, so that is
-      // the bar; in light it reads above, so the tint moves only for text
-      // that does not read.
-      const needs = Math.min(TEXT, official);
-      const b =
-        scored.find(x => x.r >= needs - 0.005) ??
-        scored.reduce((x, y) => (y.r > x.r ? y : x));
-      const pass = b.r >= needs - 0.005;
-      if (reports(names.muted) && (b.stop !== start || !pass))
-        checks.push({
-          token: names.muted,
-          mode: m,
-          stop: b.stop,
-          preferred: start,
-          against: 'citation text (--color-text-secondary)',
-          ratio: round(b.r),
-          needs: round(needs),
-          pass,
-          note: pass
-            ? `${names.muted} uses shade ${shade(b.stop)} in ${m}, not ${shade(start)}, so citation text (--color-text-secondary) reads at ${round(b.r)}:1 on it${needs < TEXT ? `, as well as in the official neutral theme (${round(needs)}:1)` : ''}`
-            : `citation text (--color-text-secondary) reads at only ${round(b.r)}:1 in ${m} on ${names.muted} even at shade ${shade(b.stop)}, the most contrasting one (needs ${round(needs)}:1): pick another ${f.id}, or set ${names.muted} exactly`,
-        });
-      return ref(f.id, m, b.stop, alpha);
+      return ref(f.id, m, away[0] ?? order[0], alpha);
     });
     put(names.muted, f.id, muted);
     /** The tint the theme really shows: an exact setting wins. @param {Mode} m */
@@ -1866,11 +1745,80 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       );
     }
   }
+
+  // Secondary text on the parts that sit on the accent tint (LIFT_PARTS),
+  // lifted as the official neutral theme lifts it: the neutral color's
+  // shade nearest the secondary text's own that reads at 4.5:1 on the
+  // tint and on the tint under a hover, over every surface. The tint
+  // itself stays at its official stop. Only with a neutral color: without
+  // one, the base theme's own text on those parts applies, and the
+  // contrast check measures it.
+  /** @type {Partial<Record<Mode, StopRef>> | null} */
+  let lift = null;
+  const secondary = tokens['--color-text-secondary'];
+  if (neutral && secondary && !setExactly('--color-text-secondary')) {
+    /** @param {Mode} m @param {string} token */
+    const valueOf = (m, token) => {
+      const v =
+        exactOf(token, m) ?? tokens[token]?.[m].color ?? base?.[m]?.[token];
+      return v && parseColor(v) ? v : null;
+    };
+    /** @type {Partial<Record<Mode, StopRef>>} */
+    const found = {};
+    for (const m of modes) {
+      const tint = valueOf(m, '--color-accent-muted');
+      if (!tint) break;
+      /** @type {StopRef} */
+      const tintRef =
+        alphaOf(tint) < 1 && /^#[0-9a-f]{8}$/i.test(tint)
+          ? {stop: 0, color: tint, alpha: tint.slice(7, 9)}
+          : {stop: 0, color: hex(/** @type {number[]} */ (parseColor(tint)))};
+      const seen = over('the accent tint', tintRef, surfaces(m, 'neutral'));
+      const hover = valueOf(m, '--color-overlay-hover');
+      const hovered =
+        hover && alphaOf(hover) > 0
+          ? seen.map(([n, c]) => {
+              const top = /** @type {[number, number, number]} */ (
+                parseColor(hover)
+              );
+              return /** @type {[string, string]} */ ([
+                `${n} under a hover`,
+                hex(
+                  compositeOver(
+                    top,
+                    alphaOf(hover),
+                    /** @type {[number, number, number]} */ (parseColor(c)),
+                  ),
+                ),
+              ]);
+            })
+          : [];
+      found[m] = pick(
+        '--color-text-secondary',
+        'neutral',
+        m,
+        secondary[m].stop,
+        [...seen, ...hovered],
+        TEXT,
+      );
+    }
+    if (modes.every(m => found[m])) lift = found;
+    // The pick's check speaks for the lifted parts.
+    for (const c of checks)
+      if (c.token === '--color-text-secondary' && c.against.includes('tint'))
+        c.note = c.pass
+          ? c.stop === c.preferred
+            ? ''
+            : `--color-text-secondary on parts that sit on the accent tint (${LIFT_WORDS}) uses shade ${shade(c.stop)} in ${c.mode}, not ${shade(c.preferred)}, so it reads at ${c.ratio}:1 on the tint and under a hover, as the official theme lifts it`
+          : `--color-text-secondary on parts that sit on the accent tint (${LIFT_WORDS}) reads at only ${c.ratio}:1 in ${c.mode} even at shade ${shade(c.stop)}, the most contrasting one (needs ${TEXT}:1): pick another accent or neutral, or set --color-accent-muted exactly`;
+  }
+
   return {
     candidate,
     families: fams,
     tokens,
-    contrast: checks,
+    contrast: checks.filter(c => c.note !== ''),
+    lift,
     vibrancy: config.vibrancy ?? VIBRANCY_DEFAULT,
     exact,
     notes: [
@@ -1938,6 +1886,7 @@ export function mappingRows(dial) {
           `${t}: light shade ${l} at opacity ${la}, dark shade ${d} at opacity ${da}`,
       ),
       "--color-background-body: the base theme's page color, so a tinted gray never tints the page",
+      `--color-text-secondary on parts that sit on the accent tint (${LIFT_WORDS}): the shade nearest the secondary text's that reads at ${TEXT}:1 on the tint and under a hover, as the official theme lifts it`,
     ];
   const word = dial === 'accent' ? null : STATUS_TOKEN[dial];
   if (dial !== 'accent' && !word) return [];
@@ -1953,7 +1902,7 @@ export function mappingRows(dial) {
     `${t('--color-text-$', '--color-text-accent')} and ${t('--color-icon-$', '--color-icon-accent')}: light shade ${TEXT_STOP[0]}, dark shade ${TEXT_STOP[1]} (moves to the nearest shade, darker or lighter, that reads at ${TEXT}:1 on the surfaces and the muted tint)`,
     word
       ? `--color-${word}-muted: light shade ${STATUS_MUTED[0]}, dark shade ${STATUS_MUTED[1][0]} at opacity ${STATUS_MUTED[1][1]} over the surface, never the fill's own shade`
-      : `--color-accent-muted: light shade ${ACCENT_MUTED[0]}, dark shade ${ACCENT_MUTED[1]}, as the official neutral theme maps it; moved to the nearest shade only when citation text (--color-text-secondary) would read on it below both ${TEXT}:1 and the official theme's own ratio, and never the fill's own shade`,
+      : `--color-accent-muted: light shade ${ACCENT_MUTED[0]}, dark shade ${ACCENT_MUTED[1]}, as the official neutral theme maps it, never the fill's own shade; secondary text on the parts that sit on it is lifted instead (see neutral)`,
   ];
   if (word)
     rows.push(

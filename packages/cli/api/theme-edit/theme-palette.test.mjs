@@ -24,7 +24,6 @@ import {
 } from './theme-edit.mjs';
 import {
   PALETTE_TOKENS,
-  officialCitation,
   paletteConfig,
   paletteMapping,
   paletteNotes,
@@ -902,7 +901,7 @@ describe('every color decision is generator config', () => {
     expect(notes).not.toContain('shade 50 (');
   });
 
-  it('finds the passing shade on either side, and steps the accent tint until citation text reads', () => {
+  it('finds the passing shade on either side, keeps the tint at its official stop, and lifts secondary text on it', () => {
     const dark = {
       '--color-background-surface': '#101314',
       '--color-background-body': '#101314',
@@ -924,54 +923,90 @@ describe('every color decision is generator config', () => {
     const pal = /** @type {import('./_palette.mjs').PaletteMapping} */ (
       paletteMapping(dir, 'x', data, gothic, tokenDefaults)
     );
-    for (const bg of Object.values(dark))
-      expect(
-        contrast(pal.tokens['--color-text-accent'].light.color, bg),
-      ).toBeGreaterThanOrEqual(4.5);
-    expect(paletteNotes(pal, 'accent', 'x').join(' ')).not.toContain(
-      'the most contrasting one',
-    );
-    // The official neutral pair: dark text-secondary on the dark accent tint.
+    // On dark light-mode surfaces with the official pale tint (85), accent
+    // text cannot read on both: the pick is the shade that reads best on
+    // all of them, found on either side, and the note says so truthfully.
+    const ramp = /** @type {any} */ (
+      generateTonalPalette(paletteConfig(dir, 'x', data, gothic)).palette.accent
+    ).light;
+    const onAll = (/** @type {string} */ c) =>
+      Math.min(
+        ...[
+          ...Object.values(dark),
+          pal.tokens['--color-accent-muted'].light.color,
+        ].map(bg => contrast(c, bg)),
+      );
+    const best = Math.max(...Object.values(ramp).map(c => onAll(String(c))));
+    const chosen = onAll(pal.tokens['--color-text-accent'].light.color);
+    expect(chosen).toBeCloseTo(best, 2);
+    if (chosen < 4.5)
+      expect(paletteNotes(pal, 'accent', 'x').join(' ')).toContain(
+        '--color-text-accent reads at only',
+      );
+    else
+      expect(paletteNotes(pal, 'accent', 'x').join(' ')).not.toContain(
+        'the most contrasting one',
+      );
+    // The tint stays at the official stop for every accent.
     const withText = {
       light: {...base.light, '--color-text-secondary': '#474747'},
       dark: {...base.dark, '--color-text-secondary': '#9e9e9e'},
     };
-    /** @param {string} seed */
-    const tint = seed => {
+    /** @param {Array<Record<string, string>>} settings */
+    const map = settings => {
       const d = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-palette-cite-'));
       dirs.push(d);
       return /** @type {import('./_palette.mjs').PaletteMapping} */ (
         paletteMapping(
           d,
           'x',
-          {...data, settings: [{thing: 'accent', value: seed, source: 'dial'}]},
+          {...data, settings: settings.map(x => ({source: 'dial', ...x}))},
           withText,
           tokenDefaults,
         )
-      ).tokens['--color-accent-muted'];
+      );
     };
-    // The official stop stays wherever citation text reads as well as in
-    // the official theme.
-    for (const seed of ['#7c3aed', '#2563eb']) {
-      expect(tint(seed).dark.stop, seed).toBe(30);
-      expect(tint(seed).light.stop, seed).toBe(85);
+    for (const seed of ['#7c3aed', '#2563eb', '#00704a', '#1db954']) {
+      const t = map([{thing: 'accent', value: seed}]).tokens;
+      expect(t['--color-accent-muted'].dark.stop, seed).toBe(30);
+      expect(t['--color-accent-muted'].light.stop, seed).toBe(85);
     }
-    // Where it would read worse, the tint steps until it reads as well.
-    for (const seed of ['#00704a', '#1db954', '#aec6cf', '#ccff00'])
+    // A fill at 85 moves the light tint off it, to the lighter neighbor.
+    const lime = map([{thing: 'accent', value: '#ccff00'}]).tokens;
+    expect(lime['--color-accent'].light.stop).toBe(85);
+    expect(lime['--color-accent-muted'].light.stop).toBe(90);
+    // Without a neutral color there is no lift: the base theme's own text
+    // on those parts applies.
+    expect(map([{thing: 'accent', value: '#00704a'}]).lift).toBeNull();
+    // With one, secondary text on the tinted parts is lifted until it reads
+    // at 4.5:1 on the tint and under a hover, as the official theme lifts
+    // it: Neutral's own gray lands on its dark 80.
+    for (const seed of ['#2563eb', '#00704a', '#1db954', '#aec6cf']) {
+      const pal = map([
+        {thing: 'neutral', value: '#808080'},
+        {thing: 'accent', value: seed},
+      ]);
+      const lift = /** @type {any} */ (pal.lift);
       for (const mode of /** @type {const} */ (['light', 'dark']))
         expect(
           contrast(
-            withText[mode]['--color-text-secondary'],
-            tint(seed)[mode].color,
+            lift[mode].color,
+            pal.tokens['--color-accent-muted'][mode].color,
           ),
           `${seed} ${mode}`,
-        ).toBeGreaterThanOrEqual(
-          Math.min(4.5, /** @type {number} */ (officialCitation(mode))) - 0.005,
-        );
-    expect(officialCitation('dark')).toBeCloseTo(
-      contrast('#9e9e9e', '#474747'),
-      2,
-    );
+        ).toBeGreaterThanOrEqual(4.5);
+      expect(lift.light.stop, seed).toBe(
+        pal.tokens['--color-text-secondary'].light.stop,
+      );
+    }
+    expect(
+      /** @type {any} */ (
+        map([
+          {thing: 'neutral', value: '#808080'},
+          {thing: 'accent', value: '#808080'},
+        ]).lift
+      ).dark.stop,
+    ).toBe(80);
   });
 
   it('refuses a layout without black and white, with non-numbers, or with a wide gap', () => {
@@ -1356,6 +1391,10 @@ describe('color settings, refused well', () => {
       'tokens/p.palette.ts was edited by hand, so it stays',
     );
     expect(fs.existsSync(file('palette.config.json'))).toBe(false);
+    // The selected-stops file is generated, so it always goes, even when
+    // the palette was edited at a shade the theme ships.
+    expect(fs.existsSync(file('tokens/p.palette-refs.ts'))).toBe(false);
+    expect(r.data.notes.join(' ')).not.toContain('palette-refs');
     // The next color change asks again, until the file is moved out.
     expect(
       (await refusal(() => themeEditSet('p', 'accent', '#16a34a', {cwd}))).code,
