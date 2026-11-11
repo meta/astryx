@@ -176,7 +176,10 @@ export function useReorderSession(
   const reorder = reorderable as ReorderableInternals | undefined;
   const engine = reorder?.[REORDER_ENGINE];
   const getListRef = useRef(getList);
-  getListRef.current = getList;
+  // Syncs the session's list getter with the committed one.
+  useIsomorphicLayoutEffect(() => {
+    getListRef.current = getList;
+  });
   const session = useMemo(
     () => engine?.createSession(() => getListRef.current(), hintId) ?? null,
     [engine, hintId],
