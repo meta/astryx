@@ -35,7 +35,7 @@ import React, {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {BaseTypeaheadFocusContext} from './BaseTypeaheadFocusContext';
-import {useBusyIndicatorLane} from './busyIndicatorLane';
+import {useBusyIndicatorLane, useIsInputBusy} from './busyIndicatorLane';
 import {useTrailingKeyDown} from './trailingKeyDown';
 import {
   CommittedChoicesKeyContext,
@@ -799,6 +799,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // cached empty answer belongs to the old query, not the text now typed.
   const [lastSearchedQuery, setLastSearchedQuery] = useState('');
   const isSearchPending = isLoading || query !== lastSearchedQuery;
+  const isInputBusy = useIsInputBusy();
 
   // An empty query reports nothing: an empty focus bootstrap is not a failed
   // search. A newer query stays silent through debounce and pending work;
@@ -2403,7 +2404,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
             : undefined
         }
         aria-autocomplete="list"
-        aria-busy={isLoading || undefined}
+        aria-busy={isLoading || isInputBusy || undefined}
         aria-describedby={inputAriaDescribedBy}
         aria-labelledby={inputAriaLabelledBy}
         aria-disabled={isFocusableDisabled ? 'true' : undefined}

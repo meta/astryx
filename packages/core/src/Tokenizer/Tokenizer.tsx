@@ -35,8 +35,10 @@ import React, {
   useId,
   useImperativeHandle,
   useMemo,
+  useOptimistic,
   useRef,
   useState,
+  useTransition,
   type ComponentType,
   type ReactNode,
   type Ref,
@@ -47,6 +49,7 @@ import {BaseTypeaheadFocusContext} from '../Typeahead/BaseTypeaheadFocusContext'
 import {
   BusyIndicatorLaneProvider,
   createBusyIndicatorLane,
+  InputBusyProvider,
   useIsBusy,
   type BusyIndicatorLane,
 } from '../Typeahead/busyIndicatorLane';
@@ -235,6 +238,19 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
   htmlName?: string;
   /** Callback when selection changes. Includes change metadata. */
   onChange: (items: T[], change: TokenizerChange<T>) => void;
+  /**
+   * Async action run after `onChange`, with the same arguments, inside a React
+   * transition. The proposed tokens show at once and the field is busy until
+   * the action settles; the field then shows `value` again. An edit made while
+   * an action is pending builds on the tokens on screen. A `value` the parent
+   * sets while an action is pending shows straight away, unless it accepts an
+   * earlier pending edit. Catch errors in the action: an error it throws
+   * reaches the nearest error boundary.
+   */
+  changeAction?: (
+    items: T[],
+    change: TokenizerChange<T>,
+  ) => void | Promise<void>;
   /** Render function for dropdown items. Default: TypeaheadItem. */
   renderItem?: (item: T) => ReactNode;
   /** Render function for selected tokens. Default: Token with label + onRemove. */
@@ -294,6 +310,15 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * reason is attached to the field itself.
    */
   disabledMessage?: string;
+
+  /**
+   * Whether the field's value is loading or being saved. Shows the end-lane
+   * Spinner and sets `aria-busy` on the control. Searching is unaffected: a
+   * search in flight has its own busy state and shares the same Spinner.
+   * @default false
+   */
+  isLoading?: boolean;
+
   /** Show clear button (clears all tokens). @default false */
   hasClear?: boolean;
   /**
@@ -862,8 +887,8 @@ function TokenizerSheetHost<T extends SearchableItem>(
  * animating and out of the accessibility tree, so its box keeps the themed
  * Spinner's own size.
  * Token rows reserve the lane's measured width, so a Spinner that came and
- * went with the search would re-wrap them, and widen a content-sized field,
- * on every search.
+ * went with each busy period would re-wrap them, and widen a content-sized
+ * field, on every search or save.
  */
 function EndLane({
   lane,
@@ -873,6 +898,7 @@ function EndLane({
   anchorRef,
   hasStaticContent,
   hasBusySlot,
+  isValueBusy,
   children,
 }: {
   lane: BusyIndicatorLane;
@@ -882,11 +908,14 @@ function EndLane({
   anchorRef: RefObject<Element | null>;
   hasStaticContent: boolean;
   hasBusySlot: boolean;
+  isValueBusy: boolean;
   children: ReactNode;
 }) {
-  const isBusy = useIsBusy(lane);
-  // The search Spinner stays named (family:input-fields FR7) but is not a
-  // live region; the field announces each search's busy start instead
+  const isSearchBusy = useIsBusy(lane);
+  const isBusy = isSearchBusy || isValueBusy;
+  // The field is busy while a search is in flight or while its value loads
+  // or saves. The Spinner stays named (family:input-fields FR7) but is not a
+  // live region; the field announces each busy start instead
   // (spec:AST-086 FR8).
   useBusyAnnouncement(isBusy, loadingLabel, anchorRef);
   if (!isBusy && !hasStaticContent && !hasBusySlot) {
@@ -895,11 +924,11 @@ function EndLane({
   return (
     <div ref={laneRef} {...stylex.props(laneXStyle)}>
       {(isBusy || hasBusySlot) && (
-        // Named, never live: the tokenizer announces its search.
+        // Named, never live: the field announces its busy start.
         <SpinnerOwnerContext value={true}>
           <Spinner
-            // Remounts when a search starts, so the ring syncs its phase on
-            // mount exactly as a newly shown Spinner did before.
+            // Remounts when the field becomes busy, so the ring syncs its
+            // phase on mount, as a newly shown Spinner does.
             key={isBusy ? 'busy' : 'idle'}
             size="sm"
             aria-label={loadingLabel}
@@ -1012,6 +1041,7 @@ export function Tokenizer<T extends SearchableItem>({
   searchSource,
   value,
   onChange,
+  changeAction,
   renderItem,
   renderToken,
   maxEntries,
@@ -1024,6 +1054,7 @@ export function Tokenizer<T extends SearchableItem>({
   isDisabled: isDisabledProp = false,
   htmlName,
   disabledMessage,
+  isLoading = false,
   hasClear = false,
   endContent,
   hasAutoFocus,
@@ -1102,6 +1133,51 @@ export function Tokenizer<T extends SearchableItem>({
       : {owner: 'content'},
   });
 
+  const [isPending, startTransition] = useTransition();
+  // `baseKeys` holds the id keys of every value the proposal builds on: the
+  // parent's value when the first pending edit started, then each pending
+  // proposal after it.
+  const [proposal, setProposal] = useOptimistic<{
+    items: T[];
+    baseKeys: string[];
+  } | null>(null);
+  const acceptedIdKey = useMemo(
+    () => JSON.stringify(value.map(item => item.id)),
+    [value],
+  );
+  // The field draws the proposal while the parent's value is one it builds
+  // on. The parent can accept an earlier pending edit before a later one
+  // settles, and the later edit stays on screen. Any other value is a
+  // replacement, and the field draws it at once.
+  const isProposalShown =
+    proposal != null && proposal.baseKeys.includes(acceptedIdKey);
+  const shownValue = isProposalShown ? proposal.items : value;
+  const commit = useCallback(
+    (items: T[], change: TokenizerChange<T>) => {
+      onChange(items, change);
+      if (changeAction) {
+        const baseKeys = isProposalShown
+          ? [
+              ...proposal.baseKeys,
+              JSON.stringify(proposal.items.map(item => item.id)),
+            ]
+          : [acceptedIdKey];
+        startTransition(async () => {
+          setProposal({items, baseKeys});
+          await changeAction(items, change);
+        });
+      }
+    },
+    [
+      onChange,
+      changeAction,
+      isProposalShown,
+      proposal,
+      acceptedIdKey,
+      setProposal,
+    ],
+  );
+  const isValueBusy = isLoading || (isPending && isProposalShown);
   // `adaptive` resolves through the policy the selection controls share. An
   // open sheet keeps its presentation until it closes. A resolution change
   // during a task does not replace the open surface.
@@ -1143,10 +1219,10 @@ export function Tokenizer<T extends SearchableItem>({
   const handleSheetCommit = useCallback(
     (items: T[], change: SheetDraftChange<T>) => {
       if (!isDisabled) {
-        onChange(items, change);
+        commit(items, change);
       }
     },
-    [isDisabled, onChange],
+    [isDisabled, commit],
   );
   // Set around a focus move the field makes itself — a presentation swap
   // handing focus from one control to the other — so the receiving control
@@ -1379,8 +1455,8 @@ export function Tokenizer<T extends SearchableItem>({
   // Focus-within state for overflow truncation
   // Reported by BaseTypeahead so the indicator can live in this field's own
   // end lane, beside endContent and the clear button.
-  // The base owns the busy state; this field only paints it. Held in a store
-  // rather than this component's state — held here, a search transition
+  // The base owns the search-busy state; this field only paints it. Held in a
+  // store rather than this component's state — held here, a search transition
   // re-rendered every selected token twice, for a glyph no token contains.
   // See busyIndicatorLane.tsx.
   const busyLane = useMemo(() => createBusyIndicatorLane(), []);
@@ -1403,15 +1479,20 @@ export function Tokenizer<T extends SearchableItem>({
     (item: T) => isItemRemovable?.(item) ?? true,
     [isItemRemovable],
   );
-  // The half of the lane's contents this component knows about. The busy half
-  // is the leaf's own business — folding it in here would mean reading the
-  // busy state during this render, which is exactly the re-render the store
-  // exists to avoid.
-  const hasClearButton = hasClear && !isDisabled && value.some(canRemoveItem);
+  // The lane's static contents. The busy state stays out of this value:
+  // EndLane reads the search-busy state from the store itself, because reading
+  // it here would re-render the whole field on every search. The value-busy
+  // state goes to EndLane as a prop.
+  // It follows the shown tokens, as every other remove path does, so it also
+  // clears tokens a pending `changeAction` proposes.
+  const hasClearButton =
+    hasClear && !isDisabled && shownValue.some(canRemoveItem);
   const hasStaticEndLane = Boolean(endContent || hasClearButton);
   const [isFocusedWithin, setIsFocusedWithin] = useState(false);
   const isTruncated =
-    !isFocusedWithin && tokenOverflowBehavior !== 'none' && value.length > 0;
+    !isFocusedWithin &&
+    tokenOverflowBehavior !== 'none' &&
+    shownValue.length > 0;
 
   // Layer for unfocusedLayer mode — promotes expanded content to the top layer
   // so it isn't clipped by ancestor overflow.
@@ -1513,22 +1594,24 @@ export function Tokenizer<T extends SearchableItem>({
     [isLayerMode, layer, isFocusInTokenizer, onBlur],
   );
 
-  const isAtMax = maxEntries != null && value.length >= maxEntries;
+  const isAtMax = maxEntries != null && shownValue.length >= maxEntries;
 
-  // Filter out already-selected items from search results. Keyed by the ids,
-  // not the array: an equal new `value` array on every render keeps the
-  // filtered source, and the key tells an open list to reload only when the
-  // committed values really change (FR13).
+  // Filter out already-selected items from search results, including tokens a
+  // pending `changeAction` proposes: they are on screen, so offering them again
+  // would allow a duplicate. Keyed by the ids, not the array: an equal new
+  // `value` array on every render keeps the filtered source, and the key tells
+  // an open list to reload only when the shown tokens really change (FR13).
   const selectedIdKey = useMemo(
-    () => JSON.stringify(value.map(item => item.id)),
-    [value],
+    () => JSON.stringify(shownValue.map(item => item.id)),
+    [shownValue],
   );
   const selectedIds = useMemo(
     () => new Set<string>(JSON.parse(selectedIdKey) as string[]),
     [selectedIdKey],
   );
-  // Tells an open list to reload when the committed values change, or to
-  // close once they reach the limit (FR13, FR15).
+  // Tells an open list to reload when the shown tokens change, a pending
+  // `changeAction` proposal included, or to close once they reach the limit
+  // (FR13, FR15).
   const committedChoices = useMemo(
     () => ({key: selectedIdKey, ids: selectedIds, isAtLimit: isAtMax}),
     [selectedIdKey, selectedIds, isAtMax],
@@ -1542,8 +1625,8 @@ export function Tokenizer<T extends SearchableItem>({
   // item from them. The result was a "Create Alice" entry that, when picked,
   // added a second "Alice" token under a different id.
   const selectedLabels = useMemo(
-    () => new Set(value.map(item => item.label.toLowerCase())),
-    [value],
+    () => new Set(shownValue.map(item => item.label.toLowerCase())),
+    [shownValue],
   );
 
   const filteredSource: SearchSource<T> = useMemo(
@@ -1649,8 +1732,8 @@ export function Tokenizer<T extends SearchableItem>({
         }
         const base = {id: createdValue, label: createdValue};
         const realItem = base as T;
-        const newItems = [...value, realItem];
-        onChange(newItems, {item: realItem, type: 'create'});
+        const newItems = [...shownValue, realItem];
+        commit(newItems, {item: realItem, type: 'create'});
         if (!options?.silent) {
           announce(t('@astryx.tokenizer.tokenAdded', {label: createdValue}));
         }
@@ -1660,16 +1743,16 @@ export function Tokenizer<T extends SearchableItem>({
       if (selectedIds.has(item.id)) {
         return false;
       }
-      const newItems = [...value, item];
-      onChange(newItems, {item, type: 'add'});
+      const newItems = [...shownValue, item];
+      commit(newItems, {item, type: 'add'});
       if (!options?.silent) {
         announce(t('@astryx.tokenizer.tokenAdded', {label: item.label}));
       }
       return true;
     },
     [
-      value,
-      onChange,
+      shownValue,
+      commit,
       isDisabled,
       isAtMax,
       selectedIds,
@@ -1688,15 +1771,15 @@ export function Tokenizer<T extends SearchableItem>({
       if (isDisabled || !canRemoveItem(item)) {
         return false;
       }
-      const newItems = value.filter(v => v.id !== item.id);
-      onChange(newItems, {item, type: 'remove'});
+      const newItems = shownValue.filter(v => v.id !== item.id);
+      commit(newItems, {item, type: 'remove'});
       if (!options?.silent) {
         announce(t('@astryx.tokenizer.tokenRemoved', {label: item.label}));
       }
       inputRef.current?.focus();
       return true;
     },
-    [value, onChange, isDisabled, canRemoveItem, announce, t],
+    [shownValue, commit, isDisabled, canRemoveItem, announce, t],
   );
 
   // A composing component that words its own Clear all (PowerSearch) provides
@@ -1705,14 +1788,14 @@ export function Tokenizer<T extends SearchableItem>({
     use(TokenizerClearAllMessageContext) ?? t('@astryx.tokenizer.allRemoved');
   const handleClearAll = useCallback(
     (options?: {silent?: boolean}) => {
-      const removedItems = value.filter(canRemoveItem);
+      const removedItems = shownValue.filter(canRemoveItem);
       if (isDisabled || removedItems.length === 0) {
         return;
       }
       // onChange names one item. Clear all names the last one it removes.
       const lastRemovedItem = removedItems[removedItems.length - 1];
-      onChange(
-        value.filter(item => !canRemoveItem(item)),
+      commit(
+        shownValue.filter(item => !canRemoveItem(item)),
         {item: lastRemovedItem, type: 'remove'},
       );
       // Focus moves to the input, so the emptied selection is announced, in
@@ -1722,7 +1805,7 @@ export function Tokenizer<T extends SearchableItem>({
       }
       inputRef.current?.focus();
     },
-    [value, onChange, isDisabled, canRemoveItem, announce, clearAllMessage],
+    [shownValue, commit, isDisabled, canRemoveItem, announce, clearAllMessage],
   );
 
   // Handle backspace on empty input — remove last token
@@ -1731,14 +1814,14 @@ export function Tokenizer<T extends SearchableItem>({
       if (
         e.key === 'Backspace' &&
         e.currentTarget.value === '' &&
-        value.length > 0
+        shownValue.length > 0
       ) {
         e.preventDefault();
-        const lastItem = value[value.length - 1];
+        const lastItem = shownValue[shownValue.length - 1];
         handleRemove(lastItem);
       }
     },
-    [value, handleRemove],
+    [shownValue, handleRemove],
   );
 
   // Click wrapper to focus input
@@ -1789,7 +1872,7 @@ export function Tokenizer<T extends SearchableItem>({
   const sizeStyle = sizeStyles[size];
 
   // Render tokens
-  const tokens = value.map(item => {
+  const tokens = shownValue.map(item => {
     const onRemoveItem = () => handleRemove(item);
 
     if (renderToken) {
@@ -1874,7 +1957,7 @@ export function Tokenizer<T extends SearchableItem>({
           inputWrapperStyles.base,
           inputWrapperStyles.textField,
           styles.wrapper,
-          value.length > 0 && styles.wrapperWithTokens,
+          shownValue.length > 0 && styles.wrapperWithTokens,
           isTruncated ? truncatedSizeStyles[size] : sizeStyle,
           isTruncated && styles.truncatedWrapper,
           isDisabled && inputWrapperStyles.disabled,
@@ -1898,7 +1981,9 @@ export function Tokenizer<T extends SearchableItem>({
         isTruncated={isTruncated}>
         {isRenderable(startIcon as ReactNode) && (
           <span
-            {...stylex.props(value.length > 0 && styles.startIconWithTokens)}>
+            {...stylex.props(
+              shownValue.length > 0 && styles.startIconWithTokens,
+            )}>
             {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
           </span>
         )}
@@ -1923,74 +2008,78 @@ export function Tokenizer<T extends SearchableItem>({
           <TrailingKeyDownContext value={onKeyDown}>
             <CommittedChoicesKeyContext value={committedChoices}>
               <BaseTypeaheadFocusContext value={baseTypeaheadFocus}>
-                <BaseTypeahead
-                  {...rest}
-                  ref={useMergedRefs(
-                    inputRef,
-                    // The ref type admits the sheet's trigger too; in this
-                    // presentation it receives the input.
-                    ref as React.Ref<HTMLInputElement> | undefined,
-                    handOffFocusRef,
-                  )}
-                  searchSource={isAtMax ? emptySource : filteredSource}
-                  value={null}
-                  onChange={handleAdd}
-                  renderItem={renderItem}
-                  // A space keeps :placeholder-shown available as the CSS-only empty
-                  // query signal without painting placeholder text beside tokens.
-                  placeholder={value.length === 0 ? placeholder : ' '}
-                  hasEntriesOnFocus={isAtMax ? false : hasEntriesOnFocus}
-                  maxMenuItems={maxMenuItems}
-                  menuWidth={menuWidth}
-                  minQueryLength={minQueryLength}
-                  emptySearchText={emptySearchText}
-                  isDisabled={isDisabled}
-                  // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
-                  // unfocusedLayer mode, where the input lives in a layer a disabled
-                  // field never opens; how that field takes focus is undecided.
-                  isFocusableDisabled={
-                    showsDisabledMessage || (isDisabled && !isLayerMode)
-                  }
-                  hasAutoFocus={hasAutoFocus}
-                  inputId={inputId}
-                  ariaLabelledBy={inputLabelledBy}
-                  ariaDescribedBy={
-                    [ariaDescribedByProp, ariaDescribedBy]
-                      .filter(Boolean)
-                      .join(' ') || undefined
-                  }
-                  onChangeQuery={onChangeQuery}
-                  // The resolved required state reaches the combobox, also when a
-                  // FormLayout default hides the visible marker (component:FormLayout
-                  // FR5, AR2).
-                  aria-required={isEffectivelyRequired || rest['aria-required']}
-                  // An error status is exposed on the combobox as on every other field
-                  // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
-                  // aria-required / aria-invalid still applies.
-                  aria-invalid={
-                    localStatus?.type === 'error' || rest['aria-invalid']
-                  }
-                  __queryEntries={createEntries}
-                  debounceMs={debounceMs}
-                  onKeyDown={handleKeyDown}
-                  anchorRef={wrapperRef}
-                  menu={menu}
-                  onOpenChange={onOpenChange}
-                  handleRef={baseHandleRef}
-                  size={size}
-                  inputXStyle={[
-                    isAtMax || isTruncated
-                      ? styles.inputAtMax
-                      : value.length > 0
-                        ? compactInputStyle
-                        : undefined,
-                    // With tokens, wrapperWithTokens reserves the lane for every row.
-                    // This rule is only for an empty Tokenizer; it still resolves to
-                    // zero until the lane publishes a width.
-                    !(isAtMax || isTruncated || value.length > 0) &&
-                      laneReserve,
-                  ]}
-                />
+                <InputBusyProvider value={isValueBusy}>
+                  <BaseTypeahead
+                    {...rest}
+                    ref={useMergedRefs(
+                      inputRef,
+                      // The ref type admits the sheet's trigger too; in this
+                      // presentation it receives the input.
+                      ref as React.Ref<HTMLInputElement> | undefined,
+                      handOffFocusRef,
+                    )}
+                    searchSource={isAtMax ? emptySource : filteredSource}
+                    value={null}
+                    onChange={handleAdd}
+                    renderItem={renderItem}
+                    // A space keeps :placeholder-shown available as the CSS-only empty
+                    // query signal without painting placeholder text beside tokens.
+                    placeholder={shownValue.length === 0 ? placeholder : ' '}
+                    hasEntriesOnFocus={isAtMax ? false : hasEntriesOnFocus}
+                    maxMenuItems={maxMenuItems}
+                    menuWidth={menuWidth}
+                    minQueryLength={minQueryLength}
+                    emptySearchText={emptySearchText}
+                    isDisabled={isDisabled}
+                    // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
+                    // unfocusedLayer mode, where the input lives in a layer a disabled
+                    // field never opens; how that field takes focus is undecided.
+                    isFocusableDisabled={
+                      showsDisabledMessage || (isDisabled && !isLayerMode)
+                    }
+                    hasAutoFocus={hasAutoFocus}
+                    inputId={inputId}
+                    ariaLabelledBy={inputLabelledBy}
+                    ariaDescribedBy={
+                      [ariaDescribedByProp, ariaDescribedBy]
+                        .filter(Boolean)
+                        .join(' ') || undefined
+                    }
+                    onChangeQuery={onChangeQuery}
+                    // The resolved required state reaches the combobox, also when a
+                    // FormLayout default hides the visible marker (component:FormLayout
+                    // FR5, AR2).
+                    aria-required={
+                      isEffectivelyRequired || rest['aria-required']
+                    }
+                    // An error status is exposed on the combobox as on every other field
+                    // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
+                    // aria-required / aria-invalid still applies.
+                    aria-invalid={
+                      localStatus?.type === 'error' || rest['aria-invalid']
+                    }
+                    __queryEntries={createEntries}
+                    debounceMs={debounceMs}
+                    onKeyDown={handleKeyDown}
+                    anchorRef={wrapperRef}
+                    menu={menu}
+                    onOpenChange={onOpenChange}
+                    handleRef={baseHandleRef}
+                    size={size}
+                    inputXStyle={[
+                      isAtMax || isTruncated
+                        ? styles.inputAtMax
+                        : shownValue.length > 0
+                          ? compactInputStyle
+                          : undefined,
+                      // With tokens, wrapperWithTokens reserves the lane for every row.
+                      // This rule is only for an empty Tokenizer; it still resolves to
+                      // zero until the lane publishes a width.
+                      !(isAtMax || isTruncated || shownValue.length > 0) &&
+                        laneReserve,
+                    ]}
+                  />
+                </InputBusyProvider>
               </BaseTypeaheadFocusContext>
             </CommittedChoicesKeyContext>
           </TrailingKeyDownContext>
@@ -2010,7 +2099,7 @@ export function Tokenizer<T extends SearchableItem>({
           endSectionSizeStyles[size],
           isInGroupRow && styles.inGroupEndSection,
           isInGroupRow &&
-            value.length > 0 &&
+            shownValue.length > 0 &&
             styles.inGroupEndSectionWithTokens,
         ]}
         loadingLabel={t('@astryx.typeahead.loading')}
@@ -2019,7 +2108,8 @@ export function Tokenizer<T extends SearchableItem>({
         // Wherever a search can run beside tokens: enabled and below
         // maxEntries. A collapsed overflow row keeps it too, since a search
         // started while focused can settle after focus leaves.
-        hasBusySlot={value.length > 0 && !isDisabled && !isAtMax}>
+        hasBusySlot={shownValue.length > 0 && !isDisabled && !isAtMax}
+        isValueBusy={isValueBusy}>
         {endContent}
         {hasClearButton && (
           <InputClearButton
@@ -2135,7 +2225,7 @@ export function Tokenizer<T extends SearchableItem>({
               // as Selector's bottom-sheet trigger does; the sheet's own rows
               // and search field carry the touch-sized targets.
               sizeStyles[size],
-              value.length > 0 && styles.wrapperWithTokens,
+              shownValue.length > 0 && styles.wrapperWithTokens,
               isDisabled && inputWrapperStyles.disabled,
               isDisabled && styles.sheetTriggerDisabled,
               status && inputStatusBorderStyles[status.type],
@@ -2150,7 +2240,9 @@ export function Tokenizer<T extends SearchableItem>({
           )}>
           {isRenderable(startIcon as ReactNode) && (
             <span
-              {...stylex.props(value.length > 0 && styles.startIconWithTokens)}>
+              {...stylex.props(
+                shownValue.length > 0 && styles.startIconWithTokens,
+              )}>
               {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
             </span>
           )}
@@ -2165,6 +2257,7 @@ export function Tokenizer<T extends SearchableItem>({
             aria-haspopup="dialog"
             aria-expanded={isSheetOpen}
             aria-disabled={isDisabled || undefined}
+            aria-busy={isValueBusy || undefined}
             // The description follows the inline input's order: the caller's
             // ids, the field description, the status message, then the
             // disabled reason (`spec:AST-085` FR5). The hidden count and the
@@ -2177,8 +2270,8 @@ export function Tokenizer<T extends SearchableItem>({
               [
                 ariaDescribedByProp,
                 ariaDescribedBy,
-                value.length > 0 ? triggerTokensId : null,
-                ...value.map(item => tokenElementId(item.id)),
+                shownValue.length > 0 ? triggerTokensId : null,
+                ...shownValue.map(item => tokenElementId(item.id)),
               ]
                 .filter(Boolean)
                 .join(' ') || undefined
@@ -2204,12 +2297,12 @@ export function Tokenizer<T extends SearchableItem>({
             onKeyDown={onKeyDown}
             {...stylex.props(
               styles.sheetTrigger,
-              value.length > 0 && styles.sheetTriggerWithTokens,
+              shownValue.length > 0 && styles.sheetTriggerWithTokens,
               // With no token the placeholder stops short of the end lane, as
               // the inline input's text does.
-              value.length === 0 && laneReserve,
+              shownValue.length === 0 && laneReserve,
             )}>
-            {value.length === 0 && (
+            {shownValue.length === 0 && (
               <span
                 {...stylex.props(
                   styles.sheetTriggerPlaceholder,
@@ -2219,7 +2312,7 @@ export function Tokenizer<T extends SearchableItem>({
               </span>
             )}
           </button>
-          {value.map(item =>
+          {shownValue.map(item =>
             renderToken ? (
               <span key={item.id} {...stylex.props(styles.token)}>
                 {renderToken(item, () => handleSheetTokenRemove(item))}
@@ -2243,13 +2336,13 @@ export function Tokenizer<T extends SearchableItem>({
             </div>
           )}
         </div>
-        {value.length > 0 && (
+        {shownValue.length > 0 && (
           <VisuallyHidden id={triggerTokensId}>
-            {t('@astryx.tokenizer.selectedCount', {count: value.length})}
+            {t('@astryx.tokenizer.selectedCount', {count: shownValue.length})}
           </VisuallyHidden>
         )}
         {renderToken != null &&
-          value.map(item => (
+          shownValue.map(item => (
             <span key={item.id} id={tokenElementId(item.id)} hidden>
               {item.label}
             </span>
@@ -2279,7 +2372,7 @@ export function Tokenizer<T extends SearchableItem>({
               initialQuery={sheetInitialQuery}
               label={label}
               searchSource={searchSource}
-              value={value}
+              value={shownValue}
               maxEntries={maxEntries}
               hasCreate={hasCreate}
               maxMenuItems={maxMenuItems ?? 10}
@@ -2309,7 +2402,7 @@ export function Tokenizer<T extends SearchableItem>({
               inputWrapperStyles.base,
               inputWrapperStyles.textField,
               styles.wrapper,
-              value.length > 0 && styles.wrapperWithTokens,
+              shownValue.length > 0 && styles.wrapperWithTokens,
               placeholderSizeStyle,
               isTruncated && styles.truncatedWrapper,
               isDisabled && inputWrapperStyles.disabled,

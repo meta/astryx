@@ -338,7 +338,7 @@ another implementation helper.
 | MultiSelector   | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, and disabled reason                            | trigger-display modes remain component-owned                                                                                                       |
 | ComplexSelector | Field, FormLayout, size, width, `isLoading`, `changeAction`, and status                                                                | no InputGroup or disabled-reason API                                                                                                               |
 | Typeahead       | Field, FormLayout, InputGroup, size, width, clear, status, disabled reason, and BaseTypeahead source loading                           | no family `isLoading` or `changeAction`; search lifecycle is component-owned                                                                       |
-| Tokenizer       | Field, FormLayout, InputGroup, size, width, clear, status, disabled reason, BaseTypeahead source loading, and multi-token block growth | no family `isLoading` or `changeAction`                                                                                                            |
+| Tokenizer       | Field, FormLayout, InputGroup, size, width, `isLoading`, `changeAction`, clear, status, disabled reason, source busy, and block growth | sheet field busy: `aria-busy`, no Spinner                                                                                                          |
 
 The current text-entry controls that already carry a 16px anti-zoom floor apply it
 only on iOS. This includes input-family members and the existing shared or
