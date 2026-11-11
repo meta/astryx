@@ -12,7 +12,7 @@
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
 import {
   CSS_WIDE_KEYWORDS as CSS_WIDE,
-  isSystemFamily,
+  isDesktopFamily,
 } from '../theme/build/font-warning.mjs';
 
 /** The command prefix every suggested command starts with. */
@@ -103,6 +103,9 @@ export const TEXT_SIZE = [
   ['larger', 16],
 ];
 
+/** The type roles a font may be set for alone (`font <x> --on <role>`). */
+export const FONT_ROLES = ['body', 'heading', 'code'];
+
 /**
  * Font presets: the family, then its fallbacks.
  * @type {Record<string, [string, string]>}
@@ -119,15 +122,13 @@ export const FONTS = {
   courier: ['Courier New', 'Courier, monospace'],
   rounded: ['Nunito', '"Varela Round", system-ui, sans-serif'],
   comic: ['Comic Sans MS', '"Comic Neue", cursive'],
-  // Preinstalled, as the theme build's font warning counts it.
-  roboto: ['Roboto', 'system-ui, sans-serif'],
 };
 /** CSS-wide keywords, and `default`, which font-family reserves: never a family, and invalid inside a list. */
 export const CSS_WIDE_KEYWORDS = [...CSS_WIDE, 'default'];
 
 /** Presets every desktop system already has, so no font file is needed. */
 export const SYSTEM_FONTS = Object.keys(FONTS).filter(k =>
-  isSystemFamily(FONTS[k][0]),
+  isDesktopFamily(FONTS[k][0]),
 );
 
 /**
@@ -139,6 +140,7 @@ export const SYSTEM_FONTS = Object.keys(FONTS).filter(k =>
  */
 const OPEN_FONT_FAMILIES = {
   inter: 'Inter',
+  roboto: 'Roboto',
   poppins: 'Poppins',
   figtree: 'Figtree',
   'dm-sans': 'DM Sans',

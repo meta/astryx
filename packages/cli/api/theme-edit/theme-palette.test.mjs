@@ -1578,3 +1578,137 @@ describe('font words', () => {
     await themeEditUndo('p', {cwd, thing: 'font'});
   });
 });
+
+describe('fonts some systems ship, and part properties by their grammar', () => {
+  it('warns or offers a package for a font not every desktop has, and loads an installed @fontsource package of any family', async () => {
+    const roboto = await themeEditSet('p', 'font', 'roboto', {cwd});
+    expect(roboto.data.notes.join(' ')).toContain(
+      'Roboto is not installed, so it does not load',
+    );
+    expect(roboto.data.notes.join(' ')).toContain('@fontsource/roboto');
+    const gill = await themeEditSet('p', 'font', 'Gill Sans', {cwd});
+    expect(gill.data.notes.join(' ')).toContain(
+      '"Gill Sans" is not a system font',
+    );
+    const pkgDir = path.join(cwd, 'node_modules', '@fontsource', 'gill-sans');
+    fs.mkdirSync(pkgDir, {recursive: true});
+    fs.writeFileSync(
+      path.join(pkgDir, 'package.json'),
+      JSON.stringify({name: '@fontsource/gill-sans', version: '1.0.0'}),
+    );
+    try {
+      const own = await themeEditSet('p', 'font', 'Gill Sans, serif', {cwd});
+      expect(own.data.notes.join(' ')).toContain(
+        'Gill Sans is installed (@fontsource/gill-sans)',
+      );
+      expect(own.data.notes.join(' ')).not.toContain('is not a system font');
+    } finally {
+      fs.rmSync(path.join(cwd, 'node_modules', '@fontsource'), {
+        recursive: true,
+        force: true,
+      });
+    }
+    // The theme build still counts both as preinstalled inside a stack.
+    const {collectUnloadedFonts} =
+      await import('../theme/build/font-warning.mjs');
+    expect(
+      collectUnloadedFonts({
+        tokens: {'--font-family-body': 'Roboto, "Gill Sans", sans-serif'},
+      }),
+    ).toEqual([]);
+    await themeEditUndo('p', {cwd, thing: 'font'});
+  });
+
+  it('checks every part property against its CSS grammar, and keeps CSS-wide keywords out of color tokens', async () => {
+    for (const [prop, value] of [
+      ['background', 'banana'],
+      ['box-shadow', 'banana'],
+      ['border', '1px solid banana'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', prop, value, {cwd, on: 'card'}),
+      );
+      expect(r.code, `${prop} ${value}`).toBe('ERR_THEME_BAD_VALUE');
+      expect(r.message, `${prop} ${value}`).toContain('its CSS grammar');
+    }
+    for (const [prop, value] of [
+      ['border', '1px solid var(--color-border)'],
+      ['background', 'linear-gradient(red, blue)'],
+      ['color', 'revert-layer'],
+    ]) {
+      await themeEditSet('p', prop, value, {cwd, on: 'card'});
+      await themeEditUndo('p', {cwd, thing: prop, on: 'card'});
+    }
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('p', '--color-text-primary', 'revert-layer', {cwd}),
+        )
+      ).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+  });
+});
+
+describe('colors and type, final checks', () => {
+  it('takes one time or easing per token, sound math only, and a leading of 0', async () => {
+    for (const [token, value] of [
+      ['--duration-slow-min', '200ms, 300ms'],
+      ['--ease-standard', 'ease-in, ease-out'],
+      ['--radius-element', 'calc(1px banana)'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', token, value, {cwd}))).code,
+        `${token} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    for (const [token, value] of [
+      ['--duration-slow-min', '300ms'],
+      ['--ease-standard', 'ease-in'],
+      ['--radius-element', 'calc(2px + 1px)'],
+      ['--text-body-leading', '0'],
+    ]) {
+      await themeEditSet('p', token, value, {cwd});
+      await themeEditUndo('p', {cwd, thing: token});
+    }
+  });
+
+  it('gives an exact secondary text to the lifted parts with no color dial', async () => {
+    await themeEditSet('p', '--color-text-secondary', '#5a5a5a', {
+      cwd,
+      mode: 'light',
+    });
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#5a5a5a, [^"]+\)"/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: '--color-text-secondary',
+      mode: 'light',
+    });
+  });
+
+  it('keeps headings for a body font, steps no further than the last rung, and names an exact token a dial cannot change', async () => {
+    await themeEditSet('p', 'font', 'serif', {cwd, on: 'body'});
+    const settings = read('p.settings.ts');
+    expect(settings).toMatch(/"body": \{[^}]*Georgia/);
+    expect(settings).not.toMatch(/"heading": \{[^}]*Georgia/);
+    // A later command still loads the theme with the body font saved.
+    await themeEditSet('p', 'text-size', '20', {cwd});
+    const more = await refusal(() =>
+      themeEditSet('p', 'text-size', 'more', {cwd}),
+    );
+    expect(more.code).toBe('ERR_THEME_BAD_VALUE');
+    expect(more.message).toContain('nowhere to go');
+    await themeEditSet('p', '--font-family-heading', 'Georgia, serif', {cwd});
+    const mono = await themeEditSet('p', 'font', 'mono', {cwd});
+    expect(mono.data.notes.join(' ')).toContain(
+      'keeps your exact --font-family-heading = Georgia, serif',
+    );
+    for (const [thing, on] of [
+      ['font', undefined],
+      ['--font-family-heading', undefined],
+      ['text-size', undefined],
+      ['font', 'body'],
+    ])
+      await themeEditUndo('p', {cwd, thing, ...(on ? {on} : {})});
+  });
+});

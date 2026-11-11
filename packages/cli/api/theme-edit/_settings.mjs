@@ -851,8 +851,41 @@ export function compileTheme(ctx, data, base) {
   // base theme lifts it in, so it replaces the base's lift. A setting of it
   // on the part (no --when or --state) wins there, per mode, so a numbered
   // citation shows what `--on citation` set.
-  for (const [target, key, ground] of pal?.lift ? LIFT_PARTS : []) {
-    const lift = pal?.lift?.[ground];
+  // Without a color dial nothing is lifted, but an exact secondary text
+  // still reaches those parts, and the base theme's own lift stays in the
+  // mode it does not cover.
+  /** @type {Partial<Record<'light' | 'dark', string>>} */
+  const exactText = {};
+  for (const x of data.settings)
+    if (
+      x.source === 'token' &&
+      x.thing === '--color-text-secondary' &&
+      !x.on &&
+      !x.when &&
+      !x.state
+    )
+      for (const m of /** @type {const} */ (['light', 'dark']))
+        if (!x.mode || x.mode === m) exactText[m] = x.value;
+  const blocks =
+    /** @type {{components?: Record<string, any>}} */ (base).components ?? {};
+  for (const [target, key, ground] of pal?.lift || Object.keys(exactText).length
+    ? LIFT_PARTS
+    : []) {
+    /** @type {Partial<Record<'light' | 'dark', {color: string}>> | undefined} */
+    let lift = pal?.lift?.[ground];
+    if (!lift) {
+      const own = blocks[target]?.[key]?.['--color-text-secondary'];
+      const split =
+        typeof own === 'string'
+          ? /^light-dark\((.*),\s*([^,]*)\)$/.exec(own.trim())
+          : null;
+      /** @param {'light' | 'dark'} m */
+      const at = m =>
+        exactText[m] ??
+        (split ? split[m === 'light' ? 1 : 2].trim() : own) ??
+        base[m]['--color-text-secondary'];
+      lift = {light: {color: at('light')}, dark: {color: at('dark')}};
+    }
     if (!lift || !ctx.project.target.has(target)) continue;
     /** @type {Partial<Record<'light' | 'dark', {color: string}>>} */
     const value = {...lift};
@@ -1025,6 +1058,15 @@ export function compileTheme(ctx, data, base) {
       for (const t of parts) putComp(s, t, camel(s.thing), s.value);
     }
   }
+  // Core gives headings the body font when a theme sets only the body's:
+  // a font for the body alone keeps the base theme's heading font.
+  if (theme.typography?.body && !theme.typography.heading) {
+    const heading = base.light['--font-family-heading'];
+    if (heading) {
+      const f = fontOf(heading);
+      theme.typography.heading = {family: f.family, fallbacks: f.fallbacks};
+    }
+  }
   // A one-mode theme looks the same whatever the system asks for: every
   // color the theme does not set takes its mode's value from the base (or
   // Core) on both sides.
@@ -1034,11 +1076,11 @@ export function compileTheme(ctx, data, base) {
         const v = base[modeOnly]?.[k];
         if (v && !/var\(/.test(v)) putTok(k, v);
       }
-  // A scale steeper than the standard one enlarges the headings; the steps
-  // below the base text size keep the standard ratio, so small text stays
-  // readable. An exact token setting still wins.
+  // A scale steeper or flatter than the standard one changes the headings;
+  // the steps below the base text size keep the standard ratio, so small
+  // text stays as it was. An exact token setting still wins.
   const scale = theme.typography?.scale;
-  if (scale && scale.ratio > STANDARD_RATIO)
+  if (scale && scale.ratio !== STANDARD_RATIO)
     for (const [k, step] of SMALL_STEPS)
       if (
         !data.settings.some(x => x.source === 'token' && x.thing === k && !x.on)
@@ -2364,19 +2406,27 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
 
 /** @param {Ctx} ctx @param {ThemeData} data */
 export function fontPackages(ctx, data) {
-  /** @type {Array<{pkg: string, family: string, installed: boolean}>} */
+  /** @type {Array<{pkg: string, family: string, installed: boolean, of: Setting}>} */
   const out = [];
-  for (const s of data.settings) {
-    if (s.thing !== 'font') continue;
-    const {pkg, family} = fontOf(s.value);
-    if (!pkg || out.some(x => x.pkg === pkg)) continue;
-    let installed = true;
+  /** @param {string} pkg */
+  const isInstalled = pkg => {
     try {
       ctx.project.req.resolve(`${pkg}/package.json`);
+      return true;
     } catch {
-      installed = false;
+      return false;
     }
-    out.push({pkg, family: family.replace(/["']/g, ''), installed});
+  };
+  for (const s of data.settings) {
+    if (s.thing !== 'font') continue;
+    const {pkg: known, family} = fontOf(s.value);
+    const name = family.replace(/["']/g, '');
+    // An installed @fontsource package of the family always loads it, even
+    // for a family some systems ship.
+    const own = `@fontsource/${name.toLowerCase().replace(/\s+/g, '-')}`;
+    const pkg = known ?? (isInstalled(own) ? own : null);
+    if (!pkg || out.some(x => x.pkg === pkg)) continue;
+    out.push({pkg, family: name, installed: isInstalled(pkg), of: s});
   }
   return out;
 }

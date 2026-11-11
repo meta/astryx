@@ -80,6 +80,27 @@ const VAR_STANDS_FOR = ['0', '1px', '1ms', 'red', 'ease', 'serif', '0 0 red'];
  * @returns {any | null}
  */
 export function matchValue(property, value) {
+  return matchWith(value, (lexer, ast) => lexer.matchProperty(property, ast));
+}
+
+/**
+ * Whether a value is one value of a CSS type (`time`, `easing-function`,
+ * `length-percentage`), never a list. Returns the parsed value on a match.
+ * @param {string} type
+ * @param {string} value
+ * @returns {any | null}
+ */
+export function matchType(type, value) {
+  return matchWith(value, (lexer, ast) => lexer.matchType(type, ast));
+}
+
+/**
+ * A value matched by `match`, with each var() tried as an ordinary value.
+ * @param {string} value
+ * @param {(lexer: any, ast: any) => {error: unknown}} match
+ * @returns {any | null}
+ */
+function matchWith(value, match) {
   const {lexer, parse} = csstree();
   const vars =
     value.match(/(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi) ?? [];
@@ -87,7 +108,7 @@ export function matchValue(property, value) {
   const tryOne = v => {
     try {
       const ast = parse(v, {context: 'value'});
-      return lexer.matchProperty(property, ast).error ? null : ast;
+      return match(lexer, ast).error || !mathIsSound(ast) ? null : ast;
     } catch {
       return null;
     }
@@ -104,6 +125,77 @@ export function matchValue(property, value) {
     return null;
   };
   return fill(value, 0);
+}
+
+/** CSS math functions, whose insides css-tree's grammar does not check. */
+const MATH = new Set([
+  'calc',
+  'min',
+  'max',
+  'clamp',
+  'round',
+  'mod',
+  'rem',
+  'abs',
+  'sign',
+]);
+/** Words a math function may hold: constants and rounding strategies. */
+const MATH_WORDS = new Set([
+  'e',
+  'pi',
+  'infinity',
+  '-infinity',
+  'nan',
+  'nearest',
+  'up',
+  'down',
+  'to-zero',
+]);
+
+/**
+ * Whether every math function in a value holds a sound expression: numbers,
+ * lengths and percentages joined by operators, nested math, var() or env(),
+ * never a stray word (`calc(1px banana)`) or two values with no operator
+ * between them. css-tree accepts any insides.
+ * @param {any} ast
+ */
+function mathIsSound(ast) {
+  let sound = true;
+  csstree().walk(ast, {
+    visit: 'Function',
+    enter(/** @type {any} */ fn) {
+      if (!MATH.has(fn.name.toLowerCase())) return;
+      /** @param {any} list */
+      const expression = list => {
+        let lastWasValue = false;
+        for (const node of list) {
+          if (node.type === 'WhiteSpace') continue;
+          if (node.type === 'Operator') {
+            if (node.value === ',') {
+              lastWasValue = false;
+              continue;
+            }
+            if (!lastWasValue) return false;
+            lastWasValue = false;
+            continue;
+          }
+          const value =
+            ['Number', 'Dimension', 'Percentage'].includes(node.type) ||
+            (node.type === 'Identifier' &&
+              MATH_WORDS.has(node.name.toLowerCase())) ||
+            (node.type === 'Function' &&
+              (MATH.has(node.name.toLowerCase()) ||
+                ['var', 'env'].includes(node.name.toLowerCase()))) ||
+            (node.type === 'Parentheses' && expression(node.children));
+          if (!value || lastWasValue) return false;
+          lastWasValue = true;
+        }
+        return lastWasValue;
+      };
+      if (!expression(fn.children)) sound = false;
+    },
+  });
+  return sound;
 }
 
 /**

@@ -55,17 +55,13 @@ export const GENERIC_KEYWORDS = new Set([
   ...CSS_WIDE_KEYWORDS,
 ]);
 
-// Families a clean machine already has: the members of core's own default
-// stacks (tokens.stylex.ts typographyDefaults) plus the classic web-safe
-// macOS/Windows set. Deliberately short — an unknown family warns, and for a
-// preinstalled rarity that is a one-line false alarm, not a broken theme.
-export const SYSTEM_FAMILIES = new Set([
+// Families the usual desktops ship, so a theme may name one as its font
+// with no font file: the classic web-safe macOS/Windows set, the system UI
+// names, and the common Linux sans faces.
+const DESKTOP_FAMILIES = new Set([
   '-apple-system',
   'blinkmacsystemfont',
   'segoe ui',
-  'segoe ui emoji',
-  'segoe ui symbol',
-  'roboto',
   'helvetica',
   'helvetica neue',
   'arial',
@@ -87,6 +83,24 @@ export const SYSTEM_FAMILIES = new Set([
   'trebuchet ms',
   'impact',
   'palatino',
+  'garamond',
+  'comic sans ms',
+  'liberation sans',
+  'dejavu sans',
+  'noto sans',
+  'ubuntu',
+  'cantarell',
+]);
+
+// Families only some systems ship (one desktop OS, Office, Android, Linux),
+// which fallback stacks name on purpose: core's own default stacks
+// (tokens.stylex.ts typographyDefaults name Roboto) and the shipped themes'
+// (neutral's code stack ends in Liberation Mono). In a stack they need no
+// warning; as a theme's own font they do not load everywhere.
+const SOME_SYSTEMS_FAMILIES = new Set([
+  'segoe ui emoji',
+  'segoe ui symbol',
+  'roboto',
   'cambria',
   'calibri',
   'lucida grande',
@@ -95,30 +109,39 @@ export const SYSTEM_FAMILIES = new Set([
   'brush script mt',
   'snell roundhand',
   'old english text mt',
-  // Linux staples — the shipped themes' fallback stacks name these on
-  // purpose (e.g. neutral's code stack ends in Liberation Mono).
   'liberation mono',
-  'liberation sans',
   'liberation serif',
-  'dejavu sans',
   'dejavu sans mono',
-  'noto sans',
-  'ubuntu',
-  'cantarell',
-  // Shipped with Windows and macOS.
-  'comic sans ms',
-  'garamond',
 ]);
 
+// Families a clean machine may already have. Deliberately short — an
+// unknown family warns, and for a preinstalled rarity that is a one-line
+// false alarm, not a broken theme.
+export const SYSTEM_FAMILIES = new Set([
+  ...DESKTOP_FAMILIES,
+  ...SOME_SYSTEMS_FAMILIES,
+]);
+
+/** @param {string} family */
+const familyKey = family => family.trim().replace(/\s+/g, ' ').toLowerCase();
+
 /**
- * Whether a family needs no font file: a CSS generic or keyword, or a
- * family a clean machine already has. Case does not matter.
+ * Whether a family needs no font file somewhere: a CSS generic or keyword,
+ * or a family some clean machine already has. Case does not matter.
  * @param {string} family without quotes
  */
-export const isSystemFamily = family => {
-  const name = family.trim().replace(/\s+/g, ' ').toLowerCase();
-  return GENERIC_KEYWORDS.has(name) || SYSTEM_FAMILIES.has(name);
-};
+export const isSystemFamily = family =>
+  GENERIC_KEYWORDS.has(familyKey(family)) ||
+  SYSTEM_FAMILIES.has(familyKey(family));
+
+/**
+ * Whether a family loads with no font file on every usual desktop: a CSS
+ * generic or keyword, or a family macOS, Windows and common Linux ship.
+ * @param {string} family without quotes
+ */
+export const isDesktopFamily = family =>
+  GENERIC_KEYWORDS.has(familyKey(family)) ||
+  DESKTOP_FAMILIES.has(familyKey(family));
 
 /**
  * Split a CSS font-family value into clean family names. Complete `var()`

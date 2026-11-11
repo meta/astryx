@@ -9,6 +9,7 @@
  */
 
 import {CSS_WIDE_KEYWORDS} from '../theme/build/font-warning.mjs';
+import {matchType} from './_css.mjs';
 import {luminance, oklabToLinearRgb} from '../theme/palette/generate/color.mjs';
 
 /** @typedef {[number, number, number]} Rgb */
@@ -644,13 +645,16 @@ export const isSize = (v, name = '') => {
     );
   if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
   if (/^env\([a-z-]+(,.*)?\)$/i.test(s)) return true;
-  return /^(calc|min|max|clamp)\(.*(\d|var\().*\)$/i.test(s);
+  return (
+    /^(calc|min|max|clamp)\(/i.test(s) &&
+    matchType('length-percentage', s) != null
+  );
 };
 
 /**
  * Whether a value reads as a CSS number for the token: a weight is 1 to
- * 1000 or a weight keyword; a line height is a positive number, length or
- * percentage, or `normal`.
+ * 1000 or a weight keyword; a line height is a number, length or
+ * percentage of 0 or more, or `normal`.
  * @param {unknown} v
  * @param {string} [name]
  */
@@ -665,8 +669,9 @@ export const isNumber = (v, name = '') => {
   if (/leading|line-height/.test(name))
     return (
       s === 'normal' ||
-      (/^\d*\.?\d+(px|rem|em|%)?$/.test(s) && Number.parseFloat(s) > 0) ||
-      /^calc\(.*\d.*\)$/.test(s)
+      (/^\d*\.?\d+(px|rem|em|%)?$/.test(s) && Number.parseFloat(s) >= 0) ||
+      (/^calc\(/i.test(s) && matchType('length-percentage', s) != null) ||
+      (/^calc\(/i.test(s) && matchType('number', s) != null)
     );
   return /^-?\d*\.?\d+$/.test(s);
 };

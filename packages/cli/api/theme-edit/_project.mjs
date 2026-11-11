@@ -340,11 +340,12 @@ export async function baseResolved(project, like) {
         v => v && typeof v === 'object' && typeof v.name === 'string',
       );
   }
-  return {
+  const out = {
     light: core.resolveThemeTokens(theme, {mode: 'light'}),
     dark: core.resolveThemeTokens(theme, {mode: 'dark'}),
     // The base theme's own part styles (neutral's pale destructive button),
     // which a one-mode setting keeps in the other mode.
     components: theme.components ?? {},
   };
+  return out;
 }

@@ -17,6 +17,7 @@ import {
   CORNERS,
   DIALS,
   FAMILIES,
+  FONT_ROLES,
   KEY_TOKENS,
   LIKE,
   P,
@@ -638,7 +639,11 @@ async function change(sub, slug, thing, value, options) {
             : []),
           ...fieldNotes,
           ...r.notes,
-          `your ${data.settings.length} settings are kept`,
+          ...(data.settings.length
+            ? [
+                `your ${data.settings.length} setting${data.settings.length === 1 ? ' is' : 's are'} kept`,
+              ]
+            : []),
           ...otherModeNotes(data),
           // The colors are made again for the new base or mode: their
           // shade notes follow.
@@ -769,9 +774,46 @@ async function change(sub, slug, thing, value, options) {
   const r = await commitTheme(ctx, slug, data, {history: true});
   const styled = styledChanges(compiledBefore, compileTheme(ctx, data, base));
   const parts = partsOf(ctx, s);
+  // Exact whole-theme tokens that win over what this dial writes: the dial
+  // changes them only in a theme without them.
+  /** @param {import('./_settings.mjs').Setting[]} list */
+  const dialsOnly = list => ({
+    ...data,
+    settings: list.filter(x => x.source === 'dial'),
+  });
+  /** @type {import('./_settings.mjs').Setting[]} */
+  let exactWins = [];
+  if (sub === 'set' && s.source === 'dial' && !s.on) {
+    const withDial = compileTheme(ctx, dialsOnly(data.settings), base);
+    const without = compileTheme(
+      ctx,
+      dialsOnly(data.settings.filter(x => x !== s)),
+      base,
+    );
+    const differs = (/** @type {unknown} */ a, /** @type {unknown} */ b) =>
+      JSON.stringify(a) !== JSON.stringify(b);
+    const touched = new Set(
+      [
+        ...Object.keys(withDial.tokens ?? {}),
+        ...Object.keys(without.tokens ?? {}),
+      ].filter(k => differs(withDial.tokens?.[k], without.tokens?.[k])),
+    );
+    for (const r of FONT_ROLES)
+      if (differs(withDial.typography?.[r], without.typography?.[r]))
+        touched.add(`--font-family-${r}`);
+    if (differs(withDial.typography?.scale, without.typography?.scale))
+      for (const k of Object.keys(ctx.project.core.tokenDefaults ?? {}))
+        if (/^--font-size-/.test(k)) touched.add(k);
+    exactWins = data.settings.filter(
+      x => x.source === 'token' && !x.on && !x.when && touched.has(x.thing),
+    );
+  }
   const kept =
     sub === 'set' && s.source === 'dial' && !s.on
-      ? data.settings.filter(x => x.thing === s.thing && x.on).map(describe)
+      ? [
+          ...data.settings.filter(x => x.thing === s.thing && x.on),
+          ...exactWins,
+        ].map(describe)
       : [];
   // The exact property a dial on a part competes with there.
   const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
@@ -793,6 +835,11 @@ async function change(sub, slug, thing, value, options) {
   /** @type {string[]} */
   const notes = [
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
+    ...(exactWins.length
+      ? [
+          `keeps your exact ${exactWins.map(describe).join(', ')}: an exact setting wins over a dial, so ${exactWins.length > 1 ? 'those do' : 'that does'} not change`,
+        ]
+      : []),
     ...(covers.length
       ? [
           `comes after ${covers.map(describe).join(', ')}, so ${covers.length > 1 ? 'those parts show' : `${covers[0].on} shows`} this value now; set ${covers.length > 1 ? 'one' : 'it'} again to make it win`,

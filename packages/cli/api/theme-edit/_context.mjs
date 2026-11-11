@@ -8,13 +8,19 @@
  * @position api/theme-edit — imported only by the adapter's operation helpers
  */
 
-import {isSystemFamily} from '../theme/build/font-warning.mjs';
+import {isDesktopFamily} from '../theme/build/font-warning.mjs';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
-import {CLOSEST_OPEN_FONT, OPEN_FONTS, P, SYSTEM_FONTS} from './_tables.mjs';
+import {
+  CLOSEST_OPEN_FONT,
+  FONT_ROLES,
+  OPEN_FONTS,
+  P,
+  SYSTEM_FONTS,
+} from './_tables.mjs';
 import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
@@ -177,7 +183,8 @@ export async function pictures(project, shots, modes) {
 export function fontNotes(ctx, data) {
   /** @type {string[]} */
   const notes = [];
-  for (const {pkg, family, installed} of fontPackages(ctx, data)) {
+  const packages = fontPackages(ctx, data);
+  for (const {pkg, family, installed} of packages) {
     const fallbacks =
       Object.values(OPEN_FONTS).find(f => f.pkg === pkg)?.fallbacks ?? '';
     const near = /monospace/.test(fallbacks)
@@ -195,9 +202,10 @@ export function fontNotes(ctx, data) {
     if (
       s.thing !== 'font' ||
       SYSTEM_FONTS.includes(s.value) ||
-      isSystemFamily(fontOf(s.value).family.replace(/["']/g, '')) ||
+      isDesktopFamily(fontOf(s.value).family.replace(/["']/g, '')) ||
       OPEN_FONTS[s.value] ||
       fontOf(s.value).pkg ||
+      packages.some(x => x.of === s) ||
       s.value === 'rounded' ||
       s.value === 'comic'
     )
@@ -261,7 +269,7 @@ export function styledChanges(before, after) {
   const ta = JSON.stringify(before?.typography ?? {});
   const tb = JSON.stringify(after?.typography ?? {});
   if (ta !== tb) {
-    for (const role of ['body', 'heading', 'code']) {
+    for (const role of FONT_ROLES) {
       const x = after?.typography?.[role];
       if (
         JSON.stringify(before?.typography?.[role] ?? null) !==

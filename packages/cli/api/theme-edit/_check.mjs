@@ -9,13 +9,16 @@
  * @position api/theme-edit — checks over the part data
  */
 
+import * as fs from 'node:fs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {baseThemeFile} from './_project.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   cssProperties,
   grammarText,
   initialOf,
   keywordsOf,
+  matchType,
   matchValue,
   numbersIn,
   propertyGrammar,
@@ -27,6 +30,7 @@ import {
   CORNERS,
   DIALS,
   FAMILIES,
+  FONT_ROLES,
   FONTS,
   GROUPS,
   HEADING_TRACKING,
@@ -189,7 +193,12 @@ export function storedProblems(ctx, slug, data, skip = '') {
     const scope = why => ({setting: s, why, scope: true});
     const problem = (() => {
       const t = s.on ? ctx.project.target.get(s.on) : null;
-      if (s.on && !t && !FAMILIES[s.on])
+      if (
+        s.on &&
+        !t &&
+        !FAMILIES[s.on] &&
+        !(s.thing === 'font' && FONT_ROLES.includes(s.on))
+      )
         return scope(`there is no part or group "${s.on}"`);
       if (s.source === 'dial' && s.on && WHOLE_ONLY.includes(s.thing))
         return scope(`${s.thing} applies to the whole theme, not to ${s.on}`);
@@ -394,7 +403,7 @@ const SYSTEM_COLORS = [
  * @param {string} value
  */
 function isTime(value) {
-  const ast = matchValue('transition-duration', value.trim());
+  const ast = matchType('time', value.trim());
   return (
     ast != null &&
     numbersIn(ast).every(
@@ -412,7 +421,7 @@ function isTime(value) {
  * @param {string} value
  */
 function isEasing(value) {
-  const ast = matchValue('transition-timing-function', value.trim());
+  const ast = matchType('easing-function', value.trim());
   if (!ast) return false;
   const count = numbersIn(ast).find(n => n.fn === 'steps');
   return !count || count.value >= (/jump-none/i.test(value) ? 2 : 1);
@@ -569,6 +578,24 @@ const DIAL_WORDS = /** @type {Record<string, Record<string, string>>} */ ({
 });
 
 /**
+/**
+ * Whether the base theme's own part styles read a token (`var(--x)`), which
+ * the editor's record of Core's parts does not cover.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} like
+ * @param {string} token
+ */
+function baseReads(ctx, like, token) {
+  try {
+    return new RegExp(`var\\(${token}[,)]`).test(
+      fs.readFileSync(baseThemeFile(ctx.project, like), 'utf8'),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check one setting and give it back ready to store, or refuse.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
@@ -706,8 +733,7 @@ export function checkSetting(
         },
       );
   }
-  const isRole =
-    thing === 'font' && ['body', 'heading', 'code'].includes(s.on ?? '');
+  const isRole = thing === 'font' && FONT_ROLES.includes(s.on ?? '');
   if (s.on && !isRole && !FAMILIES[s.on]) {
     const t = TARGET.get(s.on);
     if (!t) {
@@ -926,13 +952,36 @@ export function checkSetting(
           Math.max(0, Math.min(L.length - 1, at + (v === 'more' ? 1 : -1)))
         ][0];
       // A size between rungs steps to the next rung that way, never past it.
-      const px = typeof cur === 'number' ? cur : (lengthPx(cur) ?? Number.NaN);
+      const px =
+        typeof cur === 'number'
+          ? cur
+          : (lengthPx(cur) ??
+            (/^\d*\.?\d+$/.test(String(cur)) ? Number(cur) : Number.NaN));
       if (Number.isNaN(px)) return L[0][0];
       const next =
         v === 'more'
           ? L.find(([, n]) => n > px + 0.01)
           : [...L].reverse().find(([, n]) => n < px - 0.01);
-      return (next ?? (v === 'more' ? L[L.length - 1] : L[0]))[0];
+      // Past the last step that way, a step would go back: give a size.
+      if (!next) {
+        const edge = /** @type {[string, number]} */ (
+          v === 'more' ? L[L.length - 1] : L[0]
+        );
+        const example = String(cur).replace(
+          /\d*\.?\d+/,
+          String(Math.max(0, Math.round(px + (v === 'more' ? 2 : -2)))),
+        );
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `${thing} is ${typeof cur === 'number' ? `${cur}px` : cur}, already ${v === 'more' ? 'above' : 'below'} its ${v === 'more' ? 'largest' : 'smallest'} step (${edge[0]}, ${edge[1]}px), so "${v}" has nowhere to go. Give an exact size.`,
+          {
+            run: [
+              `${P} set ${slug} ${thing} ${quoteCommandArgument(example)}${s.on ? ` --on ${s.on}` : ''}`,
+            ],
+          },
+        );
+      }
+      return next[0];
     };
     if (PALETTE_DIALS.includes(thing) && (s.on || s.mode)) {
       const token = paletteToken(thing);
@@ -1478,7 +1527,7 @@ export function checkSetting(
           also: r0.also,
         });
       } else if (hard.length)
-        s.note = `no effect on ${hard.map(([t]) => t).join(', ')} (they never read ${thing})`;
+        s.note = `the editor's render of ${hard.map(([t]) => t).join(', ')} did not read ${thing} (each part is rendered once, with its default props, so a variant that reads it may be missed); it is set as asked`;
       if (!s.note && recorded.length) {
         const fed = C.feeds(recorded[0][0], thing);
         if (fed.length) s.note = `feeds ${C.fmtFeeds(fed, recorded[0][0])}`;
@@ -1504,6 +1553,8 @@ export function checkSetting(
       // name a token `set` refuses.
       if (r && fed.length)
         s.note = `no part reads ${thing} itself, but ${fed.slice(0, 4).join(', ')} ${fed.length > 1 ? 'are' : 'is'} built from it, so the change shows wherever ${fed.length > 1 ? 'those are' : 'that is'} used${fed.some(k => k.startsWith('--color-syntax-')) ? ' (such as diff rows in code blocks)' : ''}`;
+      else if (r && data.like && baseReads(ctx, data.like, thing))
+        s.note = `the ${data.like} theme's own part styles read ${thing}, so the change shows where they use it`;
       else if (r && dialWrites(thing))
         s.note = `no part of this Core reads ${thing}, and no token it feeds is read, so it changes nothing you see now; it is set as asked because a dial writes it too`;
       // The editor's record of what parts read comes from one render of
