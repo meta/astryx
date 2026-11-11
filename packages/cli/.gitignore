@@ -33,6 +33,9 @@ assets/docs.generated.json
 # help without loading every command. Not committed: a checkout loads them.
 clients/cli/commands.generated.json
 
+# Written at prepack (scripts/generate-self-audit.mjs); never committed.
+assets/self-audit.generated.json
+
 # The id of the published package's exact contents, written last at `prepack`
 # by scripts/generate-build-id.mjs. A checkout has none, so it keeps no
 # gathered catalogs between runs (foundation/fs/gather-cache.mjs).
