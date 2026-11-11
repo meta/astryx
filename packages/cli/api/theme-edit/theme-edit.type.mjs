@@ -167,7 +167,7 @@
  * @property {string} [cwd] - The folder to start from (default: process.cwd()); commands act on the Astryx project at or above it.
  * @property {string} [theme] - The theme the pages wear: a theme made by `experimental theme editor` (default: the only one under themes/; with none or several, the app's own theme).
  * @property {string} [template] - Add this page template instead of ranking one from a description.
- * @property {number} [top] - With a description: how many of the best-fitting page templates to add, 1 to 3 (default 1).
+ * @property {number | string} [top] - With a description: how many of the best-fitting page templates to add, 1 to 3 (default 1). A string is taken as typed: only "1", "2" or "3".
  * @property {string} [path] - The folder of the preview route, inside the project (default: theme-preview/ in the app's routes folder, app/ or src/app/).
  */
 
@@ -230,7 +230,14 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditPreviewRemoveResponse
  * @property {'themeEdit.previewRemove'} type
- * @property {{folder: string, removed: string[], pages: string[]}} data
+ * @property {object} data
+ * @property {string} data.folder - The preview route folder.
+ * @property {string[]} data.removed - Files deleted.
+ * @property {string[]} data.kept - Files kept: changed by hand after the preview wrote them, or not written by it.
+ * @property {string[]} data.missing - Files the preview had written that were gone already.
+ * @property {string[]} data.rewritten - Files written again, so the route and the Colors page match the pages left.
+ * @property {string[]} data.notes - What else to know.
+ * @property {string[]} data.pages - The pages left, in order; empty when the whole preview was removed.
  */
 
 /**

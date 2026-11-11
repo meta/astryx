@@ -629,7 +629,7 @@ export function registerExperimentalTheme(group, program) {
               cwd: process.cwd(),
               theme: o.theme,
               template: o.template,
-              top: o.top == null ? undefined : Number(o.top),
+              top: o.top,
               path: o.path,
             }),
           r => {
@@ -680,7 +680,7 @@ export function registerExperimentalTheme(group, program) {
             ...project(/** @type {any} */ (r.data)),
           ],
         ),
-    }),
+    }).allowExcessArguments(false),
     previewAppDoc,
   );
 
@@ -696,7 +696,7 @@ export function registerExperimentalTheme(group, program) {
               ? project(/** @type {any} */ (r.data))
               : [
                   ...project(/** @type {any} */ (r.data)),
-                  `Tip: ${PREFIX} preview add`,
+                  `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path '${String(o.path).replace(/'/g, `'\\''`)}'`}`,
                 ],
           r =>
             resultSet({
@@ -705,7 +705,7 @@ export function registerExperimentalTheme(group, program) {
               empty: r.data.pages.length === 0,
             }),
         ),
-    }),
+    }).allowExcessArguments(false),
     previewListDoc,
   );
 
@@ -724,7 +724,7 @@ export function registerExperimentalTheme(group, program) {
             ...project(/** @type {any} */ (r.data)),
           ],
         ),
-    }),
+    }).allowExcessArguments(false),
     previewRemoveDoc,
   );
 

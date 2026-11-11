@@ -69,6 +69,10 @@ beforeAll(async () => {
     ...FIXTURE_PACKAGES,
     '@types/react',
     '@types/react-dom',
+    // The template pages' packages are installed, not only named.
+    '@heroicons/react',
+    'lucide-react',
+    'recharts',
   ]);
   writeFixtureBaseTheme(cwd, 'neutral');
   fs.writeFileSync(
@@ -272,7 +276,7 @@ describe('preview pages', () => {
 
   it('writes an Overview built to stress the theme and a Components page with one command per cell', async () => {
     await themeEditPreviewAdd(undefined, {cwd, theme: 's'});
-    const overview = read('src/app/theme-preview/pages/overview.tsx');
+    const overview = read('src/app/theme-preview/_pages/overview.tsx');
     expect(overview).toContain('s at a glance');
     for (const part of [
       'C.Banner',
@@ -288,7 +292,7 @@ describe('preview pages', () => {
     expect(overview.indexOf('Open layers')).toBeLessThan(
       overview.indexOf('>Type<'),
     );
-    const components = read('src/app/theme-preview/pages/components.tsx');
+    const components = read('src/app/theme-preview/_pages/components.tsx');
     expect(components).toContain(
       'astryx experimental theme editor set s background',
     );
@@ -307,7 +311,7 @@ describe('preview pages', () => {
       path: 'src/app/custom-preview',
     });
     expect(r.data.pages).toContain('colors');
-    const page = 'src/app/custom-preview/pages/colors.tsx';
+    const page = 'src/app/custom-preview/_pages/colors.tsx';
     expect(read(page)).toContain('import {palette}');
     await themeEditUndo('s', {cwd, thing: 'accent'});
     expect(fs.existsSync(path.join(cwd, 'themes/s/tokens/s.palette.ts'))).toBe(
@@ -348,7 +352,7 @@ describe('round 3', () => {
     expect(r.data.skipped.map(x => x.page)).toContain('work-item-detail');
     expect(r.data.added).toHaveLength(1);
     expect(r.data.added[0]).not.toBe('work-item-detail');
-    expect(r.data.notes.join(' ')).toContain('instead');
+    expect(r.data.notes.join(' ')).toContain('in its place');
   }, 240_000);
 
   it('labels a page by its template name, however it was added', async () => {
@@ -431,7 +435,7 @@ describe('round 3', () => {
 
   it('gives every controlled sample a change handler, so a click never throws', () => {
     for (const page of ['overview', 'components']) {
-      const source = read(`src/app/theme-preview/pages/${page}.tsx`);
+      const source = read(`src/app/theme-preview/_pages/${page}.tsx`);
       const tags =
         source.match(/<C\.(TabList|SegmentedControl)\b[^\n]*/g) ?? [];
       expect(tags.length, page).toBeGreaterThan(0);
@@ -583,7 +587,7 @@ describe('round 4 follow-ups', () => {
   it('marks an exact dark fill under the light shade on the Colors page', async () => {
     await themeEditSet('s', 'accent', '#5e6ad2', {cwd});
     await themeEditPreviewAdd(undefined, {cwd, theme: 's', path: 'src/app/r4'});
-    expect(read('src/app/r4/pages/colors.tsx')).toContain(
+    expect(read('src/app/r4/_pages/colors.tsx')).toContain(
       '"--color-accent (dark mode too)"',
     );
     await themeEditUndo('s', {cwd, thing: 'accent'});
@@ -598,7 +602,7 @@ describe('round 4 follow-ups', () => {
         path: 'src/app/my preview',
       }),
     );
-    expect(r.run[0]).toMatch(/--theme s --path "src\/app\/my preview"$/);
+    expect(r.run[0]).toMatch(/--theme s --path 'src\/app\/my preview'$/);
   }, 120_000);
 });
 
