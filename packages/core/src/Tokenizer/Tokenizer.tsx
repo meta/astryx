@@ -1701,11 +1701,8 @@ export function Tokenizer<T extends SearchableItem>({
   // into the sheet's dialog; the handlers below stay silent for those.
   const announce = useAnnounce();
 
-  // Backspace (the keyboard's Delete key) on the empty input removes the
-  // last token. On a touch screen it takes two presses, as UIKit's search
-  // tokens do (iOS 26.2). The first selects the last token; the second
-  // removes it. Typing anything else keeps a selected token and goes on
-  // after it.
+  // On a touch screen Delete takes two presses, as UIKit's search tokens do
+  // (iOS 26.2). One stray tap on the thumb's Delete key then removes nothing.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedItem =
     selectedId == null ? null : (value.find(v => v.id === selectedId) ?? null);
