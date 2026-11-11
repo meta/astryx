@@ -21,8 +21,10 @@
 import path from 'node:path';
 
 import {
+  componentFolderNamed,
   componentFolderOf,
   componentPathOf,
+  localModules,
   parseRouting,
   resolveModule as resolve,
   valueImports,
@@ -103,49 +105,6 @@ const PAGE = /origin\}\/(?!iframe\.html)([\w.-]+)/g;
 const OPENS_STORIES = /iframe\.html\?id=/;
 /** A spec's extra visits: `// @visits Markdown Citation`. */
 const VISITS = /^\s*(?:\/\/|\/?\*+)\s*@visits\s+(.+?)\s*(?:\*\/)?\s*$/gm;
-
-/**
- * The files a module loads through relative value imports, itself included.
- * @param {string} file
- * @param {Set<string>} known
- * @param {(file: string) => string} read
- */
-function localModules(file, known, read) {
-  const seen = new Set([file]);
-  const queue = [file];
-  while (queue.length > 0) {
-    const current = queue.pop();
-    for (const {specifier} of valueImports(read(current))) {
-      if (!specifier.startsWith('.')) continue;
-      const target = resolve(
-        known,
-        path.posix.normalize(`${path.posix.dirname(current)}/${specifier}`),
-      );
-      if (target && !seen.has(target)) {
-        seen.add(target);
-        queue.push(target);
-      }
-    }
-  }
-  return [...seen];
-}
-
-/**
- * The folder that holds a component: the one named for it, else the one with
- * its source file (`SideNavCollapseButton` lives in `SideNav/`).
- * @param {string} name
- * @param {string[]} listed
- */
-function componentFolder(name, listed) {
-  const own = listed.find(file =>
-    new RegExp(`^packages/[^/]+/src/${name}/`).test(file),
-  );
-  if (own) return componentPathOf(own);
-  const source = listed.find(file =>
-    new RegExp(`^packages/[^/]+/src/[A-Z][^/]*/${name}\\.tsx$`).test(file),
-  );
-  return source ? componentPathOf(source) : null;
-}
 
 /**
  * A story file's own component folder: where its meta's `component` comes
@@ -259,7 +218,7 @@ export function specVisits(spec, {listed, read, stories, map}) {
   for (const [, line] of read(spec).matchAll(VISITS))
     for (const name of line.split(/[\s,]+/).filter(Boolean)) {
       const folder = /^[A-Z]\w*$/.test(name)
-        ? componentFolder(name, listed)
+        ? componentFolderNamed(name, listed)
         : null;
       if (folder) folders.add(folder);
       else unresolved.push(`@visits names ${name}, which no folder holds`);

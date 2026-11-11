@@ -27,7 +27,13 @@ import {
   testsReader,
 } from './playwright-legs.mjs';
 import {matrixFor} from './ci-matrix.mjs';
-import {importerGraph, proofImporters} from './a11y-pr-contracts.mjs';
+
+import {
+  componentFolderOf,
+  importerGraph,
+  proofImporters,
+  storyComponentFolders,
+} from './a11y-pr-contracts.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -109,6 +115,50 @@ describe('plan', () => {
     expect(result.stderr).toContain(
       'Playwright listed no interaction spec files',
     );
+  });
+});
+
+describe('storyComponentFolders', () => {
+  const listed = execFileSync('git', ['-C', root, 'ls-files'], {
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter(Boolean);
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+
+  it('maps the ChatVirtualizer story to Chat, through its name from the Lab package root', () => {
+    const story = storyComponentFolders(
+      'apps/storybook/stories/ChatVirtualizer.stories.tsx',
+      {listed, read},
+    );
+    expect(story.unresolved).toEqual([]);
+    expect(story.folders).toContain('packages/lab/src/Chat/');
+  });
+
+  it("selects Chat's interaction specs, not the full suite, for a ChatVirtualizer story change", () => {
+    const changed = ['apps/storybook/stories/ChatVirtualizer.stories.tsx'];
+    const plan = chromiumSelection({
+      listed,
+      changed,
+      scope: /^(packages\/|apps\/storybook\/|internal\/)/,
+      fullSuite: false,
+      importers: new Map(),
+      proofs: new Map(),
+      selection: JSON.parse(read('.github/interaction-selection.json')),
+      primitives: JSON.parse(read('.github/a11y-shared-primitives.json'))
+        .primitives,
+      storyFolders: file =>
+        storyComponentFolders(file, {listed, read}).folders.map(
+          componentFolderOf,
+        ),
+    });
+    expect(plan.full).toBe(false);
+    expect(plan.stories).toContain('lab/Chat');
+    expect(
+      plan.specs.some(spec =>
+        spec.startsWith('packages/lab/src/Chat/__tests__/ChatVirtualizer'),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -1484,7 +1534,41 @@ describe('what a Chromium run covers for a pull request', () => {
     });
   });
 
-  it('runs the full suite for a changed story, which maps to no component', () => {
+  const storyFolders = file => {
+    const story = storyComponentFolders(file, {
+      listed,
+      read: each => fs.readFileSync(path.join(tree, each), 'utf8'),
+    });
+    return story.unresolved.length > 0
+      ? null
+      : story.folders.map(componentFolderOf).filter(Boolean);
+  };
+
+  it('runs the specs of the component folders a changed story imports', () => {
+    expect(
+      select(['apps/storybook/stories/Menu.stories.tsx'], {storyFolders}),
+    ).toEqual({
+      full: false,
+      specs: [spec('Menu')],
+      touched: [],
+      dependents: [],
+      stories: ['core/Menu'],
+    });
+  });
+
+  it('runs the full suite for a story whose imports do not resolve', () => {
+    expect(
+      select(['apps/storybook/stories/Menu.stories.tsx'], {
+        storyFolders: () => null,
+      }),
+    ).toMatchObject({
+      full: true,
+      reason:
+        'apps/storybook/stories/Menu.stories.tsx is a story whose components could not be resolved',
+    });
+  });
+
+  it('runs the full suite for a changed story when no story resolver is given', () => {
     expect(select(['apps/storybook/stories/Menu.stories.tsx'])).toMatchObject({
       full: true,
       reason: 'apps/storybook/stories/Menu.stories.tsx maps to no component',

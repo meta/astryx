@@ -1463,3 +1463,85 @@ function main() {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.exitCode = main();
 }
+
+/**
+ * The files a module loads through relative value imports, itself included.
+ * @param {string} file
+ * @param {Set<string>} known
+ * @param {(file: string) => string} read
+ */
+export function localModules(file, known, read) {
+  const seen = new Set([file]);
+  const queue = [file];
+  while (queue.length > 0) {
+    const current = queue.pop();
+    for (const {specifier} of valueImports(read(current))) {
+      if (!specifier.startsWith('.')) continue;
+      const target = resolveModule(
+        known,
+        path.posix.normalize(`${path.posix.dirname(current)}/${specifier}`),
+      );
+      if (target && !seen.has(target)) {
+        seen.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  return [...seen];
+}
+
+/**
+ * The folder that holds a component: the one named for it, else the one with
+ * its source file (`SideNavCollapseButton` lives in `SideNav/`).
+ * @param {string} name
+ * @param {string[]} listed
+ */
+export function componentFolderNamed(name, listed) {
+  const own = listed.find(file =>
+    new RegExp(`^packages/[^/]+/src/${name}/`).test(file),
+  );
+  if (own) return componentPathOf(own);
+  const source = listed.find(file =>
+    new RegExp(`^packages/[^/]+/src/[A-Z][^/]*/${name}\\.tsx$`).test(file),
+  );
+  return source ? componentPathOf(source) : null;
+}
+
+/**
+ * The component folders a story file renders: each component it, or a local
+ * helper it imports, takes by value. A package path names its folder
+ * (`@astryxdesign/core/Button`); a name from a package's root names the folder
+ * that holds that component's source; a relative import into a component
+ * folder names that folder. A name that no folder holds stays unresolved.
+ * @param {string} file
+ * @param {{listed: string[], read: (file: string) => string}} options
+ * @returns {{folders: string[], unresolved: string[]}}
+ */
+export function storyComponentFolders(file, {listed, read}) {
+  const known = new Set(listed);
+  const folders = new Set();
+  const unresolved = [];
+  for (const module of localModules(file, known, read)) {
+    const own = componentFolderOf(module) && componentPathOf(module);
+    if (own) folders.add(own);
+    for (const {specifier, names} of valueImports(read(module))) {
+      const match = /^@astryxdesign\/([^/]+)(?:\/([^/]+))?/.exec(specifier);
+      if (!match) continue;
+      const [, pkg, top] = match;
+      if (top) {
+        if (/^[A-Z]/.test(top)) folders.add(`packages/${pkg}/src/${top}/`);
+        continue;
+      }
+      if (names.length === 0) {
+        unresolved.push(`${module} takes all of @astryxdesign/${pkg}`);
+        continue;
+      }
+      for (const name of names) {
+        const folder = componentFolderNamed(name, listed);
+        if (folder) folders.add(folder);
+        else unresolved.push(`${module} takes ${name}, which no folder holds`);
+      }
+    }
+  }
+  return {folders: [...folders].sort(), unresolved};
+}
