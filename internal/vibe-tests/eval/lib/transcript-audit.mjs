@@ -88,15 +88,18 @@ function relativeWords(segment, outside) {
 /** Commands that read every file below their target, not only the names. */
 const SEARCHER = /(?:^|[\s|;&(])(rg|ag|ack|[efz]?grep)(?=\s|$)/;
 const RECURSIVE_READER =
-  /(?:^|[\s|;&(])(?:rg|ag|ack|[efz]?grep\s+(?:[^|]*\s)?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive))(?=\s|$)|(?:\$\(|`)\s*find\s|\bfind\s[^|]*(?:-exec|-execdir|-ok)\b|\bfind\s[^|]*\|\s*xargs\b/;
+  /(?:^|[\s|;&(])(?:rg|ag|ack|[efz]?grep\s+(?:[^|]*\s)?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive))(?=\s|$)|(?:\$\(|`)\s*find\s|\bfind\s[^|]*(?:-exec|-execdir|-ok)\b|\bfind\s.*\|\s*xargs\b/;
 
 /** Commands whose quoted arguments are text: a sed script or a search pattern. */
-const TEXT_ARGUMENTS = /^(?:\w+=\S*\s+)*(?:sed|[efz]?grep|rg|ag|ack)\b/;
+const TEXT_ARGUMENTS = /(?:^|[\s|;&(])(?:sed|[efz]?grep|rg|ag|ack)(?=\s|$)/;
 
-/** Blanks quoted text that holds a space or a `|` in a sed or search command, so `'../lib'` inside it is not a path. */
+/**
+ * Blanks quoted text that holds a space, a `|` or a nested quote in a segment
+ * with a sed or search command, so `'../lib'` inside a pattern is not a path.
+ */
 function textAsText(segment) {
   if (!TEXT_ARGUMENTS.test(segment)) return segment;
-  return segment.replace(/"[^"]*"|'[^']*'/g, quoted => (/[\s|]/.test(quoted) ? '""' : quoted));
+  return segment.replace(/"[^"]*"|'[^']*'/g, quoted => (/[\s|'"]/.test(quoted.slice(1, -1)) ? '""' : quoted));
 }
 
 /** The search pattern of a grep-like command, which is text, not a path it reads. */
@@ -130,17 +133,16 @@ export function resolveCommandPaths(command, workspace, startCwd = workspace, ho
     const trimmed = textAsText(segment.trim());
     const recursive = RECURSIVE_READER.test(trimmed);
     const pattern = recursive ? searchPattern(trimmed) : null;
-    let operands = 0;
     for (const raw of pathsInCommand(trimmed)) {
-      if (raw !== pattern) operands++;
       found.push({raw, resolved: resolveRaw(raw, cwd, home), recursive: recursive && raw !== pattern});
     }
     for (const raw of relativeWords(trimmed, !isInside(cwd, workspace))) {
       if (raw !== pattern) found.push({raw, resolved: path.resolve(cwd, raw), relative: true, recursive});
     }
-    // A recursive reader with no absolute, home or parent path searches the shell folder.
-    // A plain word does not count, because it can be an option's value or the pattern.
-    if (recursive && operands === 0) found.push({raw: '.', resolved: cwd, relative: true, recursive});
+    // Which words are operands, redirects or option values is not reliable, so a
+    // recursive reader always counts as searching the shell folder too. This fails
+    // closed: a search run from a folder that holds a root fails even with its own path.
+    if (recursive) found.push({raw: '.', resolved: cwd, relative: true, recursive});
     const cd = /^cd(?:\s+(['"]?)([^'"\s]+)\1)?\s*$/.exec(trimmed);
     if (!cd) continue;
     const target = cd[2] ?? '~';
