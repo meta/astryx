@@ -113,6 +113,10 @@ async function resizeForKeyboard(page: Page): Promise<number> {
 
 test.describe('Chrome on Android under interactive-widget=resizes-content (spec:AST-099 FR8)', () => {
   test.use({hasTouch: true, isMobile: true});
+  test.skip(
+    ({browserName}) => browserName !== 'chromium',
+    'Only Chrome on Android shrinks the layout viewport for the keyboard',
+  );
 
   test('a Tall sheet\u2019s focused field lands 10 px above the keyboard in the frame the layout viewport shrinks, and stays there', async ({
     page,
