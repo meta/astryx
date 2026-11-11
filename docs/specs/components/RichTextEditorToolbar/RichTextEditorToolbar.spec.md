@@ -33,7 +33,7 @@ system_specs: [spec:AST-061, spec:AST-087/FR11]
 | Behavior                | The Link button, or Cmd/Ctrl+K in the editor, opens a non-modal popover attached to the Link button that holds one URL field and Apply, Remove (in a link) and Cancel.                |
 | End-user impact         | People add or edit a link without a modal dialog over the text they are linking, and keep their place: focus and the selection return to the editor when the popover closes.          |
 | Builder impact          | None. `promptForUrl` still replaces the built-in popover.                                                                                                                             |
-| Compatibility/readiness | Replaces the link dialog with the popover; no prop changes.                                                                                                                           |
+| Compatibility/readiness | The link UI is a non-modal popover, not a modal dialog; no prop changes.                                                                                                              |
 | Review checks           | Reject a modal link surface, a closed popover that leaves focus or the selection outside the editor, a new `richtext:*` icon key for the form's buttons, or a popover off its button. |
 | Governing rules         | `spec:AST-061`; `spec:AST-087` FR11; `architecture:icon-resolution-and-component-slots` INV10.                                                                                        |
 

@@ -137,13 +137,24 @@ function linksIn(editor: LexicalEditor) {
   });
 }
 
-/** The tooltip text a button is described by. */
+/**
+ * The text of the tooltip a button shows. A tooltip that repeats the
+ * button's name is not its description, so the layer's own text is read.
+ */
 function tooltipOf(button: HTMLElement): string {
-  return (button.getAttribute('aria-describedby') ?? '')
+  const described = (button.getAttribute('aria-describedby') ?? '')
     .split(' ')
     .map(id => document.getElementById(id)?.textContent ?? '')
     .join(' ')
     .trim();
+  if (described !== '') {
+    return described;
+  }
+  const name = button.getAttribute('aria-label') ?? '';
+  const layer = screen
+    .queryAllByRole('tooltip', {hidden: true})
+    .find(tooltip => tooltip.textContent === name);
+  return layer?.textContent ?? '';
 }
 
 async function openFromLinkButton() {
