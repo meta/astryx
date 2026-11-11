@@ -4,9 +4,10 @@
  * @file MonthYearToggle.interaction.browser.spec.ts
  * @input The built "Bottom Sheet Calendar" DateInput story, real touch input
  *   and the interaction harness
- * @output Interaction proofs that the calendar's month/year toggle runs on
- *   the theme's tokens under a finger, in Chromium and WebKit: the fades,
- *   the chevron, a turnaround, a blocked main thread, Reduced Motion and RTL
+ * @output Interaction proofs, in Chromium and WebKit, that the calendar's
+ *   month/year toggle runs on the theme's tokens under a finger. They cover
+ *   the fades, the chevron, a turnaround, a blocked main thread, Reduced
+ *   Motion, RTL and the calendar beneath the wheels
  * @position Interaction tests of TouchDateField.tsx, TouchDateTimeField.tsx and
  *   MonthPager.tsx (`*.interaction.browser.spec.ts`)
  */

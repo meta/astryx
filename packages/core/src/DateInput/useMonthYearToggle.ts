@@ -107,8 +107,8 @@ interface MonthYearToggleOptions {
  * `inert` is inherited, so flipping it restyles a panel's whole subtree.
  * Under a finger both flips wait for the cross-fade to end, when nothing on
  * screen moves. Meanwhile the caller's `aria-hidden` keeps assistive
- * technology out of the outgoing panel, and the caller's shield keeps touches
- * off both, as a UIKit view animation does. `toggle` moves focus inside the
+ * technology out of the outgoing panel. The caller's shield keeps touches off
+ * both, as a UIKit view animation does. `toggle` moves focus inside the
  * outgoing panel into the incoming one in the toggle's commit.
  *
  * Under Reduced Motion on a touch screen the title's chevron does not turn.
