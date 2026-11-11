@@ -1138,6 +1138,53 @@ describe('watchHitArea', () => {
       stop();
     });
 
+    it('still checks the click when the control’s row holds a paused animation: a paused box does not move', () => {
+      const control = byId('switch');
+      const row = control.closest('label') as HTMLElement;
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      // The link moved to 8 px away with nothing re-measuring yet.
+      place(link, rect(132, 100, 60, 24));
+      reportAnimations([
+        {
+          ...running(row, [
+            {offset: 0, transform: 'translateY(0px)'},
+            {offset: 1, transform: 'translateY(40px)'},
+          ]),
+          playState: 'paused',
+        },
+      ]);
+      expect(tap(control, 130, 112).defaultPrevented).toBe(true);
+      stop();
+    });
+
+    it('keeps a neighbour under a paused animation in the click’s check: it does not move', () => {
+      const control = byId('switch');
+      const link = byId('link');
+      place(control, rect(100, 100, 24, 24));
+      place(link, rect(400, 100, 60, 24));
+      const stop = watchHitArea(control, () => {});
+      show(control);
+      flush();
+      // The link moved to 8 px away, and a paused animation holds it there.
+      place(link, rect(132, 100, 60, 24));
+      reportAnimations([
+        {
+          ...running(link, [
+            {offset: 0, translate: '268px 0'},
+            {offset: 1, translate: '0 0'},
+          ]),
+          playState: 'paused',
+        },
+      ]);
+      expect(tap(control, 130, 112).defaultPrevented).toBe(true);
+      stop();
+    });
+
     it('still checks the click when the control’s row only fades or tints: nothing moved since the touch', () => {
       const control = byId('switch');
       const row = control.closest('label') as HTMLElement;

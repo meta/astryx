@@ -762,6 +762,18 @@ function movesBoxes(animation: Animation): boolean {
     .some(frame => Object.keys(frame).some(key => BOX_MOTION.test(key)));
 }
 
+/**
+ * The animations in `doc` that move boxes now: running and finite, on a
+ * property that moves or resizes a box. A paused one holds still, which an
+ * app can leave paused, and a fade or a tint moves nothing. The pass and the
+ * click's check read the same motion.
+ */
+function movingAnimations(doc: Document): Animation[] {
+  return settlingAnimations(doc).filter(
+    animation => animation.playState === 'running' && movesBoxes(animation),
+  );
+}
+
 /** Runs `then` once each animation has finished or been cancelled. */
 export function whenSettled(
   animations: ReadonlyArray<Animation>,
@@ -816,12 +828,7 @@ function measure(): void {
     return;
   }
   const doc = visible[0].element.ownerDocument;
-  // A pass waits only while an ancestor's running animation moves boxes. A
-  // paused one, which an app can leave paused, and a fade or a tint move
-  // nothing now, so the pass measures.
-  const moving = settlingAnimations(doc).filter(
-    animation => animation.playState === 'running' && movesBoxes(animation),
-  );
+  const moving = movingAnimations(doc);
   const due = visible.filter(watch => !isHeldBack(watch, moving));
   if (due.length === 0) {
     return;
@@ -1098,7 +1105,7 @@ function isNearerAtClick(
   // see may have moved the control or a neighbour since. Its fresh box is
   // not the one the finger landed on. The control's click then goes through,
   // as the browser's hit test took it, and a moving neighbour is left out.
-  const moving = settlingAnimations(doc).filter(movesBoxes);
+  const moving = movingAnimations(doc);
   const isMoved = (node: Element, isOwnMotionCounted: boolean) =>
     moving.some(animation => {
       const target = (animation.effect as KeyframeEffect | null)?.target;
