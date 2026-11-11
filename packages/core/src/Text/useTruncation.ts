@@ -5,17 +5,14 @@
 /**
  * @file useTruncation.ts
  * @input Uses React hooks, sharedResizeObserver, sharedMutationObserver
- * @output Exports useTruncation hook for detecting text overflow, and
- *   useHeldTruncation, internal to core: the same check with a hold, which
- *   its caller measures
- * @position Hook; consumed by Text.tsx, Heading.tsx
+ * @output Exports useTruncation hook for detecting text overflow
+ * @position Hook; consumed by Text.tsx, Heading.tsx and Lightbox.tsx
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Text/Text.doc.mjs
  */
 
 import {useCallback, useRef, useState, type RefCallback} from 'react';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import {observeContent} from '../utils/sharedMutationObserver';
 
@@ -25,15 +22,12 @@ export interface UseTruncationOptions {
    * 0 = no truncation, hook returns isTruncated: false
    */
   maxLines: number;
-}
 
-interface HeldTruncationOptions extends UseTruncationOptions {
   /**
-   * While true, the hook keeps its last result and measures nothing. A caller
-   * that shows the text unclamped for a while, such as an expanded caption,
-   * keeps the clamped answer. Releasing it measures again.
+   * Pass true while the text is shown in full; the hook keeps reporting
+   * whether it is cut off when clamped.
    */
-  isHeld: boolean;
+  isExpanded?: boolean;
 }
 
 export interface UseTruncationReturn {
@@ -81,70 +75,32 @@ export interface UseTruncationReturn {
 export function useTruncation(
   options: UseTruncationOptions,
 ): UseTruncationReturn {
-  const {ref, isTruncated, fullText} = useTruncationMeasure(
-    options.maxLines,
-    NEVER_HELD,
-    true,
-  );
-  return {ref, isTruncated, fullText};
-}
-
-/**
- * useTruncation with a hold, internal to core. Lightbox holds its caption's
- * clamped answer while the caption is open. This variant observes nothing and
- * reads nothing by itself. Its caller observes the text and calls `measure`
- * after the browser lays the text out.
- */
-export function useHeldTruncation(
-  options: HeldTruncationOptions,
-): UseTruncationReturn & {measure: () => void} {
-  const {maxLines, isHeld} = options;
-  const isHeldRef = useRef(isHeld);
-  const truncation = useTruncationMeasure(maxLines, isHeldRef, false);
-  // Syncs the hold with the caller's flag. The held answer stands until the
-  // caller's next measurement after the release, so it never flickers.
-  useIsomorphicLayoutEffect(() => {
-    isHeldRef.current = isHeld;
-  }, [isHeld]);
-  return truncation;
-}
-
-/** A hold that never holds: plain useTruncation's. */
-const NEVER_HELD: {readonly current: boolean} = {current: false};
-
-/**
- * The measurement both hooks share. While `isHeldRef` holds, it measures
- * nothing. `measure` checks the current element again. Without `observes`, it
- * leaves observing and measuring the element to its caller.
- */
-function useTruncationMeasure(
-  maxLines: number,
-  isHeldRef: {readonly current: boolean},
-  observes: boolean,
-): UseTruncationReturn & {measure: () => void} {
+  const {maxLines, isExpanded = false} = options;
   const [isTruncated, setIsTruncated] = useState(false);
   const [fullText, setFullText] = useState('');
   const elementRef = useRef<HTMLElement | null>(null);
   const unobserveRef = useRef<(() => void) | null>(null);
   const unobserveContentRef = useRef<(() => void) | null>(null);
+  // The last measured answer, which the text keeps while it is expanded.
+  const answerRef = useRef({isTruncated: false, fullText: ''});
 
   const checkTruncation = useCallback(
     (element: HTMLElement) => {
-      if (isHeldRef.current) {
-        return;
-      }
       if (maxLines === 0) {
         setIsTruncated(false);
         return;
       }
 
       // Capture full text content
-      setFullText(element.textContent ?? '');
+      answerRef.current.fullText = element.textContent ?? '';
+      setFullText(answerRef.current.fullText);
 
       // Check for overflow
       if (maxLines === 1) {
         // Single-line: check horizontal overflow
-        setIsTruncated(element.scrollWidth > element.offsetWidth);
+        answerRef.current.isTruncated =
+          element.scrollWidth > element.offsetWidth;
+        setIsTruncated(answerRef.current.isTruncated);
       } else {
         // Multi-line: use Range to measure actual content height.
         // When -webkit-line-clamp is active, browsers may report
@@ -160,10 +116,11 @@ function useTruncationMeasure(
         } catch {
           // Fallback to scrollHeight (e.g. jsdom in tests)
         }
-        setIsTruncated(contentHeight > element.offsetHeight);
+        answerRef.current.isTruncated = contentHeight > element.offsetHeight;
+        setIsTruncated(answerRef.current.isTruncated);
       }
     },
-    [maxLines, isHeldRef],
+    [maxLines],
   );
 
   const ref: RefCallback<HTMLElement> = useCallback(
@@ -176,20 +133,22 @@ function useTruncationMeasure(
       unobserveContentRef.current = null;
 
       elementRef.current = element;
-      if (!observes) {
-        // A replaced text shows no truncation until its caller measures the
-        // next one. So a stale answer never sizes the next text.
-        if (element == null) {
-          setIsTruncated(false);
-          setFullText('');
+
+      // Shown in full, the text keeps the answer it had when clamped.
+      if (isExpanded) {
+        if (element != null) {
+          setIsTruncated(answerRef.current.isTruncated);
+          setFullText(answerRef.current.fullText);
         }
         return;
       }
 
       if (element && maxLines > 0) {
-        // Measured after the browser's layout, so mounting text forces no
-        // layout pass. The truncated state only decides whether to compose
-        // the tooltip, so nothing paints differently.
+        // Observe via the shared singleton, if available. The observer's
+        // first notification measures a new element. The browser sends it
+        // after its own layout, so mounting text forces no layout pass. The
+        // truncated state only decides whether to compose the tooltip, so
+        // nothing paints differently.
         const unobserve = observeResizeAfterLayout(element, () => {
           checkTruncation(element);
         });
@@ -207,20 +166,12 @@ function useTruncationMeasure(
         setFullText('');
       }
     },
-    [maxLines, checkTruncation, observes],
+    [maxLines, isExpanded, checkTruncation],
   );
-
-  const measure = useCallback(() => {
-    const element = elementRef.current;
-    if (element != null && maxLines > 0) {
-      checkTruncation(element);
-    }
-  }, [maxLines, checkTruncation]);
 
   return {
     ref,
     isTruncated,
     fullText,
-    measure,
   };
 }

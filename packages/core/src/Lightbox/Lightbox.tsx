@@ -106,7 +106,7 @@ import {dismissBackdropAlpha, dismissChromeAlpha} from './zoomStage';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {MediaTheme} from '../theme/MediaTheme';
 import {Text} from '../Text/Text';
-import {useHeldTruncation} from '../Text/useTruncation';
+import {useTruncation} from '../Text/useTruncation';
 import {Link} from '../Link/Link';
 
 registerEnglishFallback(english);
@@ -955,16 +955,14 @@ export function Lightbox({
   // The toggle's width, which its place in the caption's last line takes.
   const [captionToggleWidth, setCaptionToggleWidth] = useState(0);
   // The current page's caption in its band, and whether two lines clamp it.
-  // Text's truncation check also follows new text in a box that keeps its
-  // size. While the caption is open it holds its closed answer, so the toggle
-  // stays mounted, with its focus, as the caption closes.
+  // While the caption is open the check keeps its clamped answer, so the
+  // toggle stays mounted, with its focus, as the caption closes.
   const bandCaptionRef = useRef<HTMLElement | null>(null);
-  const captionTruncation = useHeldTruncation({
+  const captionTruncation = useTruncation({
     maxLines: 2,
-    isHeld: isCaptionOpen,
+    isExpanded: isCaptionOpen,
   });
   const isCaptionClamped = captionTruncation.isTruncated;
-  const measureCaptionClamp = captionTruncation.measure;
   const bandCaptionMeasureRef = useMergedRefs(
     bandCaptionRef,
     captionTruncation.ref,
@@ -1050,12 +1048,9 @@ export function Lightbox({
   // one commit lands before the frame paints. A read after a write in that
   // delivery would force a layout before the browser's own.
   const measureCaptionRef = useRef(() => {});
-  // Syncs the measurement with this render's clamp and lines measures.
+  // Syncs the measurement with this render's lines measure.
   useIsomorphicLayoutEffect(() => {
-    measureCaptionRef.current = () => {
-      measureCaptionClamp();
-      measureCaptionLines();
-    };
+    measureCaptionRef.current = measureCaptionLines;
   });
   const captionDeliveryRef = useRef<{
     isCaptionDirty: boolean;
@@ -1089,7 +1084,7 @@ export function Lightbox({
     },
     [],
   );
-  // Syncs the clamp, the toggle's place and the open caption's scroll with
+  // Syncs the toggle's place and the open caption's lines and scroll with
   // the caption's laid-out size. A resize, a font load and the caption's own
   // open resize it. Paging attaches the next page's caption, and a new
   // caption or the dialog's opening attaches it again. Each registration
