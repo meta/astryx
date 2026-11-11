@@ -326,6 +326,12 @@ guidance owns the process used to propose and test APIs.
   including a reachable member tagged internal, goes to human review with that
   row listed, for an owner of this record, as `architecture:knowledge-contracts`
   change coupling step 6 describes. A removed or renamed row follows INV9.
+- **INV28 — A `create*` callback receives what it acts on.** A callback in a
+  `create*` config receives what it acts on as arguments (the instance key, the
+  typed id, the event), never through a closure over render state, so a
+  definition can be created once at module scope or memoized. It applies to new
+  APIs; released APIs that already pass their input (the Markdown plugin
+  factories, `createStaticSource`, the gesture controllers) satisfy it (DEC-7).
 
 This record applies to stable public packages, and INV23 also applies to Lab
 source. Lab components are not stable public promises until promotion.
@@ -452,6 +458,16 @@ The owner said: "okay let's get rid of this massive file. We don't need it, we s
 
 Rejected: keeping a committed generated API report per package.
 
+### DEC-7 — `create*` callbacks take their input as arguments
+
+**Decider:** `cixzhang`, `2026-11-11`
+
+The owner decided, for swipe actions, that callbacks are passed "per action and
+allow it to be memoized", and chose to apply that to every `create*` config
+(INV28).
+
+Rejected: a rule for swipe actions only.
+
 ## Verification
 
 | Invariant               | Evidence                                                                                                                 | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -477,6 +493,7 @@ Rejected: keeping a committed generated API report per package.
 | INV23                   | `@astryx/no-raw-private-attribute` lint with its baseline (test files exempt), plus public-API review of the public list | A `data-astryx-*` name or selector written outside its owner module, a test, or the public list; a `dataAttr()` call that names a private attribute; an owner module that exports its raw name or a selector; a package that imports another package's owner module; a caller that sets a property an owner style it spreads also sets; a private attribute in a public export, `.doc.mjs`, or Changeset; a baseline entry added; a public data attribute changed without INV9 evidence |
 | INV24                   | Generator tests, CI's merge-base-to-head surface compare, and the review bot's per-PR API delta                          | A promised export, prop, hook, type, custom property, theme target, public attribute, or event is missing from the delta; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; the merge gate passes a pull request that changes a published package when the compare artifact is missing or the generator errors; the review bot's summary notes do not start with the delta or "New public API: none"; a delta row decides acceptance              |
 | INV25                   | Public-API review routing against the pull request's API delta                                                           | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
+| INV28, DEC-7            | Public-API review of new `create*` callback signatures, plus type tests of their arguments                               |
 | Consumer-doc projection | `docPropReferences.test.ts` and `docPropLiterals.test.ts`                                                                | Docs name a nonexistent prop or omit public literal choices                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Known verification gaps:
