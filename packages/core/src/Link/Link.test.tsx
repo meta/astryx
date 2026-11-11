@@ -828,16 +828,17 @@ describe('Link names and native attributes', () => {
   });
 
   it('describes the link with its tooltip text', () => {
-    render(
+    const {container} = render(
       <Link href="/settings" tooltip="Configure settings">
         Settings
       </Link>,
     );
     const link = screen.getByRole('link', {name: 'Settings'});
     expect(link).toHaveAccessibleDescription('Configure settings');
-    // No tooltip layer before the first interaction, and no wrapper.
+    // No tooltip layer before the first interaction, and no wrapper: the link
+    // sits directly in the render container.
     expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
-    expect(link.parentElement?.style.display).not.toBe('contents');
+    expect(link.parentElement).toBe(container);
   });
 });
 

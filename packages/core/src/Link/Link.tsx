@@ -40,7 +40,10 @@ import type {
   TextDisplay,
 } from '../theme/types';
 import {useLinkComponent} from './useLinkComponent';
-import {LinkTooltip, type LinkTooltipTriggerProps} from './LinkTooltip';
+import {
+  OnDemandTooltip,
+  type OnDemandTooltipTriggerProps,
+} from '../utils/OnDemandTooltip';
 import type {LinkComponentType} from './types';
 import {mergeProps} from '../utils';
 import {computeTargetAndRel} from './computeTargetAndRel';
@@ -423,7 +426,7 @@ export function Link({
   );
 
   const renderLink = (
-    trigger: LinkTooltipTriggerProps | null,
+    trigger: OnDemandTooltipTriggerProps | null,
   ): React.ReactElement => {
     // The tooltip's ref already holds the caller's.
     const {ref: tooltipRef, ...tooltipTrigger} = trigger ?? {ref: undefined};
@@ -536,9 +539,13 @@ export function Link({
   // module loads on the first hover, tap or focus.
   if (tooltip) {
     return (
-      <LinkTooltip tooltip={tooltip} callerRef={ref} callerProps={props}>
+      <OnDemandTooltip
+        tooltip={tooltip}
+        isDescription
+        callerRef={ref}
+        callerProps={props}>
         {renderLink}
-      </LinkTooltip>
+      </OnDemandTooltip>
     );
   }
 
