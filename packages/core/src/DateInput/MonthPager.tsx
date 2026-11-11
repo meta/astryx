@@ -31,9 +31,11 @@ import {usePager} from '../hooks/usePager';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {dateInputTouchGeometry} from './tokens.stylex';
-import type {MonthScrollerProps} from './MonthScroller';
-import {MonthPane} from './MonthPane';
-import {useMonthGridFocus} from './useMonthGridFocus';
+import {
+  MonthPane,
+  useMonthGridFocus,
+  type MonthScrollerProps,
+} from './MonthScroller';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {clampIndex, paneWindow, rowsIn} from './monthGeometry';
 

@@ -3392,9 +3392,9 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(source).toContain("touchAction: 'pan-x'");
     // The pane and the scrollport must come from the same expression, or a
     // pane stops being exactly one screen and every snap offset drifts.
-    const paneBlockSize = /blockSize: dateInputTouchGeometry\.paneBlockSize/g;
-    expect(source.match(paneBlockSize)).toHaveLength(1);
-    expect(read('MonthPane.tsx').match(paneBlockSize)).toHaveLength(1);
+    expect(
+      source.match(/blockSize: dateInputTouchGeometry\.paneBlockSize/g),
+    ).toHaveLength(2);
   });
 
   it('under a finger: the month/year toggle leaves the calendar\u2019s days alone', () => {
@@ -3488,18 +3488,19 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     // pane stops being exactly one screen.
     const paneBlockSize = /blockSize: dateInputTouchGeometry\.paneBlockSize/g;
     expect(source.match(paneBlockSize)).toHaveLength(1);
-    expect(read('MonthPane.tsx').match(paneBlockSize)).toHaveLength(1);
+    expect(read('MonthScroller.tsx').match(paneBlockSize)).toHaveLength(2);
   });
 
   it('positions panes with logical properties, so RTL mirrors', () => {
-    const source = read('MonthPane.tsx');
-    // Scoped to the style objects. The CSS must stay logical. Physical `left`
-    // would lay the months out the same in both directions while the scroll
-    // math mirrored. Under RTL the two would disagree.
+    const source = read('MonthScroller.tsx');
+    // Scoped to the style objects: `scrollTo({left})` is the DOM API. The CSS
+    // must stay logical. Physical `left` would lay the months out the same in
+    // both directions while the scroll math mirrored. Under RTL the two would
+    // disagree.
     const styles = source
       .slice(
         source.indexOf('const styles = stylex.create('),
-        source.indexOf('export interface MonthPaneProps'),
+        source.indexOf('export interface MonthScrollerHandle'),
       )
       // Comments explain the rule ("insetInlineStart, not left") and would
       // otherwise trip it.
@@ -3537,7 +3538,7 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(theme.length).toBeGreaterThan(0);
 
     // And the touch pane carries all of it, in its one object.
-    const touch = declarations(read('MonthPane.tsx'), 'dayOutside');
+    const touch = declarations(read('MonthScroller.tsx'), 'dayOutside');
     expect(touch).toEqual(expect.arrayContaining([...structural, ...theme]));
   });
 
@@ -3557,7 +3558,7 @@ describe('DateInput — scroll CSS (definition-level)', () => {
   it('fades disabled days as the desktop does, rather than recolouring them', () => {
     const desktop = read('../Calendar/styles.ts');
     const theme = declarationsIn(desktop, 'dayCellTheme', 'dayDisabled');
-    const touch = declarations(read('MonthPane.tsx'), 'dayDisabled');
+    const touch = declarations(read('MonthScroller.tsx'), 'dayDisabled');
 
     // Whatever opacity the desktop fades to, this pane fades to the same one.
     const fade = theme.find(d => d.startsWith('opacity:'));
@@ -3580,7 +3581,7 @@ describe('DateInput — scroll CSS (definition-level)', () => {
    * than the selectable ones beside it.
    */
   it('lets disabled win over outside on a spilled day past min/max', () => {
-    const applied = read('MonthPane.tsx');
+    const applied = read('MonthScroller.tsx');
     const outside = applied.indexOf('day.isOutside && styles.dayOutside');
     const disabled = applied.indexOf('isDisabled && styles.dayDisabled');
     expect(outside).toBeGreaterThan(-1);
@@ -4003,7 +4004,7 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     // (datePicker.calendar.selection.tapAnimates). MonthScroller, the calendar
     // of a mouse or a pen, always fades; the pager fades a mouse's or a pen's
     // pick from its pointer type.
-    const pane = read('MonthPane.tsx');
+    const pane = read('MonthScroller.tsx');
     const puck = declarations(pane, 'puck');
     expect(puck.some(line => line.startsWith('transition'))).toBe(false);
     expect(declarations(pane, 'puckFade')).toContain(
@@ -4012,7 +4013,8 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(declarations(pane, 'puckFade')).toContain(
       "transitionDuration: durationVars['--duration-fast']",
     );
-    expect(read('MonthScroller.tsx')).toContain('hasSelectionFade');
+    // MonthScroller.tsx also defines the prop, so this matches the attribute.
+    expect(read('MonthScroller.tsx')).toMatch(/^\s+hasSelectionFade$/m);
     expect(read('MonthPager.tsx')).not.toContain('hasSelectionFade');
   });
 
