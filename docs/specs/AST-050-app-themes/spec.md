@@ -163,7 +163,9 @@ described.
   theme (`architecture:cli-surface` INV19), is listed and imported like a
   package theme. Its built module and stylesheet are the files `theme build`
   writes beside its source, and its font stylesheet, when it has one, is
-  `<slug>.fonts.css` beside them. An import MUST fail and name the build command
+  `<slug>.fonts.css` beside them. `theme build` refuses an input before it
+  loads it when the input is one of its own outputs, naming the source that
+  output was built from, or when the input is not a theme module. An import MUST fail and name the build command
   when the built module or stylesheet is missing. When a local theme and a
   package theme share a slug, an import adds the local theme unless `--package`
   names the package, and `theme list` shows both with their owners. The copying

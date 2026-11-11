@@ -34,7 +34,6 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
-import {findPackageRoot} from '../../../foundation/fs/paths.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
@@ -60,7 +59,10 @@ import {
   themeListAvailable,
   themeListCopySources,
 } from '../../../api/theme/list/list.mjs';
-import {themeTargets} from '../../../api/theme/targets/targets.mjs';
+import {
+  normalizeTargetFilter,
+  themeTargets,
+} from '../../../api/theme/targets/targets.mjs';
 import {
   serializePaletteCandidate,
   themePaletteGenerate,
@@ -71,6 +73,7 @@ import {
   themeBuild,
   themeBuildFamily,
   themeBuildForReport,
+  themeSourceGuesses,
 } from '../../../api/theme/build/build.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
@@ -343,53 +346,6 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
   });
-}
-
-/** A theme source file: `<slug>.theme.ts` (theme editor) or `<name>Theme.ts`. */
-const THEME_SOURCE_FILE = /(?:\.theme|Theme)\.(?:[cm]?[jt]sx?)$/;
-
-/**
- * Theme sources a missing build input probably meant, relative to the working
- * folder: the same path with `/` for `\`, or for a bare theme name the theme
- * source in `themes/<name>/` or `src/themes/<name>/`, or `<name>` with a module
- * extension.
- * @param {string} file the input as given
- * @returns {string[]}
- */
-function themeFileGuesses(file) {
-  const cwd = process.cwd();
-  const exists = (/** @type {string} */ candidate) =>
-    fs.existsSync(path.resolve(cwd, candidate));
-  if (file.includes('\\')) {
-    const forward = file.replace(/\\/g, '/');
-    return exists(forward) ? [forward] : [];
-  }
-  if (/[/.]/.test(file)) return [];
-  const root = findPackageRoot(cwd) ?? cwd;
-  /** @type {string[]} */
-  const guesses = [];
-  for (const folder of [
-    path.join(root, 'themes', file),
-    path.join(root, 'src', 'themes', file),
-  ]) {
-    let names;
-    try {
-      names = fs.readdirSync(folder);
-    } catch {
-      continue;
-    }
-    for (const name of names.sort()) {
-      if (THEME_SOURCE_FILE.test(name) && !name.endsWith('.d.ts')) {
-        guesses.push(
-          path.relative(cwd, path.join(folder, name)).split(path.sep).join('/'),
-        );
-      }
-    }
-  }
-  for (const extension of ['.ts', '.tsx', '.mjs', '.js']) {
-    if (exists(`${file}${extension}`)) guesses.push(`${file}${extension}`);
-  }
-  return guesses.slice(0, 3);
 }
 
 /**
@@ -850,7 +806,9 @@ function registerThemeCommands(theme, program, docs, words) {
         // A quoted glob reaches us unexpanded: say so rather than reporting a
         // literal `themes/*.ts` as a missing file.
         const looksGlobby = /[*?[\]{}]/.test(entry.file);
-        const guesses = looksGlobby ? [] : themeFileGuesses(entry.file);
+        const guesses = looksGlobby
+          ? []
+          : themeSourceGuesses(entry.file, process.cwd());
         return cliError(`File not found: ${entry.filePath}`, {
           code: ERROR_CODES.ERR_FILE_NOT_FOUND,
           suggestions: looksGlobby
@@ -1324,15 +1282,16 @@ function registerThemeCommands(theme, program, docs, words) {
       const matched = new Set(
         result.data.targets.map(target => target.component.toLowerCase()),
       );
+      const needle = normalizeTargetFilter(filter);
       const answered = resultSet({
         count: result.data.targets.length,
         resultKind: 'theme',
         // Falsy, not just null: the api treats an empty filter as no filter
         // at all, so recording one as a match that missed would invent a
         // failed lookup out of a run that never looked anything up.
-        directMatch: !filter
+        directMatch: !needle
           ? undefined
-          : matched.size === 1 && matched.has(String(filter).toLowerCase()),
+          : matched.size === 1 && matched.has(needle),
       });
       if (json) {
         jsonOut(result);

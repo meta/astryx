@@ -403,8 +403,9 @@ export default {
  * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
  * @param {string} dir
  * @param {string} cwd
+ * @param {string} projectDir the project root the default target is in
  */
-function assertEjectTargetFree(theme, dir, cwd) {
+function assertEjectTargetFree(theme, dir, cwd, projectDir) {
   /** @type {string[]} */
   let entries;
   try {
@@ -415,7 +416,8 @@ function assertEjectTargetFree(theme, dir, cwd) {
   }
   const rel = path.relative(cwd, dir) || '.';
   const isDefault =
-    path.resolve(cwd, defaultEjectTarget(theme.slug)) === path.resolve(dir);
+    path.resolve(projectDir, defaultEjectTarget(theme.slug)) ===
+    path.resolve(dir);
   const suggestion = isDefault
     ? undefined
     : [
@@ -533,7 +535,7 @@ export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
     }
   }
 
-  assertEjectTargetFree(theme, resolvedDir, cwd);
+  assertEjectTargetFree(theme, resolvedDir, cwd, projectDir);
 
   if (!overwrite) {
     const existing = writes.find(write => fs.existsSync(write.dest));

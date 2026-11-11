@@ -1393,10 +1393,37 @@ describe('themeBuild() — outputs it may replace', () => {
     } catch (caught) {
       error = caught;
     }
-    expect(error).toMatchObject({code: 'ERR_THEME_INVALID'});
+    expect(error).toMatchObject({code: 'ERR_THEME_LOAD'});
     expect(error.message).toMatch(/^site\.css is not a theme module\./);
     expect(error.message).not.toContain(tmpDir);
     expect(error.suggestions[0].name).toMatch(/theme build ocean\.theme\.ts$/);
+  });
+
+  it('builds a .jsx theme source, as discovery accepts it', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'jxTheme.jsx'),
+      "export const jxTheme = {name: 'jx', tokens: {'--color-bg': '#0a0a0a'}};\n",
+    );
+    await expect(
+      themeBuild('jxTheme.jsx', {}, {cwd: tmpDir}),
+    ).resolves.toMatchObject({
+      type: 'theme.build',
+      data: {name: 'jx'},
+    });
+  });
+
+  it('suggests the theme source for a bare name, and never a build output', async () => {
+    await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
+    let error;
+    try {
+      await themeBuild('ocean', {}, {cwd: tmpDir});
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({code: 'ERR_FILE_NOT_FOUND'});
+    expect(error.suggestions.map(x => x.name)).toEqual([
+      expect.stringMatching(/ theme build ocean\.mjs$/),
+    ]);
   });
 
   it('refuses a folder as its input', async () => {
