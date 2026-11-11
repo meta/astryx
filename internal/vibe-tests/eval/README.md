@@ -56,15 +56,17 @@ its folder. The agent is not sandboxed, so the runner audits it instead (below).
   the arm's root `AGENTS.md` or `CLAUDE.md`, if the arm's own setup wrote one.
   Today only `astryx init` writes one.
 
-After the agent stops, the runner reads its transcript. A path inside the home
-folder, the repository or any run under the run root, or any use of a web tool
-or a sub-agent, is a violation, and the run fails as `integrity`. Naming one of
-those roots, or a folder that holds one (`ls ~`, `find /`), is a warning. Paths
-in shell commands resolve from the folder the agent's shell is in, which
-persists between commands. Heredoc bodies that are file content are skipped;
-shell heredocs are audited as shell text, and other interpreter heredocs are
-scanned for path literals. The agent's own session folder, where it
-saves long tool output, is allowed. Other outside paths are warnings to review. When the agent exits or times out, the runner kills its whole process
+After the agent stops, the runner reads its transcript. These fail the run as
+`integrity`: a path inside the home folder, the repository or any run under the
+run root; a recursive read of one of those roots, or of a folder that holds one,
+by `grep -r`, `rg`, `ag`, `ack`, `find -exec`, `find | xargs` or the Grep tool;
+and any use of a web tool or a sub-agent. Paths in shell commands resolve from
+the folder the agent's shell is in, which persists between commands. Heredoc
+bodies that are file content are skipped; shell heredocs are audited as shell
+text, and other interpreter heredocs are scanned for path literals. The agent's
+own session folder, where it saves long tool output, is allowed. Any other
+outside path, including a root named by another command, is a warning, and
+`report.md` lists every run with warnings for a person to review. When the agent exits or times out, the runner kills its whole process
 group, so a server it started does not keep running.
 
 A run where the agent fails before its first turn, writes no result, or cannot
@@ -175,9 +177,11 @@ what the eval measures, so compare results only within one arm version.
 
 - Chromium only. WebKit and real touch devices are not covered.
 - The integrity audit reads the commands in the transcript; it is not a
-  sandbox. A read hidden behind a variable, an encoded path or a script file
-  that the transcript does not show can pass. Running each agent in an
-  isolated filesystem would close this.
+  sandbox. It fails only the forms listed under Agents. A command that reads
+  inside a root while naming only the root (`git -C`, `cp -r`, `rsync`,
+  `tar -C`, a subshell `cd`, `pushd`, a symlink), a read behind a variable or
+  an encoded path, and a script the agent writes and then runs give a warning
+  at most. Running each agent in an isolated filesystem would close this.
 - One agent harness. Results describe that harness and model, not agents in
   general.
 - This folder writes its own record schema (`schemaVersion: 1` in `meta.json`).

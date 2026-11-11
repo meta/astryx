@@ -90,6 +90,15 @@ const SEARCHER = /(?:^|[\s|;&(])(rg|ag|ack|[efz]?grep)(?=\s|$)/;
 const RECURSIVE_READER =
   /(?:^|[\s|;&(])(?:rg|ag|ack|[efz]?grep\s+(?:[^|]*\s)?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive))(?=\s|$)|(?:\$\(|`)\s*find\s|\bfind\s[^|]*(?:-exec|-execdir|-ok)\b|\bfind\s[^|]*\|\s*xargs\b/;
 
+/** Commands whose quoted arguments are text: a sed script or a search pattern. */
+const TEXT_ARGUMENTS = /^(?:\w+=\S*\s+)*(?:sed|[efz]?grep|rg|ag|ack)\b/;
+
+/** Blanks quoted text that holds a space or a `|` in a sed or search command, so `'../lib'` inside it is not a path. */
+function textAsText(segment) {
+  if (!TEXT_ARGUMENTS.test(segment)) return segment;
+  return segment.replace(/"[^"]*"|'[^']*'/g, quoted => (/[\s|]/.test(quoted) ? '""' : quoted));
+}
+
 /** The search pattern of a grep-like command, which is text, not a path it reads. */
 function searchPattern(segment) {
   const match = SEARCHER.exec(segment);
@@ -118,17 +127,21 @@ export function resolveCommandPaths(command, workspace, startCwd = workspace, ho
   const found = [];
   const {shell, code} = splitHeredocs(command);
   for (const segment of shell.split(/&&|\|\||;|\n/)) {
-    const trimmed = segment.trim();
+    const trimmed = textAsText(segment.trim());
     const recursive = RECURSIVE_READER.test(trimmed);
     const pattern = recursive ? searchPattern(trimmed) : null;
+    let operands = 0;
     for (const raw of pathsInCommand(trimmed)) {
+      if (raw !== pattern) operands++;
       found.push({raw, resolved: resolveRaw(raw, cwd, home), recursive: recursive && raw !== pattern});
     }
     for (const raw of relativeWords(trimmed, !isInside(cwd, workspace))) {
-      if (raw !== pattern) found.push({raw, resolved: path.resolve(cwd, raw), relative: true, recursive});
+      if (raw === pattern) continue;
+      operands++;
+      found.push({raw, resolved: path.resolve(cwd, raw), relative: true, recursive});
     }
     // A recursive reader with no path searches the shell folder.
-    if (recursive) found.push({raw: '.', resolved: cwd, relative: true, recursive});
+    if (recursive && operands === 0) found.push({raw: '.', resolved: cwd, relative: true, recursive});
     const cd = /^cd(?:\s+(['"]?)([^'"\s]+)\1)?\s*$/.exec(trimmed);
     if (!cd) continue;
     const target = cd[2] ?? '~';

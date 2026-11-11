@@ -64,7 +64,10 @@ export function summarizeRecords(records, armIds, taskIds, spentUsd) {
     if (record.status !== 'graded') notGraded[record.status] = (notGraded[record.status] ?? 0) + 1;
   }
   const recordCost = records.reduce((sum, record) => sum + (record.agent?.costUsd ?? 0), 0);
-  return {arms, tasks, difference, notGraded, totalCostUsd: spentUsd ?? recordCost};
+  const warned = graded
+    .filter(record => (record.audit?.warnings?.length ?? 0) > 0)
+    .map(record => `${record.task} ${record.arm} r${record.rep}`);
+  return {arms, tasks, difference, notGraded, warned, totalCostUsd: spentUsd ?? recordCost};
 }
 
 export function renderMarkdown(meta, summary) {
@@ -94,6 +97,8 @@ export function renderMarkdown(meta, summary) {
   }
   const notGraded = Object.entries(summary.notGraded).map(([status, count]) => `${status} ${count}`);
   if (notGraded.length > 0) lines.push('', `Not graded and not in the pass rates: ${notGraded.join(', ')}. See records.`);
+  // The audit cannot see every read, so a person reviews each run that named a path outside.
+  if (summary.warned.length > 0) lines.push('', `Audit warnings to review (${summary.warned.length} runs): ${summary.warned.join(', ')}.`);
   return `${lines.join('\n')}\n`;
 }
 

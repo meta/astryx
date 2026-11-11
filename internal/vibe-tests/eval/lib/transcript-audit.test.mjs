@@ -155,8 +155,15 @@ describe('reads the review found unaudited', () => {
     'grep -rn "/tmp" src',
     'rg "/home" src',
     'grep -rn Button .',
+    `sed -i "s|'../lib/utils'|'@/lib/utils'|" src/components/ui/button.tsx`,
+    `grep -rn "from '../lib" src`,
   ])('passes %j', command => {
     expect(audit(command).violations).toEqual([]);
+  });
+
+  it('searches the shell folder only when a recursive reader names no path', () => {
+    const lines = [toolUse('Bash', {command: 'cd /runs && grep -rn useState /usr/include'})];
+    expect(auditTranscript(lines, WORKSPACE, SENSITIVE, '/home/agent').violations.map(v => v.path)).not.toContain('.');
   });
 
   it('warns when the shell moves to an unknown folder', () => {
