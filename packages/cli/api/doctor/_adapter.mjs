@@ -70,6 +70,14 @@ export {themeBuild, validateThemePrivateInputs} from '../theme/build/build.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
 
+// What the authoring-docs check reads (./_authoring-audit.mjs), reached only
+// through this adapter.
+export {
+  AUTHORING_AUDIT,
+  authoringAudit,
+  authoringAuditData,
+} from './_authoring-audit.mjs';
+
 /**
  * Package written to the generated app record for one discovered theme.
  * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme

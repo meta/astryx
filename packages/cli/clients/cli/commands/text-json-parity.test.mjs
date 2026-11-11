@@ -431,6 +431,13 @@ const CASES = [
     args: ['integration', 'pack', '--check'],
     skipFieldChecks: true,
   },
+  // A bare experimental theme group answers --json with its help: the
+  // text is the group's --help.
+  ...[
+    'experimental theme',
+    'experimental theme editor',
+    'experimental theme preview',
+  ].map(name => ({name, args: name.split(' '), skipFieldChecks: true})),
   {
     name: 'experimental icon',
     args: ['experimental', 'icon', 'remove'],

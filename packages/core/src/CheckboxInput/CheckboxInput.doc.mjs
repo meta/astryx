@@ -155,8 +155,15 @@ export const docs = {
       {
         name: '--_indicator-press-image',
         description:
-          "The row's touch press image, handed down to a first-party indicator that paints its own press. Set from the press paint only while the row itself is pressed, or, under a CheckboxList row that owns the press, from that row's press paint. Only this row declares it.",
+          "The row's press image, handed down to a first-party indicator that paints its own press. Set from the press paint only while the row itself is pressed, or, under a CheckboxList row that owns the press, from that row's press paint. Only this row declares it.",
         default: 'none',
+        private: true,
+      },
+      {
+        name: '--_indicator-active-press',
+        description:
+          "Transparent while the press controller paints the row's press, and always under a CheckboxList row that owns the press, so a first-party indicator that paints its own press draws no `:active` fill under the press image. Only this row declares it.",
+        default: 'var(--color-overlay-pressed)',
         private: true,
       },
     ],
@@ -404,8 +411,15 @@ export const docsZh = {
       {
         name: '--_indicator-press-image',
         description:
-          '复选框行的触摸按下图像，传递给自行绘制按下效果的第一方指示器。仅在该行自身被按下时根据按下涂层设置；在拥有按下效果的 CheckboxList 行中，取该行的按下涂层。只有该行声明它。',
+          '复选框行的按下图像，传递给自行绘制按下效果的第一方指示器。仅在该行自身被按下时根据按下涂层设置；在拥有按下效果的 CheckboxList 行中，取该行的按下涂层。只有该行声明它。',
         default: 'none',
+        private: true,
+      },
+      {
+        name: '--_indicator-active-press',
+        description:
+          '按下控制器绘制该行的按下效果时为透明；在拥有按下效果的 CheckboxList 行中始终为透明。因此自行绘制按下效果的第一方指示器不会在按下图像下方再绘制 `:active` 填充。只有该行声明它。',
+        default: 'var(--color-overlay-pressed)',
         private: true,
       },
     ],

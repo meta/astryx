@@ -10,6 +10,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {
   AUTO_SPREAD,
@@ -35,7 +36,6 @@ import {
   nearest,
   partDefault,
   partsOf,
-  q,
   undoArgs,
   withoutBadValues,
   NAME_RULE,
@@ -48,6 +48,8 @@ import {
   themeFiles,
   buildTheme,
   staleBuild,
+  themeSource,
+  themeSourceProblem,
 } from './_settings.mjs';
 import {checkSetting, exampleOf, storedTokenProblem} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
@@ -56,6 +58,7 @@ import {
   VIBRANCY_DEFAULT,
   paletteFiles,
   paletteMapping,
+  paletteDialOf,
   paletteNotes,
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
@@ -71,12 +74,72 @@ import {
   checkSection,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 const E = ERROR_CODES;
 
 /**
  * @typedef {import('./theme-edit.type.mjs').ThemeEditChangeOptions} ChangeOptions
  */
+/** The marker a `new` writes first and removes last. */
+const NEW_MARKER = '.astryx-new.json';
+
+/** Files a system or a tool puts in any folder; a folder of only these is empty. */
+const FOLDER_JUNK = new Set(['.DS_Store', '.gitkeep', 'Thumbs.db']);
+
+/**
+ * What a stopped `new` left, when the folder holds its marker and only
+ * files the editor writes for that name (its generated files, the source
+ * exactly as it writes it, its pages, colors and temp files); null when
+ * there is no marker or anything else is there. System files (.DS_Store)
+ * stay.
+ * @param {string} dir
+ * @param {string} slug
+ * @returns {string[] | null}
+ */
+function editorLeftovers(dir, slug) {
+  if (!fs.existsSync(path.join(dir, NEW_MARKER))) return null;
+  /** @type {string[]} */
+  const files = [];
+  const named = (/** @type {string} */ n) =>
+    n === NEW_MARKER ||
+    [
+      'settings.ts',
+      'settings.json',
+      'css',
+      'css.d.ts',
+      'js',
+      'd.ts',
+      'variants.d.ts',
+      'history.json',
+    ].some(x => n === `${slug}.${x}`) ||
+    /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config\.json)$/.test(
+      n,
+    ) ||
+    // The editor's temp names: `.<name>.astryx-<pid>-<rand>.tmp`, and the
+    // build's `.<name>.tmp-<id>`.
+    /^\..+\.(astryx-\d+-[a-z0-9]+\.tmp|tmp-[\w-]+)$/.test(n);
+  for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
+    const p = path.join(dir, e.name);
+    if (FOLDER_JUNK.has(e.name)) continue;
+    if (e.isDirectory() && e.name === 'tokens') {
+      for (const t of fs.readdirSync(p, {withFileTypes: true})) {
+        if (!t.isFile() || !t.name.startsWith(`${slug}.palette`)) return null;
+        files.push(path.join(p, t.name));
+      }
+      continue;
+    }
+    if (!e.isFile()) return null;
+    if (e.name === `${slug}.theme.ts`) {
+      // Only the source exactly as the editor writes it, never one changed
+      // by hand.
+      if (fs.readFileSync(p, 'utf8') !== themeSource(slug)) return null;
+    } else if (!named(e.name)) return null;
+    files.push(p);
+  }
+  return files;
+}
+
 /**
  * Start a theme in themes/<name>/, optionally on a built-in theme, with any
  * dial settings applied in the same build. Each setting is checked as `set`
@@ -99,12 +162,22 @@ export async function themeEditNew(name, options = {}) {
         .replace(/^[^a-z]+/, '')
         .replace(/-+$/, '')
         .slice(0, 64) || 'my-theme';
+    // The name as typed may be a theme that exists in another case.
+    const exists = fs.existsSync(themeFiles(cwd, fixed).settings);
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}).`,
-      {run: [`${P} new ${fixed}`]},
+      `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.`,
+      {run: exists ? [`${P} show ${fixed}`] : [`${P} new ${fixed}`]},
     );
   }
+  // A built-in theme's name would collide with the theme of that name the
+  // app may also use.
+  if (LIKE.includes(name))
+    refuse(
+      E.ERR_FILE_EXISTS,
+      `${name} is a built-in theme; an editor theme needs a name of its own. To start from ${name}, build on it.`,
+      {run: [`${P} new my-${name} --like ${name}`]},
+    );
   const f = themeFiles(cwd, name);
   // A link or a file where the theme goes is never written through or
   // replaced.
@@ -124,7 +197,16 @@ export async function themeEditNew(name, options = {}) {
     refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.`, {
       run: [`${P} show ${name}`, `${P} set ${name} base neutral`],
     });
-  if (fs.existsSync(f.dir) && fs.readdirSync(f.dir).length)
+  // A `new` stopped part way (killed, out of memory) leaves its own marker
+  // beside the files it wrote: only such a folder is cleared, and only
+  // after every argument is checked. Anything else in the folder, or a
+  // folder without the marker, is never touched.
+  const left = fs.existsSync(f.dir) ? editorLeftovers(f.dir, name) : null;
+  const holdsOther =
+    fs.existsSync(f.dir) &&
+    !left &&
+    fs.readdirSync(f.dir).some(n => !FOLDER_JUNK.has(n));
+  if (holdsOther)
     refuse(
       E.ERR_FILE_EXISTS,
       `themes/${name}/ already holds files this command did not make; choose another name.`,
@@ -147,12 +229,55 @@ export async function themeEditNew(name, options = {}) {
     data.like,
   );
   applyNewSettings(ctx, name, data, settings);
-  const r = await commitTheme(ctx, name, data, {history: false});
+  /** @type {string[]} */
+  const leftNotes = [];
+  if (left && left.length) {
+    for (const p of left) fs.rmSync(p, {force: true});
+    try {
+      fs.rmdirSync(path.join(f.dir, 'tokens'));
+    } catch {
+      // Not there, or it holds something else.
+    }
+    const shownLeft = left.filter(p => path.basename(p) !== NEW_MARKER);
+    leftNotes.push(
+      `cleared ${shownLeft.length} file${shownLeft.length === 1 ? '' : 's'} a stopped \`new\` left in themes/${name}/ (${shownLeft
+        .slice(0, 4)
+        .map(p => path.relative(f.dir, p))
+        .join(', ')}${shownLeft.length > 4 ? ', …' : ''}), then made the theme`,
+    );
+  }
+  // The marker goes first and comes off last: a `new` stopped between
+  // leaves a folder the next `new` can prove it made.
+  const dirMade = !fs.existsSync(f.dir);
+  fs.mkdirSync(f.dir, {recursive: true});
+  const marker = path.join(f.dir, NEW_MARKER);
+  fs.writeFileSync(
+    marker,
+    JSON.stringify({pid: process.pid, started: Date.now()}),
+  );
+  /** @type {Awaited<ReturnType<typeof commitTheme>>} */
+  let r;
+  try {
+    r = await commitTheme(ctx, name, data, {history: false});
+  } catch (e) {
+    fs.rmSync(marker, {force: true});
+    if (dirMade)
+      try {
+        fs.rmdirSync(f.dir);
+      } catch {
+        // It holds something else now.
+      }
+    throw e;
+  }
+  fs.rmSync(marker, {force: true});
   const p = await previewAndRoute(ctx, name, data, png);
   /** @type {string[]} */
-  const notes = data.settings.some(s => s.thing === 'font')
-    ? fontNotes(ctx, data)
-    : [];
+  const notes = [
+    ...leftNotes,
+    ...(data.settings.some(s => s.thing === 'font')
+      ? fontNotes(ctx, data)
+      : []),
+  ];
   return {
     type: 'themeEdit.new',
     data: {
@@ -225,7 +350,11 @@ function applyNewSettings(ctx, slug, data, settings) {
           refuse(
             E.ERR_INVALID_ARGUMENT,
             `--${thing} was given two values for the same thing (${data.settings[same].value}, ${s.value}); give one.`,
-            {run: [`${P} new ${slug} --${thing} ${q(s.value)}`]},
+            {
+              run: [
+                `${P} new ${slug} --${thing} ${quoteCommandArgument(s.value)}`,
+              ],
+            },
           );
         data.settings.push(s);
       }
@@ -245,7 +374,7 @@ function asNewRefusal(e, slug, settings) {
   const flags = Object.entries(settings)
     .filter(([, v]) => v != null)
     .flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map(x => [k, x]))
-    .map(([k, v]) => `--${k} ${q(v)}`);
+    .map(([k, v]) => `--${k} ${quoteCommandArgument(String(v))}`);
   const setPrefix = `${P} set ${slug} `;
   e.suggestions = (e.suggestions ?? []).map(s => {
     if (s.name === `${P} set --help`) return {...s, name: `${P} new --help`};
@@ -325,7 +454,7 @@ function refuseStoredTokens(ctx, slug, data, skip) {
       {
         run: [
           `${P} undo ${slug} ${undoArgs(bad.setting)}`,
-          `${P} set ${slug} ${bad.setting.thing} ${q(exampleOf(ctx.C.typeOf(bad.setting.thing), bad.setting.thing))}`,
+          `${P} set ${slug} ${bad.setting.thing} ${quoteCommandArgument(exampleOf(ctx.C.typeOf(bad.setting.thing), bad.setting.thing))}`,
         ],
       },
     );
@@ -363,7 +492,16 @@ function extremeSteps(res) {
 async function change(sub, slug, thing, value, options) {
   const {cwd = process.cwd(), png = false} = options;
   requireProject(cwd);
-  const data = loadTheme(cwd, slug, thing);
+  // The setting this command changes or removes may be the bad one; any
+  // other bad setting still refuses (or is left out when this fixes one).
+  const target = /** @type {Partial<import('./_settings.mjs').Setting>} */ ({
+    thing,
+    on: options.on,
+    when: options.when,
+    state: options.state,
+    mode: options.mode,
+  });
+  const data = loadTheme(cwd, slug, target);
   const ctx = await context(cwd);
   refuseStoredTokens(ctx, slug, data, thing);
   const flags = {
@@ -409,8 +547,33 @@ async function change(sub, slug, thing, value, options) {
   }
   // undo <thing> <value> removes the setting only when that is its value.
   if (sub === 'undo' && value != null && value !== '') {
+    // A word that names a part with a setting of this thing meant --on.
+    const onPart = data.settings.find(
+      x => x.thing === s.thing && x.on === value.trim() && !s.on,
+    );
+    if (onPart)
+      refuse(
+        E.ERR_THEME_NOT_SET,
+        `${value.trim()} is a part: ${describe(onPart)} is set; name the part with --on.`,
+        {run: [`${P} undo ${slug} ${undoArgs(onPart)}`]},
+      );
     const held = data.settings.find(x => keyOf(x) === keyOf(s));
-    if (held && held.value !== value.trim())
+    // `headings weight|tracking` names a half, not a value; a value is
+    // compared as `set` reads it (case, spacing and quotes aside).
+    const norm = (/** @type {string} */ x) =>
+      x
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .replace(/^["']|["']$/g, '');
+    const half =
+      s.thing === 'headings' && ['weight', 'tracking'].includes(norm(value));
+    if (
+      held &&
+      !half &&
+      norm(held.value) !== norm(value) &&
+      norm(held.value) !== norm(s.value ?? '')
+    )
       refuse(
         E.ERR_THEME_NOT_SET,
         `The theme sets ${describe(held)}, not ${value}.`,
@@ -516,7 +679,19 @@ async function change(sub, slug, thing, value, options) {
           data.settings.splice(v, 1)[0]?.value
         );
     }
-  } else if (prev && JSON.stringify(prev) === JSON.stringify(s)) {
+  } else if (
+    prev &&
+    JSON.stringify(prev) === JSON.stringify(s) &&
+    // A later setting that covers the same parts hides it: set again, it
+    // moves last and wins.
+    !data.settings
+      .slice(prevIdx + 1)
+      .some(
+        x =>
+          x.thing === s.thing &&
+          partsOf(ctx, x).some(t => partsOf(ctx, s).includes(t)),
+      )
+  ) {
     // The same setting again: nothing moves.
   } else {
     // A changed setting goes last, so it wins over what came before it.
@@ -543,7 +718,11 @@ async function change(sub, slug, thing, value, options) {
             x.on === s.on &&
             x.when === s.when &&
             x.state === s.state &&
-            x.thing.startsWith(`${s.thing}-`),
+            x.thing.startsWith(`${s.thing}-`) &&
+            // Not part of border: its radius, collapse and spacing.
+            !/^border-(radius|collapse|spacing)$|^border-[a-z]+-radius$/.test(
+              x.thing,
+            ),
         )
       : [];
   const r = await commitTheme(ctx, slug, data, {history: true});
@@ -609,6 +788,27 @@ async function change(sub, slug, thing, value, options) {
         modesOf(data),
       ),
     );
+  // An exact color the mapping reads (a fill, a tint, text on a fill)
+  // changes what it picks around it: say what, as the dial does.
+  const dialOfToken =
+    s.source === 'token' && !s.on && !s.when && !s.state
+      ? paletteDialOf(s.thing)
+      : null;
+  if (dialOfToken && sub === 'set') {
+    const pal = paletteMapping(
+      cwd,
+      slug,
+      data,
+      base,
+      ctx.project.core.tokenDefaults,
+    );
+    if (pal?.families.some(x => x.dial === dialOfToken))
+      notes.push(
+        ...paletteNotes(pal, dialOfToken, slug, modesOf(data)).filter(
+          n => !n.startsWith('the generated colors are in '),
+        ),
+      );
+  }
   if (PALETTE_DIALS.includes(s.thing) && sub === 'undo')
     notes.push(
       `the ${s.thing} color is no longer generated, and the tokens it fed go back to the base theme's values`,
@@ -628,8 +828,8 @@ async function change(sub, slug, thing, value, options) {
     notes.push(
       `the page background stays the base theme's${pages.length ? ` (${pages.join(', ')})` : ''}${
         modes.includes('light')
-          ? `; for a white or off-white page: ${P} set ${slug} --color-background-body "#ffffff"${modes.length > 1 ? ' --mode light' : ''}`
-          : `; for another page color: ${P} set ${slug} --color-background-body "<color>"`
+          ? `; for a white or off-white page: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#ffffff')}${modes.length > 1 ? ' --mode light' : ''}`
+          : `; for another page color: ${P} set ${slug} --color-background-body ${quoteCommandArgument('#f8fafc')}`
       }`,
     );
   }
@@ -650,7 +850,18 @@ async function change(sub, slug, thing, value, options) {
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
     );
-  const p = await previewAndRoute(ctx, slug, data, png);
+  // A change that changed nothing writes nothing, the preview included.
+  const f0 = themeFiles(cwd, slug);
+  const p =
+    r.unchanged && !png && fs.existsSync(f0.preview)
+      ? {
+          preview: shown(cwd, f0.preview),
+          pictures: [],
+          pictureProblem: null,
+          notChecked: null,
+          previewStale: [],
+        }
+      : await previewAndRoute(ctx, slug, data, png);
   return {
     type: sub === 'set' ? 'themeEdit.set' : 'themeEdit.undo',
     data: {
@@ -713,7 +924,10 @@ function unsetColorNotes(data, base, slug) {
   if (!unset.length) return [];
   return [
     `${unset.join(', ')} ${unset.length > 1 ? 'are' : 'is'} not set by this theme, so ${unset.length > 1 ? 'they keep' : 'it keeps'} the base theme's colors at any vibrancy${unset.includes('info') ? ', and so do surfaces tinted with info, such as colored cards' : ''}. To include ${unset.length > 1 ? 'them' : 'it'}: ${unset
-      .map(d => `${P} set ${slug} ${d} "${base.light[word[d]] ?? '<color>'}"`)
+      .map(
+        d =>
+          `${P} set ${slug} ${d} ${quoteCommandArgument(base.light[word[d]] ?? '#1f2937')}`,
+      )
       .join('; ')}`,
   ];
 }
@@ -728,6 +942,9 @@ function unsetColorNotes(data, base, slug) {
  */
 export async function themeEditShow(theme, options = {}) {
   const {cwd = process.cwd(), png = false} = options;
+  // Without the theme lock (it cannot be taken), show writes nothing: it
+  // reports the last build as it is.
+  const readOnly = Boolean(/** @type {any} */ (options).readOnly);
   requireProject(cwd);
   const section = checkSection(options.section, theme);
   const data = loadTheme(cwd, theme);
@@ -737,9 +954,20 @@ export async function themeEditShow(theme, options = {}) {
   // A build that does not match the settings (a command stopped mid-build,
   // a hand edit, another CLI) is made again from the settings, and said.
   const stale = staleBuild(cwd, theme, data);
-  if (stale) await buildTheme(ctx, theme, data);
-  const res = await resolvedTokens(ctx, theme);
-  const problems = await contrastProblems(ctx, data, res);
+  const brokenSource = themeSourceProblem(cwd, theme);
+  if (stale && !brokenSource && !readOnly) await buildTheme(ctx, theme, data);
+  // A built module that cannot be read (damaged by hand) is built again.
+  /** @type {string | null} */
+  let unreadable = null;
+  const res = await resolvedTokens(ctx, theme).catch(async e => {
+    if (e instanceof AstryxError || readOnly) throw e;
+    unreadable = `${theme}.js could not be read (${e instanceof Error ? e.message.split('\n')[0] : String(e)}), so it was built again from the settings`;
+    await buildTheme(ctx, theme, data);
+    return resolvedTokens(ctx, theme);
+  });
+  const checked = await contrastProblems(ctx, data, res);
+  // What cannot be measured is a note, not a problem.
+  const problems = checked.filter(x => !x.startsWith('not checked'));
   const pal = paletteMapping(
     cwd,
     theme,
@@ -747,20 +975,31 @@ export async function themeEditShow(theme, options = {}) {
     await baseResolved(ctx.project, data.like),
     ctx.project.core.tokenDefaults,
   );
-  const preview = await renderPreview(ctx, theme, data);
-  const previewStale = await keepPreviewRoute(ctx, theme);
-  const sheet = await renderSheet(ctx, theme, data, {group: section});
+  const preview = readOnly
+    ? shown(cwd, f.preview)
+    : await renderPreview(ctx, theme, data);
+  const previewStale = readOnly ? [] : await keepPreviewRoute(ctx, theme);
+  const sheet = readOnly
+    ? {file: shown(cwd, f.sheet), components: 0, skipped: []}
+    : await renderSheet(ctx, theme, data, {group: section});
   const modes = modesOf(data);
-  const shots = png
-    ? await pictures(
-        ctx.project,
-        [
-          {html: f.preview, png: f.previewPng},
-          {html: f.sheet, png: f.sheetPng},
-        ],
-        modes,
-      )
-    : {files: [], problem: null};
+  const shots =
+    png && !readOnly
+      ? await pictures(
+          ctx.project,
+          [
+            {html: f.preview, png: f.previewPng},
+            // A section is photographed from its own sheet.
+            section
+              ? {
+                  html: path.join(f.dir, `sheet-${section}.html`),
+                  png: path.join(f.dir, `sheet-${section}.png`),
+                }
+              : {html: f.sheet, png: f.sheetPng},
+          ],
+          modes,
+        )
+      : {files: [], problem: null};
   return {
     type: 'themeEdit.show',
     data: {
@@ -772,11 +1011,22 @@ export async function themeEditShow(theme, options = {}) {
         return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
       }),
       notes: [
-        ...(stale
+        ...(readOnly
           ? [
-              `the build did not match ${theme}.settings.json (${stale}), so it was built again from the settings`,
+              `the theme lock could not be taken, so nothing was written: this is the last build as it is${stale ? ` (it does not match the settings: ${stale})` : ''}, and the pages were not made again`,
+            ]
+          : stale
+            ? [
+                `the build did not match ${theme}.settings.json (${stale}), so it was built again from the settings`,
+              ]
+            : []),
+        ...(unreadable ? [unreadable] : []),
+        ...(brokenSource
+          ? [
+              `${brokenSource}, so settings cannot take effect; put back the import, extends and name lines in ${theme}.theme.ts`,
             ]
           : []),
+        ...checked.filter(x => x.startsWith('not checked')),
         ...fontNotes(ctx, data),
       ],
       // A size, number or font is the same in both modes: one value.
@@ -1013,16 +1263,29 @@ function colorFiles(slug) {
  */
 export async function themeEditUndo(theme, options = {}) {
   const {cwd = process.cwd(), png = false, thing} = options;
-  // base and mode are not settings in the list: undoing one sets it back to
-  // its default.
-  if (thing === 'base' || thing === 'mode')
-    return change(
-      'set',
-      theme,
-      thing,
-      thing === 'base' ? 'none' : 'both',
-      options,
-    );
+  // base and mode are not settings in the list: undoing one goes back to
+  // what the theme was made with (the oldest step the history keeps).
+  if (thing === 'base' || thing === 'mode') {
+    requireProject(cwd);
+    const now = loadTheme(cwd, theme, thing);
+    const [first] = readHistory(themeFiles(cwd, theme).history).steps;
+    /** @type {any} */
+    let made = now;
+    try {
+      if (first) made = JSON.parse(first.replace(/^\uFEFF/, ''));
+    } catch {
+      made = now;
+    }
+    const of = (/** @type {any} */ d) =>
+      thing === 'base' ? (d?.like ?? 'none') : (d?.mode ?? 'both');
+    if (of(made) === of(now))
+      refuse(
+        E.ERR_THEME_NOT_SET,
+        `${thing} was never changed: it is ${of(now)}, as ${theme} was made.`,
+        {run: [`${P} show ${theme}`]},
+      );
+    return change('set', theme, thing, of(made), options);
+  }
   if (thing != null)
     return change('undo', theme, thing, options.value, options);
   requireProject(cwd);
@@ -1082,6 +1345,27 @@ export async function themeEditUndo(theme, options = {}) {
       `Nothing to undo: ${theme} has no earlier change.`,
       {run: [`${P} show ${theme}`]},
     );
+  // A top step equal to the settings now (left by an undo stopped between
+  // its two writes) changes nothing: skip it.
+  const nowText = fs.readFileSync(f.settings, 'utf8');
+  const same = (/** @type {string} */ a, /** @type {string} */ b) => {
+    try {
+      return (
+        JSON.stringify({...JSON.parse(a.replace(/^\uFEFF/, '')), lifted: 0}) ===
+        JSON.stringify({...JSON.parse(b.replace(/^\uFEFF/, '')), lifted: 0})
+      );
+    } catch {
+      return false;
+    }
+  };
+  while (history.length && same(history[history.length - 1], nowText))
+    history.pop();
+  if (!history.length)
+    refuse(
+      E.ERR_THEME_NOTHING_TO_UNDO,
+      `Nothing to undo: ${theme} has no earlier change (the last step equals the settings now).`,
+      {run: [`${P} show ${theme}`]},
+    );
   const ctx = await context(cwd);
   const prevText = /** @type {string} */ (history.pop());
   let prev = /** @type {import('./_settings.mjs').ThemeData} */ (
@@ -1110,7 +1394,10 @@ export async function themeEditUndo(theme, options = {}) {
     leftOut = repaired.dropped;
   }
   // The popped history is written with the change, inside its rollback.
-  await commitTheme(ctx, theme, prev, {history: false, historyAfter: history});
+  const committed = await commitTheme(ctx, theme, prev, {
+    history: false,
+    historyAfter: history,
+  });
   /** @type {string[]} */
   const undone = current
     ? []
@@ -1132,6 +1419,8 @@ export async function themeEditUndo(theme, options = {}) {
   if (current)
     for (const [k, s] of now)
       if (!was.has(k)) undone.push(`put back ${describe(s)}`);
+  // What the build kept, such as a color file edited by hand.
+  undone.push(...committed.notes);
   if (current && (current.like ?? 'none') !== (prev.like ?? 'none'))
     undone.push(
       `base ${current.like ?? 'none'} is back to ${prev.like ?? 'none'}`,
@@ -1150,4 +1439,17 @@ export async function themeEditUndo(theme, options = {}) {
       ...p,
     },
   };
+}
+
+/**
+ * Why an editor theme's build is not current, or null: the editor's own
+ * staleness check (the settings it was built from, the CLI and packages it
+ * was built with), for `compile --check`.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Promise<string | null>}
+ */
+export async function editorStale(cwd, slug) {
+  const data = loadTheme(cwd, slug);
+  return staleBuild(cwd, slug, data) || null;
 }
