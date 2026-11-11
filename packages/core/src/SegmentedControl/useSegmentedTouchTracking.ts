@@ -159,10 +159,11 @@ export function measureLiftArea(
 
 /**
  * Tracks a press on the control as UIKit's segmented control does. The press
- * tracker reports the press from landing to lift. It never claims the
- * pointer, so a vertical drag still scrolls the page. A horizontal pan
- * carries the lens. It claims the pointer only past its slop, and the lift
- * still ends the press.
+ * tracker reports the press from landing to lift. Inside a scroller, a
+ * vertical drag that starts before the press shows still scrolls the page.
+ * Once the press shows, the control keeps the finger, as a UIKit tracking
+ * control does. A horizontal pan carries the lens. It claims the pointer only
+ * past its slop, and the lift still ends the press.
  *
  * The lift decides the segment, wherever the press began. The pointer counts
  * on the control's center line, clamped to its ends, so a drift off the
@@ -255,6 +256,7 @@ export function useSegmentedTouchTracking(
   const attachRef = isEnabled ? trackRef : DETACHED;
   usePressTracker(attachRef, {
     isEnabled: () => isEnabled,
+    keepsTouch: true,
     onHighlightChange: isHighlighted => {
       if (isHighlighted) {
         motion.highlighted();
