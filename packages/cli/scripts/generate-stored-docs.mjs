@@ -18,7 +18,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {parse} from '@babel/parser';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {
-  docSourceKey,
+  storedKey,
   STORED_DOCS_FILE,
 } from '../foundation/doc-compiler/stored-docs.mjs';
 
@@ -167,7 +167,7 @@ export async function storedDocsText() {
       continue;
     }
     if (!isDeepStrictEqual(data, exports)) continue;
-    byKey[docSourceKey(text)] = data;
+    byKey[storedKey(text)] = data;
   }
   return (
     JSON.stringify(

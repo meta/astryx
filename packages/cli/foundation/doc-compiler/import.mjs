@@ -6,7 +6,7 @@
  *
  * @input An absolute path to a `.doc.{ts,mjs,js}` (or legacy template) file.
  * @output The module's exports: for a doc Astryx ships whose text matches its
- *   stored exports, a frozen, namespace-like object built from them (see
+ *   stored exports, a non-extensible, namespace-like object built from them (see
  *   `storedModule`); otherwise the namespace object a plain import of the file
  *   gives, until the file changes; then the edited file's, read once by each
  *   importer, its own way, and shared until the next change. A long-running
@@ -35,7 +35,8 @@ import {
 } from '../fs/module-loader.mjs';
 import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
 import {
-  docSourceKey,
+  readStore,
+  storedKey,
   SHIPPED_ASSETS,
   STORED_DOCS_FILE,
 } from './stored-docs.mjs';
@@ -92,26 +93,6 @@ function loadFirst(file, load) {
   return stored ? Promise.resolve(stored) : load(file);
 }
 
-/** @type {Map<string, Record<string, unknown>> | undefined} */
-let storedExports;
-
-/**
- * The stored exports, by key, read once. A missing or unreadable file leaves
- * none, so every doc is imported.
- * @returns {Map<string, Record<string, unknown>>}
- */
-function storedDocExports() {
-  if (storedExports) return storedExports;
-  try {
-    storedExports = new Map(
-      Object.entries(JSON.parse(fs.readFileSync(STORED_DOCS_FILE, 'utf-8'))),
-    );
-  } catch {
-    storedExports = new Map();
-  }
-  return storedExports;
-}
-
 /**
  * Each stored doc's module, by file, so every read of an unchanged file gets
  * the same object, as an import of it does.
@@ -136,10 +117,10 @@ function storedModule(file) {
   } catch {
     return null;
   }
-  const key = docSourceKey(text);
+  const key = storedKey(text);
   const known = storedModules.get(file);
   if (known?.key === key) return known.module;
-  const exports = storedDocExports().get(key);
+  const exports = readStore(STORED_DOCS_FILE).get(key);
   if (!exports) return null;
   /** @type {Record<string, unknown>} */
   const module = Object.create(null);

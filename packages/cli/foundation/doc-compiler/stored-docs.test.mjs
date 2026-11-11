@@ -8,7 +8,7 @@ import * as util from 'node:util';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {importDocModule} from './import.mjs';
-import {docSourceKey, STORED_DOCS_FILE} from './stored-docs.mjs';
+import {storedKey, STORED_DOCS_FILE} from './stored-docs.mjs';
 import {storedDocsText} from '../../scripts/generate-stored-docs.mjs';
 
 // The file is written at `prepack`, so a checkout has none. These tests
@@ -61,7 +61,7 @@ describe('stored doc exports', () => {
       });
     let checked = 0;
     for (const file of docFiles(path.join(CLI_ROOT, 'assets'))) {
-      const exports = stored[docSourceKey(fs.readFileSync(file, 'utf-8'))];
+      const exports = stored[storedKey(fs.readFileSync(file, 'utf-8'))];
       if (!exports) continue;
       const native = await import(`${pathToFileURL(file).href}?native`);
       expect(exports, file).toEqual({...native});
@@ -72,7 +72,7 @@ describe('stored doc exports', () => {
 
   it('give a shipped doc the module an import of it gives', async () => {
     const text = fs.readFileSync(GUIDE, 'utf-8');
-    expect(stored[docSourceKey(text)]).toBeDefined();
+    expect(stored[storedKey(text)]).toBeDefined();
     const read = await importDocModule(GUIDE);
     const native = await import(`${pathToFileURL(GUIDE).href}?native`);
     // The store answered: the importer's own import gives a real module
