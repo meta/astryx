@@ -20,7 +20,7 @@ import {
   assertWithin,
   PathSafetyError,
 } from '../../foundation/fs/path-safety.mjs';
-import {baseResolved, openProject} from './_project.mjs';
+import {baseResolved, installLine, openProject} from './_project.mjs';
 import {
   buildTheme,
   editedThemes,
@@ -56,10 +56,7 @@ import {
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {requireProject, context} from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {
-  detectPackageManager,
-  quoteCommandArgument,
-} from '../../foundation/env/package-manager.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 const E = ERROR_CODES;
 
@@ -1477,7 +1474,7 @@ function recoverPreview(cwd, dir) {
   );
   fs.rmSync(pendingFile, {force: true});
   tidyPageFolders(dir);
-  return `finished a preview change that was stopped part way (${shown(cwd, dir) || '.'}/${PENDING})${left.length ? `; kept ${left.join(', ')}, which changed after the change began: delete ${left.length > 1 ? 'them' : 'it'} yourself if ${left.length > 1 ? 'they are' : 'it is'} the preview's` : ''}`;
+  return `finished a preview change that was stopped part way (${shown(cwd, dir) || '.'}/${PENDING})${left.length ? `; kept ${left.join(', ')}: ${left.length > 1 ? 'they' : 'it'} changed after the change began, so ${left.length > 1 ? 'they' : 'it'} may hold your changes and ${left.length > 1 ? 'stay' : 'stays'} until you remove ${left.length > 1 ? 'them' : 'it'}` : ''}`;
 }
 
 /**
@@ -2172,27 +2169,6 @@ function installed(cwd, pkg) {
 }
 
 /**
- * The package-manager command that adds packages to the app.
- * @param {string} cwd
- * @param {string[]} pkgs
- */
-function addCommandOf(cwd, pkgs) {
-  const pm = packageManagerOf(cwd);
-  return `${pm === 'npm' ? 'npm install' : `${pm} add`} ${pkgs.join(' ')}`;
-}
-
-/**
- * The package manager the app uses, as every command finds it (workspaces,
- * the packageManager field, lock files); npm when nothing says (the finder
- * gives `npx` then, which is not a package manager).
- * @param {string} cwd
- */
-function packageManagerOf(cwd) {
-  const pm = detectPackageManager(cwd);
-  return pm === 'npx' ? 'npm' : pm;
-}
-
-/**
  * What a template page needs that the app lacks, from its real imports:
  * packages the app's package.json does not name (with the command that
  * adds them), packages it names that are not installed (with the install
@@ -2232,7 +2208,7 @@ function pageNeeds(cwd, source) {
     ...(needs.installCommand
       ? [[needs.installCommand, ...undeclared].join(' ')]
       : undeclared.length
-        ? [addCommandOf(cwd, undeclared)]
+        ? [installLine(cwd, undeclared)]
         : []),
     ...(notInstalled.length ? [installCommandOf(cwd)] : []),
   ];
@@ -2249,7 +2225,8 @@ function pageNeeds(cwd, source) {
 
 /** The command that installs what the package.json names. @param {string} cwd */
 function installCommandOf(cwd) {
-  return `${packageManagerOf(cwd)} install`;
+  // The package manager `installLine` names, with its install verb.
+  return installLine(cwd, []).trim().replace(/ add$/, ' install');
 }
 
 /**
@@ -2286,7 +2263,7 @@ function wornTheme(cwd, slug, again, without) {
             again(null),
             ...(missing
               ? [
-                  `${addCommandOf(cwd, [`@astryxdesign/theme-${name}`])}  # then a theme of your own can start from it`,
+                  `${installLine(cwd, [`@astryxdesign/theme-${name}`])}  # then a theme of your own can start from it`,
                 ]
               : []),
             `${EDITOR} new my-${name} --like ${name}  # a theme of your own that starts from it`,
