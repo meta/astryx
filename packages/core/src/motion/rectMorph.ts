@@ -28,12 +28,11 @@ import {
   type MotionValues,
 } from './animator';
 import {
-  easedProgress,
   presentedProgressVelocity,
   progressCurve,
+  timedCurve,
   type ProgressChannel,
 } from './progress';
-import {cubicBezier} from './bezier';
 import {
   lerpPath,
   morphCurves,
@@ -326,7 +325,11 @@ export function createRectMorph(
   ) =>
     'spring' in motion
       ? progressCurve(resolveMotion(on, motion.spring), {velocity})
-      : easedProgress(motion.duration / 1000, cubicBezier(motion.easing), {
+      : timedCurve({
+          from: 0,
+          to: 1,
+          durationMs: motion.duration,
+          easing: motion.easing,
           velocity,
         });
 
