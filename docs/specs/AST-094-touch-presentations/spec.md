@@ -34,6 +34,7 @@ verified_by:
   "paths": [
     "packages/core/src/Layer/holdEntranceInput.ts",
     "packages/core/src/Layer/inputHold.ts",
+    "packages/core/src/gestures/tapWobble.ts",
     "packages/core/src/hooks/usePager.ts",
     "packages/core/src/motion/uikit/segmented.ts",
     "packages/core/src/motion/uikit/slider.ts"
@@ -196,6 +197,7 @@ a measured, sourced difference exists.
   | `springs.contextMenuDismiss` | damping ratio 0.85, response 0.35 s | measured: UIContextMenuInteraction's dismissal, iOS 26.2 simulator, 2026-10-23                        |
   | `springs.contextMenuMorph`   | damping ratio 0.8, response 0.3 s   | measured: UIContextMenuInteraction's menu entrance and preview shadow, iOS 26.2 simulator, 2026-10-23 |
   | `segmented.selectionSpring`  | response 0.4 s, damping ratio 0.85  | measured: UISegmentedControl's selection slide, iOS 26.2 simulator, 2026-10-23                        |
+  | `segmented.lift`             | response 0.25 s, damping ratio 1    | measured: UISegmentedControl's lens lift and settle under a finger, iOS 26.2 simulator, 2026-10-23    |
   | `timing.stateChangeMs`       | 250 ms                              | measured: Core Animation's implicit transaction, iOS 26.2 simulator, 2026-10-23                       |
   | `timing.curves.viewChange`   | cubic-bezier(0.25, 0.1, 0.25, 1)    | Apple: `CAMediaTimingFunctionName.default`                                                            |
   | `timing.curves.exit`         | cubic-bezier(0.42, 0, 1, 1)         | measured: UIKit's ease-in, iOS 26.2 simulator, 2026-10-23                                             |
@@ -534,7 +536,9 @@ a measured, sourced difference exists.
   first move, only while every scroller under the finger sits at its edge and
   the drag moves toward that edge (FR14), and only the moves the browser would
   rubber-band, never a real scroll; the pan itself still begins at FR17's
-  10 pt, as UIKit's sheet pull does (DEC-18). A toast's swipe MAY cancel its
+  10 pt, as UIKit's sheet pull does (DEC-18). A scroll-edge pan that waits out
+  a tap's wobble before cancelling MUST still cancel before a kept move could
+  commit the native pan (DEC-29). A toast's swipe MAY cancel its
   touch's moves from a first move toward its dismiss edge (`component:Toast`
   FR4).
   A recognizer that is cancelled while its touch is moving, other than by the
@@ -884,12 +888,12 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
 - Browser evidence: the busy-main-thread proof and no layout or paint during
   the animation in Chromium with phone emulation, the busy-main-thread proof
   in WebKit, curves sampled by seeking the running animations, iOS simulator
-  recordings for every claim about the reference values, real-device
-  evidence for every claim about iOS Safari behavior, and, for every claim
-  about Android Chrome behavior, Chrome with Gboard in the Android emulator
-  at the exact head, with animations at normal scale and removed, plus a
-  slow-device profile, with no human device check (`spec:AST-013` FR10,
-  DEC-27).
+  recordings for every claim about the reference values, real-device evidence
+  for every claim about iOS Safari behavior, and, for every claim about
+  Android Chrome behavior, Chrome with Gboard in the Android emulator at the
+  exact head, or carried to it under DEC-31, with animations at normal scale
+  and removed, plus a slow-device profile, with no human device check
+  (`spec:AST-013` FR10, DEC-27, DEC-31).
 - Presented hit testing (FR11's and FR19's iOS WebKit sentences): unit tests
   that mimic iOS WebKit's hit testing at the motion's start, the WebKit tap and
   drag proof with the correction off as its control, and the iOS Simulator
@@ -945,6 +949,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   trackpad swipe follows FR43's pager rule in Lightbox's viewer and in
   Carousel's paging presentation, under every pointer (`component:Lightbox`
   FR11).
+- The shared pager's loop arithmetic: `hooks/usePager.ts` exports `mod` and
+  `nearestLoopCopy`, and DateInput's looping picker wheel imports both
+  (`component:DateInput` DEC-3).
 - `architecture:react-component-runtime` INV13: gestures attach for every
   pointer, within FR24's listener budget.
 - `design:user-states` DR1, DR3 and `family:buttons`: press timing follows
@@ -1089,6 +1096,7 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | FR14            | Browser tests of a sheet over a scrolled list                                                                                                       | scrolled and at its top                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a midway handoff fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | FR15–FR17       | Recognizer unit tests on synthetic streams with explicit timestamps                                                                                 | exclusive, simultaneous, require-to-fail, nested; a watcher beside a claiming winner; a blocked main thread; a pan at 10 pt per axis                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a wrong winner, a late deadline, or a translation that keeps the hysteresis, or a watcher failed or cancelled by a claiming winner fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | FR18–FR22       | Browser tests with real touch input (`spec:AST-013` FR10)                                                                                           | per-axis pans beside native scrolling, page zoom, cancelled touches, clicks after taps, keyboard activation, a modal scroll lock, a control that keeps its press through a drag; a still finger with sub-pixel jitter over a scroll view; a finger moved 9 px and 10 px straight, and (7, 7) and (8, 8) diagonally; a recognizer on an element whose author `touch-action` is narrower, including one without `pinch-zoom`; a screen-edge pan landing at 40 px and at 41 px from the edge, at 14 px and 15 px of travel, and a horizontal scroll that starts outside the band; a screen-edge pan on an element within the band, and on one that reaches beyond it; a sheet's pull from a list at its top, and from a list scrolled away from its top; a long press dragged past its tolerance after it began, which never scrolls the page | a ghost click, a scroll or zoom blocked other than by the author's `touch-action`, or a cancelled unowned touchmove outside FR19's five exceptions, a tap cancelled by sub-pixel movement or by under 10 px of travel, a scroll that does not take the touch at 10 px, or a derived `touch-action` wider than the author's, a screen-edge pan that claims outside its band or before 15 px on an element within the band, or has not claimed at 15 px, or an author scroll outside the band that is blocked, a band claim of `pan-x` on an element that reaches beyond the band, or a 15 px start there, or a scroll-edge pan that cancels a move a scroller could scroll, or begins before 10 pt, fails |
+| FR19 (DEC-30)   | Gesture unit tests on synthetic streams; browser tests with real touch input in WebKit and Chromium                                                 | a tap that wobbles 2–4 px toward a scroll edge keeps every move, and a 5 px move is cancelled; a sideways move is never held; NavigationStack's content back swipe on a pushed screen; RefreshControl's pull at its top, whose touch path is not a scroll-edge pan (a guard)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | a move under 5 px along the pan's axis cancelled, a move from 5 px left uncancelled while every scroller under the finger sits at its edge, a sideways move held, or a pan that begins before its hysteresis fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | FR20            | Browser tests with real touch input in Chromium phone emulation (`spec:AST-013` FR10)                                                               | a horizontal drag under `pan-y`; a vertical drag under `pan-y` over a scroller with room; a vertical drag where no scroller has room                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a horizontal drag under `pan-y` counted as the browser taking the touch, a vertical one over a scroller with room not counted, or a later uncancelable move counted, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR23            | Haptics tests on the recorded moments                                                                                                               | tap, drag, lift                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | a haptic outside a native moment fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | FR24            | Resource tests counting listeners, observers and timers                                                                                             | fine primary pointer; coarse pointer enabled and disabled; many instances; unmount                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a gesture listener in a component that uses no gesture, an idle document listener outside a press other than the one shared press controller and the one stray-click swallower, a second press controller, a per-instance `document` or `window` listener, or a leak fails                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -1105,6 +1113,7 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | FR43 trackpad   | Unit tests on timed wheel streams; WebKit browser tests with trackpad streams (Chromium's driver wheels read as a mouse wheel)                      | a form and a required sheet pulled 30 to 240 px by a finger and by a trackpad; mouse lines, notches, ticks and accelerated deltas over a sheet, a pager and a row; ten swipes each starting mid-momentum, ten whose momentum ends, and a slow drag with 150 ms pauses; a trackpad flick and a slow stopped drag on an info sheet; a fling, a slow 60 px swipe, a 42 px spike and back-to-back swipes on a pager; a row opened and swiped back within one gesture, and a long fast swipe; a pinch ending; a trackpad pan through a window blur and through a hidden page                                                                                                                                                                                                                                                                    | a trackpad stretch that differs from a finger's for the same travel (120 px gives 54 px on the reference sheet), a mouse wheel that moves a sheet, a pager or a row, splitter counts other than ten, ten and one, momentum that moves a surface, a flick released with no velocity, a pager that travels past one page or pages on a spike, an info sheet a flick leaves open or a slow stopped drag closes, an open row that reveals its other side within one gesture, a trackpad pan a window blur or a hidden page leaves mid-gesture, or a pinch that ends after 100 ms fails                                                                                                                       |
 | FR44            | Unit tests of a pen press a window blur ends, on a Switch, a Slider and the host, under a coarse and a fine pointer                                 | a pen press on a Switch and on a Slider, blur mid-press: nothing toggles or commits; a pen whose contact ends in `pointercancel`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | with the host keeping no note of a blur-cancelled pen, the Switch toggles at the pen's click                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | all             | iOS simulator: the UIKit reference capture and the same gesture in Safari; real iOS Safari devices; Android Chrome in the Android emulator (DEC-27) | per component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | an unmatched curve or timing is a parity defect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| all (DEC-31)    | The evidence-carry check, before device or emulator evidence from an earlier head counts at a later head                                            | a later head that only merges `main`; the pull request's own changes byte-identical or changed; a merge that changes a file the pull request changes, a direct import of those changes, a shared motion or layer module, or none of them                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | the evidence-carry check compares the PR's own diff between the two heads, and the merge's changed files against the files the PR changes, the changes' direct imports and the shared motion and layer modules (currently `motion/transientCopy`, `motion/inertClone`, `motion/animator`, `motion/carryAnimations`, `Layer/useLayer`, `hooks/usePager`); any overlap fails                                                                                                                                                                                                                                                                                                                               |
 
 ## Decision log
 
@@ -1397,6 +1406,20 @@ from its top.
 
 Rejected: cancelling moves only after the pan begins.
 
+### DEC-30 — A scroll-edge pan waits out a tap's wobble
+
+**Reference:** `spec:AST-094/DEC-30`
+**Decider:** Specs consistency ruling, `2026-11-09`, applying DEC-18
+
+The shared scroll-edge pan holds a finger only once travel along its axis
+reaches a tap's 5 px wobble, so a tap's click survives in every component that
+uses it. The trade: a wobble toward the edge from 5 px until the pan begins at
+10 pt loses its click. The 5 px point is DEC-29's Mobile Safari reading.
+
+The 5 CSS px tap allowance lives in `gestures/tapWobble.ts` (`TAP_WOBBLE`),
+shared by the pan recognizer and BottomSheet's drag; measured in Mobile Safari,
+so it stays out of the UIKit tables.
+
 ### DEC-25 — A pager pages as UIKit measures it
 
 **Reference:** `spec:AST-094/DEC-25`
@@ -1473,6 +1496,22 @@ checks there.
 
 Rejected: a physical Android phone as a gate or as a follow-up check.
 
+### DEC-31 — Device and emulator evidence carries across a main merge that touches none of the pull request's files, direct imports or shared motion and layer modules
+
+**Reference:** `spec:AST-094/DEC-31`
+**Decider:** `cixzhang`, `2026-11-09`
+
+Evidence taken on a device or in the emulator at an earlier head still counts
+at a later head that only merges `main`, when the pull request's own changes
+are byte-identical between the two heads and the merge changed none of the
+files the pull request changes, none of the files those changes import
+directly, and none of the shared motion and layer modules that the verification
+row lists. Otherwise the evidence is taken again at the new head. This is an
+exception to DEC-27's exact-head rule for heads that only merge main; DEC-27
+holds for every other head.
+
+Rejected: a new take after every main merge.
+
 ### DEC-28 — Sheet stretch at the tallest detent
 
 **Reference:** `spec:AST-094/DEC-28`
@@ -1484,6 +1523,21 @@ stretch, and a reversal hands it back (FR14's one exception).
 
 Rejected: keeping the whole gesture with the content (the strict nested-scroll
 rule).
+
+### DEC-29 — A sheet's pull waits out a tap's wobble
+
+**Reference:** `spec:AST-094/DEC-29`
+**Decider:** Specs consistency ruling, `2026-11-09`, applying DEC-18
+
+Mobile Safari commits a kept first move of 5 px to the native pan (iOS 26.2
+Simulator; a kept move of 4 px commits nothing; the author's earlier Mobile
+Safari 27.0 run committed at 7 px), so BottomSheet cancels from a first move
+that reaches a tap's 5 px wobble. Once the native pan is committed, no later
+cancel stops it, and the sheet's content rubber-bands under the finger while
+the sheet moves beside it. WebKit ends a touch's click when one of its moves is
+cancelled, so waiting out the wobble keeps a tap's click on a control in the
+sheet. The trade-off: a tap that wobbles 5 to 8 px toward the edge loses its
+click.
 
 ## Open questions
 

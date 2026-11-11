@@ -18,7 +18,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {Worker} from 'node:worker_threads';
+import {fork, spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import postcss from 'postcss';
 import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
@@ -34,7 +35,7 @@ export {PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'not-embedded'} code - What kind of problem.
+ * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'not-embedded' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -221,63 +222,156 @@ function expandImports(file, css, ctx) {
 
 /** @typedef {{dir: string, integrations: readonly string[]}} ServedSet */
 
+/** Signals that Node itself or a native module raises when it fails. */
+const CRASH_SIGNALS = new Set(['SIGSEGV', 'SIGBUS', 'SIGILL', 'SIGFPE', 'SIGABRT', 'SIGTRAP']);
+
 /**
- * Run the page in a worker, stopping it after `timeoutMs`.
- * @param {string} entry
- * @param {string} root
- * @param {number} timeoutMs
- * @param {ServedSet | null} served
- * @returns {Promise<any>}
+ * How a native crash ended a process, or null when it was not one. On
+ * Windows a crash arrives as an exit status of 0xC0000000 and above (such as
+ * 0xC0000005, an access violation), not as a signal.
+ * @param {number | null} code
+ * @param {NodeJS.Signals | null} signal
  */
-function runWorker(entry, root, timeoutMs, served) {
+function crashOf(code, signal) {
+  if (signal) return CRASH_SIGNALS.has(signal) ? signal : null;
+  if (code !== null && code >>> 0 >= 0xc0000000) return `0x${(code >>> 0).toString(16).toUpperCase()}`;
+  return null;
+}
+
+/**
+ * Whether this Node crashes when it splits text with Intl.Segmenter. Some
+ * Node builds do, and Astryx components such as Avatar split text with it.
+ */
+function segmenterCrashes() {
+  const probe = spawnSync(
+    process.execPath,
+    ['-e', "[...new Intl.Segmenter('en', {granularity: 'grapheme'}).segment('a b')]"],
+    {stdio: 'ignore', timeout: 10_000},
+  );
+  return crashOf(probe.status, probe.signal) !== null;
+}
+
+/**
+ * The error for a page process that a crash or a signal ended. A crash comes
+ * from Node itself or a native module, never from the page's JavaScript.
+ * Every message names this Node.
+ * @param {string} how the crash (a signal name or a Windows status) or the stopping signal
+ * @param {{crashed: boolean, withoutSegmenter: boolean}} state
+ */
+function crashError(how, {crashed, withoutSegmenter}) {
+  const node = `Node ${process.version} (${process.execPath})`;
+  const detail = {signal: how, node: process.version, nodePath: process.execPath};
+  if (!crashed) {
+    const memory = how === 'SIGKILL' ? ' The system stops a process this way when the machine runs out of memory.' : '';
+    return new RenderError('ERR_RENDER_FAILED', `${node} was stopped by a signal (${how}) while it rendered the page.${memory}`, detail);
+  }
+  const cause = withoutSegmenter ? ' It crashed again with Intl.Segmenter removed, so the fault is elsewhere in this Node or in a native module.' : '';
+  return new RenderError(
+    'ERR_RENDER_FAILED',
+    `${node} crashed (${how}) while it rendered the page. A fault in Node or in a native module causes this, not the page's code.${cause} Render with an official Node.js build of another version.`,
+    detail,
+  );
+}
+
+/**
+ * Run the page in a host process (page-host.mjs), stopping it after
+ * `timeoutMs`. The host runs the page in a worker thread, and it exits when
+ * this process goes away.
+ * @param {{entry: string, root: string, served: ServedSet | null, withoutSegmenter: boolean}} input
+ * @param {number} timeoutMs
+ * @returns {Promise<any>} the page's answer, or `{crashed: how}` when a
+ *   native crash ended the host
+ */
+function runWorker(input, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./page-worker.mjs', import.meta.url), {
-      workerData: {entry, root, served: served ? {dir: served.dir, integrations: [...served.integrations]} : null},
+    const data = {
+      ...input,
+      served: input.served ? {dir: input.served.dir, integrations: [...input.served.integrations]} : null,
+      timeoutMs,
+    };
+    const host = fork(fileURLToPath(new URL('./page-host.mjs', import.meta.url)), [JSON.stringify(data)], {
+      // Never the CLI's own flags (such as --input-type).
       execArgv: [],
-      stdout: true,
-      stderr: true,
-      resourceLimits: {maxOldGenerationSizeMb: 4096},
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      serialization: 'advanced',
     });
-    // The page's own writes to stdout/stderr never reach the CLI's output.
-    worker.stdout.resume();
-    worker.stderr.resume();
     let settled = false;
-    const timer = setTimeout(() => {
+    /** @param {() => void} settle */
+    const finish = settle => {
       if (settled) return;
       settled = true;
-      void worker.terminate();
-      reject(
-        new RenderError(
-          'ERR_RENDER_TIMEOUT',
-          `The page did not finish rendering within ${timeoutMs / 1000} seconds, so it was stopped. Look for a loop that never ends or a promise the page waits on.`,
-          {seconds: timeoutMs / 1000},
+      clearTimeout(timer);
+      host.kill('SIGKILL');
+      settle();
+    };
+    const timer = setTimeout(() => {
+      finish(() =>
+        reject(
+          new RenderError(
+            'ERR_RENDER_TIMEOUT',
+            `The page did not finish rendering within ${timeoutMs / 1000} seconds, so it was stopped. Look for a loop that never ends or a promise the page waits on.`,
+            {seconds: timeoutMs / 1000},
+          ),
         ),
       );
     }, timeoutMs);
-    worker.once('message', message => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      void worker.terminate();
-      resolve(message);
+    host.once('message', (/** @type {any} */ message) => {
+      finish(() => {
+        if (message?.hostError !== undefined) {
+          const text = String(message.hostError);
+          reject(
+            /ERR_WORKER_OUT_OF_MEMORY|heap out of memory/.test(text)
+              ? new RenderError('ERR_RENDER_FAILED', 'The page ran out of memory while rendering.')
+              : new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${text.split('\n')[0]}`),
+          );
+        } else if (message?.hostExit !== undefined) {
+          reject(new RenderError('ERR_RENDER_FAILED', `The page stopped rendering without an answer (exit ${message.hostExit}).`));
+        } else {
+          resolve(message);
+        }
+      });
     });
-    worker.once('error', (/** @type {any} */ error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      const out =
-        /ERR_WORKER_OUT_OF_MEMORY|heap out of memory/.test(String(error?.message ?? error))
-          ? new RenderError('ERR_RENDER_FAILED', 'The page ran out of memory while rendering.')
-          : new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${String(error?.message ?? error).split('\n')[0]}`);
-      reject(out);
+    host.once('error', error => {
+      finish(() => reject(new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${String(error?.message ?? error).split('\n')[0]}`)));
     });
-    worker.once('exit', code => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(new RenderError('ERR_RENDER_FAILED', `The page stopped rendering without an answer (exit ${code}).`));
+    host.once('exit', (code, signal) => {
+      finish(() => {
+        const crash = crashOf(code, signal);
+        if (crash) resolve({crashed: crash});
+        else if (signal) reject(crashError(signal, {crashed: false, withoutSegmenter: input.withoutSegmenter}));
+        else reject(new RenderError('ERR_RENDER_FAILED', `The page stopped rendering without an answer (exit ${code}).`));
+      });
     });
   });
+}
+
+/**
+ * Run the page. When this Node crashes in Intl.Segmenter, run it once more
+ * without Intl.Segmenter and say so in a warning.
+ * @param {{entry: string, root: string, served: ServedSet | null}} input
+ * @param {number} timeoutMs
+ * @param {RenderWarning[]} warnings
+ */
+async function runPage(input, timeoutMs, warnings) {
+  const started = Date.now();
+  const first = await runWorker({...input, withoutSegmenter: false}, timeoutMs);
+  if (!first.crashed) return first;
+  if (!segmenterCrashes()) throw crashError(first.crashed, {crashed: true, withoutSegmenter: false});
+  const again = await runWorker({...input, withoutSegmenter: true}, Math.max(1000, timeoutMs - (Date.now() - started)));
+  if (again.crashed) throw crashError(again.crashed, {crashed: true, withoutSegmenter: true});
+  warnings.push(segmenterWarning());
+  return again;
+}
+
+/**
+ * The warning for a page rendered without Intl.Segmenter.
+ * @returns {RenderWarning}
+ */
+export function segmenterWarning() {
+  return {
+    code: 'node-crash',
+    message: `This Node build (${process.version} at ${process.execPath}) crashes in Intl.Segmenter, so the page rendered without it, and the output may differ slightly: initials and character counts (such as Avatar initials) can split a joined emoji, a flag, or a letter written with a separate accent mark. Render with an official Node.js build to remove the difference.`,
+  };
 }
 
 /**
@@ -371,9 +465,9 @@ export async function renderPage(entry, options = {}) {
   const dir = path.dirname(entry);
   const root = projectRootOf(dir);
   const served = options.served ?? null;
-  const message = await runWorker(entry, root, options.timeoutMs ?? RENDER_TIMEOUT_MS, served);
   /** @type {RenderWarning[]} */
   const warnings = [];
+  const message = await runPage({entry, root, served}, options.timeoutMs ?? RENDER_TIMEOUT_MS, warnings);
   if (!message.ok) {
     throw new RenderError(message.error.code, message.error.message, message.error.detail);
   }
