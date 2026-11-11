@@ -276,8 +276,11 @@ another implementation helper.
   DateInput, DateTimeInput, TimeInput, and NumberInput reveal a value rejection
   once the entry is complete and a text rejection at commit, show every
   rejection as a visible message with the invalid state and one announcement,
-  and keep rejected text at commit. `spec:AST-118` owns the rule, including
-  when each kind of entry is complete.
+  and keep rejected text at commit. DateInput shows its message over a caller
+  `status`, and NumberInput and TimeInput show a caller `status` over theirs;
+  NumberInput and TimeInput report each rejection through
+  `onEntryErrorChange`. `spec:AST-118` owns the rule, including when each kind
+  of entry is complete.
 
 ## Allowed component variation
 
