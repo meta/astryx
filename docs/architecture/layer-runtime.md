@@ -41,6 +41,8 @@ verified_by:
     packages/core/src/Layer/layerExitCopy.test.ts,
     packages/core/src/Layer/presentationHold.test.tsx,
     packages/core/src/Layer/__tests__/layerExitCopy.interaction.browser.spec.ts,
+    packages/core/src/Layer/layerEntranceSide.test.ts,
+    packages/core/src/Layer/__tests__/LayerEntranceSide.interaction.browser.spec.ts,
     packages/core/src/Popover/Popover.test.tsx,
     packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
     packages/core/src/ContextMenu/ContextMenu.test.tsx,
@@ -76,7 +78,8 @@ deciding_specs: [spec:AST-038, spec:AST-059]
       "INV14",
       "INV15",
       "INV17",
-      "INV18"
+      "INV18",
+      "INV20"
     ],
     "layout": ["INV3", "INV11", "INV12"]
   }
@@ -637,12 +640,13 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV18 — Only a shown layer's trigger is an anchor.**
   A trigger carries its CSS anchor name only while its layer is shown; a closed trigger is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
   A layer that animates out through a CSS transition or keyframe animation it declares for its closed state counts as shown until those animations end; an animation a script starts is not tracked.
-- **INV23 — Content in a layer sizes against the layer.** The content root of
-  every layer that hosts page-like content (Dialog, Drawer, BottomSheet,
-  Lightbox, and MobileNav) is an inline-size container. Container queries and
-  container-relative units inside it, including Layout regions' widths,
-  resolve against the layer and never against a container around the layer's
-  opener (`spec:AST-038`) (DEC-1).
+- **INV20 — An entrance starts from the side its layer lands on.** On the
+  pointer path an anchored layer's entrance slides from, and scales about,
+  the side it lands on after any flip. So it never slides onto its trigger.
+  It scales about the point where the layer meets its trigger: on the edge
+  that faces the trigger, on the trigger's center line. A layer that covers
+  its trigger's center has no side: its entrance scales about that center
+  and does not slide.
 
 - **INV21 — Script never moves a layer to follow its anchor.** An anchored
   layer follows its anchor through CSS anchor positioning only; no script
@@ -655,6 +659,13 @@ layers use Layer rendering without joining Escape/platform dismissal.
   feedback scales only the trigger's own visual; a layer renders outside that
   scaled subtree and anchors to the trigger's untransformed box
   (`spec:AST-059` DEC-10).
+
+- **INV23 — Content in a layer sizes against the layer.** The content root of
+  every layer that hosts page-like content (Dialog, Drawer, BottomSheet,
+  Lightbox, and MobileNav) is an inline-size container. Container queries and
+  container-relative units inside it, including Layout regions' widths,
+  resolve against the layer and never against a container around the layer's
+  opener (`spec:AST-038`) (DEC-1).
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -908,6 +919,7 @@ apps to add a container inside each dialog.
 | INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers                                                                                                                                                                                                                                                                                                                             | A click inside a layer root that reaches an ancestor bubble-phase handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                    |
 | INV18        | `useLayer.test.tsx` (a closed trigger has no anchor-name, and the trigger of a shown or fading layer does) and `TooltipClosedTriggerAnchor.interaction.browser.spec.ts` in Chromium and WebKit                                                                                                                                                                                                                                                                                                                                                                                                            | A closed trigger with an anchor-name, a shown or fading layer placed away from its anchor, or a surface around a closed trigger that stops while the main thread is busy                                                                                                                                                                                                                                                     |
 | INV18        | `useLayer.test.tsx`: a closed state that declares a discrete `display` transition or a keyframe animation keeps the trigger's anchor name until those animations end, read from the closed state's style; a layer whose closed state declares neither is not read for animations at the close                                                                                                                                                                                                                                                                                                             | A layer with such a closed-state exit placed away from its anchor while it fades, or an animation read on the close of a layer whose closed state declares no exit                                                                                                                                                                                                                                                           |
+| INV20        | `layerEntranceSide.test.ts` for the side and the meeting point, and `LayerEntranceSide.interaction.browser.spec.ts` in Chromium and WebKit for the first frame of each anchored layer that flips                                                                                                                                                                                                                                                                                                                                                                                                          |
 | INV21        | A source check over Core for a scroll, resize, observer or animation-frame handler that writes a layer's `top`, `left`, `inset`, `translate` or `transform` from a measured rectangle, excluding the keyboard lift; a performance trace of a page scroll with an open Popover, counting script position writes                                                                                                                                                                                                                                                                                            | A script write of a layer's position during a scroll, or a handler outside DEC-9's four uses that moves a layer toward its anchor                                                                                                                                                                                                                                                                                            |
 | INV22        | `LayerPressTransform.interaction.browser.spec.ts`: a browser case per layer that opens from a pressable trigger (Popover, DropdownMenu, Selector, MultiSelector, ComplexSelector, ContextMenu), by mouse and by finger: during and after a press, the layer's rectangle, layout box and computed transform match an unpressed open, and a layer that opens on the press is placed from the untransformed box in its first frame.                                                                                                                                                                          | A layer whose rectangle, size or computed transform changes while its trigger is pressed                                                                                                                                                                                                                                                                                                                                     |
 | INV23        | Real-browser checks: a Dialog, a Drawer, and a BottomSheet opened from a section that is itself an inline-size container, each holding a Layout with a header and footer, at 390 and 1440 px                                                                                                                                                                                                                                                                                                                                                                                                              | Layout regions measured against the opener's container                                                                                                                                                                                                                                                                                                                                                                       |
