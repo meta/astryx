@@ -114,9 +114,6 @@
   "packages/core/src/theme/Theme.tsx": [
     "data-astryx-id",
     "data-astryx-id",
-    "data-astryx-id",
-    "data-astryx-id",
-    "data-astryx-theme-prose",
     "data-astryx-theme-prose"
   ],
   "packages/core/src/theme/syntax/SyntaxTheme.tsx": [
