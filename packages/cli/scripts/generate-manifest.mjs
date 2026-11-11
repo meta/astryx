@@ -15,49 +15,34 @@
 
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {isDeepStrictEqual} from 'node:util';
 import {MANIFEST_FILE} from '../clients/cli/lib/manifest.mjs';
+import {
+  assertSameBesideLockfiles,
+  inFreshFolder,
+} from './same-beside-lockfiles.mjs';
 
 /** The CLI's bin, run as a user runs it. */
 const BIN = fileURLToPath(
   new URL('../clients/cli/bin/astryx.mjs', import.meta.url),
 );
 
-/** Each package manager's lockfile, as the CLI tells them apart. */
-const LOCKFILES = [
-  'package-lock.json',
-  'pnpm-lock.yaml',
-  'yarn.lock',
-  'bun.lock',
-];
-
 /**
- * The manifest the CLI builds, run from a fresh folder with `lockfile`.
- * @param {string | null} lockfile
+ * The manifest the CLI builds, run from `dir`.
+ * @param {string} dir
  * @returns {unknown}
  */
-function manifestBeside(lockfile) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-manifest-'));
-  try {
-    if (lockfile) {
-      fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"probe"}');
-      fs.writeFileSync(path.join(dir, lockfile), '');
-    }
-    const env = {...process.env, NO_UPDATE_NOTIFIER: '1'};
-    const run = spawnSync(process.execPath, [BIN, 'manifest', '--json'], {
-      cwd: dir,
-      encoding: 'utf8',
-      env,
-      maxBuffer: 64 * 1024 * 1024,
-    });
-    if (run.status !== 0) throw new Error(run.stderr);
-    return JSON.parse(run.stdout).data;
-  } finally {
-    fs.rmSync(dir, {recursive: true, force: true});
-  }
+function manifestIn(dir) {
+  const env = {...process.env, NO_UPDATE_NOTIFIER: '1'};
+  const run = spawnSync(process.execPath, [BIN, 'manifest', '--json'], {
+    cwd: dir,
+    encoding: 'utf8',
+    env,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (run.status !== 0) throw new Error(run.stderr);
+  return JSON.parse(run.stdout).data;
 }
 
 /**
@@ -65,12 +50,8 @@ function manifestBeside(lockfile) {
  * @returns {string}
  */
 export function manifestText() {
-  const data = manifestBeside(null);
-  for (const lockfile of LOCKFILES) {
-    if (!isDeepStrictEqual(manifestBeside(lockfile), data)) {
-      throw new Error(`the manifest differs beside ${lockfile}`);
-    }
-  }
+  const data = inFreshFolder(manifestIn);
+  assertSameBesideLockfiles('the manifest', data, manifestIn);
   return JSON.stringify(data) + '\n';
 }
 
