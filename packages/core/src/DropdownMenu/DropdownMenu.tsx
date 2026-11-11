@@ -47,7 +47,7 @@ import React, {
 } from 'react';
 import {readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {
   claimPress,
@@ -1033,27 +1033,21 @@ function DropdownMenuPopover({
     if (!isControlled) {
       setInternalIsOpen(false);
     }
-    const trigger = buttonRef.current;
-    if (!trigger) {
-      return;
-    }
-    const active = document.activeElement;
-    const focusLandedElsewhere =
-      active instanceof HTMLElement &&
-      active !== document.body &&
-      active !== trigger &&
-      !contentRef.current?.contains(active);
-    if (focusLandedElsewhere) {
-      return;
-    }
-    prepareFocusReturn();
-    // After pointer input the trigger takes focus without the focus-visible
-    // ring (`component:DropdownMenu/DEC-1`). The style the helper above adds
-    // reaches only the design system's own Button; the browser's focus option
-    // also reaches a control the caller renders, which the browser would
-    // otherwise ring (Chromium after a mouse pick, WebKit after a touch).
-    returnFocusForLastInput(trigger);
-  }, [hideOpenFlyouts, isControlled, onOpenChange, prepareFocusReturn]);
+  }, [hideOpenFlyouts, isControlled, onOpenChange]);
+
+  // How returned focus moves. After pointer input the trigger takes focus
+  // without a ring. The helper's style reaches only the design system's own
+  // Button. The browser's focus option also reaches a control the caller
+  // renders, which Chromium rings after a mouse pick and WebKit after a touch.
+  const restoreFocusTo = useCallback(
+    (element: HTMLElement) => {
+      if (element === buttonRef.current) {
+        prepareFocusReturn();
+      }
+      returnFocusForLastInput(element);
+    },
+    [prepareFocusReturn],
+  );
 
   // Defer item focus until the layer has committed open, so focus restore
   // captures the trigger instead of the first menu item.
@@ -1108,7 +1102,8 @@ function DropdownMenuPopover({
         ? button.label
         : undefined;
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
+    restoreFocusTo,
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     hasLightDismiss: true,

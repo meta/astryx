@@ -567,6 +567,10 @@ function usePopoverImplementation(
 
   // Track the trigger element for returning focus
   const triggerElementRef = useRef<HTMLElement | null>(null);
+  // The caller's `anchor`, and the element it is bound to now.
+  const anchorOptionRef = useRef(anchor);
+  anchorOptionRef.current = anchor;
+  const boundAnchorRef = useRef<Element | null>(null);
 
   // Track whether to skip auto-focus for the current open event
   const skipAutoFocusRef = useRef(false);
@@ -585,12 +589,24 @@ function usePopoverImplementation(
   // A caller that may cancel an outside dismissal gets the outside-press
   // watch in place of native light dismiss, which no script can cancel.
   const watchesOutsidePress = hasLightDismiss && onOutsidePress != null;
+  // Focus returns as the popover starts to close, while it still holds focus:
+  // the browser restores focus only for an auto popover whose opener is still
+  // there, and then with a focus ring whatever the last input was. The trap
+  // below supplies the return; it is read through a ref because the layer
+  // exists first.
+  const returnFocusRef = useRef<() => void>(() => {});
+  const onCloseStartRef = useRef(onCloseStart);
+  onCloseStartRef.current = onCloseStart;
+  const handleCloseStart = useCallback(() => {
+    returnFocusRef.current();
+    onCloseStartRef.current?.();
+  }, []);
   const layer = useLayerInternal({
     mode: 'context',
     lightDismiss: hasLightDismiss && !watchesOutsidePress,
     onShow: handleLayerShow,
     onHide,
-    onCloseStart,
+    onCloseStart: handleCloseStart,
     hidesWithAnchor: anchorOutOfView === 'hide',
   });
 
@@ -603,14 +619,22 @@ function usePopoverImplementation(
   const getOpenerRef = useRef(getOpener);
   getOpenerRef.current = getOpener;
   const getRestoreTarget = useCallback(() => openerRef.current, []);
-  const {containerRef: contentRef, focusFirst} =
-    useFocusTrapInternal<HTMLDivElement>({
-      isActive: layer.isOpen,
-      onEscape: hasEscapeDismiss || hasLightDismiss ? layer.hide : undefined,
-      getRestoreTarget,
-      getRestoreFallback,
-      restoreFocusTo,
-    });
+  const {
+    containerRef: contentRef,
+    focusFirst,
+    returnFocus,
+  } = useFocusTrapInternal<HTMLDivElement>({
+    isActive: layer.isOpen,
+    onEscape: hasEscapeDismiss || hasLightDismiss ? layer.hide : undefined,
+    getRestoreTarget,
+    getRestoreFallback,
+    restoreFocusTo,
+    getTrigger: () => triggerElementRef.current,
+    getAnchor: () =>
+      anchorOptionRef.current == null ? null : boundAnchorRef.current,
+    layerId: layer.id,
+  });
+  returnFocusRef.current = returnFocus;
 
   const focusInitialTarget = useCallback(() => {
     const container = contentRef.current;
@@ -667,10 +691,7 @@ function usePopoverImplementation(
   const layerRef = layer.ref;
   // With a separate `anchor`, the trigger keeps its role but is not the
   // layer's anchor: the element `anchor` resolves to is.
-  const anchorOptionRef = useRef(anchor);
-  anchorOptionRef.current = anchor;
   const hasSeparateAnchor = anchor != null;
-  const boundAnchorRef = useRef<Element | null>(null);
   const isAnchorBoundRef = useRef(false);
   const [isAnchorMissing, setIsAnchorMissing] = useState(false);
   const triggerRef = useCallback(

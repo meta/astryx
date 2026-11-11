@@ -144,6 +144,11 @@ export const docs = {
       'Dialog displays a modal overlay that blocks interaction with the page until the user responds. Use it for delete confirmations, edit forms, terms acceptance, or any decision that should not be skipped.\n\nFor cases where you want to show a dialog without managing open state, use the `useImperativeDialog` hook: call `dialog.show(content)` and render `dialog.element` in your tree.',
     bestPractices: [
       {
+        guidance: false,
+        description:
+          "Don't add your own focus return or try to turn it off. When the dialog closes, focus goes back to the opener, or to the nearest control that stands in for it (a dialog opened from a menu row returns focus to the menu's trigger), never to the page. To send focus somewhere specific, focus that element in onOpenChange.",
+      },
+      {
         guidance: true,
         description:
           'Choose the right purpose: info for dismissable content, form to prevent accidental backdrop dismissal, required when the user must respond.',
@@ -214,6 +219,11 @@ export const docsZh = {
     description:
       'Dialog displays a modal overlay that blocks interaction with the page until the user responds. Use it for delete confirmations, edit forms, terms acceptance, or any decision that should not be skipped.',
     bestPractices: [
+      {
+        guidance: false,
+        description:
+          '不要自行实现或关闭焦点返回。对话框关闭时，焦点会回到打开它的元素，或回到最近的替代控件（从菜单项打开的对话框会把焦点还给菜单的触发器），绝不会落到页面上。若要把焦点移到特定位置，请在 onOpenChange 中聚焦该元素。',
+      },
       {
         guidance: true,
         description:

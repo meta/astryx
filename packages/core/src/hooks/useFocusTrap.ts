@@ -18,7 +18,13 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
-import {isFocusLost} from '../utils/focusReturn';
+import {
+  cancelLayerFocus,
+  prepareFocusRepairOnRemoval,
+  restoreLayerFocus,
+  trackLayerFocus,
+  type LayerFocusRecord,
+} from '../utils/focusReturn';
 import {isHTMLElement} from '../utils/nodeType';
 
 import {FOCUSABLE_SELECTOR} from './focusableSelector';
@@ -561,28 +567,46 @@ interface InternalFocusTrapOptions extends UseFocusTrapOptions {
    */
   getRestoreTarget?: () => HTMLElement | null;
   /**
-   * Where focus goes on deactivation when the restore target is gone (no
-   * longer connected), read at deactivation. Without it, focus is left where
-   * the browser puts it.
+   * A component's own stand-in for an opener that is gone, read at
+   * deactivation. It comes after the opener and its trigger in the shared
+   * return chain.
    */
   getRestoreFallback?: () => HTMLElement | null;
   /**
-   * Moves focus to the element the trap restores to on deactivation, in
-   * place of `element.focus()`, so the caller knows which focus is the
-   * return.
+   * Moves focus to the element the trap returns to, in place of the shared
+   * move, so the caller knows which focus is the return.
    */
   restoreFocusTo?: (element: HTMLElement) => void;
+  /** The overlay's trigger now, for an opener that remounted. */
+  getTrigger?: () => HTMLElement | null;
+  /** The overlay's anchor now, when it is not the trigger. */
+  getAnchor?: () => Element | null;
+  /** The id the trigger's `aria-controls` names. */
+  layerId?: string;
+}
+
+export interface InternalFocusTrapReturn<
+  T extends HTMLElement = HTMLElement,
+> extends UseFocusTrapReturn<T> {
+  /**
+   * Runs the focus return now, as the overlay starts to close and while it
+   * still holds focus. Deactivation then has nothing left to do.
+   */
+  returnFocus: () => void;
 }
 
 export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
   options: InternalFocusTrapOptions,
-): UseFocusTrapReturn<T> {
+): InternalFocusTrapReturn<T> {
   const {
     isActive,
     onEscape,
     getRestoreTarget,
     getRestoreFallback,
     restoreFocusTo,
+    getTrigger,
+    getAnchor,
+    layerId,
   } = options;
   const getRestoreTargetRef = useRef(getRestoreTarget);
   getRestoreTargetRef.current = getRestoreTarget;
@@ -590,6 +614,12 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
   getRestoreFallbackRef.current = getRestoreFallback;
   const restoreFocusToRef = useRef(restoreFocusTo);
   restoreFocusToRef.current = restoreFocusTo;
+  const getTriggerRef = useRef(getTrigger);
+  getTriggerRef.current = getTrigger;
+  const getAnchorRef = useRef(getAnchor);
+  getAnchorRef.current = getAnchor;
+  const layerIdRef = useRef(layerId);
+  layerIdRef.current = layerId;
 
   const containerRef = useRef<T | null>(null);
 
@@ -630,100 +660,70 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
   }, []);
 
   /**
-   * Capture the element focused before the trap activated, and restore focus to
-   * it when the trap deactivates (or the component unmounts). Overlays are
-   * opened imperatively (e.g. `showPopover()`), so the browser's declarative
-   * popover focus restoration does not apply — without this, closing a Popover
-   * via Escape or light dismiss drops keyboard focus to `<body>`.
-   *
-   * The restore is guarded so it never steals focus a consumer moved on
-   * purpose: it only runs when focus would otherwise be lost — i.e. the active
-   * element is nothing, the document body/root, or still inside the (possibly
-   * now-unmounted) trap container. If focus already moved to some other element
-   * outside the trap (the user clicked elsewhere, or a consumer such as
-   * DropdownMenu already refocused its trigger), the restore is a no-op.
-   *
-   * The restore is also skipped when focus never entered the trap while it
-   * was active. Some popups — a Typeahead/PowerSearch listbox anchored to its
-   * own input — deliberately keep DOM focus on the trigger and never move it
-   * into the trap container (they open with `role: "none"` and
-   * `hasAutoFocus: false`). For those, the restore would cancel a blur the
-   * user asked for on outside-click dismissal, re-focusing the trigger so a
-   * second click no longer fires a `focus` event and cannot reopen the menu.
-   * Tracking `focusin` inside the container distinguishes "focus was here and
-   * we should rescue it" from "focus was never here and we should leave it
-   * alone" — popups that do take focus (Dialog, DropdownMenu, a Typeahead
-   * option click) are unaffected.
+   * The shared layer focus return (`utils/focusReturn`). Activation records
+   * the opener and its stand-ins; deactivation, or an earlier `returnFocus`,
+   * returns focus that the close would strand. Overlays are opened
+   * imperatively (`showPopover()`), and the browser restores focus only for
+   * an auto popover whose opener is still there, so the trap owns the return.
+   * Focus that never entered the container (a listbox popup that keeps focus
+   * on its input) or that already left it is not moved.
    */
+  const recordRef = useRef<LayerFocusRecord | null>(null);
   useEffect(() => {
     if (!isActive) {
       return;
     }
-
-    // Snapshot the container now; by cleanup it may be detached or unmounted.
     const container = containerRef.current;
-    const doc = trapDocument(container);
-    const previouslyFocused =
-      getRestoreTargetRef.current?.() ??
-      (doc.activeElement as HTMLElement | null);
-
-    // Whether focus ever entered the trap container while it was active.
-    // Initialized from the current active element in case focus was already
-    // inside at activation (e.g. a programmatic focus before the effect ran).
-    let hadFocusInside =
-      container != null && container.contains(doc.activeElement);
-
-    const markFocusInside = (event: FocusEvent) => {
-      const target = event.target as Node | null;
-      if (target != null && containerRef.current?.contains(target)) {
-        hadFocusInside = true;
-      }
-    };
-    doc.addEventListener('focusin', markFocusInside, true);
-
-    const restoreFocus = (element: HTMLElement) => {
-      const restoreTo = restoreFocusToRef.current;
-      if (restoreTo == null) {
-        element.focus();
-      } else {
-        restoreTo(element);
-      }
-    };
-
+    const record = trackLayerFocus({
+      getLayer: () => containerRef.current ?? container,
+      opener: getRestoreTargetRef.current?.() ?? null,
+      getTrigger: () => getTriggerRef.current?.() ?? null,
+      getRestoreFallback: () => getRestoreFallbackRef.current?.() ?? null,
+      getAnchor: () => getAnchorRef.current?.() ?? null,
+      layerId: layerIdRef.current ?? null,
+      focus:
+        restoreFocusToRef.current == null
+          ? undefined
+          : element => restoreFocusToRef.current?.(element),
+      doc: container?.ownerDocument,
+    });
+    recordRef.current = record;
+    const repairOnRemoval =
+      container == null ? null : prepareFocusRepairOnRemoval(container);
     return () => {
-      doc.removeEventListener('focusin', markFocusInside, true);
-
-      if (!hadFocusInside) {
+      recordRef.current = null;
+      if (record.isDone) {
         return;
       }
-
-      if (!isFocusLost(container, doc)) {
+      if (container == null || container.isConnected) {
+        restoreLayerFocus(record);
+        cancelLayerFocus(record);
         return;
       }
-
-      // The page itself is no place to return to: an opener removed before
-      // the overlay opened leaves the body as the element focused then.
-      const isPage =
-        previouslyFocused === doc.body ||
-        previouslyFocused === doc.documentElement;
-      if (
-        previouslyFocused != null &&
-        previouslyFocused.isConnected &&
-        typeof previouslyFocused.focus === 'function' &&
-        !(isPage && getRestoreFallbackRef.current != null)
-      ) {
-        restoreFocus(previouslyFocused);
+      // Removed while active, as with its owner or its whole view. An
+      // opener still on the page takes focus at once. Otherwise the return
+      // waits until the removal is done, so it never lands on an element the
+      // same removal is taking away.
+      if (restoreLayerFocus(record, {isOpenerOnly: true})) {
         return;
       }
-      const fallback = getRestoreFallbackRef.current?.();
-      if (fallback != null && fallback.isConnected) {
-        restoreFocus(fallback);
-      }
+      repairOnRemoval?.(() => {
+        restoreLayerFocus(record, {warnsWhenNothingQualifies: false});
+      });
+      queueMicrotask(() => cancelLayerFocus(record));
     };
   }, [isActive]);
+
+  const returnFocus = useCallback(() => {
+    const record = recordRef.current;
+    if (record != null) {
+      restoreLayerFocus(record);
+    }
+  }, []);
 
   return {
     containerRef,
     focusFirst,
+    returnFocus,
   };
 }
