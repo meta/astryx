@@ -120,24 +120,44 @@ describe('extractImportedPackages reads only real module specifiers', () => {
     );
   });
 
-  it('drops path aliases and names npm does not accept', () => {
+  it('drops path aliases and names npm does not accept, and keeps legacy capitals', () => {
     const source = [
       "import {Card} from '@/components/card';",
       "import {cn} from '~/lib/utils';",
       "import data from '#internal/data';",
-      "import X from 'Next';",
+      "import x from 'not a package';",
+      "import JSONStream from 'JSONStream';",
       "import {a} from 'valid-pkg';",
     ].join('\n');
-    expect(extractImportedPackages(source)).toEqual(new Set(['valid-pkg']));
+    expect(extractImportedPackages(source)).toEqual(
+      new Set(['JSONStream', 'valid-pkg']),
+    );
+  });
+
+  it('reads a type-only import() reference and a require() call', () => {
+    const source = [
+      "type Options = import('chart-lib').Options;",
+      "const legacy = require('legacy-lib');",
+    ].join('\n');
+    expect(extractImportedPackages(source)).toEqual(
+      new Set(['chart-lib', 'legacy-lib']),
+    );
   });
 
   it('still reads a source the parser cannot read, statement by statement', () => {
     const source = [
       "import {a} from 'kept-pkg';",
       "// import {b} from 'commented-pkg';",
+      'import {',
+      '  LineChart,',
+      "} from 'recharts';",
+      "export const name = 'not-a-pkg';",
+      "export {c} from 'reexported-pkg';",
       'const = ;',
     ].join('\n');
-    expect(extractImportedPackages(source)).toEqual(new Set(['kept-pkg']));
+    expect(extractImportedPackages(source)).toEqual(
+      new Set(['kept-pkg', 'recharts', 'reexported-pkg']),
+    );
   });
 
   it.each([

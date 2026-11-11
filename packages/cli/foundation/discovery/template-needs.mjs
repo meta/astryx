@@ -18,7 +18,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import module from 'node:module';
-import {parse as parseModule} from '@babel/parser';
+import {parseTemplateSource, walk} from './template-source-tree.mjs';
 import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
 import {
@@ -36,17 +36,22 @@ const STYLEX_RUNTIME = '@stylexjs/stylex';
 // Node builtins: anything with a `node:` prefix or in builtinModules.
 const NODE_BUILTINS = new Set(module.builtinModules);
 
-/** A package name npm accepts: lowercase, optionally scoped. */
-const NPM_NAME = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
+/**
+ * A package name npm accepts, optionally scoped. Legacy names keep capitals
+ * (`JSONStream`). A name has no `~`, so `~/lib` is a path alias, as are
+ * `@/components` and `#internal`.
+ */
+const NPM_NAME = /^(?:@[A-Za-z0-9][\w.-]*\/)?[A-Za-z0-9][\w.-]*$/;
 
 /**
  * Extract bare (non-relative) package names from ES import statements.
  *
  * Only real module specifiers count: `import … from`, a side-effect
- * `import '…'`, `export … from`, and a dynamic `import('…')` with a string.
+ * `import '…'`, `export … from`, a dynamic `import('…')` or `require('…')`
+ * with a string, and a type `import('…')`.
  * Words in comments, strings and JSX text never count, and a specifier that
  * is not an npm package name (`@/components`, `~/lib`, `#internal`, a word
- * with capitals or spaces) is an alias or a typo, not a package to install.
+ * with spaces) is an alias or a typo, not a package to install.
  *
  * @param {string} source Template source code
  * @returns {Set<string>} Unique package names (scoped packages normalized to
@@ -76,58 +81,47 @@ export function extractImportedPackages(source) {
  * @returns {string[]}
  */
 function moduleSpecifiers(source) {
-  let ast;
+  let file;
   try {
-    ast = parseModule(source, {
-      sourceType: 'module',
-      errorRecovery: true,
-      plugins: ['jsx', 'typescript'],
-    });
+    file = parseTemplateSource(source, {errorRecovery: true});
   } catch {
     return scannedSpecifiers(source);
   }
   /** @type {string[]} */
   const specs = [];
-  /** @param {any} node */
-  const visit = node => {
-    if (node == null || typeof node !== 'object') return;
-    if (Array.isArray(node)) {
-      for (const child of node) visit(child);
-      return;
-    }
+  /** @param {any} literal */
+  const add = literal => {
+    if (literal?.type === 'StringLiteral') specs.push(literal.value);
+  };
+  walk(file.program, (/** @type {any} */ node) => {
     if (
-      (node.type === 'ImportDeclaration' ||
-        node.type === 'ExportNamedDeclaration' ||
-        node.type === 'ExportAllDeclaration') &&
-      node.source?.type === 'StringLiteral'
+      node.type === 'ImportDeclaration' ||
+      node.type === 'ExportNamedDeclaration' ||
+      node.type === 'ExportAllDeclaration'
     ) {
-      specs.push(node.source.value);
+      add(node.source);
     } else if (
       node.type === 'CallExpression' &&
-      node.callee?.type === 'Import' &&
-      node.arguments?.[0]?.type === 'StringLiteral'
+      node.callee?.type === 'Import'
     ) {
-      specs.push(node.arguments[0].value);
+      add(node.arguments?.[0]);
     } else if (
-      node.type === 'ImportExpression' &&
-      node.source?.type === 'StringLiteral'
+      node.type === 'CallExpression' &&
+      node.callee?.type === 'Identifier' &&
+      node.callee.name === 'require'
     ) {
-      specs.push(node.source.value);
+      add(node.arguments?.[0]);
+    } else if (node.type === 'ImportExpression') {
+      add(node.source);
+    } else if (node.type === 'TSImportType') {
+      // `type O = import('chart-lib').Options`
+      add(
+        node.argument?.type === 'TSLiteralType'
+          ? node.argument.literal
+          : node.argument,
+      );
     }
-    for (const key of Object.keys(node)) {
-      if (
-        key === 'loc' ||
-        key === 'leadingComments' ||
-        key === 'trailingComments' ||
-        key === 'innerComments'
-      ) {
-        continue;
-      }
-      const child = node[key];
-      if (child != null && typeof child === 'object') visit(child);
-    }
-  };
-  visit(ast.program);
+  });
   return specs;
 }
 
@@ -136,12 +130,14 @@ function scannedSpecifiers(source) {
   const code = source
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '');
+  // A statement starts a line: `import '…'`, or `import`/`export` with a
+  // clause, which may span lines, then `from '…'`.
   const re =
-    /^\s*(?:import|export)\b[^'"\n;]*?(?:\bfrom\s*)?['"]([^'"\n]+)['"]|\bimport\(\s*['"]([^'"\n]+)['"]\s*\)/gm;
+    /^\s*import\s*['"]([^'"\n]+)['"]|^\s*(?:import|export)\b[^'";]*?\bfrom\s*['"]([^'"\n]+)['"]|\bimport\(\s*['"]([^'"\n]+)['"]\s*\)/gm;
   /** @type {string[]} */
   const specs = [];
   let m;
-  while ((m = re.exec(code)) !== null) specs.push(m[1] ?? m[2]);
+  while ((m = re.exec(code)) !== null) specs.push(m[1] ?? m[2] ?? m[3]);
   return specs;
 }
 
