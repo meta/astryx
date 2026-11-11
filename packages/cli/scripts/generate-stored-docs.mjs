@@ -13,7 +13,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {parse} from '@babel/parser';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
@@ -181,9 +181,8 @@ export async function storedDocsText() {
 }
 
 const isMain =
-  process.argv[1] &&
-  path.resolve(process.argv[1]) ===
-    path.resolve(new URL(import.meta.url).pathname);
+  Boolean(process.argv[1]) &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 
 if (isMain && process.argv.includes('--clean')) {
   // `postpack`: the checkout goes back to importing every doc, so a later

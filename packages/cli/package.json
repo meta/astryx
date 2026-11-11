@@ -117,7 +117,6 @@
     "typecheck:strict": "tsc --project tsconfig.strict.json",
     "typecheck:authoring": "tsc --project tsconfig.authoring-contract.json",
     "sync:api-types": "node scripts/sync-api-types.mjs",
-    "generate:stored-docs": "node scripts/generate-stored-docs.mjs",
     "readme": "node scripts/generate-cli-readme.mjs",
     "readme:check": "node scripts/generate-cli-readme.mjs --check",
     "postpack": "node scripts/generate-stored-docs.mjs --clean",

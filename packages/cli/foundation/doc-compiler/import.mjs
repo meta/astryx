@@ -5,7 +5,9 @@
  *   authored doc file.
  *
  * @input An absolute path to a `.doc.{ts,mjs,js}` (or legacy template) file.
- * @output The module's namespace object: the one a plain import of the file
+ * @output The module's exports: for a doc Astryx ships whose text matches its
+ *   stored exports, a frozen, namespace-like object built from them (see
+ *   `storedModule`); otherwise the namespace object a plain import of the file
  *   gives, until the file changes; then the edited file's, read once by each
  *   importer, its own way, and shared until the next change. A long-running
  *   process (a docs site's search, an agent harness) thereby sees an edit to

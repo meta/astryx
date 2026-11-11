@@ -20,8 +20,6 @@ import {
 } from '../test-utils/global-local-fixtures.mjs';
 
 const STORE = 'assets/docs.generated.json';
-const REPO = path.resolve(CLI_ROOT, '..', '..');
-const SANDBOX = path.join(REPO, 'apps', 'sandbox');
 const VERSION = JSON.parse(
   fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
 ).version;
@@ -30,17 +28,40 @@ const VERSION = JSON.parse(
 let work;
 /** @type {string} */
 let packed;
+/**
+ * A project of no CLI of its own, where each CLI answers itself: inside a
+ * project with its own CLI (such as apps/sandbox), a run hands off to that
+ * copy.
+ * @type {string}
+ */
+let outside;
 
 beforeAll(() => {
   work = fs.mkdtempSync(path.join(os.tmpdir(), 'packed-docs-'));
   // The run's packed CLI, as `pnpm publish` makes it, placed with its
   // dependencies as an install would.
   packed = placeCli(path.join(work, 'cli'), VERSION).dir;
+  outside = fs.mkdtempSync(path.join(os.tmpdir(), 'packed-docs-run-'));
+  // A consumer project with Core installed and no CLI of its own, so both
+  // copies see the same Core and neither hands off.
+  fs.writeFileSync(
+    path.join(outside, 'package.json'),
+    JSON.stringify({name: 'consumer', private: true}),
+  );
+  fs.mkdirSync(path.join(outside, 'node_modules', '@astryxdesign'), {
+    recursive: true,
+  });
+  fs.symlinkSync(
+    path.resolve(CLI_ROOT, '..', 'core'),
+    path.join(outside, 'node_modules', '@astryxdesign', 'core'),
+    'dir',
+  );
 }, 120_000);
 
 afterAll(() => {
   recyclePlacedCopies();
   if (work) fs.rmSync(work, {recursive: true, force: true});
+  if (outside) fs.rmSync(outside, {recursive: true, force: true});
 });
 
 /**
@@ -71,12 +92,14 @@ export async function load(url, context, next) {
       '--json',
     ],
     {
-      cwd: SANDBOX,
+      cwd: outside,
       encoding: 'utf8',
       env: {...process.env, IMPORT_LOG: log, NO_UPDATE_NOTIFIER: '1'},
     },
   );
   expect(run.status, run.stderr).toBe(0);
+  // The copy run answered, not one it handed off to.
+  expect(JSON.parse(run.stdout).meta.answeredBy.copy).not.toBe('project');
   return {
     stdout: run.stdout,
     imported: fs.readFileSync(log, 'utf8').split('\n').filter(Boolean),
