@@ -29,10 +29,11 @@ import React, {
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Grid} from '@astryxdesign/core/Grid';
 import {HStack, VStack, StackItem} from '@astryxdesign/core/Stack';
-import {Text} from '@astryxdesign/core/Text';
+import {Text, useTruncation} from '@astryxdesign/core/Text';
 import {Card} from '@astryxdesign/core/Card';
 import {Icon} from '@astryxdesign/core/Icon';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
+import {Avatar} from '@astryxdesign/core/Avatar';
 import {ClickableCard} from '@astryxdesign/core/ClickableCard';
 import {Dialog} from '@astryxdesign/core/Dialog';
 import {Popover} from '@astryxdesign/core/Popover';
@@ -42,22 +43,26 @@ import {rtlStyles} from '@astryxdesign/core/utils';
 import {useClipboard, useMediaQuery} from '@astryxdesign/core/hooks';
 import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
+import {Selector} from '@astryxdesign/core/Selector';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {
   ArrowRightIcon,
   BanknotesIcon,
+  BarsArrowDownIcon,
+  BarsArrowUpIcon,
   ChartBarIcon,
   CheckIcon,
   ClockIcon,
   CommandLineIcon,
+  HandThumbUpIcon,
   HeartIcon,
   MagnifyingGlassIcon,
   NoSymbolIcon,
   PaintBrushIcon,
   PlayCircleIcon,
   PlusIcon,
+  StarIcon as StarLine,
   XMarkIcon,
-  StarIcon,
 } from '@heroicons/react/24/outline';
 import {
   CheckBadgeIcon as CheckBadgeSolid,
@@ -76,6 +81,10 @@ import {
   CheckBadgeIcon as Certificate01Icon,
   ClipboardDocumentCheckIcon as CheckListIcon,
   ChatBubbleBottomCenterTextIcon as ClosedCaptionIcon,
+  ChatBubbleOvalLeftIcon as Comment01Icon,
+  FireIcon as Dumbbell01Icon,
+  ArrowTrendingUpIcon as GaugeIcon,
+  EyeIcon as GlassesIcon,
   GlobeAltIcon as Globe02Icon,
   Square3Stack3DIcon as Layers01Icon,
   LinkIcon as Link01Icon,
@@ -85,6 +94,7 @@ import {
   ShareIcon as Share03Icon,
   LockOpenIcon as SquareUnlock02Icon,
   TrophyIcon as StarAward01Icon,
+  TagIcon as Tag01Icon,
   UserGroupIcon as TeachingIcon,
   BriefcaseIcon as WorkHistoryIcon,
 } from '@heroicons/react/24/outline';
@@ -93,10 +103,6 @@ import {
 import {ClockIcon as Clock01Icon} from '@heroicons/react/24/outline';
 import {Section} from '@astryxdesign/core/Layout';
 import {Heading} from '@astryxdesign/core/Text';
-import {Button} from '@astryxdesign/core/Button';
-import {Avatar} from '@astryxdesign/core/Avatar';
-import {Link} from '@astryxdesign/core/Link';
-import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Badge} from '@astryxdesign/core/Badge';
 
 /**
@@ -187,10 +193,56 @@ const hoverStyles = `
 .cr7-menurow{display:flex;align-items:center;gap:8px;width:100%;height:36px;padding-inline:10px;border-radius:calc(var(--radius-container)*0.6);font-size:14px;color:var(--color-text-primary);text-align:start;cursor:pointer;background:transparent;border:none;transition:background-color var(--duration-fast) var(--ease-standard);}
 .cr7-menurow:hover{background:var(--color-background-wash);}
 .cr7-menurow:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:-2px;}
+/* The reviews, two abreast with rules between: in one column a rule under
+   every review but the last; in two, a rule down the middle and one under
+   every row but the last. */
+.cr7-reviews{display:grid;grid-template-columns:minmax(0,1fr);margin-top:40px;margin-bottom:0;padding:0;list-style:none;}
+@media(min-width:768px){.cr7-reviews{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.cr7-rv{min-width:0;list-style:none;}
+.cr7-rv-b{border-bottom:1px solid var(--color-border);padding-bottom:32px;}
+.cr7-rv-t{padding-top:32px;}
 /* (Polish: the side paddings held the design's md: prefix — below
    md the list is one column and a review runs the full measure, not a
    column 40px short of its heading.) */
-
+@media(min-width:768px){
+  .cr7-rv-l{padding-inline-end:40px;}
+  .cr7-rv-r{padding-inline-start:40px;}
+}
+@media(min-width:1280px){.cr7-rv-l{padding-inline-end:48px}.cr7-rv-r{padding-inline-start:48px}}
+@media(min-width:768px){
+  .cr7-rv-b{border-bottom:0;padding-bottom:0;}
+  .cr7-rv-t{padding-top:0;}
+  .cr7-rv-rowb{border-bottom:1px solid var(--color-border);padding-bottom:40px;}
+  .cr7-rv-rowt{padding-top:40px;}
+  .cr7-rv-mid{border-inline-end:1px solid var(--color-border);}
+}
+/* The review row's spread + six ruled score cells (the reviews: lg:flex,
+   spread lg:w-72/xl:w-80, the cells lg:flex-1 lg:border-l). */
+.cr7-scorerow{display:flex;flex-direction:column;}
+@media(min-width:1024px){.cr7-scorerow{flex-direction:row;}}
+.cr7-spread{max-width:384px;flex:0 1 auto;}
+@media(min-width:1024px){.cr7-spread{width:288px;max-width:none;flex:0 0 auto;padding-inline-end:40px;}}
+@media(min-width:1280px){.cr7-spread{width:320px;}}
+/* The six score cells, on the design's own ladder (the reviews): a
+   sideways-scrolling strip on a phone (edge-to-edge over the container's
+   padding, a hairline between cells, first cell flush), a six-column grid
+   from sm, and only from lg the row beside the spread with its own left
+   rule — below lg the strip/grid sits UNDER the spread with mt-8. */
+.cr7-scores{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));margin-top:32px;}
+.cr7-score{display:flex;flex-direction:column;min-width:0;border-inline-start:1px solid var(--color-border);padding-inline-start:16px;padding-inline-end:8px;}
+.cr7-score:first-child{border-inline-start:none;padding-inline-start:0;}
+@media(min-width:1024px){
+  .cr7-scores{flex:1 1 0%;margin-top:0;border-inline-start:1px solid var(--color-border);}
+  .cr7-score{padding-inline-start:24px;}
+  .cr7-score:first-child{padding-inline-start:24px;}
+}
+@media(max-width:639px){
+  .cr7-scores{display:flex;overflow-x:auto;margin-inline:-24px;padding-inline:24px;scrollbar-width:none;}
+  .cr7-scores::-webkit-scrollbar{display:none;}
+  .cr7-score{flex:0 0 auto;width:112px;}
+}
+/* A held review: four lines, then "Show more". */
+.cr7-clamp{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
 /* The panel's primary CTA: the brand fill, the ink on it, the fill at 80%
    under the pointer (the design's hover:bg-primary/80). */
 .cr7-cta{display:flex;height:44px;width:100%;align-items:center;justify-content:center;gap:8px;border-radius:var(--radius-element);background:var(--color-accent);padding-inline:24px;font-size:14px;font-weight:500;color:var(--color-on-accent);border:none;cursor:pointer;transition:background-color var(--duration-fast) var(--ease-standard);}
@@ -310,6 +362,14 @@ const hoverStyles = `
 .cr12-scrub .astryx-slider-track{height:8px !important;background:var(--color-background-muted) !important;}
 .cr12-scrub .astryx-slider-track + div{height:8px !important;}
 .cr12-scrub .astryx-slider-thumb{width:24px !important;height:24px !important;background:var(--color-background-card) !important;box-shadow:var(--shadow-low) !important;}
+/* The reviews' toolbar on a phone, as the reviews holds it: the two selects
+   a column under the search (each w-full, the design's w-full sm:w-48),
+   the pair held to the right edge only from lg (lg:ml-auto). */
+.cr12-selcol{display:flex;flex-direction:column;gap:12px;}
+@media(min-width:640px){
+  .cr12-selcol{flex-direction:row;align-items:center;}
+}
+@media(min-width:1024px){.cr12-selcol{margin-inline-start:auto;}}
 /* The instructor's two buttons, on the design's own recipe
    (instructor.tsx + follow-button.tsx): a 40px row of muted fill that
    darkens a rung under the pointer; Follow answering in the brand fill,
@@ -444,50 +504,6 @@ const BASE_COURSE = {
   ],
 };
 
-const ASPECTS = [
-  {label: 'Content depth', score: 4.9},
-  {label: 'Practical exercises', score: 4.8},
-  {label: 'Instructor clarity', score: 4.9},
-  {label: 'Pacing', score: 4.6},
-  {label: 'Materials and project', score: 4.7},
-  {label: 'Community support', score: 4.5},
-];
-
-const REVIEWS = [
-  {
-    name: 'Drew Young',
-    avatar: '/template-assets/DATA-Drew-Young.png',
-    date: 'Reviewed 2 weeks ago',
-    rating: 5,
-    body: 'The evaluation module alone is worth the price. I walked in with a half-working RAG demo and walked out with a harness that caught two regressions in our first sprint after launch.',
-    helpful: 41,
-  },
-  {
-    name: 'Jihoo Song',
-    avatar: '/template-assets/DATA-Jihoo-Song.png',
-    date: 'Reviewed a month ago',
-    rating: 5,
-    body: 'Gabriela explains rerankers better than the papers do. The chunking lesson changed how our team splits documentation, and the project review was concrete, not rubber-stamp.',
-    helpful: 28,
-  },
-  {
-    name: 'Ana Thomas',
-    avatar: '/template-assets/DATA-Ana-Thomas.png',
-    date: 'Reviewed 2 months ago',
-    rating: 4,
-    body: 'Dense but fair. I wanted more on fine-tuning and got none — the course is honest about scoping to what ships. The structured-output lessons replaced three fragile regex pipelines of mine.',
-    helpful: 19,
-  },
-  {
-    name: 'Pablo Morales',
-    avatar: '/template-assets/DATA-Pablo-Morales.png',
-    date: 'Reviewed 3 months ago',
-    rating: 5,
-    body: 'I have taken four applied-AI courses this year and finished one. This is the one. Every module ends in something that runs, exactly as promised, and the finish-date picker kept me honest about pacing.',
-    helpful: 33,
-  },
-];
-
 const FAQS = [
   {
     q: 'Do I need production access to a language model?',
@@ -506,30 +522,6 @@ const FAQS = [
     a: 'Yes — a graded certificate issued when the reviewed project passes. It lists the pipeline you built, not just attendance.',
   },
 ];
-
-function StarRating({rating, count}: {rating: number; count?: number}) {
-  const filled = Math.round(rating);
-  const empty = 5 - filled;
-
-  return (
-    <HStack gap={1} vAlign="center">
-      {Array.from({length: filled}, (_, i) => (
-        <Icon key={`full-${i}`} icon={StarIconSolid} size="sm" />
-      ))}
-      {Array.from({length: empty}, (_, i) => (
-        <Icon key={`empty-${i}`} icon={StarIcon} size="sm" />
-      ))}
-      {count === undefined && (
-        <VisuallyHidden>{`Rated ${rating} out of 5`}</VisuallyHidden>
-      )}
-      {count !== undefined && (
-        <Text type="body" color="secondary">
-          {rating} ({count.toLocaleString('en-US')})
-        </Text>
-      )}
-    </HStack>
-  );
-}
 
 function SectionHeader({title, action}: {title: string; action?: ReactNode}) {
   return (
@@ -562,94 +554,6 @@ function AboutSection() {
 }
 
 // ─── Syllabus ────────────────────────────────────────────────────────────────
-
-function ReviewCard({review}: {review: (typeof REVIEWS)[number]}) {
-  return (
-    <Card padding={4}>
-      <VStack gap={3}>
-        <HStack gap={2} vAlign="center">
-          <Avatar name={review.name} src={review.avatar} size="sm" />
-          <VStack gap={1}>
-            <Text type="body" weight="bold">
-              {review.name}
-            </Text>
-            <Text type="supporting" color="secondary">
-              {review.date}
-            </Text>
-          </VStack>
-        </HStack>
-        <StarRating rating={review.rating} />
-        <Text type="body">{review.body}</Text>
-        <HStack gap={2} vAlign="center">
-          <Button
-            label={`Helpful (${review.helpful})`}
-            variant="ghost"
-            size="sm"
-            icon={<Icon icon={CheckIcon} size="xsm" />}
-          />
-        </HStack>
-      </VStack>
-    </Card>
-  );
-}
-
-function ReviewsSection() {
-  return (
-    <Section padding={6}>
-      <VStack gap={4}>
-        <SectionHeader
-          title="Reviews"
-          action={
-            <Link href="#" type="supporting" color="secondary">
-              How reviews work
-            </Link>
-          }
-        />
-        <Card padding={5}>
-          <VStack gap={4}>
-            <HStack gap={5} vAlign="center">
-              <VStack gap={1}>
-                <Text type="display-3">{BASE_COURSE.rating}</Text>
-                <StarRating rating={BASE_COURSE.rating} />
-                <Text type="supporting" color="secondary">
-                  {BASE_COURSE.ratingCount.toLocaleString('en-US')} reviews
-                </Text>
-              </VStack>
-              <StackItem size="fill">
-                <VStack gap={3}>
-                  {ASPECTS.map(aspect => (
-                    <VStack key={aspect.label} gap={1}>
-                      <HStack gap={2} vAlign="center" hAlign="between">
-                        <Text type="body" color="secondary">
-                          {aspect.label}
-                        </Text>
-                        <Text type="body" color="secondary">
-                          {aspect.score.toFixed(1)}
-                        </Text>
-                      </HStack>
-                      <ProgressBar
-                        label={aspect.label}
-                        isLabelHidden
-                        value={(aspect.score / 5) * 100}
-                      />
-                    </VStack>
-                  ))}
-                </VStack>
-              </StackItem>
-            </HStack>
-          </VStack>
-        </Card>
-        <Grid columns={{minWidth: 280, repeat: 'fit'}} gap={4}>
-          {REVIEWS.map(review => (
-            <ReviewCard key={review.name} review={review} />
-          ))}
-        </Grid>
-      </VStack>
-    </Section>
-  );
-}
-
-// ─── FAQ ─────────────────────────────────────────────────────────────────────
 
 function FaqSection() {
   return (
@@ -889,6 +793,109 @@ const COURSE = {
       },
     ],
   },
+  // The written reviews, as the design's reviews.ts keeps them: stars,
+  // weeks ago, helpful counts (what "Most helpful" sorts by — the list
+  // itself never prints them), whether they finished, a face where the
+  // reviewer gave one (placeholder, hotlinked, never shipped) and initials where
+  // they did not, and one that runs past four lines so the list shows what
+  // a long one does.
+  reviews: [
+    {
+      id: 'r1',
+      name: 'Maya T.',
+      face: '/template-assets/DATA-Ami-Pena.png',
+      role: 'Analyst, logistics',
+      stars: 5,
+      weeks: 3,
+      helpful: 48,
+      finished: true,
+      text: 'Two courses in, I still froze at a blank screen. Here every lesson ends with something you write, and the tutor asks what you expect before it tells you whether you were right.',
+    },
+    {
+      id: 'r2',
+      name: 'Jonas W.',
+      role: 'Operations lead',
+      stars: 5,
+      weeks: 6,
+      helpful: 36,
+      finished: true,
+      text: 'Maya pointed at one step in my project and asked how many rows it should return. In five years of spreadsheets, I had never asked myself that.',
+    },
+    {
+      id: 'r3',
+      name: 'Priyanka S.',
+      face: '/template-assets/DATA-Daniela-Gimenez.png',
+      role: 'Product analyst',
+      stars: 4,
+      weeks: 2,
+      helpful: 21,
+      finished: true,
+      text: 'Strong on the fundamentals, and the practice sets are the best part. The second module moves fast, so I watched two lessons twice.',
+    },
+    {
+      id: 'r4',
+      name: 'Carlos M.',
+      face: '/template-assets/DATA-Drew-Young.png',
+      role: 'Finance associate',
+      stars: 5,
+      weeks: 9,
+      helpful: 67,
+      finished: true,
+      text: 'The tutor would not hand me the answer, which annoyed me for a week. It is also why I could do it alone in my interview last month.',
+    },
+    {
+      id: 'r5',
+      name: 'Ruth A.',
+      role: 'Marketing manager',
+      stars: 3,
+      weeks: 5,
+      helpful: 34,
+      finished: false,
+      text: 'Good material, but the pace assumes more free time than I had. Its 6 hours a week were closer to 9 for me once the project started.',
+    },
+    {
+      id: 'r6',
+      name: 'Wei L.',
+      face: '/template-assets/DATA-Itai-Jordaan.png',
+      role: 'Data engineer',
+      stars: 5,
+      weeks: 4,
+      helpful: 29,
+      finished: true,
+      text: 'I came for the syllabus and stayed for the project. The dataset is messy in the ways real data is, and nobody tidied it up for us first.',
+    },
+    {
+      id: 'r7',
+      name: 'Hannah K.',
+      role: 'Researcher',
+      stars: 4,
+      weeks: 7,
+      helpful: 12,
+      finished: true,
+      text: 'Clear lessons and honest quizzes. I wanted one more worked example before the project, and the forum had one within a day.',
+    },
+    {
+      id: 'r8',
+      name: 'Tunde O.',
+      role: 'Supply chain planner',
+      stars: 5,
+      weeks: 1,
+      helpful: 18,
+      finished: false,
+      text: 'I watched the hard lessons twice, the second time with the transcript open. Clicking a line to send the video to that minute saved me hours.',
+    },
+    {
+      id: 'r9',
+      name: 'Amara N.',
+      face: '/template-assets/DATA-Jihoo-Song.png',
+      role: 'Nurse, moving into data',
+      stars: 5,
+      weeks: 16,
+      helpful: 38,
+      finished: true,
+      text: 'I started without knowing what a CSV was. Maya never assumed I knew anything, never made me feel slow for asking, and answered every question I posted, even the ones I was embarrassed to ask. By week six I was using what I learned at work, and my manager has since moved me onto the reporting team, where I build the weekly figures for every ward.',
+    },
+  ],
 };
 
 // ─── Shared helpers, ported ──────────────────────────────────────────────
@@ -930,6 +937,49 @@ const hash = (s: string) => [...s].reduce((a, c) => a + c.charCodeAt(0), 0);
 
 // Sample media: complete static fixture paths, so the copy step can find
 // and ship every file, and nothing hotlinks a host.
+
+/** How the course's reviews spread across one to five stars, as whole
+ *  percentages adding to 100 (the detail model spread): one family of shapes,
+ *  placed by the rating — a 4.8 course is mostly fives with a thin tail. */
+function spreadOf(rating: number, reviews: number) {
+  const tail = [0.7, 0.18, 0.07, 0.05];
+  const tailMean = 4 * tail[0] + 3 * tail[1] + 2 * tail[2] + 1 * tail[3];
+  const five = Math.min(
+    0.97,
+    Math.max(0.2, (rating - tailMean) / (5 - tailMean)),
+  );
+  const shares = [five, ...tail.map(t => t * (1 - five))];
+  const raw = shares.map(s => s * 100);
+  const pct = raw.map(Math.floor);
+  const order = raw
+    .map((r, i) => [r - Math.floor(r), i] as const)
+    .sort((a, b) => b[0] - a[0]);
+  for (let k = 0; k < 100 - pct.reduce((a, b) => a + b, 0); k++) {
+    pct[order[k][1]] += 1;
+  }
+  return pct.map((p, i) => ({
+    stars: 5 - i,
+    pct: p,
+    count: Math.round(shares[i] * reviews),
+  }));
+}
+
+// What learners are asked to rate besides the whole, in the order the page
+// draws them (the detail model aspectsOf): Pace scores lowest on most courses, as
+// it does on real ones.
+const ASPECTS: [string, number][] = [
+  ['Clarity', 0.1],
+  ['Pace', -0.25],
+  ['Practice', 0],
+  ['Tutor', 0.05],
+  ['Feedback', 0.05],
+  ['Value', -0.1],
+];
+const REVIEW_ASPECTS = ASPECTS.map(([label, lean]) => {
+  const jitter = ((hash(`c1${label}`) % 5) - 2) * 0.05;
+  const score = Math.min(5, Math.max(3.5, COURSE.rating + lean + jitter));
+  return {label, score: Math.round(score * 10) / 10};
+});
 
 // When the course can start, worked out from the page's frozen demo date
 // (the start picker): at the learner's own pace from that day, or with a
@@ -1646,6 +1696,42 @@ function SearchField({
         hasClear
       />
     </div>
+  );
+}
+
+/** The design's menu-style select: a trigger the search field's shape
+ *  (a glyph, the chosen label, a chevron) opening the popover the
+ *  design's own selects open — rows with a glyph and a label. */
+type SelectOption = {
+  value: string;
+  label: string;
+  icon?: ReactNode;
+  disabled?: boolean;
+};
+function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: SelectOption[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <Selector
+      label={label}
+      isLabelHidden
+      value={value}
+      onChange={onChange}
+      options={options.map(o => ({
+        value: o.value,
+        label: o.label,
+        icon: o.icon,
+        disabled: o.disabled,
+      }))}
+    />
   );
 }
 
@@ -3193,6 +3279,529 @@ function OtherCourse({
 }
 
 // ─── Reviews ────────────────────────────────────────────────────────────────
+type ReviewSort = 'helpful' | 'newest' | 'highest' | 'lowest';
+const ORDERS: {id: ReviewSort; label: string; Icon: typeof ClockIcon}[] = [
+  {id: 'helpful', label: 'Most helpful', Icon: HandThumbUpIcon},
+  {id: 'newest', label: 'Newest', Icon: ClockIcon},
+  {id: 'highest', label: 'Highest rated', Icon: BarsArrowDownIcon},
+  {id: 'lowest', label: 'Lowest rated', Icon: BarsArrowUpIcon},
+];
+
+// One glyph per thing learners rate, drawn large at the foot of its cell
+// as the design draws its own. Tutor keeps the AI glyph in the AI
+// accent, the mark the tutor wears everywhere else on the site.
+const aspectIcon: Record<string, IconSvgElement | 'tutor'> = {
+  Clarity: GlassesIcon,
+  Pace: GaugeIcon,
+  Practice: Dumbbell01Icon,
+  Tutor: 'tutor',
+  Feedback: Comment01Icon,
+  Value: Tag01Icon,
+};
+
+/** The first six reviews the list opens on; "Show more" brings in the rest. */
+const FIRST = 6;
+
+/** The design's line under its heading: how reviews get onto the page,
+ *  opened in place rather than sent to a page of its own. */
+function HowReviewsWork() {
+  return (
+    <Popover
+      label="How reviews work"
+      className="cr7-pop"
+      placement="below"
+      alignment="start"
+      width={320}
+      style={{padding: 20}}
+      content={
+        <VStack gap={2} style={{gap: 10}}>
+          <Text type="body" weight="medium">
+            How reviews work
+          </Text>
+          <ul
+            style={{
+              margin: '12px 0 0',
+              padding: 0,
+              listStyle: 'none',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              fontSize: 14,
+              color: 'var(--color-text-secondary)',
+            }}>
+            <li>
+              A learner can review a course after finishing its first two
+              modules, and can review it once.
+            </li>
+            <li>
+              The rating is the mean of every review the course has had. The six
+              scores come from the same form, one question each.
+            </li>
+            <li>
+              Nobody edits a review, and a low one stays up like any other.
+            </li>
+          </ul>
+        </VStack>
+      }>
+      {trigger => (
+        <button
+          type="button"
+          {...trigger}
+          style={{
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+            textDecorationLine: 'underline',
+            textUnderlineOffset: 4,
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            marginTop: -12,
+            cursor: 'pointer',
+            alignSelf: 'flex-start',
+          }}>
+          How reviews work
+        </button>
+      )}
+    </Popover>
+  );
+}
+
+function Reviews() {
+  const [stars, setStars] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
+  const [order, setOrder] = useState<ReviewSort>('helpful');
+  const [more, setMore] = useState(false);
+  const spread = spreadOf(COURSE.rating, COURSE.reviewCount);
+
+  const q = fold(query.trim());
+  const found = COURSE.reviews.filter(
+    r => !q || fold(r.text).includes(q) || fold(r.role).includes(q),
+  );
+  const list = found
+    .filter(r => (stars ? r.stars === stars : true))
+    .sort((a, b) =>
+      order === 'helpful'
+        ? b.helpful - a.helpful
+        : order === 'newest'
+          ? a.weeks - b.weeks
+          : order === 'highest'
+            ? b.stars - a.stars || b.helpful - a.helpful
+            : a.stars - b.stars || b.helpful - a.helpful,
+    );
+  const narrowed = stars !== null || !!q;
+  const shown = more || narrowed ? list : list.slice(0, FIRST);
+  const clear = () => {
+    setStars(null);
+    setQuery('');
+  };
+
+  // How many reviews each rating would leave, counted after the search, as
+  // the catalogue's filters count what an option would leave.
+  const leaves = (s: number) => found.filter(r => r.stars === s).length;
+  const starItems: SelectOption[] = [
+    {
+      value: 'all',
+      label: 'All ratings',
+      icon: (
+        <StarLine
+          aria-hidden="true"
+          style={{width: 16, height: 16, color: 'var(--color-text-secondary)'}}
+        />
+      ),
+    },
+    ...spread.map(s => ({
+      value: String(s.stars),
+      label: count(s.stars, 'star'),
+      icon: (
+        <StarIconSolid
+          aria-hidden="true"
+          style={{width: 16, height: 16, color: 'var(--color-text-primary)'}}
+        />
+      ),
+      disabled: stars !== s.stars && leaves(s.stars) === 0,
+    })),
+  ];
+  const orderItems: SelectOption[] = ORDERS.map(o => ({
+    value: o.id,
+    label: o.label,
+    icon: (
+      <o.Icon
+        aria-hidden="true"
+        style={{width: 16, height: 16, color: 'var(--color-text-secondary)'}}
+      />
+    ),
+  }));
+
+  return (
+    <VStack gap={0} align="stretch">
+      <HowReviewsWork />
+
+      {/* The design's row: the spread first, then one cell a score, with
+          a rule between each and the next. */}
+      <div className="cr7-scorerow" style={{marginTop: 32}}>
+        <div className="cr7-spread">
+          <p style={{margin: 0, fontSize: 14, fontWeight: 500}}>
+            Overall rating
+          </p>
+          <ul
+            style={{
+              margin: '8px 0 0',
+              padding: 0,
+              listStyle: 'none',
+              display: 'flex',
+              flexDirection: 'column',
+            }}>
+            {spread.map(s => (
+              <li
+                key={s.stars}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  fontSize: 12,
+                  color: 'var(--color-text-secondary)',
+                }}>
+                <span
+                  aria-hidden="true"
+                  style={{width: 8, fontVariantNumeric: 'tabular-nums'}}>
+                  {s.stars}
+                </span>
+                <VisuallyHidden>
+                  {count(s.stars, 'star')}, {s.pct}% of reviews
+                </VisuallyHidden>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    height: 4,
+                    flex: '1 1 auto',
+                    overflow: 'hidden',
+                    borderRadius: 999,
+                    background: 'var(--color-background-muted)',
+                  }}>
+                  <span
+                    style={{
+                      display: 'block',
+                      height: '100%',
+                      borderRadius: 999,
+                      background: 'var(--color-text-primary)',
+                      width: `${Math.max(s.pct, s.pct ? 2 : 0)}%`,
+                    }}
+                  />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <ul className="cr7-scores" style={{listStyle: 'none'}}>
+          {REVIEW_ASPECTS.map(a => {
+            const icon = aspectIcon[a.label];
+            return (
+              <li key={a.label} className="cr7-score">
+                <p style={{margin: 0, fontSize: 14, fontWeight: 500}}>
+                  {a.label}
+                </p>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 14,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                  {a.score.toFixed(1)}
+                </p>
+                <span
+                  style={{marginTop: 'auto', paddingTop: 24, display: 'flex'}}>
+                  {icon === 'tutor' ? (
+                    <HugeIcon
+                      icon={AiMagicIcon}
+                      size={30}
+                      strokeWidth={1.4}
+                      aria-hidden="true"
+                      style={{color: 'var(--color-text-purple)'}}
+                    />
+                  ) : (
+                    <HugeIcon
+                      icon={icon as IconSvgElement}
+                      size={30}
+                      strokeWidth={1.3}
+                      aria-hidden="true"
+                    />
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      {/* the rule under the row, and the three ways into the list: the
+          search on the left, the two selects held to the right edge
+          (the reviews: lg:ml-auto), as the design sets them */}
+      <div className="cr7-toolbar" style={{marginTop: 32}}>
+        <SearchField
+          label="Search the reviews"
+          placeholder="Search the reviews"
+          value={query}
+          onChange={setQuery}
+        />
+        {/* the two selects, as the reviews holds them: a column under the
+            search on a phone with each trigger the full row (w-full
+            sm:w-48), a row from sm, held to the right edge only from lg */}
+        <div className="cr12-selcol">
+          <SelectField
+            label="Filter the reviews by rating"
+            value={stars === null ? 'all' : String(stars)}
+            options={starItems}
+            onChange={v => setStars(v === 'all' ? null : Number(v))}
+          />
+          <SelectField
+            label="Sort the reviews"
+            value={order}
+            options={orderItems}
+            onChange={v => setOrder(v as ReviewSort)}
+          />
+        </div>
+      </div>
+
+      {narrowed && list.length > 0 && (
+        <p
+          style={{
+            margin: '20px 0 0',
+            fontSize: 14,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: '4px 12px',
+          }}>
+          <span
+            aria-hidden="true"
+            style={{color: 'var(--color-text-secondary)'}}>
+            {list.length} of the {COURSE.reviews.length} here
+          </span>
+          <button
+            type="button"
+            onClick={clear}
+            style={{
+              textDecorationLine: 'underline',
+              textUnderlineOffset: 4,
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              fontSize: 14,
+              cursor: 'pointer',
+              color: 'inherit',
+            }}>
+            Clear the filters
+          </button>
+        </p>
+      )}
+
+      {list.length === 0 ? (
+        <VStack
+          gap={2}
+          style={{
+            marginTop: 32,
+            borderRadius: 'var(--radius-container)',
+            background: 'var(--color-background-muted)',
+            padding: 24,
+            width: '100%',
+          }}>
+          <Text type="body" weight="medium">
+            {!q
+              ? `No ${stars}-star review in this sample`
+              : stars !== null
+                ? `No ${stars}-star review here mentions “${query.trim()}”`
+                : `No review here mentions “${query.trim()}”`}
+          </Text>
+          <Text type="supporting" color="secondary">
+            The sample is {COURSE.reviews.length} of{' '}
+            {figure(COURSE.reviewCount)}. Clear the filters to read them all.
+          </Text>
+          <button
+            type="button"
+            onClick={clear}
+            className="cr7-ringbtn"
+            style={{marginTop: 16, width: 'fit-content'}}>
+            Clear the filters
+          </button>
+        </VStack>
+      ) : (
+        <ul className="cr7-reviews">
+          {shown.map((r, i) => (
+            <ReviewItem
+              key={r.id}
+              review={r}
+              query={q}
+              className={edges(i, shown.length)}
+            />
+          ))}
+        </ul>
+      )}
+
+      {!narrowed && list.length > FIRST && (
+        <HStack gap={5} vAlign="center" wrap="wrap" style={{marginTop: 48}}>
+          {!more && (
+            <button
+              type="button"
+              className="cr7-ringbtn"
+              onClick={() => setMore(true)}>
+              Show {list.length - FIRST} more reviews
+            </button>
+          )}
+          <Text type="supporting" color="secondary">
+            {more ? list.length : FIRST} of {figure(COURSE.reviewCount)} reviews
+          </Text>
+        </HStack>
+      )}
+    </VStack>
+  );
+}
+
+/** The rules round review `i` of `n`, and nothing round the list (the
+ *  design's edges): in one column a rule under every review but the
+ *  last; in two, a rule down the middle and one under every row but the
+ *  last. */
+function edges(i: number, n: number) {
+  const row = Math.floor(i / 2);
+  const rows = Math.ceil(n / 2);
+  const left = i % 2 === 0;
+  return [
+    'cr7-rv',
+    i < n - 1 && 'cr7-rv-b',
+    i > 0 && 'cr7-rv-t',
+    left ? 'cr7-rv-l' : 'cr7-rv-r',
+    left && i < n - 1 && 'cr7-rv-mid',
+    row < rows - 1 && 'cr7-rv-rowb',
+    row > 0 && 'cr7-rv-rowt',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+/** One review in a list: the face or initials, the name and role, the
+ *  stars, when, whether they finished, and the words (the design's
+ *  ReviewItem — the helpful count sorts the list and is never printed). */
+function ReviewItem({
+  review: r,
+  query,
+  className,
+}: {
+  review: (typeof COURSE.reviews)[number];
+  query: string;
+  className?: string;
+}) {
+  return (
+    <li className={className}>
+      <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
+        {/* the reviewer's photograph where they gave one, their initials
+            where they did not, as a real list mixes the two */}
+        <Avatar name={r.name} src={r.face} size={48} />
+        <p style={{margin: 0, minWidth: 0, flex: '1 1 auto'}}>
+          <span
+            style={{
+              display: 'block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 16,
+              fontWeight: 500,
+            }}>
+            {r.name}
+          </span>
+          <span
+            style={{
+              display: 'block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 14,
+              color: 'var(--color-text-secondary)',
+            }}>
+            {r.role}
+          </span>
+        </p>
+      </div>
+
+      <p
+        style={{
+          margin: '20px 0 0',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          columnGap: 8,
+          rowGap: 4,
+          fontSize: 14,
+          color: 'var(--color-text-secondary)',
+        }}>
+        <Stars value={r.stars} />
+        <span aria-hidden="true">·</span>
+        <span>{ago(r.weeks)}</span>
+        {r.finished && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span style={{display: 'flex', alignItems: 'center', gap: 4}}>
+              <CheckIcon
+                aria-hidden="true"
+                style={{
+                  width: 14,
+                  height: 14,
+                  color: 'var(--color-text-purple)',
+                }}
+              />
+              Finished
+            </span>
+          </>
+        )}
+      </p>
+
+      <Body text={r.text} query={query} />
+    </li>
+  );
+}
+
+/** A review's words, held to four lines as the design holds a long one,
+ *  with "Show more" under it only where the four lines cut something off.
+ *  A search opens every review it matched, so a marked word is never the
+ *  part that is cut. */
+function Body({text, query}: {text: string; query: string}) {
+  const [open, setOpen] = useState(false);
+  const clamped = !open && !query;
+  const truncation = useTruncation({maxLines: clamped ? 4 : 0});
+
+  return (
+    <>
+      <p
+        ref={truncation.ref}
+        className={clamped ? 'cr7-clamp' : undefined}
+        style={{margin: '10px 0 0', fontSize: 16}}>
+        <Marked text={text} query={query} />
+      </p>
+      {!query && (truncation.isTruncated || open) && (
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          aria-expanded={open}
+          style={{
+            marginTop: 8,
+            width: 'fit-content',
+            fontSize: 14,
+            fontWeight: 500,
+            textDecorationLine: 'underline',
+            textUnderlineOffset: 4,
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            color: 'inherit',
+          }}>
+          {open ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </>
+  );
+}
+
+// ─── Related courses ─────────────────────────────────────────────────────────
 //     + the phone's reach-bar) ────────────────────────────────────────────────
 function EnrollPanel() {
   const isMobile = useIsMobile();
@@ -3490,7 +4099,8 @@ export default function CourseDetailTemplate() {
                   <Covers />
                   <SectionHeader title="Your instructor" />
                   <Instructor />
-                  <ReviewsSection />
+                  <SectionHeader title="Reviews" />
+                  <Reviews />
                   <FaqSection />
                 </VStack>
                 <VStack gap={4} style={stickyRail}>
