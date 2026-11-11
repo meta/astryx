@@ -56,6 +56,7 @@ import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import {ItemLabelNeededContext} from '../Item/ItemLabelContext';
 import {ItemTrailingContext} from '../Item/ItemTrailingContext';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
+import type {Swipe} from '../Swipe/swipeHost';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isReportedRow, keepPresentation} from './listLayoutUpdates';
@@ -163,16 +164,14 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
    */
   itemKey?: string | number;
 
-  /**
-   * Swipe actions for touch, passed through to `Item` unchanged: the verbs a
-   * sideways drag uncovers on each side. See `Item.swipeActions`; `List`
-   * clips the rows in the inline axis for them.
-   */
+  /** Swipe actions from `createSwipe`, passed to `Item` unchanged. */
+  swipe?: Swipe;
+
+  /** @deprecated Pass `swipe` instead. */
   swipeActions?: ItemSwipeActions;
 
   /**
-   * What a swipe does, passed through to `Item` unchanged. See
-   * `Item.swipeBehavior`.
+   * @deprecated Set it in `swipe` instead.
    * @default 'reveal'
    */
   swipeBehavior?: ItemSwipeBehavior;
@@ -525,6 +524,7 @@ export function ListItem({
     isInList &&
     isTouchTarget &&
     servesSwipeActions({
+      swipe: restProps.swipe,
       swipeActions: restProps.swipeActions,
       isDisabled,
       isDelegate: interactiveRef != null,

@@ -12,6 +12,7 @@
 import {useRef} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {cleanup, render, screen} from '@testing-library/react';
+import {createSwipe} from '../Swipe/createSwipe';
 import userEvent from '@testing-library/user-event';
 import {rulesDeclaredFor} from '../__tests__/pressState';
 import {swipeLayerLoaded} from '../Item/__tests__/swipeLayerLoaded';
@@ -1257,7 +1258,30 @@ describe('List and swipe actions', () => {
     ).toEqual([]);
   });
 
-  it('passes swipeActions and swipeBehavior through to the row unchanged', async () => {
+  it('passes swipe through to the row unchanged', () => {
+    render(
+      <List>
+        <ListItem
+          label="A"
+          data-testid="row"
+          swipe={createSwipe({
+            trailing: [{label: 'Archive', onActivate: () => {}}],
+            swipeBehavior: 'commit',
+          })}
+        />
+      </List>,
+    );
+    const row = screen.getByTestId('row');
+    expect(row.tagName).toBe('LI');
+    expect(row.parentElement).toBe(screen.getByRole('list'));
+    // Commit: presentational, at the row's first render.
+    expect(row.querySelector('[data-swipe-panel="trailing"]')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+  });
+
+  it('passes the deprecated swipeActions and swipeBehavior through to the row unchanged (spec:AST-057 DEP-0017)', async () => {
     render(
       <List>
         <ListItem

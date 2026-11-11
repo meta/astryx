@@ -118,6 +118,12 @@ export const categories: SandboxCategory[] = [
           'A reorderable List, a TransferList and a reorderable List in a Card, on a page that scrolls with the document, to check on a phone',
       },
       {
+        name: 'Swipe Actions Cases',
+        href: '/pages/swipe-actions-cases/',
+        description:
+          'A mail List whose rows swipe to reveal and fire actions, on a page that scrolls with the document, to check on a phone',
+      },
+      {
         name: 'TextArea Counter',
         href: '/pages/textarea-counter/',
         description:

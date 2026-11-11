@@ -14,18 +14,19 @@
  *   those slots' own layout.
  * @position Core layout primitive; consumed by index.ts, tested by Item.test.tsx
  *
- * The swipe actions live in ItemSwipeLayer, reached only through a dynamic
- * import when `swipeActions` is set: this module imports nothing of the
- * gesture, so a row without swipe actions ships none of it. The root here
- * still carries the swipe styles and forwards its events into the bridge the
- * layer fills, so a swipeable row keeps the DOM and the event model it had
- * when the gesture was imported here (Item.source-build.test.mjs pins the
- * import graph).
+ * Swipe actions come in through `swipe`, a value `createSwipe` makes. That
+ * value carries the swipe's runtime. This module hands the runtime the row's
+ * root and facts, then renders what it gets back. The runtime gates the row,
+ * routes its keys and attaches the gesture to the root. This module imports
+ * nothing of the gesture. Its only swipe code is the deprecated path for
+ * `swipeActions` and `swipeBehavior`. That path keeps the released loader,
+ * row style, role gate, key bridge and coexistence warning.
+ * Item.source-build.test.mjs pins the import graph.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Item/Item.doc.mjs
  * - /packages/core/src/Item/Item.test.tsx
- * - /packages/core/src/Item/ItemSwipeLayer.tsx
+ * - /packages/core/src/Swipe/swipeHost.ts
  * - /packages/core/src/Item/index.ts
  * - /apps/storybook/stories/Item.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/Item/ (showcase blocks)
@@ -74,14 +75,25 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import type {ItemSwipeBridge} from './ItemSwipeLayer';
+import {
+  swipeHostOf,
+  type SwipeAction,
+  type Swipe,
+  type SwipeActionVariant,
+  type SwipeBehavior,
+  type SwipeBridge,
+} from '../Swipe/swipeHost';
+// The deprecated path's row style: a row given `swipeActions` takes it from
+// its first render, as released.
+import {swipeHostStyles} from '../Swipe/swipeHost.stylex';
 
-// The gesture and the panels, loaded only by a row that has swipe actions: a
-// row without them never bundles useSwipeAction. While the chunk loads the
-// row is already painted and at rest — the panels show nothing at rest, so
-// nothing appears or moves when the layer mounts; the gesture simply attaches
-// once the chunk is ready, as ProgressBar's and Timestamp's lazy affordances do.
-const LazyItemSwipeLayer = lazy(async () => import('./ItemSwipeLayer'));
+// The released loader: the deprecated `swipeActions` load the gesture and the
+// panels the first time a row has them. While the chunk loads the row is
+// already painted and at rest. The panels show nothing at rest, so nothing
+// appears or moves when the layer mounts.
+const DeprecatedSwipeLayer = lazy(
+  async () => import('../Swipe/DeprecatedSwipeLayer'),
+);
 
 // =============================================================================
 // Types
@@ -90,57 +102,20 @@ const LazyItemSwipeLayer = lazy(async () => import('./ItemSwipeLayer'));
 export type ItemAlign = 'center' | 'start' | 'first-line';
 export type ItemDensity = 'compact' | 'balanced' | 'spacious';
 
-/**
- * How a swipe action looks: ordinary, the one you mean, the dangerous one.
- * Three flavours of verb, not a status set.
- */
-export type ItemSwipeActionVariant = 'neutral' | 'accent' | 'destructive';
+/** @deprecated Use `SwipeActionVariant`. */
+export type ItemSwipeActionVariant = SwipeActionVariant;
 
-/** One verb a sideways drag uncovers. Every field is known before the gesture begins. */
-export interface ItemSwipeAction {
-  id?: string;
-  /**
-   * The verb's name, and the button's accessible name while the row rests
-   * open. Names the state the verb reaches ("Unread"), since the gesture
-   * already supplies the verb.
-   */
-  label: string;
-  /** Drawn above the label. */
-  icon?: ReactNode;
-  /**
-   * Fires at activation: a tap on a resting entry, the full-swipe
-   * accelerator, or a `commit` release. May return a Promise; the row
-   * waits for nothing.
-   */
-  onActivate: () => void | Promise<void>;
-  isDisabled?: boolean;
-  /** @default 'accent' */
-  variant?: ItemSwipeActionVariant;
-  /**
-   * After this action fires the row holds out at the edge it travelled
-   * toward instead of springing back. Only that: not a promise the caller
-   * removes the row, not an animation, not a timing rule.
-   * @default false
-   */
-  hasRemoval?: boolean;
-}
+/** @deprecated Use `SwipeAction`. */
+export type ItemSwipeAction = SwipeAction;
 
+/** @deprecated Use `CreateSwipeOptions`. */
 export interface ItemSwipeActions {
-  /** Uncovered by a drag toward the inline end (rightward in LTR); outermost last. */
   leading?: ItemSwipeAction[];
-  /** Uncovered by a drag toward the inline start (leftward in LTR); outermost last. */
   trailing?: ItemSwipeAction[];
 }
 
-/**
- * `reveal`: past half the panel, or after a fling, the row rests open with
- * every entry a real button; a long drag fires the outermost. On a side with
- * two or more entries, only a drag that starts on the open row fires it.
- * `commit`: a release past the commit point slides the row out and fires a
- * side's one entry; nothing rests, and the panel is presentational. On a side
- * with two or more entries, `commit` fires none. A fling never fires an entry.
- */
-export type ItemSwipeBehavior = 'reveal' | 'commit';
+/** @deprecated Use `SwipeBehavior`. */
+export type ItemSwipeBehavior = SwipeBehavior;
 
 export interface ItemProps extends BaseProps<HTMLElement> {
   /** Ref forwarded to the root element. */
@@ -288,33 +263,40 @@ export interface ItemProps extends BaseProps<HTMLElement> {
   isDisabled?: boolean;
 
   /**
-   * Swipe actions for touch: the verbs a sideways drag uncovers on each side,
-   * declared as data so the row paints the panel from them. A coarse pointer
-   * drags the row aside and uncovers the side's panel; a mouse never starts
-   * the drag, and a mostly vertical drag stays the scroller's. The gesture is
-   * a touch accelerator and never a row's only path to a verb: a verb
-   * reachable only by swipe is unreachable by keyboard and by mouse, so every
-   * entry must also be reachable through the row's own content (a menu or a
-   * button in `endContent`).
+   * The row's swipe actions, configured by one `createSwipe` call. They are the
+   * verbs a sideways drag uncovers on each side, declared as data so the row
+   * paints the panel from them. A finger, a pen or a trackpad's two-finger
+   * swipe drags the row aside and uncovers the side's panel. A mouse drag and a
+   * mouse wheel's notches never do, and a mostly vertical drag stays the
+   * scroller's. The gesture is a touch accelerator and never a row's only path
+   * to a verb. A verb reachable only by swipe is unreachable by keyboard and by
+   * mouse. So every entry must also be reachable through the row's own content
+   * (a menu or a button in `endContent`). An open row closes on a press by any
+   * pointer on its own content, which activates nothing and paints no press. It
+   * also closes on a press elsewhere, when the list or page scrolls with focus
+   * outside it, and on Escape.
    *
    * Available on a row whose role permits interactive descendants — a
    * `listitem`, a row with no role — and not served on one whose role forbids
    * them (`option`, `menuitem*`, a row that is the enlarged target of a native
    * radio). The element containing the rows clips in the inline axis
    * (`overflow-inline: clip`): `List` does; any other host does it once.
-   *
-   * The gesture and its panels are loaded on demand, the first time a row has
-   * swipe actions, so a row without them ships none of it; a row with them is
-   * drawn at once and becomes swipeable as soon as that module has loaded.
+   * The swipe's code comes with `createSwipe`. So a row given `swipe` is
+   * swipeable at its first paint, and an app that never imports it ships
+   * none of it.
+   */
+  swipe?: Swipe;
+
+  /**
+   * @deprecated Pass `swipe={createSwipe({leading, trailing})}`;
+   * `astryx upgrade` rewrites it. Still works as released; ignored when
+   * `swipe` is set.
    */
   swipeActions?: ItemSwipeActions;
 
   /**
-   * What a swipe does. `reveal` rests the row open with every entry tappable,
-   * and a long drag fires the outermost. On a side with two or more entries,
-   * only a drag from the open row fires it. `commit` slides the row out and
-   * fires a side's one entry on release. On a side with two or more entries,
-   * `commit` fires none.
+   * @deprecated Pass `swipeBehavior` in `createSwipe`' options;
+   * `astryx upgrade` rewrites it. Ignored when `swipe` is set.
    * @default 'reveal'
    */
   swipeBehavior?: ItemSwipeBehavior;
@@ -344,36 +326,50 @@ const ARIA_SELECTED_ROLES = new Set([
 ]);
 
 /**
- * Roles whose content model permits interactive descendants, so a swipe
- * panel's buttons may live inside the row. A row with no role at all
- * qualifies too; `option`, the `menuitem*` roles and the rest do not.
+ * The deprecated path's released role gate: roles whose content model permits
+ * interactive descendants, so a swipe panel's buttons may live inside the
+ * row. A row with no role at all qualifies too; `option`, the `menuitem*`
+ * roles and the rest do not. A row given `swipe` is gated by its runtime
+ * (Swipe/createSwipe.ts).
  */
 const SWIPE_ROLES = new Set(['listitem']);
 
 /**
  * Whether a row serves swipe actions, and so is a stacking context at rest:
- * its root translates (`styles.swipeRoot`). Swipe actions need a
- * role that permits interactive descendants, since a swipe panel holds
- * buttons. That is a `listitem`, or no role at all. A root that is itself a
- * link is not served, nor is a role that forbids interactive descendants. A
- * disabled row, a row with no entry on either side, and the enlarged target of
- * a nested control are not served either. Internal: under a finger,
- * List/ListItem.tsx raises such a row, so its touch band stays above the rows
- * after it.
+ * its root translates. Swipe actions need a role that permits interactive
+ * descendants, since a swipe panel holds buttons. That is a `listitem`, or no
+ * role at all. A root that is itself a link is not served, nor is a role that
+ * forbids interactive descendants. A disabled row, a row with no entry on
+ * either side, and the enlarged target of a nested control are not served
+ * either. `swipe` wins over the deprecated `swipeActions`. Internal: under a
+ * finger, List/ListItem.tsx raises such a row, so its touch band stays above
+ * the rows after it.
  */
 export function servesSwipeActions({
+  swipe,
   swipeActions,
   isDisabled,
   isDelegate,
   isLinkRoot,
   role,
 }: {
+  readonly swipe: Swipe | undefined;
   readonly swipeActions: ItemSwipeActions | undefined;
   readonly isDisabled: boolean;
   readonly isDelegate: boolean;
   readonly isLinkRoot: boolean;
   readonly role: string | null | undefined;
 }): boolean {
+  if (swipe != null) {
+    return (
+      swipeHostOf(swipe)?.serves({
+        role: role ?? undefined,
+        isDisabled,
+        isDelegate,
+        isLinkRoot,
+      }) ?? false
+    );
+  }
   return (
     swipeActions != null &&
     ((swipeActions.leading?.length ?? 0) > 0 ||
@@ -384,11 +380,6 @@ export function servesSwipeActions({
     (role == null || SWIPE_ROLES.has(role))
   );
 }
-
-/** The travel a drag writes on the row root, in physical px (see useSwipeAction). */
-const SWIPE_TRAVEL = 'var(--_item-swipe-travel, 0px)';
-/** The settle clock, `0s` while the finger drives the row. */
-const SWIPE_DURATION = 'var(--_item-swipe-duration, 0s)';
 
 // =============================================================================
 // Styles
@@ -576,19 +567,6 @@ const styles = stylex.create({
     display: 'flex',
     marginInlineStart: 'auto',
   },
-  // Swipe actions. The root translates by the drag's travel and settles on
-  // the clock the gesture writes; `pan-y` lets the browser keep scrolling the
-  // list while the row owns horizontal movement, and `pinch-zoom` leaves a
-  // two-finger pinch that starts on the row to the browser, so the page stays
-  // zoomable (WCAG 1.4.4). The hover transition keeps its own clock beside
-  // the transform's.
-  swipeRoot: {
-    touchAction: 'pan-y pinch-zoom',
-    transform: `translate3d(${SWIPE_TRAVEL}, 0, 0)`,
-    transitionProperty: 'background-color, transform',
-    transitionDuration: `${durationVars['--duration-fast-min']}, ${SWIPE_DURATION}`,
-    transitionTimingFunction: `${easeVars['--ease-standard']}, ease-out`,
-  },
 });
 
 const dynamicStyles = stylex.create({
@@ -650,8 +628,9 @@ export function Item({
   isHighlighted = false,
   isSelected = false,
   isDisabled = false,
+  swipe,
   swipeActions,
-  swipeBehavior = 'reveal',
+  swipeBehavior,
   xstyle,
   className,
   style,
@@ -722,29 +701,43 @@ export function Item({
       href != null ? actionLinkRef.current : actionButtonRef.current,
     );
 
-  const leadingSwipe = swipeActions?.leading ?? [];
-  const trailingSwipe = swipeActions?.trailing ?? [];
-  const hasSwipe = servesSwipeActions({
-    swipeActions,
+  // Swipe actions given as `swipe`: the row hands the runtime its facts, and
+  // renders what it gets back. Whether the row is served, and everything it
+  // is served with, is the runtime's.
+  const swipeAttachment =
+    swipe != null
+      ? (swipeHostOf(swipe)?.attach({
+          role,
+          isDisabled,
+          isDelegate,
+          isLinkRoot,
+        }) ?? null)
+      : null;
+
+  // The deprecated path, as released, for the deprecated `swipeActions` and
+  // `swipeBehavior`. `swipe` wins over them.
+  const deprecatedSwipe = swipe == null ? swipeActions : undefined;
+  const deprecatedLeading = deprecatedSwipe?.leading ?? [];
+  const deprecatedTrailing = deprecatedSwipe?.trailing ?? [];
+  const hasDeprecatedSwipe = servesSwipeActions({
+    swipe: undefined,
+    swipeActions: deprecatedSwipe,
     isDisabled,
     isDelegate,
     isLinkRoot,
     role,
   });
+  // The released `commit` warning comes with the loaded layer
+  // (DeprecatedSwipeLayer.tsx).
   useDevWarning(
     'Item',
-    '`swipeBehavior="commit"` fires no entry on a side with two or more ' +
-      'entries. Give a committing side one entry, or use ' +
-      '`swipeBehavior="reveal"`.',
-    hasSwipe &&
-      swipeBehavior === 'commit' &&
-      (leadingSwipe.length > 1 || trailingSwipe.length > 1),
+    '`swipe` is set, so the deprecated `swipeActions` and `swipeBehavior` are ignored.',
+    swipe != null && (swipeActions != null || swipeBehavior != null),
   );
-  const swipeRootRef = useRef<HTMLElement | null>(null);
-  // Filled by the swipe layer once it has mounted; empty until then and on a
-  // row without swipe actions, when the forwarders below do nothing.
-  const swipeBridgeRef = useRef<ItemSwipeBridge | null>(null);
-  const setSwipeBridge = useCallback((bridge: ItemSwipeBridge | null) => {
+  // The bridge the loaded layer fills. It is empty until then, and on a row
+  // without the deprecated props, when the forwarder below does nothing.
+  const swipeBridgeRef = useRef<SwipeBridge | null>(null);
+  const setSwipeBridge = useCallback((bridge: SwipeBridge | null) => {
     swipeBridgeRef.current = bridge;
   }, []);
   const linkRootProps = isLinkRoot
@@ -945,13 +938,10 @@ export function Item({
   );
 
   const mergedRef = useMergedRefs(ref, containerRef);
-  const rootRef = useMergedRefs(
-    (isDelegate || isLinkRow ? mergedRef : ref) as React.Ref<HTMLElement>,
-    hasSwipe ? swipeRootRef : undefined,
-  );
+  const rootRef = isDelegate || isLinkRow ? mergedRef : ref;
 
-  // The row's own primary, which the click the browser synthesizes after a
-  // drag must not fire.
+  // The row's own primary. The click the browser synthesizes after a swipe
+  // never reaches it: the gesture system swallows it.
   const primaryOnClick = isDelegate
     ? containerOnClick
     : hasParentRole
@@ -959,37 +949,16 @@ export function Item({
       : isInteractive
         ? handleContainerClick
         : undefined;
-  const rootOnClick =
-    hasSwipe && primaryOnClick != null
-      ? (event: React.MouseEvent<HTMLElement>) => {
-          if (swipeBridgeRef.current?.shouldSuppressClick() === true) {
-            return;
-          }
-          primaryOnClick(event);
-        }
-      : primaryOnClick;
-
-  // The gesture's handlers, forwarded from the root into the bridge the swipe
-  // layer fills: the root keeps the event model it had before the split — React's
-  // own pointer, click-capture and key events on the row's root — while the
-  // gesture itself lives in the lazily loaded layer. Until the layer has
-  // mounted the bridge is empty and each forwarder does nothing.
-  const swipeHandlers = hasSwipe
+  // The root's handlers: the ones the runtime gives a row given `swipe`. On
+  // the deprecated path, the forwarder of the root's key events into the
+  // bridge the loaded layer fills, as released. Until that layer has mounted
+  // the forwarder does nothing.
+  const swipeHandlers = hasDeprecatedSwipe
     ? {
-        onPointerDown: (event: React.PointerEvent) =>
-          swipeBridgeRef.current?.handlers.onPointerDown(event),
-        onPointerMove: (event: React.PointerEvent) =>
-          swipeBridgeRef.current?.handlers.onPointerMove(event),
-        onPointerUp: (event: React.PointerEvent) =>
-          swipeBridgeRef.current?.handlers.onPointerUp(event),
-        onPointerCancel: (event: React.PointerEvent) =>
-          swipeBridgeRef.current?.handlers.onPointerCancel(event),
-        onClickCapture: (event: React.MouseEvent) =>
-          swipeBridgeRef.current?.handlers.onClickCapture(event),
         onKeyDown: (event: React.KeyboardEvent) =>
-          swipeBridgeRef.current?.handlers.onKeyDown(event),
+          swipeBridgeRef.current?.onKeyDown(event),
       }
-    : undefined;
+    : swipeAttachment?.rootProps;
 
   return (
     <Component
@@ -1007,7 +976,7 @@ export function Item({
         : hasOwnAction && !isDisabled
           ? {
               onPointerDown: chainEventHandlers(
-                swipeHandlers?.onPointerDown ?? restProps.onPointerDown,
+                restProps.onPointerDown,
                 pressOnRow,
               ),
             }
@@ -1061,14 +1030,15 @@ export function Item({
           isHighlighted && styles.highlighted,
           isSelected && styles.selected,
           isDisabled && !hasParentRole && styles.disabled,
-          hasSwipe && styles.swipeRoot,
+          swipeAttachment?.rootStyle,
+          hasDeprecatedSwipe && swipeHostStyles.root,
           xstyle,
         ),
         className,
         style,
       )}
       role={role}
-      onClick={rootOnClick}>
+      onClick={primaryOnClick}>
       <ItemTrailingContext value={null}>
         <ItemDescriptionContext
           value={hasRenderableDescription ? descriptionID : null}>
@@ -1092,17 +1062,17 @@ export function Item({
           </ItemLabelContext>
         </ItemDescriptionContext>
       </ItemTrailingContext>
-      {hasSwipe && (
-        // The panels: out-of-flow children of this root, so the DOM is the one
-        // the row had before the split. Suspense and lazy add no element, and
-        // the fallback is nothing — at rest a panel shows nothing either.
+      {/* The panels: out-of-flow children of this root, so the row gains no
+          element. Suspense and lazy add none either, and the fallback is
+          nothing; at rest a panel shows nothing. */}
+      {swipeAttachment?.layer}
+      {hasDeprecatedSwipe && (
         <Suspense fallback={null}>
-          <LazyItemSwipeLayer
-            rootRef={swipeRootRef}
+          <DeprecatedSwipeLayer
             onBridge={setSwipeBridge}
-            leading={leadingSwipe}
-            trailing={trailingSwipe}
-            behavior={swipeBehavior}
+            leading={deprecatedLeading}
+            trailing={deprecatedTrailing}
+            behavior={swipeBehavior ?? 'reveal'}
           />
         </Suspense>
       )}

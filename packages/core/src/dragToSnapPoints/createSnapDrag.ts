@@ -2,8 +2,9 @@
 
 /**
  * @file createSnapDrag.ts
- * @input An element, its snap points, and options only Core passes: the
- *   pan's options, a custom property to draw into, and a model of the drag
+ * @input An element, its snap points, and options only Core passes. They are
+ *   the pan's options, a custom property to draw into, the parts a settle moves
+ *   on the compositor, and a drag model
  * @output Exports createSnapDrag and its types: the snap-point drag under the
  *   public `createDragToSnapPoints`
  * @position Internal to core, with `createDragToSnapPoints` as its public
@@ -19,13 +20,28 @@ import {
   type AnimatorOptions,
   type MotionHandle,
 } from '../motion/animator';
+import {resolveMotion} from '../motion/resolveMotion';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
-import type {SpringDescription} from '../motion/spring';
+import {solveSpring, toSpring, type SpringDescription} from '../motion/spring';
 import {registerSpringsTable, springs} from '../motion/uikit/springs';
 import {devWarn} from '../utils/devWarning';
+import {
+  playCompositorSettle,
+  type CompositorPart,
+  type CompositorSettle,
+} from './compositorSettle';
 
 /** The document timeline's clock, which the animator runs on. */
 const now = (): number => performance.now();
+
+/** Runs `callback` in the next animation frame (a timer without one). */
+function requestFrame(callback: () => void): void {
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => callback());
+  } else {
+    setTimeout(callback, 16);
+  }
+}
 
 /**
  * The release speed, in px/s, above which a drag carries to the next snap
@@ -122,6 +138,14 @@ export interface SnapDragOptions {
    * renders only x into it, so a y drag with it draws nothing.
    */
   customProperty?: AnimatorOptions['customProperty'];
+  /**
+   * The parts a settle moves on the compositor, for an element drawn into
+   * `customProperty`. Each part plays a `translate` that follows the axis by
+   * its own offset, while the property holds the settle's end. A drag
+   * catches the settle where it is on screen. Reduce Motion keeps the
+   * animator's cross-fade. `settleTo` returns null for such a settle.
+   */
+  compositorParts?: () => ReadonlyArray<CompositorPart>;
   /** The drag's model; the public one without it. */
   model?: SnapDragModel;
 }
@@ -145,13 +169,20 @@ export interface SettleOptions {
    * during a drag from the drag itself.
    */
   onPass?: {offset: number; direction: 1 | -1; call: () => void};
+  /**
+   * The settle is asked for in an input event's own task: a key, a click, a
+   * tap. From rest, it starts at the first frame after that task, however long
+   * the task runs (the animator's `start: 'next-frame'`).
+   */
+  start?: 'next-frame';
 }
 
 /** What `createSnapDrag` returns. */
 export interface SnapDrag {
   /**
-   * Settles the element on the snap point at `index`, then calls
-   * `onSettle`; returns the settle's motion (null when it does nothing).
+   * Settles the element on the snap point at `index`, then calls `onSettle`.
+   * Returns the settle's motion, or null when it does nothing or the compositor
+   * plays it.
    */
   settleTo(index: number, options?: SettleOptions): MotionHandle | null;
   /**
@@ -166,6 +197,13 @@ export interface SnapDrag {
   snapPoints(): ReadonlyArray<number>;
   /** The animator that draws the element (presentation values, curves). */
   readonly animator: Animator;
+  /** Where the element is on screen now, along the axis. */
+  position(): number;
+  /**
+   * Ends a compositor settle in flight at its end now, and calls `onSettle`.
+   * It does nothing to a settle the animator draws.
+   */
+  finishSettle(): void;
   /** Removes every listener and stops the element where it is. */
   destroy(): void;
 }
@@ -257,25 +295,109 @@ export function createSnapDrag(
     passed: boolean;
   } | null = null;
 
+  // The settle in flight on the compositor (compositorParts), if any, and
+  // what its end does.
+  let compositor: CompositorSettle | null = null;
+  let finishCompositor: (() => void) | null = null;
+  const position = (): number => compositor?.presented() ?? animator.get(axis);
+  /** Stops a compositor settle where it is on screen, and draws it there. */
+  const holdCompositor = () => {
+    if (compositor == null) {
+      return;
+    }
+    const value = compositor.stop();
+    compositor = null;
+    finishCompositor = null;
+    animator.set({[axis]: value}, {promote: false});
+  };
+
   const settle = (
     target: number,
     settleOptions: SettleOptions,
-  ): MotionHandle => {
+  ): MotionHandle | null => {
     registerSpringsTable();
     targetIndex = target;
     const mine = ++turn;
     const flight = {turn: mine, options: settleOptions, passed: false};
     inFlight = flight;
     const {velocity} = settleOptions;
+    const spring = settleOptions.spring ?? springs.settle;
+    const touchRelease = settleOptions.touchRelease === true;
+    const {compositorParts} = options;
+    if (
+      compositorParts != null &&
+      animator.reducedMotion({touchRelease}) === 'off'
+    ) {
+      // A zero velocity keeps the element's own, as on the animator.
+      const startVelocity =
+        velocity != null && velocity !== 0
+          ? velocity
+          : (compositor?.velocity() ?? animator.getVelocity(axis));
+      const from = position();
+      holdCompositor();
+      const to = points[target];
+      // At the theme's tempo, as the animator plays a role spring.
+      const curve = solveSpring(toSpring(resolveMotion(element, spring)), {
+        from,
+        to,
+        velocity: startVelocity,
+      });
+      const {onPass} = settleOptions;
+      const play = () => {
+        if (destroyed || mine !== turn) {
+          return;
+        }
+        animator.stop();
+        animator.set({[axis]: to}, {promote: false});
+        const finish = () => {
+          compositor = null;
+          finishCompositor = null;
+          if (inFlight === flight) {
+            inFlight = null;
+          }
+          if (mine === turn && !destroyed) {
+            onSettle(targetIndex);
+          }
+        };
+        compositor = playCompositorSettle({
+          curve,
+          parts: compositorParts(),
+          requestFrame,
+          ...(onPass != null
+            ? {
+                onPass: {
+                  ...onPass,
+                  call: () => {
+                    flight.passed = true;
+                    onPass.call();
+                  },
+                },
+              }
+            : {}),
+          onFinish: finish,
+        });
+        finishCompositor = finish;
+      };
+      if (settleOptions.start === 'next-frame') {
+        requestFrame(play);
+      } else {
+        play();
+      }
+      return null;
+    }
+    holdCompositor();
     const handle = animator.animate(
       {[axis]: points[target]},
       {
-        spring: settleOptions.spring ?? springs.settle,
+        spring,
         ...(velocity != null && velocity !== 0
           ? {velocity: {[axis]: velocity}}
           : {}),
       },
-      {touchRelease: settleOptions.touchRelease === true},
+      {
+        touchRelease,
+        ...(settleOptions.start != null ? {start: settleOptions.start} : {}),
+      },
     );
     let finished = false;
     void handle.finished.then(arrived => {
@@ -334,7 +456,7 @@ export function createSnapDrag(
       };
       if (state === 'began') {
         drag = {
-          start: animator.get(axis),
+          start: position(),
           startIndex: targetIndex,
           input,
           caught: false,
@@ -361,6 +483,7 @@ export function createSnapDrag(
           // nothing now.
           drag.caught = true;
           turn += 1;
+          holdCompositor();
         }
         if (target.spring == null) {
           animator.set({[axis]: target.offset});
@@ -400,7 +523,7 @@ export function createSnapDrag(
       // back return to the snap point it started from.
       const {index: target} = resolveSnapPoint({
         points,
-        position: animator.get(axis),
+        position: position(),
         velocity: release,
         flickThreshold,
         start,
@@ -442,6 +565,7 @@ export function createSnapDrag(
         // a drag in progress ends.
         turn += 1;
         drag = null;
+        holdCompositor();
         animator.stop();
         targetIndex = 0;
         return;
@@ -463,7 +587,7 @@ export function createSnapDrag(
         }
         return;
       }
-      targetIndex = nearest(startPoint ?? animator.get(axis));
+      targetIndex = nearest(startPoint ?? position());
       if (drag != null) {
         drag.startIndex = targetIndex;
       }
@@ -472,6 +596,16 @@ export function createSnapDrag(
       return points;
     },
     animator,
+    position,
+    finishSettle() {
+      const finish = finishCompositor;
+      if (compositor == null || finish == null) {
+        return;
+      }
+      // The drawn value is already the end: only the parts' animations stop.
+      compositor.stop();
+      finish();
+    },
     destroy() {
       if (destroyed) {
         return;
@@ -480,6 +614,7 @@ export function createSnapDrag(
       pan.destroy();
       // Held where it is: disposing cancels a running settle, which would
       // otherwise leave the element where that settle began.
+      holdCompositor();
       animator.stop();
       animator.dispose();
     },

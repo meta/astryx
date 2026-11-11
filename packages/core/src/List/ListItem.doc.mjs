@@ -104,7 +104,8 @@ export const docs = {
     {
       name: 'isSelected',
       type: 'boolean',
-      description: 'Selected state; marks the item as the current one with aria-current="true" (a list item cannot carry aria-selected).',
+      description:
+        'Selected state; marks the item as the current one with aria-current="true" (a list item cannot carry aria-selected).',
       default: 'false',
     },
     {
@@ -113,16 +114,22 @@ export const docs = {
       description: "The row's item key, a string or a number from the data (the shape Table's idKey returns). It is the row's identity for the list's animated layout (List animatedLayout): with a handle, the list matches rows by it to animate inserts, removals and moves, and a row without one changes at once. In a reorderable List (List reorderable), it is the key the reorderable object's onReorder reports and isReorderable is asked about, and a row without one has no reorder handle and keeps its place. Separate from React's key.",
     },
     {
+      name: 'swipe',
+      type: 'Swipe',
+      description:
+        "Swipe actions for touch, made by createSwipe({leading?, trailing?, swipeBehavior?}) and passed through to Item unchanged: the verbs a sideways drag uncovers on each side, each `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`. See Item.swipe; List clips its rows in the inline axis for them. A verb reachable only by swipe is unreachable by keyboard and by mouse, so give each entry a second home in the row.",
+    },
+    {
       name: 'swipeActions',
       type: '{leading?: ItemSwipeAction[]; trailing?: ItemSwipeAction[]}',
       description:
-        "Swipe actions for touch, passed through to Item unchanged: the verbs a sideways drag uncovers on each side, each `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`. See Item.swipeActions; List clips its rows in the inline axis for them.",
+        "Deprecated (DEP-0017): pass swipe={createSwipe({leading, trailing})} instead. Each entry is `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`. Passed through to Item unchanged; astryx upgrade rewrites static uses.",
     },
     {
       name: 'swipeBehavior',
       type: "'reveal' | 'commit'",
       description:
-        'What a swipe does, passed through to Item unchanged. See Item.swipeBehavior.',
+        "Deprecated (DEP-0017): pass swipeBehavior in createSwipe' options instead. Passed through to Item unchanged; astryx upgrade rewrites static uses.",
       default: "'reveal'",
     },
   ],
@@ -201,7 +208,8 @@ export const docsZh = {
     {
       name: 'isSelected',
       type: 'boolean',
-      description: '选中状态；在项目上设置 aria-current="true"，将其标为当前项（列表项不能使用 aria-selected）。',
+      description:
+        '选中状态；在项目上设置 aria-current="true"，将其标为当前项（列表项不能使用 aria-selected）。',
       default: 'false',
     },
     {
@@ -210,15 +218,22 @@ export const docsZh = {
       description: '行的项目键，取自数据的字符串或数字（与 Table 的 idKey 返回的形状相同）。它是列表动画布局（List animatedLayout）中该行的身份：传入句柄时，列表按它匹配各行，为插入、删除和移动添加动画；没有项目键的行会立即变化。在可重新排序的 List（List reorderable）中，它是可重新排序对象的 onReorder 报告的键，也是 isReorderable 判断的键；没有项目键的行没有重新排序手柄，保持原位。与 React 的 key 相互独立。',
     },
     {
+      name: 'swipe',
+      type: 'Swipe',
+      description:
+        "触摸滑动操作，由 createSwipe({leading?, trailing?, swipeBehavior?}) 创建并原样传递给 Item：横向拖动在每一侧揭示的操作，每项为 `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`。参见 Item.swipe；List 会在行内轴上裁剪行。只能通过滑动触达的操作无法用键盘或鼠标触达，因此请在行内为每项再提供一个入口。",
+    },
+    {
       name: 'swipeActions',
       type: '{leading?: ItemSwipeAction[]; trailing?: ItemSwipeAction[]}',
       description:
-        "触摸滑动操作，原样传递给 Item：横向拖动在每一侧揭示的操作，每项为 `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`。参见 Item.swipeActions；List 会在行内轴上裁剪行。",
+        "已弃用（DEP-0017）：请改用 swipe={createSwipe({leading, trailing})}。每项为 `{id?, label, icon?, onActivate, isDisabled?, variant?: 'neutral' | 'accent' | 'destructive', hasRemoval?}`。原样传递给 Item；astryx upgrade 会改写静态用法。",
     },
     {
       name: 'swipeBehavior',
       type: "'reveal' | 'commit'",
-      description: '滑动的行为，原样传递给 Item。参见 Item.swipeBehavior。',
+      description:
+        '已弃用（DEP-0017）：请改为在 createSwipe 的选项中传入 swipeBehavior。原样传递给 Item；astryx upgrade 会改写静态用法。',
       default: "'reveal'",
     },
   ],

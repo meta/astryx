@@ -15,6 +15,7 @@ import {useMemo, useState} from 'react';
 import {createReorderable} from '@astryxdesign/core';
 import {Card} from '@astryxdesign/core/Card';
 import {List, ListItem} from '@astryxdesign/core/List';
+import {createSwipe} from '@astryxdesign/core/Swipe';
 import {TransferList} from '@astryxdesign/lab';
 import type {TransferListOption} from '@astryxdesign/lab';
 import type {ListReorderCaseId} from './caseIds';
@@ -70,16 +71,16 @@ function ReorderableList({hasSwipeActions}: {hasSwipeActions: boolean}) {
           description={
             hasSwipeActions ? `Archive swipes: ${archived}` : undefined
           }
-          swipeActions={
+          swipe={
             hasSwipeActions
-              ? {
+              ? createSwipe({
                   trailing: [
                     {
                       label: 'Archive',
                       onActivate: () => setArchived(count => count + 1),
                     },
                   ],
-                }
+                })
               : undefined
           }
         />

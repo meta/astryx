@@ -36,7 +36,11 @@ verified_by:
     "packages/core/src/Layer/inputHold.ts",
     "packages/core/src/hooks/usePager.ts",
     "packages/core/src/motion/uikit/segmented.ts",
-    "packages/core/src/motion/uikit/slider.ts"
+    "packages/core/src/motion/uikit/slider.ts",
+    "packages/core/src/Swipe/useSwipeAction.ts",
+    "packages/core/src/Item/Item.sharedDrag.test.tsx",
+    "packages/core/src/Item/Item.test.tsx",
+    "packages/core/src/Item/__tests__/ItemSwipeActions.interaction.browser.spec.ts"
   ]
 }
 ```
