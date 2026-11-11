@@ -209,7 +209,7 @@ describe('preview add', () => {
     const set = await themeEditSet('brand', 'font', 'inter', {cwd});
     const note = set.data.notes.join(' ');
     expect(note).toContain('Inter is not installed, so it does not load');
-    expect(note).toContain('install @fontsource/inter');
+    expect(note).toMatch(/(npm install|pnpm add|yarn add|bun add) @fontsource\/inter/);
     const route = 'src/app/theme-preview/page.tsx';
     expect(read(route)).not.toContain('@fontsource/inter');
     fs.mkdirSync(pkgDir, {recursive: true});
