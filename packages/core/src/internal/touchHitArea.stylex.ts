@@ -3,27 +3,14 @@
 /**
  * @file touchHitArea.stylex.ts
  * @input Uses StyleX, and the room a host or its group declares on each side
- * @output Exports `touchHitAreaStyles`: `layer`, a host's invisible hit band
- *   under a coarse pointer; `room` and `band`, its two halves, for a host that
- *   draws the band on a descendant; `member`, the room of a group's member;
- *   `inline`, no sideways growth for a control that sits in running text;
- *   `rowEnd`, no block growth for the controls in a row's end slot
- * @position Internal styling utility for Button (and so the input clear
- *   button), CheckboxInput, RadioListItem, List rows and reorder handles,
- *   InfoTip, SegmentedControl segments and Lab's PageControl. Each also
- *   attaches `useTouchHitArea` (utils/touchHitArea.ts), which checks a tap on
- *   the band at its click.
- *
- * The band is the host's `::after`. Under a coarse pointer each side grows
- * toward 44 px, centered on the host's box, and no further than that side's
- * room: 22 px by default, so a lone control reaches 44 px. A group sets half
- * its gap as the room between its members (`member`), and its end members
- * keep the default room outward. The band sits below the host's content in
- * the host's own stacking context, so the content keeps its taps. Outside
- * the host's box a tap on the band lands on the host; where the band lies
- * over another target's visible box, that target takes the tap at its click
- * (utils/touchHitArea.ts). SYNC:
- * utils/touchHitArea.ts and utils/touchHitArea.test.tsx.
+ * @output `touchHitAreaStyles`: `layer` (the band, a host's `::after`), its
+ *   halves `room` and `band`, `member` (a group member's room), `inline` (no
+ *   sideways room), `rowEnd` (no block room in a row's end slot), and the
+ *   group room styles. Each side grows toward 44 px, no further than its room.
+ * @position Internal styles for the coarse-only touch band. The band sits
+ *   below its host's content, in the host's own stacking context. The press
+ *   check (utils/touchHitArea.ts) decides a band tap at its click.
+ *   SYNC: utils/touchHitArea.ts and utils/touchHitArea.test.tsx.
  */
 
 import * as stylex from '@stylexjs/stylex';

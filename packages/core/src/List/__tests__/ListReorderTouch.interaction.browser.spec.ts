@@ -1002,7 +1002,7 @@ test.describe('the preview, the drop and the handle under a finger', () => {
     expect(geometry.width).toBeLessThan(44);
     expect(geometry.height).toBeLessThan(44);
     // A finger's target grows to 44 pt through the invisible touch band. A
-    // tap where it meets the next handle's, nearer that handle, does nothing
+    // tap where it meets the next handle's band goes to the nearer handle
     // (utils/touchHitArea.ts).
     expect(geometry.hitHeight).toBeCloseTo(44, 0);
     expect(geometry.hitWidth).toBeCloseTo(44, 0);

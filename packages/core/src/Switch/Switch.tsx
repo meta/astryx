@@ -70,6 +70,7 @@ import {
 import {pressHoldsDragProps} from '../privateAttributes/pressHoldsDrag.stylex';
 import {useSwitchTouch, type SwitchTouchParts} from './useSwitchTouch';
 import {BAND_ON_DESCENDANT, useTouchHitArea} from '../utils/touchHitArea';
+import {grownHitInputProps} from '../privateAttributes/grownHitInput.stylex';
 
 /**
  * The track box of each size, px (width × height), for the touch
@@ -976,6 +977,7 @@ export function Switch({
         id={id}
         type="checkbox"
         role="switch"
+        {...grownHitInputProps}
         // Withhold the name while disabled: the input stays focusable (not
         // natively disabled), and a disabled control must not submit.
         name={isDisabled ? undefined : htmlName}

@@ -340,6 +340,28 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
     await expect(output).toHaveText('Next 1, Sync on');
   });
 
+  test('a tap on the visible part of an absolutely positioned button that reaches past its parent presses that button, under a neighbour’s band', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), STORY);
+    const root = page.locator('#storybook-root');
+    const output = root.locator('output[aria-label="Overhang taps"]');
+    const pin = await boxOf(page, 'pin');
+    const mark = await boxOf(page, 'mark');
+    const parent = await root.getByTestId('pin').evaluate(element => {
+      const r = element.parentElement!.getBoundingClientRect();
+      return {left: r.left, right: r.right};
+    });
+    // Pin reaches 20 px past its parent; Mark paints over it, and Mark's
+    // band lies over the end of that part, nearer Mark than Pin's parent.
+    expect(pin.right - parent.right).toBeCloseTo(20, 0);
+    expect(mark.left - pin.right).toBeLessThan(10);
+    const y = Math.round((pin.top + pin.bottom) / 2);
+    const driver = await touchDriver(page);
+    await tapAt(driver, {x: Math.round(pin.right - 2), y});
+    await expect(output).toHaveText('Pin 1, Mark 0');
+  });
+
   test('a NavigationStack push reads no layout and writes no hit size on either screen’s rows, through the frames after it lands', async ({
     page,
   }) => {

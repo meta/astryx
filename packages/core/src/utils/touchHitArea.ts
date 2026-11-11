@@ -18,6 +18,7 @@ import {useCallback, type RefCallback} from 'react';
 import {distanceTo, INTERACTIVE_SELECTOR, type HitRect} from './hitArea';
 import {subscribeInput} from './inputStream';
 import {isElement} from './nodeType';
+import {isGrownHitInput} from '../privateAttributes/grownHitInput.stylex';
 
 /** How a host's band relates to its content. */
 export interface TouchHitAreaOptions {
@@ -48,17 +49,13 @@ function isOwn(host: Element, candidate: Element): boolean {
 }
 
 /**
- * The box a target shows. A target on a layer of its own, such as Switch's
- * grown input, is clipped to its parent's box: that is what the person sees.
+ * The box a target shows. A marked grown hit input, such as Switch's, paints
+ * nothing: the person sees its parent's box.
  */
 function visibleBox(target: Element): HitRect {
   const box = target.getBoundingClientRect();
   const parent = target.parentElement;
-  const view = target.ownerDocument.defaultView;
-  if (
-    parent == null ||
-    view?.getComputedStyle(target).position !== 'absolute'
-  ) {
+  if (parent == null || !isGrownHitInput(target)) {
     return box;
   }
   const clip = parent.getBoundingClientRect();

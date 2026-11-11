@@ -87,7 +87,7 @@ test.describe('Button touch target (spec:AST-094 FR42), under a finger', () => {
     );
   });
 
-  test('a tap on a button’s box is that button’s, even under the other’s band; a tap in the gap goes to the band on top', async ({
+  test('a tap on a button’s box is that button’s, even under the other’s band; a tap in the gap goes to the nearer box', async ({
     page,
   }) => {
     await openStory(page, storybook(), STORY);

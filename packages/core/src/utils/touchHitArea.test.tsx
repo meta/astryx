@@ -16,6 +16,7 @@ import * as stylex from '@stylexjs/stylex';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {useTouchHitArea} from './touchHitArea';
+import {grownHitInputProps} from '../privateAttributes/grownHitInput.stylex';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {Button} from '../Button/Button';
 import {ButtonGroup} from '../ButtonGroup/ButtonGroup';
@@ -227,7 +228,7 @@ describe('at a tap', () => {
     expect(onB).toHaveBeenCalledTimes(1);
   });
 
-  it('measures a target on a layer of its own, such as a grown switch input, by its parent’s box', () => {
+  it('measures a marked grown hit input, such as a switch’s, by its parent’s box', () => {
     const onA = vi.fn();
     const onSwitch = vi.fn();
     render(
@@ -240,7 +241,7 @@ describe('at a tap', () => {
             role="switch"
             aria-label="Sync"
             onClick={onSwitch}
-            style={{position: 'absolute'}}
+            {...grownHitInputProps}
           />
         </span>
       </div>,
@@ -259,6 +260,48 @@ describe('at a tap', () => {
     expect(tap(a, 125)).toBe(false);
     expect(onA).toHaveBeenCalledTimes(1);
     expect(onSwitch).not.toHaveBeenCalled();
+  });
+
+  it('measures an unmarked target by its own box, even when it reaches past its parent', () => {
+    const onA = vi.fn();
+    const onPin = vi.fn();
+    render(
+      <div data-testid="container">
+        <Host id="a" onClick={onA} />
+        <span id="holder">
+          <button
+            id="pin"
+            type="button"
+            onClick={onPin}
+            style={{position: 'absolute'}}>
+            Pin
+          </button>
+        </span>
+      </div>,
+    );
+    const a = document.getElementById('a') as HTMLElement;
+    const holder = document.getElementById('holder') as HTMLElement;
+    const pin = document.getElementById('pin') as HTMLElement;
+    const container = screen.getByTestId('container');
+    // The control ends at 124. The pin's holder ends at 116, and the visible
+    // pin reaches past it to 126.
+    a.getBoundingClientRect = () => rect(100, 100, 24, 24);
+    holder.getBoundingClientRect = () => rect(92, 100, 24, 24);
+    pin.getBoundingClientRect = () => rect(102, 100, 24, 24);
+    elementsAtPoint = [a, pin, holder, container, document.body];
+    // The finger is on the pin's own box, under the control's band.
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 125, clientY: 112});
+    a.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    a.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    expect(onPin).toHaveBeenCalledTimes(1);
+    expect(onA).not.toHaveBeenCalled();
   });
 
   it('stops at the control’s own container: what paints below it, such as the page under a layer, is not beside it', () => {

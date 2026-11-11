@@ -584,6 +584,8 @@ export const TouchReach: Story = {
       cut: 0,
       copy: 0,
       next: 0,
+      pin: 0,
+      mark: 0,
     });
     const [sync, setSync] = useState(false);
     const count = (key: keyof typeof taps) => () =>
@@ -640,6 +642,37 @@ export const TouchReach: Story = {
             onClick={count('next')}
           />
         </div>
+        <div style={{display: 'flex', gap: 24, alignItems: 'center'}}>
+          <div style={{position: 'relative', width: 24, height: 24}}>
+            <Button
+              label="Pin"
+              data-testid="pin"
+              isIconOnly
+              variant="secondary"
+              icon={<Icon icon={Cog6ToothIcon} />}
+              style={{
+                position: 'absolute',
+                left: 20,
+                top: 0,
+                width: 24,
+                height: 24,
+                minWidth: 24,
+                padding: 0,
+              }}
+              onClick={count('pin')}
+            />
+          </div>
+          <Button
+            label="Mark"
+            data-testid="mark"
+            isIconOnly
+            variant="ghost"
+            icon={<Icon icon={TrashIcon} />}
+            // Mark paints over Pin, so its band lies over Pin's overhang.
+            style={{width: 24, height: 24, minWidth: 24, padding: 0, zIndex: 1}}
+            onClick={count('mark')}
+          />
+        </div>
         <ToggleButtonGroup
           type="multiple"
           label="Format"
@@ -677,6 +710,9 @@ export const TouchReach: Story = {
         </Text>
         <output aria-label="Reach taps">
           Lone {taps.lone}, Link {taps.link}, Cut {taps.cut}, Copy {taps.copy}
+        </output>
+        <output aria-label="Overhang taps">
+          Pin {taps.pin}, Mark {taps.mark}
         </output>
         <output aria-label="Sync taps">
           Next {taps.next}, Sync {sync ? 'on' : 'off'}
