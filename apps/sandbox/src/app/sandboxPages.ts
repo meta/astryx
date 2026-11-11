@@ -130,6 +130,12 @@ export const categories: SandboxCategory[] = [
           'A reorderable List, a TransferList and a reorderable List in a Card, on a page that scrolls with the document, to check on a phone',
       },
       {
+        name: 'SegmentedControl Cases',
+        href: '/pages/segmented-control-cases/',
+        description:
+          "SegmentedControl's default example with a theme menu, on a page that scrolls with the document, to check on a phone",
+      },
+      {
         name: 'TextArea Counter',
         href: '/pages/textarea-counter/',
         description:
