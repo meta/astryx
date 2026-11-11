@@ -7,7 +7,7 @@
  * @input A source to lift, a surface to grow beside it, and the caller's
  *   springs, scale rule, tint and attribute
  * @output createLiftFromTrigger, which lifts a source and grows a surface at
- *   the press; and liftCopy, a copy of a source's picture for a zoom
+ *   the press
  * @position The one lift-from-trigger presentation, internal and opt-in.
  *   README.md says what a lift adds to the page and how it moves
  *
@@ -157,38 +157,6 @@ export interface LiftFromTrigger {
   isLifted(): boolean;
 }
 
-/** Where a copy goes, and how it is marked. */
-export interface LiftCopyOptions {
-  /**
-   * The element the copy goes in, such as a viewer's container. It is
-   * positioned, so the copy is laid out against its box. Its stacking decides
-   * what the copy shows over and under.
-   */
-  readonly host: HTMLElement;
-  /** The picture for a source that shows none. */
-  readonly src?: string;
-  /** Marks the copy, when given: a private attribute the caller owns. */
-  readonly attribute?: string;
-}
-
-/** A copy of a source's picture, lifted into a host while the source hides. */
-export interface LiftedCopy {
-  /**
-   * The copy: an image in the host, laid out at the source's box (aspect
-   * fill, its corners), inert and hidden from assistive technology. Move it
-   * on the rect morph (`createRectMorph(copy.element)`).
-   */
-  readonly element: HTMLImageElement;
-  /** The source's box, client px, where the copy is laid out. */
-  readonly box: MorphRect;
-  /**
-   * Takes the copy away. Once the last copy of the source drops, the source
-   * shows again as it was. Call it at the landing or on unmount; nothing is
-   * left either way. A second call does nothing.
-   */
-  drop(): void;
-}
-
 /**
  * The border box's size as laid out, from the computed style, to the
  * fraction of a pixel. Null when the style holds no used size in px, as for
@@ -291,29 +259,6 @@ function restore(element: HTMLElement, saved: SavedStyle): void {
       element.style.setProperty(property, value, priority);
     }
   }
-}
-
-/**
- * The radius of the shape `source` shows: its own, or that of its only
- * element child when that child fills it.
- */
-function shapeRadius(source: HTMLElement): string {
-  const view = source.ownerDocument.defaultView;
-  const own = view?.getComputedStyle(source).borderRadius ?? '';
-  if (px(own) > 0 || source.children.length === 0) {
-    return own;
-  }
-  const outer = source.getBoundingClientRect();
-  for (const child of source.children) {
-    const inner = child.getBoundingClientRect();
-    if (
-      Math.abs(inner.width - outer.width) <= 1 &&
-      Math.abs(inner.height - outer.height) <= 1
-    ) {
-      return view?.getComputedStyle(child).borderRadius ?? own;
-    }
-  }
-  return own;
 }
 
 /**
@@ -1095,134 +1040,5 @@ export function createLiftFromTrigger(): LiftFromTrigger {
       }
     },
     isLifted: () => state?.isSourceLifted === true,
-  };
-}
-
-/**
- * Sources a copy hides: how many copies hold each, and its inline visibility
- * before the first. A source gets that visibility back when its last copy
- * drops.
- */
-const hiddenSources = new WeakMap<
-  HTMLElement,
-  {holders: number; visibility: [value: string, priority: string]}
->();
-
-/** Hides `source` where it stands until the returned call lets go. */
-function hideSource(source: HTMLElement): () => void {
-  const held = hiddenSources.get(source);
-  if (held == null) {
-    hiddenSources.set(source, {
-      holders: 1,
-      visibility: [
-        source.style.getPropertyValue('visibility'),
-        source.style.getPropertyPriority('visibility'),
-      ],
-    });
-    source.style.setProperty('visibility', 'hidden', 'important');
-  } else {
-    held.holders += 1;
-  }
-  let isReleased = false;
-  return () => {
-    const entry = hiddenSources.get(source);
-    if (isReleased || entry == null) {
-      return;
-    }
-    isReleased = true;
-    entry.holders -= 1;
-    if (entry.holders > 0) {
-      return;
-    }
-    hiddenSources.delete(source);
-    const [value, priority] = entry.visibility;
-    if (value === '') {
-      source.style.removeProperty('visibility');
-    } else {
-      source.style.setProperty('visibility', value, priority);
-    }
-  };
-}
-
-/** The picture a source shows: an image's own, or the first one inside it. */
-function pictureOf(source: HTMLElement): string {
-  const image =
-    source instanceof HTMLImageElement
-      ? source
-      : source.querySelector<HTMLImageElement>('img');
-  return image?.currentSrc || image?.src || '';
-}
-
-/**
- * Lifts a copy of `source`'s picture into `host` for a zoom, the lift's one
- * transient copy. The copy is one image at the source's box, with aspect fill
- * and its corners. It is inert and hidden from assistive technology, and the
- * source hides where it stands. The caller moves the copy on the rect morph
- * and drops it at the landing. Null, with nothing changed, for a source that
- * is not in the page or has no box.
- */
-export function liftCopy(
-  source: HTMLElement,
-  {host, src, attribute}: LiftCopyOptions,
-): LiftedCopy | null {
-  if (!source.isConnected || !host.isConnected) {
-    return null;
-  }
-  // Reads before writes: the page lays out once for the copy.
-  const shown = source.getBoundingClientRect();
-  if (shown.width <= 0 || shown.height <= 0) {
-    return null;
-  }
-  const box: MorphRect = {
-    x: shown.left,
-    y: shown.top,
-    width: shown.width,
-    height: shown.height,
-  };
-  // The host's padding box is the copy's containing block.
-  const origin = host.getBoundingClientRect();
-  const left = box.x - origin.left - host.clientLeft + host.scrollLeft;
-  const top = box.y - origin.top - host.clientTop + host.scrollTop;
-  const radius = shapeRadius(source);
-  const picture = pictureOf(source) || src || '';
-  const copy = source.ownerDocument.createElement('img');
-  copy.src = picture;
-  copy.alt = '';
-  copy.setAttribute('aria-hidden', 'true');
-  copy.setAttribute('inert', '');
-  if (attribute != null) {
-    copy.setAttribute(attribute, '');
-  }
-  Object.assign(copy.style, {
-    position: 'absolute',
-    left: `${left}px`,
-    top: `${top}px`,
-    width: `${box.width}px`,
-    height: `${box.height}px`,
-    // Exactly the box, whatever the host's styles say about images.
-    margin: '0',
-    padding: '0',
-    border: '0',
-    maxWidth: 'none',
-    maxHeight: 'none',
-    boxSizing: 'border-box',
-    objectFit: 'cover',
-    borderRadius: radius,
-    pointerEvents: 'none',
-  });
-  host.append(copy);
-  const release = hideSource(source);
-  let isDropped = false;
-  return {
-    element: copy,
-    box,
-    drop: () => {
-      if (isDropped) {
-        return;
-      }
-      isDropped = true;
-      copy.remove();
-      release();
-    },
   };
 }

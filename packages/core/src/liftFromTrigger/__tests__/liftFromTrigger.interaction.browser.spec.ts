@@ -4,13 +4,12 @@
  * @file liftFromTrigger.interaction.browser.spec.ts
  * @input The lift bundled with esbuild onto a blank fixture page
  *   (liftFromTrigger.fixture.ts), in Chromium and WebKit
- * @output Proof in real engines of the lift and the zoom's copy. A row lifts
+ * @output Proof in real engines of the lift. A row lifts
  *   into the top layer while a placeholder holds its spot. Every motion is
  *   `translate`, `scale`, `transform` or `opacity`. The menu grows out of the
  *   press and shrinks back into it on close. The page has at most four more
  *   elements while lifted, and none after the drop. A tap while it grows
- *   reaches nothing. The zoom's copy grows on the rect morph, turns around
- *   and lands in the thumbnail
+ *   reaches nothing
  * @position Browser proof for liftFromTrigger.ts, run by `pnpm test:interaction`; jsdom
  *   has no layout, no top layer and no animations
  */
@@ -736,150 +735,4 @@ test('a pinch on the backdrop while a row is lifted zooms the page, and it neith
   expect(log.backdropTaps).toBe(0);
   expect(log.clicks).not.toContain('page');
   await page.evaluate(() => window.__lift.dispose());
-});
-
-test("a zoom's copy lifts into the viewer at the thumbnail's box, where the viewer's stacking puts it under the photo, while the thumbnail hides in place; one element more", async ({
-  page,
-}) => {
-  await open(page);
-  const read = await page.evaluate(() => {
-    const box = (element: Element | null): Box => {
-      const r = element?.getBoundingClientRect();
-      return r == null ? [0, 0, 0, 0] : [r.x, r.y, r.width, r.height];
-    };
-    const viewer = document.getElementById('viewer') as HTMLElement;
-    const thumb = document.getElementById('thumb') as HTMLElement;
-    viewer.style.display = 'block';
-    const count = () => document.body.querySelectorAll('*').length;
-    const rest = count();
-    const thumbBefore = box(thumb);
-    const copy = window.__zoom.liftCopy(thumb, {host: viewer});
-    if (copy == null) {
-      throw new Error('no copy');
-    }
-    // Under the photo: the viewer's stacking, as Lightbox sets it.
-    copy.element.style.zIndex = '-1';
-    const result = {
-      added: count() - rest,
-      copy: box(copy.element),
-      thumb: box(thumb),
-      thumbBefore,
-      thumbVisibility: getComputedStyle(thumb).visibility,
-      parentIsViewer: copy.element.parentElement === viewer,
-      inTopLayer:
-        copy.element.hasAttribute('popover') ||
-        copy.element.matches(':popover-open'),
-      radius: getComputedStyle(copy.element).borderTopLeftRadius,
-      fit: getComputedStyle(copy.element).objectFit,
-      hidden: copy.element.getAttribute('aria-hidden'),
-    };
-    copy.drop();
-    return {
-      ...result,
-      afterAdded: count() - rest,
-      afterVisibility: getComputedStyle(thumb).visibility,
-    };
-  });
-  expect(read.added).toBe(1);
-  expectBox(read.copy, read.thumbBefore);
-  // The thumbnail keeps its layout: nothing moves in the page.
-  expectBox(read.thumb, read.thumbBefore);
-  expect(read.thumbVisibility).toBe('hidden');
-  expect(read.parentIsViewer).toBe(true);
-  expect(read.inTopLayer).toBe(false);
-  expect(read.radius).toBe('10px');
-  expect(read.fit).toBe('cover');
-  expect(read.hidden).toBe('true');
-  expect(read.afterAdded).toBe(0);
-  expect(read.afterVisibility).toBe('visible');
-});
-
-test('the copy grows to the photo on the rect morph, a close mid-growth turns the same copy around from the rect on screen with no jump, and it lands in the thumbnail; the drop leaves the page as it was', async ({
-  page,
-}) => {
-  await open(page);
-  const run = await page.evaluate(async () => {
-    const viewer = document.getElementById('viewer') as HTMLElement;
-    const thumb = document.getElementById('thumb') as HTMLElement;
-    const photo = document.getElementById('photo') as HTMLElement;
-    viewer.style.display = 'block';
-    const count = () => document.body.querySelectorAll('*').length;
-    const rest = count();
-    const copy = window.__zoom.liftCopy(thumb, {host: viewer});
-    if (copy == null) {
-      throw new Error('no copy');
-    }
-    const element = copy.element;
-    const r = photo.getBoundingClientRect();
-    const fitted = {x: r.x, y: r.y, width: r.width, height: r.height};
-    const morph = window.__zoom.createRectMorph(element);
-    const path = window.__zoom.lerpPath(copy.box, fitted, {
-      box: copy.box,
-      scale: 'uniform',
-    });
-    const spring = {response: 0.6, dampingRatio: 1};
-    // One sample a frame of where the copy is drawn, and whether it is still
-    // the same element in the host.
-    const samples: {t: number; width: number; phase: string}[] = [];
-    let phase = 'open';
-    let sampling = true;
-    let remounted = false;
-    // The close comes once the copy is well on its way (150 px wide), however
-    // fast the engine draws frames.
-    let midway = () => {};
-    const isMidway = new Promise<void>(resolve => {
-      midway = resolve;
-      setTimeout(resolve, 2000);
-    });
-    const sample = (t: number) => {
-      remounted ||= !element.isConnected || element.parentElement !== viewer;
-      const width = element.getBoundingClientRect().width;
-      samples.push({t, width, phase});
-      if (width >= 150) {
-        midway();
-      }
-      if (sampling) {
-        requestAnimationFrame(sample);
-      }
-    };
-    requestAnimationFrame(sample);
-    morph.present(path, {spring});
-    await isMidway;
-    // The close turns the opening around: the same copy, from where it is.
-    phase = 'close';
-    const closing = morph.dismiss(path, {spring}, {target: element});
-    await closing.finished;
-    sampling = false;
-    const landed = element.getBoundingClientRect();
-    const thumbBox = thumb.getBoundingClientRect();
-    morph.dispose();
-    copy.drop();
-    return {
-      samples,
-      remounted,
-      landed: [landed.x, landed.y, landed.width, landed.height] as Box,
-      thumb: [thumbBox.x, thumbBox.y, thumbBox.width, thumbBox.height] as Box,
-      afterAdded: count() - rest,
-      afterVisibility: getComputedStyle(thumb).visibility,
-      photoWidth: fitted.width,
-    };
-  });
-  expect(run.remounted).toBe(false);
-  const opening = run.samples.filter(s => s.phase === 'open');
-  const closing = run.samples.filter(s => s.phase === 'close');
-  expect(opening.length).toBeGreaterThan(1);
-  expect(closing.length).toBeGreaterThan(1);
-  // It was growing toward the photo when the close came.
-  const lastOpen = opening[opening.length - 1].width;
-  expect(lastOpen).toBeGreaterThanOrEqual(150);
-  expect(lastOpen).toBeLessThan(run.photoWidth);
-  // The close starts where the opening was drawn. Its first frame is nearer
-  // that than either end, so no frame jumps to the thumbnail or the photo.
-  expect(Math.abs(closing[0].width - lastOpen)).toBeLessThan(
-    Math.min(lastOpen - 80, run.photoWidth - lastOpen),
-  );
-  // It lands exactly in the thumbnail.
-  expectBox(run.landed, run.thumb, 1);
-  expect(run.afterAdded).toBe(0);
-  expect(run.afterVisibility).toBe('visible');
 });

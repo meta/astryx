@@ -6,15 +6,12 @@
  * @output A page with a list of rows in a clipping, transformed panel, and a
  *   menu popover beside it. The first row is rounded by `:first-child`, and
  *   the second holds twelve elements. `window.__lift` lifts a row, grows and
- *   closes the menu, drops and ends, and logs taps and clicks. A thumbnail
- *   and a hidden viewer serve the zoom's copy through `window.__zoom`
+ *   closes the menu, drops and ends, and logs taps and clicks
  * @position Browser fixture of liftFromTrigger.interaction.browser.spec.ts; test-only
  */
 
-import {createRectMorph, lerpPath} from '../../motion/rectMorph';
 import {
   createLiftFromTrigger,
-  liftCopy,
   type LiftFromTriggerOptions,
   type LiftFromTriggerResult,
 } from '../liftFromTrigger';
@@ -37,17 +34,9 @@ export interface LiftFixture {
   isLifted: () => boolean;
 }
 
-/** What a zoom proof drives: the copy, and the rect morph that moves it. */
-export interface ZoomFixture {
-  liftCopy: typeof liftCopy;
-  createRectMorph: typeof createRectMorph;
-  lerpPath: typeof lerpPath;
-}
-
 declare global {
   interface Window {
     __lift: LiftFixture;
-    __zoom: ZoomFixture;
   }
 }
 
@@ -78,11 +67,7 @@ document.body.innerHTML = `
   </div>
   <button id="page" style="position: absolute; left: 20px; top: 640px; width: 335px; height: 120px">page</button>
   <div id="chip" style="position: absolute; left: 20px; top: 40px; width: 100.4px; line-height: 20px; background: rgb(255, 255, 255)"><span id="chip-a" style="display: inline-block; width: 50.2px; height: 20px"></span><span id="chip-b" style="display: inline-block; width: 50.2px; height: 20px"></span></div>
-  <div id="menu" popover="manual"><div role="menu" aria-label="Actions">Menu</div></div>
-  <button id="thumb" type="button" style="position: absolute; left: 280px; top: 20px; width: 80px; height: 80px; padding: 0; border: 0; border-radius: 10px; overflow: hidden"><img alt="A photo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='120'%3E%3Crect width='160' height='120' fill='rgb(0,140,0)'/%3E%3C/svg%3E" style="display: block; width: 100%; height: 100%; object-fit: cover"></button>
-  <div id="viewer" style="display: none; position: fixed; inset: 0; isolation: isolate; background: rgba(0, 0, 0, 0.8)">
-    <div id="photo" style="position: absolute; left: 20px; top: 260px; width: 335px; height: 251px; background: rgb(200, 0, 0)"></div>
-  </div>`;
+  <div id="menu" popover="manual"><div role="menu" aria-label="Actions">Menu</div></div>`;
 
 function element(id: string): HTMLElement {
   const found = document.getElementById(id);
@@ -124,8 +109,6 @@ function options(response: number): LiftFromTriggerOptions {
     },
   };
 }
-
-window.__zoom = {liftCopy, createRectMorph, lerpPath};
 
 window.__lift = {
   log,
