@@ -99,7 +99,7 @@ them with an installed icon set instead, build with
 separated by commas: `DOCSITE_ICON_SET=<package>/<set>,<package>/<backup>`.
 Each icon comes from the first set in the list that has its meaning, the same
 rule `astryx template` uses, and an icon no set has draws a placeholder that
-the preview's source declares. Install each set's package in the docsite first. Unset, the build is
+the preview's source declares. Install each set's package in the docsite first. A changed setting rebuilds the previews; there is no need to delete `.next`. Unset, the build is
 unchanged. This setting is experimental: it may change or be removed in a
 patch release.
 

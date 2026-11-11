@@ -1,5 +1,43 @@
 # @xds/core
 
+# 0.7.13
+
+#### New Features
+
+- Tokenizer forwards BaseTypeahead's `menu` and `onOpenChange` in its inline presentation, and its handle gains `open()` and `close()`. A token whose own button calls `open()` with a dialog-role menu opens the dialog, and Escape returns focus to that token: focus that a press puts on a token's control, and the menu's focus return, stay there instead of moving to the input. The sheet presentation keeps its own sheet. (#10624)
+- Typeahead: Backspace or Delete on the selected Token clears the value, as the clear button does, when the clear button shows: it calls `onChange(null)`, announces the cleared value, and moves focus to the empty input. Without `hasClear`, the keys start editing, as a click does. (#10847)
+
+#### Fixes
+
+- A swizzled component and the package's components now announce through one pair of live regions: messages from both join the same frame, and a copy no longer mounts a second pair that screen readers would read twice or skip. The modal announcement route is shared the same way. No API changes. (#10996)
+- BottomSheet: a finger's pull on the sheet's content at a scroll edge cancels the content's native pan as soon as the pull reaches a tap's wobble (5 px), before the sheet's own drag begins at 8 px. In iOS Safari the first `touchmove` a page keeps committed the touch to the content's scroll, so a slow-starting swipe down rubber-banded the content under the finger while the sheet moved beside it. A tap that wobbles less than 5 px keeps its click, while a tap that wobbles 5 to 8 px toward the edge now loses it. A real scroll is never cancelled. A mostly sideways swipe on a horizontal row is not cancelled before the sheet's drag begins; a first move past 8 px starts the drag in any direction, as before. (#10033)
+- A swizzled overlay that carries its own copy of the layer runtime now shares the package's: one layer stack, one modal outlet order, one gesture counter, and one record of outside dismissals, popover show and hide operations, layer surfaces and press claims per page. Before, such a copy kept its own, so Escape over a swizzled HoverCard inside a package Dialog could close the Dialog too, and the two copies could race each other's popover operations or miss each other's outside presses. No API changes. (#10998)
+- A disabled Link stays announced as disabled, with its own role, when the caller also passes `aria-disabled` or `role`. Before, those caller props replaced Link's own, so `aria-disabled={false}` announced a disabled link as enabled, and `role="button"` announced a button that does nothing. (#11030)
+- Markdown's public parser drops every data: link and image URL, and `<Markdown>` renders data: links and images as source text. (#11020)
+- Carousel snap paging: in Safari, a held row's stops and span stay on each item's start edge when the settle moves between an item's rect read and its translate read. (#10992)
+
+#### Documentation
+
+- Add hook documentation and interactive sparkline example block for `useDirection`, detailing render-time direction handling and CSS logical properties best practices. (#10547)
+- InternationalizationProvider has a calendar example: the provider's `calendar` prop shows a `Calendar` and a `DateInput` in the Japanese or Buddhist calendar, and the value stays a Gregorian ISO date. Both calendars work without `Temporal`. (#10135)
+
+#### Other Changes
+
+- Internal: Table's row virtualization now runs on one shared list-windowing module inside Core, which later long lists will reuse. The undocumented `@astryxdesign/core/internal/virtualization` entry gives Lab the same module. Table's behavior and public API do not change. Internal entries are outside the public API and its compatibility promise. (#10810)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @humbertovirtudes
+- @imdreamrunner
+- @nynexman4464
+- @utkarshpatwa393-sys
+- @vjeux
+
+---
+
 # 0.7.12
 
 #### Experimental APIs

@@ -121,6 +121,26 @@ export function AppI18n({children}: {children: ReactNode}) {
 }`,
     },
     {
+      label: 'Mirror the layout for right-to-left text',
+      code: `import type {ReactNode} from 'react';
+import {
+  InternationalizationProvider,
+  getLocaleDirection,
+} from '@astryxdesign/core/i18n';
+
+// Pass the same direction to the provider and to the element that holds the
+// content, so Astryx components and the page mirror together.
+export function AppI18n({children}: {children: ReactNode}) {
+  const locale = 'ar-SA';
+  const dir = getLocaleDirection(locale);
+  return (
+    <InternationalizationProvider locale={locale} dir={dir}>
+      <div dir={dir}>{children}</div>
+    </InternationalizationProvider>
+  );
+}`,
+    },
+    {
       label: 'Override one Astryx string',
       code: `import type {ReactNode} from 'react';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
@@ -133,6 +153,25 @@ export function AppI18n({children}: {children: ReactNode}) {
         en: {'@astryx.selector.placeholder': 'Choose...'},
       }}
     >
+      {children}
+    </InternationalizationProvider>
+  );
+}`,
+    },
+    {
+      label: 'Provide a local fallback catalog',
+      code: `import type {ReactNode} from 'react';
+import {
+  InternationalizationProvider,
+  type MessagesByLocale,
+} from '@astryxdesign/core/i18n';
+import ptBR from './locales/pt-BR.json';
+
+const messages: MessagesByLocale = {'pt-BR': ptBR};
+
+export function AppI18n({children}: {children: ReactNode}) {
+  return (
+    <InternationalizationProvider locale="pt-BR" messages={messages}>
       {children}
     </InternationalizationProvider>
   );
@@ -153,15 +192,15 @@ export function AppI18n({children}: {children: ReactNode}) {
 }`,
     },
     {
-      label: 'Show Calendar and DateInput in the Japanese calendar',
+      label: 'Show Calendar and DateInput in another calendar',
       code: `import {useState} from 'react';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {Calendar, type ISODateString} from '@astryxdesign/core/Calendar';
 import {DateInput} from '@astryxdesign/core/DateInput';
 import {VStack} from '@astryxdesign/core/Layout';
 
-// Japanese, Buddhist, and ROC dates need no Temporal, so they work in every
-// browser. The value stays a Gregorian ISO date.
+// Japanese, Buddhist, and Minguo calendar dates need no Temporal, so they work
+// in every browser. The value stays a Gregorian ISO date.
 export function StartDate() {
   const [value, setValue] = useState<ISODateString | undefined>('2026-10-30');
   return (
@@ -170,25 +209,6 @@ export function StartDate() {
         <DateInput label="Start date" value={value} onChange={setValue} />
         <Calendar value={value ?? null} onChange={next => setValue(next)} />
       </VStack>
-    </InternationalizationProvider>
-  );
-}`,
-    },
-    {
-      label: 'Provide a local fallback catalog',
-      code: `import type {ReactNode} from 'react';
-import {
-  InternationalizationProvider,
-  type MessagesByLocale,
-} from '@astryxdesign/core/i18n';
-import ptBR from './locales/pt-BR.json';
-
-const messages: MessagesByLocale = {'pt-BR': ptBR};
-
-export function AppI18n({children}: {children: ReactNode}) {
-  return (
-    <InternationalizationProvider locale="pt-BR" messages={messages}>
-      {children}
     </InternationalizationProvider>
   );
 }`,

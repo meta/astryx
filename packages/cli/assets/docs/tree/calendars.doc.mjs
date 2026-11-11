@@ -15,7 +15,7 @@ export const docs = {
   // Internationalization, the page that links here.
   title: 'Internationalization: calendars',
   summary:
-    'Show dates in the Persian, Hebrew, Islamic, Buddhist, Japanese, lunisolar, and other calendars while values stay Gregorian ISO dates.',
+    'Show dates in the Persian, Hebrew, Hijri, Buddhist, Japanese, Chinese, Dangi, and other calendars while values stay Gregorian ISO dates.',
   keywords: [
     'calendar',
     'calendar system',
@@ -30,6 +30,7 @@ export const docs = {
     'chinese',
     'dangi',
     'Ethiopian',
+    'Ethiopic',
     'Temporal',
     'polyfill',
     'u-ca',

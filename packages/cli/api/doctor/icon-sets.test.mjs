@@ -91,10 +91,10 @@ describe('icon-sets check', () => {
     });
     expect(check).toMatchObject({status: 'fail'});
     expect(check?.message).toContain(
-      '2 icon sets are installed and @acme/lines/lines is not in your list (experimental.iconSet)',
+      '2 icon sets are installed and lines is not in your list (experimental.iconSet)',
     );
     expect(check?.fix).toContain(
-      '`astryx experimental icon use glyphs --backup @acme/lines/lines`',
+      '`astryx experimental icon use glyphs --backup lines`',
     );
   });
 
