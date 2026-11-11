@@ -47,8 +47,13 @@ import React, {
 } from 'react';
 import {readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
-import {usePopover} from '../Popover/usePopover';
+import {usePopoverInternal} from '../Popover/usePopover';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
+import {
+  claimPress,
+  currentGesture,
+  isPressInFlight,
+} from '../Layer/gestureCounter';
 import {Button, type ButtonProps} from '../Button';
 import {Heading} from '../Heading';
 import {Icon} from '../Icon';
@@ -58,6 +63,7 @@ import type {DropdownMenuItemProps} from './DropdownMenuItem';
 import {
   MENU_ITEM_ROLES,
   MENU_ITEM_SELECTOR,
+  MENU_ROW_SELECTOR,
   MENU_BOUNDARY_SELECTOR,
   activateMenuItem,
 } from './menuItemRoles';
@@ -71,12 +77,12 @@ import {
 } from './DropdownMenuContext';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {useListFocus} from '../hooks/useListFocus';
+import {useInternalListFocus} from '../hooks/useListFocus';
 import {useDropdownMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
-import {returnFocusForLastInput} from '../utils/focusReturn';
+import {focusForLastInput, returnFocusForLastInput} from '../utils/focusReturn';
 import {PressGroupContext} from '../hooks/pressGroupContext';
 import {useMenuOverflow} from './useMenuOverflow';
 import {moveRegionsTab} from './menuRegionStops';
@@ -962,6 +968,11 @@ function DropdownMenuPopover({
   // the list ref exists, and its release is kept for the close.
   const holdEntranceRef = useRef<() => void>(() => {});
   const releaseEntranceRef = useRef<(() => void) | null>(null);
+  // The trigger press that asks the menu to open. The show holds the trigger
+  // as the invoker through that press; that hold is set below, once the
+  // popover exists.
+  const openingPressRef = useRef<{gesture: number} | null>(null);
+  const holdOpeningPressRef = useRef<() => void>(() => {});
 
   // Submenu flyouts are `popover="manual"` elements nested inside the menu's
   // `popover="auto"` element, so the browser's light dismiss of the menu never
@@ -1069,6 +1080,7 @@ function DropdownMenuPopover({
 
   const handleLayerShow = useCallback(() => {
     acceptedOpenRef.current = true;
+    holdOpeningPressRef.current();
     holdEntranceRef.current();
     resetFocusReturn();
     if (renderTrigger != null) {
@@ -1096,10 +1108,12 @@ function DropdownMenuPopover({
         ? button.label
         : undefined;
 
-  const popover = usePopover({
+  const popover = usePopoverInternal({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     hasLightDismiss: true,
+    // The menu, not the layer, owns what a touch outside that pans does.
+    ownsOutsidePan: true,
     hasCloseButton: false,
     hasAutoFocus: false,
     // Without a header or footer the popup's own role="menu" is the exposed
@@ -1113,6 +1127,9 @@ function DropdownMenuPopover({
     dialogLabel: hasRegions
       ? (menuLabel ?? t(DEFAULT_BUTTON_I18N_KEY))
       : undefined,
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations[placement],
   });
 
   const closeMenu = useCallback(() => {
@@ -1131,8 +1148,9 @@ function DropdownMenuPopover({
     focusItem,
     ownsEvent,
     getItems: getMenuItems,
-  } = useListFocus<HTMLDivElement>({
-    itemSelector: MENU_ITEM_SELECTOR,
+  } = useInternalListFocus<HTMLDivElement>({
+    itemSelector: MENU_ROW_SELECTOR,
+    reachesDisabledItems: true,
     boundarySelector: MENU_BOUNDARY_SELECTOR,
     // Menus wrap from the last row to the first and back, as macOS menus do;
     // a picker's list clamps instead.
@@ -1141,7 +1159,7 @@ function DropdownMenuPopover({
     onEscape: closeMenu,
   });
 
-  // Typeahead over the (enabled) menu items — jump to the next item whose
+  // Typeahead over the menu items, disabled ones included — jump to the next item whose
   // LABEL starts with the typed text, never its description, shortcut or
   // badge. Reuses the hook's scoped item collection so an inline submenu
   // flyout's items aren't swept in.
@@ -1204,8 +1222,18 @@ function DropdownMenuPopover({
     requestAnimationFrame(() => {
       const focusEnd = focusLastOnOpenRef.current ? focusLast : focusFirst;
       focusLastOnOpenRef.current = false;
-      if (openModalityRef.current === 'pointer' || !focusEnd()) {
-        listRef.current?.focus();
+      const isPointerOpen = openModalityRef.current === 'pointer';
+      // A pointer that lit a row before this frame keeps that row's
+      // highlight: the row under the pointer stays the focused row.
+      const list = listRef.current;
+      const active = list?.ownerDocument.activeElement;
+      const isRowLit =
+        isPointerOpen &&
+        active != null &&
+        active !== list &&
+        list?.contains(active) === true;
+      if (!isRowLit && (isPointerOpen || !focusEnd())) {
+        list?.focus();
       }
       openModalityRef.current = 'keyboard';
     });
@@ -1220,9 +1248,14 @@ function DropdownMenuPopover({
       pressTouchModel === 'uikit'
         ? listRef.current?.closest('[popover]')
         : null;
+    // The entrance plays on the popover's surface, inside the layer.
     releaseEntranceRef.current =
-      layer == null ? null : holdEntranceInput(layer);
-  }, [listRef, pressTouchModel]);
+      layer == null
+        ? null
+        : holdEntranceInput(layer, {
+            entrance: popover.contentRef.current ?? layer,
+          });
+  }, [listRef, pressTouchModel, popover.contentRef]);
   holdEntranceRef.current = holdEntrance;
   // The layer runtime's input hold: an unmount during the entrance releases it.
   useEffect(
@@ -1365,6 +1398,25 @@ function DropdownMenuPopover({
     ? controlledIsOpen === true
     : popover.isOpen;
 
+  // The menu is `popover="auto"`. The browser's light dismiss reads a release
+  // outside the popover as a dismissal, also the release of the press that
+  // opened it. This holds for a mouse and for a finger after the long-press
+  // delay, and also when the show waited for another popover operation. So
+  // the trigger stays the popover's invoker through that press, as
+  // useKeepLayerOpenProps does for controls beside an open layer.
+  const holdOpeningPress = useCallback(() => {
+    const press = openingPressRef.current;
+    openingPressRef.current = null;
+    if (
+      press != null &&
+      press.gesture === currentGesture() &&
+      isPressInFlight()
+    ) {
+      holdInvokerThroughPress(buttonRef.current, popover.id);
+    }
+  }, [popover.id]);
+  holdOpeningPressRef.current = holdOpeningPress;
+
   // A mouse opens on press-down; a finger held on the trigger opens after
   // the long-press delay. Pressing the trigger of an open menu closes it, and
   // the click of that same gesture — reported by `isTriggerClickFromPress` —
@@ -1389,22 +1441,34 @@ function DropdownMenuPopover({
       // remember whatever was focused BEFORE the press as the element to hand
       // focus back to when it closes. Focusing the trigger first gives the
       // popover the state a click-open already has: the trigger is where
-      // Escape or a pick returns focus (the APG menu-button pattern).
-      buttonRef.current?.focus({preventScroll: true});
+      // Escape or a pick returns focus (the APG menu-button pattern). A
+      // finger's press shows no ring here.
+      if (buttonRef.current != null) {
+        focusForLastInput(buttonRef.current, {preventScroll: true});
+      }
+      openingPressRef.current = {gesture: currentGesture()};
       const didOpen = openAndFocus('pointer', true);
-      if (didOpen) {
-        // The menu is `popover="auto"`: the browser's light dismiss would
-        // read the release of this very press, on the trigger outside the
-        // popover, as a dismissal — a mouse's release, and as much a
-        // finger's after the long-press delay opened the menu under it.
-        // Holding the invoker relationship through the press exempts the
-        // trigger, the way useKeepLayerOpenProps does for controls beside
-        // an open layer.
-        holdInvokerThroughPress(buttonRef.current, popover.id);
+      // A mouse can release away from the trigger, or the trigger can move
+      // away under it. So the layer claims a mouse's press, and that release
+      // lands on the layer; over the trigger, the trigger keeps it. Only a
+      // show accepted here claims it. After a show that waited, the press
+      // model no longer tracks the press, and a settled release outside must
+      // still close the menu.
+      const layer = listRef.current?.closest('[popover]');
+      if (didOpen && pointerType === 'mouse' && layer instanceof HTMLElement) {
+        claimPress(layer, {releaseTarget: buttonRef.current});
       }
       return didOpen;
     },
-    [isMenuOpenNow, isControlled, onClick, onOpenChange, openAndFocus, popover],
+    [
+      isMenuOpenNow,
+      isControlled,
+      listRef,
+      onClick,
+      onOpenChange,
+      openAndFocus,
+      popover,
+    ],
   );
 
   // The press model: the row under a release acts, the highlight follows a
@@ -1787,7 +1851,6 @@ function DropdownMenuPopover({
             resolvedMaxHeight != null &&
               dynamicStyles.popoverViewportMaxBlockSize(resolvedMaxHeight),
             popoverXstyle,
-            layerAnimations[placement],
           ],
         },
       )}

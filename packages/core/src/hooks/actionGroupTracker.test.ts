@@ -5,16 +5,18 @@
  * @input vitest (jsdom), createActionGroupTracker over actions laid out with
  *   stubbed rects
  * @output The tracker's contract, driven directly as a recognizer elsewhere
- *   would drive it: begin highlights the action under the point and reads
- *   layout only then; move follows the finger and cuts (not fades) the action
- *   it leaves; end fades and runs only the action under the finger, once;
- *   cancel and an inert press run nothing; disabled actions are skipped;
- *   several roots are one group; offsetBy shifts the cached rects; the
- *   highlight callback (with the target it replaces) and the opt-out of the
- *   paint; an owner's own target resolution (a row of segments, past its
- *   ends), the finger's raw moves, the begin target, remeasure, a cancelled
- *   click reported, and the browser's own click taken once by the shared
- *   click guard
+ *   would drive it. Begin highlights the action under the point and reads
+ *   layout only then. Move follows the finger and cuts, not fades, the action
+ *   it leaves. End fades and runs only the action under the finger, once.
+ *   Cancel and an inert press run nothing. Disabled actions are skipped, and
+ *   several roots are one group. offsetBy shifts the cached rects. The cases
+ *   also cover the highlight callback, with the target it replaces, and the
+ *   opt-out of the paint. They cover an owner's own target resolution: a row
+ *   of segments, past its ends. They cover the finger's raw moves, the begin
+ *   target, remeasure and a reported cancelled click. The shared click guard
+ *   takes the browser's own click once. A one-axis group counts the finger on
+ *   its center line, and Escape cancels its press. A paint can be decided
+ *   action by action.
  * @position jsdom tests of packages/core/src/hooks/actionGroupTracker.ts
  */
 
@@ -26,6 +28,7 @@ import {PRESS_FADE_MS} from '../utils/pressGesture';
 import {
   createActionGroupTracker,
   measureActions,
+  onCenterLine,
   type ActionGroupTarget,
   type ActionGroupTrackerOptions,
 } from './actionGroupTracker';
@@ -496,6 +499,125 @@ describe('createActionGroupTracker: options for other trackers', () => {
     owned.end();
     expect(onActivate).toHaveBeenCalledWith(left.button);
     expect(isClickGuardArmed(document)).toBe(true);
+  });
+});
+
+describe('createActionGroupTracker: a one-axis group (tracksAlong)', () => {
+  // A row of two segments in a 200 x 30 group: x 0-99 and 101-200.
+  let left: ReturnType<typeof action>;
+  let right: ReturnType<typeof action>;
+  beforeEach(() => {
+    left = action('Left', {left: 0, top: 0, width: 99, height: 30});
+    right = action('Right', {left: 101, top: 0, width: 99, height: 30});
+    root.replaceChildren(left.button, right.button);
+    place(root, {left: 0, top: 0, width: 200, height: 30});
+  });
+
+  const escape = () =>
+    window.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+
+  it('counts the finger on the row: a drift off it keeps choosing along x, and the lift runs that action', () => {
+    const group = tracker({tracksAlong: 'x'});
+    group.begin(50, 15);
+    group.move(150, 15);
+    group.move(150, 400);
+    expect(group.highlighted).toBe(right.button);
+    group.move(50, -300);
+    expect(group.highlighted).toBe(left.button);
+    expect(group.end()).toBe(left.button);
+    expect(left.onClick).toHaveBeenCalledTimes(1);
+    expect(right.onClick).not.toHaveBeenCalled();
+  });
+
+  it('past the row\u2019s ends, the end action counts', () => {
+    const group = tracker({tracksAlong: 'x'});
+    group.begin(50, 15);
+    group.move(900, 15);
+    expect(group.highlighted).toBe(right.button);
+    group.move(-900, 80);
+    expect(group.highlighted).toBe(left.button);
+  });
+
+  it('without an axis, a drift off the group leaves no action, as before', () => {
+    const group = tracker();
+    group.begin(50, 15);
+    group.move(150, 400);
+    expect(group.highlighted).toBeNull();
+  });
+
+  it('Escape cancels the press: the paint is cut at once, nothing runs, and the owner hears it', () => {
+    const onCancel = vi.fn();
+    const onHighlightChange = vi.fn();
+    const group = tracker({tracksAlong: 'x', onCancel, onHighlightChange});
+    group.begin(50, 15);
+    expect(left.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    escape();
+    expect(group.isTracking).toBe(false);
+    expect(left.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onHighlightChange).toHaveBeenLastCalledWith(null, left.button);
+    expect(group.end()).toBeNull();
+    expect(left.onClick).not.toHaveBeenCalled();
+    // The listener ends with the press: a later Escape reaches nobody.
+    escape();
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('Escape that cancels a press is handled, so a dialog around the group stays open', () => {
+    const group = tracker({tracksAlong: 'x'});
+    const idle = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      cancelable: true,
+    });
+    window.dispatchEvent(idle);
+    expect(idle.defaultPrevented).toBe(false);
+    group.begin(50, 15);
+    const handled = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      cancelable: true,
+    });
+    window.dispatchEvent(handled);
+    expect(handled.defaultPrevented).toBe(true);
+    expect(group.isTracking).toBe(false);
+  });
+
+  it('Escape leaves a group without an axis alone, and a lifted press stops listening', () => {
+    const onCancel = vi.fn();
+    const plain = tracker({onCancel});
+    plain.begin(50, 15);
+    escape();
+    expect(plain.isTracking).toBe(true);
+    plain.end();
+    const row = tracker({tracksAlong: 'x', onCancel});
+    row.begin(50, 15);
+    row.end();
+    escape();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('a paint function decides, action by action, which take the press paint', () => {
+    const group = tracker({paintsHighlight: item => item === right.button});
+    group.begin(50, 15);
+    expect(left.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    group.move(150, 15);
+    expect(right.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    group.end();
+    expect(right.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+  });
+});
+
+describe('onCenterLine', () => {
+  const band = {left: 10, top: 100, right: 210, bottom: 140};
+
+  it('reads a row on its center line, clamped to its ends', () => {
+    expect(onCenterLine(band, 'x', 50, 900)).toEqual([50, 120]);
+    expect(onCenterLine(band, 'x', -40, 0)).toEqual([10, 120]);
+    expect(onCenterLine(band, 'x', 400, 120)).toEqual([210, 120]);
+  });
+
+  it('reads a column on its center line across x', () => {
+    expect(onCenterLine(band, 'y', 900, 130)).toEqual([110, 130]);
+    expect(onCenterLine(band, 'y', 0, 0)).toEqual([110, 100]);
   });
 });
 

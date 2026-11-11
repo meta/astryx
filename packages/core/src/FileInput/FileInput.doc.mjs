@@ -124,7 +124,7 @@ export const docs = {
       type: "'attached' | 'detached' | 'tooltip'",
       description:
         'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip hides the message box and surfaces it in a tooltip on the status icon. Dropzone mode does not support attached: a dropzone defaults to detached and resolves attached to detached.',
-      default: "'attached'",
+      default: "'attached' in input mode; 'detached' in dropzone mode",
     },
     {
       name: 'labelTooltip',
@@ -297,7 +297,7 @@ export const docsZh = {
       type: "'attached' | 'detached' | 'tooltip'",
       description:
         '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 隐藏消息框，并在状态图标上以提示气泡形式显示。dropzone 模式不支持 attached：dropzone 默认使用 detached，并将 attached 解析为 detached。',
-      default: "'attached'",
+      default: "输入模式为 'attached'；dropzone 模式为 'detached'",
     },
     {
       name: 'containerXstyle',

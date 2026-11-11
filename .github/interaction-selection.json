@@ -1,0 +1,60 @@
+{
+  "$comment": "The Chromium interaction lane's selection data (spec:AST-030 FR31). `shared`: path prefixes inside component folders that run the full suite, like any path in no component folder. `edges`: a change under `from` also runs `specs`: an interaction proof in another folder that a component's record names, or the edge a logged escape missed.",
+  "shared": ["packages/core/src/Layer/"],
+  "edges": [
+    {
+      "from": "packages/core/src/AlertDialog/",
+      "specs": [
+        "packages/core/src/Dialog/__tests__/DialogTouchEntrance.interaction.browser.spec.ts"
+      ]
+    },
+    {
+      "from": "packages/core/src/Carousel/",
+      "specs": [
+        "packages/core/src/SnapPaging/__tests__/SnapPaging.interaction.browser.spec.ts"
+      ]
+    },
+    {
+      "from": "packages/core/src/CheckboxInput/",
+      "specs": [
+        "packages/core/src/Indicator/__tests__/TouchTargets.interaction.browser.spec.ts"
+      ]
+    },
+    {
+      "from": "packages/core/src/Collapsible/",
+      "specs": [
+        "packages/core/src/motion/__tests__/animatedLayoutAdopters.interaction.browser.spec.ts"
+      ]
+    },
+    {
+      "from": "packages/core/src/CommandPalette/",
+      "specs": [
+        "packages/core/src/Field/__tests__/SearchKeyboard.interaction.browser.spec.ts"
+      ]
+    },
+    {
+      "from": "packages/core/src/Field/",
+      "specs": [
+        "packages/core/src/Button/__tests__/ButtonHitArea.interaction.browser.spec.ts"
+      ]
+    },
+    {
+      "from": "packages/core/src/Layout/",
+      "specs": [
+        "packages/core/src/Resizable/__tests__/paneSlide.interaction.browser.spec.ts"
+      ]
+    },
+    {
+      "from": "packages/core/src/RadioList/",
+      "specs": [
+        "packages/core/src/Indicator/__tests__/TouchTargets.interaction.browser.spec.ts"
+      ]
+    },
+    {
+      "from": "packages/core/src/TreeList/",
+      "specs": [
+        "packages/core/src/motion/__tests__/animatedLayoutAdopters.interaction.browser.spec.ts"
+      ]
+    }
+  ]
+}

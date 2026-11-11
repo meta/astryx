@@ -57,10 +57,16 @@ import {
 import {useThemeDefinition} from '../theme/useTheme';
 import * as stylex from '@stylexjs/stylex';
 import {devWarn} from '../utils/devWarning';
+import {matchesMediaQuery, watchMediaQuery} from '../utils/coarsePointer';
 import type {BaseProps} from '../BaseProps';
 import {FALLBACK_CLOSE_SELECTOR, usePopoverInternal} from './usePopover';
+import {usePresentationHold} from '../Layer/presentationHold';
 import {usePopoverSurfaceMotion} from './PopoverTouch';
-import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {
+  FOCUSABLE_SELECTOR,
+  isDisabledWithin,
+  preferTabStops,
+} from '../hooks/focusableSelector';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
@@ -113,15 +119,12 @@ function usePresentationSurface(
     [points],
   );
   const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      const mql = window.matchMedia(query);
-      mql.addEventListener('change', onStoreChange);
-      return () => mql.removeEventListener('change', onStoreChange);
-    },
+    (onStoreChange: () => void) =>
+      watchMediaQuery(window, query, onStoreChange),
     [query],
   );
   const getSnapshot = useCallback(
-    () => window.matchMedia(query).matches,
+    () => matchesMediaQuery(window, query),
     [query],
   );
   const isCompactTouch = useSyncExternalStore(
@@ -585,6 +588,9 @@ export function Popover({
     xstyle: [
       styles.surfaceViewportFit,
       hasOverflow && styles.surfaceScrollable,
+      // The entrance runs on the surface: an anchored layer lays out again on
+      // each frame its own style animates.
+      layerAnimations[placement],
       xstyle,
     ],
     className,
@@ -601,23 +607,23 @@ export function Popover({
     surfaceMotion.present(
       surfaceRef.current?.closest<HTMLElement>('[popover]') ?? null,
       anchorElementRef.current,
+      surfaceRef.current,
     );
   };
   // A controlled popover opens on the surface its presentation resolves to
   // as it opens, and keeps that surface until it closes: a phone rotated past
   // the compact width while the sheet is open keeps its sheet.
-  const [controlledSurface, setControlledSurface] = useState<
-    'popover' | 'bottom-sheet' | null
-  >(null);
-  // The latch is set during render, as the controlled `isOpen` turns on or
-  // off, so the open surface is known in the same render that opens it.
-  if (isControlled) {
-    if (isOpen !== true && controlledSurface != null) {
-      setControlledSurface(null);
-    } else if (isOpen === true && controlledSurface == null) {
-      setControlledSurface(popover.isOpen ? 'popover' : resolvedPresentation);
-    }
+  // The layer runtime's presentation hold (Layer/presentationHold), taken
+  // during render as the controlled `isOpen` turns on, so the open surface is
+  // known in the same render that opens it, and let go as it turns off.
+  const surfaceHold = usePresentationHold<'popover' | 'bottom-sheet'>({
+    isOpen: isControlled && isOpen === true,
+    presentation: popover.isOpen ? 'popover' : resolvedPresentation,
+  });
+  if (isControlled && isOpen !== true && surfaceHold.isHeld) {
+    surfaceHold.release();
   }
+  const controlledSurface = surfaceHold.presentation;
   const isSheetOpen = isControlled
     ? isOpen === true && controlledSurface === 'bottom-sheet'
     : isSheetOpenState;
@@ -631,12 +637,16 @@ export function Popover({
   // stopped being compact, it stays through its exit, so the exit plays out
   // and its dialog hands focus back to the trigger (component:Popover AR4),
   // and gives way to the anchored layer once its dialog has closed.
-  const [hasSheetBeenOpen, setHasSheetBeenOpen] = useState(false);
+  // The sheet's presentation hold: from the render that opens it until its
+  // dialog has closed.
+  const sheetHold = usePresentationHold({
+    isOpen: isSheetOpen,
+    presentation: true,
+  });
+  const hasSheetBeenOpen = sheetHold.isHeld;
+  const releaseSheet = sheetHold.release;
   // The trigger's text, which names a sheet that has no `label` (DEC-8).
   const [triggerText, setTriggerText] = useState('');
-  if (isSheetOpen && !hasSheetBeenOpen) {
-    setHasSheetBeenOpen(true);
-  }
   const isSheetMounted =
     isSheetOpen ||
     hasSheetBeenOpen ||
@@ -647,12 +657,12 @@ export function Popover({
     sheetPanelRef.current = panel;
     setSheetPanelAttached(panel != null);
   }, []);
-  // Focus enters the sheet at each opening as it enters the anchored popover
-  // (FR2): a caller's `[data-autofocus]`, else the first genuine content
-  // control (never the injected fallback close, never BottomSheet's own
-  // scroll area), else that scroll area: the sheet's labelled surface, which
-  // paints the shared focus ring under the keyboard. It runs a frame after
-  // BottomSheet presents the dialog; BottomSheet is unchanged.
+  // Focus enters the sheet at each opening, as in the anchored popover (FR2).
+  // A caller's `[data-autofocus]` wins. Else the first enabled tab stop in the
+  // content takes focus: never the injected fallback close or BottomSheet's
+  // own scroll area. Else the scroll area does: it is the sheet's labelled
+  // surface and shows the keyboard focus ring. This runs a frame after
+  // BottomSheet presents the dialog.
   useEffect(() => {
     if (!isSheetOpen || !isSheetPanelAttached) {
       return;
@@ -677,15 +687,18 @@ export function Popover({
       }
       const target =
         sheetPanel.querySelector<HTMLElement>('[data-autofocus]') ??
-        Array.from(
-          sheetPanel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-        ).find(
-          element =>
-            // BottomSheet's scroll area is the panel's own child; content
-            // sits inside it.
-            element.parentElement !== sheetPanel &&
-            element.closest(FALLBACK_CLOSE_SELECTOR) == null,
-        );
+        preferTabStops(
+          Array.from(
+            sheetPanel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+          ).filter(
+            element =>
+              // BottomSheet's scroll area is the panel's own child; content
+              // sits inside it.
+              element.parentElement !== sheetPanel &&
+              element.closest(FALLBACK_CLOSE_SELECTOR) == null &&
+              !isDisabledWithin(element, sheetPanel),
+          ),
+        )[0];
       if (target != null) {
         target.focus({preventScroll: true});
         return;
@@ -713,14 +726,14 @@ export function Popover({
     }
     const dialog = sheetPanelRef.current?.closest('dialog');
     if (dialog == null || !dialog.open) {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- syncs with the sheet's <dialog>: it is already closed, so its close event has fired and its exit is over; unmount it
-      setHasSheetBeenOpen(false);
+      // The sheet's <dialog> is already closed, so its close event has fired
+      // and its exit is over: unmount it.
+      releaseSheet();
       return;
     }
-    const handleClose = () => setHasSheetBeenOpen(false);
-    dialog.addEventListener('close', handleClose);
-    return () => dialog.removeEventListener('close', handleClose);
-  }, [hasSheetBeenOpen, isSheetOpen]);
+    dialog.addEventListener('close', releaseSheet);
+    return () => dialog.removeEventListener('close', releaseSheet);
+  }, [hasSheetBeenOpen, isSheetOpen, releaseSheet]);
   // An open on a compact touch screen shows the sheet at once: its module
   // loads as soon as the sheet can be the surface, with nothing rendered.
   useEffect(() => {
@@ -1045,7 +1058,6 @@ export function Popover({
           ? width.trim()
           : clampInlineSize(width, layerViewportInset.maxInlineSizeFallback),
       );
-  const layerXstyle = [popoverSizeXstyle, layerAnimations[placement]];
 
   // One instance of the content at a time: the sheet holds it while it is
   // mounted, the anchored layer otherwise.
@@ -1095,7 +1107,7 @@ export function Popover({
         placement,
         alignment,
         offset: spacingVars['--spacing-1'],
-        xstyle: layerXstyle,
+        xstyle: popoverSizeXstyle,
       });
 
   // Sibling mode: render only the popover (no wrapper needed)

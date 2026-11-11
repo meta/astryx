@@ -34,14 +34,18 @@ ownership for the upload affordance that FileInput paints through Icon.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`
-- Compatibility class: additive public theming target; no existing target,
-  runtime default, DOM, prop, interaction, or accessibility behavior changes
+- Released default preserved: `no`; in dropzone mode `statusVariant`
+  resolves to `detached` unless it is `tooltip` (FR6, DEC-2)
+- Compatibility class: additive public theming target, and FR6's breaking
+  dropzone status placement (below): a dropzone's status renders `detached`,
+  with its position and `data-variant`, even when `attached` is passed; no
+  other target, prop, interaction, or accessibility behavior changes
 - Controlled/uncontrolled behavior: unchanged; FileInput remains controlled
-- Migration decision: `component:FileInput/DEC-1`
+- Migration decisions: `component:FileInput/DEC-1`, `component:FileInput/DEC-2`
 - Dropzone status placement (FR6): breaking, in a minor release. A dropzone
-  that rendered `attached` (by default or explicitly) now renders `detached`;
-  callers who want the message on hover pass `tooltip`
+  passed `statusVariant="attached"` now renders `detached`, as a dropzone with
+  no `statusVariant` already does (DEC-2); callers who want the message on
+  hover pass `tooltip`
 
 Consumer migration instructions belong in consumer docs and release notes.
 
@@ -175,12 +179,12 @@ target owns only this stable upload position and its existing mode distinction.
 
 ## Verification map
 
-| Contract            | Verification                                                                      | Representative states                              | Mutation or failure expectation                                                                             | Audit section             |
-| ------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------- |
-| FR1, FR2            | `FileInput.test.tsx` rendering and target suites                                  | Input/dropzone; empty/selected/loading             | Moving the root target or changing when/at what size the affordance renders breaks focused assertions.      | `audit:FileInput/theming` |
-| FR3, FR4, FR5       | `FileInput.test.tsx`, `themingTargets.test.ts`, probe-theme check                 | Both modes and same-element Icon target            | Missing the target, reflecting the wrong mode, or moving it off the glyph fails source/docs/probe coverage. | `audit:FileInput/theming` |
-| FR6                 | `FileInput.doc.mjs` `statusVariant` entry and the prop's JSDoc in `FileInput.tsx` | Dropzone and input modes                           | A doc or JSDoc that offers `attached` in dropzone mode, or drops it from input mode, fails review.          | —                         |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                     | Nine anatomy entries and two locally owned targets | Missing, extra, prefixed, stale, or unclaimed current mappings fail validation.                             | `audit:FileInput/anatomy` |
+| Contract            | Verification                                                                                                                                                                                                                                                                        | Representative states                              | Mutation or failure expectation                                                                                                                                                                                         | Audit section             |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| FR1, FR2            | `FileInput.test.tsx` rendering and target suites                                                                                                                                                                                                                                    | Input/dropzone; empty/selected/loading             | Moving the root target or changing when/at what size the affordance renders breaks focused assertions.                                                                                                                  | `audit:FileInput/theming` |
+| FR3, FR4, FR5       | `FileInput.test.tsx`, `themingTargets.test.ts`, probe-theme check                                                                                                                                                                                                                   | Both modes and same-element Icon target            | Missing the target, reflecting the wrong mode, or moving it off the glyph fails source/docs/probe coverage.                                                                                                             | `audit:FileInput/theming` |
+| FR6                 | `FileInput.test.tsx` "renders a dropzone status detached by default", "renders a dropzone status detached when attached is passed" and "keeps attached for an input-mode status passed attached"; `FileInput.doc.mjs` `statusVariant` entry and the prop's JSDoc in `FileInput.tsx` | Dropzone unset and explicit `attached`; input mode | A dropzone whose status renders attached, unset or when `attached` is passed, an input-mode status that loses `attached`, or a doc or JSDoc that offers `attached` in dropzone mode or drops it from input mode, fails. | —                         |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                                                                                                                                       | Nine anatomy entries and two locally owned targets | Missing, extra, prefixed, stale, or unclaimed current mappings fail validation.                                                                                                                                         | `audit:FileInput/anatomy` |
 
 ## Decision log
 
@@ -193,6 +197,20 @@ The upload icon is a stable, consumer-recognizable FileInput affordance whose
 mode-dependent placement and default size belong to FileInput. It receives the
 `file-input-icon` target on the same Icon element that paints the glyph, while
 Icon retains its general target and base glyph semantics.
+
+### DEC-2 — The dropzone default changes in a patch; the attached cleanup waits for the minor
+
+**Reference:** `component:FileInput/DEC-2`
+**Decider:** cixzhang, 2026-11-10
+
+A dropzone defaults to `detached`. An explicit
+`attached` keeps its released rendering until the next minor release, which
+resolves it to `detached`. The owner asked: "9259 can we have a non breaking
+version that just updates thw default then saves the cleanup of the attached
+version for the minor".
+
+Rejected: one breaking change in the next minor for both the default and the
+explicit `attached`.
 
 ## Open questions
 

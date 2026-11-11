@@ -4,9 +4,10 @@
 
 /**
  * @file Timestamp.tsx
- * @input Uses React, Text, provider locale and calendar, and Timestamp formatters
+ * @input Uses React, Text, lazy TimestampHoverCard, provider locale and
+ *   calendar, and Timestamp formatters
  * @output Exports Timestamp component and related types
- * @position Core implementation; renders formatted timestamps
+ * @position Core implementation; a stable time node anchors lazily attached details
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Timestamp/formatRelativeTime.ts
@@ -34,9 +35,13 @@ import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {
+  ROLELESS_TRIGGER,
+  labelledTriggerAttributes,
+} from '../HoverCard/popupTrigger';
 import {formatInstant, formatZoneName} from './formatInstant';
 import {formatRelativeTime} from './formatRelativeTime';
-import {formatTooltipLines} from './tooltipEntries';
+import {formatTooltipLines, resolveTimezoneID} from './tooltipEntries';
 import type {
   TimestampTooltipEntry,
   TimestampTooltipLine,
@@ -99,12 +104,23 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
    */
   format?: TimestampFormat;
   /**
+   * IANA time zone the absolute formats render in, such as `'UTC'` or
+   * `'America/Los_Angeles'`. Omit (or pass `'local'`) for the viewer's own
+   * zone. An explicit zone renders identically on the server and the client,
+   * so it is the way to show an absolute time without a hydration mismatch;
+   * without it the server markup depends on the server's zone. Relative
+   * formats name no instant, so their visible text ignores it. Configured
+   * `tooltipEntries` rows still follow it. An unknown identifier warns once
+   * in development and falls back to the viewer's zone.
+   */
+  timezoneID?: string;
+  /**
    * Threshold in seconds for 'auto' format to switch from relative to date_time.
    * @default 604800 (7 days)
    */
   autoThreshold?: number;
   /**
-   * Whether to show a hover card with the full date/time on hover. The card
+   * Whether to show a card with the full date/time on hover or keyboard focus. The card
    * is copyable — its default single row carries the full absolute time — and
    * `tooltipEntries` customizes its rows.
    * @default true
@@ -120,6 +136,10 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
    * the buttons align across rows; that column is only present when some row
    * is copyable. With no entries the card shows a single default row with the
    * full absolute time in the viewer's own zone, which is copyable.
+   *
+   * An entry without its own `timezoneID` follows the Timestamp's
+   * `timezoneID` when set, else the viewer's zone; `'local'` always means
+   * the viewer's zone.
    *
    * Configuring entries also attaches the surface to absolute formats, which
    * otherwise have no hover card at all. `hasTooltip={false}` still suppresses
@@ -280,6 +300,7 @@ function isRelativeFormat(
 export function Timestamp({
   value,
   format = 'auto',
+  timezoneID: timezoneIDProp,
   autoThreshold = DEFAULT_AUTO_THRESHOLD,
   hasTooltip = true,
   tooltipEntries,
@@ -313,6 +334,8 @@ export function Timestamp({
     canReadClockOnClient,
     canReadClockOnServer,
   );
+  // The open card's id, which the card reports as it shows and hides.
+  const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [now, setNow] = useState<Date | null>(() =>
     needsClock && canReadClock ? new Date() : null,
   );
@@ -346,9 +369,10 @@ export function Timestamp({
         : 'date_time'
       : format;
 
-  // Format the display text in the viewer's own zone; only the tooltip names
-  // others. The one exception is the pre-hydration placeholder, written in
-  // UTC with its label so every zone produces the same markup.
+  // Absolute text uses `timezoneID`, else the viewer's zone. A named zone makes
+  // the text the same on the server and the client. It does not reach the UTC
+  // placeholder, the default card row or the relative name.
+  const timezoneID = resolveTimezoneID(timezoneIDProp, 'timezoneID');
   const displayText = !isValidDate
     ? ''
     : effectiveFormat === 'relative'
@@ -360,24 +384,26 @@ export function Timestamp({
               date,
               effectiveFormat,
               locale,
-              // The placeholder before hydration is Gregorian and in UTC, with
-              // its zone. The server and the client then write the same text,
-              // with or without Temporal.
+              // The pre-hydration placeholder is Gregorian and in UTC, with its zone,
+              // whatever `timezoneID` pins. The server and the client then write the
+              // same text, with or without Temporal.
               isClockPending
                 ? {timeZone: 'UTC', isTimezoneShown: true}
-                : {isTimezoneShown, calendar},
+                : {timeZone: timezoneID, isTimezoneShown, calendar},
             )
           : '';
 
   // Full absolute text for the tooltip (visible — keeps the compact timezone
   // abbreviation) and for the AT-facing aria-label, which spells the timezone
   // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
-  // abbreviations to a screen-reader user (WCAG 3.1.4).
+  // abbreviations to a screen-reader user (WCAG 3.1.4). Both stay in the
+  // viewer's zone: the default hover-card row and the relative accessible name.
   const fullAbsoluteText = isValidDate
-    ? formatInstant(date, 'full', locale, {calendar})
+    ? formatInstant(date, 'full', locale, {timeZone: undefined, calendar})
     : '';
   const ariaLabelText = isValidDate
     ? formatInstant(date, 'full', locale, {
+        timeZone: undefined,
         timeZoneNameStyle: 'long',
         calendar,
       })
@@ -403,11 +429,6 @@ export function Timestamp({
     !isValidDate,
   );
 
-  // Placed after all hooks so the hook order stays stable across renders.
-  if (!isValidDate) {
-    return null;
-  }
-
   // An empty array is not a second way to spell "off" — `hasTooltip` stays the
   // only on/off axis — so normalize it away before anything reads it.
   const entries =
@@ -420,7 +441,20 @@ export function Timestamp({
   // `format` silently suppress another prop's output, so entry presence opens
   // it too. With no entries this reduces to the original condition exactly.
   const showTooltip =
-    hasTooltip && (isRelativeFormat(effectiveFormat) || entries !== undefined);
+    isValidDate &&
+    hasTooltip &&
+    (isRelativeFormat(effectiveFormat) || entries !== undefined);
+
+  // A card that unmounts while open never reports its hide. Without a card,
+  // forget its id, so the time names no element that is gone.
+  if (!showTooltip && openCardId !== null) {
+    setOpenCardId(null);
+  }
+
+  // Placed after all hooks so the hook order stays stable across renders.
+  if (!isValidDate) {
+    return null;
+  }
 
   // The rows the hover card renders: the configured entries, or the single
   // default absolute line shown when none are set. Either way the surface is
@@ -435,7 +469,7 @@ export function Timestamp({
             isCopyable: true,
           },
         ]
-      : formatTooltipLines(date, entries, locale, calendar);
+      : formatTooltipLines(date, entries, locale, calendar, timezoneID);
 
   const timestampProps = mergeProps(
     themeProps('timestamp', {format: effectiveFormat}),
@@ -443,68 +477,63 @@ export function Timestamp({
   );
 
   const timeElement = (
-    <Text
-      type={type}
-      size={size}
-      color={color}
-      weight={weight}
-      xstyle={xstyle}
-      {...timestampProps}>
-      <time
-        ref={mergedTimeRef}
-        dateTime={isoString}
-        data-testid={testId}
-        {...stylex.props(styles.time)}
-        {...rest}
-        // `ariaLabelText` is '' only for an invalid date, which bails out
-        // before rendering — but keep the guard local: an empty aria-label
-        // must be omitted entirely (not rendered as aria-label="") so AT
-        // falls back to reading the visible <time> content.
-        // A caller's own name wins (`component:Timestamp` FR5).
-        {...(isRelativeFormat(effectiveFormat) &&
-        ariaLabelText !== '' &&
-        rest['aria-label'] == null
-          ? {'aria-label': ariaLabelText}
-          : {})}
-        // The hover card is anchored here with focusTrigger="always", which
-        // attaches focus listeners but does not itself make the anchor
-        // focusable. A bare <time> is not focusable, so without a tab stop
-        // sighted keyboard users could never reveal the card (WCAG 1.4.13 /
-        // 2.1.1). Add the tab stop only while a card is actually attached — no
-        // gratuitous tab stops otherwise. The card carries its own
-        // dashed-underline hover indication as the affordance, so the anchor
-        // needs no separate focus outline.
-        // A caller's own tabIndex wins (`component:Timestamp` FR9).
-        {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}>
-        {displayText}
-      </time>
-    </Text>
+    <time
+      ref={mergedTimeRef}
+      dateTime={isoString}
+      data-testid={testId}
+      {...stylex.props(styles.time)}
+      {...rest}
+      // `ariaLabelText` is '' only for an invalid date, which bails out
+      // before rendering — but keep the guard local: an empty aria-label
+      // must be omitted entirely (not rendered as aria-label="") so AT
+      // falls back to reading the visible <time> content.
+      // A caller's own name wins.
+      {...(isRelativeFormat(effectiveFormat) &&
+      ariaLabelText !== '' &&
+      rest['aria-label'] == null
+        ? {'aria-label': ariaLabelText}
+        : {})}
+      // A bare <time> cannot take focus. Add the tab stop only while a card
+      // is attached, so keyboard users can open it. A caller's tabIndex wins.
+      {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}
+      // The time names the open card after a caller's own ids. The time role
+      // supports neither aria-haspopup nor aria-expanded.
+      {...(showTooltip
+        ? labelledTriggerAttributes(
+            ROLELESS_TRIGGER,
+            {controls: rest['aria-controls']},
+            {id: openCardId, isOpen: openCardId != null},
+          )
+        : null)}>
+      {displayText}
+    </time>
   );
 
-  if (showTooltip) {
-    // One surface for every timestamp that shows one: the copyable hover card,
-    // loaded lazily so the default card-less path never bundles it. Each line
-    // becomes a labelled row with its own copy button. With no configured
-    // entries this is a single row carrying the full absolute time, itself
-    // copyable — so hovering a relative timestamp reveals the full time and
-    // lets the reader copy it. Opens on hover and on keyboard focus (the
-    // <time> tab stop above), with the dashed-underline affordance signalling
-    // it is interactive.
-    //
-    // While the chunk loads the bare <time> stays visible (the Suspense
-    // fallback), so nothing disappears — the card simply attaches once ready.
-    return (
-      <Suspense fallback={timeElement}>
-        <LazyTimestampHoverCard
-          lines={lines}
-          label={t('@astryx.timestamp.detailsLabel')}>
-          {timeElement}
-        </LazyTimestampHoverCard>
-      </Suspense>
-    );
-  }
-
-  return timeElement;
+  // Keep the focusable node outside Suspense. Attaching the lazy overlay must
+  // not replace a timestamp the reader focused while its chunk was loading.
+  return (
+    <>
+      <Text
+        type={type}
+        size={size}
+        color={color}
+        weight={weight}
+        xstyle={xstyle}
+        {...timestampProps}>
+        {timeElement}
+      </Text>
+      {showTooltip && (
+        <Suspense fallback={null}>
+          <LazyTimestampHoverCard
+            lines={lines}
+            label={t('@astryx.timestamp.detailsLabel')}
+            triggerRef={timeRef}
+            onCardOpenChange={setOpenCardId}
+          />
+        </Suspense>
+      )}
+    </>
+  );
 }
 
 Timestamp.displayName = 'Timestamp';

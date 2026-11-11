@@ -547,9 +547,9 @@ export function FileInput({
     isEnabled: showsDisabledMessage,
   });
 
-  // family:input-fields FR8/AV6: a dropzone cannot carry an attached message,
-  // so it offers only detached and tooltip (component:FileInput FR6).
-  const statusVariant: FieldStatusVariant =
+  // A dropzone's tall surface cannot carry an attached message, so it offers
+  // only detached and tooltip.
+  const statusVariant: FieldStatusPlacement =
     mode === 'dropzone'
       ? statusVariantProp === 'tooltip'
         ? 'tooltip'

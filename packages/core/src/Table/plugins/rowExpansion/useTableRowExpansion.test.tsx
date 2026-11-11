@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, fireEvent, act} from '@testing-library/react';
 import {useState} from 'react';
 import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
@@ -181,6 +181,21 @@ describe('useTableRowExpansion (detail panel)', () => {
       ).toHaveAttribute('aria-expanded', 'true');
     },
   );
+  it('retains the original focused chevron and row across expansion and collapse', () => {
+    render(<Harness />);
+    const trigger = screen.getAllByRole('button', {name: /expand row/i})[1];
+    const row = trigger.closest('tr');
+    act(() => trigger.focus());
+    fireEvent.click(trigger);
+    expect(row?.isConnected).toBe(true);
+    expect(trigger.isConnected).toBe(true);
+    expect(screen.getByRole('button', {name: /collapse row/i})).toBe(trigger);
+    expect(document.activeElement).toBe(trigger);
+    fireEvent.click(trigger);
+    expect(trigger.closest('tr')).toBe(row);
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.queryByTestId('panel')).not.toBeInTheDocument();
+  });
   it('renders an "Expand row" chevron button for every expandable row', () => {
     render(<Harness />);
     expect(screen.getAllByRole('button', {name: /expand row/i})).toHaveLength(
@@ -527,21 +542,24 @@ describe('useTableRowExpansion (detail panel)', () => {
   describe('panel variant', () => {
     const panelRow = () =>
       screen.getByTestId('panel').closest('tr') as HTMLTableRowElement;
+    const panelCell = () =>
+      screen.getByTestId('panel').closest('td') as HTMLTableCellElement;
+    const wash = {backgroundColor: 'var(--color-background-muted)'};
 
     it('leaves the panel on the surface behind the table by default', () => {
       // The panel is the row's continuation, not a surface of its own: it
       // takes whatever the table sits on, the way the row does.
       render(<Harness initialExpanded={new Set(['a'])} />);
-      expect(panelRow()).not.toHaveStyle({
-        backgroundColor: 'var(--color-background-muted)',
-      });
+      expect(panelRow()).not.toHaveStyle(wash);
+      expect(panelCell()).not.toHaveStyle(wash);
     });
 
-    it('washes the panel when muted is asked for', () => {
+    it('washes the panel cell, not its row, when muted is asked for', () => {
+      // A row that paints its own box keeps a moving clip as the panel plays
+      // in. The cell slides in with the content instead.
       render(<Harness initialExpanded={new Set(['a'])} panelVariant="muted" />);
-      expect(panelRow()).toHaveStyle({
-        backgroundColor: 'var(--color-background-muted)',
-      });
+      expect(panelCell()).toHaveStyle(wash);
+      expect(panelRow()).not.toHaveStyle(wash);
     });
   });
 
@@ -554,6 +572,11 @@ describe('useTableRowExpansion (detail panel)', () => {
      * sibling row in the same tbody (which is what makes an exclusion
      * necessary at all), and every stripe rule counts only rows that are not
      * panels.
+     *
+     * Both cases render without row dividers. The panel's divider carry reads
+     * the striped row's computed style, and jsdom resolves it in about 2,000
+     * nested passes, which takes seconds. Striping does not depend on
+     * dividers.
      */
     const stripeRules = () => {
       const out: string[] = [];
@@ -572,7 +595,9 @@ describe('useTableRowExpansion (detail panel)', () => {
     };
 
     it('counts stripes over data rows only, so an open panel cannot flip them', () => {
-      render(<Harness isStriped initialExpanded={new Set(['a'])} />);
+      render(
+        <Harness isStriped dividers="none" initialExpanded={new Set(['a'])} />,
+      );
 
       // The panel really is a row among the rows — left in the count, it takes
       // the stripe meant for the row below it and inverts everything after.
@@ -592,7 +617,9 @@ describe('useTableRowExpansion (detail panel)', () => {
     it('marks the panel row so the stripe rule can skip it', () => {
       // The attribute is what the selector keys off, so it is contract, not
       // decoration — losing it silently restores the parity shift above.
-      render(<Harness initialExpanded={new Set(['a'])} isStriped />);
+      render(
+        <Harness initialExpanded={new Set(['a'])} isStriped dividers="none" />,
+      );
       const panels = Array.from(
         document.querySelectorAll<HTMLTableRowElement>('tbody tr'),
       ).filter(r => r.hasAttribute('data-expansion-panel'));
