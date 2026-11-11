@@ -1749,16 +1749,17 @@ export function useSheetGestures({
       // A pull against the armed edge can never scroll: the chain is at that
       // edge. Its native pan is cancelled before the promotion slop, once the
       // pull passes a tap's wobble, because a later cancel no longer stops a
-      // pan iOS Safari has committed. Before the sheet's drag begins, a mostly
-      // sideways move is a horizontal row's scroll, so it is not cancelled. A
-      // move past the drag's 8 px slop starts the drag in any direction.
+      // pan iOS Safari has committed. A mostly sideways move is a horizontal
+      // row's scroll, so the sheet does not cancel it.
       const opposesTop = armed.top && delta > 0 && chainAtTop(armed.scrollers);
       const opposesBottom =
         armed.bottom && delta < 0 && chainAtBottom(armed.scrollers);
+      const sideways = Math.abs(t.clientX - armed.startX);
+      const isMostlyVertical = Math.abs(delta) > sideways;
       if (
         (opposesTop || opposesBottom) &&
         Math.abs(delta) >= PAN_CANCEL_SLOP &&
-        Math.abs(delta) > Math.abs(t.clientX - armed.startX) &&
+        isMostlyVertical &&
         event.cancelable
       ) {
         event.preventDefault();
@@ -1767,8 +1768,10 @@ export function useSheetGestures({
       // no longer scroll that way: at the top, a downward pull (delta > 0)
       // collapses; at the bottom, an upward pull (delta < 0) expands. The
       // opposite direction is a real scroll, so disarm and let it through.
-      const pullDownAtTop = opposesTop && delta > DRAG_PROMOTION_SLOP;
-      const pullUpAtBottom = opposesBottom && delta < -DRAG_PROMOTION_SLOP;
+      const pullDownAtTop =
+        opposesTop && isMostlyVertical && delta > DRAG_PROMOTION_SLOP;
+      const pullUpAtBottom =
+        opposesBottom && isMostlyVertical && delta < -DRAG_PROMOTION_SLOP;
       if (pullDownAtTop || pullUpAtBottom) {
         if (event.cancelable) {
           event.preventDefault();
@@ -1783,10 +1786,40 @@ export function useSheetGestures({
         pointerMoveRef.current(asPointer(t, scroller, event));
         return;
       }
-      if ((armed.top && delta < 0) || (armed.bottom && delta > 0)) {
-        // Scrolling away from the armed edge; hand back to native scroll. The
-        // touch stays tracked: this is the swipe that may reach the far edge.
+      // The first move past the drag slop on either axis decides the touch,
+      // once. A drag that started later would move the sheet by the whole
+      // travel at once. A mostly sideways move is a row's scroll or swipe, so
+      // the sheet stops tracking the touch. Any other move that did not start
+      // the drag is the content's scroll, and both edges go back to it.
+      const isPastDragSlop =
+        Math.max(Math.abs(delta), sideways) > DRAG_PROMOTION_SLOP;
+      if (isPastDragSlop && (armed.top || armed.bottom)) {
+        if (!isMostlyVertical) {
+          releaseContentHold(armed);
+          touchDragRef.current = null;
+          return;
+        }
         armed.top = false;
+        armed.bottom = false;
+      }
+      // Under the drag slop, an armed edge goes back to the native scroll when
+      // a move leaves it, on two conditions. The content has room to scroll
+      // that way. The move has passed a tap's wobble, because a shorter move
+      // commits no native pan. The touch stays tracked, because this swipe can
+      // reach the far edge. Content that fits has nothing to scroll, so both
+      // edges stay armed.
+      if (
+        armed.top &&
+        delta <= -PAN_CANCEL_SLOP &&
+        !chainAtBottom(armed.scrollers)
+      ) {
+        armed.top = false;
+      }
+      if (
+        armed.bottom &&
+        delta >= PAN_CANCEL_SLOP &&
+        !chainAtTop(armed.scrollers)
+      ) {
         armed.bottom = false;
       }
       // Reaching the end of the content mid-gesture. Arming at `touchstart`
