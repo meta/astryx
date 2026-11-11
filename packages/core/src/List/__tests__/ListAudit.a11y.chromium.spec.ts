@@ -411,8 +411,8 @@ for (const direction of ['ltr', 'rtl'] as const) {
         focused: document.activeElement === el,
         hintOpen: document.querySelector(':popover-open') != null,
       }));
-      // The handle sits at its row's inline end, and the hint opens below it,
-      // over the handle and inside the viewport, in either direction.
+      // The handle sits at its row's inline end. The hint opens below the
+      // handle, overlaps it across the row, and stays inside the viewport.
       const placement = await handle.evaluate(el => {
         const row = el.closest('li') as HTMLElement;
         const hint = document.querySelector(':popover-open');
