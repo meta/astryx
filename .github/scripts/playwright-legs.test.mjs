@@ -34,6 +34,7 @@ import {
   importerGraph,
   proofImporters,
   storyComponentFolders,
+  storyMeta,
 } from './a11y-pr-contracts.mjs';
 
 const root = path.resolve(
@@ -184,6 +185,70 @@ describe('storyComponentFolders', () => {
       folders: ['packages/core/src/Menu/'],
       unresolved: [],
     });
+  });
+
+  it("reads a story's id from its default-export meta, inline or declared, never a data row's title", () => {
+    expect(
+      storyMeta(
+        "const meta: Meta = {title: 'Lab/3DChart/PopArt'};\nexport default meta;\n",
+      ),
+    ).toEqual({title: 'Lab/3DChart/PopArt', id: null});
+    expect(
+      storyMeta(
+        "const rows = [{title: 'Dune'}];\nconst meta = {\n  title: 'Core/PowerSearchWithTable',\n  id: 'core-pst',\n};\nexport default meta;\n",
+      ),
+    ).toEqual({title: 'Core/PowerSearchWithTable', id: 'core-pst'});
+    expect(
+      storyMeta("export default {title: 'Core/Menu', args: {title: 'x'}};\n"),
+    ).toEqual({title: 'Core/Menu', id: null});
+  });
+
+  const scoped = files => {
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'story-scope-'));
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
+      fs.writeFileSync(path.join(tree, file), text);
+    }
+    const scope = storyScopeFor({
+      listed: Object.keys(files),
+      read: file => fs.readFileSync(path.join(tree, file), 'utf8'),
+    })('apps/storybook/stories/X.stories.tsx');
+    fs.rmSync(tree, {recursive: true, force: true});
+    return scope;
+  };
+  const SPEC = 'packages/core/src/Menu/__tests__/A.interaction.browser.spec.ts';
+
+  it('runs the full suite for a story with no id, or a whole-prefix template that could name it', () => {
+    const menu = {
+      'packages/core/src/Menu/Menu.tsx': 'export const Menu = 1;\n',
+      [SPEC]: "await page.goto('/iframe.html?id=core-menu--default');\n",
+    };
+    const story = meta =>
+      `import {Menu} from '@astryxdesign/core/Menu';\n${meta}\n`;
+    expect(
+      scoped({
+        ...menu,
+        'apps/storybook/stories/X.stories.tsx': story(
+          "export default {title: 'Lab/Chat X'};",
+        ),
+      }),
+    ).toEqual({folders: ['core/Menu'], specs: []});
+    expect(
+      scoped({
+        ...menu,
+        'apps/storybook/stories/X.stories.tsx': story('export default {};'),
+      }),
+    ).toBe(null);
+    expect(
+      scoped({
+        ...menu,
+        [SPEC]:
+          'await page.goto(`/iframe.html?id=lab-chat-${name}--default`);\n',
+        'apps/storybook/stories/X.stories.tsx': story(
+          "export default {title: 'Lab/Chat X'};",
+        ),
+      }),
+    ).toBe(null);
   });
 
   it('maps the ChatVirtualizer story to Chat, through its name from the Lab package root', () => {
@@ -1551,7 +1616,7 @@ describe('what a Chromium run covers for a pull request', () => {
       "import {Menu} from '@astryxdesign/core/Menu/Menu';\nexport function Tour() {}\n",
     'packages/lab/src/Tour/__tests__/Tour.interaction.browser.spec.ts': '',
     'apps/storybook/stories/Menu.stories.tsx':
-      "import {Menu} from '@astryxdesign/core/Menu/Menu';\n",
+      "import {Menu} from '@astryxdesign/core/Menu/Menu';\nexport default {title: 'Core/Menu'};\n",
   };
   const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'chromium-selection-'));
   for (const [file, text] of Object.entries(files)) {

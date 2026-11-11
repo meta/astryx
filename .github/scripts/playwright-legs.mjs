@@ -42,6 +42,7 @@ import {
   listedFiles,
   proofImporters,
   renderingFolders,
+  isStoryFile,
   specOwners,
   storyComponentFolders,
   storyFiles,
@@ -333,8 +334,8 @@ export function selectProofs({listed, changed, shared, filters}) {
 /**
  * What a changed story reaches: the component folders it imports by value,
  * and every interaction spec that opens one of its story ids. Null when the
- * tree lacks the story, an import does not resolve, or a spec's templated id
- * that could name this story is not filled.
+ * tree lacks the story, its meta names no id, an import does not resolve, or
+ * a spec's templated id that could name this story is not filled.
  * @param {{listed: string[], read: (file: string) => string}} options
  * @returns {(file: string) => {folders: string[], specs: string[]} | null}
  */
@@ -352,6 +353,8 @@ export function storyScopeFor({listed, read}) {
     const own = [...stories]
       .filter(([, files]) => files.includes(file))
       .map(([id]) => id);
+    // A story whose meta names no id cannot be matched to its openers.
+    if (own.length === 0) return null;
     const specs = [];
     for (const [spec, {ids, unfilled}] of opened) {
       if (ids.some(id => own.includes(id))) specs.push(spec);
@@ -369,9 +372,6 @@ export function storyScopeFor({listed, read}) {
     };
   };
 }
-
-/** A Storybook story file. */
-const STORY_FILE = /^apps\/storybook\/.+\.stories\.[cm]?[jt]sx?$/;
 
 /** What a proof's page loads: the specs, the stories they open, the preview. */
 export const isProofPage = file =>
@@ -448,7 +448,7 @@ export function chromiumSelection({
     }
     if (selection.shared.some(prefix => file.startsWith(prefix)))
       return full(`${file} is shared code`);
-    if (storyScope && STORY_FILE.test(file)) {
+    if (storyScope && isStoryFile(file)) {
       const scope = storyScope(file);
       if (
         scope == null ||

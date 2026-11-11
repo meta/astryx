@@ -1520,11 +1520,52 @@ export function storyIdOf(title) {
     .replace(/^-+|-+$/g, '');
 }
 
-const STORY_FILE_PATH = /^apps\/storybook\/.+\.stories\.[cm]?[jt]sx?$/;
-const TITLE = /^\s*title:\s*['"`]([^'"`]+)['"`]/m;
-/** A meta's own `id`, which replaces the title's id, on the lines after it. */
-const META_ID =
-  /^\s*title:\s*['"`][^'"`]+['"`],?\s*\n(?:\s*\/\/[^\n]*\n)*\s*id:\s*['"`]([a-z0-9-]+)['"`]/m;
+/** A Storybook story file. */
+export const isStoryFile = file =>
+  /^apps\/storybook\/.+\.stories\.[cm]?[jt]sx?$/.test(file);
+
+/**
+ * The `title` and `id` of a story file's default-export meta, read at the
+ * meta's own depth, so a nested object's or a data row's `title` never counts.
+ * @param {string} text
+ * @returns {{title: string | null, id: string | null}}
+ */
+export function storyMeta(text) {
+  const exported = /export\s+default\s+(\{|[A-Za-z_$][\w$]*)/.exec(text);
+  if (!exported) return {title: null, id: null};
+  let start = exported.index + exported[0].length - 1;
+  if (exported[1] !== '{') {
+    const name = exported[1].replace(/[$]/g, '\\$');
+    const declared = new RegExp(
+      `(?:const|let|var)\\s+${name}\\b[^=]*=\\s*\\{`,
+    ).exec(text);
+    if (!declared) return {title: null, id: null};
+    start = declared.index + declared[0].length - 1;
+  }
+  const meta = {title: null, id: null};
+  let depth = 0;
+  for (let i = start; i < text.length; i += 1) {
+    const char = text[i];
+    if (char === '"' || char === "'" || char === '`') {
+      const end = text.indexOf(char, i + 1);
+      if (end === -1) break;
+      i = end;
+      continue;
+    }
+    if ('{[('.includes(char)) depth += 1;
+    else if ('}])'.includes(char)) {
+      depth -= 1;
+      if (depth === 0) break;
+    } else if (depth === 1) {
+      const field = /^(title|id)\s*:\s*(['"`])([^'"`]+)\2/.exec(
+        text.slice(i, i + 200),
+      );
+      if (field && /[\s{,]/.test(text[i - 1]) && meta[field[1]] == null)
+        meta[field[1]] = field[3];
+    }
+  }
+  return meta;
+}
 
 /**
  * Each story id prefix (a title's id, or a meta's own id), to the story files
@@ -1535,13 +1576,11 @@ const META_ID =
  */
 export function storyFiles(listed, read) {
   const byId = new Map();
-  for (const file of listed.filter(each => STORY_FILE_PATH.test(each))) {
-    const text = read(file);
-    const title = TITLE.exec(text)?.[1];
+  for (const file of listed.filter(isStoryFile)) {
+    const {title, id} = storyMeta(read(file));
     if (title == null) continue;
     const ids = new Set([storyIdOf(title)]);
-    const own = META_ID.exec(text)?.[1];
-    if (own) ids.add(own);
+    if (id) ids.add(id);
     for (const id of ids) byId.set(id, [...(byId.get(id) ?? []), file]);
   }
   return byId;
@@ -1550,7 +1589,7 @@ export function storyFiles(listed, read) {
 /** A story id prefix in a spec or its helpers: `core-bottomsheet--…`. */
 const STORY_ID = /(?:id=|['"`])([a-z0-9][a-z0-9-]*?)--(?:[a-z0-9$]|['"`])/g;
 /** A story id whose component part a template fills: `core-${name}--`. */
-const TEMPLATED_ID = /([a-z0-9]+)-\$\{[^}]+\}--/g;
+const TEMPLATED_ID = /([a-z0-9][a-z0-9-]*)-\$\{[^}]+\}--/g;
 /** A quoted name a template can fill. */
 const NAME = /['"`]([a-z0-9][a-z0-9-]*)['"`]/g;
 /**
