@@ -137,7 +137,7 @@ type ValidationBehavior = 'complete' | 'commit';
   it (`spec:AST-038` FR7, FR8).
 - **FR3 — `'complete'` is each member's shipped behavior.** Under
   `'complete'`, a member reveals each rejection when, and with the signals,
-  its record states. A field with no `validationBehavior` and no
+  its own record states, and nothing in this record changes that. A field with no `validationBehavior` and no
   `FormLayout` default behaves exactly as a field of the latest stable release
   does.
 - **FR4 — `'commit'` holds every signal until commit.** Under `'commit'`, while
@@ -154,9 +154,8 @@ type ValidationBehavior = 'complete' | 'commit';
   it, clears the rejection's signals at once, without a commit. Under
   `'commit'`, an edit that leaves the entry rejected keeps the revealed
   rejection and does not announce it again; the next commit reveals the entry's
-  current rejection. A new `value` from the caller, or a date or time picked
-  from a Calendar, sheet, or native picker, replaces the entry and clears its
-  rejection.
+  current rejection. A new `value` or a pick that replaces the entry, as the
+  member's record states, clears its rejection.
 - **FR6 — Disabled and busy fields reveal no rejection.** While a member is
   disabled or busy, it reveals no rejection of its own, as its record states
   (`spec:AST-085` FR2). Once it is editable, its validation behavior applies
@@ -186,8 +185,8 @@ Classified under `spec:AST-017` against the latest stable release:
   usage that sets neither is unchanged: additive (`spec:AST-017` FR5;
   `architecture:public-component-api` INV3).
 - `'commit'` applies only where a caller sets it. It makes Enter a commit for
-  `TimeInput`, which has no Enter commit by default: additive (`spec:AST-017`
-  FR5).
+  `TimeInput` and for `DateTimeInput`'s time segment, which have no Enter
+  commit by default: additive (`spec:AST-017` FR5).
 
 ### Platform support
 
@@ -214,7 +213,8 @@ Requirement gaps:
 
 - FR1–FR6 gap: no member accepts `validationBehavior`, and `FormLayout` has no
   `defaultValidationBehavior`; every member behaves as FR3 states.
-- FR4 gap: `TimeInput` takes no commit on Enter.
+- FR4 gap: `TimeInput` and `DateTimeInput`'s time segment take no commit on
+  Enter.
 
 ## Verification
 
