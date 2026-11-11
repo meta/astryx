@@ -492,10 +492,10 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
 
   /**
    * The dark fill as the exact color given, when text on it reads at 4.5:1
-   * (white first, then the dark text stop); no pair when none does, with
-   * the best ratio it got.
+   * (white first, then the dark text stop) and it stands out from the dark
+   * surfaces at 3:1; no pair otherwise, with why.
    * @param {string} fillToken @param {string} onToken @param {string} id @param {number} seedStop
-   * @returns {{pair: ReturnType<typeof fillPair> | null, ratio: number}}
+   * @returns {{pair: ReturnType<typeof fillPair> | null, ratio: number, why: string}}
    */
   const exactDarkFill = (fillToken, onToken, id, seedStop) => {
     const fill = ref(id, 'light', seedStop);
@@ -503,7 +503,22 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
       .reverse()
       .map(on => ({on, r: contrast(ref(id, 'dark', on).color, fill.color)}))
       .reduce((a, b) => (b.r > a.r + 0.01 ? b : a));
-    if (best.r < TEXT) return {pair: null, ratio: round(best.r)};
+    if (best.r < TEXT)
+      return {
+        pair: null,
+        ratio: round(best.r),
+        why: `your exact color reads at only ${round(best.r)}:1 with any text shade, and text needs ${TEXT}:1`,
+      };
+    // The fill must also stand out from the dark surfaces it sits on.
+    const page = Math.min(
+      ...surfaces('dark', id).map(([, bg]) => contrast(fill.color, bg)),
+    );
+    if (page < NON_TEXT)
+      return {
+        pair: null,
+        ratio: round(page),
+        why: `your exact color stands out from the dark page at only ${round(page)}:1, and a fill needs ${NON_TEXT}:1`,
+      };
     if (has(onToken))
       checks.push({
         token: onToken,
@@ -522,6 +537,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         moved: FILL[1],
       },
       ratio: round(best.r),
+      why: '',
     };
   };
 
@@ -640,7 +656,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           mode: 'dark',
           stop: pair.fill.stop,
           preferred: fillStart(f.id),
-          against: `the text on it: your exact color reads at only ${exact.ratio}:1 with any text shade`,
+          against: `the text on it: ${exact.why}`,
           ratio: exact.ratio,
           needs: TEXT,
           pass: true,
@@ -795,7 +811,7 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
     if (!modes.includes(c.mode)) continue;
     if (c.against.startsWith('the text on it'))
       notes.push(
-        `in dark, ${c.token} is shade ${c.stop}, not your exact color: ${c.against.slice('the text on it: '.length)}, and needs ${c.needs}:1`,
+        `in dark, ${c.token} is shade ${c.stop}, not your exact color: ${c.against.slice('the text on it: '.length)}`,
       );
     else if (!c.pass)
       notes.push(

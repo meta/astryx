@@ -23,6 +23,7 @@ import {baseResolved, openProject} from './_project.mjs';
 import {
   loadTheme,
   nearest,
+  q,
   refuse,
   shown,
   themeFiles,
@@ -382,8 +383,11 @@ async function colorsPage(cwd, dir, slug) {
     const byMode = (uses[v.family] ??= {light: {}, dark: {}});
     for (const m of /** @type {const} */ (['light', 'dark'])) {
       const r = v[m];
-      (byMode[m][r.stop] ??= []).push(
-        r.alpha ? `${token} (opacity ${r.alpha})` : token,
+      // A dark fill that keeps the exact color uses the light ramp's shade:
+      // it is marked there, for dark mode.
+      const ramp = r.from ?? m;
+      (byMode[ramp][r.stop] ??= []).push(
+        `${token}${r.alpha ? ` (opacity ${r.alpha})` : ''}${ramp !== m ? ` (${m} mode too)` : ''}`,
       );
     }
   }
@@ -811,8 +815,8 @@ export async function themeEditPreviewAdd(description, options = {}) {
         cwd,
         notes,
         [
-          ...(options.theme != null ? [` --theme ${options.theme}`] : []),
-          ...(options.path != null ? [` --path ${options.path}`] : []),
+          ...(options.theme != null ? [` --theme ${q(options.theme)}`] : []),
+          ...(options.path != null ? [` --path ${q(options.path)}`] : []),
         ].join(''),
       );
     for (const pick of picks) {

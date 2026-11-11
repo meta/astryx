@@ -546,3 +546,56 @@ describe('round 4', () => {
     fs.rmSync(path.join(cwd, 'themes/one'), {recursive: true, force: true});
   }, 120_000);
 });
+
+describe('round 4 follow-ups', () => {
+  it('gives token lines a color or width when the resting border reads a token', async () => {
+    const r = /** @type {any} */ (
+      (await themeEditHow('thin gray border on inputs', {cwd})).data
+    );
+    const lines = r.results.flatMap((/** @type {any} */ x) => x.commands);
+    const tokenLines = lines.filter((/** @type {string} */ c) =>
+      c.includes('# via the token'),
+    );
+    expect(tokenLines.length).toBeGreaterThan(0);
+    for (const c of tokenLines) expect(c).not.toContain('solid');
+    expect(tokenLines.join('\n')).toMatch(/--color-border\S* "<color>"/);
+    expect(lines.join('\n')).toContain(
+      'set <theme> border "1px solid <color>" --on inputs   # direct',
+    );
+  });
+
+  it('moves the dark fill off an exact color that disappears on the dark page', async () => {
+    const r = await themeEditSet('s', 'accent', '#1e3a8a', {cwd});
+    expect(r.data.notes.join(' ')).toContain(
+      'stands out from the dark page at only',
+    );
+    const show = await themeEditShow('s', {cwd});
+    expect(show.data.resolved['--color-accent']).toMatchObject({
+      light: '#1e3a8a',
+    });
+    expect(
+      /** @type {any} */ (show.data.resolved['--color-accent']).dark,
+    ).not.toBe('#1e3a8a');
+  }, 120_000);
+
+  it('marks an exact dark fill under the light shade on the Colors page', async () => {
+    await themeEditSet('s', 'accent', '#5e6ad2', {cwd});
+    await themeEditPreviewAdd(undefined, {cwd, theme: 's', path: 'src/app/r4'});
+    expect(read('src/app/r4/pages/colors.tsx')).toContain(
+      '"--color-accent (dark mode too)"',
+    );
+    await themeEditUndo('s', {cwd, thing: 'accent'});
+  }, 240_000);
+
+  it('quotes the options it repeats in a suggestion', async () => {
+    fs.mkdirSync(path.join(cwd, 'src/app/my preview'), {recursive: true});
+    const r = await refusal(() =>
+      themeEditPreviewAdd('a weather widget', {
+        cwd,
+        theme: 's',
+        path: 'src/app/my preview',
+      }),
+    );
+    expect(r.run[0]).toMatch(/--theme s --path "src\/app\/my preview"$/);
+  }, 120_000);
+});

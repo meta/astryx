@@ -135,11 +135,14 @@ describe('color dials through the palette generator', () => {
       );
       expect(show.data.resolved['--color-text-accent'][mode]).toBe(color);
     }
-    // White text reads on #7c3aed, so the dark fill keeps the exact color.
-    expect(show.data.resolved['--color-accent']).toEqual({
-      light: '#7c3aed',
-      dark: '#7c3aed',
-    });
+    // White text reads on #7c3aed, but it stands out from the dark page at
+    // under 3:1, so the dark fill moves to a lighter shade and says why.
+    const accent = /** @type {any} */ (show.data.resolved['--color-accent']);
+    expect(accent.light).toBe('#7c3aed');
+    expect(accent.dark).not.toBe('#7c3aed');
+    expect(show.data.colorNotes.join(' ')).toContain(
+      'stands out from the dark page at only',
+    );
     expect(Object.keys(tokens)).toEqual(
       expect.arrayContaining([
         '--color-accent',
