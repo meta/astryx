@@ -2223,8 +2223,22 @@ describe('the spec change summary', () => {
         {path: 'docs/specs/AST-901/spec.md', before: 'same', after: 'same'},
       ]),
     ).toBe(
-      'spec:AST-900 front matter, New; docs/design/assets/flow.svg (+6 −0 lines)',
+      'spec:AST-900 front matter, New; docs/design/assets/flow.svg (+5 −0 lines)',
     );
+  });
+
+  it('names a requirement id with a hyphen or a letter suffix', () => {
+    const before =
+      '## Requirements\n\n- **FR29b — One.** Text.\n- **DEC-14 — Two.** Text.\n';
+    expect(
+      summarizeSpecTextChange([
+        {
+          path: 'docs/specs/AST-901/spec.md',
+          before,
+          after: before.replace(/Text\./g, 'New.'),
+        },
+      ]),
+    ).toBe('docs/specs/AST-901/spec.md FR29b, DEC-14 (+2 −2 lines)');
   });
 
   it('says nothing when no text differs', () => {

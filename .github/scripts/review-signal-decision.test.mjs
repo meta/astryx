@@ -360,6 +360,18 @@ describe('the review gate text for the spec half', () => {
     });
   });
 
+  it('asks for nothing while a run checks a head that needed no owner approval', () => {
+    const decidedWithoutApprovers = trusted(
+      'spec-owner-approval',
+      'Mirrors review-required · spec ok',
+      'success',
+    );
+
+    expect(gateFor([reconciling, decidedWithoutApprovers]).description).toBe(
+      `${codeWait} (+ spec check)`,
+    );
+  });
+
   it('still asks for approval when the last decision on this head waits', () => {
     expect(gateFor([reconciling, waitingMirror]).description).toBe(
       `${codeWait} (+ spec approval)`,

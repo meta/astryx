@@ -187,20 +187,21 @@ function readSpecGate(statuses) {
     const decided = specStatuses.find(earlier =>
       (earlier.description ?? '').startsWith(SPEC_MIRROR_PREFIX),
     );
-    if (!decided) {
-      return {
-        known: false,
-        satisfied: false,
-        text: SPEC_CHECKING_TEXT,
-        url: status.target_url,
-      };
-    }
-    if (isOwnerApproval(decided)) {
+    if (decided && isOwnerApproval(decided)) {
       return {
         known: true,
         satisfied: false,
         carried: true,
         text: SPEC_CARRIED_TEXT,
+        url: status.target_url,
+      };
+    }
+    // No decision yet, or one that needed no owner approval: ask nothing.
+    if (!decided || decided.state === 'success') {
+      return {
+        known: false,
+        satisfied: false,
+        text: SPEC_CHECKING_TEXT,
         url: status.target_url,
       };
     }

@@ -92,10 +92,18 @@ function isSettled(pr) {
 }
 
 const SECTION_HEADING = /^#{1,6}\s+(.+?)\s*$/;
-const REQUIREMENT_ITEM = /^\s*[-*]\s+\*\*([A-Z]+\d+)\b/;
+const REQUIREMENT_ITEM = /^\s*[-*]\s+\*\*([A-Z]+-?\d+[a-z]?)\b/;
 const MAX_SECTIONS_SHOWN = 8;
 // Above this many line pairs, every differing line counts as changed.
 const MAX_DIFF_CELLS = 4_000_000;
+
+/** A text's lines; a final newline ends the last line and adds no line. */
+function textLines(text) {
+  if (text == null || text === '') return [];
+  const lines = text.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
 
 /** Each line's section: the requirement item or heading it falls under. */
 function sectionOfEachLine(lines) {
@@ -193,8 +201,8 @@ function summarizeSpecTextChange(changes) {
       parts.push(name);
       continue;
     }
-    const beforeLines = before == null ? [] : before.split('\n');
-    const afterLines = after == null ? [] : after.split('\n');
+    const beforeLines = textLines(before);
+    const afterLines = textLines(after);
     const beforeSections = sectionOfEachLine(beforeLines);
     const afterSections = sectionOfEachLine(afterLines);
     const sections = new Set();
