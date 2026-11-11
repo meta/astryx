@@ -245,7 +245,6 @@ function nearestPosition(
   return nearestLoopCopy(row, offset / layout.rowHeight, layout.rowCount);
 }
 
-/** Whether `option` exists and may commit. */
 function isEnabledOption(option: WheelOption | undefined): boolean {
   return option != null && !option.isDisabled;
 }
@@ -475,7 +474,6 @@ export function PickerWheel({
     [motion, drawCopies],
   );
 
-  // Commits `option` when it is enabled and not the committed value.
   const commit = useCallback((option: WheelOption | undefined) => {
     const current = latestRef.current;
     if (
@@ -498,14 +496,21 @@ export function PickerWheel({
       // A rest on the committed row is not a stop to correct. A committed value
       // outside the bounds stays until a person moves the wheel off it, as in
       // the scrolling column. On a loop the nearest enabled row is measured
-      // around the seam, and the wheel turns the shorter way to it.
+      // around the seam, and the wheel turns the shorter way to it. The
+      // committed row counts at its copy nearest the rest, so a rest whole
+      // laps away is on it.
       let step = 0;
       if (current.layout.looping && count > 0) {
-        if (position !== committedRef.current) {
+        const committed = nearestLoopCopy(
+          committedRef.current,
+          position,
+          count,
+        );
+        if (position !== committed) {
           step = restingLoopStep(
             at => isEnabledOption(optionAt(at)),
             position,
-            committedRef.current,
+            committed,
             count,
           );
         }

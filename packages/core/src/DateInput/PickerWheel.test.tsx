@@ -1903,6 +1903,54 @@ describe('PickerWheel — looping', () => {
     expect(onSpun).toHaveBeenCalledWith(true);
     expect(labelDrawnAt(column, 0)).toBe('00');
   });
+
+  it('rests a whole lap away on a committed value outside the bounds and commits nothing (component:DateInput FR13)', () => {
+    // :00 to :09 are disabled, as under a 10:10 AM minimum at 10 AM.
+    const {column, onChange} = renderWheel({
+      options: MINUTES.map(option => ({
+        ...option,
+        isDisabled: option.value < 10,
+      })),
+      value: 5,
+      label: 'Minute',
+      isLooping: true,
+    });
+    // Up 60 rows (+10 px of hysteresis), held still, lifted: the wheel rests
+    // on :05's copy one lap on.
+    drag(column, 1900, 1900 - 10 - 60 * ROW, {
+      steps: 60,
+      interval: 16,
+      hold: 300,
+    });
+    advance(3000);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(labelDrawnAt(column, 0)).toBe('05');
+  });
+
+  it('with no enabled row, turns from a rest laps away onto the committed row’s nearest copy', () => {
+    const {ends, restore} = recordStripEnds();
+    try {
+      const {column, onChange} = renderWheel({
+        options: MINUTES.map(option => ({...option, isDisabled: true})),
+        value: 30,
+        label: 'Minute',
+        isLooping: true,
+      });
+      // Up 124 rows (+10 px of hysteresis), held still, lifted: the wheel
+      // rests at position 154, on :34. The nearest :30 is position 150.
+      drag(column, 3700, 3700 - 10 - 124 * ROW, {
+        steps: 124,
+        interval: 16,
+        hold: 300,
+      });
+      advance(3000);
+      // The strip moves up by minus the offset: four rows back, not 124.
+      expect(ends.at(-1)).toBeCloseTo(-150 * ROW, 0);
+      expect(onChange).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
 });
 
 describe('PickerWheel — markup', () => {
