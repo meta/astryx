@@ -27,3 +27,6 @@ assets/templates/components.generated.json
 # scripts/generate-command-list.mjs so the published package prints its root
 # help without loading every command. Not committed: a checkout loads them.
 clients/cli/commands.generated.json
+
+# Written at prepack (scripts/generate-self-audit.mjs); never committed.
+assets/self-audit.generated.json

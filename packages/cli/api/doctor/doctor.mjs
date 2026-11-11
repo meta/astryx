@@ -118,6 +118,7 @@ import {
   builtIntegrationPackages,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
+import {storedSelfAudit} from '../../foundation/discovery/stored-self-audit.mjs';
 
 /**
  * @typedef {'pass'|'warn'|'fail'|'info'} DoctorStatus
@@ -1372,6 +1373,50 @@ function surfaceProblems(surface) {
 }
 
 /**
+ * What the authoring-docs check reads: the self-docs audit, the field
+ * reference's section keys, and the authoring-surface audit. They read only
+ * the CLI's own files, so `prepack` stores them for the published package
+ * (scripts/generate-self-audit.mjs).
+ * @param {{root?: string, sources?: string[], topicKeys?: Set<string> | null}} [options]
+ */
+export async function authoringAuditData(options = {}) {
+  const {auditAuthoringSelfDocs} =
+    await import('../../foundation/discovery/authoring-self-docs.mjs');
+  const {auditAuthoringSurface} =
+    await import('../../foundation/discovery/authoring-surface.mjs');
+  const {root, sources} = options;
+  const audit = await auditAuthoringSelfDocs({root, sources});
+  const topic =
+    options.topicKeys === undefined
+      ? await authoringTopicKeys()
+      : {keys: options.topicKeys};
+  const surface = await auditAuthoringSurface({
+    root,
+    sources,
+    topicKeys: topic.keys,
+  });
+  return {audit, topic, surface};
+}
+
+/** The name the authoring-docs check's data is stored under. */
+export const AUTHORING_AUDIT = 'authoring-docs';
+
+/**
+ * The authoring-docs check's data as stored at publish, while the files it
+ * read are unchanged, else undefined.
+ * @returns {Awaited<ReturnType<typeof authoringAuditData>> | undefined}
+ */
+function storedAuthoringAudit() {
+  const value = /** @type {any} */ (storedSelfAudit(AUTHORING_AUDIT));
+  if (!value) return undefined;
+  const {keys, ...rest} = value.topic;
+  return {
+    ...value,
+    topic: keys === null ? {keys: null, ...rest} : {keys: new Set(keys)},
+  };
+}
+
+/**
  * Every authoring self-doc is reachable from `astryx docs authoring`, loads,
  * and fits in one read, and every type `@astryxdesign/cli/authoring` exports
  * has its doc there: the self-doc beside the module that declares it. The
@@ -1386,12 +1431,15 @@ export async function checkAuthoringDocs(_ctx, options = {}) {
   const id = 'authoring-docs';
   const label = 'Authoring docs';
   try {
-    const {auditAuthoringSelfDocs} =
-      await import('../../foundation/discovery/authoring-self-docs.mjs');
-    const {auditAuthoringSurface} =
-      await import('../../foundation/discovery/authoring-surface.mjs');
-    const {root, sources} = options;
-    const audit = await auditAuthoringSelfDocs({root, sources});
+    const {
+      audit,
+      topic,
+      surface: surfaceAudit,
+    } = (options.root === undefined &&
+    options.sources === undefined &&
+    options.topicKeys === undefined
+      ? storedAuthoringAudit()
+      : undefined) ?? (await authoringAuditData(options));
     const problems = [
       ...audit.unreachable.map(
         source =>
@@ -1405,19 +1453,13 @@ export async function checkAuthoringDocs(_ctx, options = {}) {
           `authoring section "${key}" is ${kilobytes(bytes)}, over the ${kilobytes(DOC_OUTPUT_BUDGET_BYTES)} one read may return`,
       ),
     ];
-    const topic =
-      options.topicKeys === undefined
-        ? await authoringTopicKeys()
-        : {keys: options.topicKeys};
     const surface = [
       ...('error' in topic
         ? [
             `\`${formatCliCommand('docs authoring/field-reference')}\` could not be read: ${topic.error}`,
           ]
         : []),
-      ...surfaceProblems(
-        await auditAuthoringSurface({root, sources, topicKeys: topic.keys}),
-      ),
+      ...surfaceProblems(surfaceAudit),
     ];
     if (problems.length + surface.length > 0) {
       return {
