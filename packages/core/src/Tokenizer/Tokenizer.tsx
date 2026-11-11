@@ -1767,11 +1767,15 @@ export function Tokenizer<T extends SearchableItem>({
         inputRef.current?.focus();
         return true;
       }
-      // A remove button that held focus, as after Shift+Tab from the input,
-      // unmounts with its token. Focus then moves to the input, as for every
-      // other removal. Focus anywhere else stays where it is.
+      // A token that held focus, on its remove button or on another of its
+      // controls, unmounts with focus inside it. Focus then moves to the
+      // input, as for every other removal. Focus anywhere else stays where it
+      // is. A built-in token's only control is its remove button.
       const active = pressed.ownerDocument.activeElement;
-      if (active != null && pressed.contains(active)) {
+      const token =
+        [...tokenSlotsRef.current].find(slot => slot.contains(pressed)) ??
+        pressed;
+      if (active != null && token.contains(active)) {
         inputRef.current?.focus();
       }
       return true;

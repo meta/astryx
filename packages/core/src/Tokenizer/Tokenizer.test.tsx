@@ -33,6 +33,7 @@ import type {SearchSource, SearchableItem} from '../Typeahead/types';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
 import type * as TokenModule from '../Token';
+import {Token} from '../Token/Token';
 import {FormLayout} from '../FormLayout/FormLayout';
 
 // Every Token render, in order, by label.
@@ -584,6 +585,34 @@ describe('Tokenizer', () => {
       await user.tab({shift: true});
       const remove = screen.getByRole('button', {name: 'Remove Bob'});
       expect(remove).toHaveFocus();
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.click(remove);
+      expect(input).toHaveFocus();
+      expect(onBlur).not.toHaveBeenCalled();
+    });
+
+    it('moves focus to the input when a finger removes a token whose own action held focus', async () => {
+      const user = userEvent.setup();
+      const onBlur = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={vi.fn()}
+          onBlur={onBlur}
+          renderToken={(item, onRemove) => (
+            <Token label={item.label} onClick={() => {}} onRemove={onRemove} />
+          )}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      await user.tab({shift: true});
+      await user.tab({shift: true});
+      const remove = screen.getByRole('button', {name: 'Remove Bob'});
+      expect(remove).not.toHaveFocus();
+      expect(remove.parentElement?.contains(document.activeElement)).toBe(true);
       fireEvent.pointerDown(remove, {pointerType: 'touch'});
       fireEvent.click(remove);
       expect(input).toHaveFocus();
