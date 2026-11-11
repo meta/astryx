@@ -240,8 +240,10 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
   onChange: (items: T[], change: TokenizerChange<T>) => void;
   /**
    * Async action run after `onChange`, with the same arguments, inside a React
-   * transition. The proposed tokens show at once and the field is busy until
-   * the action settles; the field then shows `value` again. An edit made while
+   * transition. The proposed tokens show at once, and the field is busy while
+   * they show. When the action settles, the field shows `value` again. A
+   * `value` that already holds the change shows no proposal, so the field is
+   * not busy. An edit made while
    * an action is pending builds on the tokens on screen. A `value` the parent
    * sets while an action is pending shows straight away, unless it accepts an
    * earlier pending edit. Catch errors in the action: an error it throws

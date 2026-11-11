@@ -115,6 +115,29 @@ function visibleSpinners(): HTMLElement[] {
   return screen.queryAllByRole('img', {name: 'Loading'});
 }
 
+/**
+ * Records each message written to the shared polite live region. Each
+ * announce writes its text in a later frame, so two announces add it twice.
+ */
+function recordPoliteWrites(): {written: string[]; stop: () => void} {
+  const written: string[] = [];
+  const observer = new MutationObserver(records => {
+    for (const record of records) {
+      const target = record.target as Element;
+      if (target.getAttribute?.('data-astryx-live-region') !== 'polite') {
+        continue;
+      }
+      for (const node of record.addedNodes) {
+        if (node.textContent) {
+          written.push(node.textContent);
+        }
+      }
+    }
+  });
+  observer.observe(document.body, {childList: true, subtree: true});
+  return {written, stop: () => observer.disconnect()};
+}
+
 /** The labels of the tokens on screen, read from their remove buttons. */
 function tokenLabels(): string[] {
   return screen
@@ -277,6 +300,35 @@ describe('Tokenizer isLoading', () => {
     expect(visibleSpinners()).toHaveLength(0);
   });
 
+  it('announces "Loading" once for a busy start, also when a search starts during it', async () => {
+    const search = vi.fn(async () => new Promise<SearchableItem[]>(() => {}));
+    const {written, stop} = recordPoliteWrites();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={{search, bootstrap: () => []}}
+        value={[alice]}
+        onChange={() => {}}
+        debounceMs={0}
+        isLoading
+      />,
+    );
+    await waitFor(() => expect(written).toContain('Loading'));
+
+    // A search starts while the value is still loading. The field is busy
+    // already, so this is not a new busy start.
+    await act(async () => {
+      fireEvent.change(screen.getByRole('combobox'), {target: {value: 'Bo'}});
+    });
+    expect(search).toHaveBeenCalledWith('Bo', expect.anything());
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    stop();
+
+    expect(written.filter(text => text === 'Loading')).toHaveLength(1);
+  });
+
   it('sets aria-busy on the sheet trigger, with no Spinner (FR17)', () => {
     render(
       <Tokenizer
@@ -378,7 +430,7 @@ describe('Tokenizer changeAction', () => {
     });
   });
 
-  it('shows the proposed tokens at once and stays busy until the action settles', async () => {
+  it('shows the proposed tokens at once and stays busy while they show', async () => {
     const {saves, onSave} = controlledSaves();
     render(<SavingTokenizer initial={[alice]} onSave={onSave} />);
     const input = screen.getByRole('combobox');
@@ -431,15 +483,46 @@ describe('Tokenizer changeAction', () => {
       screen.getByRole('button', {name: 'Replace with Charlie'}).click();
     });
     expect(saves).toHaveLength(1);
-    expect(screen.getByRole('combobox')).toHaveAttribute('aria-busy', 'true');
+    // The replacement ends the busy state, though the save is still pending.
+    expect(screen.getByRole('combobox')).not.toHaveAttribute('aria-busy');
+    expect(visibleSpinners()).toHaveLength(0);
     expect(tokenLabels()).toEqual(['Charlie']);
 
     // The rejected save does not bring back the old proposal or the old value.
     await saves[0].settle('reject');
-    await waitFor(() =>
-      expect(screen.getByRole('combobox')).not.toHaveAttribute('aria-busy'),
-    );
+    expect(screen.getByRole('combobox')).not.toHaveAttribute('aria-busy');
     expect(tokenLabels()).toEqual(['Charlie']);
+  });
+
+  it('is not busy when onChange sets value, though the action is pending', async () => {
+    const {saves, onSave} = controlledSaves();
+    function OptimisticParent() {
+      const [value, setValue] = useState([alice]);
+      return (
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={value}
+          onChange={items => setValue(items)}
+          changeAction={async items => {
+            await onSave(items);
+          }}
+          debounceMs={0}
+        />
+      );
+    }
+    render(<OptimisticParent />);
+
+    await pickOption('Bob');
+
+    // value already holds the change, so no proposal shows.
+    expect(saves).toHaveLength(1);
+    expect(tokenLabels()).toEqual(['Alice', 'Bob']);
+    expect(screen.getByRole('combobox')).not.toHaveAttribute('aria-busy');
+    expect(visibleSpinners()).toHaveLength(0);
+
+    await saves[0].settle('accept');
+    expect(tokenLabels()).toEqual(['Alice', 'Bob']);
   });
 
   it('keeps the first edit when a second one is made while the first saves', async () => {

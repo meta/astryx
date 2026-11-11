@@ -62,7 +62,7 @@ export const docs = {
       name: 'changeAction',
       type: '(items: T[], change: TokenizerChange<T>) => void | Promise<void>',
       description:
-        "Async action run after onChange, with the same arguments, inside a React transition, for every change: add, create, remove, Backspace, Clear all, and the bottom sheet's Save. The proposed tokens show at once and the field is busy until the action settles; the field then shows value again, so set value in the action to keep the change. An edit made while an action is pending builds on the tokens on screen. A value you set while an action is pending shows at once, unless it accepts an earlier pending edit. Catch errors in the action: an error it throws reaches the nearest error boundary.",
+        "Async action run after onChange, with the same arguments, inside a React transition, for every change: add, create, remove, Backspace, Clear all, and the bottom sheet's Save. The proposed tokens show at once, and the field is busy while they show. When the action settles, the field shows value again, so set value in the action to keep the change. If onChange already sets value, no proposal shows and the field is not busy. An edit made while an action is pending builds on the tokens on screen. A value you set while an action is pending shows at once, unless it accepts an earlier pending edit. Catch errors in the action: an error it throws reaches the nearest error boundary.",
     },
     {
       name: 'isLoading',
@@ -470,7 +470,7 @@ export const docsZh = {
       name: 'changeAction',
       type: '(items: T[], change: TokenizerChange<T>) => void | Promise<void>',
       description:
-        '在 onChange 之后、以相同参数、在 React transition 中运行的异步操作，适用于每种变更：添加、创建、移除、Backspace、全部清除以及底部面板的保存。建议的标记会立即显示，字段在操作完成前处于忙碌状态；操作完成后字段重新显示 value，因此需在操作中设置 value 才能保留变更。操作等待期间进行的编辑基于屏幕上的标记。操作等待期间设置的 value 会立即显示，除非它接受的是更早的待处理编辑。请在操作中捕获错误：操作抛出的错误会传到最近的错误边界。',
+        '在 onChange 之后、以相同参数、在 React transition 中运行的异步操作，适用于每种变更：添加、创建、移除、Backspace、全部清除以及底部面板的保存。建议的标记会立即显示，显示期间字段处于忙碌状态。操作完成后字段重新显示 value，因此需在操作中设置 value 才能保留变更。如果 onChange 已设置 value，则不显示建议的标记，字段也不处于忙碌状态。操作等待期间进行的编辑基于屏幕上的标记。操作等待期间设置的 value 会立即显示，除非它接受的是更早的待处理编辑。请在操作中捕获错误：操作抛出的错误会传到最近的错误边界。',
     },
     {
       name: 'isLoading',
@@ -880,7 +880,7 @@ export const docsDense = {
     onChange:
       "Fired on selection change. Change arg includes affected item+type ('add'|'create'|'remove'|'reorder').",
     changeAction:
-      'Async action after onChange, same args, in a transition, on every change path incl. sheet Save. Proposed tokens show at once; busy until it settles, then shows value (set value in the action to keep it). Later edits build on shown tokens; a new value shows at once unless it accepts an earlier pending edit. Catch errors: a throw reaches the error boundary.',
+      'Async action after onChange, same args, in a transition, on every change path incl. sheet Save. Proposed tokens show at once, busy while shown; on settle shows value (set value in the action to keep it). onChange setting value: no proposal, not busy. Later edits build on shown tokens; a new value shows at once unless it accepts an earlier pending edit. Catch errors: a throw reaches the error boundary.',
     isLoading:
       'Value loading/saving: end Spinner + aria-busy. Separate from search busy; one shared Spinner. Sheet: aria-busy on trigger, no Spinner.',
     hasCreate:
