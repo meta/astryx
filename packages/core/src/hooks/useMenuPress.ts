@@ -44,6 +44,7 @@ import {
   type LongPressTolerance,
 } from './useLongPress';
 import {edgeAutoscroll} from '../utils/edgeAutoscroll';
+import {subscribeInput} from '../utils/inputStream';
 import {focusForLastInput} from '../utils/focusReturn';
 import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
@@ -732,13 +733,17 @@ export function useDropdownMenuPress(
 
       // The touchstart after this pointerdown names the touch, so the guard
       // at the lift cancels only that touch's touchend.
-      const onTouchStart = (event: TouchEvent) => {
-        doc.removeEventListener('touchstart', onTouchStart, true);
-        touchIdentifierRef.current = touchOfPointer(
-          event.changedTouches,
-          pointerId,
-        );
-      };
+      let stopTouchStart: (() => void) | null = null;
+      if (view != null) {
+        stopTouchStart = subscribeInput(view, 'touchstart', event => {
+          stopTouchStart?.();
+          stopTouchStart = null;
+          touchIdentifierRef.current = touchOfPointer(
+            event.changedTouches,
+            pointerId,
+          );
+        });
+      }
       const onMove = (event: PointerEvent) => {
         if (event.pointerId !== pointerIdRef.current) {
           return;
@@ -811,17 +816,13 @@ export function useDropdownMenuPress(
         stepRef.current({type: 'cancel'});
       };
 
-      doc.addEventListener('touchstart', onTouchStart, {
-        capture: true,
-        passive: true,
-      });
       doc.addEventListener('pointermove', onMove, true);
       doc.addEventListener('pointerup', onUp, true);
       doc.addEventListener('pointercancel', onCancel, true);
       doc.addEventListener('pointerdown', onOtherPointerDown, true);
       view?.addEventListener('blur', onBlur);
       detachRef.current = () => {
-        doc.removeEventListener('touchstart', onTouchStart, true);
+        stopTouchStart?.();
         doc.removeEventListener('pointermove', onMove, true);
         doc.removeEventListener('pointerup', onUp, true);
         doc.removeEventListener('pointercancel', onCancel, true);

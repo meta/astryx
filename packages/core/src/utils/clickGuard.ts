@@ -180,8 +180,8 @@ export function armClickGuard(
 }
 
 /**
- * Whether `event` ends the touch `identifier`. A `touchend` that lists no
- * changed touches counts as that touch's own.
+ * Whether `event` ends the touch `identifier`. A `touchend` without
+ * `changedTouches` counts as that touch's own.
  */
 function endsTouch(event: Event, identifier: number): boolean {
   const changed = (event as Partial<TouchEvent>).changedTouches;
