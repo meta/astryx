@@ -5,7 +5,7 @@
  * @input The built AlertDialog stories on the phone profile, a desktop
  *   pointer profile, real touch input and the interaction harness
  * @output Proofs of the alert's touch motion in Chromium and WebKit: the
- *   scale and the fades on the theme's dialog entrance and exit tokens, a
+ *   scale and the fades on the theme's entrance and exit tokens, a
  *   theme's own tokens, the viewport start and the phone width, a turn back
  *   from where it is, input during either transition, frames through a
  *   blocked main thread, reduced motion, a toast that the alert's action
@@ -59,8 +59,8 @@ const SCALE_FROM = 1.2;
 /** iOS's alert width on a phone, in every theme. */
 const PHONE_WIDTH = 320;
 
-/** The theme's dialog entrance, which the presentation plays. */
-const ENTRANCE = {duration: '--duration-medium-max', easing: '--ease-standard'};
+/** The theme's entrance timing, which the presentation plays. */
+const ENTRANCE = {duration: '--duration-medium-max', easing: '--ease-entrance'};
 
 /** The exit every overlay shares, which the dismissal plays. */
 const EXIT = {duration: '--duration-exit', easing: '--ease-exit'};
@@ -544,7 +544,7 @@ const closedAt = async (page: Page) =>
   page.evaluate(() => (window as unknown as {__closedAt: number}).__closedAt);
 
 test.describe('under a finger', () => {
-  test("presents from scale 1.2 and opacity 0 with the dimming, on the theme's dialog entrance", async ({
+  test("presents from scale 1.2 and opacity 0 with the dimming, on the theme's entrance timing", async ({
     page,
   }, testInfo) => {
     const {driver, trigger, dialog} = await openPage(page);
@@ -605,7 +605,7 @@ test.describe('under a finger', () => {
   }) => {
     const {driver, trigger, dialog} = await openPage(page);
     await setToken(page, '--duration-medium-max', '1200ms');
-    await setToken(page, '--ease-standard', 'linear');
+    await setToken(page, '--ease-entrance', 'linear');
     await setToken(page, '--duration-exit', '900ms');
     await setToken(page, '--ease-exit', 'linear');
     await holdDialogAnimationsAtCreation(page);
@@ -1065,7 +1065,7 @@ test.describe('under a finger', () => {
     // lands inside them. An opaque dim makes every frame of them change the
     // alert's pixels by over one level, which a lossless cast shows.
     await page.addStyleTag({
-      content: `* { --duration-medium-max: ${BUSY_MS}ms !important; --duration-exit: ${BUSY_MS}ms !important; --ease-standard: linear !important; --ease-exit: linear !important; --color-overlay: rgb(0 0 0) !important; }`,
+      content: `* { --duration-medium-max: ${BUSY_MS}ms !important; --duration-exit: ${BUSY_MS}ms !important; --ease-entrance: linear !important; --ease-exit: linear !important; --color-overlay: rgb(0 0 0) !important; }`,
     });
     // The control shows what the compositor presented in each block.
     const control = await startBusyControl(page);

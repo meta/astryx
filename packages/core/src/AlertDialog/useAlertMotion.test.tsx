@@ -5,7 +5,7 @@
  * @input A component using useAlertMotion, with the motion animator replaced
  *   by a recorder whose animations end when the test says so
  * @output The touch motion contract: the presentation plays scale 1.2 to 1
- *   and opacity 0 to 1, with the dimming, on the theme's dialog entrance; the
+ *   and opacity 0 to 1, with the dimming, on the theme's entrance timing; the
  *   dismissal fades from where it is on the exit tokens and keeps the alert
  *   presented until the fade ends; a reopen fades back from where it is;
  *   pointer input waits while either transition runs; no spring plays
@@ -17,6 +17,7 @@ import {StrictMode, type CSSProperties} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type {MotionCurve} from '../motion/animator';
 import {cubicBezier} from '../motion/bezier';
+import {parseCssEasing} from '../motion/roles';
 import {declaredTimingTokens} from '../motion/themeTiming';
 import {isInHeldLayer} from '../Layer/inputHold';
 import {useAlertMotion, type AlertMotion} from './useAlertMotion';
@@ -154,8 +155,16 @@ function lastCurves(record: Recorded): Record<string, MotionCurve> {
 const ENTRANCE_S =
   parseFloat(declaredTimingTokens['--duration-medium-max']) / 1000;
 const EXIT_S = parseFloat(declaredTimingTokens['--duration-fast']) / 1000;
-const ENTRANCE_EASE = cubicBezier([0.24, 1, 0.4, 1]);
-const EXIT_EASE = cubicBezier([0.3, 0, 0.6, 0.6]);
+/** Core's own curve for an easing token. */
+function easeOf(token: '--ease-entrance' | '--ease-exit') {
+  const points = parseCssEasing(declaredTimingTokens[token]);
+  if (points == null) {
+    throw new Error(`${token} is no cubic-bezier`);
+  }
+  return cubicBezier(points);
+}
+const ENTRANCE_EASE = easeOf('--ease-entrance');
+const EXIT_EASE = easeOf('--ease-exit');
 
 /** Expects `curve` to carry `from` to `to` over `seconds` on `ease`. */
 function expectTimed(
@@ -184,7 +193,7 @@ afterEach(() => {
 });
 
 describe('useAlertMotion', () => {
-  it("presents from scale 1.2 and opacity 0 with the dimming, on the theme's dialog entrance", () => {
+  it("presents from scale 1.2 and opacity 0 with the dimming, on the theme's entrance timing", () => {
     render(<Alert isOpen isEnabled />);
     const {panel, backdrop} = animators();
     expect(moves(panel)[0]).toEqual({
@@ -204,7 +213,7 @@ describe('useAlertMotion', () => {
   it("plays a theme's own entrance and exit tokens", () => {
     const style = {
       '--duration-medium-max': '300ms',
-      '--ease-standard': 'cubic-bezier(0.4, 0, 0.2, 1)',
+      '--ease-entrance': 'cubic-bezier(0.4, 0, 0.2, 1)',
       '--duration-exit': '120ms',
       '--ease-exit': 'cubic-bezier(0.4, 0, 1, 1)',
     } as CSSProperties;

@@ -33,13 +33,13 @@ import {
 import {holdInput} from '../Layer/inputHold';
 
 /**
- * The presentation plays the theme's dialog entrance, the duration and the
- * curve that a mouse's entrance plays. A tap opens an alert, and a tap has no
- * velocity, so no spring plays.
+ * The presentation plays the theme's entrance easing over its duration step
+ * for UIKit's measured 404 ms alert present. A tap opens an alert, and a tap
+ * has no velocity, so no spring plays.
  */
 const ALERT_ENTRANCE_TOKENS: ThemeTimingTokens = {
   duration: '--duration-medium-max',
-  easing: '--ease-standard',
+  easing: '--ease-entrance',
 };
 
 /** The dismissal plays the exit duration and easing that every overlay shares. */
@@ -77,7 +77,6 @@ function presentScaleFrom(element: HTMLElement | null): number {
     : PRESENT_SCALE_FROM;
 }
 
-/** `progress` carried from `from` to `to`. */
 function between(progress: MotionCurve, from: number, to: number): MotionCurve {
   // Unclamped, so an easing that overshoots carries the value with it.
   return mapProgress(progress, mapRange([0, 1], [from, to], {clamp: false}));
