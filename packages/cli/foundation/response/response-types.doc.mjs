@@ -129,19 +129,19 @@ export const doc = {
       value: 'themeEdit.show',
       stability: 'experimental',
       description:
-        'Every `settings` entry with the `parts` it styles, key `resolved` token values per mode, the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures`, and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
+        'Every `settings` entry with the `parts` it styles, key `resolved` token values (colors and shadows per mode, other values once), `partValues` (corners or spacing set on a part or group, with what its parts get beside the whole-theme value), the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures`, and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.undo',
       stability: 'experimental',
       description:
-        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page and any `pictures`. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` naming the one removed, which is back to the base theme's value. Experimental: may change or be removed in a patch release.",
+        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page and any `pictures`. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` and `removed` both naming the setting removed, and `now` saying what applies instead (a whole-theme setting of the same thing, or the base theme's value; `changedTokens` lists the values). Experimental: may change or be removed in a patch release.",
     },
     {
       value: 'themeEdit.previewAdd',
       stability: 'experimental',
       description:
-        "Pages added to the theme preview in the app: the route `folder`, the `theme` the pages wear (null for the app's own), the pages `added` and every page (`pages`), the template pages `skipped` because the app lacks packages they import (each with its `missingPackages` and `installCommand`), the `files` the preview wrote, `notes`, and how to `open` it. Experimental: may change or be removed in a patch release.",
+        "Pages added to the theme preview in the app: the route `folder`, the `theme` the pages wear (null for the app's own), the pages `added`, the pages that were there already and are written again (`refreshed`), every page (`pages`), each template page picked and why (`matched`), the template pages `skipped` (each with its `reason` and `installCommand`), the `files` the preview wrote, `notes`, and how to `open` it. Experimental: may change or be removed in a patch release.",
     },
     {
       value: 'themeEdit.previewApp',

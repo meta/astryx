@@ -2645,6 +2645,7 @@ jobs:
     outputs:
       chromium: ${{ steps.matrix.outputs.chromium }}
       webkit: ${{ steps.matrix.outputs.webkit }}
+      chromium_specs: ${{ steps.select-chromium.outputs.specs }}
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
@@ -2705,32 +2706,12 @@ jobs:
           cp .test-scope/.github/scripts/merge-base.sh "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/interaction-legs/.github/"
 
-      - name: Count the Chromium legs
-        id: count-chromium
-        if: steps.scope-chromium.outputs.applies == 'true'
-        continue-on-error: true
-        env:
-          LAB_SPECS: ${{ steps.scope-chromium.outputs.lab_specs_path }}
-        run: |
-          # A Lab-only change runs only the interaction specs it edits.
-          FILTERS=()
-          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
-          git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
-          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
-            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
-            --tests-out "$RUNNER_TEMP/interaction-legs/tests.json" \
-            --key interaction-chromium --fallback-key interaction-webkit \
-            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
-            --setup-seconds 90 --max-seconds 600 \
-            --leg 1 --max-legs 10 \
-            "${FILTERS[@]}"
-
-      # The Chromium selection (spec:AST-030 FR31) runs in shadow: this step
-      # computes it, reports it and keeps it as an artifact, and the lane
-      # still runs every spec until a replay of recent pull requests shows the
-      # selection catches what the full runs caught. Its import graphs read
-      # the merge commit's package, harness and Storybook sources.
-      - name: Select the Chromium proofs, in shadow
+      # The Chromium selection (spec:AST-030 FR31): the specs a pull request
+      # reaches, or `full`. Its import graphs read the merge commit's package,
+      # harness and Storybook sources. The leg count and every leg read its
+      # output; an empty output (a failed or skipped step) runs the full
+      # suite. The artifact feeds the escape log.
+      - name: Select the Chromium proofs
         id: select-chromium
         if: github.event_name == 'pull_request' && steps.scope-chromium.outputs.applies == 'true' && steps.scope-chromium.outputs.lab_specs_path == ''
         continue-on-error: true
@@ -2753,6 +2734,8 @@ jobs:
             --selection .test-scope/.github/interaction-selection.json \
             --primitives .test-scope/.github/a11y-shared-primitives.json \
             --out "$RUNNER_TEMP/interaction-legs/chromium-selection.json" | tee -a "$GITHUB_STEP_SUMMARY"
+          node -e 'const r = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")); console.log(`specs=${r.full ? "full" : JSON.stringify(r.specs)}`)' \
+            "$RUNNER_TEMP/interaction-legs/chromium-selection.json" >> "$GITHUB_OUTPUT"
 
       - name: Keep the Chromium selection
         if: steps.select-chromium.outcome == 'success'
@@ -2761,6 +2744,42 @@ jobs:
           name: interaction-selection-${{ github.run_attempt }}
           path: ${{ runner.temp }}/interaction-legs/chromium-selection.json
           retention-days: 90
+
+      - name: Count the Chromium legs
+        id: count-chromium
+        if: steps.scope-chromium.outputs.applies == 'true'
+        continue-on-error: true
+        env:
+          LAB_SPECS: ${{ steps.scope-chromium.outputs.lab_specs_path }}
+          CHROMIUM_SPECS: ${{ steps.select-chromium.outputs.specs }}
+        run: |
+          # A Lab-only change runs only the interaction specs it edits; any
+          # other pull request runs the Chromium selection, and `full` or no
+          # selection runs every spec.
+          FILTERS=()
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}")
+          elif [ -n "${CHROMIUM_SPECS:-}" ] && [ "$CHROMIUM_SPECS" != full ]; then
+            # A selection that does not parse runs every spec.
+            if ! PICKED_LINES=$(node -e 'for (const file of JSON.parse(process.env.CHROMIUM_SPECS)) console.log(file)'); then
+              echo "::warning::The Chromium selection does not parse, so every spec runs."
+            elif [ -z "$PICKED_LINES" ]; then
+              echo "No Chromium interaction proof covers this change: it touches no proof, no component folder that holds one or renders one, and no shared code."
+              printf 'count=0\nruns=false\nleg=1\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            else
+              mapfile -t PICKED <<< "$PICKED_LINES"
+              FILTERS=(-- "${PICKED[@]}")
+            fi
+          fi
+          git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
+            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
+            --tests-out "$RUNNER_TEMP/interaction-legs/tests.json" \
+            --key interaction-chromium --fallback-key interaction-webkit \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
+            --setup-seconds 90 --max-seconds 600 \
+            --leg 1 --max-legs 10 \
+            "${FILTERS[@]}"
 
       # The full WebKit suite on the weekly run; for a release check, the
       # last full weekly run's verdict and the release version decide; every
@@ -2948,10 +2967,26 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         env:
           LAB_SPECS: ${{ steps.scope.outputs.lab_specs_path }}
+          CHROMIUM_SPECS: ${{ needs.interaction-legs.outputs.chromium_specs }}
         run: |
-          # A Lab-only change runs only the interaction specs it edits.
+          # A Lab-only change runs only the interaction specs it edits; any
+          # other pull request runs the Chromium selection, and `full` or no
+          # selection runs every spec.
           FILTERS=()
-          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}")
+          elif [ -n "${CHROMIUM_SPECS:-}" ] && [ "$CHROMIUM_SPECS" != full ]; then
+            # A selection that does not parse runs every spec.
+            if ! PICKED_LINES=$(node -e 'for (const file of JSON.parse(process.env.CHROMIUM_SPECS)) console.log(file)'); then
+              echo "::warning::The Chromium selection does not parse, so every spec runs."
+            elif [ -z "$PICKED_LINES" ]; then
+              echo "No Chromium interaction proof covers this change: it touches no proof, no component folder that holds one or renders one, and no shared code."
+              printf 'count=0\nruns=false\nleg=1\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            else
+              mapfile -t PICKED <<< "$PICKED_LINES"
+              FILTERS=(-- "${PICKED[@]}")
+            fi
+          fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
@@ -3041,10 +3076,26 @@ jobs:
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         env:
           LAB_SPECS: ${{ steps.scope.outputs.lab_specs_path }}
+          CHROMIUM_SPECS: ${{ needs.interaction-legs.outputs.chromium_specs }}
         run: |
-          # A Lab-only change runs only the interaction specs it edits.
+          # A Lab-only change runs only the interaction specs it edits; any
+          # other pull request runs the Chromium selection, and `full` or no
+          # selection runs every spec.
           FILTERS=()
-          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}"); fi
+          if [ -n "${LAB_SPECS:-}" ]; then mapfile -t LAB < "$LAB_SPECS"; FILTERS=(-- "${LAB[@]}")
+          elif [ -n "${CHROMIUM_SPECS:-}" ] && [ "$CHROMIUM_SPECS" != full ]; then
+            # A selection that does not parse runs every spec.
+            if ! PICKED_LINES=$(node -e 'for (const file of JSON.parse(process.env.CHROMIUM_SPECS)) console.log(file)'); then
+              echo "::warning::The Chromium selection does not parse, so every spec runs."
+            elif [ -z "$PICKED_LINES" ]; then
+              echo "No Chromium interaction proof covers this change: it touches no proof, no component folder that holds one or renders one, and no shared code."
+              printf 'count=0\nruns=false\nleg=1\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            else
+              mapfile -t PICKED <<< "$PICKED_LINES"
+              FILTERS=(-- "${PICKED[@]}")
+            fi
+          fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
             --key interaction-chromium --fallback-key interaction-webkit --tests "$RUNNER_TEMP/interaction-legs/tests.json" \
             --config playwright.interaction.config.ts --project chromium \
@@ -4893,6 +4944,192 @@ jobs:
             pr-a11y-output/
           if-no-files-found: ignore
           retention-days: 7
+
+  # The release specs a pull request runs in `release-specs (changed)`, by
+  # FR32's release-file and import triggers (spec:AST-030 FR32): each
+  # `*.release.*.spec.ts` file it adds or changes, and each one that imports a
+  # module it changes. Specs tagged `@pr-a11y release-only`, visited
+  # components and Lab-only pull requests are not triggers yet. When the imports
+  # cannot be followed, every release spec runs. The plan runs on a slim
+  # runner, so a pull request that triggers nothing never starts the
+  # release check's runner.
+  release-specs-plan:
+    needs: [room, admission, heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      has_specs: ${{ steps.plan.outputs.has_specs }}
+      specs: ${{ steps.plan.outputs.specs }}
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          # Package and harness sources a release spec can import, and the
+          # release specs themselves.
+          paths: '^(packages/[^/]+/src/|internal/)|\.release\.[^/]*\.spec\.ts$'
+          outside-pull-request: skip
+          # Lists the changed files, so the plan reads them.
+          component-audit: 'true'
+
+      # A diff GitHub truncates lists no changed files, and a re-run cannot
+      # list them; the pull request must be split (spec:AST-030 FR12).
+      - name: Require a complete changed-file list
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        env:
+          TRUNCATED: ${{ steps.scope.outputs.truncated }}
+        run: |
+          if [ "$TRUNCATED" = true ]; then
+            echo "::error::GitHub truncated this pull request's file list, so the release specs to run are unknown. Split the pull request."
+          else
+            echo "::error::The scope step could not list the changed files, so the release specs to run are unknown. Re-run the job."
+          fi
+          exit 1
+
+      # The merge commit's package and harness sources, for the import graph.
+      - name: Check out the merge commit's sources
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/scripts
+            scripts/lib
+            packages
+            internal
+          path: .plan
+          persist-credentials: false
+
+      - name: Plan the release specs
+        id: plan
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+        run: |
+          # A planner failure fails the step, never reads as "nothing to run".
+          set -o pipefail
+          git -C .plan ls-files > "$RUNNER_TEMP/listed.txt"
+          node .plan/.github/scripts/release-specs-plan.mjs \
+            --listed "$RUNNER_TEMP/listed.txt" --changed "$FILES_PATH" \
+            --root .plan --out "$RUNNER_TEMP/release-specs-plan.json" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # Each release spec the plan names runs here in full and alone
+  # (`--workers=1`), on the runner of the gating release check, with that
+  # check's Playwright config and timing gate (spec:AST-030 FR32, DEC-29). It
+  # has no time budget and no automatic retry: a timing-budget miss is a
+  # failure. merge-guard waits for it by name when a pull request triggers it.
+  # The job starts only when the plan names a spec.
+  release-specs:
+    name: release-specs (changed)
+    needs: [room, admission, heavy-ci, build-storybook, release-specs-plan]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true' && needs.release-specs-plan.outputs.has_specs == 'true')) }}
+    # The gating release check runs its contracts on four cores; timing
+    # budgets hold only on that runner.
+    runs-on: 4-core-ubuntu
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the workflow's scripts
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Require this pull request's Storybook build
+        if: needs.build-storybook.result != 'success'
+        run: |
+          echo "The release specs read this pull request's Storybook build, which did not succeed."
+          exit 1
+
+      # The head checkout below replaces the workspace, so the lane's
+      # environment marker and the spec-glob list move out of the workflow's
+      # commit first.
+      - name: Keep the workflow commit's lane marker and spec globs
+        run: |
+          mkdir -p "$RUNNER_TEMP/lane-environment/.github/scripts" "$RUNNER_TEMP/release-specs/.github/scripts/lib"
+          cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/lane-environment/.github/scripts/"
+          cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/lane-environment/.github/"
+          cp .test-scope/.github/scripts/lib/a11y-spec-files.mjs "$RUNNER_TEMP/release-specs/.github/scripts/lib/"
+
+      # The specs, their helpers and the lockfile come from the head that
+      # built the Storybook, as the release check runs them against its own
+      # build.
+      - name: Check out the head that built the Storybook
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Require this lane's environment in the branch
+        run: >-
+          node "$RUNNER_TEMP/lane-environment/.github/scripts/lane-environment.mjs" check --lane a11y-contracts
+          --workflow "$RUNNER_TEMP/lane-environment/.github/lane-environments.json"
+          --head .github/lane-environments.json
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      # The job never drops a planned spec (spec:AST-030 FR32): one the head
+      # lacks, or one outside the config's spec globs, fails here by name.
+      - name: Run the planned release specs
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SPECS: ${{ needs.release-specs-plan.outputs.specs }}
+          # The Table release proof reads it: timing budgets gate on the
+          # release check's runner, so they gate here too.
+          ASTRYX_TABLE_TIMING_GATE: '1'
+        run: |
+          set -euo pipefail
+          mapfile -t PLANNED < <(node -e 'for (const file of JSON.parse(process.env.SPECS)) console.log(file)')
+          # The plan reads the merge commit, which holds every planned spec.
+          # A planned spec the head lacks was added on main after the branch
+          # point; it must run, so the step fails until main is merged in.
+          RUN=()
+          MISSING=()
+          for file in "${PLANNED[@]}"; do
+            if [ -f "$file" ]; then RUN+=("$file"); else MISSING+=("$file"); fi
+          done
+          if [ "${#MISSING[@]}" -gt 0 ]; then
+            for file in "${MISSING[@]}"; do
+              echo "::error file=$file::$file is a planned release spec that this pull request's head does not have: main added it after the branch point. Merge main into the branch so it runs."
+            done
+            exit 1
+          fi
+          SPEC_FILES="$RUNNER_TEMP/release-specs/.github/scripts/lib/a11y-spec-files.mjs" node --input-type=module -e '
+            import {pathToFileURL} from "node:url";
+            const {isA11ySpecFile} = await import(pathToFileURL(process.env.SPEC_FILES));
+            const outside = process.argv.slice(1).filter(file => !isA11ySpecFile(file));
+            for (const file of outside) console.log("::error file=" + file + "::" + file + " is a release spec outside playwright.config.ts, so no release check runs it.");
+            process.exitCode = outside.length > 0 ? 1 : 0;
+          ' "${RUN[@]}"
+          # One worker: a release spec judges timing alone, as the release
+          # check gives an isolated timing proof a contract leg of its own.
+          pnpm exec playwright test "${RUN[@]}" --config playwright.config.ts --project chromium --workers=1
 
   # Dependent audits (spec:AST-030 FR12): a change to a component's source runs
   # that component's own `audit` specs, and a change to a shared primitive that
