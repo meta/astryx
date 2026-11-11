@@ -2,11 +2,12 @@
 
 /**
  * @file actionGroupTracker.ts
- * @input The tracked elements, the action selector and hit expansion, and the
- *   press paint and the press controller's fade clock
+ * @input The tracked elements, the action selector and hit expansion, the
+ *   group's axis, and the press paint and the press controller's fade clock
  * @output createActionGroupTracker, ActionGroupTracker,
- *   ActionGroupTrackerOptions, ActionGroupTarget, measureActions (the actions
- *   the tracker tracks, measured) and DISABLED_SELECTOR (the actions it skips)
+ *   ActionGroupTrackerOptions, ActionGroupTarget and measureActions (the
+ *   actions the tracker tracks, measured). Also onCenterLine (where a finger
+ *   counts in a one-axis group) and DISABLED_SELECTOR (the actions it skips)
  * @position Internal core tracker for a held finger that slides across a
  *   group of actions. Gesture recognizers drive it.
  *
@@ -15,6 +16,7 @@
 
 import {clickAndReport, clickForLift} from '../utils/browserClickWait';
 import {armClickGuard} from '../utils/clickGuard';
+import {subscribeInput} from '../utils/inputStream';
 import {PRESSED_ATTRIBUTE, pressFadeMs} from '../utils/pressFeedback';
 
 /** An action that is not enabled takes no highlight and does not run. */
@@ -65,9 +67,21 @@ export interface ActionGroupTrackerOptions {
   highlightExpansion: number;
   /**
    * Paint the highlighted action with the press attribute (`on`, then
-   * `fading` at the lift). @default true
+   * `fading` at the lift). A function decides per action, read at each write.
+   * @default true
    */
-  paintsHighlight?: boolean;
+  paintsHighlight?: boolean | ((item: HTMLElement) => boolean);
+  /**
+   * The axis of a one-row or one-column group. The finger then counts on the
+   * group's center line, clamped to its ends. A drift off the group keeps
+   * choosing along the axis, and Escape cancels the press.
+   */
+  tracksAlong?: 'x' | 'y';
+  /**
+   * The tracker cancelled the press itself (Escape): the owner takes back
+   * what it shows for the press. Not called for the owner's own `cancel()`.
+   */
+  onCancel?: () => void;
   /**
    * Called whenever the highlighted action changes (null: none), with the
    * one it replaces.
@@ -153,6 +167,60 @@ export interface ActionGroupTracker {
   dispose(): void;
 }
 
+/** A one-axis group's box, px, and the window whose keys can cancel. */
+interface GroupBand {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  readonly view: Window | null;
+}
+
+/** The box around every root, read once; null when no root is rendered. */
+function measureBand(
+  roots: Iterable<Element | null | undefined>,
+): GroupBand | null {
+  let band: GroupBand | null = null;
+  for (const root of roots) {
+    if (root == null) {
+      continue;
+    }
+    const rect = root.getBoundingClientRect();
+    if (band == null) {
+      band = {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        view: root.ownerDocument.defaultView,
+      };
+    } else {
+      band.left = Math.min(band.left, rect.left);
+      band.top = Math.min(band.top, rect.top);
+      band.right = Math.max(band.right, rect.right);
+      band.bottom = Math.max(band.bottom, rect.bottom);
+    }
+  }
+  return band;
+}
+
+/**
+ * Where a finger counts in a one-axis group: on the group's center line
+ * across the axis, and clamped to its ends along it.
+ */
+export function onCenterLine(
+  band: Pick<GroupBand, 'left' | 'top' | 'right' | 'bottom'>,
+  axis: 'x' | 'y',
+  x: number,
+  y: number,
+): [number, number] {
+  const clamp = (value: number, low: number, high: number) =>
+    Math.min(Math.max(value, low), high);
+  return axis === 'x'
+    ? [clamp(x, band.left, band.right), (band.top + band.bottom) / 2]
+    : [(band.left + band.right) / 2, clamp(y, band.top, band.bottom)];
+}
+
 interface TrackedAction {
   readonly element: HTMLElement;
   left: number;
@@ -167,7 +235,8 @@ interface TrackedAction {
  *
  * The tracker treats a group of actions as one control, as UIKit does:
  * - The action under the finger highlights. Between or outside the actions,
- *   nothing highlights.
+ *   nothing highlights. A one-axis group (`tracksAlong`) reads the finger on
+ *   its center line instead, so a drift off the group keeps its action.
  * - The lift runs the action under the finger, and its highlight fades.
  * - An inert press is taken but paints and runs nothing.
  *
@@ -190,8 +259,14 @@ export function createActionGroupTracker(
   let lastX = 0;
   let lastY = 0;
   const fades = new Map<Element, ReturnType<typeof setTimeout>>();
+  // A one-axis group's box, read at the begin: the finger counts inside it.
+  let band: GroupBand | null = null;
+  let stopEscape: (() => void) | null = null;
 
-  const paints = () => getOptions().paintsHighlight !== false;
+  const paints = (element: HTMLElement) => {
+    const option = getOptions().paintsHighlight;
+    return typeof option === 'function' ? option(element) : option !== false;
+  };
 
   const clearFade = (element: Element) => {
     const fade = fades.get(element);
@@ -201,21 +276,21 @@ export function createActionGroupTracker(
     }
   };
   const paint = (element: HTMLElement) => {
-    if (!paints()) {
+    if (!paints(element)) {
       return;
     }
     clearFade(element);
     element.setAttribute(PRESSED_ATTRIBUTE, 'on');
   };
   const cut = (element: HTMLElement) => {
-    if (!paints()) {
+    if (!paints(element)) {
       return;
     }
     clearFade(element);
     element.removeAttribute(PRESSED_ATTRIBUTE);
   };
   const release = (element: HTMLElement) => {
-    if (!paints()) {
+    if (!paints(element)) {
       return;
     }
     clearFade(element);
@@ -253,8 +328,16 @@ export function createActionGroupTracker(
     return measureActions(roots(), itemSelector, isItem);
   };
 
-  const actionAt = (x: number, y: number): HTMLElement | null => {
-    const {resolveTarget, highlightExpansion: margin} = getOptions();
+  const actionAt = (fingerX: number, fingerY: number): HTMLElement | null => {
+    const {
+      resolveTarget,
+      highlightExpansion: margin,
+      tracksAlong,
+    } = getOptions();
+    const [x, y] =
+      band == null || tracksAlong == null
+        ? [fingerX, fingerY]
+        : onCenterLine(band, tracksAlong, fingerX, fingerY);
     if (resolveTarget != null) {
       return actions.length === 0 ? null : resolveTarget(x, y, actions);
     }
@@ -284,6 +367,41 @@ export function createActionGroupTracker(
     landedOn = null;
     isTracking = false;
     isInert = false;
+    band = null;
+    stopEscape?.();
+    stopEscape = null;
+  };
+
+  const cancel = () => {
+    const current = highlighted;
+    const wasTracking = isTracking;
+    reset();
+    if (current != null) {
+      cut(current);
+      if (wasTracking) {
+        getOptions().onHighlightChange?.(null, current);
+      }
+    }
+  };
+
+  // Escape takes back a press in a one-axis group, where no slide-off can.
+  const listenForEscape = (view: Window | null) => {
+    if (view == null) {
+      return;
+    }
+    // The key is handled, so a dialog around the group stays open.
+    stopEscape = subscribeInput(
+      view,
+      'keydown',
+      event => {
+        if (event.key === 'Escape' && isTracking) {
+          event.preventDefault();
+          cancel();
+          getOptions().onCancel?.();
+        }
+      },
+      {cancels: true},
+    );
   };
 
   return {
@@ -295,8 +413,15 @@ export function createActionGroupTracker(
       if (previous != null) {
         cut(previous);
       }
+      stopEscape?.();
+      stopEscape = null;
       // An inert press tracks no action: nothing to paint, nothing to run.
       actions = inert ? [] : measure();
+      const {roots, tracksAlong} = getOptions();
+      band = inert || tracksAlong == null ? null : measureBand(roots());
+      if (band != null) {
+        listenForEscape(band.view);
+      }
       highlighted = null;
       isTracking = true;
       isInert = inert;
@@ -349,23 +474,13 @@ export function createActionGroupTracker(
       }
       return lifted;
     },
-    cancel() {
-      const current = highlighted;
-      const wasTracking = isTracking;
-      reset();
-      if (current != null) {
-        cut(current);
-        if (wasTracking) {
-          getOptions().onHighlightChange?.(null, current);
-        }
-      }
-    },
+    cancel,
     offsetBy(dx, dy) {
-      for (const action of actions) {
-        action.left += dx;
-        action.right += dx;
-        action.top += dy;
-        action.bottom += dy;
+      for (const box of band == null ? actions : [...actions, band]) {
+        box.left += dx;
+        box.right += dx;
+        box.top += dy;
+        box.bottom += dy;
       }
     },
     remeasure() {
@@ -373,6 +488,9 @@ export function createActionGroupTracker(
         return;
       }
       actions = measure();
+      if (band != null) {
+        band = measureBand(getOptions().roots()) ?? band;
+      }
       highlight(actionAt(lastX, lastY));
     },
     get highlighted() {

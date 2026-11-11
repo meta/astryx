@@ -1,14 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Colocated types for `astryx experimental theme`: the source of truth
+ * @file Colocated types for `astryx experimental theme editor`: the source of truth
  * for its option and response shapes.
  *
  * @position api/theme-edit — typedefs for api/theme-edit/theme-edit.mjs
  */
 
 /**
- * One setting a theme made by `experimental theme` holds.
+ * One setting a theme made by `experimental theme editor` holds.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditSetting
  * @property {string} thing - A dial (`corners`), a design token (`--color-accent`), or a CSS property (`background`).
@@ -52,7 +52,7 @@
  */
 
 /**
- * `astryx --json experimental theme new <theme>`.
+ * `astryx --json experimental theme editor new <theme>`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditNewResponse
  * @property {'themeEdit.new'} type
@@ -60,10 +60,11 @@
  */
 
 /**
- * `astryx --json experimental theme set|reset <theme> <thing> ...`.
+ * `astryx --json experimental theme editor set <theme> <thing> <value>`, and
+ * `undo <theme> <thing>`, which removes one setting.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditChangeResponse
- * @property {'themeEdit.set' | 'themeEdit.reset'} type
+ * @property {'themeEdit.set' | 'themeEdit.undo'} type
  * @property {ThemeEditChangeData} data
  */
 
@@ -71,8 +72,8 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditChangeData
  * @property {string} theme
- * @property {'set' | 'reset'} action
- * @property {ThemeEditSetting} setting - The setting written, or for `reset` the one removed.
+ * @property {'set' | 'undo'} action
+ * @property {ThemeEditSetting} setting - The setting written, or for `undo` the one removed.
  * @property {ThemeEditSetting | null} replaced - The setting this one replaced.
  * @property {string | null} was - For `base` and `mode`: the value before.
  * @property {string[]} parts - The parts it styles (a family's members when it spread).
@@ -81,7 +82,7 @@
  * @property {string[]} styled - Part styles and typography the change wrote.
  * @property {string[]} kept - Part settings a whole-theme dial left in place (a part setting wins).
  * @property {string[]} lifted - Variant keys the setting was newly repeated on, so a more specific base rule cannot beat it.
- * @property {string[]} notes - What else to know: accent text per mode, font loading, what a token feeds.
+ * @property {string[]} notes - What else to know: the palette stops a color dial feeds and any stop contrast moved, font loading, what a token feeds.
  * @property {string[]} problems - Text this theme made unreadable (below 4.5:1, and not that low in the base theme).
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string} preview
@@ -90,7 +91,15 @@
  */
 
 /**
- * `astryx --json experimental theme show <theme>`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditShowOptions
+ * @property {string} [cwd] - The app folder (default: process.cwd()).
+ * @property {string} [group] - Only one group on the sheet: actions, inputs, selection, navigation, feedback, data, containers, overlays, or pages.
+ * @property {boolean} [png] - Also take PNG pictures of the previews.
+ */
+
+/**
+ * `astryx --json experimental theme editor show <theme>`.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditShowResponse
  * @property {'themeEdit.show'} type
@@ -100,6 +109,7 @@
  * @property {string} data.mode
  * @property {Array<ThemeEditSetting & {parts: string[]}>} data.settings
  * @property {Record<string, Record<string, string | null>>} data.resolved - Key tokens, per mode.
+ * @property {ThemeEditPaletteReport | null} data.palette - The palette the color dials grow; null when the theme sets no color dial.
  * @property {string[]} data.problems
  * @property {string[]} data.notes
  * @property {string} data.preview
@@ -111,33 +121,114 @@
  */
 
 /**
- * `astryx --json experimental theme undo <theme>`.
+ * The palette behind the color dials, as `show` reports it.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPaletteReport
+ * @property {string} config - The palette config, in the shape `theme palette generate` reads.
+ * @property {string} file - The generated palette module the theme imports.
+ * @property {string} receipt - The generation receipt beside it.
+ * @property {Array<{family: string, seed: string, value: string, exactToken: string, tokens: Record<string, {light: string, dark: string}>}>} families - Each color dial's family: its seed, the value as set, the token that sets its main color exactly, and the stop that feeds each token in each mode.
+ * @property {string[]} contrast - Each contrast check behind a stop choice, with its ratio and whether it passes.
+ * @property {string[]} overridden - Palette-fed tokens an exact token setting replaces.
+ */
+
+/**
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditUndoOptions
+ * @property {string} [cwd] - The app folder (default: process.cwd()).
+ * @property {string} [thing] - Remove this one setting (a dial, a token, or a CSS property) instead of stepping back one change; it goes back to the base theme's value.
+ * @property {string} [value] - With `thing` `headings`: which half to remove, `weight` or `tracking`.
+ * @property {string} [on] - With `thing`: the part, family or role it was set on.
+ * @property {string} [when] - With `thing`: the variant it was set for.
+ * @property {string} [state] - With `thing`: the state it was set for.
+ * @property {string} [mode] - With `thing`: the mode it was set for.
+ * @property {boolean} [only] - With `thing`: whether it was set with `--only`.
+ * @property {boolean} [png] - Also take PNG pictures of the preview.
+ */
+
+/**
+ * `astryx --json experimental theme editor undo <theme>`: one step back.
+ * With a thing, undo returns a {@link ThemeEditChangeResponse} instead.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoResponse
  * @property {'themeEdit.undo'} type
- * @property {{theme: string, undone: string[], settings: number, stepsLeft: number} & ThemeEditPreviewFields} data
+ * @property {{theme: string, action: 'step', undone: string[], settings: number, stepsLeft: number} & ThemeEditPreviewFields} data
  */
 
 /**
- * `astryx --json experimental theme preview <theme>`.
  * @experimental May change or be removed in a patch release.
- * @typedef {object} ThemeEditPreviewResponse
- * @property {'themeEdit.preview'} type
+ * @typedef {object} ThemeEditPreviewAddOptions
+ * @property {string} [cwd] - The project folder (default: process.cwd()).
+ * @property {string} [theme] - The theme the pages wear: a theme made by `experimental theme editor` (default: the only one under themes/; with none or several, the app's own theme).
+ * @property {string} [template] - Add this page template instead of ranking one from a description.
+ * @property {number} [top] - With a description: how many of the best-fitting page templates to add, 1 to 3 (default 1).
+ * @property {string} [path] - The folder of the preview route, inside the project (default: theme-preview/ in the app's routes folder, app/ or src/app/).
+ */
+
+/**
+ * `astryx --json experimental theme preview add [<description>]`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPreviewAddResponse
+ * @property {'themeEdit.previewAdd'} type
  * @property {object} data
- * @property {string} data.theme
- * @property {string | null} data.group
- * @property {'html' | 'page'} data.mode - `html`: one rendered file; `page`: page modules written into the app.
- * @property {string[]} data.files
- * @property {string | null} data.html
- * @property {number} data.components
- * @property {string[]} data.skipped
- * @property {string[]} data.pictures
- * @property {string | null} data.pictureProblem
+ * @property {string} data.folder - The preview route folder.
+ * @property {string | null} data.theme - The theme the pages wear; null for the app's own theme.
+ * @property {string[]} data.added - Pages added by this call.
+ * @property {Array<{page: string, missingPackages: string[], installCommand: string | null, stylexCompiler: boolean}>} data.skipped - Template pages not added: the packages they import that the app lacks, with the command that installs them, and whether the page needs a StyleX compiler the app does not have.
+ * @property {string[]} data.notes - What else to know.
+ * @property {string[]} data.pages - Every page of the preview, in order.
+ * @property {string[]} data.files - Every file the preview wrote.
+ * @property {string} data.open - How to open the preview.
  */
 
 /**
  * @experimental May change or be removed in a patch release.
- * @typedef {object} ThemeEditExplainOptions
+ * @typedef {object} ThemeEditPreviewAppOptions
+ * @property {string} [cwd] - The folder the app folder is inside (default: process.cwd()).
+ * @property {string} [theme] - A theme made by `experimental theme editor` here: it is copied into the app, and the preview pages wear it (default: the app's own neutral theme).
+ * @property {boolean} [overwrite] - Write into a folder that is not empty. A protected file there is never replaced, and the folder's own package.json and .gitignore are kept.
+ */
+
+/**
+ * `astryx --json experimental theme preview app <dir>`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPreviewAppResponse
+ * @property {'themeEdit.previewApp'} type
+ * @property {object} data
+ * @property {string} data.folder - The new app folder.
+ * @property {string | null} data.theme - The theme copied into the app, which the pages wear; null for the app's own neutral theme.
+ * @property {string[]} data.pages - The preview pages.
+ * @property {string[]} data.files - Every file written.
+ * @property {string[]} data.notes - What else to know.
+ * @property {string} data.open - How to install, run and open the app.
+ */
+
+/**
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPreviewListOptions
+ * @property {string} [cwd] - The project folder (default: process.cwd()).
+ * @property {string} [path] - The folder of the preview route, when it is not in the default place.
+ */
+
+/**
+ * `astryx --json experimental theme preview list`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPreviewListResponse
+ * @property {'themeEdit.previewList'} type
+ * @property {{folder: string | null, theme: string | null, pages: Array<{id: string, label: string}>}} data
+ */
+
+/**
+ * `astryx --json experimental theme preview remove [<page>]`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditPreviewRemoveResponse
+ * @property {'themeEdit.previewRemove'} type
+ * @property {{folder: string, removed: string[], pages: string[]}} data
+ */
+
+/**
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} ThemeEditHowOptions
  * @property {string} [cwd] - The app folder (default: process.cwd()).
  * @property {string} [list] - List what a change can name: dials, tokens, parts, families, or properties; the subject filters it.
  * @property {string[]} [at] - With a PNG picture: pixel points x,y ("40,20;300,180", "40,20 300,180", several entries, or a flat "40,20,300,180").
@@ -145,10 +236,10 @@
  */
 
 /**
- * `astryx --json experimental theme explain ...`. `kind` says which answer it is.
+ * `astryx --json experimental theme editor how <subject>`. `kind` says which answer it is.
  * @experimental May change or be removed in a patch release.
- * @typedef {object} ThemeEditExplainResponse
- * @property {'themeEdit.explain'} type
+ * @typedef {object} ThemeEditHowResponse
+ * @property {'themeEdit.how'} type
  * @property {{kind: 'part' | 'family' | 'setting' | 'aspect' | 'question' | 'picture' | 'list', subject: string, [key: string]: any}} data
  */
 
