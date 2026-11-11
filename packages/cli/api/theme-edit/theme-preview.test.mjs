@@ -136,8 +136,8 @@ describe('preview add', () => {
   it('refuses with no routes folder, naming --path and preview app', async () => {
     const r = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
     expect(r.code).toBe('ERR_NOT_FOUND');
-    expect(r.run.join(' ')).toContain('add --path <dir>');
-    expect(r.run.join(' ')).toContain('preview app <dir>');
+    expect(r.run.join(' ')).toContain('add --path app/theme-preview');
+    expect(r.run.join(' ')).toContain('preview app theme-app');
   });
 
   it('writes the route, the default pages and the data file in the app routes folder', async () => {
@@ -440,7 +440,8 @@ describe('preview options and errors', () => {
           theme: 'broken',
         }),
       );
-      expect(r.code).toBe('ERR_THEME_LOAD');
+      // The source no longer carries the settings: refused before the build.
+      expect(r.code).toBe('ERR_THEME_INVALID');
       expect(filesUnder(path.join(cwd, 'src/app/broken'))).toEqual([]);
     } finally {
       fs.rmSync(broken, {recursive: true, force: true});
@@ -453,7 +454,12 @@ describe('preview options and errors', () => {
     fs.writeFileSync(path.join(bare, 'package.json'), '{"name": "bare"}\n');
     try {
       const r = await themeEditPreviewList({cwd: bare});
-      expect(r.data).toEqual({folder: null, theme: null, pages: []});
+      expect(r.data).toEqual({
+        folder: null,
+        theme: null,
+        pages: [],
+        notes: [],
+      });
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
     }
@@ -654,9 +660,9 @@ describe('preview app', () => {
       expect(r.message).toContain('mine exists and is not empty');
       expect(r.run[0]).toMatch(/preview app mine-preview$/);
       expect(read('mine/src/app/layout.tsx')).toBe('MY LAYOUT\n');
-      expect(
-        (await refusal(() => themeEditPreviewApp('.', {cwd}))).code,
-      ).toBe('ERR_FILE_EXISTS');
+      expect((await refusal(() => themeEditPreviewApp('.', {cwd}))).code).toBe(
+        'ERR_FILE_EXISTS',
+      );
     } finally {
       fs.rmSync(app, {recursive: true, force: true});
     }

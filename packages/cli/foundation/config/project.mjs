@@ -35,6 +35,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {LOCAL_THEME_ROOT} from './theme-state.mjs';
 import {loadModuleWithParser} from '../fs/module-loader.mjs';
 import {findConfigPath} from './config-path.mjs';
 import {parseConfig} from '../../authoring/config/parse.mjs';
@@ -324,7 +325,6 @@ function readPackageJson(dir) {
  * @typedef {import('../integrations/issue').AstryxIntegrationIssue & {package: string}} ProjectIntegrationIssue
  */
 
-
 /** Default issue tracker used when neither config nor integration routes one. */
 export const DEFAULT_ISSUES_URL =
   'https://github.com/meta/astryx/issues/new';
@@ -363,7 +363,6 @@ function inheritsIntegrationDebug(projectDir) {
     return true;
   }
 }
-
 
 /**
  * The provider ledger each loaded Project resolved, kept off the class so it
@@ -419,6 +418,8 @@ export class Project {
   #core = 'any';
   /** @type {ProjectIntegrationIssue[]} */
   #issues = [];
+  /** @type {Array<{slug: string, path: string, reason: string}>} */
+  #skippedLocalThemes = [];
   /**
    * Loaded integrations whose issues have already been collected (via a
    * discovery method or a direct issues() validation), so issues() can fill in
@@ -925,14 +926,39 @@ export class Project {
    * ejects share one discovery seam. A broken integration theme contribution is
    * reported without hiding the package's other valid kinds.
    *
-   * @param {{includeLocal?: boolean}} [options]
+   * With `skipBrokenLocal`, a local theme folder that fails validation is
+   * left out and recorded for `skippedLocalThemes()`, so one broken folder
+   * does not hide every other theme.
+   *
+   * @param {{includeLocal?: boolean, skipBrokenLocal?: boolean}} [options]
    * @returns {Promise<import('../discovery/theme-discovery.mjs').DiscoveredTheme[]>}
    */
-  async themes({includeLocal = true} = {}) {
-    return this.#memo(includeLocal ? 'themes' : 'themes:external', async () => {
+  async themes({includeLocal = true, skipBrokenLocal = false} = {}) {
+    const kind = !includeLocal
+      ? 'themes:external'
+      : skipBrokenLocal
+        ? 'themes:skip-broken'
+        : 'themes';
+    return this.#memo(kind, async () => {
       const themes = discoverBundledThemes();
       const projectDir = findPackageRoot(this.#cwd) ?? this.#cwd;
-      if (includeLocal) themes.push(...discoverLocalThemes(projectDir));
+      if (includeLocal) {
+        themes.push(
+          ...discoverLocalThemes(projectDir, undefined, {
+            onFolderError: skipBrokenLocal
+              ? (slug, error) =>
+                  this.#skippedLocalThemes.push({
+                    slug,
+                    path: path.posix.join(
+                      LOCAL_THEME_ROOT.replace(/^\.\//, ''),
+                      slug,
+                    ),
+                    reason: error.message,
+                  })
+              : undefined,
+          }),
+        );
+      }
 
       for (const integration of this.#loadedIntegrations) {
         await this.#collectIssues(integration);
@@ -951,6 +977,14 @@ export class Project {
 
       return themes;
     });
+  }
+
+  /**
+   * Local theme folders `themes({skipBrokenLocal: true})` left out, with why.
+   * @returns {Array<{slug: string, path: string, reason: string}>}
+   */
+  skippedLocalThemes() {
+    return this.#skippedLocalThemes.map(entry => ({...entry}));
   }
 
   /**

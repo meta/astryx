@@ -112,10 +112,11 @@ describe('names', () => {
       expect(exists(`themes/${name}/${name}.js`), name).toBe(true);
       fs.rmSync(path.join(cwd, 'themes', name), {recursive: true, force: true});
     }
+    // A folder of only system files counts as empty.
     fs.mkdirSync(path.join(cwd, 'themes/zz'));
     fs.writeFileSync(path.join(cwd, 'themes/zz/.DS_Store'), '');
-    const r = await refusal(() => themeEditNew('zz', {cwd}));
-    expect(r.run[0]).toMatch(/new zz-copy$/);
+    await themeEditNew('zz', {cwd});
+    expect(exists('themes/zz/zz.js')).toBe(true);
     fs.rmSync(path.join(cwd, 'themes/zz'), {recursive: true, force: true});
   }, 240_000);
 
@@ -174,7 +175,7 @@ describe('new takes its flags as set does', () => {
       themeEditNew('v1', {cwd, settings: {vibrancy: '60'}}),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/new v1 --vibrancy 60 --accent "#7c3aed"$/);
+    expect(r.run[0]).toMatch(/new v1 --vibrancy 60 --accent '#7c3aed'$/);
   });
 
   it('refuses a font or text size that would not build', async () => {
@@ -313,7 +314,17 @@ describe('exact tokens', () => {
       'node_modules/.cache/astryx-theme/locks',
     );
     const {createHash} = await import('node:crypto');
-    const key = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+    // The lock is named for the project as seen from the lock folder.
+    fs.mkdirSync(dir, {recursive: true});
+    const key = createHash('sha256')
+      .update(
+        path
+          .relative(fs.realpathSync(dir), fs.realpathSync(cwd))
+          .split(path.sep)
+          .join('/'),
+      )
+      .digest('hex')
+      .slice(0, 16);
     fs.mkdirSync(path.join(dir, `${key}-theme-h.lock`), {recursive: true});
     fs.writeFileSync(
       path.join(dir, `${key}-theme-h.lock`, 'owner.json'),
@@ -639,7 +650,7 @@ describe('fix3: links, rollback, locks, paths', () => {
     fs.rmSync(path.join(cwd, 'themes/k3'), {recursive: true, force: true});
   }, 120_000);
 
-  it('a lock folder that cannot be written is refused, naming it', async () => {
+  it('a lock folder that cannot be written is refused, naming it; a read-only command runs without it', async () => {
     const dir = path.join(
       path.dirname(cwd),
       'node_modules/.cache/astryx-theme/locks',
@@ -647,9 +658,12 @@ describe('fix3: links, rollback, locks, paths', () => {
     fs.mkdirSync(dir, {recursive: true});
     fs.chmodSync(dir, 0o555);
     try {
-      const r = await refusal(() => themeEditShow('h', {cwd}));
+      const r = await refusal(() =>
+        themeEditSet('h', 'corners', 'pill', {cwd}),
+      );
       expect(r.code).toBe('ERR_WRITE_FAILED');
       expect(r.message).toContain('astryx-theme');
+      expect((await themeEditShow('h', {cwd})).data.theme).toBe('h');
     } finally {
       fs.chmodSync(dir, 0o755);
     }
@@ -780,8 +794,10 @@ describe('hunt2: undo', () => {
     expect(
       (await refusal(() => themeEditUndo('u1', {cwd, on: 'card'}))).code,
     ).toBe('ERR_MISSING_ARGUMENT');
-    const base = await themeEditUndo('u1', {cwd, thing: 'base'});
-    expect(base.data.setting.value).toBe('none');
+    // base was never changed: it stays as the theme was made.
+    expect(
+      (await refusal(() => themeEditUndo('u1', {cwd, thing: 'base'}))).code,
+    ).toBe('ERR_THEME_NOT_SET');
     fs.rmSync(path.join(cwd, 'themes/u1'), {recursive: true, force: true});
   }, 240_000);
 
