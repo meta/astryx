@@ -104,7 +104,7 @@ describe('useLinkify', () => {
         patterns: [
           {
             pattern: /\bD(\d+)\b/g,
-            href: m => `https://phabricator.example.com/${m[0]}`,
+            href: m => `https://review.example.com/${m[0]}`,
             label: m => `Diff ${m[1]}`,
           },
         ],
