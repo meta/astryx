@@ -35,8 +35,8 @@ affects_consumer_docs:
 {
   "paths": [
     "packages/core/src/hooks/**",
-    "packages/core/src/dragToSnapPoints/createSnapDrag.ts",
-    "packages/core/src/gestures/createPan.ts"
+    "packages/core/src/dragToSnapPoints/createDragToSnapPoints.ts",
+    "packages/core/src/gestures/createPanGesture.ts"
   ]
 }
 ```
@@ -186,7 +186,10 @@ onSettle}) → {settleTo(index), destroy}`, and `createAnimator(element) →
   only for a job the public layer does not expose; those jobs are listed as
   known public-API gaps in `architecture:react-component-runtime` INV13.
   `createReorderable`'s plain-element attach path (`spec:AST-103`) covers
-  collections that are not List.
+  collections that are not List. The internals beneath the public pan and
+  snap-point drag are `createPan`, in `createPanGesture.ts`, and
+  `createSnapDrag`, in `createDragToSnapPoints.ts`. No package entry exports
+  them.
 
 - **FR8 — A headless context menu.** `createContextMenu(element, {items | render, label?, isDisabled?,
 onOpenChange?, presentation?}) → {open(at?), close(), destroy()}`
