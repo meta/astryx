@@ -323,7 +323,7 @@ function changeBlocks(r) {
   const status =
     d.was != null
       ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
-      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; it is back to the base theme's value`}`;
+      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // On undo, `setting` and `removed` both name the setting removed, as in
   // the JSON; the status line says the base theme's value is back.
   return [status, ...project(/** @type {any} */ (d))];
@@ -624,7 +624,6 @@ export function registerExperimentalTheme(group, program) {
             themeEditPreviewApp(dir, {
               cwd: process.cwd(),
               theme: o.theme,
-              overwrite: o.overwrite ?? false,
             }),
           r => [
             `[ok] new app in ${r.data.folder} with the theme preview`,

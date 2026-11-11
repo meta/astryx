@@ -258,8 +258,10 @@ export async function previewAfter(ctx, slug, data, png) {
   try {
     preview = await renderPreview(ctx, slug, data);
   } catch (e) {
-    if (!isRenderFailure(e)) throw e;
-    cause ??= renderCause(ctx.project, /** @type {Error} */ (e).message);
+    // The change is already saved: any failure here leaves it unchecked.
+    cause ??= isRenderFailure(e)
+      ? renderCause(ctx.project, /** @type {Error} */ (e).message)
+      : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
   const shots =
