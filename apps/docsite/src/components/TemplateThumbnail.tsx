@@ -229,7 +229,7 @@ export function TemplateThumbnail({
             show();
           } else {
             // A fast scroll holds this download too, so a tile that leaves
-            // before the scroll slows down downloads nothing.
+            // the lead zone before the scroll slows down downloads nothing.
             cancelImport = whenScrollIsCalm(() => {
               preloadTemplate(slug).then(show, settleRender);
             });
