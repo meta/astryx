@@ -36,7 +36,7 @@ import {
   partDefault,
   partsOf,
   q,
-  badThing,
+  withoutBadValues,
   readHistory,
   refuse,
   settingsProblem,
@@ -44,6 +44,7 @@ import {
   shown,
   slugOk,
   themeFiles,
+  buildCurrent,
   buildTheme,
 } from './_settings.mjs';
 import {checkSetting} from './_check.mjs';
@@ -527,7 +528,10 @@ export async function themeEditShow(theme, options = {}) {
   const data = loadTheme(cwd, theme);
   const ctx = await context(cwd);
   const f = themeFiles(cwd, theme);
-  if (!fs.existsSync(f.js)) await buildTheme(ctx, theme, data);
+  // A build that does not match the settings (a command stopped mid-build,
+  // a hand edit, another CLI) is made again from the settings, and said.
+  const stale = !buildCurrent(cwd, theme, data);
+  if (stale) await buildTheme(ctx, theme, data);
   const res = await resolvedTokens(ctx, theme);
   const problems = await contrastProblems(ctx, data, res);
   const pal = paletteMapping(
@@ -561,7 +565,14 @@ export async function themeEditShow(theme, options = {}) {
         const masked = maskedSettings(data).get(s);
         return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
       }),
-      notes: fontNotes(ctx, data),
+      notes: [
+        ...(stale
+          ? [
+              `the build did not match ${theme}.settings.json (a command stopped while building, or a hand edit), so it was built again from the settings`,
+            ]
+          : []),
+        ...fontNotes(ctx, data),
+      ],
       // A size, number or font is the same in both modes: one value.
       resolved: Object.fromEntries(
         KEY_TOKENS.map(k => [
@@ -816,26 +827,30 @@ export async function themeEditUndo(theme, options = {}) {
     );
   const ctx = await context(cwd);
   const prevText = /** @type {string} */ (history.pop());
-  const prev = /** @type {import('./_settings.mjs').ThemeData} */ (
+  let prev = /** @type {import('./_settings.mjs').ThemeData} */ (
     JSON.parse(prevText.replace(/^\uFEFF/, ''))
   );
   // A step always restores into this theme, whatever name it holds.
   prev.name = theme;
   // The step it goes back to is checked like the settings file itself. A
-  // value the editor no longer accepts is not damage: name the setting.
-  const bad = settingsProblem(prev);
-  if (bad) {
-    const thing = badThing(prev);
-    refuse(
-      E.ERR_THEME_INVALID,
-      `The step before the last change holds a value the editor no longer accepts: ${bad}.`,
-      thing && current
-        ? {run: [`${P} undo ${theme} ${thing}`, `${P} show ${theme}`]}
-        : {
-            fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
-            run: [`${P} show ${theme}`],
-          },
-    );
+  // value the editor no longer accepts is left out of that step (with a
+  // note); a step whose shape is broken is refused.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  let leftOut = [];
+  if (settingsProblem(prev)) {
+    const repaired = withoutBadValues(prev);
+    const still = settingsProblem(repaired.data);
+    if (still)
+      refuse(
+        E.ERR_THEME_INVALID,
+        `The settings before the last change, in ${theme}.history.json, are damaged: ${still}.`,
+        {
+          fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
+          run: [`${P} show ${theme}`],
+        },
+      );
+    prev = repaired.data;
+    leftOut = repaired.dropped;
   }
   // The popped history is written with the change, inside its rollback.
   await commitTheme(ctx, theme, prev, {history: false, historyAfter: history});
@@ -845,6 +860,10 @@ export async function themeEditUndo(theme, options = {}) {
     : [
         `the damaged ${theme}.settings.json is replaced by the settings before the last change`,
       ];
+  for (const x of leftOut)
+    undone.push(
+      `left out ${describe(x)} from the step it went back to: a value the editor no longer accepts`,
+    );
   const now = new Map(prev.settings.map(s => [keyOf(s), s]));
   const was = new Map((current?.settings ?? []).map(s => [keyOf(s), s]));
   for (const [k, s] of was) {

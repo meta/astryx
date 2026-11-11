@@ -308,18 +308,16 @@ describe('exact tokens', () => {
   }, 240_000);
 
   it('takes over a lock left by a command that stopped', async () => {
-    const dir = path.join(cwd, 'node_modules/.cache/astryx-theme/locks');
+    const dir = path.join(
+      path.dirname(cwd),
+      'node_modules/.cache/astryx-theme/locks',
+    );
     const {createHash} = await import('node:crypto');
     const key = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
-    fs.mkdirSync(dir, {recursive: true});
+    fs.mkdirSync(path.join(dir, `${key}-theme-h.lock`), {recursive: true});
     fs.writeFileSync(
-      path.join(dir, `${key}-theme-h.lock`),
-      JSON.stringify({
-        pid: 2 ** 22 + 7,
-        host: os.hostname(),
-        started: Date.now(),
-        token: 'x',
-      }),
+      path.join(dir, `${key}-theme-h.lock`, 'owner.json'),
+      JSON.stringify({pid: 2 ** 22 + 7, host: os.hostname(), at: Date.now()}),
     );
     const started = Date.now();
     await themeEditShow('h', {cwd});
@@ -514,14 +512,6 @@ describe('rollback and recovery', () => {
     fs.rmSync(path.join(cwd, 'themes/v2'), {recursive: true, force: true});
   }, 240_000);
 
-  it('removes what a stopped command left behind', async () => {
-    const left = path.join(cwd, 'themes/.astryx-render-4194311-abc');
-    fs.mkdirSync(left, {recursive: true});
-    fs.writeFileSync(path.join(left, 'x.mjs'), '');
-    await themeEditShow('h', {cwd});
-    expect(fs.existsSync(left)).toBe(false);
-  }, 120_000);
-
   it('takes quoted text and data URLs with a semicolon, never a breakout', async () => {
     const {isSafeValue} = await import('./_color.mjs');
     expect(isSafeValue('"a;b"')).toBe(true);
@@ -531,4 +521,153 @@ describe('rollback and recovery', () => {
     expect(isSafeValue('"a"; b')).toBe(false);
     expect(isSafeValue('"</style>"')).toBe(false);
   });
+});
+
+describe('fix3', () => {
+  it('never picks the home folder, even with Core installed there', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-home-'));
+    const saved = process.env.HOME;
+    try {
+      fs.writeFileSync(
+        path.join(home, 'package.json'),
+        JSON.stringify({dependencies: {'@astryxdesign/core': '*'}}),
+      );
+      fs.mkdirSync(path.join(home, 'node_modules/@astryxdesign/core'), {
+        recursive: true,
+      });
+      const code = path.join(home, 'code/app');
+      fs.mkdirSync(path.join(code, '.git'), {recursive: true});
+      process.env.HOME = home;
+      expect(projectRoot(code)).toBe(code);
+      expect(projectRoot(path.join(home, 'code'))).toBe(
+        path.join(home, 'code'),
+      );
+    } finally {
+      process.env.HOME = saved;
+      fs.rmSync(home, {recursive: true, force: true});
+    }
+  });
+
+  it('a step holding a value from an older release is passed with that value left out', async () => {
+    await themeEditNew('f1', {cwd});
+    await themeEditSet('f1', 'corners', 'small', {cwd});
+    await themeEditSet('f1', 'text-size', '16', {cwd});
+    const hist = path.join(cwd, 'themes/f1/f1.history.json');
+    const steps = JSON.parse(fs.readFileSync(hist, 'utf8'));
+    const top = JSON.parse(steps.at(-1));
+    top.settings.push({thing: 'spacing', value: 'huge', source: 'dial'});
+    steps[steps.length - 1] = JSON.stringify(top);
+    fs.writeFileSync(hist, JSON.stringify(steps));
+    const r = await themeEditUndo('f1', {cwd});
+    expect(JSON.stringify(r.data)).toContain('left out spacing');
+    const now = JSON.parse(read('themes/f1/f1.settings.json')).settings;
+    expect(now.map((/** @type {any} */ x) => x.thing)).toEqual(['corners']);
+    fs.rmSync(path.join(cwd, 'themes/f1'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('no command removes a file it did not write in that run', async () => {
+    const dir = path.join(cwd, 'themes/h');
+    const mine = [
+      'notes.4194311.tmp',
+      '.h.settings.json.astryx-4194311-abc.tmp',
+    ];
+    for (const f of mine) fs.writeFileSync(path.join(dir, f), 'mine');
+    await themeEditShow('h', {cwd});
+    await themeEditSet('h', 'corners', 'small', {cwd});
+    await themeEditUndo('h', {cwd});
+    for (const f of mine) {
+      expect(fs.readFileSync(path.join(dir, f), 'utf8')).toBe('mine');
+      fs.rmSync(path.join(dir, f));
+    }
+  }, 120_000);
+
+  it('a text size keeps the theme own weight tokens feeding the headings', async () => {
+    await themeEditNew('f2', {cwd});
+    await themeEditSet('f2', '--font-weight-semibold', '700', {cwd});
+    await themeEditSet('f2', 'text-size', 'large', {cwd});
+    const {resolvedTokens} = await import('./_settings.mjs');
+    const {context} = await import('./_context.mjs');
+    const res = await resolvedTokens(await context(cwd), 'f2');
+    const semibold = Object.keys(res.light).filter(
+      k =>
+        /^--text-heading-\d-weight$/.test(k) &&
+        /semibold/.test(
+          read('themes/f2/f2.settings.ts').split(k)[1]?.split('\n')[0] ?? '',
+        ),
+    );
+    expect(semibold.length).toBeGreaterThan(0);
+    for (const k of semibold) expect(res.light[k]).toBe('700');
+    fs.rmSync(path.join(cwd, 'themes/f2'), {recursive: true, force: true});
+  }, 240_000);
+});
+
+describe('fix3: links, rollback, locks, paths', () => {
+  it('refuses a link inside the theme folder, and leaves it', async () => {
+    await themeEditNew('k1', {cwd});
+    const away = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-away-'));
+    const tokens = path.join(cwd, 'themes/k1/tokens');
+    fs.rmSync(tokens, {recursive: true, force: true});
+    fs.symlinkSync(away, tokens);
+    expect(
+      (await refusal(() => themeEditSet('k1', 'accent', '#7c3aed', {cwd})))
+        .code,
+    ).toBe('ERR_THEME_INVALID');
+    expect(fs.lstatSync(tokens).isSymbolicLink()).toBe(true);
+    expect(fs.readdirSync(away)).toEqual([]);
+    fs.rmSync(path.join(cwd, 'themes/k1'), {recursive: true, force: true});
+    fs.rmSync(away, {recursive: true, force: true});
+  }, 120_000);
+
+  it('keeps a palette.config.json the editor did not write', async () => {
+    await themeEditNew('k2', {cwd});
+    const file = path.join(cwd, 'themes/k2/palette.config.json');
+    fs.writeFileSync(file, '{"note": "mine"}\n');
+    await themeEditSet('k2', 'spacing', 'roomy', {cwd});
+    expect(fs.readFileSync(file, 'utf8')).toBe('{"note": "mine"}\n');
+    fs.rmSync(path.join(cwd, 'themes/k2'), {recursive: true, force: true});
+  }, 120_000);
+
+  it('show finds a build that does not match the settings and builds again', async () => {
+    await themeEditNew('k3', {cwd});
+    const css = path.join(cwd, 'themes/k3/k3.css');
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(css, old, old);
+    const r = await themeEditShow('k3', {cwd});
+    expect(r.data.notes.join(' ')).toContain('built again');
+    const again = await themeEditShow('k3', {cwd});
+    expect(again.data.notes.join(' ')).not.toContain('built again');
+    fs.rmSync(path.join(cwd, 'themes/k3'), {recursive: true, force: true});
+  }, 120_000);
+
+  it('a lock folder that cannot be written is refused, naming it', async () => {
+    const dir = path.join(
+      path.dirname(cwd),
+      'node_modules/.cache/astryx-theme/locks',
+    );
+    fs.mkdirSync(dir, {recursive: true});
+    fs.chmodSync(dir, 0o555);
+    try {
+      const r = await refusal(() => themeEditShow('h', {cwd}));
+      expect(r.code).toBe('ERR_WRITE_FAILED');
+      expect(r.message).toContain('astryx-theme');
+    } finally {
+      fs.chmodSync(dir, 0o755);
+    }
+  }, 120_000);
+
+  it('from a subfolder, the reply paths are absolute', async () => {
+    const sub = path.join(cwd, 'src/deep');
+    fs.mkdirSync(sub, {recursive: true});
+    fs.writeFileSync(
+      path.join(cwd, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '*'}}),
+    );
+    try {
+      const r = await themeEditShow('h', {cwd: sub});
+      expect(JSON.stringify(r.data)).toContain(path.join(cwd, 'themes/h'));
+    } finally {
+      fs.rmSync(path.join(cwd, 'package.json'));
+      fs.rmSync(path.join(cwd, 'src'), {recursive: true, force: true});
+    }
+  }, 120_000);
 });

@@ -37,6 +37,21 @@ const E = ERROR_CODES;
  */
 export function requireProject(cwd) {
   if (!isOutsideProject(cwd)) return;
+  const pkg = path.join(cwd, 'package.json');
+  // Yarn Plug'n'Play has no node_modules for the editor to read Core from.
+  if (fs.existsSync(path.join(cwd, '.pnp.cjs')))
+    throw new AstryxError(
+      "This app uses Yarn Plug'n'Play, which astryx experimental theme does not support: it reads the installed Core from node_modules. Set `nodeLinker: node-modules` in .yarnrc.yml and run yarn install. Nothing was written.",
+      [],
+      E.ERR_PROJECT_REQUIRED,
+    );
+  // A package.json with no Core: an app (or a workspace root) that needs it.
+  if (fs.existsSync(pkg))
+    throw new AstryxError(
+      `@astryxdesign/core is not installed in this app (package.json here does not use it). astryx experimental theme checks every change against the installed Core: install it, or run the command from the package that uses it. Nothing was written.`,
+      [{name: 'npm install @astryxdesign/core', reason: 'do this first'}],
+      E.ERR_PROJECT_REQUIRED,
+    );
   throw new AstryxError(
     'No package.json found. astryx experimental theme works inside an app project, which it writes the theme into and whose installed Core it checks every change against. Nothing was written.',
     [],

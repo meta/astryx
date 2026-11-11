@@ -39,160 +39,123 @@ import * as edit from './_edit.mjs';
 import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {findAstryxProject} from '../../foundation/fs/paths.mjs';
+import {
+  findAstryxProject,
+  findPackageRoot,
+} from '../../foundation/fs/paths.mjs';
+import {tryLock} from '../../foundation/release/cache.mjs';
 import {q} from './_settings.mjs';
 
 export {themeEditHow, parsePoints} from './_how.mjs';
 export const {themeEditPreviewApp} = preview;
 
 /**
- * The project a command acts on: the nearest folder at or above `cwd` with a
- * package.json. Run from a subfolder of an app, a command still finds the
- * app's themes; it never walks past the nearest package into another
- * project; a folder with Core installed counts as one. That package must
- * name Core (in any dependency list) or hold editor themes; a package that
- * does not, inside a project that does, is refused with the folder to run
- * from. Otherwise, `cwd` itself.
+ * The project a command acts on: the Astryx project at or above `cwd`, found
+ * as `upgrade` finds it (the nearest package that declares an Astryx package
+ * in any dependency list; the search stops at a repository root and never
+ * counts the home folder or above), else `cwd` itself. A package nearer
+ * than that project that does not use Astryx is refused with the folder to
+ * run from, and a nearest package.json that does not parse is never walked
+ * past.
  * @param {string} cwd
  */
 export function projectRoot(cwd) {
   const start = path.resolve(cwd);
-  for (let dir = start; ; dir = path.dirname(dir)) {
-    const pkg = path.join(dir, 'package.json');
-    // A folder with Core installed is a project, with or without a
-    // package.json of its own.
-    if (
-      !fs.existsSync(pkg) &&
-      fs.existsSync(
-        path.join(dir, 'node_modules', '@astryxdesign', 'core', 'package.json'),
-      )
-    )
-      return dir;
-    if (fs.existsSync(pkg)) {
-      /** @type {any} */
-      let json;
-      try {
-        json = JSON.parse(fs.readFileSync(pkg, 'utf8').replace(/^\uFEFF/, ''));
-      } catch {
-        throw new AstryxError(
-          `${path.relative(start, pkg) || 'package.json'} is not valid JSON, so the app it belongs to is unknown. Fix it, then run the command again. Nothing was written.`,
-          [],
-          ERROR_CODES.ERR_PROJECT_REQUIRED,
-        );
-      }
-      if (usesCore(dir, json)) return dir;
-      const parent =
-        path.dirname(dir) === dir ? null : findAstryxProject(path.dirname(dir));
-      if (parent)
-        throw new AstryxError(
-          `${path.relative(start, pkg) || 'package.json'} is a package that does not use @astryxdesign/core; the app that does is ${path.relative(start, parent) || '.'}. Run the command from there, so the theme lands in that app. Nothing was written.`,
-          [
-            {
-              name: `cd ${q(path.relative(start, parent))}`,
-              reason: 'do this first',
-            },
-          ],
-          ERROR_CODES.ERR_PROJECT_REQUIRED,
-        );
-      return start;
+  const project = findAstryxProject(start);
+  const pkg = findPackageRoot(start);
+  const inReach = (/** @type {string} */ dir) =>
+    project ? !path.relative(project, dir).startsWith('..') : true;
+  if (pkg && inReach(pkg) && pkg !== project) {
+    const file = path.join(pkg, 'package.json');
+    /** @type {any} */
+    let json;
+    try {
+      json = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+    } catch {
+      throw new AstryxError(
+        `${path.relative(start, file) || 'package.json'} is not valid JSON, so the app it belongs to is unknown. Fix it, then run the command again. Nothing was written.`,
+        [],
+        ERROR_CODES.ERR_PROJECT_REQUIRED,
+      );
     }
-    if (path.dirname(dir) === dir) return start;
+    // A package.json that only sets the module type (no name, no
+    // dependencies) is a folder setting, not another package.
+    const trivial =
+      json?.name == null &&
+      !['dependencies', 'devDependencies', 'peerDependencies'].some(
+        k => json?.[k] != null,
+      );
+    if (project && !trivial)
+      throw new AstryxError(
+        `${path.relative(start, file) || 'package.json'} is a package that does not use Astryx; the app that does is ${path.relative(start, project) || '.'}. Run the command from there, so the theme lands in that app. Nothing was written.`,
+        [
+          {
+            name: `cd ${q(path.relative(start, project))}`,
+            reason: 'do this first',
+          },
+        ],
+        ERROR_CODES.ERR_PROJECT_REQUIRED,
+      );
   }
+  return project ?? start;
 }
 
 /**
- * Whether the package in `dir` uses Core: it names it in a dependency list
- * (peer included), or already holds editor themes.
- * @param {string} dir
- * @param {any} json its package.json
+ * The node_modules folder Core resolves from for `root` (its own, or one
+ * above it, as Node finds packages), or null when Core is not installed.
+ * @param {string} root
+ * @returns {string | null}
  */
-function usesCore(dir, json) {
-  const core = '@astryxdesign/core';
-  if (
-    ['dependencies', 'devDependencies', 'peerDependencies'].some(
-      k => json?.[k]?.[core] != null,
+function coreModules(root) {
+  for (let d = root; ; d = path.dirname(d)) {
+    const modules = path.join(d, 'node_modules');
+    if (
+      fs.existsSync(path.join(modules, '@astryxdesign', 'core', 'package.json'))
     )
-  )
-    return true;
-  const themes = path.join(dir, 'themes');
-  return (
-    fs.existsSync(themes) &&
-    fs
-      .readdirSync(themes)
-      .some(t => fs.existsSync(path.join(themes, t, `${t}.settings.json`)))
-  );
+      return modules;
+    if (path.dirname(d) === d) return null;
+  }
 }
+
+/** The locks this process holds now. */
+const HELD = new Set();
 
 /** @param {number} ms */
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Where a project's locks are: in its own `node_modules/.cache` (shared by
- * every shell, outside the source tree), else in a temp folder of this
- * user's own (made private), when node_modules cannot be written.
+ * Where a project's locks are: the `.cache` of the node_modules its Core
+ * is installed in (the project's own, or a workspace root's), shared by
+ * every shell and user that can change the project, outside the source
+ * tree. Null when Core is not installed for it (nothing can be written
+ * without Core, so there is nothing to keep apart). A folder that
+ * cannot be written is refused, naming it.
  * @param {string} root
+ * @returns {string | null}
  */
 function lockDir(root) {
-  const own = path.join(
-    root,
-    'node_modules',
-    '.cache',
-    'astryx-theme',
-    'locks',
-  );
+  const modules = coreModules(root);
+  if (!modules) return null;
+  const dir = path.join(modules, '.cache', 'astryx-theme', 'locks');
   try {
-    if (fs.existsSync(path.join(root, 'node_modules'))) {
-      fs.mkdirSync(own, {recursive: true});
-      fs.accessSync(own, fs.constants.W_OK);
-      return own;
-    }
-  } catch {
-    // Read-only: the temp folder below.
-  }
-  const user =
-    typeof process.getuid === 'function'
-      ? String(process.getuid())
-      : os.userInfo().username;
-  const dir = path.join(os.tmpdir(), `astryx-theme-locks-${user}`);
-  fs.mkdirSync(dir, {recursive: true, mode: 0o700});
-  fs.chmodSync(dir, 0o700);
-  return dir;
-}
-
-/**
- * Whether a lock was left by a command that is no longer running on this
- * machine. A lock from another machine (a shared folder) is taken over
- * only after ten minutes.
- * @param {string} file
- */
-function stale(file) {
-  try {
-    const lock = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (lock.host !== os.hostname())
-      return Date.now() - Number(lock.started) > 600_000;
-    process.kill(Number(lock.pid), 0);
-    return false;
+    fs.mkdirSync(dir, {recursive: true});
+    fs.accessSync(dir, fs.constants.W_OK);
+    return dir;
   } catch (e) {
-    const code = /** @type {any} */ (e)?.code;
-    // ESRCH: no such process. EPERM: another user's live process.
-    if (code === 'ESRCH') return true;
-    if (code === 'EPERM') return false;
-    // A lock that cannot be read is being written now, or was left by a
-    // command stopped while writing it.
-    try {
-      return Date.now() - fs.statSync(file).mtimeMs > 1000;
-    } catch {
-      return true;
-    }
+    throw new AstryxError(
+      `Could not write ${path.relative(root, dir)} (${/** @type {any} */ (e).code ?? String(e)}), where the lock that keeps two commands on one theme apart is kept. Fix its permission, then run the command again. Nothing was changed.`,
+      [],
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
   }
 }
 
 /**
  * Run `fn` holding a lock named `name` for the project at `root`, so two
  * commands on one theme (or one preview) run one after the other: each one
- * reads what the other wrote. The lock is a file in the project's
- * node_modules/.cache (or a private temp folder); a lock left by a command
- * that is no longer running is taken over.
+ * reads what the other wrote. The lock is a folder in the project's
+ * node_modules/.cache; a lock left by a command that is no longer running
+ * is taken over.
  * @template T
  * @param {string} root
  * @param {string} name
@@ -201,46 +164,66 @@ function stale(file) {
  */
 async function withLock(root, name, fn) {
   const dir = lockDir(root);
+  if (!dir) return fn();
   const key = createHash('sha256').update(root).digest('hex').slice(0, 16);
-  const file = path.join(dir, `${key}-${name}.lock`);
-  const owner = JSON.stringify({
-    pid: process.pid,
-    host: os.hostname(),
-    started: Date.now(),
-    token: Math.random().toString(36).slice(2),
-  });
+  const lock = path.join(dir, `${key}-${name}.lock`);
+  const ownerFile = path.join(lock, 'owner.json');
+  /** @returns {any} */
+  const owner = () => {
+    try {
+      return JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
+    } catch {
+      return null;
+    }
+  };
+  // A lock naming this very process on this computer, that this process
+  // does not hold, is left from a process that had this pid before (a
+  // container restarted).
+  const held = owner();
+  if (
+    held?.pid === process.pid &&
+    held?.host === os.hostname() &&
+    !HELD.has(lock)
+  )
+    fs.rmSync(lock, {recursive: true, force: true});
   try {
-    for (let waited = 0; ; waited += 50) {
-      try {
-        fs.writeFileSync(file, owner, {flag: 'wx', mode: 0o600});
-        break;
-      } catch (e) {
-        if (/** @type {any} */ (e).code !== 'EEXIST') throw e;
-        if (stale(file)) {
-          fs.rmSync(file, {force: true});
-          continue;
-        }
-        if (waited > 30_000)
-          throw new AstryxError(
-            `Another command is changing ${name.replace(/^theme-/, '')} and did not finish within 30 seconds. Nothing was changed; run this command again.`,
-            [],
-            ERROR_CODES.ERR_THEME_BUSY,
-          );
-        await sleep(50);
+    // The release cache's lock: made with mkdir (one taker wins), and a
+    // holder that stopped is taken over by a rename (one taker wins).
+    for (let waited = 0; !tryLock(lock); waited += 50) {
+      if (waited > 30_000) {
+        const o = owner();
+        throw new AstryxError(
+          `Another command is changing ${name.replace(/^theme-/, '')} and did not finish within 30 seconds${o ? ` (process ${o.pid} on ${o.host}, for ${Math.round((Date.now() - Number(o.at)) / 1000)} s)` : ''}. Nothing was changed; run this command again. If no astryx command is running, remove the lock ${lock}.`,
+          [
+            {
+              name: `rm -r ${q(lock)}`,
+              reason: 'only when no astryx command is running',
+            },
+          ],
+          ERROR_CODES.ERR_THEME_BUSY,
+        );
       }
+      await sleep(50);
     }
   } catch (e) {
     if (e instanceof AstryxError) throw e;
     throw new AstryxError(
-      `Could not take the lock that keeps two commands on one theme apart (${/** @type {any} */ (e).code ?? String(e)} in ${dir}). Nothing was changed; check that folder, then run the command again.`,
+      `Could not take the lock ${lock} (${/** @type {any} */ (e).code ?? String(e)}). Nothing was changed; fix the folder, then run the command again.`,
       [],
       ERROR_CODES.ERR_WRITE_FAILED,
     );
   }
-  // Only this command's own lock is removed, never one another command took.
+  HELD.add(lock);
+  const mine = fs.existsSync(ownerFile)
+    ? fs.readFileSync(ownerFile, 'utf8')
+    : null;
+  // Only this command's own lock is removed, never one another took over.
   const release = () => {
     try {
-      if (fs.readFileSync(file, 'utf8') === owner) fs.rmSync(file);
+      const now = fs.existsSync(ownerFile)
+        ? fs.readFileSync(ownerFile, 'utf8')
+        : null;
+      if (now === mine) fs.rmSync(lock, {recursive: true, force: true});
     } catch {
       // Gone already.
     }
@@ -255,8 +238,20 @@ async function withLock(root, name, fn) {
   process.once('SIGTERM', onSignal);
   try {
     return await fn();
+  } catch (e) {
+    // A folder that cannot be written (no permission, a full or read-only
+    // disk) is a documented refusal, not a crash.
+    const code = /** @type {any} */ (e)?.code;
+    if (['EACCES', 'EPERM', 'ENOSPC', 'EROFS'].includes(code))
+      throw new AstryxError(
+        `Could not write ${path.relative(root, /** @type {any} */ (e).path ?? '') || 'the theme files'}: ${code === 'ENOSPC' ? 'the disk is full' : code === 'EROFS' ? 'the disk is read-only' : 'no permission'}. Free the space or fix the permission, then run the command again; a refused change is undone.`,
+        [],
+        ERROR_CODES.ERR_WRITE_FAILED,
+      );
+    throw e;
   } finally {
     release();
+    HELD.delete(lock);
     process.removeListener('exit', release);
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
@@ -273,7 +268,6 @@ async function withLock(root, name, fn) {
 function atRoot(options) {
   const from = options.cwd ?? process.cwd();
   const cwd = projectRoot(from);
-  sweepLeftovers(cwd);
   return {
     ...options,
     cwd,
@@ -283,93 +277,77 @@ function atRoot(options) {
   };
 }
 
-/**
- * Remove what commands that are no longer running left behind: render
- * folders, load copies and half-written files, each named with the process
- * id that made it.
- * @param {string} root
- */
-function sweepLeftovers(root) {
-  const dead = (/** @type {string} */ pid) => {
-    if (Number(pid) === process.pid) return false;
-    try {
-      process.kill(Number(pid), 0);
-      return false;
-    } catch (e) {
-      return /** @type {any} */ (e)?.code === 'ESRCH';
-    }
-  };
-  /** @param {string} dir @param {RegExp} pattern */
-  const sweep = (dir, pattern) => {
-    /** @type {string[]} */
-    let names;
-    try {
-      names = fs.readdirSync(dir);
-    } catch {
-      return;
-    }
-    for (const name of names) {
-      const m = pattern.exec(name);
-      const pid = m?.[1] ?? m?.[2];
-      if (pid && dead(pid))
-        fs.rmSync(path.join(dir, name), {recursive: true, force: true});
-    }
-  };
-  try {
-    const themes = path.join(root, 'themes');
-    sweep(themes, /^\.astryx-render-(\d+)-/);
-    for (const t of fs.existsSync(themes) ? fs.readdirSync(themes) : [])
-      sweep(path.join(themes, t), /(?:\.load-(\d+)-|\.(\d+)\.tmp$)/);
-    const cache = path.join(root, 'node_modules', '.cache', 'astryx-theme');
-    for (const v of fs.existsSync(cache) ? fs.readdirSync(cache) : [])
-      sweep(path.join(cache, v), /\.load-(\d+)-/);
-  } catch {
-    // A leftover that cannot be removed is no reason to refuse a command.
-  }
-}
-
 /** @param {any} name */
 const lockName = name =>
   `theme-${String(name ?? '')
     .replace(/[^a-z0-9-]/gi, '_')
     .slice(0, 80)}`;
 
+/**
+ * A result whose theme paths read from the project root, made absolute when
+ * the command ran in a folder below that root, so a path in the reply
+ * points at the file wherever the person is.
+ * @template T
+ * @param {T} result
+ * @param {string} root
+ * @param {string} from
+ * @returns {T}
+ */
+function absolute(result, root, from) {
+  if (path.resolve(from) === root) return result;
+  /** @param {any} v @returns {any} */
+  const map = v =>
+    typeof v === 'string'
+      ? /^themes\//.test(v)
+        ? path.join(root, v)
+        : v
+      : Array.isArray(v)
+        ? v.map(map)
+        : v && typeof v === 'object'
+          ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, map(x)]))
+          : v;
+  return map(result);
+}
+
+/**
+ * Run an editor command at the project root, holding `lock` when one is
+ * named, with paths in the reply that work from where it ran.
+ * @template {{cwd?: string, path?: string}} O
+ * @template T
+ * @param {O} options
+ * @param {string | null} lock
+ * @param {(o: O & {cwd: string}) => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function inProject(options, lock, fn) {
+  const from = options.cwd ?? process.cwd();
+  const o = atRoot(options);
+  const r = lock ? await withLock(o.cwd, lock, () => fn(o)) : await fn(o);
+  return absolute(r, o.cwd, from);
+}
+
 /** @type {typeof edit.themeEditNew} */
-export const themeEditNew = (name, options = {}) => {
-  const o = atRoot(options);
-  return withLock(o.cwd, lockName(name), () => edit.themeEditNew(name, o));
-};
+export const themeEditNew = (name, options = {}) =>
+  inProject(options, lockName(name), o => edit.themeEditNew(name, o));
 /** @type {typeof edit.themeEditSet} */
-export const themeEditSet = (theme, thing, value, options = {}) => {
-  const o = atRoot(options);
-  return withLock(o.cwd, lockName(theme), () =>
+export const themeEditSet = (theme, thing, value, options = {}) =>
+  inProject(options, lockName(theme), o =>
     edit.themeEditSet(theme, thing, value, o),
   );
-};
 /** @type {typeof edit.themeEditUndo} */
-export const themeEditUndo = (theme, options = {}) => {
-  const o = atRoot(options);
-  return withLock(o.cwd, lockName(theme), () => edit.themeEditUndo(theme, o));
-};
+export const themeEditUndo = (theme, options = {}) =>
+  inProject(options, lockName(theme), o => edit.themeEditUndo(theme, o));
 /** @type {typeof edit.themeEditShow} */
-export const themeEditShow = (theme, options = {}) => {
-  const o = atRoot(options);
-  return withLock(o.cwd, lockName(theme), () => edit.themeEditShow(theme, o));
-};
+export const themeEditShow = (theme, options = {}) =>
+  inProject(options, lockName(theme), o => edit.themeEditShow(theme, o));
 /** @type {typeof preview.themeEditPreviewAdd} */
-export const themeEditPreviewAdd = (description, options = {}) => {
-  const o = atRoot(options);
-  return withLock(o.cwd, 'preview', () =>
+export const themeEditPreviewAdd = (description, options = {}) =>
+  inProject(options, 'preview', o =>
     preview.themeEditPreviewAdd(description, o),
   );
-};
 /** @type {typeof preview.themeEditPreviewList} */
 export const themeEditPreviewList = (options = {}) =>
-  preview.themeEditPreviewList(atRoot(options));
+  inProject(options, null, async o => preview.themeEditPreviewList(o));
 /** @type {typeof preview.themeEditPreviewRemove} */
-export const themeEditPreviewRemove = (page, options = {}) => {
-  const o = atRoot(options);
-  return withLock(o.cwd, 'preview', () =>
-    preview.themeEditPreviewRemove(page, o),
-  );
-};
+export const themeEditPreviewRemove = (page, options = {}) =>
+  inProject(options, 'preview', o => preview.themeEditPreviewRemove(page, o));
