@@ -6,16 +6,16 @@
  * @file useGroupPressTracking.ts
  * @input A group's root ref and whether the group tracks presses: under the
  *   touch presentation only
- * @output useGroupPressTracking: the press tracking that ButtonGroup,
- *   ToggleButtonGroup and Rating share; GROUP_PRESS_POINTERS, the pointers it follows
- * @position Internal hook. Core's internal/touch entry exposes it to Lab. It drives
+ * @output useGroupPressTracking: the press tracking that ButtonGroup and
+ *   ToggleButtonGroup share; GROUP_PRESS_POINTERS, the pointers it follows
+ * @position Internal hook, not exported from the hooks entry. It drives
  *   useActionGroupTracking and the shared touch hit area (useTouchHitArea)
  *   for a group's members. Each group's root applies
  *   touchHitAreaStyles.layerBelowChildren. AlertDialog's tracking follows
  *   GROUP_PRESS_POINTERS too.
  *
  * SYNC: When modified, update ButtonGroupTracking.test.tsx and
- * ToggleButtonGroupTracking.test.tsx and RatingTracking.test.tsx.
+ * ToggleButtonGroupTracking.test.tsx.
  */
 
 import type {RefCallback, RefObject} from 'react';

@@ -2566,13 +2566,5 @@
   "@astryx.navigationStack.back": {
     "defaultMessage": "Back",
     "description": "Label of the back button in a lab NavigationStack's bar when the screen it returns to has no title of its own. Returns to the previous screen; keep it short, as on an iOS navigation bar."
-  },
-  "@astryx.rating.starLabel": {
-    "defaultMessage": "{value, number} of {max, number} stars",
-    "description": "Accessible name of a Rating star or fractional read-only rating. value is the rating and max is the total number of stars."
-  },
-  "@astryx.rating.readOnlyLabel": {
-    "defaultMessage": "{label}: {rating}",
-    "description": "Complete accessible name of a read-only Rating. label is the caller-supplied group name and rating is the localized rating text, or the caller override. Translators may reorder both parts."
   }
 }

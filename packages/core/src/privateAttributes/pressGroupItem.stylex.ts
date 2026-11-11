@@ -9,7 +9,7 @@
  *   file that writes its name. AlertDialog's actions and a Button inside a
  *   tracking group carry the mark. The press controller
  *   (utils/pressFeedback.ts) leaves a press of those pointers to the group's
- *   tracker. Only the internal/touch entry exposes the writer to Lab's Rating; no public entry exports it.
+ *   tracker. No package entry exports it.
  */
 
 const PRESS_GROUP_ITEM = 'data-astryx-press-group-item';
