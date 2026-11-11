@@ -466,9 +466,17 @@ const styles = stylex.create({
     zIndex: 1,
   },
   // UIKit paints a selected search token with the tint fill and no animation.
+  // Forced colors drop that fill, so the selection takes the system's
+  // highlight there.
   tokenSelected: {
-    backgroundColor: colorVars['--color-accent'],
-    color: colorVars['--color-on-accent'],
+    backgroundColor: {
+      default: colorVars['--color-accent'],
+      '@media (forced-colors: active)': 'Highlight',
+    },
+    color: {
+      default: colorVars['--color-on-accent'],
+      '@media (forced-colors: active)': 'HighlightText',
+    },
   },
   token: {
     display: 'flex',
