@@ -45,6 +45,12 @@ describe('focus-owner wrapper ring', () => {
     for (const rule of ringRules) {
       // On the wrapper, while its marked control shows keyboard focus.
       expect(rule).toMatch(/:has\(> \[data-astryx-focus-owner\]:focus-visible/);
+      // Or while a marked cell's marked control shows it.
+      if (rule.includes('focus-owner-group')) {
+        expect(rule).toMatch(
+          /> \[data-astryx-focus-owner-group\] > \[data-astryx-focus-owner\]:focus-visible/,
+        );
+      }
       // Never every descendant.
       expect(rule).not.toMatch(/:has\([^{]*\)\)?\s+\*/);
     }

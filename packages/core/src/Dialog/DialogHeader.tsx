@@ -29,7 +29,13 @@ import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {useDialogContext} from './DialogContext';
-import {useTranslator} from '../i18n/useTranslator';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Dialog/DialogHeader.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   container: {
@@ -160,7 +166,7 @@ export function DialogHeader({
   ref,
   ...rest
 }: DialogHeaderProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const dialogContext = useDialogContext();
   const shouldAutoFocus = dialogContext?.isInline !== true;
@@ -184,9 +190,16 @@ export function DialogHeader({
   // avoid stealing scroll position from the surrounding page.
   // The parent Dialog detects this title (by `titleId`) via a callback ref to
   // set its default aria-labelledby — no registration handshake needed here.
+  // The native dialog is not modal yet when the header mounts in its opening
+  // render. Dialog focuses the title after showModal().
   useEffect(() => {
-    if (shouldAutoFocus && titleRef.current) {
-      titleRef.current.focus();
+    const title = titleRef.current;
+    if (!shouldAutoFocus || title == null) {
+      return;
+    }
+    const nativeDialog = title.closest('dialog');
+    if (nativeDialog == null || nativeDialog.open) {
+      title.focus();
     }
   }, [shouldAutoFocus]);
 
@@ -222,6 +235,7 @@ export function DialogHeader({
             id={titleId}
             level={2}
             tabIndex={-1}
+            data-autofocus={shouldAutoFocus ? 'dialog-title' : undefined}
             xstyle={styles.titleFocusable}>
             {title}
           </Heading>

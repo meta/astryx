@@ -3,8 +3,10 @@
 Every visual-regression test uses the shared Storybook framework and
 `.github/workflows/ci.yml` → `pr-visual` (**Stable visual regression**). It runs
 in `release-check`, which `main-heavy-lanes.yml` dispatches after merges to
-`main` (a burst is checked once, at its newest commit) and the release gate dispatches before a cut; a pull request runs it only
-with the `ci:run-visual` label (AST-030 FR12, DEC-7).
+`main` (a burst is checked once, at its newest commit) and the release gate dispatches before a cut. A pull request runs its full
+check only with the `ci:run-visual` label; without it, `pr-visual` runs its
+default touched check, which compares only the touched Core components that
+have an accepted baseline shot and never widens (AST-030 FR12, DEC-7).
 [AST-030 FR12](../../../docs/specs/AST-030/spec.md) owns this requirement.
 Add coverage to that owner, not to a new component, package, theme, scheduled,
 post-CI, or post-merge workflow.
@@ -30,9 +32,13 @@ findings remain soft while report completeness is mandatory. The dispatch does
 not capture baseline candidates, promote baselines, or publish previews. `visual-release-report` holds
 the visual evidence for that exact run/attempt.
 
-PR accessibility is intentionally smaller: explicit changed-component axe scope
-(including grouped-folder owners), plus the fast modal-close, theme-var, and
-story-play guards. Empty/shared scope never falls back to all stories, and
+PR accessibility is intentionally smaller. With `ci:run-a11y` it runs an
+explicit changed-component axe scope (including grouped-folder owners), plus
+the fast modal-close, theme-var, and story-play guards. Without the label, the
+default touched-components check audits only the touched components' stories,
+without the guards, and runs up to four browser accessibility spec files the
+pull request adds or modifies (scoped and `always` specs; `audit` and
+`release-only` specs wait). Empty/shared scope never falls back to all stories, and
 missing or approximate analysis fails rather than granting an empty scope.
 The full axe roster, whole-repository accessibility spec-test contracts and their
 pixel/evidence uploads run only during `release-check`.

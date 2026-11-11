@@ -373,6 +373,50 @@ describe('parseDateInput', () => {
       expect(parseDateInput('1/25.2026')).toBeNull();
     });
 
+    it('in a day-first locale, never reads numeric text month-first outside the locale-ordered forms', () => {
+      // Native Date reads these month-first whatever the locale.
+      for (const text of [
+        '12/0',
+        '12/01/',
+        '12/01/2',
+        '12/01/20',
+        '12/01/202',
+        '12/01/90',
+        '12,01',
+        '12,01,2026',
+        '12;01;2026',
+      ]) {
+        expect(parseDateInput(text, 'en-GB')).toBeNull();
+      }
+      // A month-first locale keeps the browser's reading of a short year.
+      expect(parseDateInput('1/5/25', 'en-US')).toEqual({
+        year: 2025,
+        month: 1,
+        day: 5,
+      });
+      // A four-digit year written first parses in every locale, with any
+      // separator the browser reads.
+      for (const locale of ['en-GB', 'en-US']) {
+        for (const text of ['2026/01/12', '2026 01 12', '2026.1.12.']) {
+          expect(parseDateInput(text, locale)).toEqual({
+            year: 2026,
+            month: 1,
+            day: 12,
+          });
+        }
+      }
+      // The locale-ordered forms still parse in the locale's order.
+      expect(parseDateInput('12/01/2026', 'en-GB')).toEqual({
+        year: 2026,
+        month: 1,
+        day: 12,
+      });
+      expect(parseDateInput('12/01', 'en-GB')).toMatchObject({
+        month: 1,
+        day: 12,
+      });
+    });
+
     it('treats a single typed digit as incomplete, not a date', () => {
       // A user starting to type a month (e.g. "0" or "1" for January) should
       // not produce a date. Native Date parsing would otherwise coerce these

@@ -58,6 +58,7 @@ import type {
   TouchSample,
 } from './types';
 import {DEFAULT_ENVIRONMENT} from './types';
+import {internals} from './recognizerInternals';
 
 export interface GestureClock {
   now(): number;
@@ -89,10 +90,33 @@ export interface ArenaBeganInput extends TouchBeganInput {
 export interface GestureArenaOptions {
   clock?: GestureClock;
   environment?: GestureEnvironment;
-  /** Touches a recognizer now owns: cancel the browser's default for them. */
-  onClaim?: (touchIds: ReadonlyArray<number>) => void;
+  /**
+   * Touches a recognizer now owns, and the recognizer that claimed them. A
+   * claim comes in any state: a recognizer that waits on another's failure
+   * claims while `possible`, and a swipe claims as `ended`. Each claim is
+   * reported once.
+   */
+  onClaim?: (
+    touchIds: ReadonlyArray<number>,
+    claimer: GestureRecognizer,
+  ) => void;
+  /** Claimed touches given back to the browser (releaseClaim). */
+  onRelease?: (touchIds: ReadonlyArray<number>) => void;
   /** A click deferred at touch end resolved: replay it, or drop it. */
   onDeferredClick?: (touch: GestureTouch, allowed: boolean) => void;
+  /**
+   * The arena dropped its last touch, as after a lifted touch's decision
+   * waited on a timer (a tap waiting on a double tap): its host may stop
+   * listening now (`spec:AST-094` FR24).
+   */
+  onIdle?: () => void;
+  /**
+   * Whether the browser keeps a contact for itself while it is down. Then no
+   * claiming recognizer recognizes with it before its lift. So a mouse or pen
+   * drag that starts on selectable text selects that text. A recognition at
+   * the lift, such as a tap's, is unaffected.
+   */
+  refusesClaim?: (touch: GestureTouch) => boolean;
   /** Every recognizer transition, for debugging and tests. */
   onTransition?: (
     recognizer: GestureRecognizer,
@@ -141,7 +165,7 @@ export class GestureArena {
   private depth = 0;
   /** Open `deferResolution` calls: what their stops unblock waits. */
   private deferDepth = 0;
-  /** A deferred stop left recognitions, held touches or resets to settle. */
+  /** A deferred stop left a resolution for the next pass. */
   private owesResolution = false;
 
   constructor(options: GestureArenaOptions = {}) {
@@ -162,9 +186,23 @@ export class GestureArena {
     return this.records.get(id)?.isClaimed === true;
   }
 
+  /** @internal The view-level consumer of this touch, if any. */
+  consumerOf(id: number): TouchConsumer | null {
+    return this.records.get(id)?.consumer ?? null;
+  }
+
   /** The live touch with this id. */
   getTouch(id: number): GestureTouch | undefined {
     return this.records.get(id)?.touch;
+  }
+
+  /**
+   * The recognizers that took touch `id` when it began: each was enabled,
+   * accepted its pointer, and its `shouldReceiveTouch` agreed. Empty for a
+   * touch the arena does not track.
+   */
+  participantsOf(id: number): ReadonlyArray<GestureRecognizer> {
+    return this.records.get(id)?.participants ?? [];
   }
 
   /** Every touch the arena tracks, lifted ones awaiting a decision included. */
@@ -207,14 +245,15 @@ export class GestureArena {
           target: input.target,
           scroll: input.scroll ?? null,
           takenByBrowser: false,
+          ...(input.scrollType == null ? {} : {scrollType: input.scrollType}),
         };
         const participants: GestureRecognizer[] = [];
         for (const [depth, recognizer] of input.recognizers.entries()) {
-          if (!recognizer.wantsTouch(touch)) {
+          if (!internals(recognizer).wantsTouch(touch)) {
             continue;
           }
           participants.push(recognizer);
-          recognizer.arena = this;
+          internals(recognizer).arena = this;
           if (!this.active.includes(recognizer)) {
             // Resolution follows `active`, so a recognizer joins ahead of any
             // that sits further out on this touch's path: when two recognize
@@ -250,7 +289,7 @@ export class GestureArena {
       for (const recognizer of [...this.active]) {
         const touches = newTouches.get(recognizer);
         if (touches != null) {
-          recognizer.deliverBegan(touches, context);
+          internals(recognizer).deliverBegan(touches, context);
         }
       }
       // A recognizer already tracking a gesture hears of a touch that began
@@ -262,7 +301,7 @@ export class GestureArena {
           .map(record => record.touch)
           .filter(touch => own == null || !own.includes(touch));
         if (elsewhere.length > 0 && recognizer.numberOfTouches > 0) {
-          recognizer.deliverBeganElsewhere(elsewhere, context);
+          internals(recognizer).deliverBeganElsewhere(elsewhere, context);
         }
       }
       for (const record of created) {
@@ -300,7 +339,7 @@ export class GestureArena {
       const context = this.context();
       for (const recognizer of [...this.active]) {
         if (recognizer.numberOfTouches > 0) {
-          recognizer.deliverBeganElsewhere([touch], context);
+          internals(recognizer).deliverBeganElsewhere([touch], context);
         }
       }
     });
@@ -321,7 +360,7 @@ export class GestureArena {
       this.movingIds = new Set(changed.map(touch => touch.id));
       try {
         for (const recognizer of [...this.active]) {
-          recognizer.deliverMoved(changed, context);
+          internals(recognizer).deliverMoved(changed, context);
         }
       } finally {
         this.movingIds = previous;
@@ -348,7 +387,7 @@ export class GestureArena {
       const changed = this.update(inputs, 'ended');
       const context = this.context();
       for (const recognizer of [...this.active]) {
-        recognizer.deliverEnded(changed, context);
+        internals(recognizer).deliverEnded(changed, context);
       }
       // A lift can decide a waiting recognition (its requirement lifted
       // undecided and failed): settle those first, so each click's answer is
@@ -375,7 +414,7 @@ export class GestureArena {
       }
       const context = this.context();
       for (const recognizer of [...this.active]) {
-        recognizer.deliverCancelled(touches, context);
+        internals(recognizer).deliverCancelled(touches, context);
       }
       for (const touch of touches) {
         const record = this.records.get(touch.id);
@@ -410,7 +449,7 @@ export class GestureArena {
       }
       const context = this.context();
       for (const recognizer of [...this.active]) {
-        recognizer.deliverTakenByBrowser(touches, context);
+        internals(recognizer).deliverTakenByBrowser(touches, context);
       }
       for (const touch of touches) {
         const record = this.records.get(touch.id);
@@ -437,7 +476,10 @@ export class GestureArena {
       this.fail(recognizer);
       return;
     }
-    if (recognizer.pending != null && (next === 'began' || next === 'ended')) {
+    if (
+      internals(recognizer).pending != null &&
+      (next === 'began' || next === 'ended')
+    ) {
       // Already waiting on a requirement; the recognition stands as asked.
       return;
     }
@@ -471,11 +513,16 @@ export class GestureArena {
     }
   }
 
+  /** @internal A recognizer takes its touches from the view, unclaimed. */
+  cancelTouchesInViewOf(recognizer: GestureRecognizer): void {
+    this.cancelViewTouchesOf(recognizer);
+  }
+
   /**
    * Runs `body`, code outside input that stops recognizers (an Effect that
    * turns one off or detaches it), without resolving what those stops
-   * unblock: the recognitions waiting on them, the touches they held from a
-   * view, the resets. A pass a microtask later resolves all of it, at the
+   * unblock: the recognitions waiting on them, the touches they held from
+   * a view, the resets. A pass a microtask later resolves all of it, at the
    * last event's time, so the listeners and consumers it reaches hear it
    * outside the caller's frame and read the recognized state
    * (react-component-runtime INV2).
@@ -507,7 +554,9 @@ export class GestureArena {
   stop(recognizer: GestureRecognizer): void {
     // A cancel from code between events happens at the last event's time:
     // wall time would run deadlines ahead of input still queued (FR16).
-    const time = this.currentTime ?? this.lastEventTime();
+    const time =
+      this.currentTime ??
+      (Number.isFinite(this.latestTime) ? this.latestTime : this.clock.now());
     this.run(time, () => {
       if (isActive(recognizer.state)) {
         this.apply(recognizer, 'cancelled');
@@ -524,13 +573,20 @@ export class GestureArena {
     recognizer: GestureRecognizer,
     next: 'began' | 'ended',
   ): void {
-    if (!recognizer.shouldBegin() || this.isVetoedByConsumer(recognizer)) {
+    if (
+      !internals(recognizer).shouldBegin() ||
+      this.isVetoedByConsumer(recognizer) ||
+      this.isRefusedByBrowser(recognizer)
+    ) {
       this.fail(recognizer);
       return;
     }
     let isWaiting = false;
     for (const other of this.active) {
-      if (other === recognizer || !recognizer.requiresFailureOf(other)) {
+      if (
+        other === recognizer ||
+        !internals(recognizer).requiresFailureOf(other)
+      ) {
         continue;
       }
       if (other.state === 'failed') {
@@ -546,7 +602,7 @@ export class GestureArena {
       }
     }
     if (isWaiting) {
-      recognizer.pending = next;
+      internals(recognizer).pending = next;
       this.claim(recognizer);
       return;
     }
@@ -570,14 +626,18 @@ export class GestureArena {
         continue;
       }
       if (
-        other.requiresFailureOf(recognizer) ||
+        internals(other).requiresFailureOf(recognizer) ||
         this.conflicts(recognizer, other)
       ) {
         this.fail(other);
       }
     }
     this.claim(recognizer);
-    if (recognizer.cancelsTouchesInView) {
+    // A watcher takes nothing from the view either: the press and the click
+    // under it stay (spec:AST-094 FR11, FR19; FR15 exempts watchers). Only
+    // `cancelTouchesInView` takes them, as a pager's catch on a release's settle
+    // does.
+    if (recognizer.claimsTouches && recognizer.cancelsTouchesInView) {
       this.cancelViewTouchesOf(recognizer);
     }
   }
@@ -587,15 +647,39 @@ export class GestureArena {
     winner: GestureRecognizer,
     other: GestureRecognizer,
   ): boolean {
-    if (!sharesTouches(winner, other) || winner.allowsSimultaneous(other)) {
+    if (
+      !sharesTouches(winner, other) ||
+      internals(winner).allowsSimultaneous(other) ||
+      // A watcher (claimsTouches false) prevents nothing and nothing
+      // prevents it.
+      !winner.claimsTouches ||
+      !other.claimsTouches
+    ) {
       return false;
     }
     return winner.canPrevent(other) && other.canBePrevented(winner);
   }
 
+  /**
+   * Whether a recognizer that claims touches would take a contact the
+   * browser keeps while it is down (`refusesClaim`).
+   */
+  private isRefusedByBrowser(recognizer: GestureRecognizer): boolean {
+    const refuses = this.options.refusesClaim;
+    if (refuses == null || !recognizer.claimsTouches) {
+      return false;
+    }
+    return recognizer.trackedTouches.some(
+      touch =>
+        touch.phase !== 'ended' &&
+        touch.phase !== 'cancelled' &&
+        refuses(touch),
+    );
+  }
+
   /** UIControl's rule: a control may veto an overlapping ancestor recognizer. */
   private isVetoedByConsumer(recognizer: GestureRecognizer): boolean {
-    for (const id of recognizer.seenTouchIds) {
+    for (const id of internals(recognizer).seenTouchIds) {
       const consumer = this.records.get(id)?.consumer;
       if (consumer?.allowsAncestorRecognizer?.(recognizer) === false) {
         return true;
@@ -612,13 +696,9 @@ export class GestureArena {
       this.apply(recognizer, 'cancelled');
       return;
     }
-    recognizer.pending = null;
+    internals(recognizer).pending = null;
+    // apply() gives back any claim it held (releaseClaim), waiting or not.
     this.apply(recognizer, 'failed');
-    if (this.deferDepth > 0) {
-      // Inside `deferResolution`, the next pass settles.
-      this.owesResolution = true;
-      return;
-    }
     this.reviewPending();
   }
 
@@ -636,6 +716,7 @@ export class GestureArena {
     recognizer: GestureRecognizer,
     keep: ReadonlySet<number> = new Set(),
   ): void {
+    const released: number[] = [];
     for (const touch of recognizer.trackedTouches) {
       const record = this.records.get(touch.id);
       if (record == null || !record.isClaimed || keep.has(touch.id)) {
@@ -649,18 +730,22 @@ export class GestureArena {
           other.claimsTouches &&
           (isActive(other.state) ||
             other.state === 'ended' ||
-            other.pending != null) &&
+            internals(other).pending != null) &&
           other.trackedTouches.some(tracked => tracked.id === touch.id),
       );
       if (!isOwned) {
         record.isClaimed = false;
+        released.push(touch.id);
       }
+    }
+    if (released.length > 0) {
+      this.options.onRelease?.(released);
     }
   }
 
   private apply(recognizer: GestureRecognizer, next: GestureState): void {
     const from = recognizer.state;
-    recognizer.applyState(next);
+    internals(recognizer).applyState(next);
     if (recognizer.state === next && from !== next) {
       this.options.onTransition?.(recognizer, from, next);
     } else if (next === 'changed' && from === 'changed') {
@@ -682,25 +767,29 @@ export class GestureArena {
    * settle in one pass.
    */
   private reviewPending(): void {
+    if (this.deferDepth > 0) {
+      this.owesResolution = true;
+      return;
+    }
     let changed = true;
     while (changed) {
       changed = false;
       for (const recognizer of [...this.active]) {
-        const next = recognizer.pending;
+        const next = internals(recognizer).pending;
         if (next == null || recognizer.state !== 'possible') {
           continue;
         }
         const blocked = this.active.some(
           other =>
             other !== recognizer &&
-            recognizer.requiresFailureOf(other) &&
+            internals(recognizer).requiresFailureOf(other) &&
             other.state === 'possible' &&
             other.isInvolved(),
         );
         if (blocked) {
           continue;
         }
-        recognizer.pending = null;
+        internals(recognizer).pending = null;
         this.attemptRecognition(recognizer, next);
         changed = true;
       }
@@ -726,7 +815,7 @@ export class GestureArena {
       }
     }
     if (claimed.length > 0) {
-      this.options.onClaim?.(claimed);
+      this.options.onClaim?.(claimed, recognizer);
     }
   }
 
@@ -829,7 +918,7 @@ export class GestureArena {
         recognizer.delaysTouchesBegan &&
         recognizer.state === 'possible' &&
         recognizer.isInvolved() &&
-        recognizer.seenTouchIds.has(record.touch.id),
+        internals(recognizer).seenTouchIds.has(record.touch.id),
     );
   }
 
@@ -839,12 +928,12 @@ export class GestureArena {
         recognizer.delaysTouchesEnded &&
         recognizer.state === 'possible' &&
         recognizer.isInvolved() &&
-        recognizer.seenTouchIds.has(record.touch.id),
+        internals(recognizer).seenTouchIds.has(record.touch.id),
     );
   }
 
   private cancelViewTouchesOf(recognizer: GestureRecognizer): void {
-    for (const id of recognizer.seenTouchIds) {
+    for (const id of internals(recognizer).seenTouchIds) {
       const record = this.records.get(id);
       if (record == null) {
         continue;
@@ -925,6 +1014,13 @@ export class GestureArena {
   private run(time: number, body: () => void): void {
     this.depth += 1;
     try {
+      if (this.depth === 1 && this.deferDepth === 0 && this.owesResolution) {
+        // A deferred stop resolves before anything newer: input that comes
+        // ahead of its microtask (a nested dispatch) sees settled state.
+        this.owesResolution = false;
+        this.currentTime = this.clampTime(this.lastEventTime());
+        this.settle();
+      }
       this.flushTimers(time);
       this.currentTime = this.clampTime(time);
       body();
@@ -997,7 +1093,7 @@ export class GestureArena {
       }
       this.active = this.active.filter(other => other !== recognizer);
       const from = recognizer.state;
-      recognizer.resetToPossible();
+      internals(recognizer).resetToPossible();
       didReset = true;
       if (from !== 'possible') {
         this.options.onTransition?.(recognizer, from, 'possible');
@@ -1008,6 +1104,7 @@ export class GestureArena {
       // touch from its view; release it now, not at the next input.
       this.reviewHeld();
     }
+    let dropped = false;
     for (const [id, record] of this.records) {
       if (
         record.isLifted &&
@@ -1016,7 +1113,11 @@ export class GestureArena {
         !record.deferredClick
       ) {
         this.records.delete(id);
+        dropped = true;
       }
+    }
+    if (dropped && this.records.size === 0) {
+      this.options.onIdle?.();
     }
   }
 
@@ -1057,8 +1158,8 @@ export class GestureArena {
 }
 
 function sharesTouches(a: GestureRecognizer, b: GestureRecognizer): boolean {
-  for (const id of a.seenTouchIds) {
-    if (b.seenTouchIds.has(id)) {
+  for (const id of internals(a).seenTouchIds) {
+    if (internals(b).seenTouchIds.has(id)) {
       return true;
     }
   }

@@ -25,8 +25,6 @@ export const doc = {
   icons: {
     ArrowRightIcon: 'arrowRight',
     ChartBarIcon: 'chart',
-    ChevronDownIcon: 'chevronDown',
-    ChevronRightIcon: 'chevronRight',
     DocumentDuplicateIcon: 'copy',
     EllipsisHorizontalIcon: 'moreHorizontal',
     PencilIcon: 'edit',

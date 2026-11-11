@@ -6,7 +6,9 @@
  *   computed borders, StyleX
  * @output Exports `glidingDividerStyles` (a row's stand-in divider while it
  *   glides), `markGlidingRows` (marks the moving rows for that glide and
- *   carries each row's own border onto the stand-in) and `rowEdge`
+ *   carries each row's own border onto the stand-in), `rowEdge`,
+ *   `dividerOffset`, and the row and pinned-cell attribute names
+ *   plugins/stickyColumns reads
  * @position Table internals. With collapsed borders the table paints every
  *   border at its cell's static place, so a row that moves leaves its divider
  *   behind. For the glide only, the moving row's cells are marked: their
@@ -37,8 +39,12 @@ const CELL_ATTRIBUTE = 'data-astryx-cell-gliding';
 const CELL_GLIDING = '[data-astryx-cell-gliding]';
 const CELL_LINE = '[data-astryx-cell-gliding="line"]';
 
-/** On a pinned (sticky) cell: plugins/stickyColumns. */
-const PINNED_ATTRIBUTE = 'data-astryx-table-pinned';
+/**
+ * On a pinned (sticky) cell, written by plugins/stickyColumns. Named here
+ * because that plugin already imports this module; naming it there would make
+ * the two import each other.
+ */
+export const PINNED_ATTRIBUTE = 'data-astryx-table-pinned';
 
 /**
  * A row's divider, carried on the row for its glide. Names no cell sets, so
@@ -175,6 +181,25 @@ export function rowEdge(row: Element): BottomEdge | null {
 }
 
 /**
+ * How far `row`'s divider hangs from the bottom of the row's padding box. The
+ * line hangs from that padding box (its containing block), which a row's own
+ * border shortens. The collapsed edge starts at a cell's padding-box bottom,
+ * which a wide border puts below it. The table paints that edge from the
+ * whole pixel at or above it, so the line starts there too.
+ */
+export function dividerOffset(row: Element, edge: BottomEdge): number | null {
+  const cell = row.lastElementChild;
+  if (!(cell instanceof HTMLElement)) {
+    return null;
+  }
+  const cellEdge =
+    cell.getBoundingClientRect().top + cell.clientTop + cell.clientHeight;
+  const rowPaddingEdge =
+    row.getBoundingClientRect().top + row.clientTop + row.clientHeight;
+  return Math.floor(cellEdge) + edge.width - rowPaddingEdge;
+}
+
+/**
  * Marks the rows a glide is moving around `changed`, and `entering` (a row
  * playing its entrance, with that entrance), so their cells draw a divider
  * that moves with them; unmarks them in one batch when that motion ends. A
@@ -182,13 +207,18 @@ export function rowEdge(row: Element): BottomEdge | null {
  * visible part, so this walks out from the changed row each way and stops at
  * still rows: it never visits the rest of a long table. It asks the motion
  * module which rows glide and takes the borders read before the glide
- * started (`edges`), so it reads nothing from the layout: it only writes.
+ * started (`edges`). It reads each row's divider offset before it writes.
  * Resolves when the motion has ended.
  */
 export async function markGlidingRows(
   changed: HTMLElement,
   edges: ReadonlyMap<Element, BottomEdge>,
-  entering: {row: HTMLElement; animation: Animation} | null,
+  entering: {
+    row: HTMLElement;
+    animation: Animation;
+    /** Its divider's offset, read before its entrance moved its cell. */
+    offset?: number | null;
+  } | null,
   glideOf: (element: Element) => Animation | null,
 ): Promise<void> {
   const rows = new Map<HTMLElement, Animation | null>();
@@ -221,23 +251,20 @@ export async function markGlidingRows(
     return;
   }
   const batch = Symbol('glide');
-  // Where each row's divider rests, read before any write. The line hangs
-  // from the row's padding box (its containing block), which a row's own
-  // border shortens; the collapsed edge starts at a cell's padding-box
-  // bottom, which a wide border puts below it. The table paints that edge
-  // from the whole pixel at or above it, so the line starts there too.
+  // Where each row's divider rests, read before any write.
   const offsets = new Map<Element, number>();
   for (const row of rows.keys()) {
     const edge = edges.get(row);
-    const cell = row.lastElementChild;
-    if (edge == null || !(cell instanceof HTMLElement)) {
+    if (edge == null) {
       continue;
     }
-    const cellEdge =
-      cell.getBoundingClientRect().top + cell.clientTop + cell.clientHeight;
-    const rowPaddingEdge =
-      row.getBoundingClientRect().top + row.clientTop + row.clientHeight;
-    offsets.set(row, Math.floor(cellEdge) + edge.width - rowPaddingEdge);
+    const offset =
+      row === entering?.row && entering.offset != null
+        ? entering.offset
+        : dividerOffset(row, edge);
+    if (offset != null) {
+      offsets.set(row, offset);
+    }
   }
   for (const row of rows.keys()) {
     const edge = edges.get(row);

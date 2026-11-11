@@ -5,7 +5,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
 import {TreeList} from '@astryxdesign/core/TreeList';
 import type {TreeListItemData} from '@astryxdesign/core/TreeList';
-import {Collapsible} from '@astryxdesign/core/Collapsible';
+import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
 import {useAnimatedLayout} from '@astryxdesign/core/hooks';
 
 const meta: Meta = {
@@ -143,6 +143,38 @@ function Demo() {
               New
             </span>
           </div>
+          <Section title="A CollapsibleGroup, one open at a time, of unequal heights">
+            <div style={card}>
+              <CollapsibleGroup type="single">
+                <Collapsible
+                  trigger="Return policy"
+                  value="returns"
+                  animatedLayout={animatedLayout}>
+                  <p style={{margin: '4px 0'}}>
+                    Return any item within 30 days.
+                  </p>
+                  <p style={{margin: '4px 0'}}>Items must be unused.</p>
+                  <p style={{margin: '4px 0'}}>Refunds take 5 business days.</p>
+                  <p style={{margin: '4px 0'}}>Exchanges ship free.</p>
+                  <p style={{margin: '4px 0'}}>
+                    Gift returns get store credit.
+                  </p>
+                </Collapsible>
+                <Collapsible
+                  trigger="Gift options"
+                  value="gifts"
+                  animatedLayout={animatedLayout}>
+                  <p style={{margin: '4px 0'}}>Add a note at checkout.</p>
+                </Collapsible>
+                <Collapsible
+                  trigger="Delivery windows"
+                  value="delivery"
+                  animatedLayout={animatedLayout}>
+                  <p style={{margin: '4px 0'}}>Choose a two-hour window.</p>
+                </Collapsible>
+              </CollapsibleGroup>
+            </div>
+          </Section>
           <div style={{display: 'contents'}}>
             <div style={plain}>Inside a display: contents wrapper (1)</div>
             <div style={plain}>Inside a display: contents wrapper (2)</div>

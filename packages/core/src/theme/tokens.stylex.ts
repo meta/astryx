@@ -24,7 +24,7 @@ import * as stylex from '@stylexjs/stylex';
 
 export const colorDefaults = {
   // Core semantic
-  '--color-accent': 'light-dark(#0064E0, #2694FE)',
+  '--color-accent': 'light-dark(#0064E0, #0171E3)',
   '--color-accent-muted': 'light-dark(#0082FB33, #0082FB3F)',
   '--color-on-accent': 'light-dark(#FFFFFF, #FFFFFF)',
   '--color-neutral':
@@ -307,6 +307,8 @@ export const durationDefaults = {
   '--duration-slow-min': '730ms',
   '--duration-slow': '975ms',
   '--duration-slow-max': '1300ms',
+  /** The standard dismissal duration. */
+  '--duration-exit': 'var(--duration-fast)',
 } as const;
 
 export const durationVars = stylex.defineVars(durationDefaults);

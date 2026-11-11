@@ -17,7 +17,10 @@
  *   - templateRegistry.ts  — page templates including playground source
  *   - templateMetadataRegistry.ts — lightweight page-template metadata
  *   - docsRegistry.ts      — long-form documentation topics from CLI docs/
+ *   - blogRegistry.ts      — blog posts (plus canary-only test fixtures)
+ *   - blogExampleAssets.ts — each post's live-example assets, loaded on demand
  *   - searchLinks.json     — search destinations and document presentation metadata
+ *   - searchIndex.ts       — the candidates the search API ranks
  */
 
 import * as fs from 'node:fs';
@@ -33,9 +36,11 @@ import {
   GUIDE_NAMESPACE_PAGES,
   GUIDE_PAGE_NAMESPACES,
   ROOT_PAGE_ALIASES,
+  applySidebarParents,
   movedGuideRedirects,
   mergeFlatTopics,
   namespacePage,
+  rootNamespacePages,
   routeSlug,
   sectionAnchors,
   withCliCommands,
@@ -55,6 +60,11 @@ import {
   docs as readDocs,
   template as queryTemplates,
 } from '@astryxdesign/cli/api';
+import {
+  discoverAll,
+  pkgOf,
+  replaceDemoContent,
+} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import docsiteConfig from '../astryx.config.mjs';
 import {
   integrationContentEnabled,
@@ -70,7 +80,12 @@ import {
   buildTypeDefinitionIndex,
   collectPropTypeRefs,
 } from '../src/lib/typeDefinitions.mjs';
-import {generateShadcnRegistryForTarget} from './generate-shadcn-registry.mjs';
+import {
+  generateShadcnRegistryForTarget,
+  registrySkipNotices,
+  reportRegistrySkips,
+} from './generate-shadcn-registry.mjs';
+import {createPublishedImportJudge} from './published-exports.mjs';
 import {
   blockRegistryIdentity,
   resolveShadcnRegistryOrigin,
@@ -552,6 +567,18 @@ function sanitizeForJson(obj) {
   );
 }
 
+/**
+ * A component doc's `deprecated` (what replaces it), copied for the registry;
+ * null when the component is not deprecated. `replacementDisplayName` is
+ * resolved once every package's components are known.
+ * @param {{deprecated?: {replacement: string, description: string}}} doc
+ */
+function deprecationOf(doc) {
+  if (!doc.deprecated) return null;
+  const {replacement, description} = doc.deprecated;
+  return {replacement, replacementDisplayName: replacement, description};
+}
+
 function extractStringArrayField(content, field) {
   const re = new RegExp(`${field}:\\s*\\[([^\\]]*)\\]`);
   const match = re.exec(content);
@@ -717,6 +744,7 @@ async function generateComponentRegistry() {
               description: doc.description || parentMeta.topDescription || '',
               keywords: parentMeta.keywords ?? keywords,
               hidden: parentMeta.hidden ?? hidden,
+              deprecated: deprecationOf(doc),
               registry,
               parentDoc: doc.subComponentOf,
               props: isHookEntry
@@ -782,6 +810,7 @@ async function generateComponentRegistry() {
               description: doc.description || topDescription,
               keywords,
               hidden,
+              deprecated: deprecationOf(doc),
               registry,
               parentDoc: name,
               props: sanitizeForJson(doc.props),
@@ -851,6 +880,7 @@ async function generateComponentRegistry() {
               description: sub.description || topDescription,
               keywords,
               hidden,
+              deprecated: null,
               registry: sub.registry ? sanitizeForJson(sub.registry) : null,
               parentDoc: doc.name,
               props: isHookEntry
@@ -897,6 +927,7 @@ async function generateComponentRegistry() {
             description: topDescription,
             keywords,
             hidden,
+            deprecated: null,
             registry,
             parentDoc: dirPrimaryDoc,
             props: [],
@@ -933,6 +964,7 @@ async function generateComponentRegistry() {
             description: topDescription,
             keywords,
             hidden,
+            deprecated: deprecationOf(doc),
             registry,
             parentDoc: null,
             props: Array.isArray(doc.props) ? sanitizeForJson(doc.props) : [],
@@ -1006,6 +1038,24 @@ async function generateComponentRegistry() {
       }
       componentOwners.set(entry.name, packageName);
     }
+  }
+
+  // A deprecated component's notice links its replacement, so the replacement
+  // must be a documented component; its display name labels the link.
+  const entriesByName = new Map(
+    Object.values(allComponents)
+      .flat()
+      .map(entry => [entry.name, entry]),
+  );
+  for (const entry of entriesByName.values()) {
+    if (!entry.deprecated) continue;
+    const replacement = entriesByName.get(entry.deprecated.replacement);
+    if (!replacement || replacement.deprecated) {
+      throw new Error(
+        `${entry.name} is deprecated in favor of "${entry.deprecated.replacement}", which is not a documented, non-deprecated component. Set \`deprecated.replacement\` to the \`name\` of the component to use instead.`,
+      );
+    }
+    entry.deprecated.replacementDisplayName = replacement.displayName;
   }
 
   const content = `// Auto-generated by scripts/generate-data.mjs — do not edit
@@ -1144,11 +1194,26 @@ export interface DerivedVar {
   replaces?: boolean;
 }
 
+export interface ComponentIconSlotState {
+  name: string;
+  type: string;
+  description: string;
+}
+
+export interface ComponentIconSlot {
+  slot: string;
+  description: string;
+  fallback: string;
+  state?: ComponentIconSlotState[];
+  whenNull: string;
+}
+
 export interface ThemingDoc {
   container?: boolean;
   targets: ThemingTarget[];
   vars?: ComponentVar[];
   derived?: DerivedVar[];
+  componentIcons?: ComponentIconSlot[];
 }
 
 export interface HookParamDoc {
@@ -1200,6 +1265,9 @@ export interface ComponentEntry {
    *  declares \`stability: 'experimental'\` (spec:AST-017 FR21), and null for
    *  a stable one. */
   stability: 'experimental' | 'lab' | null;
+  /** What replaces a deprecated component, from its doc's \`deprecated\`;
+   *  null when it is not deprecated. */
+  deprecated: ComponentDeprecation | null;
   registry: {slug?: string; aliases?: string[]} | null;
   parentDoc: string | null;
   props: PropDoc[];
@@ -1213,6 +1281,15 @@ export interface ComponentEntry {
   relatedComponents: string[] | null;
   relatedHooks: string[] | null;
   playground: PlaygroundConfig | null;
+}
+
+export interface ComponentDeprecation {
+  /** \`name\` of the documented component to use instead. */
+  replacement: string;
+  /** That component's display name. */
+  replacementDisplayName: string;
+  /** The modernization route, in a sentence or two. */
+  description: string;
 }
 
 export type ElementDescriptor = ComponentSlotElement;
@@ -1460,6 +1537,9 @@ export const groupedComponents: Record<string, GroupedComponents> = ${JSON.strin
 
 // ── 3. Block Registry ──────────────────────────────────────────────────
 
+/** The authored file of each integration block, by block `dirName`. */
+const integrationBlockFiles = new Map();
+
 async function generateBlockRegistry() {
   console.log('Generating block registry...');
 
@@ -1525,6 +1605,11 @@ async function generateBlockRegistry() {
     } catch {
       /* ignore */
     }
+    // Displayed source: the Code tab, Open in Playground, and the MCP server
+    // show each demo-content element as the placeholder a copy writes, and keep
+    // fixture media. The live preview renders the original file (see
+    // writeBlockPreview). A use that cannot be replaced safely fails the build.
+    source = replaceDemoContent(source).source;
 
     const resolvedName = meta.name || basename;
     blocks.push({
@@ -1563,6 +1648,7 @@ async function generateBlockRegistry() {
     const integrationBlocks = templateList.data.filter(entry =>
       CONFIGURED_COMPONENT_PACKAGES.has(entry.package),
     );
+    const discovered = await discoverAll(DOCSITE_ROOT);
     for (const entry of integrationBlocks) {
       const shown = await queryTemplates(entry.id, {
         show: true,
@@ -1570,8 +1656,20 @@ async function generateBlockRegistry() {
         package: entry.package,
         cwd: DOCSITE_ROOT,
       });
+      const dirName = `${entry.package}-${entry.id}`.replace(
+        /[^a-zA-Z0-9_-]/g,
+        '-',
+      );
+      const authored = discovered.find(
+        t =>
+          t.type === 'block' &&
+          t.dirName === entry.id &&
+          pkgOf(t) === entry.package,
+      );
+      if (!authored) throw new Error(`No authored file for ${dirName}`);
+      integrationBlockFiles.set(dirName, authored.filePath);
       blocks.push({
-        dirName: `${entry.package}-${entry.id}`.replace(/[^a-zA-Z0-9_-]/g, '-'),
+        dirName,
         name: entry.name,
         displayName: entry.displayName || entry.name,
         description: entry.description,
@@ -1686,6 +1784,10 @@ async function generateTemplateRegistry() {
       /* ignore */
     }
 
+    // Displayed source, like each block's: the playground and the MCP server
+    // hand out the demo-content replacement a copy applies, with fixture media.
+    source = replaceDemoContent(source).source;
+
     templates.push({
       slug: dir.name,
       name: doc.name || dir.name,
@@ -1755,9 +1857,11 @@ export const templateMetadataCount = ${templateMetadata.length};
  * The docsite pages of the CLI's docs tree, read through the CLI's public docs
  * API. Every root namespace is one full page at its own slug (docs-pages.mjs),
  * so splitting a flat topic into a namespace keeps its URL, sidebar spot and
- * text; the guides under it redirect to their sections on that page. A root
- * namespace in GUIDE_PAGE_NAMESPACES shows the pages GUIDE_NAMESPACE_PAGES
- * lists, the same way one level down, and its other guides keep a page each.
+ * text; the guides under it redirect to their sections on that page. A nested
+ * namespace in NESTED_NAMESPACE_PAGES is a page of its own instead, under its
+ * root's page in the sidebar. A root namespace in GUIDE_PAGE_NAMESPACES shows
+ * the pages GUIDE_NAMESPACE_PAGES lists, the same way one level down, and its
+ * other guides keep a page each.
  */
 async function docsTreePages() {
   const pages = [];
@@ -1783,9 +1887,13 @@ async function docsTreePages() {
       continue;
     }
     routes.push(...(await treeRoutes(root)));
-    const full = await namespacePage(readDocs, root, {
+    const {root: full, nested} = await rootNamespacePages(readDocs, root, {
       aliases: ROOT_PAGE_ALIASES.get(root) ?? [],
     });
+    for (const page of nested) {
+      pages.push(page.page);
+      Object.assign(redirects, page.redirects);
+    }
     if (!full) continue;
     pages.push(full.page);
     Object.assign(
@@ -1923,6 +2031,7 @@ async function generateDocsRegistry() {
     }
     docTopics.push(page);
   }
+  applySidebarParents(docTopics);
   const docsTreeRoutes = [...new Set(tree.routes)].sort();
   const docRedirects = Object.fromEntries(
     Object.entries({...merged.redirects, ...tree.redirects}).sort(([a], [b]) =>
@@ -1996,6 +2105,8 @@ export interface DocTopic {
   description: string;
   /** Navigation category: 'guide' | 'foundations' | null */
   category: string | null;
+  /** Slug of the page the sidebar shows this page under, if any */
+  parent?: string;
   /** Full doc sections with content blocks */
   sections: DocSection[];
 }
@@ -2058,6 +2169,21 @@ function generateSearchLinks({
   );
   console.log(
     `  wrote ${path.relative(REPO_ROOT, path.join(OUT_DIR, 'searchLinks.json'))}`,
+  );
+}
+
+/**
+ * The candidates the search API ranks (generate-search-index.mjs). A process
+ * of its own gathers them. This process reads docs with the site's package
+ * manager, and the CLI keeps the docs it has read. `astryx search` reads them
+ * with this project's package manager.
+ */
+function generateSearchIndex() {
+  console.log('Generating search index...');
+  execFileSync(
+    process.execPath,
+    [path.join(__dirname, 'generate-search-index.mjs')],
+    {stdio: 'inherit'},
   );
 }
 
@@ -2217,6 +2343,17 @@ function blockSourcePath(block) {
     'blocks',
     block.category,
     `${block.dirName}.tsx`,
+  );
+}
+
+function templateSourcePath(template) {
+  return path.join(
+    CLI_ROOT,
+    'assets',
+    'templates',
+    'pages',
+    template.slug,
+    'page.tsx',
   );
 }
 
@@ -2480,14 +2617,34 @@ async function generateBlogRegistry() {
   const POSTS_DIR = path.join(DOCSITE_ROOT, 'src', 'content', 'blog', 'posts');
 
   // Single source of truth for discovery + validation (shared with tests).
-  const {discoverPosts, collectTypes, collectTags} = await import(
-    pathToFileURL(path.join(DOCSITE_ROOT, 'src', 'lib', 'blog', 'posts.mjs'))
-      .href
-  );
+  const {discoverPosts, collectTypes, collectTags, collectExampleAssets} =
+    await import(
+      pathToFileURL(path.join(DOCSITE_ROOT, 'src', 'lib', 'blog', 'posts.mjs'))
+        .href
+    );
 
   // Local development and every draft/preview deployment use the canary target.
   const includeDrafts = DOCSITE_TARGET === 'canary';
   const posts = discoverPosts(POSTS_DIR, {includeDrafts});
+  // Test fixtures (spec:AST-033 FR22): canary-only posts that the post and
+  // plain-text routes serve but the index, feed and sitemap never list.
+  const FIXTURES_DIR = path.join(
+    DOCSITE_ROOT,
+    'src',
+    'content',
+    'blog',
+    'fixtures',
+  );
+  const fixturePosts = includeDrafts
+    ? discoverPosts(FIXTURES_DIR, {includeDrafts: true})
+    : [];
+  for (const fixture of fixturePosts) {
+    if (posts.some(p => p.slug === fixture.slug)) {
+      throw new Error(
+        `Blog fixture "${fixture.slug}" has the same slug as a post`,
+      );
+    }
+  }
   const types = collectTypes(posts);
   const tags = collectTags(posts);
 
@@ -2512,6 +2669,12 @@ export const blogTags: string[] = ${JSON.stringify(tags)};
 export const blogPostCount = ${posts.length};
 
 /**
+ * Test fixture posts (canary only): the post and plain-text routes serve them,
+ * but the index, feed and sitemap read only blogPosts.
+ */
+export const blogFixturePosts: BlogPost[] = ${JSON.stringify(fixturePosts, null, 2)};
+
+/**
  * Site-absolute paths of every dark-mode image variant found under
  * public/blog (files named "<name>.dark.<ext>"). ThemedImage consults this to
  * decide whether a body image has a dark counterpart — a definitive,
@@ -2529,6 +2692,42 @@ export const blogImageSizes: Record<string, {width: number; height: number}> =
   ${JSON.stringify(imageSizes, null, 2)};
 `;
   writeRegistry('blogRegistry.ts', content);
+
+  // Each post's example assets, loaded on demand inside the preview frame
+  // that runs that post's live examples (spec:AST-033 FR22).
+  const assetEntries = [
+    ...posts.map(p => ({slug: p.slug, dir: POSTS_DIR})),
+    ...fixturePosts.map(p => ({slug: p.slug, dir: FIXTURES_DIR})),
+  ]
+    .map(({slug, dir}) => ({slug, assets: collectExampleAssets(dir, slug)}))
+    .filter(({assets}) => assets.length > 0);
+  const assetLines = assetEntries.map(({slug, assets}) => {
+    const loaders = assets.map(({specifier, file}) => {
+      const target = path
+        .relative(OUT_DIR, file)
+        .replace(/\\/g, '/')
+        .replace(/\.(tsx?|jsx?)$/, '');
+      return `    ${JSON.stringify(specifier)}: () => import(${JSON.stringify(target)}),`;
+    });
+    return `  ${JSON.stringify(slug)}: {\n${loaders.join('\n')}\n  },`;
+  });
+  writeRegistry(
+    'blogExampleAssets.ts',
+    `// Auto-generated by scripts/generate-data.mjs — do not edit
+
+/**
+ * Each blog post's example assets, by post slug and then by the relative
+ * specifier its live examples import (spec:AST-033 FR22).
+ */
+export const blogExampleAssets: Record<
+  string,
+  Record<string, () => Promise<unknown>>
+> = {
+${assetLines.join('\n')}
+};
+`,
+  );
+
   return {blogPostCount: posts.length, blogTypeCount: types.length};
 }
 
@@ -2595,18 +2794,35 @@ async function main() {
   const {templates, templateCount} = await generateTemplateRegistry();
   const {docTopics, docsCount} = await generateDocsRegistry();
   generateSearchLinks({docTopics, allComponents, templates, blocks, packages});
+  generateSearchIndex();
   const {blogPostCount} = await generateBlogRegistry();
   const shadcnCounts = generateShadcnRegistryForTarget({
     target: DOCSITE_TARGET,
     outDir: path.join(DOCSITE_ROOT, 'public', 'shadcn'),
     packages,
     allComponents,
-    blocks,
-    templates,
+    // The registries carry displayed source. A shadcn install is a copy, so it
+    // starts from the file as authored.
+    blocks: blocks.map(block => ({
+      ...block,
+      authoredSourcePath:
+        blockSourcePath(block) ?? integrationBlockFiles.get(block.dirName),
+    })),
+    templates: templates.map(template => ({
+      ...template,
+      authoredSourcePath: templateSourcePath(template),
+    })),
     cliRoot: CLI_ROOT,
     dependencyTag: DOCSITE_TARGET === 'canary' ? 'canary' : null,
     externalDependencySpecs: registryExternalDependencySpecs(),
+    // Production installs the published packages, so an example that imports
+    // a name they lack waits for the release that adds it.
+    publishedImports:
+      DOCSITE_TARGET === 'latest'
+        ? createPublishedImportJudge(CONTENT_ROOT, packages)
+        : null,
   });
+  reportRegistrySkips(registrySkipNotices(shadcnCounts));
   checkShadcnRouteLock(shadcnCounts.contracts, {
     allowSubset: DOCSITE_TARGET === 'latest',
   });

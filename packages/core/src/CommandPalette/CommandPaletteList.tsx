@@ -20,7 +20,13 @@ import {mergeProps} from '../utils';
 import {spacingVars} from '../theme/tokens.stylex';
 import {useCommandPaletteContext} from './CommandPaletteContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CommandPalette/CommandPaletteList.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   list: {
@@ -83,7 +89,7 @@ export function CommandPaletteList({
   style,
   ...props
 }: CommandPaletteListProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.commandPalette.list.label');
   const ctx = useCommandPaletteContext();
   // Inside CommandPalette the list is a listbox only while it holds selectable

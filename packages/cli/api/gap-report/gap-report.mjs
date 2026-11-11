@@ -345,6 +345,9 @@ function failedHandler(message) {
  * process.exitCode, stdout, and every continuation the handler creates. A
  * timeout aborts the supplied signal, gives the handler one short turn to
  * observe it, then terminates the isolate before the next handler starts.
+ * `timeoutMs` is the handler's own time and starts once its module has
+ * loaded. Starting the worker and loading the module have the default
+ * deadline.
  *
  * @param {Extract<HandlerEntry, {kind: 'handler'}>} entry
  * @param {GapReport} report cloned before this call
@@ -393,7 +396,8 @@ async function callHandler(entry, report, timeoutMs = HANDLER_TIMEOUT_MS) {
         .finally(() => resolve(outcome));
     };
 
-    const beginTimeout = () => {
+    /** @param {number} deadlineMs */
+    const beginTimeout = deadlineMs => {
       if (timeout !== undefined) clearTimeout(timeout);
       timeout = setTimeout(() => {
         if (settled) return;
@@ -407,13 +411,13 @@ async function callHandler(entry, report, timeoutMs = HANDLER_TIMEOUT_MS) {
           () => finish(timeoutOutcome),
           HANDLER_ABORT_GRACE_MS,
         );
-      }, timeoutMs);
+      }, deadlineMs);
     };
 
     worker.on('message', message => {
       if (settled || timedOut) return;
       if (message?.kind === 'ready') {
-        beginTimeout();
+        beginTimeout(timeoutMs);
         return;
       }
       if (message?.kind === 'exit-code') {
@@ -458,7 +462,8 @@ async function callHandler(entry, report, timeoutMs = HANDLER_TIMEOUT_MS) {
       finish(failedHandler(`Handler called process.exit(${String(code)}).`));
     });
 
-    beginTimeout();
+    // A short handler budget must not cover a slow start on a busy machine.
+    beginTimeout(Math.max(timeoutMs, HANDLER_TIMEOUT_MS));
   });
 }
 

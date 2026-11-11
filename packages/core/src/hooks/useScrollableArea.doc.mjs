@@ -40,7 +40,7 @@ export const docs = {
       name: 'getContentProps',
       type: '<E extends HTMLElement>(props?: ScrollableElementProps<E>) => ScrollableElementProps<E>',
       description:
-        'Composes caller content-box props and refs with content observation.',
+        'Composes caller content-box props, xstyle, and refs with content observation.',
     },
     {
       name: 'state',
@@ -79,9 +79,19 @@ export const docs = {
           'Pass caller `xstyle` through `getViewportProps`; the getter composes it with fitting clip, active overflow, and Sticky containment.',
       },
       {
+        guidance: true,
+        description:
+          'Give a viewport-owned tab stop a visible focus indicator; compose `focusOutlineStyles.focusVisible` (or an equivalent) into the viewport `xstyle`, as ScrollableArea does.',
+      },
+      {
         guidance: false,
         description:
           'Attach only the viewport getter. A real observed content box is required for live overflow changes.',
+      },
+      {
+        guidance: false,
+        description:
+          'Declare overflow through caller props on the viewport; the getter owns overflow declarations and strips conflicting inline values.',
       },
     ],
   },
@@ -102,7 +112,7 @@ export const docsDense = {
   returnDescriptions: {
     getViewportProps:
       'safe viewport prop/ref/xstyle composition with behavior-owned overflow, accessibility, and chaining.',
-    getContentProps: 'safe observed content-box prop/ref composition.',
+    getContentProps: 'safe observed content-box prop/ref/xstyle composition.',
     state: 'inline/block isScrollable, atStart, and atEnd state.',
   },
   usage: {
