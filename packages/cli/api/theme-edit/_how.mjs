@@ -34,7 +34,10 @@ import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
 import {checked, exampleStep, howTheme, render} from './_how-commands.mjs';
 import {draftAnswer} from './_how-question.mjs';
-import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
+import {
+  getCliInvocation,
+  quoteCommandArgument,
+} from '../../foundation/env/package-manager.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
 const E = ERROR_CODES;
@@ -106,6 +109,34 @@ export async function themeEditHow(subject, options = {}) {
   const {cwd = process.cwd()} = options;
   requireProject(cwd);
   try {
+    if (options.words) {
+      // The words as typed: a picture first takes only a count after it;
+      // anything else is one subject.
+      const words = options.words;
+      const picture = isPicture(words[0] ?? '', cwd);
+      const again = `${HOW} ${quoteCommandArgument(words[0] ?? '')} 5`;
+      if (picture && words.length > 2)
+        throw new AstryxError(
+          `After a picture, give only how many colors to list, not "${words.slice(1).join(' ')}".`,
+          [{name: again, reason: 'do this instead'}],
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      // A missing picture is the first thing to say, before a bad count.
+      if (
+        picture &&
+        words.length === 2 &&
+        !/^[1-9]\d*$/.test(words[1]) &&
+        fs.existsSync(path.resolve(cwd, words[0]))
+      )
+        throw new AstryxError(
+          `The count after a picture must be a positive whole number, not "${words[1]}".`,
+          [{name: again, reason: 'do this instead'}],
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      subject = picture ? words[0] : words.join(' ');
+      if (picture && words.length === 2)
+        options = {...options, count: Number(words[1])};
+    }
     const data = await answer(subject, options, cwd);
     return {type: 'themeEdit.how', data: withPrefix(data, cwd)};
   } catch (e) {
@@ -336,6 +367,13 @@ async function answer(subject, options, cwd) {
     const tok = /--[a-z0-9-]+/i.exec(t)?.[0]?.toLowerCase();
     if (tok && Object.hasOwn(ctx.project.core.tokenDefaults, tok))
       return tokenAnswer(ctx, env, t, tok, unknown, themeFields);
+    // "what does spacing more do": the dial's own lookup, its values and
+    // what each does.
+    const dial = Object.keys(DIALS).find(d =>
+      new RegExp(`\\b${d}\\b`, 'i').test(t.replace(/--[a-z0-9-]+/gi, ' ')),
+    );
+    if (dial && !/\b(on|for)\s+(the\s+)?[a-z]+s?\b/i.test(t))
+      return {...(await answer(dial, options, cwd)), subject: t};
     const q = draftAnswer(ctx, env, t);
     const groups = q.aspects.filter(a => Object.hasOwn(GROUPS, a));
     const results = q.parts
