@@ -213,7 +213,7 @@ describe('refusals', () => {
     );
     expect(r.code).toBe('ERR_MISSING_ARGUMENT');
     expect(r.run[0]).toBe(
-      'astryx experimental theme editor set t box-shadow none --on <part>',
+      'astryx experimental theme editor set t box-shadow none --on card',
     );
   });
 });
@@ -691,8 +691,9 @@ describe('the command', () => {
     expect(r.status).toBe(1);
     const out = JSON.parse(r.stdout);
     expect(out.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(out.suggestions[0].name).toBe(
-      'astryx experimental theme editor set t color "#ffffff" --on card',
+    // The same prefix the text output uses.
+    expect(out.suggestions[0].name).toMatch(
+      /^(astryx|(?:npx|pnpm dlx|yarn dlx|bunx) \S+) experimental theme editor set t color "#ffffff" --on card$/,
     );
   });
 
@@ -815,8 +816,7 @@ describe('the command', () => {
         cwd,
       },
     );
-    expect(fresh.stdout).toContain(
-      'Will replace: astryx theme template, astryx theme eject',
-    );
+    // Each stable command is claimed once, by its own copy.
+    expect(fresh.stdout).not.toContain('Will replace');
   });
 });

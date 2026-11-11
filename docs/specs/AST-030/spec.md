@@ -656,22 +656,19 @@ they are separately named.
 
 - **FR32 — A changed release spec runs in full before merge.** A pull request
   runs a release spec in full, alone (`--workers=1`), on `4-core-ubuntu`, the
-  runner class whose release-check timings gate, in the `release-specs (changed)` job, when it adds
+  runner class whose release-check timings gate, in one of the release-spec shards, when it adds
   or changes the spec, changes a module the spec imports where the
   touched-component mapping can see it, or changes a component the spec
   visits. A release spec is a `*.release.*.spec.ts` file or a spec tagged
   `@pr-a11y release-only`. A spec visits a component through a story id
   (`core-<component>--…`) or a sandbox path that maps to the component's
-  folder; a visit that cannot be resolved runs the spec. A Lab-only pull request (FR26) runs the job for the release specs it triggers. The job MUST NOT drop a spec as not run. Merge-guard requires the job only when a pull request
+  folder; a visit that cannot be resolved runs the spec. A Lab-only pull request (FR26) runs the release specs it triggers. The shards MUST NOT drop a spec as not run, and the `release-specs (changed)` check passes only when every shard passes. Merge-guard requires that check only when a pull request
   triggers it; a missing, skipped, or stale-head result waits and fails
-  closed. A timing-budget miss in the job is a failure, not a flake; it is not
+  closed. A timing-budget miss in a shard is a failure, not a flake; it is not
   retried automatically, and a budget question goes to the specification
-  owner (DEC-29). FR32 gap: the `release-specs (changed)` job runs only
-  `*.release.*.spec.ts` files that a pull request adds or changes, or whose
-  imported modules it changes. It does not run specs tagged
-  `@pr-a11y release-only`, does not trigger on a changed component that a
-  spec visits (and has no map from pattern stories and fixture pages to
-  components), and does not run on a Lab-only pull request.
+  owner (DEC-29). FR32 gap: the plan reads visits only from Storybook story
+  ids and pages on the served Storybook; it maps no sandbox path to a
+  component folder.
 
 ### Platform support
 

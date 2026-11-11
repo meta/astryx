@@ -24,6 +24,7 @@ import {
 } from './theme-edit.mjs';
 import {
   PALETTE_TOKENS,
+  officialCitation,
   paletteConfig,
   paletteMapping,
   paletteNotes,
@@ -217,7 +218,7 @@ describe('color dials through the palette generator', () => {
       dark: '#ff0000',
     });
     expect(show.data.colors[0].tokens['--color-accent']).toMatch(
-      /^#ff0000 \(your exact setting wins over the generated light/,
+      /^light #ff0000 \(your exact setting wins over the generated \d+/,
     );
     const source = read('p.settings.ts');
     expect(source).toContain('"--color-accent": "#ff0000"');
@@ -885,6 +886,197 @@ describe('every color decision is generator config', () => {
     );
     expect(notes).not.toContain('shade 50 (');
   });
+
+  it('finds the passing shade on either side, and steps the accent tint until citation text reads', () => {
+    const dark = {
+      '--color-background-surface': '#101314',
+      '--color-background-body': '#101314',
+      '--color-background-card': '#191d20',
+    };
+    const dir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-palette-gothic-'),
+    );
+    dirs.push(dir);
+    const gothic = {
+      light: {...dark, '--color-text-secondary': '#a3a3a3'},
+      dark: {...dark, '--color-text-secondary': '#a3a3a3'},
+    };
+    const data = /** @type {import('./_settings.mjs').ThemeData} */ ({
+      name: 'x',
+      mode: 'both',
+      settings: [{thing: 'accent', value: '#1877f2', source: 'dial'}],
+    });
+    const pal = /** @type {import('./_palette.mjs').PaletteMapping} */ (
+      paletteMapping(dir, 'x', data, gothic, tokenDefaults)
+    );
+    for (const bg of Object.values(dark))
+      expect(
+        contrast(pal.tokens['--color-text-accent'].light.color, bg),
+      ).toBeGreaterThanOrEqual(4.5);
+    expect(paletteNotes(pal, 'accent', 'x').join(' ')).not.toContain(
+      'the most contrasting one',
+    );
+    // The official neutral pair: dark text-secondary on the dark accent tint.
+    const withText = {
+      light: {...base.light, '--color-text-secondary': '#474747'},
+      dark: {...base.dark, '--color-text-secondary': '#9e9e9e'},
+    };
+    /** @param {string} seed */
+    const tint = seed => {
+      const d = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-palette-cite-'));
+      dirs.push(d);
+      return /** @type {import('./_palette.mjs').PaletteMapping} */ (
+        paletteMapping(
+          d,
+          'x',
+          {...data, settings: [{thing: 'accent', value: seed, source: 'dial'}]},
+          withText,
+          tokenDefaults,
+        )
+      ).tokens['--color-accent-muted'];
+    };
+    // The official stop stays wherever citation text reads as well as in
+    // the official theme.
+    for (const seed of ['#7c3aed', '#2563eb']) {
+      expect(tint(seed).dark.stop, seed).toBe(30);
+      expect(tint(seed).light.stop, seed).toBe(85);
+    }
+    // Where it would read worse, the tint steps until it reads as well.
+    for (const seed of ['#00704a', '#1db954', '#aec6cf', '#ccff00'])
+      for (const mode of /** @type {const} */ (['light', 'dark']))
+        expect(
+          contrast(
+            withText[mode]['--color-text-secondary'],
+            tint(seed)[mode].color,
+          ),
+          `${seed} ${mode}`,
+        ).toBeGreaterThanOrEqual(
+          Math.min(4.5, /** @type {number} */ (officialCitation(mode))) - 0.005,
+        );
+    expect(officialCitation('dark')).toBeCloseTo(
+      contrast('#9e9e9e', '#474747'),
+      2,
+    );
+  });
+
+  it('refuses a layout without black and white, with non-numbers, or with a wide gap', () => {
+    for (const [stops, why] of /** @type {const} */ ([
+      [[10, 20, 30, 40, 50, 60, 70], 'need 0 (black) and 100 (white)'],
+      [['0', '10', '20', '30', '40', '50', '100'], 'which are not numbers'],
+      [[0, 1, 2, 3, 4, 5, 100], 'leave a gap of 95'],
+    ]))
+      expect(
+        () =>
+          plan([{thing: 'accent', value: '#16a34a'}], {
+            config: {stops, families: []},
+          }),
+        why,
+      ).toThrow(why);
+  });
+
+  it('names what a config holds that changes nothing, and the colors it could not keep exact', () => {
+    const {pal} = plan(
+      [
+        {thing: 'neutral', value: '#78716c'},
+        {thing: 'accent', value: 'oklch(0.7 0.5 30)'},
+      ],
+      {
+        config: {
+          darkChromaTaper: {edgeMultiplier: 0.5},
+          neutralProfile: 'warm-v1',
+          families: [],
+        },
+      },
+    );
+    const notes = pal.notes.join(' ');
+    expect(notes).toContain('does not read darkChromaTaper');
+    expect(notes).toContain('neutralProfile warm-v1 changes nothing here');
+    expect(paletteNotes(pal, 'accent', 'x').join(' ')).toContain(
+      'is outside the colors every screen shows (sRGB)',
+    );
+  });
+
+  it('checks an exact main token against the light page too', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-palette-pale-'));
+    dirs.push(dir);
+    const pal = /** @type {import('./_palette.mjs').PaletteMapping} */ (
+      paletteMapping(
+        dir,
+        'x',
+        {
+          name: 'x',
+          mode: 'both',
+          settings: [
+            {thing: 'accent', value: '#2563eb', source: 'dial'},
+            {thing: '--color-accent', value: '#ffff00', source: 'token'},
+          ],
+        },
+        base,
+        tokenDefaults,
+      )
+    );
+    const notes = paletteNotes(pal, 'accent', 'x').join(' ');
+    expect(notes).toContain(
+      'your exact --color-accent (#ffff00) stands out from the page at only',
+    );
+    expect(notes).not.toContain('set --color-accent exactly');
+  });
+
+  it('never makes a see-through tint the fill itself, and keeps author anchors the editor did not write', () => {
+    const amber = plan([{thing: 'warning', value: '#f59e0b'}]);
+    const t = amber.pal.tokens;
+    expect(t['--color-warning'].dark.stop).toBe(75);
+    expect(t['--color-warning-muted'].dark.stop).not.toBe(75);
+    // The seed's color at another stop is the author's own anchor.
+    const own = {mode: 'light', stop: 55, color: '#2563eb', policy: 'exact'};
+    const kept = plan([{thing: 'accent', value: '#2563eb'}], {
+      config: {
+        families: [
+          {
+            id: 'accent',
+            seed: '#2563eb',
+            anchors: [
+              {mode: 'light', stop: 50, color: '#2563eb', policy: 'exact'},
+              own,
+            ],
+          },
+        ],
+      },
+      saved: [{thing: 'accent', value: '#2563eb', source: 'dial'}],
+    });
+    expect(fam(kept.config, 'accent').anchors).toContainEqual(own);
+    // An anchor kept across a new seed is named.
+    const moved = plan([{thing: 'accent', value: '#16a34a'}], {
+      config: {
+        families: [
+          {
+            id: 'accent',
+            seed: '#2563eb',
+            anchors: [
+              {mode: 'light', stop: 50, color: '#2563eb', policy: 'exact'},
+              {
+                mode: 'light',
+                stop: 90,
+                color: '#dde8ff',
+                policy: 'bounded',
+                maxDeltaE: 4,
+              },
+            ],
+          },
+        ],
+      },
+      saved: [{thing: 'accent', value: '#2563eb', source: 'dial'}],
+    });
+    expect(moved.pal.notes.join(' ')).toContain(
+      'keeps your own accent anchors (light 90 #dde8ff)',
+    );
+    // A kind the editor wrote for a gray is dropped without blaming you.
+    const gray = plan([{thing: 'accent', value: '#2563eb'}], {
+      config: {families: [{id: 'accent', seed: '#808080', kind: 'neutral'}]},
+      saved: [{thing: 'accent', value: '#808080', source: 'dial'}],
+    });
+    expect(gray.pal.notes.join(' ')).not.toContain('kind');
+  });
 });
 
 describe('color settings, refused well', () => {
@@ -921,19 +1113,24 @@ describe('color settings, refused well', () => {
   });
 
   it('suggests the dial for another name, a part route for a part, and the nearest vibrancy', async () => {
-    for (const [thing, dial] of [
-      ['Accent', 'accent'],
-      ['gray', 'neutral'],
-      ['saturation', 'vibrancy'],
-      ['destructive', 'danger'],
-      ['brand', 'accent'],
+    // The value carries over only to a dial that takes it.
+    for (const [thing, rest] of [
+      ['Accent', 'accent "#64748b"'],
+      ['gray', 'neutral "#64748b"'],
+      ['saturation', 'vibrancy 60'],
+      ['destructive', 'danger "#64748b"'],
+      ['brand', 'accent "#64748b"'],
     ]) {
       const r = await refusal(() => themeEditSet('p', thing, '#64748b', {cwd}));
       expect(r.code, thing).toBe('ERR_THEME_UNKNOWN_THING');
       expect(r.run[0], thing).toBe(
-        `astryx experimental theme editor set p ${dial} "#64748b"`,
+        `astryx experimental theme editor set p ${rest}`,
       );
     }
+    expect(
+      (await refusal(() => themeEditSet('p', 'accent', '#ff000', {cwd})))
+        .run[0],
+    ).toBe('astryx experimental theme editor set p accent "#ff0000"');
     const inputs = await refusal(() =>
       themeEditSet('p', 'info', 'blue', {cwd, on: 'inputs'}),
     );
@@ -966,33 +1163,112 @@ describe('color settings, refused well', () => {
     await themeEditUndo('p', {cwd, thing: 'accent'});
   });
 
-  it('never overwrites a hand-edited palette, and regenerates one from another generator version', async () => {
+  it('never overwrites a hand-edited palette, lets other changes through, and regenerates one from another generator version', async () => {
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
-    const edited = read('tokens/p.palette.ts').replace('#7c3aed', '#7c3aee');
+    const original = read('tokens/p.palette.ts');
+    // Formatting is not an edit: line endings, a trailing newline, quotes.
+    fs.writeFileSync(
+      file('tokens/p.palette.ts'),
+      `${original.replace(/\n/g, '\r\n').replace(/"/g, "'")}\n`,
+    );
+    await themeEditSet('p', 'accent', '#6d28d9', {cwd});
+    expect(read('tokens/p.palette.ts')).toContain('#6d28d9');
+    const edited = read('tokens/p.palette.ts').replace('#6d28d9', '#6d28da');
     fs.writeFileSync(file('tokens/p.palette.ts'), edited);
+    // A change that leaves the colors alone goes ahead, and show names the edit.
+    await themeEditSet('p', 'corners', 'round', {cwd});
+    expect(
+      (await themeEditShow('p', {cwd})).data.colorNotes.join(' '),
+    ).toContain('p.palette.ts was edited by hand');
     const r = await refusal(() =>
       themeEditSet('p', 'accent', '#2563eb', {cwd}),
     );
     expect(r.code).toBe('ERR_THEME_INVALID');
     expect(r.message).toContain('was edited by hand');
-    expect(r.run).toEqual([
-      'cp themes/p/tokens/p.palette.ts themes/p/p.my-colors.ts',
-      'rm themes/p/tokens/p.palette.ts',
-    ]);
+    // The way out is told in words: no command that moves or deletes files.
+    expect(r.run).toEqual([]);
+    expect(r.message).toContain('move the file out of tokens/');
     expect(read('tokens/p.palette.ts')).toBe(edited);
-    fs.rmSync(file('tokens/p.palette.ts'));
+    // A missing receipt is no way around it.
+    fs.rmSync(file('tokens/p.palette.receipt.json'));
+    expect(
+      (await refusal(() => themeEditSet('p', 'accent', '#2563eb', {cwd}))).code,
+    ).toBe('ERR_THEME_INVALID');
+    // Moving the file out keeps the edit, in one step.
+    fs.renameSync(file('tokens/p.palette.ts'), file('p.my-colors.ts'));
     await themeEditSet('p', 'accent', '#2563eb', {cwd});
     expect(read('tokens/p.palette.ts')).toContain('#2563eb');
+    expect(read('p.my-colors.ts')).toBe(edited);
+    fs.rmSync(file('p.my-colors.ts'));
     const receipt = JSON.parse(read('tokens/p.palette.receipt.json'));
     fs.writeFileSync(
       file('tokens/p.palette.receipt.json'),
       JSON.stringify({...receipt, generatorVersion: 'an-older-generator'}),
     );
-    await themeEditSet('p', 'corners', 'round', {cwd});
+    await themeEditSet('p', 'corners', 'small', {cwd});
     expect(
       JSON.parse(read('tokens/p.palette.receipt.json')).generatorVersion,
     ).toBe(receipt.generatorVersion);
     await themeEditUndo('p', {cwd, thing: 'corners'});
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
+  it('builds any numeric stop layout and never ships an unresolved color', async () => {
+    await themeEditSet('p', 'accent', '#2563eb', {cwd});
+    const config = JSON.parse(read('palette.config.json'));
+    fs.writeFileSync(
+      file('palette.config.json'),
+      JSON.stringify({
+        ...config,
+        stops: [0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100],
+      }),
+    );
+    await themeEditSet('p', 'accent', '#16a34a', {cwd});
+    for (const out of ['p.css', 'p.js', 'p.settings.ts'])
+      expect(read(out), out).not.toContain('@@palette:');
+    expect(read('p.settings.ts')).toMatch(/palette\.accent\.light\[\d+\.5\]/);
+    expect(read('tokens/p.palette-refs.ts')).toMatch(/\d+\.5: '#[0-9a-f]{6}'/);
+    const back = JSON.parse(read('palette.config.json'));
+    delete back.stops;
+    fs.writeFileSync(file('palette.config.json'), JSON.stringify(back));
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
+  it('fixes a vibrancy edited by hand with the commands it names, keeping the colors', async () => {
+    await themeEditSet('p', 'accent', '#2563eb', {cwd});
+    const settings = JSON.parse(read('p.settings.json'));
+    fs.writeFileSync(
+      file('p.settings.json'),
+      JSON.stringify({
+        ...settings,
+        settings: [
+          ...settings.settings,
+          {thing: 'vibrancy', value: 'high', source: 'dial'},
+        ],
+      }),
+    );
+    const refused = await refusal(() =>
+      themeEditSet('p', 'corners', 'small', {cwd}),
+    );
+    expect(refused.run[0]).toBe(
+      'astryx experimental theme editor undo p vibrancy',
+    );
+    await themeEditUndo('p', {cwd, thing: 'vibrancy'});
+    expect(JSON.parse(read('p.settings.json')).settings).toEqual([
+      {thing: 'accent', value: '#2563eb', source: 'dial'},
+    ]);
+    fs.writeFileSync(
+      file('p.settings.json'),
+      JSON.stringify({
+        ...settings,
+        settings: [
+          ...settings.settings,
+          {thing: 'vibrancy', value: '150', source: 'dial'},
+        ],
+      }),
+    );
+    await themeEditSet('p', 'vibrancy', '60', {cwd});
+    expect(JSON.parse(read('palette.config.json')).vibrancy).toBe(60);
     await themeEditUndo('p', {cwd, thing: 'accent'});
   });
 });

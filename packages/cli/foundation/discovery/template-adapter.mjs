@@ -27,6 +27,7 @@ import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
+import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
 import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
@@ -2096,11 +2097,33 @@ export function extractComponents(pagePath) {
 /**
  * The components a template source composes. A surface that returns rewritten
  * source lists the components of that source, so a component the rewrite
- * removed is not listed.
+ * removed is not listed. A template Astryx ships answers from its stored list
+ * (TEMPLATE_COMPONENTS_FILE), which holds what parsing it returns; any other
+ * source, such as an integration's template, is parsed.
  * @param {string} src
  * @returns {string[]}
  */
 export function componentsInSource(src) {
+  const known = readStore(TEMPLATE_COMPONENTS_FILE).get(storedKey(src));
+  if (known) return [...known];
+  return parsedComponents(src);
+}
+
+/** Where the component lists of the templates Astryx ships are stored. */
+export const TEMPLATE_COMPONENTS_FILE = path.join(
+  CLI_ROOT,
+  'assets',
+  'templates',
+  'components.generated.json',
+);
+
+/**
+ * The components a template source composes, read from its syntax tree (see
+ * componentsInSource).
+ * @param {string} src
+ * @returns {string[]}
+ */
+export function parsedComponents(src) {
   // Match JSX opening tags, e.g. `<Section` or the legacy `<XDSSection`.
   // Templates author bare component names post un-prefix migration,
   // so the `XDS` prefix is optional. Anchoring on the `<`

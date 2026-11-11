@@ -42,7 +42,9 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   findAstryxProject,
   findPackageRoot,
+  findProjectCoreDir,
 } from '../../foundation/fs/paths.mjs';
+import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {tryLock} from '../../foundation/release/cache.mjs';
 import {q} from './_settings.mjs';
 
@@ -117,23 +119,6 @@ export function projectRoot(cwd) {
   return project ?? start;
 }
 
-/**
- * The node_modules folder Core resolves from for `root` (its own, or one
- * above it, as Node finds packages), or null when Core is not installed.
- * @param {string} root
- * @returns {string | null}
- */
-function coreModules(root) {
-  for (let d = root; ; d = path.dirname(d)) {
-    const modules = path.join(d, 'node_modules');
-    if (
-      fs.existsSync(path.join(modules, '@astryxdesign', 'core', 'package.json'))
-    )
-      return modules;
-    if (path.dirname(d) === d) return null;
-  }
-}
-
 /** The locks this process holds now. */
 const HELD = new Set();
 
@@ -141,18 +126,22 @@ const HELD = new Set();
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Where a project's locks are: the `.cache` of the node_modules its Core
- * is installed in (the project's own, or a workspace root's), shared by
+ * Where a project's locks are: the `.cache` of the node_modules holding
+ * the Core the command reads (the project's own, or a workspace root's), shared by
  * every shell and user that can change the project, outside the source
- * tree. Null when Core is not installed for it (nothing can be written
- * without Core, so there is nothing to keep apart). A folder that
+ * tree. Null outside a project or without Core (nothing can be written
+ * then, so there is nothing to keep apart). A folder that
  * cannot be written is refused, naming it.
  * @param {string} root
  * @returns {string | null}
  */
 function lockDir(root) {
-  const modules = coreModules(root);
-  if (!modules) return null;
+  // The Core the command reads decides where; outside a project there is
+  // none, and no lock.
+  if (isOutsideProject(root)) return null;
+  const core = findProjectCoreDir(root);
+  if (!core) return null;
+  const modules = path.dirname(path.dirname(core));
   const dir = path.join(modules, '.cache', 'astryx-theme', 'locks');
   try {
     fs.mkdirSync(dir, {recursive: true});
@@ -177,10 +166,20 @@ function lockDir(root) {
  * @param {string} root
  * @param {string} name
  * @param {() => Promise<T>} fn
+ * @param {boolean} [bestEffort] a command that only reads, or writes
+ *   nothing a lock guards, runs without the lock when it cannot be taken
+ *   (a read-only node_modules)
  * @returns {Promise<T>}
  */
-async function withLock(root, name, fn) {
-  const dir = lockDir(root);
+async function withLock(root, name, fn, bestEffort = false) {
+  /** @type {string | null} */
+  let dir;
+  try {
+    dir = lockDir(root);
+  } catch (e) {
+    if (bestEffort) return fn();
+    throw e;
+  }
   if (!dir) return fn();
   const key = createHash('sha256').update(root).digest('hex').slice(0, 16);
   const lock = path.join(dir, `${key}-${name}.lock`);
@@ -210,13 +209,8 @@ async function withLock(root, name, fn) {
       if (waited > 30_000) {
         const o = owner();
         throw new AstryxError(
-          `Another command is changing ${name.replace(/^theme-/, '')} and did not finish within 30 seconds${o ? ` (process ${o.pid} on ${o.host}, for ${Math.round((Date.now() - Number(o.at)) / 1000)} s)` : ''}. Nothing was changed; run this command again. If no astryx command is running, remove the lock ${lock}.`,
-          [
-            {
-              name: `rm -r ${q(lock)}`,
-              reason: 'only when no astryx command is running',
-            },
-          ],
+          `Another command is changing ${name.replace(/^theme-/, '')} and did not finish within 30 seconds${o ? ` (process ${o.pid} on ${o.host}, for ${Math.round((Date.now() - Number(o.at)) / 1000)} s)` : ''}. Nothing was changed; run this command again. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
+          [],
           ERROR_CODES.ERR_THEME_BUSY,
         );
       }
@@ -224,6 +218,7 @@ async function withLock(root, name, fn) {
     }
   } catch (e) {
     if (e instanceof AstryxError) throw e;
+    if (bestEffort) return fn();
     throw new AstryxError(
       `Could not take the lock ${lock} (${/** @type {any} */ (e).code ?? String(e)}). Nothing was changed; fix the folder, then run the command again.`,
       [],
@@ -336,12 +331,29 @@ function absolute(result, root, from) {
  * @param {(o: O & {cwd: string}) => Promise<T>} fn
  * @returns {Promise<T>}
  */
-async function inProject(options, lock, fn) {
+async function inProject(options, lock, fn, bestEffort = false) {
   const from = options.cwd ?? process.cwd();
   const o = atRoot(options);
-  const r = lock ? await withLock(o.cwd, lock, () => fn(o)) : await fn(o);
+  const r = lock
+    ? await withLock(o.cwd, lock, () => fn(o), bestEffort)
+    : await fn(o);
   return absolute(r, o.cwd, from);
 }
+
+/**
+ * Options for a preview command, with a way to hold a theme's lock while
+ * the preview builds that theme.
+ * @template {{cwd: string}} O
+ * @param {O} o
+ * @returns {any}
+ */
+const withThemeLock = o => ({
+  ...o,
+  lockTheme: (
+    /** @type {string} */ slug,
+    /** @type {() => Promise<any>} */ fn,
+  ) => withLock(o.cwd, lockName(slug), fn),
+});
 
 /** @type {typeof edit.themeEditNew} */
 export const themeEditNew = (name, options = {}) =>
@@ -356,11 +368,11 @@ export const themeEditUndo = (theme, options = {}) =>
   inProject(options, lockName(theme), o => edit.themeEditUndo(theme, o));
 /** @type {typeof edit.themeEditShow} */
 export const themeEditShow = (theme, options = {}) =>
-  inProject(options, lockName(theme), o => edit.themeEditShow(theme, o));
+  inProject(options, lockName(theme), o => edit.themeEditShow(theme, o), true);
 /** @type {typeof preview.themeEditPreviewAdd} */
 export const themeEditPreviewAdd = (description, options = {}) =>
   inProject(options, 'preview', o =>
-    preview.themeEditPreviewAdd(description, o),
+    preview.themeEditPreviewAdd(description, withThemeLock(o)),
   );
 /**
  * `preview app` runs from the project root, with `dir` kept pointing where
@@ -380,6 +392,7 @@ export const themeEditPreviewApp = (dir, options = {}) => {
           : dir,
         o,
       ),
+    true,
   );
 };
 /** @type {typeof preview.themeEditPreviewList} */
@@ -387,4 +400,6 @@ export const themeEditPreviewList = (options = {}) =>
   inProject(options, null, async o => preview.themeEditPreviewList(o));
 /** @type {typeof preview.themeEditPreviewRemove} */
 export const themeEditPreviewRemove = (page, options = {}) =>
-  inProject(options, 'preview', o => preview.themeEditPreviewRemove(page, o));
+  inProject(options, 'preview', o =>
+    preview.themeEditPreviewRemove(page, withThemeLock(o)),
+  );

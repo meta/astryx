@@ -120,6 +120,14 @@ export async function renderGenerated(project, file, source, extra = []) {
       );
     })();
   fs.mkdirSync(dir, {recursive: true});
+  // Stopped by a signal, the render folder still goes.
+  const cleanup = () => fs.rmSync(dir, {recursive: true, force: true});
+  const onSignal = (/** @type {NodeJS.Signals} */ sig) => {
+    cleanup();
+    process.kill(process.pid, sig);
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
   const entry = path.join(dir, file);
   fs.writeFileSync(entry, source);
   for (const x of extra) {
@@ -149,6 +157,8 @@ export async function renderGenerated(project, file, source, extra = []) {
     for (const f of [entry, ...extra.map(x => path.join(dir, x.name))])
       fs.rmSync(f, {force: true});
     removeEmpty(madeThemes ? themes : dir);
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
   }
 }
 
