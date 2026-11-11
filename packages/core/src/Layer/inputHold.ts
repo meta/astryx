@@ -29,12 +29,20 @@ import {
 } from '../utils/inputStream';
 import {isDocument, isElement, isHTMLElement, isNode} from '../utils/nodeType';
 import {realmValue, sharedKey} from '../utils/sharedRealm';
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {
+  hasLayerRootWithin,
+  isLayerRoot,
+} from '../privateAttributes/layerRoot.stylex';
+import {notifyTopLayerEntry} from './modalOutlet';
 
 /**
  * What a hold does. `'viewport'` and `'layer'` add one shield over the whole
  * viewport. `'layer'` also makes the layer's content inert and moves focus
- * out of it. `'surface'` shields only the layer's own box, and the page
- * around it stays live.
+ * out of it. Another layer inside it, such as the toast viewport that an open
+ * modal holds, stays live under `'layer'`: it takes input, and it goes back
+ * above the shield. `'surface'` shields only the layer's own box, and the
+ * page around it stays live.
  */
 export type InputHoldScope = 'viewport' | 'layer' | 'surface';
 
@@ -130,12 +138,30 @@ export function isInHeldLayer(target: Node | null): boolean {
 }
 
 /**
+ * Whether `target` is inside another layer that sits inside `layer`, such as
+ * the toast viewport an open modal holds. A dismissal holds only its own
+ * layer's content.
+ */
+function isInNestedLayer(target: Node, layer: Node): boolean {
+  for (
+    let node: Node | null = target;
+    node != null && node !== layer;
+    node = parentAcrossShadow(node)
+  ) {
+    if (isElement(node) && isLayerRoot(node)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Whether the gesture host holds `target` away for the current pointer. A
- * dismissing layer holds every pointer. A presenting layer holds every
- * pointer but a mouse, which keeps today's behavior. The host asks this for
- * every touch. So this module imports nothing from gestures/, and a
- * root-entry component can hold its layer without gesture code. With nothing
- * held, this answers false.
+ * dismissing layer holds every pointer, except in another layer inside it. A
+ * presenting layer holds every pointer but a mouse, which keeps today's
+ * behavior. The host asks this for every touch. So this module imports
+ * nothing from gestures/, and a root-entry component can hold its layer
+ * without gesture code. With nothing held, this answers false.
  */
 export function holdsTouch(target: Node): boolean {
   const doc = isDocument(target) ? target : target.ownerDocument;
@@ -155,10 +181,13 @@ export function holdsTouch(target: Node): boolean {
   ) {
     const state = isElement(node) ? held.get(node) : undefined;
     if (state != null) {
-      if (state.layer > 0) {
+      const isNested = state.layer > 0 && isInNestedLayer(target, node);
+      if (state.layer > 0 && !isNested) {
         return true;
       }
-      isHeld = true;
+      if (!isNested || state.viewport > 0 || state.surface > 0) {
+        isHeld = true;
+      }
     }
   }
   return isHeld && !isMouseLast(doc);
@@ -462,6 +491,9 @@ export function holdInput(
     state.shield.style.pointerEvents = 'auto';
     if (state.layer === 1) {
       state.inertContent = makeContentInert(layer, state.shield);
+      // A layer inside this one goes back into the top layer, above the
+      // shield.
+      notifyTopLayerEntry();
     }
   }
   if (raisesFullShield) {
@@ -618,9 +650,10 @@ function createPressHold(doc: Document): PressHold | null {
 
   /**
    * Whether a new press that lands on `target` is held. While a layer is held
-   * over the viewport, a press anywhere is held. While a layer is held only
-   * to its box (a `'surface'` hold), only a press on the layer is held. The
-   * page around it stays live.
+   * over the viewport, a press anywhere is held, except one in another layer
+   * inside a dismissing layer. While a layer is held only to its box (a
+   * `'surface'` hold), only a press on the layer is held. The page around it
+   * stays live.
    */
   const holdsPressAt = (target: EventTarget | null) => {
     if (!holdsNewPress()) {
@@ -631,7 +664,10 @@ function createPressHold(doc: Document): PressHold | null {
       if (state == null) {
         continue;
       }
-      if (state.viewport > 0 || state.layer > 0) {
+      if (
+        state.viewport > 0 ||
+        (state.layer > 0 && !(isNode(target) && isInNestedLayer(target, layer)))
+      ) {
         return true;
       }
       if (
@@ -881,24 +917,57 @@ function createPressHold(doc: Document): PressHold | null {
 }
 
 /**
- * Makes the layer's content inert, except the shield, and moves focus out of
- * it. An element that turns inert while focused keeps its focus and its key
- * activation. Enter and Space still click such a button until the engine's
- * focus fixup runs, if it runs. Blurring it leaves focus on the document, as
- * that fixup does. The layer element itself stays live. An inert subtree is
- * no hit target, so the shield inside the layer still catches every hit.
+ * Whether `element` is a live region with nothing focusable in it. It takes
+ * no input, and inert would drop the words written to it, so a hold leaves it
+ * live.
+ */
+function isTextLiveRegion(element: Element): boolean {
+  const live = element.getAttribute('aria-live');
+  const isLive =
+    live != null
+      ? live !== 'off'
+      : ['status', 'alert', 'log'].includes(element.getAttribute('role') ?? '');
+  return (
+    isLive &&
+    !element.matches(FOCUSABLE_SELECTOR) &&
+    element.querySelector(FOCUSABLE_SELECTOR) == null
+  );
+}
+
+/**
+ * Makes the layer's content inert and moves focus out of it. The shield, a
+ * child live region with nothing focusable, and another layer inside this one
+ * stay live. An element that holds another layer stays live, and its other
+ * children go inert, because inert content has no live descendant. An element
+ * that turns inert while focused keeps its focus and its key activation.
+ * Enter and Space still click such a button until the engine's focus fixup
+ * runs, if it runs. Blurring it leaves focus on the document, as that fixup
+ * does. The layer element itself stays live. An inert subtree is no hit
+ * target, so the shield inside the layer still catches every hit.
  */
 function makeContentInert(
   layer: Element,
   shield: Element,
 ): Map<Element, boolean> {
   const content = new Map<Element, boolean>();
-  for (const child of layer.children) {
-    if (child !== shield) {
+  const makeInertAround = (parent: Element, isLayer: boolean) => {
+    for (const child of parent.children) {
+      if (
+        child === shield ||
+        isLayerRoot(child) ||
+        (isLayer && isTextLiveRegion(child))
+      ) {
+        continue;
+      }
+      if (hasLayerRootWithin(child)) {
+        makeInertAround(child, false);
+        continue;
+      }
       content.set(child, child.hasAttribute('inert'));
       child.setAttribute('inert', '');
     }
-  }
+  };
+  makeInertAround(layer, true);
   const focused = deepActiveElement(layer.ownerDocument);
   if (
     isHTMLElement(focused) &&

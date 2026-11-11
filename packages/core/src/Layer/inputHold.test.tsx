@@ -10,6 +10,7 @@ import {
   vi,
 } from 'vitest';
 import {GestureHost} from '../gestures/GestureHost';
+import {layerRootProps} from '../privateAttributes/layerRoot.stylex';
 import {subscribeInput} from '../utils/inputStream';
 import {
   holdInput,
@@ -18,6 +19,7 @@ import {
   isInputShield,
   type InputHoldScope,
 } from './inputHold';
+import {subscribeModalOutlets, type ModalOutletChange} from './modalOutlet';
 
 function deferred() {
   let resolve: () => void = () => {};
@@ -42,6 +44,24 @@ const flush = async () => {
   await Promise.resolve();
   await Promise.resolve();
 };
+
+/**
+ * Another layer inside `layer`, as the toast viewport sits in an open modal:
+ * a host, with a sibling, around a marked layer root that holds a button.
+ */
+function mountNestedLayer(layer: Element) {
+  const host = document.createElement('div');
+  const sibling = document.createElement('div');
+  const root = document.createElement('div');
+  for (const [name, value] of Object.entries(layerRootProps)) {
+    root.setAttribute(name, value);
+  }
+  const button = document.createElement('button');
+  root.append(button);
+  host.append(sibling, root);
+  layer.append(host);
+  return {host, sibling, root, button};
+}
 
 /**
  * What a listener throws during a case: jsdom reports it as an `error` event
@@ -167,6 +187,70 @@ describe('holdInput', () => {
     expect(already.hasAttribute('inert')).toBe(true);
     expect(shield.isConnected).toBe(false);
     expect(isInHeldLayer(child)).toBe(false);
+  });
+
+  it('leaves another layer inside a dismissing layer live, with the path to it: the toast viewport a modal holds keeps its input, and the rest goes inert (spec:AST-003 FR16)', async () => {
+    const {layer, child} = mountLayer();
+    const nested = mountNestedLayer(layer);
+    const end = deferred();
+    holdInput(layer, {until: end.promise, scope: 'layer'});
+    expect(child.hasAttribute('inert')).toBe(true);
+    expect(nested.host.hasAttribute('inert')).toBe(false);
+    expect(nested.root.hasAttribute('inert')).toBe(false);
+    expect(nested.sibling.hasAttribute('inert')).toBe(true);
+    // The gesture host lets a touch on the other layer through, not one on
+    // the dismissing layer's own content.
+    expect(holdsTouch(nested.button)).toBe(false);
+    expect(holdsTouch(child)).toBe(true);
+    end.resolve();
+    await flush();
+    expect(nested.sibling.hasAttribute('inert')).toBe(false);
+    expect(child.hasAttribute('inert')).toBe(false);
+  });
+
+  it('still holds a touch on another layer inside a presenting layer', () => {
+    const {layer} = mountLayer();
+    const nested = mountNestedLayer(layer);
+    holdInput(layer, {until: new Promise(() => {}), scope: 'viewport'});
+    expect(holdsTouch(nested.button)).toBe(true);
+  });
+
+  it('leaves a live region with nothing focusable in a dismissing layer live, so words written during the dismissal reach assistive technology (spec:AST-086 FR2); one that holds a control goes inert', async () => {
+    const {layer} = mountLayer();
+    const status = document.createElement('div');
+    status.setAttribute('role', 'status');
+    const polite = document.createElement('div');
+    polite.setAttribute('aria-live', 'polite');
+    const off = document.createElement('div');
+    off.setAttribute('aria-live', 'off');
+    const withControl = document.createElement('div');
+    withControl.setAttribute('role', 'alert');
+    withControl.append(document.createElement('button'));
+    layer.append(status, polite, off, withControl);
+    const end = deferred();
+    holdInput(layer, {until: end.promise, scope: 'layer'});
+    expect(status.hasAttribute('inert')).toBe(false);
+    expect(polite.hasAttribute('inert')).toBe(false);
+    expect(off.hasAttribute('inert')).toBe(true);
+    expect(withControl.hasAttribute('inert')).toBe(true);
+    end.resolve();
+    await flush();
+  });
+
+  it("puts the global hosts back above a dismissal's shield: it tells the modal outlets a surface entered the top layer, and a presentation does not", async () => {
+    const changes: (ModalOutletChange | undefined)[] = [];
+    onTestFinished(subscribeModalOutlets(change => changes.push(change)));
+    const presenting = mountLayer();
+    const presented = deferred();
+    holdInput(presenting.layer, {until: presented.promise, scope: 'viewport'});
+    expect(changes).toEqual([]);
+    const dismissing = mountLayer();
+    const dismissed = deferred();
+    holdInput(dismissing.layer, {until: dismissed.promise, scope: 'layer'});
+    expect(changes).toEqual(['entry']);
+    presented.resolve();
+    dismissed.resolve();
+    await flush();
   });
 
   it('names a live hold’s shield, and only it, so a hit test can skip it', () => {
@@ -439,6 +523,18 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     tap(onLayer.button, 'touch', 2);
     expect(onLayer.reached).toEqual([]);
     expect(holdsTouch(onLayer.button)).toBe(true);
+  });
+
+  it("leaves a finger's press on another layer inside a dismissing layer alone, with its release and click (spec:AST-003 FR16)", () => {
+    const {layer} = mountLayer();
+    const nested = mountNestedLayer(layer);
+    nested.button.remove();
+    const {button, reached} = recorder(nested.root);
+    hold(layer, 'layer');
+    pointer(button, 'pointerdown', 'touch');
+    pointer(button, 'pointerup', 'touch');
+    click(button, 'touch');
+    expect(reached).toEqual(['pointerdown', 'pointerup', 'click']);
   });
 
   it("holds a pen's press as a finger's", () => {
