@@ -19,7 +19,7 @@ import {
   type ISODateTimeString,
 } from '../DateTimeInput/DateTimeInput';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
-import {monthGridKeyTarget} from './MonthPane';
+import {monthGridKeyTarget} from './MonthScroller';
 import {createMonthModel, dateInMonth} from './monthGeometry';
 import {
   type CalendarSystem,
