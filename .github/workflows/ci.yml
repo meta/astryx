@@ -101,7 +101,7 @@ permissions: {}
 # its own, so re-running an older head never cancels the run for the pull
 # request's current head.
 concurrency:
-  group: "ci-${{ github.event.pull_request.number && (github.run_attempt == '1' && github.event.pull_request.number || format('{0}-rerun-{1}', github.event.pull_request.number, github.run_id)) || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && 'interaction-full') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && 'webkit-weekly') || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
+  group: "ci-${{ github.event.pull_request.number && (github.run_attempt == '1' && github.event.pull_request.number || format('{0}-rerun-{1}', github.event.pull_request.number, github.run_id)) || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && 'interaction-full') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && github.ref == 'refs/heads/main' && 'webkit-weekly') || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
 
 jobs:
@@ -1510,7 +1510,7 @@ jobs:
     # the run; every job that uses its build also needs admission, so the heavy
     # legs still wait for room (spec:AST-030 FR16, DEC-16).
     needs: [room, heavy-ci]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check' || inputs.operation == 'webkit-weekly' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always() && !cancelled() && needs.room.outputs.full != 'true')) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check' || inputs.operation == 'webkit-weekly' && github.ref == 'refs/heads/main' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always() && !cancelled() && needs.room.outputs.full != 'true')) }}
     # Every browser lane waits for this job, and the package builds and the
     # Storybook build run side by side (build-packages-and-storybook.mjs).
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
@@ -3085,7 +3085,9 @@ jobs:
   # a WebKit break elsewhere never turns an unrelated pull request red; the
   # motion adopters spec renders Storybook components and stays with the
   # Chromium proofs. A release interaction check (an `interaction-check/`
-  # branch from the release tooling) runs every spec (spec:AST-030 FR28).
+  # branch from the release tooling) runs the same subset. It runs every spec
+  # only after a failed or stale weekly full run and at a minor release. The
+  # weekly run on main runs every spec.
   # Out of scope every step after the scope step skips and the job reports
   # success, so the `test` join reads it without a new required context. Specs that need Chromium-only evidence skip themselves
   # in WebKit.

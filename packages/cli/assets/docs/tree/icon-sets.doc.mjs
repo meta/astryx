@@ -143,7 +143,7 @@ astryx experimental icon add --variant solid --from @heroicons/react/24/solid --
         },
         {
           type: 'prose',
-          text: 'A library whose icons are data (objects or SVG strings) has no components to find: create the set, declare an `adapter` in its data file (see library shapes), and run the command again; every data export then becomes an icon through the adapter. When every icon export shares a leading word, such as `feather` in `featherEye` and `featherSun`, ids and export names leave it out: `featherEye` becomes id `eye`, exported as `EyeIcon`. The prefix is read over icon-like exports only: SCREAMING_CASE constants (`README`, `VERSION`), number and boolean exports, and, next to components or icon objects, plain strings are never icons. Components named `…Provider` or `…Context` are never icons either, and neither is a pack: an object whose keys are all other exports of the module, such as `fas` next to `faXmark`. Leave out any other export that is not an icon with `--exclude meta,version`: the data file keeps the list in `exclude`, so a refresh leaves them out too. When a library exports one icon under several names (`Trash2` and `Trash`), the icon is recorded once and its other names become words, so `experimental icon trash-2` finds it and `experimental icon map delete trash-2` maps it. `experimental icon add` reads the prefix the same way, and reuses the icon an export already has, so its commands need no `--id`.',
+          text: 'A library whose icons are data (objects or SVG strings) has no components to find: write an adapter (see library shapes) and pass it, as in `experimental icon new-set fa --from @acme/glyph-data --adapter ./src/adapt.js#adapt`; every data export then becomes an icon through the adapter. When every icon export shares a leading word, such as `feather` in `featherEye` and `featherSun`, ids and export names leave it out: `featherEye` becomes id `eye`, exported as `EyeIcon`. The prefix is read over icon-like exports only: SCREAMING_CASE constants (`README`, `VERSION`), number and boolean exports, and, next to components or icon objects, plain strings are never icons. Components named `…Provider` or `…Context` are never icons either, and neither is a pack: an object whose keys are all other exports of the module, such as `fas` next to `faXmark`. Leave out any other export that is not an icon with `--exclude meta,version`: the data file keeps the list in `exclude`, so a refresh leaves them out too. When a library exports one icon under several names (`Trash2` and `Trash`), the icon is recorded once and its other names become words, so `experimental icon trash-2` finds it and `experimental icon map delete trash-2` maps it. `experimental icon add` reads the prefix the same way, and reuses the icon an export already has, so its commands need no `--id`.',
         },
       ],
     },
@@ -241,7 +241,7 @@ for (const [name, Icon] of Object.entries(icons)) {
         },
         {
           type: 'prose',
-          text: 'An export that is not a component goes through your adapter: a function in your package that turns it into one. Declare it in the data file, `"adapter": {"module": "./src/adapt.js", "export": "adapt"}`, and `experimental icon add` writes `export const RocketIcon = adaptIcon(RocketIconSource);`:',
+          text: 'An export that is not a component goes through your adapter: a function in your package that turns it into one. Pass it to `experimental icon new-set` as `--adapter ./src/adapt.js#adapt`, which declares it in the data file as `"adapter": {"module": "./src/adapt.js", "export": "adapt"}`; with `--from`, every data export becomes an icon through it, and `experimental icon add` writes `export const RocketIcon = adaptIcon(RocketIconSource);`:',
         },
         {
           type: 'code',
@@ -307,6 +307,10 @@ export const brand = defineTheme({name: 'brand', icons: themeIcons});`,
         {
           type: 'prose',
           text: 'The other Astryx definitions your set leaves unmapped are not issues: a library need not draw every definition. They are listed under "Unmapped icon definitions (optional)", and in the JSON as the validate result\'s `iconSets`: for each set, `unmappedDefinitions` (each `{name, description, words}`) and `suggestions` (each `{definition, icon}`, for any unmapped definition one of your icons fits). They are never counted and never fail a check.',
+        },
+        {
+          type: 'prose',
+          text: 'Templates use more meanings than the built-in ones, such as `document` and `share`. A copied template shows a placeholder for each meaning your set does not map. To see which, run `astryx experimental icon --definitions` in your package: each definition shows how many templates use it and whether your set maps it. `new-set`, `add`, and `map` end with a line that names the template meanings the set still leaves unmapped, most used first, and `integration check` lists them under "Template icon meanings not mapped" (in the JSON, each set\'s `templateMeanings.unmapped`, each `{definition, templates}`). This list never fails a check.',
         },
         {
           type: 'prose',
