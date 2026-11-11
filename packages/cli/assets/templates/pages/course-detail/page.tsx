@@ -336,16 +336,33 @@ const hoverStyles = `
    (Polish: the paddings were written camelCase — paddingInline and kin —
    which a stylesheet parses as unknown properties and drops, so every text
    sat hard on its rule. Kebab, as CSS spells them.) */
-
+.cr11-footgrid{display:grid;}
+.cr11-footcell{padding-block:40px;}
+.cr11-footcell:first-child{padding-top:0;}
+.cr11-footcell:last-child{padding-bottom:0;}
+.cr11-footcell + .cr11-footcell{border-top:1px solid var(--color-border);}
 @media(min-width:1024px){
-
+  .cr11-footgrid{grid-template-columns:1.15fr 1fr 1fr 1.25fr;}
+  .cr11-footcell{padding-block:0;}
+  .cr11-footcell + .cr11-footcell{border-top:none;border-inline-start:1px solid var(--color-border);}
+  .cr11-footcell{padding-inline:40px;}
+  .cr11-footcell:first-child{padding-inline-start:0;}
+  .cr11-footcell:last-child{padding-inline-end:0;}
 }
-
+.cr11-footlink{background:transparent;border:none;padding:0;cursor:pointer;font:inherit;font-size:14px;color:var(--color-text-secondary);text-decoration-line:underline;text-decoration-color:transparent;text-underline-offset:4px;transition:color var(--duration-fast) var(--ease-standard);}
+.cr11-footlink:hover{color:var(--color-text-primary);}
+.cr11-footlink:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:var(--focus-outline-offset);}
 /* the newsletter's inline field: card ground, hairline ring that darkens
    under the pointer, a 36px round submit in the brand fill */
-
-@media(min-width:640px){}
-
+.cr11-newsrow{display:flex;height:44px;align-items:center;border-radius:var(--radius-element);background:var(--color-background-card);padding-inline-start:16px;padding-inline-end:4px;box-shadow:inset 0 0 0 1px var(--color-border);transition:box-shadow var(--duration-fast) var(--ease-standard);}
+.cr11-newsrow:hover{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--color-text-primary) 20%,transparent);}
+.cr11-newsrow:focus-within{box-shadow:inset 0 0 0 2px var(--color-accent);}
+.cr11-newsinput{min-width:0;flex:1 1 auto;height:100%;background:transparent;border:none;outline:none;font:inherit;font-size:16px;color:var(--color-text-primary);}
+.cr11-newsinput::placeholder{color:var(--color-text-secondary);}
+@media(min-width:640px){.cr11-newsinput{font-size:14px;}}
+.cr11-newssub{display:flex;width:36px;height:36px;flex:0 0 auto;align-items:center;justify-content:center;border-radius:999px;background:var(--color-accent);color:var(--color-on-accent);border:none;cursor:pointer;transition:background-color var(--duration-fast) var(--ease-standard);}
+.cr11-newssub:hover{background:color-mix(in srgb,var(--color-accent) 80%,transparent);}
+.cr11-newssub:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:var(--focus-outline-offset);}
 .cr7-card{position:relative;display:flex;flex-direction:column;height:100%;border-radius:var(--radius-container);background:var(--color-background-card);box-shadow:var(--shadow-low);padding:8px;transition:box-shadow 200ms cubic-bezier(0,0,0.2,1);}
 .cr7-card:hover{box-shadow:var(--shadow-med);}
 .cr7-cardlink{position:absolute;inset:0;z-index:1;border-radius:inherit;background:transparent;border:none;padding:0;cursor:pointer;}
@@ -4705,6 +4722,281 @@ function ClosingCta() {
   );
 }
 
+// ─── Site footer (the design's SiteFooter) ────────────────────────────────
+/** The page's own close, as the design draws it: four unequal cells cut
+ *  by full-height rules from lg (and by horizontal ones below, where there
+ *  is no width to divide — each cell pads itself, which keeps every line
+ *  centred between the two blocks it separates), then the baseline row the
+ *  legal set belongs on: a reader looks along that line for it, not up in a
+ *  column. Not a section — a hairline across the page rather than a band is
+ *  what says the page has stopped. */
+const FOOTER_LEARN = [
+  'Browse courses',
+  'Career paths',
+  'Instructors',
+  'My learning',
+  'Pricing',
+];
+const FOOTER_GROUPS = [
+  {
+    heading: 'Teach',
+    links: ['Teach on Maya Labs', 'Course studio', 'Earnings calculator'],
+  },
+  {
+    heading: 'Company',
+    links: ['About', 'Contact', 'Course standards'],
+  },
+];
+const FOOTER_LEGAL = ['Privacy', 'Terms', 'How we use AI', 'Support'];
+
+/** The design's own newsletter row: one inline field closed by a round
+ *  button. No backend, so the state it keeps is the only thing that proves
+ *  the control is wired: a field that swallows a submit reads as
+ *  decoration. As every form in the demo, it walks to its success from
+ *  rest; an address typed wrong says so under the field. */
+function NewsletterForm() {
+  const [email, setEmail] = useState('');
+  const [state, setState] = useState<'rest' | 'sent' | 'wrong'>('rest');
+  const address = email.trim();
+  const shaped = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  return (
+    <form
+      noValidate
+      onSubmit={e => {
+        e.preventDefault();
+        setState(shaped(address) ? 'sent' : 'wrong');
+      }}
+      style={{marginTop: 20}}>
+      <div className="cr11-newsrow">
+        <input
+          size={1}
+          type="email"
+          name="email"
+          autoComplete="email"
+          spellCheck={false}
+          value={email}
+          onChange={e => {
+            setEmail(e.target.value);
+            setState('rest');
+          }}
+          aria-label="Email address"
+          aria-invalid={state === 'wrong'}
+          aria-describedby="newsletter-note"
+          placeholder="you@studio.com"
+          className="cr11-newsinput"
+        />
+        <button type="submit" aria-label="Subscribe" className="cr11-newssub">
+          {state === 'sent' ? (
+            <CheckIcon aria-hidden="true" style={{width: 16, height: 16}} />
+          ) : (
+            <Icon icon={ArrowRightIcon} size="sm" xstyle={rtlStyles.mirror} />
+          )}
+        </button>
+      </div>
+      <p
+        id="newsletter-note"
+        aria-live="polite"
+        style={{
+          margin: '8px 0 0',
+          fontSize: 14,
+          color:
+            state === 'wrong'
+              ? 'var(--color-text-error)'
+              : 'var(--color-text-secondary)',
+        }}>
+        {state === 'sent'
+          ? `Thanks. The Tuesday letter goes to ${address}.`
+          : state === 'wrong'
+            ? address
+              ? 'That address needs an @ and a domain, like you@studio.com.'
+              : 'Enter your email address.'
+            : 'One letter a week. What shipped, and what we got wrong.'}
+      </p>
+    </form>
+  );
+}
+
+/** The brand's mark, as the design signs its footer: the name cut to its
+ *  first word, the full point after it riding the baseline in the brand hue
+ *  with the chip's halo. */
+function FooterLogo() {
+  return (
+    <span
+      style={{
+        display: 'flex',
+        width: 'fit-content',
+        alignItems: 'baseline',
+        fontSize: 18,
+        letterSpacing: '-0.05em',
+        fontFamily: 'var(--font-family-heading)',
+        fontWeight: 525,
+        color: 'var(--color-text-primary)',
+      }}>
+      <VisuallyHidden>Maya Labs</VisuallyHidden>
+      <span
+        aria-hidden="true"
+        style={{display: 'flex', alignItems: 'baseline'}}>
+        maya
+        <span
+          style={{
+            marginInlineStart: '0.06em',
+            width: '0.3em',
+            height: '0.3em',
+            flexShrink: 0,
+            borderRadius: 999,
+            background: 'var(--color-accent)',
+            boxShadow: '0 0 0 0.12em var(--color-accent-muted)',
+          }}
+        />
+      </span>
+    </span>
+  );
+}
+
+function SiteFooter() {
+  const sm = !useIsMobile(639);
+  const lg = !useIsMobile(1023);
+  const link = (label: string) => (
+    <button
+      key={label}
+      type="button"
+      className="cr11-footlink"
+      onClick={() => {}}>
+      {label}
+    </button>
+  );
+  return (
+    <footer
+      style={{
+        marginTop: sm ? 160 : 128,
+        borderTop: '1px solid var(--color-border)',
+        width: '100%',
+        isolation: 'isolate',
+      }}>
+      <div
+        style={{
+          paddingTop: sm ? 80 : 64,
+          paddingBottom: sm ? 80 : 64,
+          display: 'grid',
+          rowGap: 0,
+        }}
+        className="cr11-footgrid">
+        {/* the first cell — the one a visitor arrives wanting — keeps its
+            heading off, which is what makes the four read as different
+            objects rather than four of the same column */}
+        <div className="cr11-footcell">
+          <p style={{margin: 0, display: 'flex'}}>
+            <FooterLogo />
+          </p>
+          <p
+            style={{
+              margin: '12px 0 0',
+              maxWidth: 320,
+              fontSize: 14,
+              color: 'var(--color-text-secondary)',
+            }}>
+            A course platform with a tutor that answers from the lesson you have
+            open, and a studio that turns a raw transcript into a chapter list.
+          </p>
+        </div>
+
+        <div className="cr11-footcell">
+          <ul
+            style={{
+              margin: 0,
+              padding: 0,
+              listStyle: 'none',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+            }}>
+            {FOOTER_LEARN.map(l => (
+              <li key={l}>{link(l)}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div
+          className="cr11-footcell"
+          style={{display: 'flex', flexDirection: 'column', gap: 40}}>
+          {FOOTER_GROUPS.map(g => (
+            <div key={g.heading}>
+              <Caps>{g.heading}</Caps>
+              <ul
+                style={{
+                  margin: '16px 0 0',
+                  padding: 0,
+                  listStyle: 'none',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12,
+                }}>
+                {g.links.map(l => (
+                  <li key={l}>{link(l)}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className="cr11-footcell">
+          <Caps>Newsletter</Caps>
+          <p
+            style={{
+              margin: '16px 0 0',
+              maxWidth: 320,
+              fontSize: 14,
+              color: 'var(--color-text-secondary)',
+            }}>
+            The lesson teardowns and studio notes we write for instructors, sent
+            once a week.
+          </p>
+          <NewsletterForm />
+        </div>
+      </div>
+
+      {/* the design's baseline row, and where the legal set belongs */}
+      <div
+        className="cr11-footbase"
+        style={{
+          marginTop: sm ? 64 : 56,
+          borderTop: '1px solid var(--color-border)',
+          paddingTop: 32,
+          display: 'flex',
+          flexDirection: lg ? 'row' : 'column',
+          alignItems: lg ? 'center' : 'stretch',
+          justifyContent: lg ? 'space-between' : 'flex-start',
+          gap: 20,
+        }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
+          © {new Date(DEMO_TODAY).getFullYear()} Maya Labs. A demo template.
+          Every figure here is written for it.
+        </p>
+        <ul
+          style={{
+            margin: 0,
+            padding: 0,
+            listStyle: 'none',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            columnGap: 24,
+            rowGap: 8,
+          }}>
+          {FOOTER_LEGAL.map(l => (
+            <li key={l}>{link(l)}</li>
+          ))}
+        </ul>
+      </div>
+    </footer>
+  );
+}
+
 // ─── FAQ (the design's FaqStepRows) ──────────────────────────────────────
 /** The questions people ask before they enrol: rows a whole container
  *  wide — the group label in caps, the question in the heading face, the
@@ -5076,6 +5368,10 @@ export default function CourseDetailTemplate() {
                   <FaqStepRows />
                   <ClosingCta />
                 </VStack>
+                {/* the footer, outside main's rhythm as the design keeps it
+                (a hairline across the page is what says the page has
+                stopped) */}
+                <SiteFooter />
               </LayoutContent>
             }
           />
