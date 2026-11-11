@@ -478,9 +478,10 @@ function checkEdgeGeometry(
       );
     }
     if (card.edge === 'bleed') {
+      // A Card's full-bleed child reaches under its border.
       check(
-        near(card.rowPaintStart, card.paddingEdge),
-        `${label} row paint ${card.rowPaintStart} not at the padding edge ${card.paddingEdge}`,
+        near(card.rowPaintStart, 0, 0.5),
+        `${label} row paint ${card.rowPaintStart} not at the card's outer edge`,
       );
     }
   }
