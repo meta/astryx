@@ -418,6 +418,7 @@ describe('Tokenizer', () => {
       const [items, setItems] = useState([users[0], users[1]]);
       return (
         <Tokenizer
+          presentation="popover"
           label="Members"
           searchSource={userSource}
           value={items}
@@ -443,9 +444,8 @@ describe('Tokenizer', () => {
       expect(onChange).not.toHaveBeenCalled();
       expect(tokenNamed('Bob')).toHaveAttribute('aria-description');
       expect(tokenNamed('Alice')).not.toHaveAttribute('aria-description');
-      // The token reflects it as its theme state, for a theme to style.
-      expect(tokenNamed('Bob')).toHaveAttribute('data-selected', 'selected');
-      expect(tokenNamed('Alice')).not.toHaveAttribute('data-selected');
+      // The selection adds no public attribute: themes see no new state.
+      expect(tokenNamed('Bob')).not.toHaveAttribute('data-selected');
       await waitFor(() => {
         expect(politeRegion()?.textContent).toBe(
           'Bob selected. Delete again to remove it.',
@@ -484,6 +484,7 @@ describe('Tokenizer', () => {
         return (
           <>
             <Tokenizer
+              presentation="popover"
               label="Members"
               searchSource={userSource}
               value={items}
@@ -520,6 +521,7 @@ describe('Tokenizer', () => {
       const onChange = vi.fn();
       render(
         <Tokenizer
+          presentation="popover"
           label="Members"
           searchSource={userSource}
           value={[users[0], users[1]]}
@@ -554,6 +556,7 @@ describe('Tokenizer', () => {
       stubPointer(true);
       render(
         <Tokenizer
+          presentation="popover"
           label="Members"
           description="Pick up to five people"
           searchSource={userSource}
@@ -589,6 +592,47 @@ describe('Tokenizer', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
+    it('clears the selection when a token is picked from the open list, so the next Delete only selects', async () => {
+      stubPointer(true);
+      const onChange = vi.fn();
+      function WithEntries() {
+        const [items, setItems] = useState([users[0], users[1]]);
+        return (
+          <Tokenizer
+            presentation="popover"
+            label="Members"
+            searchSource={userSource}
+            hasEntriesOnFocus
+            debounceMs={0}
+            value={items}
+            onChange={next => {
+              setItems(next);
+              onChange(next);
+            }}
+          />
+        );
+      }
+      render(<WithEntries />);
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      // The focus list opens with the entries not yet chosen.
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(tokenNamed('Bob')).toHaveAttribute('aria-description');
+      fireEvent.click(screen.getByText('Charlie'));
+      expect(onChange).toHaveBeenLastCalledWith([users[0], users[1], users[2]]);
+      expect(tokenNamed('Bob')).not.toHaveAttribute('aria-description');
+      onChange.mockClear();
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      // The first Delete selects the new last token and removes nothing.
+      expect(onChange).not.toHaveBeenCalled();
+      expect(tokenNamed('Charlie')).toHaveAttribute('aria-description');
+      expect(tokenNamed('Bob')).not.toHaveAttribute('aria-description');
+    });
+
     it('keeps the selected token when another key is typed', () => {
       stubPointer(true);
       const onChange = vi.fn();
@@ -621,6 +665,7 @@ describe('Tokenizer', () => {
       const onChange = vi.fn();
       render(
         <Tokenizer
+          presentation="popover"
           label="Members"
           searchSource={userSource}
           value={[users[0], users[1]]}

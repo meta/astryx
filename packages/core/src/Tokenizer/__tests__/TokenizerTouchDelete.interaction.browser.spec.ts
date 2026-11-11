@@ -11,7 +11,7 @@
  * @position Interaction proof for Tokenizer's touch Delete (Tokenizer.tsx)
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   openStory,
   touchDriver,
@@ -20,6 +20,10 @@ import {
 } from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
+
+// The inline field on a touch screen is a tablet's: a phone's default field
+// is the bottom sheet, which has no inline input.
+test.use({viewport: {width: 1024, height: 1366}});
 
 async function openField(page: Page) {
   await openStory(page, storybook(), 'core-tokenizer--with-preselected');

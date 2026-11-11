@@ -66,7 +66,6 @@ import {
 import {hasInteractiveAncestor} from '../hooks/useClickableContainer';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
 import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
-import {TokenSelectedContext} from '../Token/TokenSelectedContext';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {
   type AdaptivePresentation,
@@ -1694,6 +1693,23 @@ export function Tokenizer<T extends SearchableItem>({
   // into the sheet's dialog; the handlers below stay silent for those.
   const announce = useAnnounce();
 
+  // Backspace (the keyboard's Delete key) on the empty input removes the
+  // last token. On a touch screen it takes two presses, as UIKit's search
+  // tokens do (iOS 26.2). The first selects the last token; the second
+  // removes it. Typing anything else keeps a selected token and goes on
+  // after it.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // A selection only lives while it names a current token.
+  const selectedItem =
+    selectedId == null ? null : (value.find(v => v.id === selectedId) ?? null);
+  // When the selected token leaves (its ×, Clear all, or the app's own
+  // change), the selection goes with it. The same item added back later
+  // then starts unselected. This adjusts state while rendering, as React
+  // recommends for state derived from props.
+  if (selectedId != null && selectedItem == null) {
+    setSelectedId(null);
+  }
+
   // Handle adding an item — detect creatable synthetic items
   const handleAdd = useCallback(
     (item: T | null, options?: {silent?: boolean}): boolean => {
@@ -1723,6 +1739,7 @@ export function Tokenizer<T extends SearchableItem>({
         const base = {id: createdValue, label: createdValue};
         const realItem = base as T;
         const newItems = [...value, realItem];
+        setSelectedId(null);
         onChange(newItems, {item: realItem, type: 'create'});
         if (!options?.silent) {
           announce(t('@astryx.tokenizer.tokenAdded', {label: createdValue}));
@@ -1734,6 +1751,9 @@ export function Tokenizer<T extends SearchableItem>({
         return false;
       }
       const newItems = [...value, item];
+      // A token added from the list clears the selection, so the next Delete
+      // selects the new last token first.
+      setSelectedId(null);
       onChange(newItems, {item, type: 'add'});
       if (!options?.silent) {
         announce(t('@astryx.tokenizer.tokenAdded', {label: item.label}));
@@ -1819,22 +1839,6 @@ export function Tokenizer<T extends SearchableItem>({
     [value, onChange, isDisabled, canRemoveItem, announce, clearAllMessage],
   );
 
-  // Backspace (the keyboard's Delete key) on the empty input removes the
-  // last token. On a touch screen it takes two presses, as UIKit's search
-  // tokens do (iOS 26.2). The first selects the last token; the second
-  // removes it. Typing anything else keeps a selected token and goes on
-  // after it.
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  // A selection only lives while it names a current token.
-  const selectedItem =
-    selectedId == null ? null : (value.find(v => v.id === selectedId) ?? null);
-  // When the selected token leaves (its ×, Clear all, or the app's own
-  // change), the selection goes with it. The same item added back later
-  // then starts unselected. This adjusts state while rendering, as React
-  // recommends for state derived from props.
-  if (selectedId != null && selectedItem == null) {
-    setSelectedId(null);
-  }
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (
@@ -1953,22 +1957,18 @@ export function Tokenizer<T extends SearchableItem>({
     }
 
     const isSelected = item.id === selectedItem?.id;
-    // Every token gets the provider, so a selection change never remounts one.
     return (
-      <TokenSelectedContext key={item.id} value={isSelected}>
-        <Token
-          label={item.label}
-          size={size}
-          onRemove={
-            isDisabled || !canRemoveItem(item) ? undefined : onRemoveItem
-          }
-          isDisabled={isDisabled}
-          description={
-            isSelected ? (selectionDescription ?? undefined) : undefined
-          }
-          xstyle={[styles.token, isSelected && styles.tokenSelected]}
-        />
-      </TokenSelectedContext>
+      <Token
+        key={item.id}
+        label={item.label}
+        size={size}
+        onRemove={isDisabled || !canRemoveItem(item) ? undefined : onRemoveItem}
+        isDisabled={isDisabled}
+        description={
+          isSelected ? (selectionDescription ?? undefined) : undefined
+        }
+        xstyle={[styles.token, isSelected && styles.tokenSelected]}
+      />
     );
   });
 

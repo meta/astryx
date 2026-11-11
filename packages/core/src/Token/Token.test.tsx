@@ -14,7 +14,6 @@ import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Token} from './Token';
 import type {TokenColor} from './Token';
-import {TokenSelectedContext} from './TokenSelectedContext';
 
 describe('Token', () => {
   it('renders with label', () => {
@@ -853,25 +852,5 @@ describe('popup state on a clickable token (FR10)', () => {
     expect(button).toHaveAttribute('aria-haspopup', 'dialog');
     expect(button).toHaveAttribute('aria-expanded', 'false');
     expect(button.parentElement).not.toHaveAttribute('aria-haspopup');
-  });
-});
-
-describe('Token selected state', () => {
-  it('reflects a selection its field marks as the `selected` theme state', () => {
-    const {rerender} = render(
-      <TokenSelectedContext value>
-        <Token label="Alice" onRemove={() => {}} />
-      </TokenSelectedContext>,
-    );
-    const token = screen.getByText('Alice').closest('.astryx-token');
-    expect(token).toHaveAttribute('data-selected', 'selected');
-    rerender(
-      <TokenSelectedContext value={false}>
-        <Token label="Alice" onRemove={() => {}} />
-      </TokenSelectedContext>,
-    );
-    expect(
-      screen.getByText('Alice').closest('.astryx-token'),
-    ).not.toHaveAttribute('data-selected');
   });
 });
