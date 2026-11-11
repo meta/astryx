@@ -47,6 +47,24 @@ import {tryLock} from '../../foundation/release/cache.mjs';
 import {q} from './_settings.mjs';
 
 export {themeEditHow, parsePoints} from './_how.mjs';
+import {isPicture as howPicture} from './_how.mjs';
+
+/**
+ * Whether `how`'s first word names a picture, as the API decides it, for
+ * the command line's own argument checks. The file system is read here.
+ * @param {string} word
+ * @param {string} [cwd]
+ */
+export const isHowPicture = (word, cwd = process.cwd()) =>
+  howPicture(word, cwd);
+
+/**
+ * Whether a file named on the command line exists, read here.
+ * @param {string} file
+ * @param {string} [cwd]
+ */
+export const fileExists = (file, cwd = process.cwd()) =>
+  fs.existsSync(path.resolve(cwd, file));
 
 /**
  * The project a command acts on: the Astryx project at or above `cwd`, found

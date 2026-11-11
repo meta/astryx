@@ -64,6 +64,7 @@ export function tempFor(file) {
 }
 
 /** @typedef {'light' | 'dark'} Mode */
+/** @typedef {import('./_settings.mjs').Setting} Setting */
 /** @typedef {import('../theme/theme.type.mjs').TonalPaletteCandidate} Candidate */
 
 /**
@@ -288,7 +289,7 @@ function themeModes(data) {
 
 /**
  * The color dial settings of a theme, in dial order.
- * @param {{settings: import('./_settings.mjs').Setting[]}} data
+ * @param {{settings: Setting[]}} data
  */
 function dialFamilies(data) {
   /** @type {Array<{id: string, dial: string, seed: string, value: string}>} */
@@ -406,7 +407,7 @@ function usableStops(stops, slug) {
  * the nearest stop, a stop's color, the surfaces text and fills sit on, the
  * text that reads on a fill, and the theme's exact color settings.
  * @param {Candidate} candidate
- * @param {{settings: import('./_settings.mjs').Setting[]}} data
+ * @param {{settings: Setting[]}} data
  * @param {{light: Record<string, string>, dark: Record<string, string>} | undefined} base
  */
 function tools(candidate, data, base) {
@@ -561,7 +562,7 @@ function darkExact(t, id, seed) {
  * the author's own stay. Null when the config would hold no family.
  * @param {string} cwd
  * @param {string} slug
- * @param {{mode?: string, settings: import('./_settings.mjs').Setting[]}} data
+ * @param {{mode?: string, settings: Setting[]}} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} [base] the base theme's resolved colors, which the dark check reads
  * @returns {PalettePlan | null}
  */
@@ -779,7 +780,7 @@ function planPalette(cwd, slug, data, base) {
  * or null when it would hold no family.
  * @param {string} cwd
  * @param {string} slug
- * @param {{mode?: string, settings: import('./_settings.mjs').Setting[]}} data
+ * @param {{mode?: string, settings: Setting[]}} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} [base]
  * @returns {any}
  */
@@ -801,7 +802,7 @@ const sha256 = text => createHash('sha256').update(text).digest('hex');
  * of a hand edit, for the result notes.
  * @param {string} cwd
  * @param {string} slug
- * @param {{mode?: string, settings: import('./_settings.mjs').Setting[], palette?: string}} data
+ * @param {{mode?: string, settings: Setting[], palette?: string}} data
  *   `palette`: the hash of the config the editor wrote, kept in the settings
  * @param {{light: Record<string, string>, dark: Record<string, string>}} [base]
  * @returns {string[]}

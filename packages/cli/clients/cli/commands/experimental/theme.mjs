@@ -16,8 +16,6 @@
  *   astryx experimental theme editor how "white text in the banner"
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import {getCliInvocation} from '../../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../../foundation/debug/index.mjs';
@@ -44,6 +42,10 @@ import {
   themeEditShow,
   themeEditUndo,
 } from '../../../../api/theme-edit/theme-edit.mjs';
+import {
+  fileExists,
+  isHowPicture,
+} from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
 import {doc as editorDoc} from '../experimental-theme-editor.doc.mjs';
@@ -489,22 +491,6 @@ function lookupBlocks(d) {
 }
 
 /**
- * Whether how's first word names a picture: a picture file name, or a file
- * that exists. The API decides the same way.
- * @param {string} word
- */
-function isPicture(word) {
-  if (!word || /\s/.test(word)) return false;
-  if (/\.(png|jpe?g|gif|webp|bmp|avif|heic|tiff?|svg)$/i.test(word))
-    return true;
-  try {
-    return fs.statSync(path.resolve(word)).isFile();
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Refuse an option the command does not have. Set, undo and how take
  * unknown options so a design token (`--color-accent`) can be the thing
  * they name; a `--` word anywhere else is a mistyped option.
@@ -909,7 +895,7 @@ export function registerExperimentalTheme(group, program) {
           );
         }
         // A picture first: the only other word is how many colors to list.
-        const picture = isPicture(rest[0] ?? '');
+        const picture = isHowPicture(rest[0] ?? '');
         if (picture && rest.length > 2)
           return cliError(
             `After a picture, give only how many colors to list, not "${rest.slice(1).join(' ')}".`,
@@ -925,7 +911,7 @@ export function registerExperimentalTheme(group, program) {
           picture &&
           rest.length === 2 &&
           !/^[1-9]\d*$/.test(rest[1]) &&
-          fs.existsSync(path.resolve(rest[0]))
+          fileExists(rest[0])
         )
           return cliError(
             `The count after a picture must be a positive whole number, not "${rest[1]}".`,
