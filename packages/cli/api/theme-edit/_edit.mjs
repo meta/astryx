@@ -56,6 +56,7 @@ import {
   VIBRANCY_DEFAULT,
   paletteFiles,
   paletteMapping,
+  paletteDialOf,
   paletteNotes,
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
@@ -609,6 +610,27 @@ async function change(sub, slug, thing, value, options) {
         modesOf(data),
       ),
     );
+  // An exact color the mapping reads (a fill, a tint, text on a fill)
+  // changes what it picks around it: say what, as the dial does.
+  const dialOfToken =
+    s.source === 'token' && !s.on && !s.when && !s.state
+      ? paletteDialOf(s.thing)
+      : null;
+  if (dialOfToken && sub === 'set') {
+    const pal = paletteMapping(
+      cwd,
+      slug,
+      data,
+      base,
+      ctx.project.core.tokenDefaults,
+    );
+    if (pal?.families.some(x => x.dial === dialOfToken))
+      notes.push(
+        ...paletteNotes(pal, dialOfToken, slug, modesOf(data)).filter(
+          n => !n.startsWith('the generated colors are in '),
+        ),
+      );
+  }
   if (PALETTE_DIALS.includes(s.thing) && sub === 'undo')
     notes.push(
       `the ${s.thing} color is no longer generated, and the tokens it fed go back to the base theme's values`,
@@ -1110,7 +1132,10 @@ export async function themeEditUndo(theme, options = {}) {
     leftOut = repaired.dropped;
   }
   // The popped history is written with the change, inside its rollback.
-  await commitTheme(ctx, theme, prev, {history: false, historyAfter: history});
+  const committed = await commitTheme(ctx, theme, prev, {
+    history: false,
+    historyAfter: history,
+  });
   /** @type {string[]} */
   const undone = current
     ? []
@@ -1132,6 +1157,8 @@ export async function themeEditUndo(theme, options = {}) {
   if (current)
     for (const [k, s] of now)
       if (!was.has(k)) undone.push(`put back ${describe(s)}`);
+  // What the build kept, such as a color file edited by hand.
+  undone.push(...committed.notes);
   if (current && (current.like ?? 'none') !== (prev.like ?? 'none'))
     undone.push(
       `base ${current.like ?? 'none'} is back to ${prev.like ?? 'none'}`,
