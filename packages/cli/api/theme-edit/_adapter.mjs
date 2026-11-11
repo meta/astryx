@@ -62,13 +62,24 @@ import {themeEditHow as howAt} from './_how.mjs';
 export async function themeEditHow(subject, options = {}) {
   const from = options.cwd ?? process.cwd();
   const o = atRoot(options);
-  const picture =
-    typeof subject === 'string' &&
-    !path.isAbsolute(subject) &&
+  /** A file named from the subfolder, as a path from anywhere. @param {unknown} name */
+  const here = name =>
+    typeof name === 'string' &&
+    name !== '' &&
+    !path.isAbsolute(name) &&
     path.resolve(from) !== o.cwd &&
-    fs.existsSync(path.resolve(from, subject)) &&
-    fs.statSync(path.resolve(from, subject)).isFile();
-  return howAt(picture ? path.resolve(from, subject) : subject, o);
+    fs.existsSync(path.resolve(from, name)) &&
+    fs.statSync(path.resolve(from, name)).isFile()
+      ? path.resolve(from, name)
+      : name;
+  // The CLI passes the words as typed: the first may be that picture too.
+  const words = o.words?.length
+    ? [String(here(o.words[0])), ...o.words.slice(1)]
+    : o.words;
+  return howAt(/** @type {string} */ (here(subject)), {
+    ...o,
+    ...(words ? {words} : {}),
+  });
 }
 
 /** The built-in themes a theme can build on (`--like`). */

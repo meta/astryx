@@ -1963,6 +1963,14 @@ const QUESTIONS_F = [
     'Feedback round 2:\n- rounder buttons',
     {top: /^set q corners more --on button$/},
   ],
+  // a number ending a sentence is a value, not a list marker
+  [
+    'Use radius 8. Shadows off.',
+    {
+      top: /^set q corners 8px && set q --shadow-low none && set q --shadow-med none && set q --shadow-high none$/,
+      adds: /--radius-element=8px/,
+    },
+  ],
   [
     'primary=#7c3aed radius=10 font=Geist',
     {top: /^set q accent '#7c3aed' && set q corners 10px && set q font geist$/},
@@ -2134,6 +2142,39 @@ describe('how answers final-pass questions', () => {
       expect(data.results[0].commands.map(bare)[0]).toBe(
         'set q corners more --on button',
       );
+      // A picture named from the subfolder opens from there, as the CLI
+      // passes it (the words as typed) and as a subject.
+      const chunk = (/** @type {string} */ t, /** @type {Buffer} */ body) => {
+        const len = Buffer.alloc(4);
+        len.writeUInt32BE(body.length);
+        return Buffer.concat([
+          len,
+          Buffer.from(t, 'latin1'),
+          body,
+          Buffer.alloc(4),
+        ]);
+      };
+      const header = Buffer.alloc(13);
+      header.writeUInt32BE(1, 0);
+      header.writeUInt32BE(1, 4);
+      header[8] = 8;
+      header[9] = 2;
+      fs.writeFileSync(
+        path.join(sub, 'shot.png'),
+        Buffer.concat([
+          Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+          chunk('IHDR', header),
+          chunk('IDAT', zlib.deflateSync(Buffer.from([0, 255, 0, 0]))),
+          chunk('IEND', Buffer.alloc(0)),
+        ]),
+      );
+      for (const opts of [{words: ['shot.png']}, {}]) {
+        const shot = (
+          await themeEditHow('shot.png', {cwd: sub, theme: 'q', ...opts})
+        ).data;
+        expect(shot.kind).toBe('picture');
+        expect(JSON.stringify(shot)).toMatch(/#ff0000/);
+      }
     } finally {
       if (made) fs.rmSync(pkg);
       fs.rmSync(path.join(cwd, 'src'), {recursive: true, force: true});
