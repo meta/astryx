@@ -35,7 +35,9 @@ import {Dialog} from '@astryxdesign/core/Dialog';
 import {Popover} from '@astryxdesign/core/Popover';
 import {Slider} from '@astryxdesign/core/Slider';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
-import {useClipboard} from '@astryxdesign/core/hooks';
+import {useClipboard, useMediaQuery} from '@astryxdesign/core/hooks';
+import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {
   BanknotesIcon,
   ChartBarIcon,
@@ -43,7 +45,9 @@ import {
   ClockIcon,
   CommandLineIcon,
   HeartIcon,
+  MagnifyingGlassIcon,
   PaintBrushIcon,
+  PlayCircleIcon,
   XMarkIcon,
   PlayIcon,
   ArrowRightIcon,
@@ -66,12 +70,20 @@ import {
   SparklesIcon as AiMagicIcon,
   CalendarIcon as Calendar03Icon,
   CheckBadgeIcon as Certificate01Icon,
+  ClipboardDocumentCheckIcon as CheckListIcon,
   ChatBubbleBottomCenterTextIcon as ClosedCaptionIcon,
   GlobeAltIcon as Globe02Icon,
+  Square3Stack3DIcon as Layers01Icon,
   LinkIcon as Link01Icon,
   EnvelopeIcon as Mail01Icon,
+  CubeIcon as Package01Icon,
+  QueueListIcon as PlayListIcon,
   ShareIcon as Share03Icon,
+  LockOpenIcon as SquareUnlock02Icon,
 } from '@heroicons/react/24/outline';
+// ClockIcon is bound above; alias the same glyph for the design's
+// Clock01Icon without rebinding the existing name.
+import {ClockIcon as Clock01Icon} from '@heroicons/react/24/outline';
 import {Section} from '@astryxdesign/core/Layout';
 import {Heading} from '@astryxdesign/core/Text';
 import {Badge} from '@astryxdesign/core/Badge';
@@ -86,11 +98,8 @@ import {Link} from '@astryxdesign/core/Link';
 import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Card} from '@astryxdesign/core/Card';
-import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
-// ClockIcon is bound above; alias the same glyph for the design's
-// Clock01Icon without rebinding the existing name.
 
 /**
  * Icon data shape the template stores in its tables: an SVG component with
@@ -160,10 +169,12 @@ const hoverStyles = `
 .cr4-lift:hover{box-shadow:0 10px 24px var(--color-shadow);transform:translateY(-2px);}
 .cr4-disc{transition:transform var(--duration-fast) var(--ease-standard);}
 .cr4-disc:hover{transform:scale(1.06);}
+.cr4-mark{background-color:var(--color-accent-muted);border-radius:4px;padding-inline:2px;color:inherit;}
 /* The search slot: the field fills the row until lg, where the design
    caps it; the slot carries the sizing so the core field keeps its own
    width behavior inside it. */
-
+.cr7-search{flex:1 1 auto;min-width:0;}
+@media(min-width:1024px){.cr7-search{max-width:384px;}}
 /* The design's ghost control: a hairline ring, the page's ground showing
    through, the wash on hover. "Open every module", "Show more reviews",
    the panel's secondary CTA and the select triggers all wear it. */
@@ -179,6 +190,16 @@ const hoverStyles = `
    md the list is one column and a review runs the full measure, not a
    column 40px short of its heading.) */
 
+/* The FAQ's caps column: the whole row's width on a phone, its own 160px
+   column from sm. */
+/* The syllabus' six figures: two to a row on a phone, three from sm. */
+.cr7-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;}
+@media(min-width:640px){.cr7-facts{grid-template-columns:repeat(3,minmax(0,1fr));}}
+.cr7-fact{display:flex;flex-direction:column;min-width:0;padding-inline-end:16px;}
+/* The syllabus toolbar and the reviews' one: the field and the controls on
+   one line from sm, stacked under it on a phone. */
+.cr7-toolbar{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--color-border);padding-top:32px;margin-top:32px;}
+@media(min-width:640px){.cr7-toolbar{flex-direction:row;align-items:center;}}
 /* ── Polish ───────────────────────────────────────────────────────────────
    The poster (poster frame): the art leans in under the pointer and
    the dim doubles; the play disc steps up a size and its shadow lifts. */
@@ -393,59 +414,6 @@ const BASE_COURSE = {
   ],
 };
 
-const MODULES = [
-  {
-    id: 'foundations',
-    title: 'Foundations and tooling',
-    meta: '3 lessons · 48 min',
-    lessons: [
-      {
-        title: 'What a language model can and cannot promise',
-        duration: '12 min',
-      },
-      {
-        title: 'The working setup: SDK, keys, and a scratchpad',
-        duration: '18 min',
-      },
-      {title: 'Tokens, temperature, and the cost dial', duration: '18 min'},
-    ],
-  },
-  {
-    id: 'retrieval',
-    title: 'Retrieval that answers the question',
-    meta: '4 lessons · 76 min',
-    lessons: [
-      {
-        title: 'Chunking strategies that survive real documents',
-        duration: '21 min',
-      },
-      {title: 'Vector search from first principles', duration: '19 min'},
-      {title: 'Rerankers and the relevance ceiling', duration: '18 min'},
-      {title: 'When the model should say it found nothing', duration: '18 min'},
-    ],
-  },
-  {
-    id: 'output',
-    title: 'Structured output you can hand to code',
-    meta: '3 lessons · 64 min',
-    lessons: [
-      {title: 'Schemas as contracts, not suggestions', duration: '22 min'},
-      {title: 'Validation, repair, and retry loops', duration: '21 min'},
-      {title: 'Streaming partial results into a UI', duration: '21 min'},
-    ],
-  },
-  {
-    id: 'evaluation',
-    title: 'The evaluation harness',
-    meta: '3 lessons · 59 min',
-    lessons: [
-      {title: 'Golden sets and where they come from', duration: '20 min'},
-      {title: 'Scoring retrieval and generation apart', duration: '19 min'},
-      {title: 'Regression gates in continuous integration', duration: '20 min'},
-    ],
-  },
-];
-
 const INCLUDES = [
   'Lifetime access to 13 lessons and all future revisions',
   'The reviewed project: a working extraction pipeline',
@@ -619,60 +587,6 @@ function AboutSection() {
 }
 
 // ─── Syllabus ────────────────────────────────────────────────────────────────
-
-function SyllabusSection() {
-  return (
-    <Section padding={6}>
-      <VStack gap={4}>
-        <SectionHeader
-          title="Syllabus"
-          action={
-            <Text type="supporting" color="secondary">
-              {MODULES.length} modules · {BASE_COURSE.lessonCount} lessons
-            </Text>
-          }
-        />
-        <CollapsibleGroup type="multiple" defaultValue={[MODULES[0].id]}>
-          {MODULES.map(module => (
-            <Collapsible
-              key={module.id}
-              value={module.id}
-              trigger={
-                <VStack gap={1}>
-                  <Text type="large" weight="bold">
-                    {module.title}
-                  </Text>
-                  <Text type="supporting" color="secondary">
-                    {module.meta}
-                  </Text>
-                </VStack>
-              }>
-              <VStack gap={2}>
-                {module.lessons.map(lesson => (
-                  <HStack
-                    key={lesson.title}
-                    gap={2}
-                    vAlign="center"
-                    hAlign="between">
-                    <HStack gap={2} vAlign="center">
-                      <Icon icon={PlayIcon} size="sm" />
-                      <Text type="body">{lesson.title}</Text>
-                    </HStack>
-                    <Text type="supporting" color="secondary">
-                      {lesson.duration}
-                    </Text>
-                  </HStack>
-                ))}
-              </VStack>
-            </Collapsible>
-          ))}
-        </CollapsibleGroup>
-      </VStack>
-    </Section>
-  );
-}
-
-// ─── Instructor ──────────────────────────────────────────────────────────────
 
 function InstructorSection() {
   return (
@@ -938,6 +852,14 @@ function EnrollRail() {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 // ─── Hook: below 768px the page switches to its phone composition ───────────
+// Core's useMediaQuery shares one listener per query across the page and
+// reads matchMedia during render, so the first paint already carries the
+// right composition.
+function useIsMobile(breakpoint = 768): boolean {
+  return useMediaQuery(`(max-width: ${breakpoint}px)`);
+}
+
+// ─── Course data (domain-shaped sample content) ─────────────────────────────
 type Lesson = {
   title: string;
   minutes: number;
@@ -1068,6 +990,13 @@ const COURSE = {
       ],
     },
   ] as Module[],
+  skills: [
+    'Prompt design',
+    'RAG pipelines',
+    'Structured output',
+    'Evaluation',
+    'Cost control',
+  ],
   // The teacher, as the design's own data keeps them (the catalog data
   // Teacher + the detail model Instructor): a trade line, a portrait where there
   // is one, three credentials in the teacher's own words, and every course
@@ -1125,6 +1054,10 @@ const COURSE = {
 const fmt = (n: number) => `$${n}`;
 const pad = (n: number) => String(Math.floor(n)).padStart(2, '0');
 const mmss = (s: number) => `${pad(s / 60)}:${pad(s % 60)}`;
+/** Folded for matching: accents off and lower case, so "Analisis" finds
+ *  "Análisis" and a search reads the way people type. */
+const fold = (s: string) =>
+  s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 const figure = (n: number) => n.toLocaleString('en-US');
 const compact = new Intl.NumberFormat('en-US', {
   notation: 'compact',
@@ -1759,6 +1692,56 @@ function Highlight({children}: {children: React.ReactNode}) {
   );
 }
 
+/** The words a search found, marked in the brand's chip tint. `query` is
+ *  already folded. */
+function Marked({text, query}: {text: string; query: string}) {
+  if (!query) {
+    return <>{text}</>;
+  }
+  const i = fold(text).indexOf(query);
+  if (i < 0) {
+    return <>{text}</>;
+  }
+  return (
+    <>
+      {text.slice(0, i)}
+      <mark className="cr4-mark">{text.slice(i, i + query.length)}</mark>
+      {text.slice(i + query.length)}
+    </>
+  );
+}
+
+/** The syllabus and the reviews search rows: the core `TextInput` carries
+ *  the magnifier (`startIcon`) and the clear button (`hasClear` — clearing
+ *  hands focus back to the input). */
+function SearchField({
+  label,
+  placeholder,
+  value,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="cr7-search">
+      <TextInput
+        label={label}
+        isLabelHidden
+        size="md"
+        width="100%"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        startIcon={MagnifyingGlassIcon}
+        hasClear
+      />
+    </div>
+  );
+}
+
 /** The design's topic marks: one glyph per subject and one hue — the
  *  chip on every card of that subject and at the head of the course page
  *  (the design's own glyph map is heroicons throughout). */
@@ -2303,6 +2286,499 @@ function Poster() {
 }
 
 // ─── Syllabus ────────────────────────────────────────────────────────────────
+const ALL_OPEN = COURSE.modules.map(m => m.id);
+
+/** A lesson's glyph says what kind of time it asks for: watching, answering,
+ *  or making something somebody will review (the design's tag). */
+function LessonTag({lesson: l}: {lesson: Lesson}) {
+  if (!l.quiz && !l.project) {
+    return (
+      <PlayCircleIcon
+        aria-hidden="true"
+        style={{
+          width: 20,
+          height: 20,
+          flexShrink: 0,
+          color: 'var(--color-text-secondary)',
+        }}
+      />
+    );
+  }
+  return (
+    <HugeIcon
+      icon={l.quiz ? CheckListIcon : Package01Icon}
+      size={20}
+      strokeWidth={1.5}
+      aria-hidden="true"
+      style={{color: 'var(--color-text-secondary)', flexShrink: 0}}
+    />
+  );
+}
+
+/** The lesson's number in the syllabus: "2.3", as the design prints it
+ *  (shared with the player's clips, above). */
+
+function Syllabus() {
+  const preview = usePreview();
+  // The design's module rail and preview chip step at sm (640), not md.
+  const isMobile = useIsMobile(639);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState<string[]>(['m1']);
+  const q = fold(query.trim());
+  // What the search shows: modules whose title matches keep every lesson;
+  // otherwise only the lessons that match, and modules with none drop out.
+  const shown = COURSE.modules
+    .map(m => ({
+      m,
+      lessons: fold(m.title).includes(q)
+        ? m.lessons
+        : m.lessons.filter(l => fold(l.title).includes(q)),
+    }))
+    .filter(x => x.lessons.length > 0 || (q && fold(x.m.title).includes(q)));
+  const found = q
+    ? COURSE.modules
+        .flatMap(m => m.lessons)
+        .filter(l => fold(l.title).includes(q)).length
+    : 0;
+  const titled = q
+    ? COURSE.modules.filter(m => fold(m.title).includes(q)).length
+    : 0;
+  const tally = [
+    found ? count(found, 'lesson') : '',
+    titled ? count(titled, 'module') : '',
+  ]
+    .filter(Boolean)
+    .join(' and ');
+  // The tally's one sentence, held in a variable so the live region below
+  // stays mounted whether or not a search has a match to announce.
+  const tallyText = `${tally} ${found + titled === 1 ? 'mentions' : 'mention'} “${query.trim()}”`;
+  const all = open.length === COURSE.modules.length;
+
+  // The course in six figures, each with the line that says what it holds
+  // (the design computes these from the syllabus itself, so a rewritten
+  // course keeps a true summary, and a figure that comes to nothing drops
+  // out).
+  const items = COURSE.modules.flatMap(m => m.lessons);
+  const videos = items.filter(l => !l.quiz && !l.project);
+  const lengths = videos.map(l => l.minutes);
+  const [shortest, longest] = [Math.min(...lengths), Math.max(...lengths)];
+  const free = videos.filter(l => l.preview).length;
+  const quizzes = items.filter(l => l.quiz).length;
+  const questions = items.reduce((sum, l) => sum + (l.questions ?? 0), 0);
+  const project = items.some(l => l.project);
+  const minutes = videos.reduce((sum, l) => sum + l.minutes, 0);
+  const facts: {
+    n: number;
+    icon: IconSvgElement;
+    title: string;
+    text: string;
+  }[] = [
+    {
+      n: COURSE.modules.length,
+      icon: Layers01Icon,
+      title: count(COURSE.modules.length, 'module'),
+      text: 'Ends on the project',
+    },
+    {
+      n: videos.length,
+      icon: PlayListIcon,
+      title: count(videos.length, 'lesson'),
+      text:
+        shortest === longest
+          ? `${shortest} min each`
+          : `${shortest} to ${longest} min each`,
+    },
+    {
+      n: minutes,
+      icon: Clock01Icon,
+      title: `${duration(minutes)} of video`,
+      text: 'Pause to ask the tutor',
+    },
+    {
+      n: free,
+      icon: SquareUnlock02Icon,
+      title: count(free, 'free lesson'),
+      text: 'Watch before you pay',
+    },
+    {
+      n: quizzes,
+      icon: CheckListIcon,
+      title: count(quizzes, 'quiz', 'quizzes'),
+      text: `${questions} questions in all`,
+    },
+    {
+      n: project ? 1 : 0,
+      icon: Package01Icon,
+      title: '1 project',
+      text: 'Reviewed by Maya’s team',
+    },
+  ].filter(f => f.n > 0);
+
+  return (
+    <VStack gap={0}>
+      {/* The course in six figures: each a glyph, the figure, and one line
+          on what it holds — two to a row on a phone, three from sm. */}
+      <ul
+        className="cr7-facts"
+        style={{margin: 0, padding: 0, listStyle: 'none'}}>
+        {facts.map(f => (
+          <li key={f.title} className="cr7-fact">
+            <HugeIcon
+              icon={f.icon}
+              size={20}
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+            <p style={{margin: '12px 0 0', fontSize: 14, fontWeight: 500}}>
+              {f.title}
+            </p>
+            <p
+              style={{
+                margin: '2px 0 0',
+                fontSize: 14,
+                color: 'var(--color-text-secondary)',
+              }}>
+              {f.text}
+            </p>
+          </li>
+        ))}
+      </ul>
+
+      {/* The two ways through the list, as the reviews set theirs: the
+          search and Open-every-module on one line over a rule. */}
+      <div className="cr7-toolbar">
+        <SearchField
+          label="Search the syllabus"
+          placeholder="Find a lesson"
+          value={query}
+          onChange={setQuery}
+        />
+        {!q && (
+          <button
+            type="button"
+            className="cr7-ringbtn"
+            style={{flexShrink: 0}}
+            onClick={() => setOpen(all ? [] : ALL_OPEN)}>
+            {all ? 'Close every module' : 'Open every module'}
+          </button>
+        )}
+      </div>
+
+      {q && tally ? (
+        <p
+          aria-hidden="true"
+          style={{
+            margin: '16px 0 0',
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
+          {tallyText}
+        </p>
+      ) : null}
+      <VisuallyHidden as="p" aria-live="polite">
+        {q && tally ? tallyText : ''}
+      </VisuallyHidden>
+
+      {q && shown.length === 0 ? (
+        <VStack
+          gap={2}
+          style={{
+            marginTop: 16,
+            borderRadius: 'var(--radius-container)',
+            background: 'var(--color-background-muted)',
+            padding: 24,
+          }}>
+          <Text type="body" weight="medium">
+            No lesson mentions “{query.trim()}”
+          </Text>
+          <Text type="supporting" color="secondary">
+            Try one of the skills the course is built on.
+          </Text>
+          <HStack gap={2} wrap="wrap" style={{marginTop: 16}}>
+            {COURSE.skills.map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setQuery(s)}
+                style={{
+                  height: 40,
+                  borderRadius: 'var(--radius-element)',
+                  background: 'var(--color-background-card)',
+                  boxShadow: 'var(--shadow-low)',
+                  paddingInline: 16,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  border: 'none',
+                }}>
+                {s}
+              </button>
+            ))}
+          </HStack>
+        </VStack>
+      ) : (
+        <CollapsibleGroup
+          type="multiple"
+          value={q ? shown.map(x => x.m.id) : open}
+          onChange={v => {
+            if (!q) {
+              setOpen(Array.isArray(v) ? v : [v]);
+            }
+          }}>
+          <ol style={{margin: '24px 0 0', padding: 0, listStyle: 'none'}}>
+            {shown.map(({m, lessons}, k) => {
+              const last = k === shown.length - 1;
+              const moduleVideos = m.lessons.filter(l => !l.quiz && !l.project);
+              const time = moduleVideos.reduce((sum, l) => sum + l.minutes, 0);
+              const closer = m.lessons[m.lessons.length - 1];
+              const mi = COURSE.modules.indexOf(m);
+              // On a phone the number sits in front of the title; from sm the
+              // design's rail: each module's tile, and a line running down
+              // from it to the next, so the modules read as one course taken
+              // in order.
+              const head = (
+                <span style={{minWidth: 0, flex: '1 1 auto'}}>
+                  <span
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      fontSize: 16,
+                      fontWeight: 500,
+                    }}>
+                    {isMobile && (
+                      <span
+                        style={{
+                          flexShrink: 0,
+                          fontFamily: 'var(--font-family-heading)',
+                          fontVariantNumeric: 'tabular-nums',
+                          color: 'var(--color-text-secondary)',
+                        }}>
+                        {String(mi + 1).padStart(2, '0')}
+                      </span>
+                    )}
+                    <span style={{minWidth: 0}}>
+                      <Marked text={m.title} query={q} />
+                    </span>
+                  </span>
+                  <span
+                    style={{
+                      display: 'block',
+                      marginTop: 2,
+                      fontSize: 14,
+                      color: 'var(--color-text-secondary)',
+                    }}>
+                    {count(moduleVideos.length, 'lesson')} · {duration(time)}
+                    {closer?.quiz
+                      ? ' · quiz'
+                      : closer?.project
+                        ? ' · project'
+                        : ''}
+                  </span>
+                </span>
+              );
+              return (
+                <li
+                  key={m.id}
+                  style={{
+                    position: 'relative',
+                    isolation: 'isolate',
+                    display: isMobile ? 'block' : 'grid',
+                    ...(isMobile
+                      ? {
+                          borderTop:
+                            k === 0
+                              ? undefined
+                              : '1px solid var(--color-border)',
+                          paddingTop: k === 0 ? 0 : 16,
+                          marginTop: k === 0 ? 0 : 16,
+                        }
+                      : {
+                          gridTemplateColumns: '48px minmax(0, 1fr)',
+                          columnGap: 20,
+                        }),
+                  }}>
+                  {!isMobile && (
+                    <div
+                      style={{
+                        position: 'relative',
+                        display: 'flex',
+                        justifyContent: 'center',
+                      }}>
+                      <span
+                        style={{
+                          position: 'relative',
+                          zIndex: 1,
+                          display: 'flex',
+                          width: 48,
+                          height: 48,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: 'calc(var(--radius-container) * 0.6)',
+                          background: 'var(--color-background-muted)',
+                          fontFamily: 'var(--font-family-heading)',
+                          fontSize: 16,
+                          fontVariantNumeric: 'tabular-nums',
+                        }}>
+                        {String(mi + 1).padStart(2, '0')}
+                      </span>
+                      {!last && (
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            position: 'absolute',
+                            top: 48,
+                            bottom: 0,
+                            width: 1,
+                            background: 'var(--color-border)',
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      minWidth: 0,
+                      ...(isMobile ? {} : {paddingBottom: last ? 0 : 16}),
+                    }}>
+                    <Collapsible value={m.id} trigger={head}>
+                      <ul
+                        style={{
+                          margin: '4px 0 8px',
+                          padding: 0,
+                          listStyle: 'none',
+                          display: 'flex',
+                          flexDirection: 'column',
+                        }}>
+                        {(q ? lessons : m.lessons).map(l => {
+                          const id = lessonId(mi, m.lessons.indexOf(l));
+                          const length = l.project
+                            ? `${l.minutes / 60} hours`
+                            : `${l.minutes} min`;
+                          const title = l.quiz ? (
+                            <Marked
+                              text={`Quiz · ${l.questions} questions`}
+                              query={q}
+                            />
+                          ) : (
+                            <>
+                              {l.project && 'Project · '}
+                              <Marked text={l.title} query={q} />
+                            </>
+                          );
+                          const chip = (
+                            <span
+                              style={{
+                                display: 'flex',
+                                height: 24,
+                                width: 'fit-content',
+                                flexShrink: 0,
+                                alignItems: 'center',
+                                gap: 4,
+                                borderRadius: 'var(--radius-element)',
+                                background: 'var(--color-accent-muted)',
+                                paddingInline: 8,
+                                fontSize: 12,
+                                fontWeight: 500,
+                                color: 'var(--color-text-accent)',
+                              }}>
+                              <PlaySolid
+                                aria-hidden="true"
+                                style={{width: 12, height: 12}}
+                              />
+                              Preview
+                            </span>
+                          );
+                          const body = (
+                            <>
+                              <LessonTag lesson={l} />
+                              <span
+                                style={{
+                                  display: 'flex',
+                                  minWidth: 0,
+                                  flex: '1 1 auto',
+                                  gap: 8,
+                                  fontSize: 14,
+                                }}>
+                                {!l.quiz && !l.project && (
+                                  <span
+                                    style={{
+                                      flexShrink: 0,
+                                      fontVariantNumeric: 'tabular-nums',
+                                      color: 'var(--color-text-secondary)',
+                                    }}>
+                                    {id}
+                                  </span>
+                                )}
+                                <span style={{minWidth: 0}}>{title}</span>
+                                {l.preview && isMobile && (
+                                  <span
+                                    style={{marginTop: 6, display: 'block'}}>
+                                    {chip}
+                                  </span>
+                                )}
+                              </span>
+                              {l.preview && !isMobile && chip}
+                              <span
+                                style={{
+                                  width: isMobile ? 56 : 64,
+                                  flexShrink: 0,
+                                  textAlign: 'end',
+                                  fontSize: 14,
+                                  fontVariantNumeric: 'tabular-nums',
+                                  color: 'var(--color-text-secondary)',
+                                }}>
+                                {length}
+                              </span>
+                            </>
+                          );
+                          const row: CSSProperties = {
+                            display: 'flex',
+                            minHeight: 44,
+                            width: '100%',
+                            alignItems: 'center',
+                            gap: 12,
+                            borderRadius: 'calc(var(--radius-container) * 0.6)',
+                            paddingBlock: 8,
+                            paddingInlineStart: isMobile ? 8 : 12,
+                            paddingInlineEnd: isMobile ? 4 : 8,
+                            textAlign: 'start',
+                          };
+                          return (
+                            <li
+                              key={id}
+                              style={{
+                                borderBottom:
+                                  '1px solid color-mix(in srgb, var(--color-border) 70%, transparent)',
+                              }}>
+                              {l.preview ? (
+                                <button
+                                  type="button"
+                                  onClick={() => preview.open(id)}
+                                  aria-label={`Preview lesson ${id}, ${l.title}, ${length}`}
+                                  className="cr4-row"
+                                  style={row}>
+                                  {body}
+                                </button>
+                              ) : (
+                                <div style={row}>{body}</div>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </Collapsible>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </CollapsibleGroup>
+      )}
+    </VStack>
+  );
+}
+
+// ─── Covers: In the price / Not in it ────────────────────────────────────────
 
 export default function CourseDetailTemplate() {
   return (
@@ -2319,7 +2795,8 @@ export default function CourseDetailTemplate() {
                 <Poster />
                 <DetailsBlock />
                 <AboutSection />
-                <SyllabusSection />
+                <SectionHeader title="Syllabus" />
+                <Syllabus />
                 <InstructorSection />
                 <ReviewsSection />
                 <FaqSection />
