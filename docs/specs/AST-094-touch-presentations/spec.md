@@ -706,7 +706,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   velocity, and its commit point is halfway from its lowest detent to closed. A
   release past its measured flick speed lands on the first position at or past
   its projection, at least its next one. So a short fast flick at its lowest
-  detent closes it (`component:BottomSheet` FR19). A row swipe keeps
+  detent closes it (`component:BottomSheet` FR19). When the owner refuses the
+  close and opens a confirmation dialog in answer, the sheet waits at a peek
+  until the dialog closes instead of springing back (`component:BottomSheet`
+  FR21). A row swipe keeps
   `spec:AST-057`'s own release rule.
 - **FR37 — Moving back cancels.** A release whose velocity points back
   toward the start MUST cancel, whatever the travel so far.
@@ -845,7 +848,8 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   rubber band for a finger and a trackpad alike, the same travel giving the
   same stretch, a trackpad's pull reaching no farther than the sheet's height,
   and springs back at the release; an `info` sheet closes on a flick or past
-  its close distance and otherwise springs back (FR36, FR37); a mouse wheel
+  its close distance and otherwise springs back (FR36, FR37), and a close its
+  owner refuses rests as `component:BottomSheet` FR21 states; a mouse wheel
   never moves a sheet. A pager follows a trackpad swipe, never more than one
   page from where the swipe began, rubber-banded at its first and last page; it
   commits past half a page or on a flick, never on a speed spike that moved it
