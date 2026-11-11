@@ -501,7 +501,8 @@ registered layer.
 
 Banner and FieldStatus are in-flow. `useAnnounce` is nonvisual. AlertDialog,
 imperative Dialog, Lightbox, and ordinary Popover-family surfaces are
-interaction-local. `useKeyboardHint`, Carousel's control overlay, and visual-only
+interaction-local. `useKeyboardHint` uses Layer rendering and joins Escape
+dismissal while its hint shows. Carousel's control overlay and visual-only
 layers use Layer rendering without joining Escape/platform dismissal.
 
 ## Boundaries and invariants
@@ -679,6 +680,10 @@ Current gaps are observable facts, not current target behavior:
 
 - A caller of the public `useLayer({lightDismiss: true})` gets no outside-pan
   claim; Popover-based layers do (INV7).
+- A caller's own Popover whose content has `role="menu"` keeps the outside-pan
+  claim, because the layer cannot see its content (INV7).
+- In a browser that light-dismisses at the release, a Popover closes when a
+  control's own drag that began outside it ends outside it (INV7).
 - Some layers anchor to the control that the press scales, so a press moves
   the layer and can narrow it (INV22). DropdownMenu anchors its menu to its
   Button. A finger held on the trigger opens the menu from the pressed box and
@@ -710,7 +715,7 @@ migration, verification, and completion criteria for these gaps. This record mus
 be updated only as that work ships.
 
 `spec:AST-003` does not cover INV21 or INV22; `spec:AST-059` DEC-9 and DEC-10
-govern them. It does not cover the INV7 gap either.
+govern them. It does not cover the INV7 gaps either.
 
 INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them. The
 runtime owns the shared exit copy (INV13, `placeLayerExitCopy`) and the shared
