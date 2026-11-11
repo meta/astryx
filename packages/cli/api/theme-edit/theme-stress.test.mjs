@@ -227,6 +227,11 @@ describe('how', () => {
     const corners = await ask('override the corner radius');
     expect(corners.understood.aspects).toEqual(['corners']);
     expect(JSON.stringify(corners.results)).not.toContain('--color-');
+    for (const q of ['make the background red', 'a yellow background']) {
+      const bg = await ask(q);
+      expect(bg.understood.aspects, q).toEqual(['background']);
+      expect(JSON.stringify(bg.results), q).not.toContain('Status colors');
+    }
     expect((await ask('error red')).understood.aspects).toEqual(['colors']);
   });
 
@@ -273,6 +278,10 @@ describe('preview pages', () => {
     ])
       expect(overview).toContain(part);
     expect(overview).not.toContain('AppShell');
+    // Open layers come first, so they open below their anchors into free space.
+    expect(overview.indexOf('Open layers')).toBeLessThan(
+      overview.indexOf('>Type<'),
+    );
     const components = read('src/app/theme-preview/pages/components.tsx');
     expect(components).toContain(
       'astryx experimental theme editor set s background',

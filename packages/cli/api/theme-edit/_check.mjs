@@ -973,14 +973,14 @@ export function answerHow(ctx, question) {
           text: DIALS[dial].help,
           commands: DIALS[dial].examples.map(e => `${P} ${e}`),
         });
-      // Text color comes from the text tokens first; the brand color after.
-      if (g === 'text') results.push(...wholeThemeTokens(ctx, g));
+      // Text and background colors come from their tokens first; the brand
+      // color after.
+      results.push(...wholeThemeTokens(ctx, g));
       if (g === 'background' || g === 'text')
         results.push({
           text: DIALS.accent.help,
           commands: DIALS.accent.examples.map(e => `${P} ${e}`),
         });
-      if (g !== 'text') results.push(...wholeThemeTokens(ctx, g));
     }
   }
   if (!results.length) {
