@@ -54,7 +54,6 @@ import {useScrollLock} from '../hooks/useScrollLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useAttachment} from '../hooks/useAttachment';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
-import {observeContent} from '../utils/sharedMutationObserver';
 import {MIN_TOUCH_TARGET} from '../utils/hitArea';
 import {useTouchHitArea, type TouchHitAreaOptions} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
@@ -104,7 +103,7 @@ import {dismissBackdropAlpha, dismissChromeAlpha} from './zoomStage';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {MediaTheme} from '../theme/MediaTheme';
 import {Text} from '../Text/Text';
-import {useHeldTruncation} from '../Text/useTruncation';
+import {useTruncation} from '../Text/useTruncation';
 import {Link} from '../Link/Link';
 
 registerEnglishFallback(english);
@@ -776,9 +775,22 @@ export function Lightbox({
   // A video left on another page stops: the pager keeps the neighbours
   // mounted, and a playing one would go on, with its sound, off screen. With
   // `hasAutoPlay`, the video paged to plays again, as a newly shown one does.
+  // The closed dialog keeps them mounted too, so closing stops a playing
+  // video. A single video has no page element. Play looks only in the media
+  // box: a caption can contain its own video, and that one stays put.
   useEffect(() => {
     const container = containerRef.current;
     if (container == null) {
+      return;
+    }
+    if (!isOpen) {
+      for (const video of container.querySelectorAll<HTMLVideoElement>(
+        'video',
+      )) {
+        if (!video.paused) {
+          video.pause();
+        }
+      }
       return;
     }
     for (const video of container.querySelectorAll<HTMLVideoElement>(
@@ -788,14 +800,18 @@ export function Lightbox({
         video.pause();
       }
     }
-    const current = container.querySelector<HTMLVideoElement>(
-      '[data-lightbox-page][data-current] video',
-    );
+    const onAPage = container.querySelector('[data-lightbox-page]') != null;
+    const current = onAPage
+      ? container.querySelector<HTMLVideoElement>(
+          '[data-lightbox-page][data-current] [data-lightbox-page-media] video',
+        )
+      : (imageWrapperRef.current?.querySelector<HTMLVideoElement>('video') ??
+        null);
     if (hasAutoPlay && current != null && current.paused) {
       // A browser can refuse playback without a user's gesture.
       void current.play()?.catch(() => {});
     }
-  }, [index, hasAutoPlay]);
+  }, [index, hasAutoPlay, isOpen]);
 
   // The backdrop, the controls and the pages a dismissal faded, to restore
   // exactly those. A page faded as a neighbour may be the current one when
@@ -928,23 +944,19 @@ export function Lightbox({
   // The toggle's width, which its place in the caption's last line takes.
   const [captionToggleWidth, setCaptionToggleWidth] = useState(0);
   // The current page's caption in its band, and whether two lines clamp it.
-  // Text's truncation check also follows new text in a box that keeps its
-  // size. While the caption is open it holds its closed answer, so the toggle
-  // stays mounted, with its focus, as the caption closes.
+  // While the caption is open the check keeps its clamped answer, so the
+  // toggle stays mounted, with its focus, as the caption closes.
   const bandCaptionRef = useRef<HTMLElement | null>(null);
-  const captionTruncation = useHeldTruncation({
+  const captionTruncation = useTruncation({
     maxLines: 2,
-    isHeld: isCaptionOpen,
+    isExpanded: isCaptionOpen,
   });
   const isCaptionClamped = captionTruncation.isTruncated;
-  const measureCaptionClamp = captionTruncation.measure;
   const bandCaptionMeasureRef = useMergedRefs(
     bandCaptionRef,
     captionTruncation.ref,
   );
   const [captionShownLines, setCaptionShownLines] = useState(0);
-  // Whether the current caption is open, for the content observer's callback.
-  const isCaptionOpenRef = useRef(false);
   // The current caption's lines, without its toggle's place.
   const bandCaptionFlowRef = useRef<HTMLDivElement | null>(null);
   // The caption's width at its last measure, and the cancel of a smaller
@@ -1025,12 +1037,9 @@ export function Lightbox({
   // one commit lands before the frame paints. A read after a write in that
   // delivery would force a layout before the browser's own.
   const measureCaptionRef = useRef(() => {});
-  // Syncs the measurement with this render's clamp and lines measures.
+  // Syncs the measurement with this render's lines measure.
   useIsomorphicLayoutEffect(() => {
-    measureCaptionRef.current = () => {
-      measureCaptionClamp();
-      measureCaptionLines();
-    };
+    measureCaptionRef.current = measureCaptionLines;
   });
   const captionDeliveryRef = useRef<{
     isCaptionDirty: boolean;
@@ -1064,53 +1073,31 @@ export function Lightbox({
     },
     [],
   );
-  // Syncs the clamp, the toggle's place and the open caption's scroll with
-  // the caption's laid-out size and its text. A resize, a font load and the
-  // caption's own open resize it. New text can keep its size, and paging
-  // attaches the next page's caption. The dialog's opening attaches it again.
-  // Each registration gets one delivery after the browser lays the caption
-  // out, and the commit reads nothing. A delivery changes attributes and
-  // styles only and adds no element, so no observer that reacts to new
-  // elements runs mid-delivery. The toggle's observers sit deeper, so they
-  // deliver in the same frame.
+  // Syncs the toggle's place and the open caption's lines and scroll with
+  // the caption's laid-out size. A resize, a font load and the caption's own
+  // open resize it. Paging attaches the next page's caption, and a new
+  // caption or the dialog's opening attaches it again. Each registration
+  // gets one delivery after the browser lays the caption out, and the commit
+  // reads nothing. A delivery changes attributes and styles only and adds no
+  // element, so no observer that reacts to new elements runs mid-delivery.
+  // The toggle's observers sit deeper, so they deliver in the same frame.
   useAttachment(
     bandCaptionRef,
     element => {
+      // A new caption has no measure yet, so an open caption's first
+      // delivery counts its text's lines, as a new width does.
+      captionWidthRef.current = 0;
       const box = element.closest('[data-lightbox-caption]') ?? element;
-      const register = (): (() => void) | undefined => {
-        const stop = observeResizeAfterLayout(box, () => {
-          noteCaptionDelivery(true, null);
-        });
-        if (stop == null) {
-          measureCaptionRef.current();
-          return undefined;
-        }
-        return stop;
-      };
-      let stopResize = register();
-      // New text in a box that keeps its size fires no resize. A new
-      // registration gets its own delivery after the next layout. An open
-      // caption first counts its new text's lines, as an opening does.
-      const stopContent = observeContent(element, () => {
-        stopResize?.();
-        if (isCaptionOpenRef.current) {
-          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the caption lays out without the toggle's place before its lines are counted
-          flushSync(() => {
-            setCaptionShownLines(0);
-          });
-          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the new count must lay out before the new registration's delivery reads the caption
-          flushSync(() => {
-            countOpenCaption();
-          });
-        }
-        stopResize = register();
+      const stop = observeResizeAfterLayout(box, () => {
+        noteCaptionDelivery(true, null);
       });
-      return () => {
-        stopResize?.();
-        stopContent();
-      };
+      if (stop == null) {
+        measureCaptionRef.current();
+        return () => {};
+      }
+      return stop;
     },
-    isOpen,
+    isOpen ? currentItem?.caption : null,
   );
   // The caption's toggle. Under a coarse pointer it takes taps out toward
   // 44 px. A finger's tap on it is its own, as UIKit gives a control's tap
@@ -1155,10 +1142,6 @@ export function Lightbox({
       Math.round(flow.getBoundingClientRect().height / line),
     );
   }, []);
-  // Syncs the content observer's callback with this render's open caption.
-  useIsomorphicLayoutEffect(() => {
-    isCaptionOpenRef.current = isCaptionOpen;
-  }, [isCaptionOpen]);
   // Syncs the toggle's place in the caption's last line with its width. The
   // width is the delivery's own size, measured in the layout the delivery
   // follows, so nothing reads the toggle there. A hidden toggle's size is
@@ -1763,7 +1746,7 @@ export function Lightbox({
         src={src}
         aria-label={alt}
         controls
-        autoPlay={isCurrent && hasAutoPlay}
+        autoPlay={isOpen && isCurrent && hasAutoPlay}
         preload={isCurrent ? 'auto' : 'metadata'}
         {...stylex.props(styles.video)}
       />

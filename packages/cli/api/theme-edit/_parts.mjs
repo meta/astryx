@@ -83,14 +83,18 @@ export function catalogItems(project) {
   return {items, imports};
 }
 
+/** One name per process, so two commands at once never share a folder. */
+const RUN = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+
 /**
  * The folder generated pages render from: inside the project but outside
  * node_modules, so the render compiles them and their stylesheet imports as
- * the project's own. It is removed after each render.
+ * the project's own. Its name is this process's own, and it is removed
+ * after each render.
  * @param {import('./_project.mjs').ThemeProject} project
  */
 export const renderDir = project =>
-  path.join(project.cwd, 'themes', '.astryx-render');
+  path.join(project.cwd, 'themes', `.astryx-render-${RUN}`);
 
 /**
  * Render a generated page module and give its HTML and markup (the body,
@@ -128,7 +132,26 @@ export async function renderGenerated(project, file, source, extra = []) {
     }
     throw e;
   } finally {
-    fs.rmSync(dir, {recursive: true, force: true});
+    // Only this render's files go; the folder goes when nothing else is in
+    // it, so a render running beside this one keeps its own.
+    for (const f of [entry, ...extra.map(x => path.join(dir, x.name))])
+      fs.rmSync(f, {force: true});
+    removeEmpty(dir);
+  }
+}
+
+/**
+ * Remove `dir` and the folders under it when no file is left in them.
+ * @param {string} dir
+ */
+function removeEmpty(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const e of fs.readdirSync(dir, {withFileTypes: true}))
+    if (e.isDirectory()) removeEmpty(path.join(dir, e.name));
+  try {
+    fs.rmdirSync(dir);
+  } catch {
+    // Not empty: another render is using it.
   }
 }
 

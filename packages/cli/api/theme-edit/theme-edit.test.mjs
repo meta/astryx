@@ -99,9 +99,11 @@ describe('new', () => {
       settings: [],
     });
     // The render folder is removed after every render.
-    expect(fs.existsSync(path.join(cwd, 'themes', '.astryx-render'))).toBe(
-      false,
-    );
+    expect(
+      fs
+        .readdirSync(path.join(cwd, 'themes'))
+        .filter(f => f.startsWith('.astryx-render')),
+    ).toEqual([]);
   });
 
   it('caches the part data per Core version under node_modules/.cache', () => {
@@ -288,30 +290,53 @@ describe('every refusal code', () => {
 });
 
 describe('the editor commands succeed from the command line', () => {
-  it('new, set, undo, show and how exit 0 with a JSON envelope each', async () => {
-    /** @param {string[]} args */
-    const ok = async args => {
-      const r = await runCli(
-        ['--json', 'experimental', 'theme', 'editor', ...args],
-        {cwd},
-      );
-      expect(r.status, args.join(' ')).toBe(0);
-      return JSON.parse(r.stdout);
-    };
+  // One CLI run per test: each run starts Node and copies the theme, so
+  // several runs together outlast one test's time limit. The tests run in
+  // order and share the fixture project, so each one builds on the one
+  // before it.
+  /** @param {string[]} args */
+  const ok = async args => {
+    const r = await runCli(
+      ['--json', 'experimental', 'theme', 'editor', ...args],
+      {cwd},
+    );
+    expect(r.status, args.join(' ')).toBe(0);
+    return JSON.parse(r.stdout);
+  };
+
+  it('new exits 0 with a JSON envelope', async () => {
     expect((await ok(['new', 'cli', '--like', 'neutral'])).type).toBe(
       'themeEdit.new',
     );
+  });
+
+  it('set exits 0 with a JSON envelope', async () => {
     expect((await ok(['set', 'cli', 'corners', 'pill'])).type).toBe(
       'themeEdit.set',
     );
+  });
+
+  it('set on one component exits 0 with a JSON envelope', async () => {
     expect(
       (await ok(['set', 'cli', 'corners', '12px', '--on', 'card'])).type,
     ).toBe('themeEdit.set');
+  });
+
+  it('undo of one component exits 0 with a JSON envelope', async () => {
     expect(
       (await ok(['undo', 'cli', 'corners', '--on', 'card'])).data.action,
     ).toBe('undo');
+  });
+
+  it('undo of the last step exits 0 with a JSON envelope', async () => {
     expect((await ok(['undo', 'cli'])).data.action).toBe('step');
+  });
+
+  it('show exits 0 with a JSON envelope', async () => {
     expect((await ok(['show', 'cli'])).type).toBe('themeEdit.show');
+  });
+
+  it('how exits 0 with a JSON envelope', async () => {
     expect((await ok(['how', 'banner'])).data.kind).toBe('part');
   });
 });
