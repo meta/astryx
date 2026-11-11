@@ -110,7 +110,7 @@ describe('color dials through the palette generator', () => {
     const source = read('p.settings.ts');
     expect(source).toContain("import {palette} from './tokens/p.palette';");
     expect(source).toMatch(
-      /"--color-accent": \[\s*palette\.accent\.light\[\d+\],\s*palette\.accent\.dark\[\d+\]\s*\]/,
+      /"--color-text-accent": \[\s*palette\.accent\.light\[\d+\],\s*palette\.accent\.dark\[\d+\]\s*\]/,
     );
     const show = await themeEditShow('p', {cwd});
     expect(show.data.colors[0]).toMatchObject({
@@ -123,7 +123,7 @@ describe('color dials through the palette generator', () => {
     );
     const shades =
       /^light (\d+) (#[0-9a-f]{6}), dark (\d+) (#[0-9a-f]{6})$/.exec(
-        tokens['--color-accent'],
+        tokens['--color-text-accent'],
       );
     for (const [i, mode] of /** @type {const} */ ([
       [1, 'light'],
@@ -133,8 +133,13 @@ describe('color dials through the palette generator', () => {
       expect(/** @type {any} */ (candidate.palette.accent)[mode][stop]).toBe(
         color,
       );
-      expect(show.data.resolved['--color-accent'][mode]).toBe(color);
+      expect(show.data.resolved['--color-text-accent'][mode]).toBe(color);
     }
+    // White text reads on #7c3aed, so the dark fill keeps the exact color.
+    expect(show.data.resolved['--color-accent']).toEqual({
+      light: '#7c3aed',
+      dark: '#7c3aed',
+    });
     expect(Object.keys(tokens)).toEqual(
       expect.arrayContaining([
         '--color-accent',
@@ -184,8 +189,8 @@ describe('color dials through the palette generator', () => {
       light: '#ff0000',
       dark: '#ff0000',
     });
-    expect(show.data.colors[0].tokens['--color-accent']).toContain(
-      '(your exact setting wins)',
+    expect(show.data.colors[0].tokens['--color-accent']).toMatch(
+      /^#ff0000 \(your exact setting wins over the generated light/,
     );
     const source = read('p.settings.ts');
     expect(source).toContain('"--color-accent": "#ff0000"');
@@ -344,6 +349,7 @@ describe('color dials through the palette generator', () => {
       },
     });
     expect(r.data.settings).toEqual([
+      'mode = light-only (whole theme)',
       'corners = round (whole theme)',
       'accent = #7c3aed (whole theme)',
       'vibrancy = 60 (whole theme)',
@@ -495,7 +501,9 @@ describe('contrast picks a stop that passes', () => {
     for (const v of Object.values(pal.tokens))
       for (const mode of /** @type {const} */ (['light', 'dark']))
         expect(
-          /** @type {any} */ (candidate.palette.accent)[mode][v[mode].stop],
+          /** @type {any} */ (candidate.palette.accent)[v[mode].from ?? mode][
+            v[mode].stop
+          ],
         ).toBe(v[mode].color);
     expect(pal.contrast.every(c => c.pass)).toBe(true);
   });

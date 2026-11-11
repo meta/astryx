@@ -38,6 +38,7 @@ import {
 } from './_preview.mjs';
 import {paletteFiles, paletteMapping} from './_palette.mjs';
 import {build} from '../build/build.mjs';
+import {search} from '../search/search.mjs';
 import {template} from '../template/template.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
@@ -555,69 +556,97 @@ function skipReason(s) {
 }
 
 /**
- * The page templates the build ranking picks for a description, best first,
- * each with why. App frames (the Shell templates) are left out: the preview
- * is an app shell already, and `--template` can still name one. When the
- * ranking says no page is really this one, it refuses with the closest
- * pages to name instead, and nothing is written.
+ * The page templates for a description, best first, each with why: the
+ * build ranking's picks, then the template search's, so a page the app
+ * cannot show has a next match. App frames (the Shell templates) are left
+ * out: the preview is an app shell already, and `--template` can still name
+ * one. The closest page is added even when it is not exactly the page asked
+ * for, with a note; only a description no page relates to is refused, with
+ * the closest pages to name instead, and nothing is written.
  * @param {string} words
  * @param {string} cwd
- * @param {string[]} notes skipped frames are noted here
+ * @param {string[]} notes notes for the result
+ * @param {string} flags the caller's other flags, for the suggestions
  * @returns {Promise<Array<{name: string, displayName: string, why: string}>>}
  */
-async function rankedPages(words, cwd, notes) {
+async function rankedPages(words, cwd, notes, flags) {
   const kit =
     /** @type {import('../build/build.type.mjs').BuildKitResponse} */ (
       await build(words, {cwd})
     );
   const start = kit.data.start;
-  const all = start ? [start, ...start.alternatives] : [];
-  const listed = /** @type {Array<{id: string, category?: string}>} */ (
-    (await template(undefined, {list: true, type: 'page', cwd})).data
-  );
+  const listed = await pageTemplates(cwd);
   const frames = new Set(
     listed.filter(t => /^Shell\b/.test(t.category ?? '')).map(t => t.id),
   );
-  const pages = all.filter(p => !frames.has(p.name));
-  const skippedFrames = all.filter(p => frames.has(p.name)).map(p => p.name);
-  if (!pages.length)
+  const found = /** @type {any} */ (
+    await search(words, {cwd, type: 'template', limit: 20})
+  ).data.results.filter((/** @type {any} */ r) => r.kind === 'page');
+  /** @type {Map<string, string>} */
+  const matchedWords = new Map(
+    found.map((/** @type {any} */ r) => [
+      r.name,
+      String(r.reason ?? '').replace(/^matches \d+\/\d+ terms: /, ''),
+    ]),
+  );
+  const names = [
+    ...(start ? [start.name, ...start.alternatives.map(a => a.name)] : []),
+    ...found.map((/** @type {any} */ r) => r.name),
+  ].filter((n, i, a) => a.indexOf(n) === i);
+  const skippedFrames = names.filter(n => frames.has(n));
+  const pages = names.filter(n => !frames.has(n));
+  /** @param {string} name */
+  const label = name => listed.find(t => t.id === name)?.name ?? name;
+  const suggest = (/** @type {string[]} */ list) =>
+    list.slice(0, 3).map(n => `${PREVIEW} add --template ${n}${flags}`);
+  // No page relates when the ranking fell back to a frame with no direct
+  // match, and no page the search found matches two words of the request.
+  const termsMatched = (/** @type {any} */ r) =>
+    Number(/^matches (\d+)\//.exec(String(r.reason ?? ''))?.[1] ?? 0);
+  const unrelated =
+    !pages.length ||
+    (start &&
+      start.basis === 'fallback' &&
+      frames.has(start.name) &&
+      !kit.data.directMatch &&
+      !found.some(
+        (/** @type {any} */ r) => !frames.has(r.name) && termsMatched(r) >= 2,
+      ));
+  if (unrelated)
     refuse(
       E.ERR_NOT_FOUND,
-      `No page template to show for "${words}": ${all.length ? `the ranking found only app frames (${skippedFrames.join(', ')}), and the preview is a frame already` : 'this project has none'}. Nothing was written.`,
-      {
-        run: skippedFrames
-          .slice(0, 3)
-          .map(n => `${PREVIEW} add --template ${n}`),
-      },
-    );
-  // The ranking's own verdict: a closest page that is not this one, or a
-  // frame it fell back to because no page matched, adds nothing unrelated.
-  const unmatched =
-    start &&
-    ((start.basis === 'closest' && !frames.has(start.name)) ||
-      (start.basis === 'fallback' &&
-        frames.has(start.name) &&
-        !kit.data.directMatch));
-  if (unmatched)
-    refuse(
-      E.ERR_NOT_FOUND,
-      `No page template really matches "${words}"${start.basis === 'closest' ? `: the closest is ${start.name}, and none is exactly this page` : ''}. Nothing was written. Name one of the closest pages to add it anyway.`,
-      {run: pages.slice(0, 3).map(p => `${PREVIEW} add --template ${p.name}`)},
+      `No page template relates to "${words}". Name a page to add it anyway.`,
+      {run: suggest(pages.length ? pages : skippedFrames)},
     );
   if (skippedFrames.length)
     notes.push(
       `left out ${skippedFrames.join(', ')}: app frames, not pages (add one with --template <id>)`,
     );
-  return pages.map((p, i) => ({
-    name: p.name,
-    displayName: p.displayName,
-    why:
-      i === 0 && p === start
-        ? (start.reason ?? 'the best match')
-        : i === 0
-          ? 'the best match after leaving out app frames'
-          : 'the next best match',
-  }));
+  const closest = start && start.basis === 'closest';
+  return pages.map((name, i) => {
+    const words = matchedWords.get(name);
+    const doc = listed.find(t => t.id === name)?.description ?? '';
+    const shape = doc.split(/(?<=\.)\s/)[0];
+    return {
+      name,
+      displayName: label(name),
+      why:
+        i === 0 && closest
+          ? `the closest page, not exactly the one described${words ? `: it covers ${words}` : ''}; the rest of the description is not on it. ${shape}`
+          : `${i === 0 ? 'the best match' : 'the next match'}${words ? `: it covers ${words}` : ''}. ${shape}`,
+    };
+  });
+}
+
+/**
+ * The page templates this project has, with their display names.
+ * @param {string} cwd
+ * @returns {Promise<Array<{id: string, name: string, category?: string, description?: string}>>}
+ */
+async function pageTemplates(cwd) {
+  return /** @type {any} */ (
+    (await template(undefined, {list: true, type: 'page', cwd})).data
+  );
 }
 
 /**
@@ -706,15 +735,26 @@ export async function themeEditPreviewAdd(description, options = {}) {
     /** @type {Array<{name: string, displayName: string, why: string}>} */
     let picks;
     const explicit = options.template != null;
-    if (explicit)
+    if (explicit) {
+      const name = /** @type {string} */ (options.template);
       picks = [
         {
-          name: /** @type {string} */ (options.template),
-          displayName: /** @type {string} */ (options.template),
+          name,
+          displayName:
+            (await pageTemplates(cwd)).find(t => t.id === name)?.name ?? name,
           why: 'named with --template',
         },
       ];
-    else picks = await rankedPages(words, cwd, notes);
+    } else
+      picks = await rankedPages(
+        words,
+        cwd,
+        notes,
+        [
+          ...(options.theme != null ? [` --theme ${options.theme}`] : []),
+          ...(options.path != null ? [` --path ${options.path}`] : []),
+        ].join(''),
+      );
     for (const pick of picks) {
       if (add.length >= (explicit ? 1 : top)) break;
       const shownTemplate =

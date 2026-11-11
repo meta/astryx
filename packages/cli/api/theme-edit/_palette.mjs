@@ -31,6 +31,7 @@ import {parseColor, hex, ratio} from './_color.mjs';
  * One token pointed at a palette stop in each mode.
  * @typedef {object} StopRef
  * @property {number} stop
+ * @property {Mode} [from] - The ramp the stop is from when it is not the token's own mode: a dark fill that keeps the exact color takes the light ramp's stop.
  * @property {string} color - The stop's color, with `alpha` appended when set.
  * @property {string} [alpha] - Two hex digits of opacity.
  */
@@ -482,6 +483,41 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     return {fill: ref(id, m, b.fill), on: ref(id, m, b.on), moved: b.fill};
   };
 
+  /**
+   * The dark fill as the exact color given, when text on it reads at 4.5:1
+   * (white first, then the dark text stop); no pair when none does, with
+   * the best ratio it got.
+   * @param {string} fillToken @param {string} onToken @param {string} id @param {number} seedStop
+   * @returns {{pair: ReturnType<typeof fillPair> | null, ratio: number}}
+   */
+  const exactDarkFill = (fillToken, onToken, id, seedStop) => {
+    const fill = ref(id, 'light', seedStop);
+    const best = [...ON_FILL.dark]
+      .reverse()
+      .map(on => ({on, r: contrast(ref(id, 'dark', on).color, fill.color)}))
+      .reduce((a, b) => (b.r > a.r + 0.01 ? b : a));
+    if (best.r < TEXT) return {pair: null, ratio: round(best.r)};
+    if (has(onToken))
+      checks.push({
+        token: onToken,
+        mode: 'dark',
+        stop: best.on,
+        preferred: ON_FILL.dark[1],
+        against: `${fillToken} (your exact color)`,
+        ratio: round(best.r),
+        needs: TEXT,
+        pass: true,
+      });
+    return {
+      pair: {
+        fill: {...fill, from: /** @type {Mode} */ ('light')},
+        on: ref(id, 'dark', best.on),
+        moved: FILL[1],
+      },
+      ratio: round(best.r),
+    };
+  };
+
   const modes = /** @type {Mode[]} */ (['light', 'dark']);
   const neutral = fams.find(f => f.id === 'neutral');
   if (neutral) {
@@ -585,9 +621,25 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         };
     const muted = modes.map((m, i) => ref(f.id, m, MUTED[i]));
     put(names.muted, f.id, muted[0], muted[1]);
-    const pairs = modes.map((m, i) =>
-      fillPair(names.fill, names.on, f.id, m, i ? FILL[1] : fillStart(f.id)),
-    );
+    const pairs = modes.map(m => {
+      if (m === 'light')
+        return fillPair(names.fill, names.on, f.id, m, fillStart(f.id));
+      const exact = exactDarkFill(names.fill, names.on, f.id, fillStart(f.id));
+      if (exact.pair) return exact.pair;
+      const pair = fillPair(names.fill, names.on, f.id, m, FILL[1]);
+      if (has(names.fill))
+        checks.push({
+          token: names.fill,
+          mode: 'dark',
+          stop: pair.fill.stop,
+          preferred: fillStart(f.id),
+          against: `the text on it: your exact color reads at only ${exact.ratio}:1 with any text shade`,
+          ratio: exact.ratio,
+          needs: TEXT,
+          pass: true,
+        });
+      return pair;
+    });
     put(names.fill, f.id, pairs[0].fill, pairs[1].fill);
     put(names.on, f.id, pairs[0].on, pairs[1].on);
     const text = modes.map((m, i) =>
@@ -689,7 +741,7 @@ export function mappingRows(dial) {
   const t = (/** @type {string} */ a, /** @type {string} */ b) =>
     word ? a.replace('$', word) : b;
   const rows = [
-    `${t('--color-$', '--color-accent')}: in light, the shade the color lands on (kept exactly, so it stays the color you gave); in dark, shade ${FILL[1]}; either moves until the text on it reads at ${TEXT}:1`,
+    `${t('--color-$', '--color-accent')}: the color you gave, exactly, in light and in dark; in dark, when no text on it reads at ${TEXT}:1, shade ${FILL[1]} or the nearest shade where text does, and the result says so`,
     `${t('--color-on-$', '--color-on-accent')}: shade ${ON_FILL.light[0]} or ${ON_FILL.light[1]} in light, ${ON_FILL.dark[0]} or ${ON_FILL.dark[1]} in dark, whichever reads better on the fill`,
     `${t('--color-text-$', '--color-text-accent')} and ${t('--color-icon-$', '--color-icon-accent')}: light shade ${TEXT_STOP[0]}, dark shade ${TEXT_STOP[1]} (moves until it reads at ${TEXT}:1 on the surfaces and the muted tint)`,
     `${t('--color-$-muted', '--color-accent-muted')}: light shade ${MUTED[0]}, dark shade ${MUTED[1]}`,
@@ -723,11 +775,15 @@ export function paletteNotes(pal, dial, slug) {
   const notes = [];
   if (main)
     notes.push(
-      `${paletteToken(dial)} uses ${dial} shade ${main.light.stop} (${main.light.color}) in light and shade ${main.dark.stop} (${main.dark.color}) in dark`,
+      `${paletteToken(dial)} uses ${dial} shade ${main.light.stop} (${main.light.color}) in light and ${main.dark.from ? 'the same exact color in dark' : `shade ${main.dark.stop} (${main.dark.color}) in dark`}`,
     );
   for (const c of pal.contrast) {
     if (pal.tokens[c.token]?.family !== dial) continue;
-    if (!c.pass)
+    if (c.against.startsWith('the text on it'))
+      notes.push(
+        `in dark, ${c.token} is shade ${c.stop}, not your exact color: ${c.against.slice('the text on it: '.length)}, and needs ${c.needs}:1`,
+      );
+    else if (!c.pass)
       notes.push(
         `${c.token} reads at only ${c.ratio}:1 in ${c.mode} on ${c.against} (needs ${c.needs}:1) even at shade ${c.stop}, the most contrasting one: pick a lighter or darker ${dial}, or set ${c.token} exactly`,
       );
