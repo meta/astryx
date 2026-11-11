@@ -66,7 +66,7 @@ server code stay calendar-neutral.
 - Values that carry their calendar, such as `2024-02-10[u-ca=hebrew]`.
 - A public calendar adapter or plugin API.
 - Calendar arithmetic owned by Astryx. Temporal owns it.
-- Calendar identifiers outside FR1, including the observational Islamic
+- Calendar identifiers outside FR1, including the observational Hijri
   calendars.
 - Japanese era names before Meiji (1868).
 - Guaranteed behavior for dates before 1900. Such dates display and navigate as
@@ -106,9 +106,9 @@ server code stay calendar-neutral.
 ```
 
 ```ts
-// Calendars other than gregory, iso8601, buddhist, roc, and japanese need
-// Temporal. Where the runtime lacks it, the application loads a polyfill on the
-// server and in the browser.
+// Calendars other than the Gregorian, Buddhist, Minguo, and Japanese calendars
+// need Temporal. Where the runtime lacks it, the application loads a
+// polyfill on the server and in the browser.
 import 'temporal-polyfill/full/global';
 ```
 
@@ -129,7 +129,8 @@ optional `calendar` argument that defaults to `gregory` (FR18). The public
   `buddhist`, `roc`, `japanese`, `persian`, `indian`, `hebrew`, `chinese`,
   `dangi`, `coptic`, `ethiopic`, `ethioaa`, `islamic-civil`, `islamic-tbla`, or
   `islamic-umalqura`: the calendars that ECMA-402 and Temporal require. Any
-  other identifier resolves to `gregory` and warns once in development.
+  other identifier resolves to `gregory` and warns once in development. Each
+  calendar goes by its CLDR name (DEC-8).
 - **FR2 — The application selects the calendar.** A date component uses, in
   order: its own `calendar` prop; the `calendar` prop of its
   `InternationalizationProvider`; otherwise `gregory`. A locale never selects
@@ -147,14 +148,15 @@ optional `calendar` argument that defaults to `gregory` (FR18). The public
   wheel, list, or step in a component, or in a hook given a calendar (FR20),
   assumes 12 months or Gregorian month lengths. A leap
   month is a distinct month with its own name: Adar I and Adar II in a Hebrew
-  leap year, or the leap month of a `chinese` or `dangi` year.
-- **FR5 — Some calendars need Temporal.** `gregory`, `iso8601`, `buddhist`,
-  `roc`, and `japanese` work everywhere. The other calendars use the runtime's
-  `Temporal`, native or a polyfill the application loads; Astryx bundles none.
-  Without it, a component that resolves one of them shows and accepts Gregorian
-  dates and warns once in development, naming the polyfill. Server and browser
-  markup match when both resolve the calendar the same way, so a server-rendered
-  application loads `Temporal` on the server too. FR19 names the one exception.
+  leap year, or the leap month of a Chinese or Dangi calendar year.
+- **FR5 — Some calendars need Temporal.** The Gregorian, Buddhist, Minguo,
+  and Japanese calendars work everywhere. The other calendars use the
+  runtime's `Temporal`, native or a polyfill the application loads; Astryx
+  bundles none. Without it, a component that resolves one of them shows and
+  accepts Gregorian dates and warns once in development, naming the polyfill.
+  Server and browser markup match when both resolve the calendar the same way,
+  so a server-rendered application loads `Temporal` on the server too. FR19
+  names the one exception.
 
 ### Calendar
 
@@ -191,10 +193,11 @@ These requirements apply to the text fields of `DateInput` and
   ignoring case and Latin diacritics. A typed month number means what the
   locale's numeric month means for that calendar: the month's position in the
   typed year for Hebrew, and the month number with the locale's leap marker for
-  `chinese` and `dangi`. A plain Adar typed for a Hebrew leap year is Adar II.
-  In the Gregorian calendar, text that matches none of these forms, or that
-  names a date the locale's numeric order does not have, still commits on Enter
-  or blur when `parseDateInput` reads it: `13/5/2026` in `en-US` commits 13 May 2026. Otherwise FR11 applies. A one-digit year is not a date, even when
+  the Chinese and Dangi calendars. A plain Adar typed for a Hebrew leap year is
+  Adar II. In the Gregorian calendar, text that matches none of these forms, or
+  that names a date the locale's numeric order does not have, still commits on
+  Enter or blur when `parseDateInput` reads it: `13/5/2026` in `en-US` commits
+  13 May 2026. Otherwise FR11 applies. A one-digit year is not a date, even when
   `parseDateInput` reads it.
 - **FR10 — Years are years of the calendar.** A typed year is a year of the
   active calendar, never a converted Gregorian year: `2026` in a Buddhist field
@@ -202,7 +205,7 @@ These requirements apply to the text fields of `DateInput` and
   when the locale's format includes it, such as `พ.ศ.` (B.E., the Buddhist Era)
   or `民國` (Minguo, the Minguo calendar's era), and add it when the year alone is
   ambiguous, following the ICU4X year-ambiguity model: a year before the
-  calendar's epoch era always shows its era, and in the `japanese` and `roc`
+  calendar's epoch era always shows its era, and in the Japanese and Minguo
   calendars, whose era changes within 1900 through 2100, a format that omits the
   era gains it, written narrow when that keeps the locale's field order; where
   every era width reorders the fields, only a date before the latest era gains
@@ -230,9 +233,9 @@ These requirements apply to the text fields of `DateInput` and
   and `date_weekday` render in the calendar. `system_date` stays Gregorian ISO
   and the field also accepts ISO input with it. For every calendar, locale, and
   named format, the field reads its committed text back as the same date, for
-  every day from 1900 through 2100. `chinese` and `dangi` committed text
-  includes the related Gregorian year, and its month and day agree with the
-  field's own arithmetic in the same environment.
+  every day from 1900 through 2100. Committed text in the Chinese and Dangi
+  calendars includes the related Gregorian year, and its month and day agree
+  with the field's own arithmetic in the same environment.
 - **FR14 — Custom display text is display-only.** Text from a custom `format`
   function that the field cannot read back cannot be re-committed after an edit.
 
@@ -283,18 +286,19 @@ These requirements apply to the text fields of `DateInput` and
 
 ### Lunisolar calendars
 
-- **FR19 — Lunisolar dates follow the runtime.** `chinese` and `dangi` month
-  starts come from the runtime's `Temporal`. Native `Temporal` agrees with
-  official observatory data from 1900 through 2100. A polyfill that reads the
-  platform's `Intl` data can start nine `chinese` and four `dangi` months in
-  that range one day apart, the first month of the 2027 `chinese` year among
-  them. When a server and a browser use implementations that disagree on a month
-  start, the browser's render of that month differs from the server markup, and
-  React renders that part again on the client during hydration. The
-  internationalization guide and the date component documentation state this.
-  They advise loading a polyfill only where `Temporal` is missing, and loading
-  the same implementation on the server and in the browser when a
-  server-rendered application needs identical `chinese` or `dangi` markup.
+- **FR19 — Lunisolar dates follow the runtime.** Month starts in the Chinese and
+  Dangi calendars come from the runtime's `Temporal`. Native `Temporal` agrees
+  with official observatory data from 1900 through 2100. A polyfill that reads
+  the platform's `Intl` data can start nine Chinese calendar months and four
+  Dangi calendar months in that range one day apart, the first month of the 2027
+  Chinese calendar year among them. When a server and a browser use
+  implementations that disagree on a month start, the browser's render of that
+  month differs from the server markup, and React renders that part again on the
+  client during hydration. The internationalization guide and the date component
+  documentation state this. They advise loading a polyfill only where `Temporal`
+  is missing, and loading the same implementation on the server and in the
+  browser when a server-rendered application needs identical markup in the
+  Chinese or Dangi calendar.
 
 ### Accessibility contract
 
@@ -306,9 +310,10 @@ These requirements apply to the text fields of `DateInput` and
   example date in the calendar's numeric pattern: today when the field accepts
   it, else the nearest date it accepts within `min`, `max`, and
   `dateConstraints`. A caller's `placeholder` always wins. The field's
-  description names its calendar only when that calendar differs from its
-  provider's calendar, so a page in one calendar does not repeat it and a page
-  that mixes calendars says which field uses which.
+  description names its calendar, by the locale's CLDR display name (DEC-8),
+  only when that calendar differs from its provider's calendar, so a page in one
+  calendar does not repeat it and a page that mixes calendars says which field
+  uses which.
 - **AR3 — Each rejection has its own message.** Unreadable text, a date the
   calendar does not have, and an out-of-range date each announce a different
   message.
@@ -329,9 +334,9 @@ These requirements apply to the text fields of `DateInput` and
   polyfill; an application that renders on the server loads it on the server
   too), the preserved obligations (`spec:AST-013` FR7 and FR8, and FR9 whenever
   the server and the browser resolve the calendar the same way, outside FR19's
-  `chinese` and `dangi` case), the evidence (real-browser runs with `Temporal`
-  removed, with and without a polyfill), the owner (`nynexman4464`), and the
-  review condition (Safari ships `Temporal`).
+  case of the Chinese and Dangi calendars), the evidence (real-browser runs with
+  `Temporal` removed, with and without a polyfill), the owner (`nynexman4464`),
+  and the review condition (Safari ships `Temporal`).
 - Browser evidence: real Chromium and Firefox with native `Temporal`; real
   Chromium, Firefox, and WebKit with `Temporal` removed, with and without the
   polyfill; server render and hydration with and without `Temporal`.
@@ -407,7 +412,7 @@ These requirements apply to the text fields of `DateInput` and
 | ------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1–FR2      | Provider and component resolution tests                                                                      | Every identifier; an unknown identifier; component over provider over default; bare `fa-IR`; a `-u-ca-` locale stays Gregorian                                                                                                       | A locale selects a calendar, the precedence changes, or an unknown identifier throws                                                                                             |
 | FR3          | Callback and form tests in non-Gregorian calendars                                                           | Select, type, clear, `min`, `max`, and `dateConstraints` in `persian` and `hebrew`                                                                                                                                                   | Any reported or submitted value is not Gregorian ISO                                                                                                                             |
-| FR4, FR6–FR7 | Month-structure tests against `Temporal` for every calendar from 1900 through 2100; real-browser grid checks | Persian month boundaries, a Hebrew leap year, the Ethiopic thirteenth month, the Japanese era change, a `chinese` leap month; PageUp, PageDown, Shift+PageUp, Shift+PageDown                                                         | A month start, length, or step differs from `Temporal`, or a leap month vanishes                                                                                                 |
+| FR4, FR6–FR7 | Month-structure tests against `Temporal` for every calendar from 1900 through 2100; real-browser grid checks | Persian month boundaries, a Hebrew leap year, the Ethiopic thirteenth month, the Japanese era change, a Chinese leap month; PageUp, PageDown, Shift+PageUp, Shift+PageDown                                                           | A month start, length, or step differs from `Temporal`, or a leap month vanishes                                                                                                 |
 | FR5          | Real-browser runs with `Temporal` removed, with and without the polyfill; server render and hydrate          | `persian` with and without `Temporal`; `buddhist` and `japanese` without `Temporal`                                                                                                                                                  | A crash, a missing warning, or a hydration mismatch                                                                                                                              |
 | FR8          | Calendar week-number tests                                                                                   | `persian` and `hebrew` grids with `hasWeekNumbers`                                                                                                                                                                                   | A week number that is not ISO 8601                                                                                                                                               |
 | FR9–FR14     | Parser tests; a round-trip matrix; DateInput and DateTimeInput interaction tests                             | Every calendar from 1900 through 2100 in native locales, English, and Swedish, in every named format; Adar; partial input; mixed digits; Japanese eras; invalid dates; Gregorian text that only `parseDateInput` reads               | A round trip fails, an invalid date is adjusted, `onChange` fires on partial input, or Gregorian text that `parseDateInput` reads, other than a one-digit year, stops committing |
@@ -512,9 +517,10 @@ host's `Intl` data and make native environments less consistent.
 **Reference:** `spec:AST-111/DEC-6`
 **Decider:** `nynexman4464`, 2026-11-02
 
-`Temporal` defines week numbering only for the ISO calendar, so `hasWeekNumbers`
-keeps one meaning. In a thirteen-month calendar, twelve months is not a year, so
-a year step moves to the same month of the next calendar year.
+`Temporal` defines week numbering only for `iso8601`, the Gregorian calendar
+with ISO 8601 weeks, so `hasWeekNumbers` keeps one meaning. In a thirteen-month
+calendar, twelve months is not a year, so a year step moves to the same month of
+the next calendar year.
 
 ### DEC-7 — A non-Gregorian calendar wins over the native picker
 
@@ -529,6 +535,26 @@ loses for seconds or steps, so the calendar wins even over an explicit
 
 Rejected: keeping an explicit `native` native, because the device, not the
 application, would then choose the calendar a person sees.
+
+### DEC-8 — Calendars go by their CLDR names
+
+**Reference:** `spec:AST-111/DEC-8`
+**Decider:** `nynexman4464`, 2026-11-10
+
+Astryx names a calendar the way CLDR names it. A component that names a
+calendar reads the locale's display name from `Intl.DisplayNames` with type
+`calendar` (AR2). Specs, docs, changesets, and source comments use the CLDR
+English name, such as the Minguo calendar for `roc`, the Dangi calendar for
+`dangi`, and the Chinese calendar for `chinese`. They write the ECMA-402
+identifier in code font only where the API value itself is meant. The `iso8601`
+calendar, which CLDR names the Gregorian calendar with ISO 8601 weeks, counts
+as the Gregorian calendar where weeks do not matter. Era names that `Intl`
+writes, such as `民國`, are data and appear as `Intl` writes them. Search
+keywords may also list other common names so people can find a page.
+
+Rejected: names that are not CLDR's, such as a country, a state, or a holiday
+standing for a calendar, because a standard name stays neutral and matches what
+the components show.
 
 ## Open questions
 
