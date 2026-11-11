@@ -2239,6 +2239,8 @@ describe('integrationPackCheck', () => {
     }
   });
 
+  // npm pack's own limit is 60s. The 30s default stops a slow run on Node
+  // 22.13 before that limit, so this test allows the pack to finish.
   it('does not execute shell metacharacters embedded in the cwd', async () => {
     const marker = path.join(process.cwd(), 'astryx-pack-check-injected');
     fs.rmSync(marker, {force: true});
@@ -2262,7 +2264,7 @@ describe('integrationPackCheck', () => {
       fs.rmSync(weirdDir, {recursive: true, force: true});
       fs.rmSync(marker, {force: true});
     }
-  });
+  }, 90_000);
 
   it('returns early with issues for a directory without package.json', async () => {
     const emptyDir = fs.mkdtempSync(

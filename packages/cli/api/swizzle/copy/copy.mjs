@@ -552,11 +552,9 @@ export async function swizzleCopy(component, options = {}) {
     } catch (err) {
       const unrestored = undoCopy(written);
       for (const dir of [...createdDirs].reverse()) {
-        fs.rmSync(dir, {recursive: true, force: true});
+        removeCopyDir(dir);
       }
-      if (!outputDirExisted) {
-        fs.rmSync(outputDir, {recursive: true, force: true});
-      }
+      if (!outputDirExisted) removeCopyDir(outputDir);
       throw writeFailed(output.dest, cwd, err, unrestored);
     }
   }
@@ -609,6 +607,20 @@ function swizzleMarkerContent(existing, ownerPackage, version) {
   }
   packages[ownerPackage] = version;
   return `${JSON.stringify({packages}, null, 2)}\n`;
+}
+
+/**
+ * Remove a directory the copy created. Node 22 throws ENOTDIR when a parent
+ * of `dir` is a file. That error stays here, so the caller still sees the
+ * write error.
+ * @param {string} dir
+ */
+function removeCopyDir(dir) {
+  try {
+    fs.rmSync(dir, {recursive: true, force: true});
+  } catch {
+    // The write error is the one the caller sees.
+  }
 }
 
 /**

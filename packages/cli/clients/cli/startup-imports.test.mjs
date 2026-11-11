@@ -7,7 +7,8 @@
  * project and integration modules. The project, integration and contribution
  * modules use them. A component lookup loads no code-rewrite package, which
  * only patching an integration manifest uses. A module hook in the child
- * records every module that the run resolves.
+ * records every module that the run resolves. The hook calls `register()`,
+ * which Node 22.13 has. `registerHooks` exists only from Node 22.15.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -82,19 +83,28 @@ function packageOf(url) {
 function modulesLoadedBy(args) {
   const log = path.join(dir, 'resolved.txt');
   fs.rmSync(log, {force: true});
+  const hooks = path.join(dir, 'record-resolved-hooks.mjs');
+  fs.writeFileSync(
+    hooks,
+    [
+      "import {appendFileSync} from 'node:fs';",
+      'export async function resolve(specifier, context, nextResolve) {',
+      '  const result = await nextResolve(specifier, context);',
+      `  appendFileSync(${JSON.stringify(log)}, result.url + '\\n');`,
+      '  return result;',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  // `--import` evaluates this file, including its top-level await, before the
+  // bin loads. `register()` then records every module the bin resolves.
   const hook = path.join(dir, 'record-resolved.mjs');
   fs.writeFileSync(
     hook,
     [
-      "import {appendFileSync} from 'node:fs';",
-      "import {registerHooks} from 'node:module';",
-      'registerHooks({',
-      '  resolve(specifier, context, nextResolve) {',
-      '    const result = nextResolve(specifier, context);',
-      `    appendFileSync(${JSON.stringify(log)}, result.url + '\\n');`,
-      '    return result;',
-      '  },',
-      '});',
+      "import {register} from 'node:module';",
+      "import {pathToFileURL} from 'node:url';",
+      `await register(pathToFileURL(${JSON.stringify(hooks)}).href, import.meta.url);`,
       '',
     ].join('\n'),
   );
