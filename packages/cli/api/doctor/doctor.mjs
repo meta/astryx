@@ -2180,12 +2180,22 @@ async function runComputerChecks(cwd) {
 
 /**
  * Where `search` and `build` keep their gathered catalog between runs, and
- * how much it holds. Left out of a checkout, which keeps none.
+ * how much it holds; under Yarn Plug'n'Play, that they keep none. Left out of
+ * a checkout, which keeps none.
  * @returns {DoctorCheck | null}
  */
 export function checkGatherCache() {
   const summary = gatherCacheSummary();
   if (summary == null) return null;
+  if (process.versions.pnp) {
+    return {
+      id: 'gather-cache',
+      label: 'Search catalog cache',
+      status: 'info',
+      message:
+        "not used in Yarn Plug'n'Play projects: search and build gather their catalogs on every run here.",
+    };
+  }
   const size = `${(summary.bytes / (1024 * 1024)).toFixed(1)} MB`;
   return {
     id: 'gather-cache',

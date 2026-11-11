@@ -516,6 +516,23 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(entries(pnp).size).toBe(0);
   }, 120_000);
 
+  it("is listed by doctor, as not used under Plug'n'Play", () => {
+    const tmp = keptTmp('doctor');
+    /** @param {Record<string, string>} [env] */
+    const row = env => {
+      const {stdout} = run(['doctor'], {tmp, env});
+      return JSON.parse(stdout).data.checks.find(
+        (/** @type {{id: string}} */ check) => check.id === 'gather-cache',
+      );
+    };
+    expect(row().message).toContain(path.join(tmp, CACHE_NAME));
+    const pnp = path.join(work, 'as-pnp.cjs');
+    fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
+    expect(row({NODE_OPTIONS: `--require ${pnp}`}).message).toMatch(
+      /^not used in Yarn Plug'n'Play projects/,
+    );
+  }, 120_000);
+
   it('is never kept by a checkout, even one a pack left a build id in', () => {
     // A checkout: the packed files outside any node_modules folder, build id
     // included, as a local `pnpm pack` without its cleanup would leave them.
