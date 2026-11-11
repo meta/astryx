@@ -20,7 +20,14 @@ import {getCliInvocation} from '../../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
-import {emit, text} from '../../formatters/index.mjs';
+import {
+  emit,
+  list,
+  record,
+  records,
+  section,
+  text,
+} from '../../formatters/index.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {
@@ -79,8 +86,121 @@ const HOW = `${EDITOR} ${howDoc.name.split(' ').pop()}`;
 const cmd = line =>
   line.split(PREFIX).join(`${getCliInvocation()} experimental theme`);
 
-/** Print lines as one block. @param {string[]} lines */
-const print = lines => emit(text(lines.map(cmd).join('\n')));
+/**
+ * Print blocks, a blank line between them, with this project's run prefix
+ * in every command.
+ * @param {Array<string | import('../../formatters/index.mjs').Block>} blocks
+ */
+const print = blocks => emit(...blocks.map(b => text(cmd(String(b)))));
+
+/** @param {unknown} v */
+const isEmptyValue = v =>
+  v == null || v === '' || (Array.isArray(v) && v.length === 0);
+
+/**
+ * One value as record text: an array comma-joined, an object as
+ * `key: value` pairs, and an empty value as `none`, so every JSON key shows.
+ * @param {unknown} v
+ * @returns {string}
+ */
+function shownValue(v) {
+  if (isEmptyValue(v)) return 'none';
+  if (Array.isArray(v))
+    return (
+      v
+        .map(x => (x && typeof x === 'object' ? shownValue(x) : String(x)))
+        .join(', ') || 'none'
+    );
+  if (typeof v === 'object')
+    return Object.entries(/** @type {Record<string, unknown>} */ (v))
+      .map(([k, x]) => `${k}: ${shownValue(x)}`)
+      .join('; ');
+  return String(v);
+}
+
+/**
+ * One object as record fields: a nested object's own fields join the
+ * record, so every label is a JSON key.
+ * @param {Record<string, unknown>} o
+ * @returns {Record<string, string>}
+ */
+function flatRecord(o) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (Array.isArray(v) && !v.length) continue;
+    if (v && typeof v === 'object' && !Array.isArray(v))
+      Object.assign(
+        out,
+        flatRecord(/** @type {Record<string, unknown>} */ (v)),
+      );
+    else out[k] = shownValue(v);
+  }
+  return out;
+}
+
+/**
+ * The text projection of an envelope's data, with field names that match
+ * its JSON keys: plain fields in one record; a long list, a list of objects,
+ * or an object as a section of its own.
+ * @param {Record<string, unknown>} data
+ * @returns {Array<string | import('../../formatters/index.mjs').Block>}
+ */
+function project(data) {
+  /** @type {Record<string, string>} */
+  const plain = {};
+  /** @type {Array<string | import('../../formatters/index.mjs').Block>} */
+  const parts = [];
+  for (const [k, v] of Object.entries(data)) {
+    // An empty list has no field in the JSON projection, so none here.
+    if (Array.isArray(v) && !v.length) continue;
+    if (isEmptyValue(v) || (v !== null && typeof v !== 'object')) {
+      plain[k] = shownValue(v);
+    } else if (Array.isArray(v) && typeof v[0] !== 'object') {
+      const joined = v.join(', ');
+      if (v.length <= 3 && joined.length <= 80) plain[k] = joined;
+      else parts.push(section(`${k}:`), list(v.map(String)));
+    } else if (Array.isArray(v)) {
+      const items = /** @type {Record<string, unknown>[]} */ (v).map(
+        flatRecord,
+      );
+      // Short items print one per line; items with prose print as records.
+      const prose = items.some(o => Object.values(o).some(x => x.length > 100));
+      parts.push(
+        section(`${k}:`),
+        records(items, prose ? {} : {layout: 'inline'}),
+      );
+    } else {
+      const entries = Object.entries(
+        /** @type {Record<string, unknown>} */ (v),
+      );
+      if (
+        entries.every(
+          ([, x]) =>
+            x === null ||
+            typeof x !== 'object' ||
+            (Array.isArray(x) && typeof x[0] !== 'object'),
+        )
+      )
+        parts.push(
+          section(`${k}:`),
+          record(flatRecord(Object.fromEntries(entries))),
+        );
+      else
+        for (const [name, x] of entries) {
+          if (Array.isArray(x) && !x.length) continue;
+          const items = Array.isArray(x) ? x : [x];
+          parts.push(
+            section(`${k} ${name}:`),
+            records(
+              /** @type {Record<string, unknown>[]} */ (items).map(flatRecord),
+            ),
+          );
+        }
+    }
+  }
+  return [record(plain), ...parts];
+}
 
 /**
  * Run one API call: errors become the CLI error envelope, results go to
@@ -88,7 +208,7 @@ const print = lines => emit(text(lines.map(cmd).join('\n')));
  * @template T
  * @param {import('commander').Command} program
  * @param {() => Promise<T>} call
- * @param {(result: T) => string[]} render
+ * @param {(result: T) => Array<string | import('../../formatters/index.mjs').Block>} render
  * @param {(result: T) => import('../../../../foundation/debug/command-result.mjs').CommandResult} [answer]
  */
 async function run(program, call, render, answer) {
@@ -117,12 +237,6 @@ async function run(program, call, render, answer) {
   return answered;
 }
 
-/** @param {{pictures: string[], pictureProblem: string | null}} d */
-const pictureLines = d => [
-  ...(d.pictures.length ? [`  pictures: ${d.pictures.join(', ')}`] : []),
-  ...(d.pictureProblem ? [`  pictures: none. ${d.pictureProblem}`] : []),
-];
-
 /** @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditSetting} s */
 function describe(s) {
   const where = s.on
@@ -146,147 +260,31 @@ const changeOptions = o => ({
 });
 
 /**
- * The receipt of a set or unset.
+ * The receipt of a change: a status line, then the change data.
  * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} r
  */
-function changeLines(r) {
+function changeBlocks(r) {
   const d = r.data;
   const s = d.setting;
-  /** @type {string[]} */
-  const lines = [];
-  if (d.was != null)
-    lines.push(`[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`);
-  else
-    lines.push(
-      `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `undid ${describe(s)}: back to the base theme's value`}${d.replaced ? ` (was ${d.replaced.value})` : ''}`,
-    );
-  if (d.family)
-    lines.push(
-      `  applied to the ${d.family.name} family: ${d.family.members.join(', ')}${d.family.onlyHint && s.on && !s.only ? ` (add --only to style just ${s.on})` : ''}`,
-    );
-  for (const n of d.notes) lines.push(`  note: ${n}`);
-  if (d.changedTokens.length) {
-    lines.push(
-      `  resolved changes (${d.changedTokens.length}):`,
-      ...d.changedTokens.slice(0, 8).map(c => `    ${c}`),
-    );
-    if (d.changedTokens.length > 8)
-      lines.push(`    ... ${d.changedTokens.length - 8} more (--json for all)`);
-  }
-  if (d.styled.length) {
-    lines.push(
-      `  styled (${d.styled.length}):`,
-      ...d.styled.slice(0, 8).map(c => `    ${c}`),
-    );
-    if (d.styled.length > 8)
-      lines.push(`    ... ${d.styled.length - 8} more (--json for all)`);
-  }
-  if (!d.changedTokens.length && !d.styled.length && d.was == null)
-    lines.push('  no visible change: the theme already looked this way');
-  for (const k of d.kept)
-    lines.push(`  kept (a part setting beats the whole-theme dial): ${k}`);
-  if (d.lifted.length) {
-    const keys = [
-      ...new Set(d.lifted.map(x => x.split(' ').slice(0, 2).join(' '))),
-    ];
-    lines.push(
-      `  also applied to ${keys.slice(0, 6).join(', ')}${keys.length > 6 ? ` and ${keys.length - 6} more` : ''}: the base theme styles those separately, so the plain setting alone would lose there`,
-    );
-  }
-  for (const w of d.warnings) lines.push(`  build: ${w}`);
-  for (const p of d.problems) lines.push(`  contrast: ${p}`);
-  lines.push(`  preview: ${d.preview}`, ...pictureLines(d));
-  return lines;
+  const status =
+    d.was != null
+      ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
+      : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `undid ${describe(s)}: back to the base theme's value`}`;
+  return [status, ...project(/** @type {any} */ (d))];
 }
 
 /**
- * The text of a lookup answer, by its kind.
+ * The text of a lookup answer: the answer data, lists one item per line.
  * @param {any} d
- * @returns {string[]}
  */
-function lookupLines(d) {
-  if (d.kind === 'question') {
-    if (!d.results.length) {
-      return [
-        `No match for "${d.subject}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold). Or: ${HOW} --list parts`,
-      ];
-    }
+function lookupBlocks(d) {
+  if (d.kind === 'question' && !d.results.length)
     return [
-      `"${d.subject}" -> parts: ${d.understood.parts.join(', ') || 'whole theme'}; aspects: ${d.understood.aspects.join(', ') || '?'}`,
-      ...d.results.flatMap((/** @type {any} */ x) => [
-        `  ${x.text}`,
-        ...x.commands.map((/** @type {string} */ c) => `    ${c}`),
-      ]),
+      `No match for "${d.subject}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold).`,
+      ...project(d),
+      `Tip: ${HOW} --list parts`,
     ];
-  }
-  if (d.kind === 'aspect')
-    return [
-      `${d.subject} for the whole theme:`,
-      ...d.results.flatMap((/** @type {any} */ x) => [
-        `  ${x.text}`,
-        ...x.commands.map((/** @type {string} */ c) => `    ${c}`),
-      ]),
-    ];
-  if (d.kind === 'picture') {
-    if (d.points)
-      return [
-        `colors in ${d.file} (${d.width}x${d.height}) at:`,
-        ...d.points.map(
-          (/** @type {any} */ c) =>
-            `  (${c.at})  ${c.color ?? 'outside the picture'}`,
-        ),
-      ];
-    return [
-      `main colors in ${d.file} (${d.width}x${d.height}; share of the picture, where):`,
-      ...d.colors.map(
-        (/** @type {any} */ c) => `  ${c.color}  ${c.share}%  ${c.where}`,
-      ),
-    ];
-  }
-  if (d.kind === 'list') {
-    const items = /** @type {any[]} */ (d.items);
-    if (d.list === 'dials')
-      return items.flatMap(x => [
-        `${x.name}: ${x.values}`,
-        `  ${x.help}`,
-        ...x.examples.map((/** @type {string} */ e) => `  e.g. ${e}`),
-      ]);
-    if (d.list === 'families')
-      return items.map(
-        x =>
-          `${x.name}: ${x.members.join(', ')}${x.spreads ? '  (styling one styles all; --only to opt out)' : '  (--on the family styles all)'}`,
-      );
-    if (d.list === 'properties')
-      return [
-        ...items.map(x => x.name),
-        ...(d.common
-          ? [
-              `(the common ones; any standard CSS property works: ${HOW} <filter> --list properties)`,
-            ]
-          : []),
-      ];
-    if (d.list === 'tokens')
-      return items.map(
-        x =>
-          `${x.name}  [${x.type}] default ${x.default}; read by ${x.readBy} parts`,
-      );
-    return [
-      ...items.map(
-        x =>
-          `${x.name}  (${x.component})${x.family ? ` [${x.family}]` : ''}${Object.entries(
-            /** @type {Record<string, string[]>} */ (x.variants),
-          )
-            .map(
-              ([p, v]) => `  --when ${p}:${v.length ? v.join('|') : '<value>'}`,
-            )
-            .join(
-              '',
-            )}${x.states.length ? `  --state ${x.states.join('|')}` : ''}${x.recorded ? '' : '  (no compiled record: changes on it are not checked)'}`,
-      ),
-      `What a part reads: ${HOW} <part>`,
-    ];
-  }
-  return d.lines;
+  return project(d);
 }
 
 /**
@@ -393,11 +391,9 @@ export function registerExperimentalTheme(group, program) {
               png: o.png ?? false,
             }),
           r => [
-            `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}: ${r.data.files.settings} (owned by this command) -> ${r.data.files.source} -> ${r.data.files.css}`,
-            ...r.data.problems.map(p => `  contrast: ${p}`),
-            `  preview: ${r.data.preview}`,
-            ...pictureLines(r.data),
-            `  next: ${EDITOR} set ${r.data.theme} <thing> <value>   (${HOW} "<what you want>")`,
+            `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
+            ...project(/** @type {any} */ (r.data)),
+            `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
           ],
         ),
     }),
@@ -417,7 +413,7 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
-          changeLines,
+          changeBlocks,
         ),
     }),
     setDoc,
@@ -436,35 +432,7 @@ export function registerExperimentalTheme(group, program) {
               png: o.png ?? false,
               group: o.group,
             }),
-          r => {
-            const d = r.data;
-            const modes =
-              d.mode === 'light-only'
-                ? ['light']
-                : d.mode === 'dark-only'
-                  ? ['dark']
-                  : ['light', 'dark'];
-            return [
-              `theme "${d.theme}"${d.like ? ` (on top of ${d.like})` : ''}, mode ${d.mode}, ${d.settings.length} settings:`,
-              ...d.settings.map(
-                (s, i) =>
-                  `  ${i + 1}. [${s.source}] ${describe(s)}${s.parts.length > 1 ? `  -> ${s.parts.length} parts` : ''}`,
-              ),
-              `key values (${modes.join(' / ')}):`,
-              ...Object.entries(d.resolved).map(
-                ([k, v]) =>
-                  `  ${k}: ${modes.map(m => v[m] ?? '-').join(' / ')}`,
-              ),
-              ...(d.problems.length
-                ? d.problems.map(p => `contrast: ${p}`)
-                : ['problems: none caused by this theme']),
-              ...d.notes.map(n => `note: ${n}`),
-              `preview (sample app page): ${d.preview}`,
-              `every component (theme-building page, ${d.sheetComponents} components): ${d.sheet}`,
-              ...d.skipped.map(x => `  left out: ${x}`),
-              ...pictureLines(d),
-            ];
-          },
+          r => project(/** @type {any} */ (r.data)),
         ),
     }),
     showDoc,
@@ -491,12 +459,10 @@ export function registerExperimentalTheme(group, program) {
           r =>
             r.data.action === 'step'
               ? [
-                  `[ok] ${r.data.theme}: undid the last change${r.data.undone.length ? `: ${r.data.undone.join('; ')}` : ''}`,
-                  `  now ${r.data.settings} settings; ${r.data.stepsLeft} earlier change${r.data.stepsLeft === 1 ? '' : 's'} can still be undone`,
-                  `  preview: ${r.data.preview}`,
-                  ...pictureLines(r.data),
+                  `[ok] ${r.data.theme}: undid the last change`,
+                  ...project(/** @type {any} */ (r.data)),
                 ]
-              : changeLines(
+              : changeBlocks(
                   /** @type {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} */ (
                     r
                   ),
@@ -528,10 +494,8 @@ export function registerExperimentalTheme(group, program) {
               path: o.path,
             }),
           r => [
-            `[ok] theme preview in ${r.data.folder}: ${r.data.added.length ? `added ${r.data.added.join(', ')}` : 'pages refreshed'}; pages: ${r.data.pages.join(', ')}`,
-            `  theme: ${r.data.theme ?? "the app's own"}`,
-            ...r.data.notes.map(n => `  note: ${n}`),
-            `  open: ${r.data.open}`,
+            `[ok] theme preview in ${r.data.folder}: ${r.data.added.length ? `added ${r.data.added.join(', ')}` : 'pages refreshed'}`,
+            ...project(/** @type {any} */ (r.data)),
           ],
         ),
     }),
@@ -551,10 +515,8 @@ export function registerExperimentalTheme(group, program) {
               overwrite: o.overwrite ?? false,
             }),
           r => [
-            `[ok] new app in ${r.data.folder} (${r.data.files.length} files) with the theme preview; pages: ${r.data.pages.join(', ')}`,
-            `  theme: ${r.data.theme ?? "the app's own neutral theme"}`,
-            ...r.data.notes.map(n => `  note: ${n}`),
-            `  open: ${r.data.open}`,
+            `[ok] new app in ${r.data.folder} with the theme preview`,
+            ...project(/** @type {any} */ (r.data)),
           ],
         ),
     }),
@@ -570,11 +532,11 @@ export function registerExperimentalTheme(group, program) {
           () => themeEditPreviewList({cwd: process.cwd(), path: o.path}),
           r =>
             r.data.folder
-              ? [
-                  `theme preview in ${r.data.folder} (theme: ${r.data.theme ?? "the app's own"}):`,
-                  ...r.data.pages.map(p => `  ${p.id}  ${p.label}`),
-                ]
-              : [`no theme preview yet: ${PREFIX} preview add`],
+              ? project(/** @type {any} */ (r.data))
+              : [
+                  ...project(/** @type {any} */ (r.data)),
+                  `Tip: ${PREFIX} preview add`,
+                ],
           r =>
             resultSet({
               count: r.data.pages.length,
@@ -596,9 +558,9 @@ export function registerExperimentalTheme(group, program) {
             themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
           r => [
             r.data.pages.length
-              ? `[ok] removed ${page} from the theme preview; pages: ${r.data.pages.join(', ')}`
+              ? `[ok] removed ${page} from the theme preview`
               : `[ok] removed the theme preview in ${r.data.folder}`,
-            ...r.data.removed.map(f => `  deleted ${f}`),
+            ...project(/** @type {any} */ (r.data)),
           ],
         ),
     }),
@@ -646,7 +608,7 @@ export function registerExperimentalTheme(group, program) {
               at: o.at ?? [],
               count,
             }),
-          r => lookupLines(/** @type {any} */ (r.data)),
+          r => lookupBlocks(/** @type {any} */ (r.data)),
           r => {
             const d = /** @type {any} */ (r.data);
             const n =

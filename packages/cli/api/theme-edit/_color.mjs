@@ -1,10 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Color math for `astryx experimental theme`: parse a CSS color to RGB,
- * contrast ratios, mixing, value type checks, and the accent derivation.
+ * @file Color reading for `astryx experimental theme`: parse a CSS color to
+ * RGB, the contrast ratio (on the palette code's luminance), and value type
+ * checks. The theme's colors themselves come from the palette generator.
  * @position api/theme-edit — pure helpers
  */
+
+import {luminance} from '../theme/palette/generate/color.mjs';
 
 /** @typedef {[number, number, number]} Rgb */
 
@@ -175,23 +178,156 @@ const FUNCTIONS =
   /^(rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark)\(.+\)$/i;
 
 /**
- * The RGB of a hex, rgb() or named color, or null for anything else.
+ * The numbers inside a color function, each as a number with its unit:
+ * commas, spaces and a `/ alpha` part are all accepted; the alpha is dropped.
+ * @param {string} body
+ * @returns {Array<{n: number, unit: string}> | null}
+ */
+function args(body) {
+  const parts = body
+    .split('/')[0]
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean);
+  const out = [];
+  for (const part of parts) {
+    if (part === 'none') {
+      out.push({n: 0, unit: ''});
+      continue;
+    }
+    const m = /^(-?\d*\.?\d+(?:e-?\d+)?)(%|deg|grad|rad|turn)?$/i.exec(part);
+    if (!m) return null;
+    out.push({n: Number(m[1]), unit: (m[2] ?? '').toLowerCase()});
+  }
+  return out;
+}
+
+/** A hue in degrees. @param {{n: number, unit: string}} h */
+const degrees = h =>
+  h.unit === 'turn'
+    ? h.n * 360
+    : h.unit === 'rad'
+      ? (h.n * 180) / Math.PI
+      : h.unit === 'grad'
+        ? h.n * 0.9
+        : h.n;
+
+/** A number, with `%` read against `full`. @param {{n: number, unit: string}} v @param {number} full */
+const amount = (v, full) => (v.unit === '%' ? (v.n / 100) * full : v.n);
+
+/** @param {number[]} lin linear sRGB @returns {Rgb} */
+const fromLinear = lin =>
+  /** @type {Rgb} */ (
+    lin.map(c => {
+      const v = Math.max(0, Math.min(1, c));
+      return (
+        255 *
+        (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055)
+      );
+    })
+  );
+
+/** @param {number} h @param {number} s @param {number} l 0..1 @returns {Rgb} */
+function hslToRgb(h, s, l) {
+  /** @param {number} n */
+  const f = n => {
+    const k = (n + h / 30) % 12;
+    return l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  return [f(0) * 255, f(8) * 255, f(4) * 255];
+}
+
+/** @param {number} l @param {number} a @param {number} b CIE Lab (D50) @returns {Rgb} */
+function labToRgb(l, a, b) {
+  const fy = (l + 16) / 116;
+  const fx = fy + a / 500;
+  const fz = fy - b / 200;
+  const e = 216 / 24389;
+  const k = 24389 / 27;
+  const x = ((fx ** 3 > e ? fx ** 3 : (116 * fx - 16) / k) * 0.3457) / 0.3585;
+  const y = l > k * e ? fy ** 3 : l / k;
+  const z =
+    ((fz ** 3 > e ? fz ** 3 : (116 * fz - 16) / k) * (1 - 0.3457 - 0.3585)) /
+    0.3585;
+  // XYZ D50 to linear sRGB (D65), Bradford-adapted.
+  return fromLinear([
+    3.1341359569958707 * x - 1.6173863321612538 * y - 0.4906619460083532 * z,
+    -0.978795502912089 * x + 1.916254567259524 * y + 0.03344273116131949 * z,
+    0.07195537988411677 * x - 0.2289768264158322 * y + 1.405386058324125 * z,
+  ]);
+}
+
+/** @param {number} l @param {number} a @param {number} b OKLab @returns {Rgb} */
+function oklabToRgb(l, a, b) {
+  const l1 = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m1 = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s1 = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  return fromLinear([
+    4.0767416621 * l1 - 3.3077115913 * m1 + 0.2309699292 * s1,
+    -1.2684380046 * l1 + 2.6097574011 * m1 - 0.3413193965 * s1,
+    -0.0041960863 * l1 - 0.7034186147 * m1 + 1.707614701 * s1,
+  ]);
+}
+
+/** @param {number} c @param {number} h degrees @returns {[number, number]} */
+const polar = (c, h) => [
+  c * Math.cos((h * Math.PI) / 180),
+  c * Math.sin((h * Math.PI) / 180),
+];
+
+/**
+ * The RGB of a fixed CSS color: a hex, a named color, or rgb(), hsl(),
+ * hwb(), lab(), lch(), oklab() or oklch(). Null for a value with no fixed
+ * color (`var()`, `color-mix()`, `light-dark()`, `color()`, a keyword).
  * @param {unknown} value
  * @returns {Rgb | null}
  */
 export function parseColor(value) {
   const s = String(value ?? '').trim();
-  let m = /^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i.exec(s);
+  const m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(s);
   if (m) {
     let h = m[1];
-    if (h.length === 3) h = [...h].map(c => c + c).join('');
-    const n = parseInt(h, 16);
+    if (h.length <= 4) h = [...h].map(c => c + c).join('');
+    const n = parseInt(h.slice(0, 6), 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   }
-  m = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i.exec(s);
-  if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
   const named = NAMED[s.toLowerCase()];
-  return named ? parseColor(named) : null;
+  if (named) return parseColor(named);
+  const fn = /^([a-z]+)\((.*)\)$/i.exec(s);
+  const a = fn && args(fn[2]);
+  if (!fn || !a || a.length < 3) return null;
+  const [x, y, z] = a;
+  switch (fn[1].toLowerCase()) {
+    case 'rgb':
+    case 'rgba':
+      return [amount(x, 255), amount(y, 255), amount(z, 255)];
+    case 'hsl':
+    case 'hsla':
+      return hslToRgb(degrees(x), amount(y, 100) / 100, amount(z, 100) / 100);
+    case 'hwb': {
+      let w = amount(y, 100) / 100;
+      let b = amount(z, 100) / 100;
+      if (w + b >= 1) {
+        const g = (w / (w + b)) * 255;
+        return [g, g, g];
+      }
+      return /** @type {Rgb} */ (
+        hslToRgb(degrees(x), 1, 0.5).map(
+          c => (c / 255) * (1 - w - b) * 255 + w * 255,
+        )
+      );
+    }
+    case 'lab':
+      return labToRgb(amount(x, 100), amount(y, 125), amount(z, 125));
+    case 'lch':
+      return labToRgb(amount(x, 100), ...polar(amount(y, 150), degrees(z)));
+    case 'oklab':
+      return oklabToRgb(amount(x, 1), amount(y, 0.4), amount(z, 0.4));
+    case 'oklch':
+      return oklabToRgb(amount(x, 1), ...polar(amount(y, 0.4), degrees(z)));
+    default:
+      return null;
+  }
 }
 
 /** @param {number[]} rgb */
@@ -205,37 +341,15 @@ export const hex = rgb =>
     )
     .join('')}`;
 
-/** @param {number[]} rgb */
-const luminance = ([r, g, b]) => {
-  /** @param {number} c */
-  const f = c => {
-    const v = c / 255;
-    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-};
-
 /**
  * The WCAG contrast ratio of two colors.
  * @param {number[]} a
  * @param {number[]} b
  */
 export function ratio(a, b) {
-  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+  const [x, y] = [luminance(hex(a)), luminance(hex(b))].sort((p, q) => q - p);
   return (x + 0.05) / (y + 0.05);
 }
-
-/**
- * @param {number[]} a
- * @param {number[]} b
- * @param {number} t 0 gives a, 1 gives b
- * @returns {Rgb}
- */
-export const mix = (a, b, t) => [
-  a[0] + (b[0] - a[0]) * t,
-  a[1] + (b[1] - a[1]) * t,
-  a[2] + (b[2] - a[2]) * t,
-];
 
 /**
  * Whether a value is one CSS color: a hex, a color function, a named color,
@@ -261,40 +375,3 @@ export const isSize = v =>
 
 /** Whether a value reads as a number. @param {unknown} v */
 export const isNumber = v => /^-?\d*\.?\d+$|^var\(/.test(String(v).trim());
-
-/**
- * The tokens one accent color sets. The color itself stays exact; accent
- * text is darkened (light) or lightened (dark) until it reads at 4.5:1.
- * A pair is `[light, dark]`.
- * @param {string} value
- * @returns {Record<string, string | [string, string]>}
- */
-export function accentSet(value) {
-  const c = parseColor(value);
-  if (!c)
-    return {
-      '--color-accent': value,
-      '--color-icon-accent': value,
-      '--color-text-accent': value,
-    };
-  /** @type {Rgb} */
-  const white = [255, 255, 255];
-  /** @type {Rgb} */
-  const black = [0, 0, 0];
-  /** @type {Rgb} */
-  const darkCard = [31, 31, 34];
-  let text = c;
-  for (let i = 0; i < 20 && ratio(text, white) < 4.5; i++)
-    text = mix(text, black, 0.08);
-  let darkText = c;
-  for (let i = 0; i < 20 && ratio(darkText, darkCard) < 4.5; i++)
-    darkText = mix(darkText, white, 0.08);
-  return {
-    '--color-accent': value,
-    '--color-text-accent': [hex(text), hex(darkText)],
-    '--color-icon-accent': [value, hex(darkText)],
-    '--color-accent-muted': [hex(mix(c, white, 0.85)), hex(mix(c, black, 0.7))],
-    '--color-on-accent':
-      ratio(c, white) >= ratio(c, [17, 17, 17]) ? '#ffffff' : '#111111',
-  };
-}

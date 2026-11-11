@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports Lightbox component, useLightbox hook, and types
@@ -10,14 +8,7 @@
  */
 
 export {Lightbox} from './Lightbox';
-export type {
-  LightboxProps,
-  LightboxMedia,
-  LightboxMediaType,
-} from './Lightbox';
+export type {LightboxProps, LightboxMedia, LightboxMediaType} from './Lightbox';
 
 export {useLightbox} from './useLightbox';
-export type {
-  UseLightboxOptions,
-  UseLightboxReturn,
-} from './useLightbox';
+export type {UseLightboxOptions, UseLightboxReturn} from './useLightbox';
