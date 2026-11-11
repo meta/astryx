@@ -1064,10 +1064,18 @@ and doesn't need network to use.
 
 ### Storybook Issues
 
+Storybook compiles workspace package source through the aliases and
+`astryxStylex` plugin in
+[`apps/storybook/.storybook/main.ts`](apps/storybook/.storybook/main.ts).
+Package builds are not required, and source edits reload without rebuilding.
+
 **"Failed to fetch dynamically imported module"**
 
-- Cause: Core package not built or out of date
-- Fix: `pnpm -F @astryxdesign/core build` then restart Storybook
+- Check the Storybook terminal and browser console for the failed module's
+  import or compilation error.
+- For workspace imports, check the `workspaceAliases` table in
+  `apps/storybook/.storybook/main.ts`. Keep these aliases pointing at source;
+  rebuilding `dist/` does not repair a source compilation error.
 
 **"React is not defined"**
 
@@ -1077,11 +1085,12 @@ and doesn't need network to use.
 **"Unexpected 'stylex.defineVars' call at runtime"**
 
 - Cause: StyleX code trying to run without compilation
-- Fix: Storybook should load from `dist/` not `src/`. Check vite.config.ts aliases.
+- Fix: Check that `astryxStylex` and its StyleX aliases remain configured in
+  `apps/storybook/.storybook/main.ts`, alongside the matching Vite source aliases.
 
 **Changes not appearing in Storybook**
 
-- Rebuild the package: `pnpm -F @astryxdesign/core build`
+- Restart Storybook if source edits stop reloading
 - Hard refresh browser: Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows)
 - Clear Storybook cache: Remove `apps/storybook/node_modules/.cache`
 
