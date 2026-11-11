@@ -185,10 +185,8 @@ describe('RichTextEditorSelectionToolbar', () => {
     await waitFor(() => expect(bar()).toBeNull());
   });
 
-  it('offers bold, italic, underline, strikethrough, inline code, and Link, then the end content', async () => {
-    const editor = await renderEditor({
-      bar: {endContent: <button type="button">Comment</button>},
-    });
+  it('offers bold, italic, underline, strikethrough, inline code, and Link', async () => {
+    const editor = await renderEditor();
     await seed(editor);
     const toolbar = await screen.findByRole('toolbar', {
       name: 'Selected text',
@@ -201,18 +199,23 @@ describe('RichTextEditorSelectionToolbar', () => {
       'Strikethrough',
       'Inline code',
       'Link',
-      null,
     ]);
-    expect(toolbar.textContent).toContain('Comment');
   });
 
-  it('offers only the formats it is given, in their order, and Link only when asked', async () => {
-    const editor = await renderEditor({
-      bar: {formats: ['italic', 'bold'], hasLink: false, label: 'Format'},
-    });
+  it('leaves Link out with hasLink={false}', async () => {
+    const editor = await renderEditor({bar: {hasLink: false}});
     await seed(editor);
-    const toolbar = await screen.findByRole('toolbar', {name: 'Format', ...h});
-    expect(labels(toolbar)).toEqual(['Italic', 'Bold']);
+    const toolbar = await screen.findByRole('toolbar', {
+      name: 'Selected text',
+      ...h,
+    });
+    expect(labels(toolbar)).toEqual([
+      'Bold',
+      'Italic',
+      'Underline',
+      'Strikethrough',
+      'Inline code',
+    ]);
   });
 
   it('formats the selection with the toolbar’s commands and shows the format as pressed', async () => {

@@ -52,10 +52,7 @@ export {
 export type {RichTextEditorToolbarProps} from './RichTextEditorToolbar';
 
 export {RichTextEditorSelectionToolbar} from './RichTextEditorSelectionToolbar';
-export type {
-  RichTextEditorSelectionToolbarFormat,
-  RichTextEditorSelectionToolbarProps,
-} from './RichTextEditorSelectionToolbar';
+export type {RichTextEditorSelectionToolbarProps} from './RichTextEditorSelectionToolbar';
 
 export {
   RichTextEditorAutoLinkPlugin,

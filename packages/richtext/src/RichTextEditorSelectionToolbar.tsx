@@ -5,7 +5,7 @@
 /**
  * @file RichTextEditorSelectionToolbar.tsx
  * @input Uses React, @lexical/react (composer context), @lexical/link,
- *   @lexical/table, lexical, core Layer, Toolbar, ToggleButton, Divider,
+ *   @lexical/table, lexical, core Layer, Toolbar, ToggleButton,
  *   isImeKeyEvent, and useTranslator, plus the glyphs and inline formats
  *   RichTextEditorToolbar shares and the link popover in ToolbarLinkPopover.
  * @output Exports RichTextEditorSelectionToolbar, the toolbar a non-collapsed
@@ -27,14 +27,7 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-  type Ref,
-} from 'react';
+import {useCallback, useEffect, useRef, useState, type Ref} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {$isLinkNode} from '@lexical/link';
 import {
@@ -57,9 +50,8 @@ import type {BaseProps} from '@astryxdesign/core';
 import {useLayer, type LayerPlacement} from '@astryxdesign/core/Layer';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
-import {Divider} from '@astryxdesign/core/Divider';
 import {HStack} from '@astryxdesign/core/Layout';
-import {isImeKeyEvent, isRenderable} from '@astryxdesign/core/utils';
+import {isImeKeyEvent} from '@astryxdesign/core/utils';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {
   colorVars,
@@ -82,28 +74,15 @@ import {
 } from './ToolbarLinkPopover';
 import {useEditorFocusAndDrag} from './useEditorFocusAndDrag';
 
-/** One of the inline formats the toolbar offers. */
-export type RichTextEditorSelectionToolbarFormat = InlineFormat;
-
 export interface RichTextEditorSelectionToolbarProps extends BaseProps<HTMLDivElement> {
   /**
    * Ref to the toolbar's root element. Base props pass through to the
    * underlying Astryx `Toolbar`: the ref, `className`, `style`, and `xstyle`
    * reach its root, and `data-*`, other `aria-*` attributes, and DOM
    * handlers reach the `role="toolbar"` element inside it. The toolbar names
-   * itself, so pass `label` rather than `aria-label`.
+   * itself "Selected text", translated for the active locale.
    */
   ref?: Ref<HTMLDivElement>;
-  /**
-   * Accessible label for the toolbar element.
-   * @default 'Selected text', translated for the active locale
-   */
-  label?: string;
-  /**
-   * Which inline formats to offer, in order.
-   * @default ['bold', 'italic', 'underline', 'strikethrough', 'code']
-   */
-  formats?: ReadonlyArray<RichTextEditorSelectionToolbarFormat>;
   /**
    * Whether to offer Link, which opens the same link popover as
    * `RichTextEditorToolbar`'s Link button, anchored to this one. A
@@ -118,11 +97,6 @@ export interface RichTextEditorSelectionToolbarProps extends BaseProps<HTMLDivEl
    * @default true
    */
   hasNewTabLinks?: boolean;
-  /**
-   * Extra controls at the end of the toolbar, after a divider: actions on
-   * the selected text, such as Comment.
-   */
-  endContent?: ReactNode;
 }
 
 /** Room between the toolbar and the selection, and inside its band. */
@@ -325,10 +299,6 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-container'],
     boxShadow: shadowVars['--shadow-med'],
   },
-  divider: {
-    alignSelf: 'stretch',
-    height: 'auto',
-  },
 });
 
 function isAltF10(event: KeyboardEvent): boolean {
@@ -342,9 +312,10 @@ function isAltF10(event: KeyboardEvent): boolean {
 }
 
 /**
- * A toolbar beside a non-collapsed selection while the editor is editable: bold, italic, underline, strikethrough, inline code, and Link,
- * the formatting `RichTextEditorToolbar` offers, with the same commands,
- * glyphs, and link popover, plus any `endContent`. It never takes focus when
+ * A toolbar beside a non-collapsed selection while the editor is editable:
+ * bold, italic, underline, strikethrough, inline code, and Link, the
+ * formatting `RichTextEditorToolbar` offers, with the same commands, glyphs,
+ * and link popover. It never takes focus when
  * it appears. Alt+F10 (⌥F10) moves focus into it, arrow keys move along it,
  * and Escape returns focus to the editor with the selection kept. Read-only
  * and disabled editors show none.
@@ -366,11 +337,8 @@ function isAltF10(event: KeyboardEvent): boolean {
  * ```
  */
 export function RichTextEditorSelectionToolbar({
-  label: labelFromProps,
-  formats = ALL_FORMATS,
   hasLink = true,
   hasNewTabLinks = true,
-  endContent,
   xstyle,
   ref,
   ...rest
@@ -378,8 +346,7 @@ export function RichTextEditorSelectionToolbar({
   const [editor] = useLexicalComposerContext();
   const t = useTranslator();
   const icon = useToolbarIcon();
-  const label =
-    labelFromProps ?? t('@astryx.richTextEditor.selectionToolbar.label');
+  const label = t('@astryx.richTextEditor.selectionToolbar.label');
   const formatLabels = inlineFormatLabels(t);
 
   const [isEditable, setIsEditable] = useState(() => editor.isEditable());
@@ -613,7 +580,7 @@ export function RichTextEditorSelectionToolbar({
               aria-keyshortcuts="Alt+F10"
               startContent={
                 <HStack gap={1}>
-                  {formats.map(format => (
+                  {ALL_FORMATS.map(format => (
                     <ToggleButton
                       key={format}
                       label={formatLabels[format]}
@@ -633,12 +600,6 @@ export function RichTextEditorSelectionToolbar({
                       isIconOnly
                       isPressed={facts?.isLink === true || link.isOpen}
                     />
-                  )}
-                  {isRenderable(endContent) && (
-                    <>
-                      <Divider orientation="vertical" xstyle={styles.divider} />
-                      {endContent}
-                    </>
                   )}
                 </HStack>
               }
