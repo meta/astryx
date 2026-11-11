@@ -796,9 +796,6 @@ export function ContextMenu({
       // the menu, so it does not close it.
       openingGestureRef.current = currentGesture();
       openAtLocalPoint(local.x, local.y, triggerRef.current, 'menu');
-      // A finger still down goes on into the menu as its opening press: it
-      // slides onto an item, and its lift selects it. A lift over no item
-      // leaves the menu open.
       if (held != null) {
         continueGesture({...held, time: Date.now()});
       }
