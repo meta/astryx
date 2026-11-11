@@ -29,6 +29,8 @@ import * as stylex from '@stylexjs/stylex';
 import {useLayerInternal, type ContextRenderProps} from '../Layer/useLayer';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {resolvePopoverAnchor, type PopoverAnchor} from './popoverAnchor';
+import {useOutsidePress} from '../Layer/outsidePress';
+import {isElement} from '../utils/nodeType';
 import {useFocusTrapInternal} from '../hooks/useFocusTrap';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import type {StyleXStyles} from '@stylexjs/stylex';
@@ -184,6 +186,20 @@ export interface UsePopoverOptions {
   anchorOutOfView?: 'hold' | 'hide';
 
   /**
+   * Called for each press that starts and ends outside the open popover,
+   * before the popover closes for it. Call `event.preventDefault()` to keep
+   * the popover open — for example when the press lands on a control that
+   * switches what the popover shows. Cancelling affects only the dismissal:
+   * the press, its focus change and its click reach the page unchanged.
+   *
+   * A press on a separate `anchor` is an outside press. A press on the
+   * trigger keeps its toggle and is not reported. Not called when
+   * `hasLightDismiss` is false, nor for Escape or the close button.
+   * Wrap in useCallback for stable identity.
+   */
+  onOutsidePress?: (event: PopoverOutsidePressEvent) => void;
+
+  /**
    * Callback fired when popover is shown.
    * Wrap in useCallback for stable identity.
    */
@@ -328,6 +344,41 @@ export interface UsePopoverOptions {
    * component-owned refinement target.
    */
   surfaceTarget?: string;
+}
+
+/**
+ * A press outside an open popover, reported to `onOutsidePress` before the
+ * popover closes for it.
+ */
+export interface PopoverOutsidePressEvent {
+  /** The element the press landed on, or `null` when it is not an element. */
+  readonly target: Element | null;
+  /** The pointer that pressed: `'mouse'`, `'pen'` or `'touch'`. */
+  readonly pointerType: string;
+  /** The browser event that ended the press. */
+  readonly nativeEvent: PointerEvent;
+  /** Keeps the popover open. It does not cancel `nativeEvent`. */
+  preventDefault: () => void;
+  /** Whether `preventDefault` was called. */
+  readonly defaultPrevented: boolean;
+}
+
+function createOutsidePressEvent(
+  nativeEvent: PointerEvent,
+): PopoverOutsidePressEvent {
+  let isPrevented = false;
+  const pressed = nativeEvent.composedPath()[0];
+  return {
+    target: pressed != null && isElement(pressed) ? pressed : null,
+    pointerType: nativeEvent.pointerType,
+    nativeEvent,
+    preventDefault: () => {
+      isPrevented = true;
+    },
+    get defaultPrevented() {
+      return isPrevented;
+    },
+  };
 }
 
 /**
@@ -478,6 +529,7 @@ function usePopoverImplementation(
   const {
     anchor,
     anchorOutOfView = 'hold',
+    onOutsidePress,
     onShow,
     onHide,
     onCloseStart,
@@ -521,9 +573,12 @@ function usePopoverImplementation(
   }, [onShow]);
 
   // Core layer for popover positioning
+  // A caller that may cancel an outside dismissal gets the outside-press
+  // watch in place of native light dismiss, which no script can cancel.
+  const watchesOutsidePress = hasLightDismiss && onOutsidePress != null;
   const layer = useLayerInternal({
     mode: 'context',
-    lightDismiss: hasLightDismiss,
+    lightDismiss: hasLightDismiss && !watchesOutsidePress,
     onShow: handleLayerShow,
     onHide,
     onCloseStart,
@@ -678,6 +733,41 @@ function usePopoverImplementation(
     observer.observe(doc.documentElement, {childList: true, subtree: true});
     return () => observer.disconnect();
   }, [hasSeparateAnchor, isLayerOpen, bindAnchor]);
+
+  const onOutsidePressRef = useRef(onOutsidePress);
+  onOutsidePressRef.current = onOutsidePress;
+  const hideRef = useRef(layer.hide);
+  hideRef.current = layer.hide;
+  const outsidePress = useOutsidePress();
+  // Watches the document for outside presses while the popover is open. The
+  // trigger counts as inside, so its own toggle answers a press on it.
+  useEffect(() => {
+    const surface = contentRef.current;
+    if (!watchesOutsidePress || !isLayerOpen || surface == null) {
+      return;
+    }
+    const layerRoot = surface.closest('[popover]') ?? surface;
+    outsidePress.start(
+      surface,
+      path => {
+        const trigger = triggerElementRef.current;
+        return (
+          path.includes(layerRoot) ||
+          (trigger != null && path.includes(trigger))
+        );
+      },
+      nativeEvent => {
+        const press = createOutsidePressEvent(nativeEvent);
+        onOutsidePressRef.current?.(press);
+        if (press.defaultPrevented) {
+          return false;
+        }
+        hideRef.current();
+        return true;
+      },
+    );
+    return () => outsidePress.stop();
+  }, [watchesOutsidePress, isLayerOpen, outsidePress, contentRef]);
 
   // Show function with optional focus preservation
   const show = useCallback(
