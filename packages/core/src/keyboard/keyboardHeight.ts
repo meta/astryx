@@ -18,11 +18,7 @@
 
 import {armClickGuard} from '../utils/clickGuard';
 import {matchesMediaQuery} from '../utils/coarsePointer';
-import {
-  getTouchStartCount,
-  isTouchOnScreen,
-  subscribeInput,
-} from '../utils/inputStream';
+import {getTouches, subscribeInput} from '../utils/inputStream';
 import {isNode} from '../utils/nodeType';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {PRESS_SLOP_PX} from '../utils/pressGesture';
@@ -165,7 +161,7 @@ function attach(win: Window, store: KeyboardStore): () => void {
   let stepLimit = 0;
   const deliver = (height: number, timeStamp: number) => {
     if (height <= KEYBOARD_EPSILON && store.height > KEYBOARD_EPSILON) {
-      store.startsAtHide = getTouchStartCount(win);
+      store.startsAtHide = getTouches(win).starts;
     }
     store.height = height;
     const report: KeyboardHeightEvent = {type: 'viewport', height, timeStamp};
@@ -304,9 +300,10 @@ export function subscribeKeyboardHeight(
  */
 export function isFingerOnScreen(win: Window): boolean {
   const startsAtHide = stores.get(win)?.startsAtHide;
+  const touches = getTouches(win);
   return (
-    isTouchOnScreen(win) &&
-    (startsAtHide == null || getTouchStartCount(win) !== startsAtHide)
+    touches.fingers > 0 &&
+    (startsAtHide == null || touches.starts !== startsAtHide)
   );
 }
 

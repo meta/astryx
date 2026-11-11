@@ -16,11 +16,7 @@
 import {animatorFor, type Animator} from '../motion/animator';
 import {reducedMotionFade} from '../motion/reducedMotion';
 import {isCoarsePointer} from '../utils/coarsePointer';
-import {
-  getTouchStartCount,
-  isTouchOnScreen,
-  subscribeInput,
-} from '../utils/inputStream';
+import {getTouches, subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {nearestScroller, scrollingAncestor} from '../utils/scrollingAncestor';
 import {sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
@@ -731,7 +727,7 @@ function revealWithKeyboard(
       return;
     }
     hasRevealed = height > KEYBOARD_EPSILON;
-    startsAtReveal = getTouchStartCount(win);
+    startsAtReveal = getTouches(win).starts;
     const rising = reveal(focused, scroller, height, offset, win);
     if (unplaced === 'keep') {
       return;
@@ -778,7 +774,7 @@ function revealWithKeyboard(
   // when Firefox's toolbar hides in a drag.
   let lastHeight = getKeyboardHeight(win);
   const isLaterPressDown = () =>
-    isFingerOnScreen(win) && getTouchStartCount(win) !== startsAtReveal;
+    isFingerOnScreen(win) && getTouches(win).starts !== startsAtReveal;
   const stopReports = subscribeKeyboardHeight(win, event => {
     if (event.type === 'viewport') {
       if (Math.abs(event.height - lastHeight) > KEYBOARD_EPSILON) {
@@ -1363,7 +1359,7 @@ function watchKeyboardGo(win: Window): Map<Element, AddedScroll> {
           settle = null;
           const active = win.document.activeElement;
           if (
-            !isTouchOnScreen(win) &&
+            getTouches(win).fingers === 0 &&
             (active == null ||
               (!bringsUpKeyboard(active) && !hidesField(active)))
           ) {
