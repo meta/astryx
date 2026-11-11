@@ -76,9 +76,11 @@ describe('the weak-keyword bound of a page template', () => {
     expect(gatheredPages.length).toBeGreaterThan(20);
     expect(parse).not.toHaveBeenCalled();
     for (const page of gatheredPages) scoreCandidate('zzqqxx', page);
-    // Only a page whose source defeats the bound (an escape) is parsed.
+    // Only a page whose source defeats the bound (an escape) reads its
+    // components, and a shipped page reads them from its stored list, so at
+    // most those pages are parsed.
     const unboundedPages = gatheredPages.filter(p => !p.weakKeywordBound);
-    expect(parse).toHaveBeenCalledTimes(unboundedPages.length);
+    expect(parse.mock.calls.length).toBeLessThanOrEqual(unboundedPages.length);
     expect(unboundedPages.length).toBeLessThan(gatheredPages.length / 4);
   });
 
