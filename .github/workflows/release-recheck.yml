@@ -119,7 +119,7 @@ jobs:
 
             await github.rest.actions.createWorkflowDispatch({
               ...context.repo, workflow_id: 'ci.yml', ref: 'main',
-              // Cut evidence: the contract legs gate timing on the release runner.
+              // Cut evidence: the run is named Release evidence of <sha>.
               inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': sha, recheck: 'true', evidence: 'true'},
             });
             await github.rest.actions.createWorkflowDispatch({

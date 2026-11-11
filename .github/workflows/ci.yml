@@ -6,10 +6,11 @@
 # Merge queue: test + build also run on merge_group events so the
 # merge queue can gate on them before landing a PR.
 name: CI
-# Main's nightly full interaction run, the weekly full WebKit run and a
-# cut-evidence release-check name their commit, so the main heavy lanes and
-# the release receipts tell them from a monitoring release-check. Every other
-# run keeps its default name.
+# Main's nightly full interaction run and the weekly full WebKit run name
+# their commit, so the main heavy lanes tell them from a release-check. A
+# cut-evidence release-check names its commit too, so people reading Actions
+# tell it from a monitoring release-check. Every other run keeps its default
+# name.
 run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && format('WebKit weekly of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && inputs.evidence && format('Release evidence of {0}', github.sha) || '' }}"
 
 on:

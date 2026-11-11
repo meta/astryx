@@ -6,8 +6,8 @@
 # - ci.yml's canonical release-check, about every three hours and once each
 #   weekday at about 06:30 Pacific, before the 08:00 release cut: main's
 #   visual/a11y/RTL result, fixed forward on failure (DEC-7, FR24). A check
-#   that starts in that hour is cut evidence (`evidence`): its contract legs
-#   gate timing on the release runner;
+#   that starts in that hour is cut evidence (`evidence`), named Release
+#   evidence of <sha>;
 # - deploy.yml's full unit run, about hourly: every unit suite of every
 #   package, on that exact commit, never cancelled by a push (FR21);
 # - ci.yml's full Chromium interaction run, once a day in the 09:00 UTC hour:

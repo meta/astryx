@@ -371,8 +371,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
           runs: [at(now, 90)],
           units: [at(now, 20)],
         });
-        // It is cut evidence: its contract legs gate timing on the release
-        // runner.
+        // It is cut evidence, named Release evidence of <sha>.
         expect(calls.dispatch).toEqual([
           releaseCheck(sha, {evidence: true}),
           unitRun,
