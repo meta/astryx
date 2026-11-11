@@ -136,6 +136,11 @@ describe('reads the review found unaudited', () => {
     'cat `find / -name x.probe.mjs`',
     'cd / && rg -l getByRole',
     'cd /runs && grep -rl getByRole',
+    'cd / && rg -C 3 getByRole',
+    'cd / && rg -t js getByRole',
+    'cd / && rg -e getByRole',
+    'cd / && grep -rn -A 2 getByRole',
+    'cd / && grep -rl -m 1 getByRole',
   ])('fails %j', command => {
     expect(audit(command).violations.length).toBeGreaterThan(0);
   });

@@ -136,11 +136,10 @@ export function resolveCommandPaths(command, workspace, startCwd = workspace, ho
       found.push({raw, resolved: resolveRaw(raw, cwd, home), recursive: recursive && raw !== pattern});
     }
     for (const raw of relativeWords(trimmed, !isInside(cwd, workspace))) {
-      if (raw === pattern) continue;
-      operands++;
-      found.push({raw, resolved: path.resolve(cwd, raw), relative: true, recursive});
+      if (raw !== pattern) found.push({raw, resolved: path.resolve(cwd, raw), relative: true, recursive});
     }
-    // A recursive reader with no path searches the shell folder.
+    // A recursive reader with no absolute, home or parent path searches the shell folder.
+    // A plain word does not count, because it can be an option's value or the pattern.
     if (recursive && operands === 0) found.push({raw: '.', resolved: cwd, relative: true, recursive});
     const cd = /^cd(?:\s+(['"]?)([^'"\s]+)\1)?\s*$/.exec(trimmed);
     if (!cd) continue;
