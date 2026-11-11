@@ -5017,8 +5017,9 @@ jobs:
           # A planner failure fails the step, never reads as "nothing to run".
           set -o pipefail
           # A change with no file list (GitHub truncated it, or the scope step
-          # could not decide) puts every release spec in scope, as everything
-          # is in scope for the other lanes.
+          # could not decide) puts every release spec in scope: uncertainty
+          # fails closed (spec:AST-030 FR4). A head over 3,000 files must
+          # still be split before merge (FR12).
           if [ -n "$FILES_PATH" ]; then
             changes=(--changed "$FILES_PATH")
           elif [ "$TRUNCATED" = true ]; then
