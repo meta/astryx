@@ -16,7 +16,7 @@ export interface WaitForPressClickOptions {
    */
   isSamePress?: () => boolean;
   /** More event types on the element that end the wait, as a cancel does. */
-  cancelOn?: readonly string[];
+  cancelOn?: ReadonlyArray<string>;
 }
 
 /**

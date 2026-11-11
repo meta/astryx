@@ -678,8 +678,15 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         </Text>,
       );
       expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+      // Tab focus matches :focus-visible in a browser; jsdom does not model it
+      // for a tab.
+      const link = screen.getByRole('link', {name: LABEL});
+      const realMatches = link.matches.bind(link);
+      vi.spyOn(link, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? true : realMatches(selector),
+      );
       await user.tab();
-      expect(screen.getByRole('link', {name: LABEL})).toHaveFocus();
+      expect(link).toHaveFocus();
       await waitFor(
         () => {
           expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
