@@ -123,6 +123,7 @@ import {
 import {formatCalendarDateText} from '../utils/calendarDateParser';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
@@ -149,7 +150,6 @@ import english from '../i18n/generated-english/DateInput/TouchDateField.generate
 const UNKNOWN_TODAY_STAND_IN = plainDateFromISO('1970-01-01');
 
 registerEnglishFallback(english);
-import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 
 /**
  * The comfortable minimum tap target on both iOS and Android, honoured by
