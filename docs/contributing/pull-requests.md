@@ -102,11 +102,11 @@ Attach manual screenshots and their receipts to the pull request, or link a
 public retained copy outside the implementation branch. A device or emulator
 clip that a verification row needs is kept in the maintainers' audit store
 (`architecture:knowledge-contracts` INV24); the pull request states each one in
-text — device or emulator, browser, head, animation scale, result — and does not
-attach it. A public video, when one is needed, comes from CI's own artifacts.
-Keep reusable fixtures, accepted baselines, and media used by public
-documentation in their owning source paths. Evidence storage does not relax the
-matching template's evidence bar.
+text — device or emulator, browser, head, animation scale or slow-device
+profile, result — and does not attach it. A public video, when one is needed,
+comes from CI's own artifacts. Keep reusable fixtures, accepted baselines, and
+media used by public documentation in their owning source paths. Evidence
+storage does not relax the matching template's evidence bar.
 
 ## Review your change before you ask for review
 
