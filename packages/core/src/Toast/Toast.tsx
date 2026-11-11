@@ -34,6 +34,11 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
+import {
+  renderedText,
+  useAnnounceRenderedText,
+} from '../hooks/useAnnounceRenderedText';
+import type {AnnounceFn, AnnouncePoliteness} from '../hooks/useAnnounce';
 import {useTheme} from '../theme';
 import {MediaTheme} from '../theme/MediaTheme';
 import type {
@@ -52,6 +57,17 @@ import english from '../i18n/generated-english/Toast/Toast.generated';
 registerEnglishFallback(english);
 
 const SWIPE_INTERACTIVE_TARGET_SELECTOR = `${INTERACTIVE_SELECTORS},[tabindex],[contenteditable]:not([contenteditable="false"])`;
+
+const TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR =
+  'button, input, select, textarea, a[href], [role="button"], [role="link"], [tabindex], [contenteditable]:not([contenteditable="false"]), svg, [role="img"]';
+
+function getToastAnnouncementText(element: HTMLElement): string {
+  const copy = element.cloneNode(true) as HTMLElement;
+  copy
+    .querySelectorAll(TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR)
+    .forEach(node => node.remove());
+  return renderedText(copy);
+}
 
 function isInteractiveTarget(
   target: EventTarget | null,
@@ -158,6 +174,10 @@ export interface ToastProps {
 
 interface ToastSurfaceProps extends ToastProps {
   gestureDirection: ToastGestureDirection;
+  /** The viewport's modal-aware announcement channel. */
+  announce?: AnnounceFn;
+  /** Read the body after render when its text comes from a child component. */
+  isRenderedBodyAnnouncement?: boolean;
   /**
    * Changes when a uniqueID overwrite updates this card in place: the new
    * toast's auto-hide timer starts over.
@@ -214,9 +234,20 @@ export function ToastSurface({
   gestureDirection,
   timerKey,
   isLiveRegion = true,
+  announce,
+  isRenderedBodyAnnouncement = false,
   hasEntryStarted = false,
 }: ToastSurfaceProps) {
   const t = useComponentTranslator();
+  const isError = type === 'error';
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const politeness: AnnouncePoliteness = isError ? 'assertive' : 'polite';
+  useAnnounceRenderedText(
+    bodyRef,
+    !isLiveRegion && isRenderedBodyAnnouncement,
+    timerKey ?? '',
+    {politeness, announce},
+  );
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Every condition that holds the auto-hide timer (pointer over the card,
   // focus inside it, a touch or pen gesture, the window blurred) is tracked on
@@ -384,11 +415,36 @@ export function ToastSurface({
   });
   cardRootRef.current = rootRef;
 
+  const lastCustomAnnouncementRef = useRef<string | null>(null);
+  // Keep the viewport's shared announcement channel in sync with custom toast text.
+  useEffect(() => {
+    if (isLiveRegion || renderContent == null || announce == null) {
+      return;
+    }
+    // MediaTheme is the card's first child and uses display: contents, so
+    // reading it includes the custom layout without adding a wrapper that
+    // could change the caller's layout or selectors.
+    const content = rootRef.current?.firstElementChild;
+    if (content?.nodeType !== Node.ELEMENT_NODE) {
+      return;
+    }
+    const text = getToastAnnouncementText(content as HTMLElement);
+    if (text === '') {
+      lastCustomAnnouncementRef.current = null;
+      return;
+    }
+    const occasion = `${timerKey ?? ''}\u0000${text}`;
+    if (lastCustomAnnouncementRef.current === occasion) {
+      return;
+    }
+    lastCustomAnnouncementRef.current = occasion;
+    announce(text, politeness);
+  });
+
   const handleDismiss = useCallback(() => {
     onDismiss('manual');
   }, [onDismiss]);
 
-  const isError = type === 'error';
   // The surface is *usually* dark in light mode and light in dark mode, but a
   // theme can define --color-background-inverted as anything — so the mode is
   // measured, not assumed. This is only the pre-measurement fallback.
@@ -427,7 +483,9 @@ export function ToastSurface({
           })
         ) : (
           <div {...stylex.props(styles.inner)}>
-            <div {...stylex.props(styles.content)}>{body}</div>
+            <div ref={bodyRef} {...stylex.props(styles.content)}>
+              {body}
+            </div>
 
             <div {...stylex.props(styles.endContent)}>
               {endContent}
