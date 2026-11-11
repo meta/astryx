@@ -489,6 +489,8 @@ function list({config, project}, out, extra) {
       ...(project ? ['--project', project] : []),
       '--list',
       '--reporter=json',
+      // Playwright exits 1 when nothing matches; `plan` explains that case.
+      '--pass-with-no-tests',
       ...extra,
     ],
     {

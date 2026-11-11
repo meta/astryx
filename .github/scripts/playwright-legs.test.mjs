@@ -44,6 +44,74 @@ const durations = JSON.parse(
 );
 const step = (job, name) => job.steps.find(each => each.name === name);
 
+describe('plan', () => {
+  /**
+   * Runs `plan` with a stand-in pnpm that answers `playwright test --list` as
+   * Playwright does when no spec file matches: exit 1, unless the listing
+   * passes `--pass-with-no-tests`, which writes an empty report instead.
+   */
+  function planWithNothingListed(filters) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'legs-plan-'));
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin);
+    fs.writeFileSync(
+      path.join(bin, 'pnpm'),
+      [
+        '#!/bin/sh',
+        'case " $* " in',
+        '  *" --pass-with-no-tests "*) echo \'{"suites":[]}\' > "$PLAYWRIGHT_JSON_OUTPUT_FILE" ;;',
+        '  *) echo "Error: No tests found" >&2; exit 1 ;;',
+        'esac',
+        '',
+      ].join('\n'),
+      {mode: 0o755},
+    );
+    const result = spawnSync(
+      'node',
+      [
+        path.join(root, '.github/scripts/playwright-legs.mjs'),
+        'plan',
+        '--key',
+        'interaction',
+        '--config',
+        'playwright.interaction.config.ts',
+        '--leg',
+        '1',
+        '--of',
+        '1',
+        '--out',
+        path.join(dir, 'plan.json'),
+        ...(filters.length > 0 ? ['--', ...filters] : []),
+      ],
+      {
+        cwd: root,
+        env: {...process.env, PATH: `${bin}:${process.env.PATH}`},
+        encoding: 'utf8',
+      },
+    );
+    fs.rmSync(dir, {recursive: true, force: true});
+    return result;
+  }
+
+  it('tells the author to update a branch whose head lacks every selected spec', () => {
+    const result = planWithNothingListed([
+      'packages/core/src/Added/__tests__/Added.interaction.spec.ts',
+    ]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'they were added on main after the branch point. Update the branch to run them.',
+    );
+  });
+
+  it('still fails a suite that lists no spec files at all', () => {
+    const result = planWithNothingListed([]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'Playwright listed no interaction spec files',
+    );
+  });
+});
+
 describe('nearCeilingMessage', () => {
   const limits = {setupSeconds: 90, maxSeconds: 600, maxLegs: 6};
 
