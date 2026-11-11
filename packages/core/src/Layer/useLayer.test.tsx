@@ -3250,6 +3250,47 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     vi.restoreAllMocks();
   });
 
+  it('reads its box once when it shows, and gives the entrance its side from that read', async () => {
+    const user = userEvent.setup();
+    viewport720();
+    // Directly below the trigger and clear of it, so it is not placed afresh.
+    const reads = placeBoxes(TRIGGER, rect(330, 400, 100, 200));
+    const {container} = render(<ClearHarness />);
+    const layer = container.querySelector<HTMLElement>('[popover]')!;
+    reads.mockClear();
+    await user.click(container.querySelector('button')!);
+    const layerReads = reads.mock.contexts.filter(context => context === layer);
+    expect(layerReads).toHaveLength(1);
+    expect(layer.style.getPropertyValue('--_astryx-layer-enter-y')).toBe('-1');
+  });
+
+  it('leaves the entrance side to a component that writes it after its own commit', async () => {
+    function WritesSideHarness() {
+      const layer = useLayerInternal({
+        mode: 'context',
+        writesEntranceSide: true,
+      });
+      return (
+        <>
+          <button type="button" ref={layer.ref} onClick={layer.show}>
+            Trigger
+          </button>
+          {layer.render(<span>Layer content</span>)}
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    const reads = placeBoxes(TRIGGER, rect(330, 400, 100, 200));
+    const {container} = render(<WritesSideHarness />);
+    const layer = container.querySelector<HTMLElement>('[popover]')!;
+    reads.mockClear();
+    await user.click(container.querySelector('button')!);
+    expect(
+      reads.mock.contexts.filter(context => context === layer),
+    ).toHaveLength(0);
+    expect(layer.style.getPropertyValue('--_astryx-layer-enter-y')).toBe('');
+  });
+
   it('lists the other block side at its own size, then beside the trigger, and only then each block side sized to its room', () => {
     expect(getAnchorClearFallbacks('above')).toBe(
       'flip-block, --astryx-layer-beside-end, --astryx-layer-beside-start, --astryx-layer-fit-above, --astryx-layer-fit-below',
