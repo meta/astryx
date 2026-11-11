@@ -15,7 +15,7 @@
  */
 
 import {$createLinkNode} from '@lexical/link';
-import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
+import {describe, it, expect, vi, beforeAll} from 'vitest';
 import {
   render,
   screen,
