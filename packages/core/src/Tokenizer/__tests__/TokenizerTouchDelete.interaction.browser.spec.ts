@@ -2,8 +2,8 @@
 
 /**
  * @file TokenizerTouchDelete.interaction.browser.spec.ts
- * @input The built "Core/Tokenizer" stories on the harness's phone, real
- *   touch input and the keyboard's Backspace
+ * @input The built "Core/Tokenizer" stories on a tablet-sized touch
+ *   screen, real touch input and the keyboard's Backspace
  * @output Proofs of Tokenizer's two-press Delete on a touch screen. The first
  *   Backspace on the empty input selects the last token; the second removes
  *   it. Typing keeps a selected token, and leaving the field clears the

@@ -1699,7 +1699,6 @@ export function Tokenizer<T extends SearchableItem>({
   // removes it. Typing anything else keeps a selected token and goes on
   // after it.
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // A selection only lives while it names a current token.
   const selectedItem =
     selectedId == null ? null : (value.find(v => v.id === selectedId) ?? null);
   // When the selected token leaves (its ×, Clear all, or the app's own
