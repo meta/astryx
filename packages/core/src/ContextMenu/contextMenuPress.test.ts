@@ -13,7 +13,7 @@
  * @position Unit tests of packages/core/src/ContextMenu/contextMenuPress.ts
  */
 
-import {describe, expect, it, vi} from 'vitest';
+import {describe, expect, it} from 'vitest';
 import {createHarness} from '../gestures/__tests__/harness';
 import {contextMenu} from '../motion/uikit/contextMenu';
 import {ContextMenuPressRecognizer} from './contextMenuPress';
@@ -49,10 +49,13 @@ describe('ContextMenuPressRecognizer', () => {
     const {harness, press, states} = setup();
     harness.finger(1).down(0, 0, 0, {recognizers: [press]});
     // Nothing ran until 900 ms (a blocked main thread): the press still
-    // began at 400, and the menu was due at 735.
+    // began at 400. The menu's timer ran late, so it waits 50 ms for moves
+    // queued behind the block, and none came.
     harness.advance(900);
-    expect(states).toEqual([`began@${COMMIT}`, `changed@${DISPLAY}`]);
+    expect(states).toEqual([`began@${COMMIT}`]);
     expect(press.beganAt).toBe(COMMIT);
+    harness.advance(950);
+    expect(states).toEqual([`began@${COMMIT}`, 'changed@950']);
   });
 
   it('claims the finger at the commit and drops the lift’s click', () => {
@@ -101,13 +104,13 @@ describe('ContextMenuPressRecognizer', () => {
     const {harness, press, states} = setup();
     const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
     harness.advance(COMMIT);
-    // The page has just handled a move from 450 ms: more may still come.
-    finger.move(3, 0, 450);
+    // The page gets a move from 450 ms only at 700 ms: it is behind.
+    finger.move(3, 0, 450, undefined, 700);
     harness.advance(DISPLAY);
     expect(press.isMenuDue).toBe(false);
     // A late move that came at 600 ms, 14 px over. The arena holds its time
     // at the clock, and the recognizer reads the time it came with.
-    finger.move(14, 0, 600);
+    finger.move(14, 0, 600, undefined, DISPLAY + 10);
     expect(states).toEqual([
       `began@${COMMIT}`,
       'changed@450',
@@ -121,11 +124,11 @@ describe('ContextMenuPressRecognizer', () => {
     const {harness, press, states} = setup();
     const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
     harness.advance(COMMIT);
-    finger.move(3, 0, 450);
+    finger.move(3, 0, 450, undefined, 700);
     harness.advance(DISPLAY);
     expect(press.isMenuDue).toBe(false);
     // Inside the tolerance at the moment, 14 px over 15 ms after it.
-    finger.move(14, 0, DISPLAY + 15);
+    finger.move(14, 0, DISPLAY + 15, undefined, DISPLAY + 20);
     expect(press.isMenuDue).toBe(true);
     expect(states).toEqual([
       `began@${COMMIT}`,
@@ -136,23 +139,129 @@ describe('ContextMenuPressRecognizer', () => {
     finger.up(DISPLAY + 300);
   });
 
-  it('shows the menu once the late moves pause for 50 ms', () => {
-    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
-    try {
-      const {harness, press} = setup();
+  it('judges each coalesced sample of a late move at its own time while the menu waits', () => {
+    const {harness, press, states} = setup();
+    const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
+    harness.advance(COMMIT);
+    finger.move(3, 0, 450, undefined, 700);
+    harness.advance(DISPLAY);
+    // One late move with two samples: 13 px at 725 ms, before the moment,
+    // then 14 px at 740 ms. Two separate moves would end the hold at the
+    // first, so this one does too.
+    finger.move(
+      14,
+      0,
+      DISPLAY + 5,
+      [{x: 13, y: 0, time: DISPLAY - 10}],
+      DISPLAY + 20,
+    );
+    expect(press.isMenuDue).toBe(false);
+    expect(states).toEqual([
+      `began@${COMMIT}`,
+      'changed@450',
+      `cancelled@${DISPLAY + 5}`,
+    ]);
+  });
+
+  it('shows the waiting menu for a coalesced move whose samples before the moment stay inside the tolerance', () => {
+    const {harness, press} = setup();
+    const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
+    harness.advance(COMMIT);
+    finger.move(3, 0, 450, undefined, 700);
+    harness.advance(DISPLAY);
+    finger.move(
+      14,
+      0,
+      DISPLAY + 5,
+      [{x: 10, y: 0, time: DISPLAY - 10}],
+      DISPLAY + 20,
+    );
+    expect(press.isMenuDue).toBe(true);
+    finger.up(DISPLAY + 300);
+  });
+
+  for (const blockedUntil of [760, 800, 900]) {
+    it(`judges a coalesced move from behind a block until ${blockedUntil} ms before the menu shows`, () => {
+      const {harness, press, states} = setup();
       const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
       harness.advance(COMMIT);
-      finger.move(3, 0, 450);
-      harness.advance(DISPLAY);
+      // On time until 640 ms. Then the page is blocked past the moment.
+      finger.move(3, 0, 640);
+      // The finger crossed 11.5 px at 650 ms. Its moves wait behind the block
+      // and come as one coalesced move.
+      finger.move(
+        14,
+        0,
+        blockedUntil - 5,
+        [
+          {x: 13, y: 0, time: 650},
+          {x: 14, y: 0, time: 700},
+        ],
+        blockedUntil,
+      );
       expect(press.isMenuDue).toBe(false);
-      vi.advanceTimersByTime(49);
-      expect(press.isMenuDue).toBe(false);
-      vi.advanceTimersByTime(1);
-      expect(press.isMenuDue).toBe(true);
-      finger.up(DISPLAY + 300);
-    } finally {
-      vi.useRealTimers();
-    }
+      expect(states).toEqual([
+        `began@${COMMIT}`,
+        'changed@640',
+        `cancelled@${blockedUntil - 5}`,
+      ]);
+    });
+  }
+
+  it('shows a still finger’s menu after a block, once no move comes from behind it', () => {
+    const {harness, press} = setup();
+    const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
+    // The moment's timer runs 65 ms late behind a block.
+    harness.advance(DISPLAY, DISPLAY + 65);
+    expect(press.isMenuDue).toBe(false);
+    harness.advance(DISPLAY + 115);
+    expect(press.isMenuDue).toBe(true);
+    finger.up(DISPLAY + 300);
+  });
+
+  it('shows the menu once the late moves pause for 50 ms', () => {
+    const {harness, press} = setup();
+    const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
+    harness.advance(COMMIT);
+    finger.move(3, 0, 450, undefined, 700);
+    harness.advance(DISPLAY);
+    expect(press.isMenuDue).toBe(false);
+    // The wait runs on the arena's clock.
+    harness.advance(DISPLAY + 49);
+    expect(press.isMenuDue).toBe(false);
+    harness.advance(DISPLAY + 50);
+    expect(press.isMenuDue).toBe(true);
+    finger.up(DISPLAY + 300);
+  });
+
+  it('shows the menu at its moment after a move that reached the page on time, with no wait', () => {
+    const {harness, press, states} = setup();
+    const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
+    harness.advance(COMMIT);
+    // A 3 px shift at 720 ms that the page gets at once: it is not behind.
+    finger.move(3, 0, 720);
+    harness.advance(DISPLAY);
+    expect(press.isMenuDue).toBe(true);
+    expect(states).toEqual([
+      `began@${COMMIT}`,
+      'changed@720',
+      `changed@${DISPLAY}`,
+    ]);
+  });
+
+  it('waits at the menu’s moment when its own timer runs late after a recent move', () => {
+    const {harness, press} = setup();
+    const finger = harness.finger(1).down(0, 0, 0, {recognizers: [press]});
+    harness.advance(COMMIT);
+    finger.move(3, 0, 730);
+    // The page is busy: the moment's timer runs 40 ms late, so later moves
+    // may still be queued.
+    harness.advance(DISPLAY, DISPLAY + 40);
+    expect(press.isMenuDue).toBe(false);
+    // No more moves came: the wait ends 50 ms after the late timer ran.
+    harness.advance(DISPLAY + 90);
+    expect(press.isMenuDue).toBe(true);
+    finger.up(DISPLAY + 300);
   });
 
   it('shows a still finger’s menu at its moment, with no wait', () => {
