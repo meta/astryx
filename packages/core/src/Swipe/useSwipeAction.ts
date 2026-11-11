@@ -5,7 +5,7 @@
 /**
  * @file useSwipeAction.ts
  * @input Per side, the panel window and its entries (callback refs; the row
- *   root is the window's parent). The shared drag path (createSnapDrag.ts: the
+ *   root is the window's parent). The shared drag path (createSnapDrag, in createDragToSnapPoints.ts: the
  *   trackpad splitter, the pan, the snap-point drag and the animator). The
  *   UIKit constants table and swipeRelease.ts
  * @output Exports useSwipeAction — the stops, the actions and the finger's
@@ -81,7 +81,7 @@ import {
   type SnapDragMove,
   type SnapDragRelease,
   type SnapDragTarget,
-} from '../dragToSnapPoints/createSnapDrag';
+} from '../dragToSnapPoints/createDragToSnapPoints';
 import {getGestureHost} from '../gestures/GestureHost';
 import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import type {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';

@@ -3,7 +3,7 @@
 /**
  * @file Item.sharedDrag.test.tsx
  * @input Item with swipe actions; the shared snap-point drag
- *   (createSnapDrag.ts), spied to read what the row hands it
+ *   (createSnapDrag, in createDragToSnapPoints.ts), spied to read what the row hands it
  * @output Verifies the row's swipe runs the shared drag path and declares only
  *   its stops and actions there. The row's travel is the shared drag's, drawn
  *   into the row's custom property. The pan takes a finger, a pen and a
@@ -19,18 +19,18 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
 import {Item} from './Item';
 import {createSwipe} from '../Swipe/createSwipe';
-import type * as SnapDragModule from '../dragToSnapPoints/createSnapDrag';
+import type * as SnapDragModule from '../dragToSnapPoints/createDragToSnapPoints';
 import type {
   SnapDrag,
   SnapDragOptions,
-} from '../dragToSnapPoints/createSnapDrag';
+} from '../dragToSnapPoints/createDragToSnapPoints';
 import {swipeActions as SWIPE} from '../motion/uikit/swipeActions';
 
 const {created} = vi.hoisted(() => ({
   created: [] as {options: SnapDragOptions; snap: SnapDrag}[],
 }));
 
-vi.mock('../dragToSnapPoints/createSnapDrag', async importOriginal => {
+vi.mock('../dragToSnapPoints/createDragToSnapPoints', async importOriginal => {
   const actual = await importOriginal<typeof SnapDragModule>();
   return {
     ...actual,

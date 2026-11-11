@@ -6,7 +6,7 @@
  *   offset at a value
  * @output playCompositorSettle: a settle as one compositor `translate`
  *   animation per part, with its callbacks timed from the same curve
- * @position Used by createSnapDrag.ts for the settles it plays on the
+ * @position Used by createSnapDrag (createDragToSnapPoints.ts) for the settles it plays on the
  *   compositor (its `compositorParts` option)
  *
  * The caller writes the settle's end on the drawn value first, so each part's

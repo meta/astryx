@@ -3,7 +3,7 @@
 /**
  * @file createSnapDrag.test.ts
  * @input vitest (jsdom, fake clock), the internal snap-point drag with its
- *   pan (gestures/createPan.ts) replaced by a stand-in that hands its pan
+ *   pan (createPan, gestures/createPanGesture.ts) replaced by a stand-in that hands its pan
  *   events to the test
  * @output Checks the options only Core passes. A model draws a drag one for one
  *   or on a spring, or leaves the element as it is inside a dead zone. A settle
@@ -18,16 +18,16 @@
  *   settle plays one `translate` per part on one clock, and reports from its
  *   curve. It holds where a drag or a destroy stops it. Reduce Motion keeps the
  *   animator's settle.
- * @position Testing; validates createSnapDrag.ts
+ * @position Testing; validates createSnapDrag (createDragToSnapPoints.ts)
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import type {PanEvent, PanInput, PanOptions} from '../gestures/createPan';
+import type {PanEvent, PanInput, PanOptions} from '../gestures/createPanGesture';
 
 let onPan: ((event: PanEvent) => void) | null = null;
 let recognizer: PanOptions['recognizer'];
 
-vi.mock('../gestures/createPan', () => ({
+vi.mock('../gestures/createPanGesture', () => ({
   createPan: (_element: Element, options: PanOptions) => {
     onPan = options.onPan;
     recognizer = options.recognizer;
@@ -35,7 +35,7 @@ vi.mock('../gestures/createPan', () => ({
   },
 }));
 
-const {createSnapDrag} = await import('./createSnapDrag');
+const {createSnapDrag} = await import('./createDragToSnapPoints');
 
 beforeEach(() => {
   vi.useFakeTimers({
