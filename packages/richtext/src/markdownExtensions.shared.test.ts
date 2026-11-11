@@ -76,5 +76,9 @@ describe('markdown extensions shared by the package and a swizzled copy', () => 
     expect(pkg.pluginsOf([copy.createRichTextExtension(mentions)], [])).toEqual(
       [mentions],
     );
+    // The brand is required, so a hand-built object is not an extension.
+    // @ts-expect-error -- `{name}` lacks the extension's brand.
+    const handBuilt: typeof extension = {name: 'mentions'};
+    expect(copy.pluginsOf([handBuilt], [])).toEqual([undefined]);
   });
 });

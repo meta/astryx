@@ -128,7 +128,7 @@ interface RichTextEditorStatus
 type RichTextEditorStatusType = 'warning' | 'error' | 'success'
 interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> (props of RichTextEditorToolbar)
 interface RichTextMarkdownExtension
-  [extensionPlugin]: MarkdownPluginEntry
+  @astryxdesign/richtext/markdown-extension/v1: never
   name: string
 interface RichTextViewProps extends BaseProps (props of RichTextView)
 ```

@@ -47,7 +47,11 @@ import {
   RichTextExtensionNode,
 } from './markdownExtensionNode';
 
-const extensionPlugin = Symbol('RichTextMarkdownExtension.plugin');
+// A registered key, so the package and a swizzled RichTextEditor or
+// RichTextView copy read one another's extensions.
+const extensionPlugin = Symbol.for(
+  '@astryxdesign/richtext/markdown-extension/v1',
+);
 
 /**
  * One Markdown plugin adopted by RichText. Opaque: create it with
@@ -57,8 +61,18 @@ const extensionPlugin = Symbol('RichTextMarkdownExtension.plugin');
 export interface RichTextMarkdownExtension {
   /** The adopted plugin's name. */
   readonly name: string;
-  readonly [extensionPlugin]: MarkdownPluginEntry;
+  /**
+   * A brand that is never present on the type. Only
+   * `createRichTextExtension` makes an extension, and the package and a
+   * swizzled copy name the brand alike.
+   */
+  readonly '@astryxdesign/richtext/markdown-extension/v1': never;
 }
+
+/** Where `createRichTextExtension` keeps the adopted plugin. */
+type ExtensionRecord = RichTextMarkdownExtension & {
+  readonly [extensionPlugin]: MarkdownPluginEntry;
+};
 
 /** Why RichText refused a plugin or a configuration (spec:AST-064 FR4, FR6). */
 export class RichTextExtensionError extends Error {
@@ -102,7 +116,10 @@ export function createRichTextExtension(
   if (capabilities.transform) {
     throw new RichTextExtensionError(plugin.name, 'transform', null);
   }
-  return Object.freeze({name: plugin.name, [extensionPlugin]: plugin});
+  return Object.freeze({
+    name: plugin.name,
+    [extensionPlugin]: plugin,
+  }) as unknown as RichTextMarkdownExtension;
 }
 
 /**
@@ -140,7 +157,9 @@ export function pluginsOf(
       }
     });
   }
-  return extensions.map(extension => extension[extensionPlugin]);
+  return extensions.map(
+    extension => (extension as ExtensionRecord)[extensionPlugin],
+  );
 }
 
 // ---------------------------------------------------------------------------
