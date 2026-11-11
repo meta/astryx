@@ -262,8 +262,8 @@ export function useSelectedItemOverlayMargin({
     if (!isOpen || listbox == null) {
       return;
     }
-    // The report at registration falls inside this commit, where the
-    // measuring Effect already runs, so it is skipped.
+    // Skip the report at registration. It falls inside this commit, and the
+    // measuring Effect already runs in this commit.
     let isRegistering = true;
     const unobserve = observeResize(listbox, () => {
       if (!isRegistering) {
