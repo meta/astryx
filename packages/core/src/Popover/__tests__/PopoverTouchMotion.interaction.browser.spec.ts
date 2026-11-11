@@ -101,12 +101,6 @@ interface Box {
   height: number;
 }
 
-/** When the touch hit areas' new insets were written and drawn, epoch ms. */
-interface HitAreaInsets {
-  written: number;
-  drawn: number;
-}
-
 interface OpenStory {
   driver: TouchDriver;
   trigger: Locator;
@@ -337,47 +331,6 @@ async function contentPromotions(layer: Locator): Promise<string[]> {
         );
     }),
   );
-}
-
-/**
- * Logs each time the content's touch hit areas take new insets: when the
- * style write runs, and when the next frame has drawn, epoch ms. The mutation
- * observer reads no layout, and its one frame callback runs before any window
- * that waits for it.
- */
-async function logHitAreaInsets(page: Page) {
-  await page.evaluate(() => {
-    const log: HitAreaInsets[] = [];
-    Object.defineProperty(window, '__popoverHitAreaInsets', {value: log});
-    const isInsets = (style: string | null) =>
-      style?.includes('--astryx-hit-inset-') ?? false;
-    new MutationObserver(records => {
-      if (
-        !records.some(
-          record =>
-            isInsets(record.oldValue) ||
-            isInsets((record.target as Element).getAttribute('style')),
-        )
-      ) {
-        return;
-      }
-      const entry = {
-        written: performance.timeOrigin + performance.now(),
-        drawn: 0,
-      };
-      log.push(entry);
-      requestAnimationFrame(() =>
-        setTimeout(() => {
-          entry.drawn = performance.timeOrigin + performance.now();
-        }),
-      );
-    }).observe(document.body, {
-      attributes: true,
-      attributeFilter: ['style'],
-      attributeOldValue: true,
-      subtree: true,
-    });
-  });
 }
 
 /** The static copy the dismissal plays on. */
@@ -687,7 +640,6 @@ test('the presentation and the dismissal do no Layout or Paint per frame', async
   // reads every animation each frame, so the windows come from when each
   // scale animation starts.
   await story.trigger.focus();
-  await logHitAreaInsets(page);
   let opened = 0;
   let closed = 0;
   let present = 0;
@@ -704,40 +656,20 @@ test('the presentation and the dismissal do no Layout or Paint per frame', async
     },
     {keepEvents: true},
   );
-  const insets = await page.evaluate(() => [
-    ...(window as unknown as {__popoverHitAreaInsets: HitAreaInsets[]})
-      .__popoverHitAreaInsets,
-  ]);
   // Each window starts 400 ms in, after the focus ring, and ends one frame
-  // before its curve does. Each motion's start also measures the content's
-  // touch hit areas: layout reads, then a style write. A stalled machine can
-  // delay that past 400 ms and spread it over frames, a few controls each. So
-  // a window starts no sooner than the frame that draws the last of those
-  // insets. A page frame callback makes Chromium lay out this anchored layer
-  // every frame. So these zeros also show that no frame loop runs here,
-  // Popover's own included.
-  for (const [name, action, base, ms] of [
-    ['present', opened, present, entrance.ms],
-    ['dismiss', closed, dismiss, exit.ms],
+  // before its curve does. A page frame callback makes Chromium lay out this
+  // anchored layer every frame. So these zeros also show that no frame loop
+  // runs here, Popover's own included.
+  for (const [name, base, ms] of [
+    ['present', present, entrance.ms],
+    ['dismiss', dismiss, exit.ms],
   ] as const) {
     const end = base + ms - 20;
-    // A write that lands before the previous one has drawn belongs to the
-    // same pass.
-    let drawn = 0;
-    for (const entry of insets) {
-      if (entry.written < action || entry.written >= end) {
-        continue;
-      }
-      if (drawn !== 0 && entry.written > drawn) {
-        break;
-      }
-      drawn = Math.max(drawn, entry.drawn);
-    }
-    const from = Math.max(base + WINDOW_START_MS, drawn);
+    const from = base + WINDOW_START_MS;
     // A late setup leaves too short a window to judge, so it fails by name.
     expect(
       end - from,
-      `${name}: the hit areas drew ${Math.round(from - base)} ms in, too late to leave a window`,
+      `${name}: the window starts ${Math.round(from - base)} ms in, too late to leave one`,
     ).toBeGreaterThanOrEqual(MIN_WINDOW_MS);
     const during = countBetween(trace, from, end);
     // On failure, every rendering event of the window, in ms after its

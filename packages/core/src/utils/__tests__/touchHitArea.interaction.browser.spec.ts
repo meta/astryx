@@ -100,12 +100,14 @@ test.describe('the touch band (spec:AST-094 FR42), under a finger', () => {
       .locator('#storybook-root')
       .getByRole('button', {name: 'Pricing help'});
     const linkBox = await link.boundingBox();
-    expect(linkBox).not.toBeNull();
+    if (linkBox == null) {
+      throw new Error('the link has no box');
+    }
     const driver = await touchDriver(page);
     // The link's last letter, beside the tip.
     await tapAt(driver, {
-      x: Math.floor(linkBox!.x + linkBox!.width - 2),
-      y: Math.round(linkBox!.y + linkBox!.height / 2),
+      x: Math.floor(linkBox.x + linkBox.width - 2),
+      y: Math.round(linkBox.y + linkBox.height / 2),
     });
     await expect(
       page.locator('#storybook-root output[aria-label="Reach taps"]'),

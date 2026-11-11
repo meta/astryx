@@ -69,13 +69,9 @@ import {
 
 const storybook = withStorybook(test);
 
-/**
- * A segment's inline style without the touch hit insets utils/hitArea writes
- * under a coarse pointer: only what the selection motion writes.
- */
+/** A segment's inline style: what the selection motion writes. */
 function motionStyle(element: HTMLElement): string {
   return [...element.style]
-    .filter(property => !property.startsWith('--astryx-hit-inset-'))
     .map(property => `${property}: ${element.style.getPropertyValue(property)}`)
     .join('; ');
 }
@@ -2397,12 +2393,7 @@ test('a vetoed tap selects nothing, and the lens goes back to the selection', as
   expect(
     await control.group.evaluate(group =>
       [...group.querySelectorAll<HTMLElement>('[role="radio"]')]
-        .flatMap(segment =>
-          // Only what the motion writes: not utils/hitArea's touch insets.
-          [...segment.style].filter(
-            property => !property.startsWith('--astryx-hit-inset-'),
-          ),
-        )
+        .flatMap(segment => [...segment.style])
         .join(''),
     ),
   ).toBe('');
