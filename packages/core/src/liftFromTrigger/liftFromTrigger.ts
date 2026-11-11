@@ -91,8 +91,8 @@ export interface LiftFromTriggerOptions {
   readonly onBackdropTap?: () => void;
   /**
    * Marks the lift's elements, a private attribute the caller owns: the
-   * layer, its placeholder (`<attribute>-placeholder`) and a surface's exit
-   * copy (`<attribute>-exit`).
+   * layer, its anchor box (`<attribute>-anchor`) and its placeholder
+   * (`<attribute>-placeholder`).
    */
   readonly attribute: string;
 }
