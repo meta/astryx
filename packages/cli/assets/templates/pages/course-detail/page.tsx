@@ -21,6 +21,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type CSSProperties,
   type ReactNode,
@@ -29,16 +30,21 @@ import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Grid} from '@astryxdesign/core/Grid';
 import {HStack, VStack, StackItem} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
+import {Card} from '@astryxdesign/core/Card';
+import {Icon} from '@astryxdesign/core/Icon';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {ClickableCard} from '@astryxdesign/core/ClickableCard';
 import {Dialog} from '@astryxdesign/core/Dialog';
 import {Popover} from '@astryxdesign/core/Popover';
 import {Slider} from '@astryxdesign/core/Slider';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {useClipboard, useMediaQuery} from '@astryxdesign/core/hooks';
 import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
+import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {
+  ArrowRightIcon,
   BanknotesIcon,
   ChartBarIcon,
   CheckIcon,
@@ -46,14 +52,12 @@ import {
   CommandLineIcon,
   HeartIcon,
   MagnifyingGlassIcon,
+  NoSymbolIcon,
   PaintBrushIcon,
   PlayCircleIcon,
+  PlusIcon,
   XMarkIcon,
-  PlayIcon,
-  ArrowRightIcon,
   StarIcon,
-  UsersIcon,
-  BookOpenIcon,
 } from '@heroicons/react/24/outline';
 import {
   CheckBadgeIcon as CheckBadgeSolid,
@@ -80,26 +84,20 @@ import {
   QueueListIcon as PlayListIcon,
   ShareIcon as Share03Icon,
   LockOpenIcon as SquareUnlock02Icon,
+  TrophyIcon as StarAward01Icon,
+  UserGroupIcon as TeachingIcon,
+  BriefcaseIcon as WorkHistoryIcon,
 } from '@heroicons/react/24/outline';
 // ClockIcon is bound above; alias the same glyph for the design's
 // Clock01Icon without rebinding the existing name.
 import {ClockIcon as Clock01Icon} from '@heroicons/react/24/outline';
 import {Section} from '@astryxdesign/core/Layout';
 import {Heading} from '@astryxdesign/core/Text';
-import {Badge} from '@astryxdesign/core/Badge';
-import {Divider} from '@astryxdesign/core/Divider';
-import {
-  SegmentedControl,
-  SegmentedControlItem,
-} from '@astryxdesign/core/SegmentedControl';
 import {Button} from '@astryxdesign/core/Button';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {Link} from '@astryxdesign/core/Link';
 import {ProgressBar} from '@astryxdesign/core/ProgressBar';
-import {Icon} from '@astryxdesign/core/Icon';
-import {Card} from '@astryxdesign/core/Card';
-import {rtlStyles} from '@astryxdesign/core/utils';
-import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
+import {Badge} from '@astryxdesign/core/Badge';
 
 /**
  * Icon data shape the template stores in its tables: an SVG component with
@@ -170,6 +168,9 @@ const hoverStyles = `
 .cr4-disc{transition:transform var(--duration-fast) var(--ease-standard);}
 .cr4-disc:hover{transform:scale(1.06);}
 .cr4-mark{background-color:var(--color-accent-muted);border-radius:4px;padding-inline:2px;color:inherit;}
+.cr6-row{border-radius:calc(var(--radius-container) * 0.6);}
+.cr6-photo{transition:transform 500ms cubic-bezier(0,0,0.2,1);}
+.cr6-row:hover .cr6-photo{transform:scale(1.04);}
 /* The search slot: the field fills the row until lg, where the design
    caps it; the slot carries the sizing so the core field keeps its own
    width behavior inside it. */
@@ -190,6 +191,11 @@ const hoverStyles = `
    md the list is one column and a review runs the full measure, not a
    column 40px short of its heading.) */
 
+/* The panel's primary CTA: the brand fill, the ink on it, the fill at 80%
+   under the pointer (the design's hover:bg-primary/80). */
+.cr7-cta{display:flex;height:44px;width:100%;align-items:center;justify-content:center;gap:8px;border-radius:var(--radius-element);background:var(--color-accent);padding-inline:24px;font-size:14px;font-weight:500;color:var(--color-on-accent);border:none;cursor:pointer;transition:background-color var(--duration-fast) var(--ease-standard);}
+.cr7-cta:hover{background:color-mix(in srgb,var(--color-accent) 80%,transparent);}
+.cr7-cta:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:var(--focus-outline-offset);}
 /* The FAQ's caps column: the whole row's width on a phone, its own 160px
    column from sm. */
 /* The syllabus' six figures: two to a row on a phone, three from sm. */
@@ -200,6 +206,12 @@ const hoverStyles = `
    one line from sm, stacked under it on a phone. */
 .cr7-toolbar{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--color-border);padding-top:32px;margin-top:32px;}
 @media(min-width:640px){.cr7-toolbar{flex-direction:row;align-items:center;}}
+/* What the price covers: two columns where a line fits its column — from sm
+   while the page is one column, and from xl; between, the panel beside
+   takes the room. */
+.cr7-cols2{display:grid;grid-template-columns:minmax(0,1fr);gap:40px;}
+@media(min-width:640px){.cr7-cols2{grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;}}
+@media(min-width:1024px) and (max-width:1279px){.cr7-cols2{grid-template-columns:minmax(0,1fr);gap:40px;}}
 /* ── Polish ───────────────────────────────────────────────────────────────
    The poster (poster frame): the art leans in under the pointer and
    the dim doubles; the play disc steps up a size and its shadow lifts. */
@@ -298,6 +310,25 @@ const hoverStyles = `
 .cr12-scrub .astryx-slider-track{height:8px !important;background:var(--color-background-muted) !important;}
 .cr12-scrub .astryx-slider-track + div{height:8px !important;}
 .cr12-scrub .astryx-slider-thumb{width:24px !important;height:24px !important;background:var(--color-background-card) !important;box-shadow:var(--shadow-low) !important;}
+/* The instructor's two buttons, on the design's own recipe
+   (instructor.tsx + follow-button.tsx): a 40px row of muted fill that
+   darkens a rung under the pointer; Follow answering in the brand fill,
+   its plus turning to a tick, both labels in one grid cell so the width
+   holds. */
+.cr12-actbtn{height:40px;border-radius:var(--radius-element);padding-inline:20px;font-size:14px;font-weight:500;color:var(--color-text-primary);border:none;cursor:pointer;transition:background-color var(--duration-fast) var(--ease-standard),color var(--duration-fast) var(--ease-standard);width:100%;background:var(--color-background-muted);}
+.cr12-actbtn:hover{background:var(--color-background-gray);}
+.cr12-actbtn:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:var(--focus-outline-offset);}
+/* Follow: a grid holding its two labels in one cell, the one not in use
+   invisible, so the button keeps the longer label's width (the
+   design's col-start-1 row-start-1 pair) */
+.cr12-follow{display:grid;place-items:center;}
+.cr12-follow[data-on='true']{background:var(--color-accent);color:var(--color-on-accent);}
+.cr12-follow[data-on='true']:hover{background:color-mix(in srgb,var(--color-accent) 80%,transparent);}
+.cr12-labelcell{grid-area:1/1;display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;}
+/* the teacher's spoken name under 360px: heard, not drawn (the
+   design's max-[359px]:sr-only) */
+.cr12-un360{font-size:0;}
+@media(min-width:360px){.cr12-un360{font-size:inherit;}}
 /* the design's globals.css: anchors glide for a reader who did not ask
    for stillness */
 
@@ -342,6 +373,28 @@ dialog.cr12-sheet::backdrop{
 [popover].cr7-pop:popover-open{opacity:1;scale:1;}
 @starting-style{[popover].cr7-pop:popover-open{opacity:0;scale:0.98;}}
 
+/* The phone's reach bar (the enroll panel): mounted once below lg — the
+   design's lg:hidden — and held off the screen by translate, sliding
+   its full height up over 300ms ease-out once the panel's own CTA has
+   left the screen, visibility stepping with it so nothing of it ever
+   draws below the screen's edge. */
+.cr13-reachbar{
+  position:fixed;inset-inline:0;bottom:0;
+  background:var(--color-background-card);
+  border-top:1px solid var(--color-border);
+  box-shadow:0 -6px 20px var(--color-shadow);
+  padding-inline:24px;padding-top:12px;padding-bottom:max(12px,env(safe-area-inset-bottom));
+  translate:0 100%;visibility:hidden;
+  transition:translate 300ms cubic-bezier(0,0,0.2,1),visibility 300ms cubic-bezier(0,0,0.2,1);
+}
+.cr13-reachbar[data-away='true']{translate:0 0;visibility:visible;}
+@media(min-width:1024px){.cr13-reachbar{display:none;}}
+/* its Enroll, the design's own: the brand fill that dips a fifth under
+   the pointer */
+.cr13-reachcta{display:flex;height:40px;flex:0 0 auto;align-items:center;justify-content:center;border-radius:var(--radius-element);background:var(--color-accent);padding-inline:20px;font-size:14px;font-weight:500;color:var(--color-on-accent);border:none;cursor:pointer;transition:background-color 150ms cubic-bezier(0.4,0,0.2,1);}
+.cr13-reachcta:hover{background:color-mix(in srgb,var(--color-accent) 80%,transparent);}
+.cr13-reachcta:focus-visible{outline:var(--focus-outline-width) var(--focus-outline-style) var(--focus-outline-color);outline-offset:var(--focus-outline-offset);}
+
 /* The design's blanket kill, scoped to this page and its layers: a
    reader who asked for stillness gets every state arrived at, never
    travelled to — the hovers land, the sheet and the popovers appear, the
@@ -349,11 +402,13 @@ dialog.cr12-sheet::backdrop{
    never move at all. */
 @media(prefers-reduced-motion:reduce){
   dialog.cr12-sheet,dialog.cr12-sheet::backdrop,
-  [popover].cr7-pop,[popover].cr7-pop *,[popover].cr7-pop *::before,[popover].cr7-pop *::after{
+  [popover].cr7-pop,[popover].cr7-pop *,[popover].cr7-pop *::before,[popover].cr7-pop *::after,
+  .cr13-reachbar,.cr13-reachcta{
     animation-duration:0.01ms !important;
     animation-iteration-count:1 !important;
     transition-duration:0.01ms !important;
   }
+  .cr6-row:hover .cr6-photo,
   .cr9-poster:hover .cr9-poster-art,
   .cr9-poster:hover .cr9-poster-disc{transform:none;}
 }
@@ -366,31 +421,6 @@ const stickyRail: CSSProperties = {
   top: 'var(--spacing-8)',
   alignSelf: 'start',
 };
-
-/** The level as the course cards draw it: three dots, one lit per rung. */
-function LevelDots({level}: {level: string}) {
-  const rank =
-    ({Beginner: 1, Intermediate: 2, Advanced: 3} as Record<string, number>)[
-      level
-    ] ?? 1;
-  return (
-    <HStack gap={0.5} vAlign="center" aria-hidden="true">
-      {[1, 2, 3].map(step => (
-        <span
-          key={step}
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: 999,
-            ...(step <= rank
-              ? {background: 'var(--color-accent)'}
-              : {boxShadow: 'inset 0 0 0 1px var(--color-accent)'}),
-          }}
-        />
-      ))}
-    </HStack>
-  );
-}
 
 const BASE_COURSE = {
   title: 'Applied AI: Build with Language Models',
@@ -412,23 +442,6 @@ const BASE_COURSE = {
     'Prompt design',
     'Vector search',
   ],
-};
-
-const INCLUDES = [
-  'Lifetime access to 13 lessons and all future revisions',
-  'The reviewed project: a working extraction pipeline',
-  'A graded certificate of completion',
-  'Offline downloads for every lesson',
-];
-
-const INSTRUCTOR = {
-  name: 'Gabriela Fernández',
-  role: 'Applied AI engineer, formerly search infrastructure',
-  portrait: '/template-assets/DATA-Gabriela-Fernandez.png',
-  learners: '12,840',
-  courses: '4',
-  rating: '4.9',
-  bio: 'Gabriela spent nine years building retrieval systems at scale before language models landed on her desk. She has shipped the exact pipeline this course teaches — twice, in production, with the scars to prove which parts matter.',
 };
 
 const ASPECTS = [
@@ -494,44 +507,6 @@ const FAQS = [
   },
 ];
 
-const COHORTS = [
-  {
-    id: 'march',
-    date: 'Cohort of March 10',
-    detail: 'Live reviews · 14 seats left',
-  },
-  {
-    id: 'april',
-    date: 'Cohort of April 7',
-    detail: 'Live reviews · 6 seats left',
-  },
-];
-
-// A fixed reference date keeps the computed finish date deterministic
-// between server and client render.
-
-const COHORT_START = new Date('2026-03-02T00:00:00');
-
-const TOTAL_HOURS = 42;
-
-const PACE_MIN = 2;
-
-const PACE_MAX = 12;
-
-const BASE_fmt = (n: number) => `$${n.toFixed(0)}`;
-
-const finishFrom = (pace: number) => {
-  const weeks = Math.max(1, Math.ceil(TOTAL_HOURS / pace));
-  const finish = new Date(COHORT_START);
-  finish.setDate(finish.getDate() + weeks * 7);
-  return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} · finish around ${finish.toLocaleDateString(
-    'en-US',
-    {month: 'short', day: 'numeric'},
-  )}`;
-};
-
-// ─── Star Rating ─────────────────────────────────────────────────────────────
-
 function StarRating({rating, count}: {rating: number; count?: number}) {
   const filled = Math.round(rating);
   const empty = 5 - filled;
@@ -587,62 +562,6 @@ function AboutSection() {
 }
 
 // ─── Syllabus ────────────────────────────────────────────────────────────────
-
-function InstructorSection() {
-  return (
-    <Section padding={6}>
-      <VStack gap={4}>
-        <SectionHeader title="Your instructor" />
-        <Card padding={5}>
-          <VStack gap={4}>
-            <HStack gap={4} vAlign="start">
-              <Avatar
-                name={INSTRUCTOR.name}
-                src={INSTRUCTOR.portrait}
-                size="xl"
-              />
-              <VStack gap={1}>
-                <Text type="large" weight="bold">
-                  {INSTRUCTOR.name}
-                </Text>
-                <Text type="body" color="secondary">
-                  {INSTRUCTOR.role}
-                </Text>
-              </VStack>
-            </HStack>
-            <HStack gap={5} vAlign="center">
-              <HStack gap={1} vAlign="center">
-                <Icon icon={UsersIcon} size="sm" />
-                <Text type="body" color="secondary">
-                  {INSTRUCTOR.learners} learners
-                </Text>
-              </HStack>
-              <HStack gap={1} vAlign="center">
-                <Icon icon={BookOpenIcon} size="sm" />
-                <Text type="body" color="secondary">
-                  {INSTRUCTOR.courses} courses
-                </Text>
-              </HStack>
-              <HStack gap={1} vAlign="center">
-                <Icon icon={StarIcon} size="sm" />
-                <Text type="body" color="secondary">
-                  {INSTRUCTOR.rating} instructor rating
-                </Text>
-              </HStack>
-            </HStack>
-            <Text type="body">{INSTRUCTOR.bio}</Text>
-            <HStack gap={2}>
-              <Button label="View full profile" />
-              <Button label="Follow" variant="ghost" />
-            </HStack>
-          </VStack>
-        </Card>
-      </VStack>
-    </Section>
-  );
-}
-
-// ─── Reviews ─────────────────────────────────────────────────────────────────
 
 function ReviewCard({review}: {review: (typeof REVIEWS)[number]}) {
   return (
@@ -758,98 +677,6 @@ function FaqSection() {
 }
 
 // ─── Enroll rail ─────────────────────────────────────────────────────────────
-
-function EnrollRail() {
-  const [mode, setMode] = useState('self-paced');
-  const [pace, setPace] = useState(7);
-  const [cohort, setCohort] = useState(COHORTS[0].id);
-
-  return (
-    <Card padding={5}>
-      <VStack gap={4}>
-        <VStack gap={1}>
-          <HStack gap={2} vAlign="center">
-            <Text type="display-3">{BASE_fmt(BASE_COURSE.price)}</Text>
-            <Text type="body" color="secondary" hasStrikethrough>
-              {BASE_fmt(BASE_COURSE.compareAt)}
-            </Text>
-            <Badge variant="error" label="Sale" />
-          </HStack>
-          <Text type="supporting" color="secondary">
-            One-time purchase · yours to keep
-          </Text>
-        </VStack>
-        <VStack gap={2}>
-          <Button
-            label="Enroll now"
-            variant="primary"
-            size="lg"
-            icon={
-              <Icon icon={ArrowRightIcon} size="sm" xstyle={rtlStyles.mirror} />
-            }
-          />
-          <Button
-            label="Start lesson one free"
-            size="lg"
-            icon={<Icon icon={PlayIcon} size="sm" />}
-          />
-        </VStack>
-        <Text type="supporting" color="secondary">
-          30-day money-back guarantee
-        </Text>
-        <Divider />
-        <VStack gap={3}>
-          <Text type="label">Start</Text>
-          <SegmentedControl value={mode} onChange={setMode} label="Start mode">
-            <SegmentedControlItem value="self-paced" label="Self-paced" />
-            <SegmentedControlItem value="cohort" label="Cohort" />
-          </SegmentedControl>
-          {mode === 'self-paced' ? (
-            <VStack gap={2}>
-              <Slider
-                label="Weekly pace"
-                value={pace}
-                onChange={setPace}
-                min={PACE_MIN}
-                max={PACE_MAX}
-                marks={[{value: PACE_MIN}, {value: PACE_MAX}]}
-                formatValue={(value: number) => `${value} h/week`}
-              />
-              <Text type="supporting" color="secondary">
-                At {pace} h/week — {finishFrom(pace)}
-              </Text>
-            </VStack>
-          ) : (
-            <RadioList label="Cohort start" value={cohort} onChange={setCohort}>
-              {COHORTS.map(option => (
-                <RadioListItem
-                  key={option.id}
-                  value={option.id}
-                  label={option.date}
-                  description={option.detail}
-                />
-              ))}
-            </RadioList>
-          )}
-        </VStack>
-        <Divider />
-        <VStack gap={2}>
-          <Text type="label">This course includes</Text>
-          {INCLUDES.map(item => (
-            <HStack key={item} gap={2} vAlign="start">
-              <Icon icon={CheckIcon} size="sm" />
-              <Text type="body" color="secondary">
-                {item}
-              </Text>
-            </HStack>
-          ))}
-        </VStack>
-      </VStack>
-    </Card>
-  );
-}
-
-// ─── Page ────────────────────────────────────────────────────────────────────
 
 // ─── Hook: below 768px the page switches to its phone composition ───────────
 // Core's useMediaQuery shares one listener per query across the page and
@@ -990,6 +817,20 @@ const COURSE = {
       ],
     },
   ] as Module[],
+  inPrice: [
+    '10 video lessons, 3 h 6 min in all',
+    'The AI tutor beside every lesson',
+    '2 quizzes, graded as you answer',
+    'A project reviewed by Maya’s team',
+    'A course certificate when you finish',
+    'Transcripts in 12 languages',
+  ],
+  notInPrice: [
+    'Answers the tutor writes for you',
+    'Live reviews outside a cohort',
+    'One-to-one mentoring',
+    'A job guarantee',
+  ],
   skills: [
     'Prompt design',
     'RAG pipelines',
@@ -1085,10 +926,76 @@ function ago(weeks: number) {
   const months = Math.round(weeks / 4.3);
   return `${months} ${months === 1 ? 'month' : 'months'} ago`;
 }
+const hash = (s: string) => [...s].reduce((a, c) => a + c.charCodeAt(0), 0);
+
+// Sample media: complete static fixture paths, so the copy step can find
+// and ship every file, and nothing hotlinks a host.
+
+// When the course can start, worked out from the page's frozen demo date
+// (the start picker): at the learner's own pace from that day, or with a
+// cohort on a Monday. The first cohort is already full, so the list shows
+// the state a sold-out row takes. Dates are kept as keys and read back at
+// noon UTC, so a date never slips a day.
+const DAY = 86_400_000;
 const at = (key: string) => new Date(`${key}T12:00:00Z`);
+const keyOf = (d: Date) => d.toISOString().slice(0, 10);
+const plusDays = (key: string, days: number) =>
+  keyOf(new Date(at(key).getTime() + days * DAY));
+function monday(key: string, min: number) {
+  const d = at(plusDays(key, min));
+  const ahead = (8 - d.getUTCDay()) % 7;
+  return keyOf(new Date(d.getTime() + ahead * DAY));
+}
+// A demo page shows one story, not the reader's calendar: the worked-from
+// date is frozen so every render — server, client, any day of the year —
+// agrees on the cohort window and the pace picker's finish date.
+const DEMO_TODAY = '2025-09-21';
+function localToday() {
+  return DEMO_TODAY;
+}
+const longDate = new Intl.DateTimeFormat('en-US', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'UTC',
+});
+const shortDate = new Intl.DateTimeFormat('en-US', {
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'UTC',
+});
+/** "Mon, Nov 9" */
+const dayLabel = (key: string) => longDate.format(at(key));
+/** "Nov 9" */
+const dateLabel = (key: string) => shortDate.format(at(key));
 type Start =
   | {kind: 'self'; key: 'self'}
   | {kind: 'cohort'; key: string; starts: string; ends: string; seats: number};
+function startsFor(today: string): Start[] {
+  const h = hash(COURSE.title);
+  const first = monday(today, 1);
+  const runs = [
+    {starts: first, seats: 0},
+    {starts: plusDays(first, 7), seats: 3 + (h % 10)},
+    {starts: plusDays(first, 35), seats: 14 + (h % 12)},
+  ];
+  return [
+    {kind: 'self', key: 'self'},
+    ...runs.map(({starts, seats}) => ({
+      kind: 'cohort' as const,
+      key: starts,
+      starts,
+      ends: plusDays(starts, COURSE.weeks * 7 - 3),
+      seats,
+    })),
+  ];
+}
+/** The day a self-paced learner finishes at `perWeek` hours a week. */
+function finishAt(today: string, perWeek: number) {
+  const weeks = Math.ceil((COURSE.weeks * COURSE.hours) / perWeek);
+  return {weeks, key: plusDays(today, weeks * 7)};
+}
+
 /** A lesson's number in the course, as the design's own ids keep it. */
 const lessonId = (mi: number, li: number) => `${mi + 1}.${li + 1}`;
 
@@ -2779,6 +2686,787 @@ function Syllabus() {
 }
 
 // ─── Covers: In the price / Not in it ────────────────────────────────────────
+function Covers() {
+  const cols = [
+    {head: 'In the price', rows: COURSE.inPrice, on: true},
+    {head: 'Not in it', rows: COURSE.notInPrice, on: false},
+  ];
+  return (
+    <div className="cr7-cols2">
+      {cols.map(col => (
+        <div key={col.head}>
+          <Caps>{col.head}</Caps>
+          <ul
+            style={{
+              margin: '16px 0 0',
+              padding: 0,
+              listStyle: 'none',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+            }}>
+            {col.rows.map(line => (
+              <li key={line} style={{display: 'flex', gap: 12, fontSize: 16}}>
+                <span
+                  style={{
+                    display: 'flex',
+                    height: 24,
+                    flexShrink: 0,
+                    alignItems: 'center',
+                  }}>
+                  {col.on ? (
+                    <CheckIcon
+                      aria-hidden="true"
+                      style={{
+                        width: 18,
+                        height: 18,
+                        color: 'var(--color-text-purple)',
+                      }}
+                    />
+                  ) : (
+                    <NoSymbolIcon
+                      aria-hidden="true"
+                      style={{
+                        width: 18,
+                        height: 18,
+                        color: 'var(--color-text-secondary)',
+                      }}
+                    />
+                  )}
+                </span>
+                <span
+                  style={
+                    col.on ? undefined : {color: 'var(--color-text-secondary)'}
+                  }>
+                  {line}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Instructor ──────────────────────────────────────────────────────────────
+// The teacher as the design sets them (course-page/instructor.tsx): a
+// 16rem card with the face, the trade and the figures their courses add up
+// to, and beside it three rows in the teacher's own words. Under both,
+// Follow and the full profile as one row of buttons, then two of the
+// teacher's other courses. The card and its rows are one tutor profile —
+// the data of a person the product keeps — so the design marks the grid
+// as an object and sets it at 14px; the figures are computed from the
+// teacher's own catalogue, never typed in twice.
+function Instructor() {
+  const t = COURSE.instructor;
+  const isMobile = useIsMobile();
+  // Below 1280 this page's content column runs beside the rail — the
+  // design's own lg state, where the card stands over the rows; from
+  // 1280 (its xl) the column is wide enough for the two-column grid.
+  const isNarrow = useIsMobile(1279);
+  // The button row splits into two columns from 640 (the design's sm),
+  // and the phone card runs the full width below it (its base).
+  const isTiny = useIsMobile(639);
+  const [following, setFollowing] = useState(false);
+  // The teacher's spoken name — 'Maya' out of 'Dr. Maya Chen'. The
+  // design's split(' ')[0] assumes no honorific; ours carries one.
+  const first = t.name.replace(/^Dr\.\s+/, '').split(' ')[0];
+  // Two of the teacher's other courses, the two the most learners have
+  // taken — the design's own pick. The band carries only courses with
+  // a photograph (the catalogue's current course never shows here).
+  const others = t.courses
+    .filter(
+      (x): x is (typeof COURSE.instructor.courses)[number] & {image: string} =>
+        x.id !== 'this' && x.image !== undefined,
+    )
+    .sort((a, b) => b.learners - a.learners)
+    .slice(0, 2);
+
+  const stats = [
+    {figure: t.rating.toFixed(1), label: 'Rating', star: true},
+    {figure: compact.format(t.learners), label: 'Learners'},
+    {
+      figure: String(t.courses.length),
+      label: t.courses.length === 1 ? 'Course' : 'Courses',
+    },
+  ];
+
+  const card = (
+    <Card
+      style={{
+        width: isMobile && isTiny ? '100%' : 256,
+        flexShrink: 0,
+        padding: '28px 20px 20px',
+        textAlign: 'center',
+      }}>
+      <VStack gap={3} align="center">
+        {/* The face, with the verified badge on the portrait's edge as the
+            home page's cards wear it: a disc the icon's own size, its
+            centre on the circle at 45°. */}
+        <span style={{position: 'relative', display: 'inline-block'}}>
+          <img
+            src={t.portrait}
+            alt=""
+            width={80}
+            height={80}
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: 999,
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+          <span
+            style={{
+              position: 'absolute',
+              insetInlineEnd: -2,
+              bottom: -2,
+              width: 24,
+              height: 24,
+              borderRadius: 999,
+              background: 'var(--color-background-surface)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+            <Icon
+              icon={CheckBadgeSolid}
+              style={{width: 24, height: 24, color: 'var(--color-text-purple)'}}
+            />
+          </span>
+        </span>
+        <VStack gap={0.5} align="center" style={{marginTop: 12}}>
+          <Text
+            as="h3"
+            type="body"
+            style={{
+              fontSize: 20,
+              fontWeight: 525,
+              letterSpacing: '-0.025em',
+              fontFamily: 'var(--font-family-heading)',
+              width: '100%',
+            }}>
+            {t.name}
+            <VisuallyHidden>, verified instructor</VisuallyHidden>
+          </Text>
+          <Text type="body" color="secondary" style={{width: '100%'}}>
+            {t.trade}
+          </Text>
+        </VStack>
+        {/* Each figure set to its column's left edge, 12px off the rule
+            before it, the learners' column a quarter wider for a
+            six-character count; the star is held against the figure it
+            belongs to. */}
+        <HStack
+          gap={0}
+          vAlign="start"
+          style={{
+            width: '100%',
+            marginTop: 20,
+            paddingTop: 16,
+            borderTop: '1px solid var(--color-border)',
+          }}>
+          {stats.map((s, i) => (
+            <StackItem
+              key={s.label}
+              size="fill"
+              style={{
+                flexGrow: i === 1 ? 1.25 : 1,
+                paddingInlineStart: i === 0 ? 0 : 12,
+                borderInlineStart:
+                  i === 0 ? undefined : '1px solid var(--color-border)',
+              }}>
+              <VStack gap={0.5}>
+                <HStack gap={0.5} vAlign="center">
+                  <Text
+                    type="body"
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 525,
+                      fontFamily: 'var(--font-family-heading)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
+                    {s.figure}
+                  </Text>
+                  {s.star && (
+                    <Icon
+                      icon={StarIconSolid}
+                      style={{width: 14, height: 14}}
+                    />
+                  )}
+                </HStack>
+                <Text type="body" color="secondary" style={{fontSize: 12}}>
+                  {s.label}
+                </Text>
+              </VStack>
+            </StackItem>
+          ))}
+        </HStack>
+      </VStack>
+    </Card>
+  );
+
+  // Three rows in the teacher's own words under bare outline glyphs — the
+  // design sets them bare, no disc. The 28px row rhythm rides an
+  // explicit px (no --spacing-7 step; the block-rhythm precedent).
+  const credentials = (
+    <VStack gap={6} style={{gap: 28}}>
+      {[
+        // the design's own three glyphs (instructor.tsx): WorkHistory,
+        // StarAward01, Teaching — 28px rendered icons, set bare.
+        {
+          icon: WorkHistoryIcon,
+          title: t.credentials.years,
+          text: t.credentials.work,
+        },
+        {
+          icon: StarAward01Icon,
+          title: 'Career highlight',
+          text: t.credentials.highlight,
+        },
+        {
+          icon: TeachingIcon,
+          title: `How ${first} teaches`,
+          text: t.credentials.teaching,
+        },
+      ].map(r => (
+        <HStack key={r.title} gap={4} vAlign="start">
+          <HugeIcon
+            icon={r.icon}
+            size={28}
+            strokeWidth={1.5}
+            aria-hidden="true"
+            style={{flexShrink: 0}}
+          />
+          <StackItem size="fill">
+            <VStack gap={0.5}>
+              <Text type="body" weight="medium" style={{width: '100%'}}>
+                {r.title}
+              </Text>
+              <Text type="body" color="secondary" style={{width: '100%'}}>
+                {r.text}
+              </Text>
+            </VStack>
+          </StackItem>
+        </HStack>
+      ))}
+    </VStack>
+  );
+
+  // Follow and the full profile as one row of buttons, drawn exactly as the
+  // design draws them (the profile row + follow button): two
+  // 40px controls of muted fill that darken a rung under the pointer; Follow
+  // answering in the brand fill, its plus turning to a tick. Both labels
+  // stand in one grid cell and the one not in use is hidden, so the button
+  // keeps the longer one's width and nothing beside it moves when the label
+  // changes. Under 360px the name is heard and not drawn.
+  const buttonsRow = (
+    <Grid columns={isTiny ? 1 : 2} gap={3} style={{marginTop: 32}}>
+      <button
+        type="button"
+        className="cr12-actbtn cr12-follow"
+        data-on={following || undefined}
+        aria-pressed={following}
+        // the name said aloud, held explicit because both labels stand in
+        // one grid cell (the design hides the unused one with
+        // visibility:hidden, which a real browser's name computation
+        // excludes but a text-content one reads through) — the announcement
+        // is the design's own either way
+        aria-label={following ? `Following ${first}` : `Follow ${first}`}
+        onClick={() => setFollowing(f => !f)}>
+        <span
+          className="cr12-labelcell"
+          style={following ? {visibility: 'hidden'} : undefined}
+          aria-hidden={following || undefined}>
+          <PlusIcon aria-hidden="true" style={{width: 16, height: 16}} />
+          <span>
+            Follow
+            <span className="cr12-un360"> {first}</span>
+          </span>
+        </span>
+        <span
+          className="cr12-labelcell"
+          style={!following ? {visibility: 'hidden'} : undefined}
+          aria-hidden={!following || undefined}>
+          <CheckIcon aria-hidden="true" style={{width: 16, height: 16}} />
+          <span>
+            Following
+            <span className="cr12-un360"> {first}</span>
+          </span>
+        </span>
+      </button>
+      {/* Full profile: the design's row — the muted fill, the arrow at
+          the label's end, 8px between them */}
+      <button
+        type="button"
+        className="cr12-actbtn"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+        }}
+        onClick={() => {}}>
+        Full profile
+        <Icon icon={ArrowRightIcon} size="sm" xstyle={rtlStyles.mirror} />
+      </button>
+    </Grid>
+  );
+
+  const othersBlock =
+    others.length > 0 ? (
+      <VStack gap={4} style={{marginTop: 48}}>
+        <Caps>Also taught by {first}</Caps>
+        {/* Side by side only from 1280, where a row has room for the
+            photograph and the title beside it; narrower, one over the
+            other, so a phone is the only other width that cuts a title. */}
+        <Grid columns={isNarrow ? 1 : 2} gap={4}>
+          {others.map(x => (
+            <OtherCourse key={x.id} course={x} />
+          ))}
+        </Grid>
+      </VStack>
+    ) : null;
+
+  return (
+    <VStack gap={0}>
+      {isNarrow ? (
+        <VStack gap={8} align="start">
+          {card}
+          {credentials}
+        </VStack>
+      ) : (
+        <HStack gap={10} vAlign="center">
+          {card}
+          <StackItem size="fill">{credentials}</StackItem>
+        </HStack>
+      )}
+      {buttonsRow}
+      {othersBlock}
+    </VStack>
+  );
+}
+
+// ─── Also taught by ──────────────────────────────────────────────────────────
+/** The level as the course cards draw it: three dots, one lit per rung. */
+function LevelDots({level}: {level: string}) {
+  const rank =
+    ({Beginner: 1, Intermediate: 2, Advanced: 3} as Record<string, number>)[
+      level
+    ] ?? 1;
+  return (
+    <HStack gap={0.5} vAlign="center" aria-hidden="true">
+      {[1, 2, 3].map(step => (
+        <span
+          key={step}
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: 999,
+            ...(step <= rank
+              ? {background: 'var(--color-accent)'}
+              : {boxShadow: 'inset 0 0 0 1px var(--color-accent)'}),
+          }}
+        />
+      ))}
+    </HStack>
+  );
+}
+
+/** One of the teacher's other courses, as the design's wide card with
+ *  its frame taken off (course-page/other-course.tsx): the photograph at
+ *  the left, on the page's own ground, and beside it the title, the level
+ *  and length under it, and the rating and the price along the foot, one
+ *  after the other. The photograph leans in while it is pointed at, as a
+ *  course card's does everywhere else on the site. */
+function OtherCourse({
+  course: x,
+}: {
+  course: (typeof COURSE.instructor.courses)[number] & {image: string};
+}) {
+  return (
+    <ClickableCard
+      label={`Open the course ${x.title}`}
+      variant="transparent"
+      padding={0}
+      className="cr6-row"
+      style={{minWidth: 0}}
+      onClick={() => {}}>
+      <HStack gap={4} vAlign="stretch" style={{width: '100%', minWidth: 0}}>
+        <span
+          style={{
+            width: 96,
+            height: 96,
+            borderRadius: 'calc(var(--radius-container) - 6px)',
+            overflow: 'hidden',
+            background: 'var(--color-background-muted)',
+            flexShrink: 0,
+            display: 'block',
+          }}>
+          <img
+            src={x.image}
+            alt=""
+            width={96}
+            height={96}
+            className="cr6-photo"
+            style={{
+              width: 96,
+              height: 96,
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+        </span>
+        {/* 1px top and bottom, so the title and the foot sit on the
+            photograph's own edges. The design's own column carries
+            min-w-0 (other-course.tsx) — without it the nowrap title's
+            min-content overflows a phone's column, and the row ran 5px
+            past the viewport. */}
+        <StackItem size="fill" style={{minWidth: 0}}>
+          <VStack
+            gap={1}
+            style={{
+              height: '100%',
+              minWidth: 0,
+              paddingTop: 1,
+              paddingBottom: 1,
+            }}>
+            <Text
+              type="body"
+              weight="medium"
+              style={{
+                width: '100%',
+                minWidth: 0,
+                fontSize: 16,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+              {x.title}
+            </Text>
+            <HStack gap={1.5} vAlign="center" style={{minWidth: 0}}>
+              <LevelDots level={x.level} />
+              <span
+                style={{
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontSize: 14,
+                  color: 'var(--color-text-secondary)',
+                }}>
+                {x.level} · {x.weeks} weeks
+              </span>
+            </HStack>
+            {/* The rating and the price in a row, a slash between them, set
+                on one baseline: the star rides the figure's centre, and the
+                figure carries the rating's baseline out to the row. The
+                star is ink, as the teacher's card draws theirs. */}
+            <HStack gap={2} vAlign="center" style={{marginTop: 'auto'}}>
+              <HStack gap={0.5} vAlign="center">
+                <Icon icon={StarIconSolid} style={{width: 14, height: 14}} />
+                <Text type="body" style={{fontVariantNumeric: 'tabular-nums'}}>
+                  {x.rating.toFixed(1)}
+                </Text>
+              </HStack>
+              <Text type="body" color="secondary">
+                /
+              </Text>
+              <Text
+                type="body"
+                style={{
+                  fontSize: 18,
+                  fontWeight: 525,
+                  fontFamily: 'var(--font-family-heading)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}>
+                {priceLabel(x.price)}
+              </Text>
+            </HStack>
+          </VStack>
+        </StackItem>
+      </HStack>
+    </ClickableCard>
+  );
+}
+
+// ─── Reviews ────────────────────────────────────────────────────────────────
+//     + the phone's reach-bar) ────────────────────────────────────────────────
+function EnrollPanel() {
+  const isMobile = useIsMobile();
+  // The panel is held to the screen's height less the header only from lg,
+  // where it rides beside the syllabus (the design's own gate).
+  const tall = !useIsMobile(1023);
+  const {today, starts, picked, setPicked, pace, setPace, setAway} =
+    useEnrollment();
+  const maxPace = Math.max(12, COURSE.hours * 2);
+  const start = starts.find(s => s.key === picked) ?? starts[0];
+  const finish = finishAt(today, pace);
+  const paid = COURSE.price > 0;
+
+  // The design's reach-bar: once the CTA has scrolled away above the
+  // screen, the bar keeps the price and the button in reach. The bar
+  // itself mounts once at the page's end (its own component, below the
+  // provider), so the panel only reports the CTA's reach. The root runs
+  // far below the screen, so the button counts as in view down the page and
+  // only leaving past the top turns the bar on.
+  const ctaRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ctaRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      return;
+    }
+    const io = new IntersectionObserver(
+      entries => setAway(!entries[0].isIntersecting),
+      {
+        rootMargin: '0px 0px 10000px 0px',
+      },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [setAway]);
+
+  const self = starts.find(s => s.kind === 'self');
+  const cohortRows = starts.filter(s => s.kind === 'cohort');
+  const ctaLabel = paid ? `Enroll for ${fmt(COURSE.price)}` : 'Enroll for free';
+
+  return (
+    // Beside the syllabus the panel is held to the screen's height, less
+    // the header above it and a margin below, so on a short laptop its
+    // foot is never under the screen's edge: the price and the buttons
+    // stay whole, and the ways to start scroll inside it instead.
+    <Card
+      variant="transparent"
+      padding={isMobile ? 5 : 6}
+      style={{
+        width: '100%',
+        background: 'var(--color-background-card)',
+        boxShadow: 'var(--shadow-low)',
+        borderRadius: 'var(--radius-container)',
+        display: 'flex',
+        flexDirection: 'column',
+        ...(tall
+          ? {maxHeight: 'calc(100dvh - 112px)', overflow: 'hidden'}
+          : null),
+      }}>
+      <VStack gap={0} style={{flexShrink: 0}}>
+        <p
+          style={{
+            margin: 0,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'baseline',
+            columnGap: 12,
+            rowGap: 4,
+          }}>
+          <span
+            style={{
+              fontFamily: 'var(--font-family-heading)',
+              fontSize: 36,
+              fontWeight: 525,
+              letterSpacing: '-0.05em',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+            {priceLabel(COURSE.price)}
+          </span>
+          <span style={{fontSize: 14, color: 'var(--color-text-secondary)'}}>
+            {paid ? 'once, yours to keep' : 'tutor included'}
+          </span>
+        </p>
+        {paid && (
+          <p
+            style={{
+              margin: '4px 0 0',
+              fontSize: 14,
+              color: 'var(--color-text-secondary)',
+            }}>
+            Or in <span style={{color: 'inherit'}}>{COURSE.tier.name}</span> for
+            ${COURSE.tier.monthly} a month
+          </p>
+        )}
+
+        <div ref={ctaRef} style={{marginTop: 20, width: '100%'}}>
+          <button type="button" className="cr7-cta">
+            {ctaLabel}
+            <Icon icon={ArrowRightIcon} size="sm" xstyle={rtlStyles.mirror} />
+          </button>
+        </div>
+        <button
+          type="button"
+          className="cr7-ringbtn"
+          style={{marginTop: 10, width: '100%'}}>
+          <PlaySolid aria-hidden="true" style={{width: 14, height: 14}} />
+          {paid ? 'Start lesson one free' : 'Start lesson one'}
+        </button>
+        <p
+          style={{
+            margin: '12px 0 0',
+            textAlign: 'center',
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
+          {paid ? 'Your money back within 30 days' : 'No card, now or later'}
+        </p>
+      </VStack>
+
+      <div
+        style={{
+          marginTop: 20,
+          borderTop: '1px solid var(--color-border)',
+          paddingTop: 20,
+          display: 'flex',
+          flexDirection: 'column',
+          flex: '1 1 auto',
+          minHeight: 0,
+          width: '100%',
+          overflowY: 'auto',
+        }}>
+        <RadioList label="When to start" value={picked} onChange={setPicked}>
+          {self && (
+            <RadioListItem
+              value="self"
+              label="Today, at your own pace"
+              description={`Finish around ${dayLabel(finish.key)}`}
+            />
+          )}
+          {cohortRows.map(s => (
+            <RadioListItem
+              key={s.key}
+              value={s.key}
+              label={`${dayLabel(s.starts)} – ${dateLabel(s.ends)}`}
+              description={
+                s.seats === 0
+                  ? 'Full'
+                  : `${s.seats} seats left · live Thursdays`
+              }
+              isDisabled={s.seats === 0}
+            />
+          ))}
+        </RadioList>
+        {/* The pace belongs to the self-paced choice, so it opens under
+              the list and moves that choice's finish date as it is dragged. */}
+        {start.kind === 'self' && (
+          <VStack gap={2} style={{padding: '16px 20px 4px'}}>
+            <Slider
+              label="Hours you have a week"
+              value={pace}
+              onChange={(v: number) => setPace(v)}
+              min={1}
+              max={maxPace}
+              marks={[{value: 1}, {value: maxPace}]}
+              formatValue={(value: number) => `${value} h/week`}
+            />
+          </VStack>
+        )}
+        <Text type="supporting" color="secondary" style={{marginTop: 8}}>
+          Cohorts run live on Thursdays.
+        </Text>
+      </div>
+    </Card>
+  );
+}
+
+// ─── The phone's reach bar (one mount, after the footer) ─────────────
+/** What the reader picked and where the panel's button went: the
+ *  provider sits above whichever composition renders the panel, and the
+ *  bar mounts once as the page's last child — after the footer — where
+ *  tree order paints it above the page without a number (AST-027 FR2:
+ *  the surface owns its order, never a page-wide rank). */
+type Enrollment = {
+  today: string;
+  starts: Start[];
+  picked: string;
+  setPicked: (value: string) => void;
+  pace: number;
+  setPace: (value: number) => void;
+  away: boolean;
+  setAway: (value: boolean) => void;
+};
+const EnrollmentContext = createContext<Enrollment | null>(null);
+
+function EnrollmentProvider({children}: {children: ReactNode}) {
+  const today = localToday();
+  const starts = startsFor(today);
+  const [picked, setPicked] = useState<string>('self');
+  const [pace, setPace] = useState(COURSE.hours);
+  const [away, setAway] = useState(false);
+  return (
+    <EnrollmentContext.Provider
+      value={{
+        today,
+        starts,
+        picked,
+        setPicked,
+        pace,
+        setPace,
+        away,
+        setAway,
+      }}>
+      {children}
+    </EnrollmentContext.Provider>
+  );
+}
+
+function useEnrollment(): Enrollment {
+  const enrollment = useContext(EnrollmentContext);
+  if (!enrollment) {
+    throw new Error('EnrollmentContext is missing its provider');
+  }
+  return enrollment;
+}
+
+/** The phone's reach bar as the design draws it: the price and the same
+ *  action, once the panel's own button has scrolled off the screen.
+ *  Solid rather than frosted — the header already spends the page's blur.
+ *  The bar hides from lg (the design's lg:hidden), reads the reader's
+ *  pick for its date line, and slides on over 300ms ease-out, visibility
+ *  held with it so nothing of it draws below the edge. */
+function ReachBar() {
+  const {starts, picked, away} = useEnrollment();
+  const start = starts.find(s => s.key === picked) ?? starts[0];
+  const paid = COURSE.price > 0;
+  return (
+    <div
+      className="cr13-reachbar"
+      data-away={away || undefined}
+      aria-hidden={!away}
+      inert={!away}>
+      <HStack
+        gap={3}
+        vAlign="center"
+        justify="between"
+        style={{width: '100%', maxWidth: 576, marginInline: 'auto'}}>
+        <StackItem size="fill">
+          <VStack gap={0.5}>
+            <Text
+              type="body"
+              weight="semibold"
+              style={{
+                fontFamily: 'var(--font-family-heading)',
+                fontSize: 24,
+                letterSpacing: '-0.025em',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+              {priceLabel(COURSE.price)}
+            </Text>
+            <Text type="supporting" color="secondary">
+              {start.kind === 'self'
+                ? 'Start today, at your pace'
+                : `Cohort from ${dateLabel(start.starts)}`}
+            </Text>
+          </VStack>
+        </StackItem>
+        <button type="button" className="cr13-reachcta">
+          {paid ? 'Enroll' : 'Enroll free'}
+        </button>
+      </HStack>
+    </div>
+  );
+}
+
+// ─── Closing CTA band (the design's closing band) ─────────────────────
 
 export default function CourseDetailTemplate() {
   return (
@@ -2789,22 +3477,28 @@ export default function CourseDetailTemplate() {
         content={
           <LayoutContent padding={6}>
             <style>{hoverStyles}</style>
-            <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={6}>
-              <VStack gap={4}>
-                <HeadBlock />
-                <Poster />
-                <DetailsBlock />
-                <AboutSection />
-                <SectionHeader title="Syllabus" />
-                <Syllabus />
-                <InstructorSection />
-                <ReviewsSection />
-                <FaqSection />
-              </VStack>
-              <VStack gap={4} style={stickyRail}>
-                <EnrollRail />
-              </VStack>
-            </Grid>
+            <EnrollmentProvider>
+              <Grid columns={{minWidth: 320, repeat: 'fit'}} gap={6}>
+                <VStack gap={4}>
+                  <HeadBlock />
+                  <Poster />
+                  <DetailsBlock />
+                  <AboutSection />
+                  <SectionHeader title="Syllabus" />
+                  <Syllabus />
+                  <SectionHeader title="What the price covers" />
+                  <Covers />
+                  <SectionHeader title="Your instructor" />
+                  <Instructor />
+                  <ReviewsSection />
+                  <FaqSection />
+                </VStack>
+                <VStack gap={4} style={stickyRail}>
+                  <EnrollPanel />
+                </VStack>
+              </Grid>
+              <ReachBar />
+            </EnrollmentProvider>
           </LayoutContent>
         }
       />
