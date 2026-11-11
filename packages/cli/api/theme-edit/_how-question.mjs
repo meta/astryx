@@ -40,19 +40,33 @@ import {COLOR_PROPS} from './_tables.mjs';
 const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
   [
     [
-      'botones?|boutons?|knöpfe|knopf|кнопк[аиу]|botões|botão|botao|pulsanti|bottoni',
+      'botones?|boutons?|knöpfe|knopf|кнопк[аиу]|botões|botão|botao|pulsanti|bottoni|الأزرار|أزرار|زر|बटन',
       '按钮|ボタン|버튼',
       'buttons',
     ],
-    ['tarjetas?|cartes|karten?|карточк[аи]', '卡片|カード', 'cards'],
     [
-      'redondead[oa]s?|arrondi[es]*|abgerundet\\p{L}*|скругл\\p{L}*|arredondad\\p{L}*|arrotondat\\p{L}*',
+      'tarjetas?|cartes|karten?|карточк[аи]|schede|carte',
+      '卡片|カード|카드',
+      'cards',
+    ],
+    [
+      'redondead[oa]s?|redond[oa]s|arrondi[es]*|abgerundet\\p{L}*|скругл\\p{L}*|arredondad\\p{L}*|arrotondat\\p{L}*|مستدير\\p{L}*|गोल',
       '圆|丸く|丸い|둥글게|둥근',
       'rounded',
     ],
     ['esquinas?|coins|ecken|углы', '角', 'corners'],
-    ['sombras?|ombres?|schatten|тен[ьи]', '阴影|影', 'shadow'],
-    ['entfernen|quitar|enlever|supprimer|убрать', '去掉|删除|消して', 'remove'],
+    [
+      'sombras?|ombres?|ombra|ombre|schatten|тен[ьи]|ظل',
+      '阴影|影|그림자',
+      'shadow',
+    ],
+    [
+      'entfernen|quitar|enlever|supprimer|убрать|togliere|rimuovere|remover|हटाओ',
+      '去掉|删除|消して|없애',
+      'remove',
+    ],
+    ['цвет\\p{L}*|colore|farbe', '颜色|色', 'color'],
+    ['акцент\\p{L}*', '强调', 'accent'],
     ['más|mais|mehr|più|более', '更', 'more'],
     // "sans" is a typeface word before serif or font.
     [
@@ -427,7 +441,11 @@ const boxIn = c =>
 function shadowIn(c) {
   const one =
     '(?:inset\\s+)?-?\\d*\\.?\\d+(?:px)?\\s+-?\\d*\\.?\\d+(?:px)?(?:\\s+-?\\d*\\.?\\d+(?:px)?){0,2}\\s+(?:#[0-9a-f]{3,8}|(?:rgba?|hsla?|oklch)\\([^)]*\\)|[a-z]+)';
-  return new RegExp(`${one}(?:\\s*,\\s*${one})*`).exec(c)?.[0] ?? null;
+  return (
+    new RegExp(`${one}(?:\\s*[,\u2e34]\\s*${one})*`)
+      .exec(c)?.[0]
+      .replace(/\u2e34/g, ',') ?? null
+  );
 }
 
 /** A length tied to a height word ("40px tall", "height 40px"). @param {string} c */
@@ -439,7 +457,7 @@ const tallIn = c =>
 
 /** A length tied to a radius word ("8px radius", "radius: 8px"). @param {string} c */
 const radiusIn = c =>
-  /(-?\d*\.?\d+(?:px|rem|em)?)\s*(?:radius|corners?)\b|\b(?:radius|corners?|rounded)\s*:?\s*(?:to\s+)?(-?\d*\.?\d+(?:px|rem|em)?)\b/
+  /(-?\d*\.?\d+(?:px|rem|em)?)\s*(?:radius|corners?)\b|\b(?:radius|corners?|rounded)\s*(?:values?\s+)?(?:are|is|of|at)?\s*:?\s*(?:to\s+)?(?:about\s+|around\s+)?(-?\d*\.?\d+(?:px|rem|em)?)\b/
     .exec(c)
     ?.slice(1)
     .find(Boolean) ?? null;
@@ -598,6 +616,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {'light' | 'dark' | null} mode
  * @property {boolean} except - "but not on X": X keeps what the clause before does
  * @property {Record<string, string>} decl - CSS written as `prop: value`
+ * @property {string[]} [quoted] - family names the clause writes in quotes
  */
 
 /**
@@ -617,7 +636,7 @@ function aspectsOf(text) {
   };
   if (/\b(letter ?spacing|tracking|kerning)\b/.test(c)) add('tracking');
   if (
-    /\b(round(ed|er|ness|ing)?|unround\w*|corners?|radius|radii|curv\w*|circular|circles?|pill( shaped)?|sharp(er)?|square(d|r)?)\b/.test(
+    /\b(round(ed|er|ness|ing)?|unround\w*|corners?|radius|radii|curv\w*|circular(?! (font|typeface))|circles?|pill( shaped)?|sharp(er)?|square(d|r)?)\b/.test(
       c,
     )
   )
@@ -674,7 +693,7 @@ function aspectsOf(text) {
   )
     add('fontsize');
   if (
-    (/\b(taller|shorter|wider|narrower|width|height|bigger|larger|smaller|tall)\b/.test(
+    (/\b(taller|shorter|wider|narrower|width|(?<!line )height|bigger|larger|smaller|tall|too (small|tiny|big|large))\b/.test(
       c,
     ) ||
       (/\b(thick(er)?|thin(ner)?)\b/.test(c) &&
@@ -695,7 +714,8 @@ function aspectsOf(text) {
     add('opacity');
   if (/\b(scales? (down|up)|shrinks?|grows?)\b/.test(c)) add('scale');
   if (
-    /\b(text|writing|words|labels?|font colou?r|readable|links?)\b/.test(c) &&
+    (/\b(text|writing|words|labels?|font colou?r|readable|links?)\b/.test(c) ||
+      /\b(buttons?|links?) colou?r\b/.test(c)) &&
     !a.some(x =>
       ['case', 'italic', 'weight', 'family', 'fontsize', 'tracking'].includes(
         x,
@@ -727,7 +747,7 @@ function clausesOf(q) {
   // "swap X and Y" is one ask.
   const pieces = (/\bswap\b/.test(q) ? q.replace(/\band\b/g, '&') : q)
     .split(
-      /;|\.(?=\s|$)|,(?![^(]*\))|\b(?:and|with|but|then|plus|also)\b|\bwhile\b|(?=\bexcept\b)/,
+      /;|\.(?=\s|$)|,(?![^(]*\))|\b(?:and|with|but|then|plus|also|y|et|und|и)\b|\bwhile\b|(?=\bexcept\b)/,
     )
     .map(s => s.trim())
     .filter(Boolean);
@@ -741,6 +761,13 @@ function clausesOf(q) {
       if (!m) continue;
       const p = {...part};
       if (p.on === 'heading' && /^h[1-4]$/.test(m[0])) p.level = m[1];
+      // "the error banner": one status of the banner.
+      const status =
+        /\b(error|danger|warning|success|info)\s+(banners?|alerts?|notices?)\b/.exec(
+          rest,
+        )?.[1];
+      if (p.on === 'banner' && status)
+        p.when = `status:${status === 'danger' ? 'error' : status}`;
       parts.push(p);
       rest = rest.replace(re, ' ');
     }
@@ -757,7 +784,7 @@ function clausesOf(q) {
       ' ',
     );
     const neg =
-      /\b(no|not|don'?t|do not|never|without|remove|removing|get rid of|lose|drop|kill|none|shouldn'?t|should not|mustn'?t|turn off|turn (the|it|them) off|switch off|stop|unbold\w*|unround\w*|disable)\b/.test(
+      /\b(no|not|don'?t|do not|never|without|remove|removing|get rid of|lose|drop|ditch|nix|scrap|kill|none|shouldn'?t|should not|mustn'?t|turn off|turn (the|it|them) off|switch off|stop|unbold\w*|unround\w*|disable|(?:revert|undo|take back) (?:the|those|that|these|my|our|all))\b/.test(
         negText.replace(/\bdisabled\b/g, ' '),
       ) && !/\bno (wait|longer)\b/.test(negText);
     // "too X" asks for less X: too sharp is rounder, too heavy is lighter.
@@ -836,8 +863,40 @@ export function draftAnswer(ctx, env, question) {
   const {C} = ctx;
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
+  /** Family names written in quotes, kept as typed: qq<n>qq in the text. */
+  const quoted = /** @type {string[]} */ ([]);
   let q = question
     .normalize('NFKC')
+    // Markup and comment text are not part of the ask.
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<\/?[a-z][^>]*>/gi, ' ')
+    .replace(/\*\/[\s\S]*?\/\*/g, ' ')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(
+      /(?<=\bfont(?:[ -]family)?\s*:?\s*)'((?:[^'\\]|\\.){2,40})'|["\u201c]([^"\u201d\n]{2,40})["\u201d]/gi,
+      (m, a, b, off, all) => {
+        const name = String(a ?? b)
+          .replace(/\\(.)/g, '$1')
+          .trim();
+        // Only a font name after a font word ("font 'O\'Reilly Sans'",
+        // headings use "Playfair Display") is kept as typed; other quoted
+        // text is read as words.
+        const fontWord =
+          a != null ||
+          /\b(font(?:[ -]family)?|typeface|family|uses?)\s*:?\s*$/i.test(
+            String(all).slice(Math.max(0, off - 30), off),
+          ) ||
+          /^\s*(font|typeface)\b/i.test(String(all).slice(off + m.length));
+        if (!fontWord || !/^[A-Za-z][A-Za-z0-9 '.-]{1,38}$/.test(name))
+          return m;
+        quoted.push(name);
+        return ` qq${quoted.length - 1}qq `;
+      },
+    )
+    // Each line of a list is its own ask: a "no" on one line never reaches
+    // the next.
+    .replace(/^[ \t]*(?:[-*\u2022\u25e6]|\d+[.)])[ \t]+/gm, '')
+    .replace(/\s*[\r\n]+\s*/g, ' ; ')
     .replace(/\p{Cc}/gu, ' ')
     // Code-shaped asks: camelCase keys, JSON and CSS punctuation, dotted
     // paths ("primaryColor=#3b82f6", {"accent": ...}, theme.colors.primary).
@@ -847,9 +906,48 @@ export function draftAnswer(ctx, env, question) {
     .replace(/(?<![\w-])\.(?=[a-z])/gi, ' ')
     .replace(/\s*=\s*/g, ' ')
     .toLowerCase()
-    .replace(/[\u2018\u2019]/g, "'");
+    .replace(/[\u2018\u2019]/g, "'")
+    // CSS property names read as their words.
+    .replace(
+      /\b(letter|line|font)-(spacing|height|size|weight|family)\b/g,
+      '$1 $2',
+    )
+    // "12 pixels", "8 px" are lengths.
+    .replace(/\b(\d+(?:\.\d+)?)\s*(?:pixels?|px)\b/g, '$1px')
+    // A drop shadow is a shadow, not a "drop".
+    .replace(/\bdrop[- ]shadows?\b/g, 'shadow')
+    // "x 0, y 4, blur 6, spread -1, rgba(...)": one shadow value.
+    .replace(
+      /\bx\s*:?\s*(-?\d+)(?:px)?\s*,?\s*y\s*:?\s*(-?\d+)(?:px)?(?:\s*,?\s*blur\s*:?\s*(-?\d+)(?:px)?)?(?:\s*,?\s*spread\s*:?\s*(-?\d+)(?:px)?)?\s*,?\s*(#[0-9a-f]{3,8}|(?:rgba?|hsla?)\([^)]*\))/g,
+      (_, x, y, b, sp, col) =>
+        [x, y, b, sp]
+          .filter(v => v != null)
+          .map(v => (v === '0' ? '0' : `${v}px`))
+          .join(' ') + ` ${col}`,
+    )
+    // A shadow's layers stay one value: the comma between them is not a
+    // clause break.
+    .replace(/\)\s*,\s*(?=(?:inset\s+)?-?\d)/g, ')\u2e34 ')
+    // "swap Inter for Manrope", "replace X with Y": Y is the ask.
+    .replace(
+      /\b(?:swap|replace|switch)\s+(?:out\s+)?[^,;]+?\s+(?:for|with)\s+/g,
+      'use ',
+    )
+    // "bg #fff text #000": a new color after a color starts a new ask.
+    .replace(
+      /(#[0-9a-f]{3,8}|\))\s+(?!(?:to|into|and|or|vs|than|then)\b)(?=[a-z][\w-]*\s*:?\s*(?:#[0-9a-f]{3,8}\b|(?:rgba?|hsla?|oklch)\())/g,
+      '$1 ; ',
+    )
+    // "#0d6efd primary": the color belongs to the word after it, when that
+    // word has no color of its own.
+    .replace(
+      /(#[0-9a-f]{3,8}|(?:rgba?|hsla?|oklch)\([^)]*\))\s+(primary|secondary|accent|brand|danger|error|success|warning|info|neutral|bg|background|text|border|links?)\b(?!\s*:?\s*(?:#|rgba?\(|hsla?\(|oklch\())/g,
+      '$2 $1',
+    );
   for (const [re, w] of TRANSLATE) q = q.replace(re, w);
   q = q
+    // "bordes redondeados": rounded edges are corners.
+    .replace(/\bborders?\s+rounded\b/g, 'rounded corners')
     .replace(/\bbutton-s\b/g, 'buttons')
     .replace(/[a-z]+/g, w => corrected(w))
     .replace(/\b(everything|everywhere|all) but\b/g, '$1 except')
@@ -860,6 +958,89 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\s+/g, ' ')
     .trim();
   const clauses = clausesOf(q);
+  for (const c of clauses) {
+    c.quoted = [...c.text.matchAll(/qq(\d+)qq/g)].map(
+      m => quoted[Number(m[1])],
+    );
+    c.text = c.text
+      .replace(/\s*qq\d+qq\s*/g, ' font ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (c.quoted.length && !c.aspects.includes('family'))
+      c.aspects.push('family');
+  }
+  // The generic family after a quoted one is its fallback, not a second ask.
+  for (let i = 1; i < clauses.length; i++)
+    if (
+      clauses[i - 1].quoted?.length &&
+      /^(monospace|mono|sans ?-?serif|serif|system-ui|cursive)$/.test(
+        clauses[i].text,
+      )
+    ) {
+      clauses[i].text = '';
+      clauses[i].aspects = [];
+    }
+  for (const c of clauses)
+    if (!c.aspects.includes('shadow') && shadowIn(c.text))
+      c.aspects.push('shadow');
+  // "color #000" after a clause about borders is the border's color.
+  for (let i = 1; i < clauses.length; i++) {
+    const c = clauses[i];
+    const word = c.text
+      .replace(/#[0-9a-f]+|\b(?:rgba?|hsla?|oklch)\([^)]*\)/g, '')
+      .trim();
+    if (
+      c.colors.length &&
+      /^colou?rs?:?$/.test(word) &&
+      clauses[i - 1].aspects.length
+    ) {
+      c.aspects = [...clauses[i - 1].aspects.filter(a => a !== 'size')];
+      c.parts = clauses[i - 1].parts.map(p => ({...p}));
+    }
+  }
+  // "the table ... a header" is the table's header row.
+  if (/\b(tables?|rows?|zebra)\b/.test(q))
+    for (const c of clauses)
+      for (const p of c.parts)
+        if (p.on === 'app-shell-header') p.on = 'table-header-cell';
+  // A clause that is only a color ("brand blue, #0057ff") belongs to the
+  // clause before it; a clause with any other word ("accent #fff") does not.
+  for (let i = 1; i < clauses.length; i++) {
+    const c = clauses[i];
+    const rest = c.text
+      .replace(/#[0-9a-f]+|\b(?:rgba?|hsla?|oklch)\([^)]*\)/g, '')
+      .replace(/\b(the|a|an|it|its|is|like|please|pls|thanks|ok)\b/g, '')
+      .trim();
+    if (c.colors.length && !rest && !c.parts.length && !c.aspects.length) {
+      clauses[i - 1].colors = [...c.colors, ...clauses[i - 1].colors];
+      c.colors = [];
+      c.text = '';
+    }
+  }
+  // A clause that names a color the theme generates with no color ("LGTM
+  // except the accent") gives that role to the next clause with only a
+  // color ("make it #6d28d9"); so does "the purple" for the brand color.
+  for (let i = 1; i < clauses.length; i++) {
+    const c = clauses[i];
+    const prev = clauses[i - 1];
+    if (
+      c.colors.length &&
+      !c.parts.length &&
+      !c.aspects.length &&
+      !ROLE_WORDS.test(c.text) &&
+      (!prev.colors.length || prev.neg) &&
+      !prev.parts.length
+    ) {
+      const role =
+        ROLE_WORDS.exec(prev.text)?.[0] ??
+        (new RegExp(`\\bthe (${Object.keys(HUES).join('|')})\\b`).test(
+          prev.text,
+        )
+          ? 'accent'
+          : null);
+      if (role) c.text = `${role} ${c.text}`;
+    }
+  }
   // "nav items" in a question about the sidebar are the side nav's; an
   // underline on tabs is the tab indicator.
   const side = /\b(side ?nav|sidebar|side ?panel)\b/.test(q);
@@ -899,6 +1080,8 @@ export function draftAnswer(ctx, env, question) {
       !c.except &&
       // "per the brand guide" names no part; "accent text" does.
       !(ROLE_WORDS.test(c.text) && !c.aspects.length) &&
+      // "Circular font" after "12px cards" is the theme's font.
+      !(c.aspects.length && c.aspects.every(a => a === 'family')) &&
       (c.aspects.length || c.colors.length || c.lengths.length)
     ) {
       c.parts = before.parts.map(p => ({...p}));
@@ -924,23 +1107,6 @@ export function draftAnswer(ctx, env, question) {
       (!c.parts.length || (!prev.parts.length && !prev.aspects.length))
     )
       c.mode = prev.mode;
-    // "brand blue, #0057ff": a clause that is only a color belongs to the
-    // clause before it.
-    if (
-      prev &&
-      !c.parts.length &&
-      !c.aspects.length &&
-      c.colors.length &&
-      c.text
-        .replace(/#[0-9a-f]+|\b(?:rgba?|hsla?|oklch)\([^)]*\)/g, '')
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean).length <= 1
-    ) {
-      prev.colors = [...c.colors, ...prev.colors];
-      c.colors = [];
-      c.text = '';
-    }
   }
   fillAspect();
   const modal = env.data.mode === 'both';
@@ -963,6 +1129,44 @@ export function draftAnswer(ctx, env, question) {
     env.base[mode]?.[token] ?? String(TOKENS[token] ?? '');
   /** The member a group's checks read. @param {string} on */
   const one = on => (FAMILIES[on] ? FAMILIES[on][0] : on);
+  /**
+   * Steps for a color how works out from the one a token has now. On a
+   * theme with both modes there is one step per mode, each from that mode's
+   * own value, so a change made for light never lands on dark; with the
+   * clause's mode, only that one. A mode whose value would not change gets
+   * no step.
+   * @param {string} token the token whose value the new color starts from
+   * @param {string} thing what the step sets (the token, or a property)
+   * @param {Record<string, string | undefined>} flags
+   * @param {(now: string, mode: 'light' | 'dark') => string | null} fn
+   * @param {Clause} c
+   * @returns {Step[]}
+   */
+  const perMode = (token, thing, flags, fn, c) => {
+    const modes = /** @type {Array<'light' | 'dark'>} */ (
+      c.mode && modal
+        ? [c.mode]
+        : modal
+          ? ['light', 'dark']
+          : [env.data.mode === 'dark-only' ? 'dark' : 'light']
+    );
+    /** @type {Step[]} */
+    const out = [];
+    for (const m of modes) {
+      const now = current(token, m);
+      const v = fn(now, m);
+      if (v && v.toLowerCase() !== now.toLowerCase())
+        out.push(set(thing, v, {...flags, ...(modal ? {mode: m} : {})}));
+    }
+    return out;
+  };
+  /** How the mode of a set of per-mode steps reads in a sentence. @param {Step[]} steps */
+  const modesSaid = steps =>
+    modal && steps.length
+      ? steps.length > 1
+        ? ', each mode from its own value'
+        : ` in ${steps[0].mode} mode only (the other mode keeps its value)`
+      : '';
   /**
    * The state a part takes for a state word, as `set` names it.
    * @param {string} on @param {string} word
@@ -1058,7 +1262,15 @@ export function draftAnswer(ctx, env, question) {
   /** @param {Draft} input */
   const push = input => {
     const d = withMode(input, clauseNow);
-    const options = d.options.filter(o => o.length);
+    // A step given twice in one option runs once.
+    const options = d.options
+      .map(o =>
+        o.filter(
+          (st, i) =>
+            o.findIndex(x => JSON.stringify(x) === JSON.stringify(st)) === i,
+        ),
+      )
+      .filter(o => o.length);
     // The caller reads what was kept.
     input.text = d.text;
     input.options = options;
@@ -1084,6 +1296,18 @@ export function draftAnswer(ctx, env, question) {
   const colorFor = (c, kind) => {
     for (const [re, fill, text] of THEME_COLOR_WORDS)
       if (re.test(c.text)) return kind === 'fill' ? fill : text;
+    // "fails contrast on white": the color after "on" is what the text sits
+    // on, never the text's own color.
+    if (kind === 'text') {
+      const own = colorsIn(
+        c.text.replace(
+          /\b(on|against|over)\s+(a\s+|the\s+)?((light|dark|pale)\s+)?(#[0-9a-f]+|[a-z]+)(\s+(background|bg|page|surface|cards?))?/g,
+          ' ',
+        ),
+      );
+      if (c.colors.length && !own.length) return null;
+      if (own.length) return own[0];
+    }
     if (kind === 'text' && !c.colors.length) {
       if (/\bdark (text|labels?|writing|words)\b/.test(c.text))
         return '#111827';
@@ -1356,8 +1580,10 @@ export function draftAnswer(ctx, env, question) {
         : null;
     }
     if (on === 'page') {
-      const color = colorFor(c, 'fill') ?? (c.neg ? null : null);
-      if (!color) return null;
+      const color = colorFor(c, 'fill');
+      // "the page background lighter": the whole-theme answer, per mode.
+      if (!color)
+        return a === 'background' && c.dir ? answerFor(c, null, a) : null;
       return {
         text: `the page background: --color-background-body${c.mode && modal ? ` in ${c.mode} mode` : ''}`,
         options: [
@@ -1378,16 +1604,23 @@ export function draftAnswer(ctx, env, question) {
       };
     }
     if (on === 'overlay') {
-      const now = current('--color-overlay', c.mode ?? 'light');
-      const value =
-        colorFor(c, 'fill') ??
-        (c.dir || c.neg
-          ? stronger(now, c.dir === 'more' ? 1.5 : 0.6, c.mode ?? 'light')
-          : null);
-      if (!value) return null;
+      const typed = colorFor(c, 'fill');
+      const steps = typed
+        ? [set('--color-overlay', typed, modeOf(c))]
+        : c.dir || c.neg
+          ? perMode(
+              '--color-overlay',
+              '--color-overlay',
+              {},
+              (now, m) => stronger(now, c.dir === 'more' ? 1.5 : 0.6, m),
+              c,
+            )
+          : [];
+      if (!steps.length) return null;
       return {
-        text: `the dimmed layer behind dialogs and drawers: --color-overlay (now ${now})`,
-        options: [[set('--color-overlay', value, modeOf(c))]],
+        text: `the dimmed layer behind dialogs and drawers: --color-overlay${typed ? '' : modesSaid(steps)}`,
+        options: [steps],
+        sequence: steps.length > 1,
       };
     }
     if (p?.role === 'body' && a === 'weight') {
@@ -1407,13 +1640,27 @@ export function draftAnswer(ctx, env, question) {
     }
     if (p?.role && (a === 'family' || a === 'fontsize')) {
       if (a === 'family') {
-        const font = fontIn(c.text, question);
-        return font
-          ? {
-              text: `the ${p.role} font: font --on ${p.role}`,
-              options: [[set('font', font, {on: p.role})]],
-            }
-          : null;
+        const font = fontIn(c, question);
+        if (!font) return null;
+        // set font --on body moves the heading font too in this release, so
+        // the body alone takes its token.
+        if (p.role === 'body' && env.bodyFontReachesHeadings) {
+          const stack = FONTS[font]
+            ? `${FONTS[font][0].includes(' ') ? `"${FONTS[font][0]}"` : FONTS[font][0]}, ${FONTS[font][1]}`
+            : OPEN_FONTS[font]
+              ? `"${OPEN_FONTS[font].family}", ${OPEN_FONTS[font].fallbacks}`
+              : /[\s,]/.test(font) && !font.includes(',')
+                ? `"${font}"`
+                : font;
+          return {
+            text: 'the body font alone: --font-family-body (font --on body also changes the headings in this release)',
+            options: [[set('--font-family-body', stack)]],
+          };
+        }
+        return {
+          text: `the ${p.role} font: font --on ${p.role}`,
+          options: [[set('font', font, {on: p.role})]],
+        };
       }
       if (p.role === 'body') {
         const px = /\b(\d+)px\b/.exec(c.text)?.[1];
@@ -1467,10 +1714,30 @@ export function draftAnswer(ctx, env, question) {
       case 'corners': {
         const tall = tallIn(c.text);
         const tied = radiusIn(c.text);
-        const px =
+        const typedPx =
           (tied && /^-?\d*\.?\d+$/.test(tied) ? `${tied}px` : tied) ??
           c.lengths.find(l => l !== tall) ??
           null;
+        // A radius of 0 is square.
+        const px = typedPx && parseFloat(typedPx) === 0 ? null : typedPx;
+        const zero = Boolean(typedPx) && !px;
+        // "revert the rounded corners": take back what the theme sets.
+        if (/\b(revert|undo|take back)\b/.test(c.text)) {
+          const back = existing(['corners', 'border-radius'], on);
+          if (back.length)
+            return {
+              text: `take back the corners this theme sets${where}`,
+              options: back.map(x => [
+                /** @type {Step} */ ({
+                  verb: 'undo',
+                  thing: x.thing,
+                  ...(on ? {on} : {}),
+                  ...(x.when ? {when: x.when} : {}),
+                  ...(x.state ? {state: x.state} : {}),
+                }),
+              ]),
+            };
+        }
         if (px?.startsWith('-'))
           return {
             text: `a radius cannot be negative ("${px}"); give a size of 0 or more`,
@@ -1479,9 +1746,11 @@ export function draftAnswer(ctx, env, question) {
         // "too sharp" asks for rounder, not square.
         const shapeText = c.text.replace(/\btoo \w+/g, ' ');
         const shape =
-          c.neg || /\b(square(d)?|sharp)\b/.test(shapeText)
+          zero || c.neg || /\b(square(d)?|sharp)\b/.test(shapeText)
             ? 'square'
-            : /\b(pill|circular|circles?|fully round)\b/.test(shapeText)
+            : /\b(pill|circular(?! (font|typeface))|circles?|fully round)\b/.test(
+                  shapeText,
+                )
               ? 'pill'
               : null;
         const value =
@@ -1522,6 +1791,8 @@ export function draftAnswer(ctx, env, question) {
             text: 'the shadow you wrote, as the shared medium shadow most panels use: --shadow-med',
             options: [[set('--shadow-med', typedShadow, modeOf(c))]],
           };
+        // Another clause writes the shadow out: that one answers.
+        if (!typedShadow && !on && !c.neg && shadowIn(q)) return null;
         const strong =
           /\b(strong(er)?|deep(er)?|heav(y|ier)|bigger|more)\b/.test(c.text);
         const soft = /\b(soft(er)?|subtle(r)?|light(er)?|gentle|less)\b/.test(
@@ -1612,15 +1883,21 @@ export function draftAnswer(ctx, env, question) {
               c.text,
             )
           ) {
-            const now = current('--color-border', c.mode ?? 'light');
             const more =
               /\b(darker|stronger|more contrast|visible)\b/.test(c.text) &&
               !/\binvisible\b/.test(c.text);
-            const value = stronger(now, more ? 2 : 0.5, c.mode ?? 'light');
-            return value
+            const steps = perMode(
+              '--color-border',
+              '--color-border',
+              {},
+              (now, m) => stronger(now, more ? 2 : 0.5, m),
+              c,
+            );
+            return steps.length
               ? {
-                  text: `the border color of the whole theme: --color-border (now ${now})`,
-                  options: [[set('--color-border', value, modeOf(c))]],
+                  text: `the border color of the whole theme: --color-border, ${more ? 'stronger' : 'fainter'}${modesSaid(steps)}`,
+                  options: [steps],
+                  sequence: steps.length > 1,
                 }
               : null;
           }
@@ -1813,7 +2090,7 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'family': {
-        const font = fontIn(c.text, question);
+        const font = fontIn(c, question);
         if (!font) return null;
         if (!on)
           return {
@@ -1959,7 +2236,9 @@ export function draftAnswer(ctx, env, question) {
           : null;
       case 'size': {
         if (!on) return null;
-        const tall = tallIn(c.text);
+        const tall =
+          tallIn(c.text) ??
+          (/\b(taller|shorter|height)\b/.test(c.text) ? c.lengths[0] : null);
         if (tall)
           return {
             text: `the height${where}: min-height ${tall}`,
@@ -2020,29 +2299,81 @@ export function draftAnswer(ctx, env, question) {
           ? '--color-text-secondary'
           : '--color-text-primary';
         if (!on) {
-          const now = current(tok, c.mode ?? 'light');
-          const darker =
-            /\b(darker|too light|can'?t read|hard to read|unreadable|more contrast)\b/.test(
+          const label = `${tok === '--color-text-secondary' ? 'secondary' : 'main'} text color: ${tok}`;
+          // "never use pure black": where the token is that color, a near
+          // color that is not it; a mode where it is not keeps its value.
+          if (c.neg && color) {
+            const avoid = parseColor(color);
+            const steps = perMode(
+              tok,
+              tok,
+              {},
+              now => {
+                const n = parseColor(now);
+                if (
+                  !avoid ||
+                  !n ||
+                  n.some((x, i) => Math.abs(x - avoid[i]) > 2)
+                )
+                  return null;
+                return avoid.reduce((x, y) => x + y, 0) < 384
+                  ? '#1f2937'
+                  : '#f9fafb';
+              },
+              c,
+            );
+            return steps.length
+              ? {
+                  text: `${label}, off ${color}${modesSaid(steps)}`,
+                  options: [steps],
+                  sequence: steps.length > 1,
+                }
+              : {
+                  text: `${label} is not ${color} in any mode, so nothing changes`,
+                  options: [],
+                };
+          }
+          if (color)
+            return {
+              text: `${label}${c.mode && modal ? ` in ${c.mode} mode` : ''}`,
+              options: [[set(tok, color, modeOf(c))]],
+            };
+          // More contrast moves text away from its page: darker on light,
+          // lighter on dark. Less contrast moves it toward the page.
+          const more =
+            /\b(darker|too light|can'?t read|hard to read|unreadable|(more|better|higher|low|fails?|failing|enough) contrast|contrast)\b/.test(
+              c.text,
+            ) && !/\bless contrast\b/.test(c.text);
+          const less =
+            /\b(less bright|dimmer|softer|lighter|less contrast|too dark)\b/.test(
               c.text,
             );
-          // "never use pure black": a near color that is not it.
-          const avoid = c.neg && color;
-          const value =
-            (avoid
-              ? (parseColor(color)?.reduce((x, y) => x + y, 0) ?? 0) < 384
-                ? '#1f2937'
-                : '#f9fafb'
-              : color) ??
-            (darker
-              ? shift(now, c.mode === 'dark' ? 0.25 : -0.3)
-              : /\b(less bright|dimmer|softer|lighter)\b/.test(c.text)
-                ? shift(now, c.mode === 'dark' ? -0.15 : 0.25)
-                : null);
-          if (!value) return null;
-          return {
-            text: `${tok === '--color-text-secondary' ? 'secondary' : 'main'} text color${c.mode && modal ? ` in ${c.mode} mode` : ''}: ${tok} (now ${now})`,
-            options: [[set(tok, value, modeOf(c))]],
-          };
+          if (!more && !less) return null;
+          const literal = /\b(darker|lighter)\b/.test(c.text) && c.mode;
+          const steps = perMode(
+            tok,
+            tok,
+            {},
+            (now, m) => {
+              const toward = literal
+                ? /\bdarker\b/.test(c.text)
+                  ? -1
+                  : 1
+                : (m === 'dark' ? 1 : -1) * (more ? 1 : -1);
+              return shift(now, toward * (more ? 0.3 : 0.2));
+            },
+            c,
+          );
+          return steps.length
+            ? {
+                text: `${label}, ${more ? 'more' : 'less'} contrast with the page${modesSaid(steps)}`,
+                options: [steps],
+                sequence: steps.length > 1,
+              }
+            : {
+                text: `${label} is already ${more ? 'as far from the page as it goes' : 'as close to the page as it should go'} (${current(tok, 'light')} in light${modal ? `, ${current(tok, 'dark')} in dark` : ''}), so nothing changes`,
+                options: [],
+              };
         }
         if (!color) return null;
         return {
@@ -2106,17 +2437,49 @@ export function draftAnswer(ctx, env, question) {
               };
         }
         if (!on) {
-          const now = current('--color-background-body', c.mode ?? 'light');
-          const color =
-            colorFor(c, 'fill') ??
-            (c.dir
-              ? shift(now, /\blight(er)?|brighter\b/.test(c.text) ? 0.5 : -0.06)
-              : null);
-          if (!color) return null;
-          return {
-            text: `the page background: --color-background-body${c.mode && modal ? ` in ${c.mode} mode` : ''}`,
-            options: [[set('--color-background-body', color, modeOf(c))]],
-          };
+          const color = colorFor(c, 'fill');
+          if (color)
+            return {
+              text: `the page background: --color-background-body${c.mode && modal ? ` in ${c.mode} mode` : ''}`,
+              options: [[set('--color-background-body', color, modeOf(c))]],
+            };
+          if (!c.dir) return null;
+          const lighter = /\blight(er)?|brighter\b/.test(c.text);
+          const steps = perMode(
+            '--color-background-body',
+            '--color-background-body',
+            {},
+            (now, m) => {
+              const v = shift(
+                now,
+                lighter
+                  ? m === 'dark'
+                    ? 0.06
+                    : 0.5
+                  : m === 'dark'
+                    ? -0.3
+                    : -0.06,
+              );
+              // White cannot get lighter, nor black darker.
+              const sum = (/** @type {string | null} */ x) =>
+                (x &&
+                  parseColor(x)
+                    ?.slice(0, 3)
+                    .reduce((p, q) => p + q, 0)) ??
+                0;
+              return v && (lighter ? sum(v) > sum(now) : sum(v) < sum(now))
+                ? v
+                : null;
+            },
+            c,
+          );
+          return steps.length
+            ? {
+                text: `a ${lighter ? 'lighter' : 'darker'} page background: --color-background-body${modesSaid(steps)}`,
+                options: [steps],
+                sequence: steps.length > 1,
+              }
+            : null;
         }
         if (c.decl.background || c.decl['background-color'])
           return {
@@ -2129,6 +2492,15 @@ export function draftAnswer(ctx, env, question) {
                   f,
                 ),
               ],
+            ],
+          };
+        // "from #f58529 to #dd2a7b": the gradient written in the question.
+        const ends = /\bfrom\s+(\S+)\s+(?:to|into)\s+(\S+)/.exec(c.text);
+        if (design && ends && parseColor(ends[1]) && parseColor(ends[2]))
+          return {
+            text: `a gradient from ${ends[1]} to ${ends[2]}${where}`,
+            options: [
+              [set('background', `linear-gradient(${ends[1]}, ${ends[2]})`, f)],
             ],
           };
         if (design)
@@ -2152,22 +2524,35 @@ export function draftAnswer(ctx, env, question) {
             sequence: true,
           };
         if (!color && c.dir) {
-          const tok =
-            C.partReads(one(on), 'background').find(r => r.when.includes(''))
-              ?.token ??
-            (FAMILIES.containers.includes(one(on))
-              ? '--color-background-card'
-              : '--color-background-surface');
-          const now = tok ? current(tok, c.mode ?? 'light') : null;
           const lighter = /\blight(er)?\b/.test(c.text);
-          color = now ? shift(now, lighter ? 0.12 : -0.12) : null;
-          if (color && f.state)
+          const reads = C.partReads(one(on), 'background');
+          const read = C.MAP[one(on)]
+            ? (reads.find(r => r.when.includes(''))?.token ??
+              (FAMILIES.containers.includes(one(on))
+                ? '--color-background-card'
+                : reads[0]?.token))
+            : null;
+          // A part with no recorded fill: what its color is now is unknown,
+          // so a brightness filter makes it darker or lighter from there.
+          if (!read || f.state)
             return {
-              text: `${lighter ? 'a lighter' : 'a darker'} background${where}`,
+              text: `${lighter ? 'a lighter' : 'a darker'} ${on}${where}: a brightness filter, from whatever color it has now`,
               options: [
-                [set('filter', `brightness(${lighter ? 1.1 : 0.9})`, f)],
-                [set('background-color', color, f)],
+                [set('filter', `brightness(${lighter ? 1.15 : 0.85})`, f)],
               ],
+            };
+          const steps = perMode(
+            read,
+            'background',
+            f,
+            now => shift(now, lighter ? 0.12 : -0.12),
+            c,
+          );
+          if (steps.length)
+            return {
+              text: `${lighter ? 'a lighter' : 'a darker'} background${where}, from ${read}${modesSaid(steps)}`,
+              options: [steps],
+              sequence: steps.length > 1,
             };
         }
         if (!color && f.state === 'hover')
@@ -2235,16 +2620,25 @@ export function draftAnswer(ctx, env, question) {
       }
     }
     if (/\b(more|higher|high|better) contrast\b|\bcontrast mode\b/.test(t)) {
-      const sec = current('--color-text-secondary');
-      const border = current('--color-border');
-      /** @type {Step[]} */
-      const steps = [];
-      const darkerSec = shift(sec, -0.35);
-      if (darkerSec) steps.push(set('--color-text-secondary', darkerSec));
-      const strongBorder = stronger(border, 2.5, 'light');
-      if (strongBorder) steps.push(set('--color-border', strongBorder));
+      // Away from the page in each mode: darker on light, lighter on dark.
+      const steps = [
+        ...perMode(
+          '--color-text-secondary',
+          '--color-text-secondary',
+          {},
+          (now, m) => shift(now, m === 'dark' ? 0.35 : -0.35),
+          c,
+        ),
+        ...perMode(
+          '--color-border',
+          '--color-border',
+          {},
+          (now, m) => stronger(now, 2.5, m),
+          c,
+        ),
+      ];
       return {
-        text: `more contrast: darker secondary text (now ${sec}) and stronger borders (now ${border}), in light mode`,
+        text: `more contrast: secondary text further from the page and stronger borders${modal && !c.mode ? ', in light and in dark mode, each from its own value' : c.mode ? ` in ${c.mode} mode` : ''}`,
         options: [steps],
         sequence: steps.length > 1,
       };
@@ -2257,12 +2651,18 @@ export function draftAnswer(ctx, env, question) {
             : 'a theme that is always dark: mode dark-only',
         options: [[set('mode', 'dark-only')]],
       };
-    if (/\b(undo|revert|go back|take back)\b/.test(t))
-      return {
-        text: `undo ${env.slug} steps back one change; undo ${env.slug} <thing> removes one setting`,
-        options: [],
-        ...(env.exists ? {lookup: `${P} undo ${env.slug}`} : {}),
-      };
+    if (/\b(undo|revert|go back|take back)\b/.test(t) && !c.colors.length)
+      return env.undoSteps
+        ? {
+            text: `undo ${env.slug} steps back one change (${env.undoSteps} can be undone); undo ${env.slug} <thing> removes one setting`,
+            options: [],
+            lookup: `${P} undo ${env.slug}`,
+          }
+        : {
+            text: `${env.slug} has no change to undo yet; show ${env.slug} lists its settings`,
+            options: [],
+            ...(env.exists ? {lookup: `${P} show ${env.slug}`} : {}),
+          };
     if (/\breset\b|\bstart over\b|\bback to (the )?defaults?\b/.test(t))
       return {
         text: `each undo ${env.slug} steps back one change; show ${env.slug} lists every setting, and undo ${env.slug} <thing> removes one`,
@@ -2302,6 +2702,10 @@ export function draftAnswer(ctx, env, question) {
       /\b(colou?rful|saturat\w*|desaturat\w*|vivid|vibran\w*|muted|dull|washed|pastel|intense|pop|punch\w*|gr[ae]yer)\b/.test(
         t,
       );
+    if (vib && c.colors.length && ROLE_WORDS.test(t)) {
+      const named = roleAnswer(c);
+      if (named) return named;
+    }
     if (vib) {
       seenAspect('colors');
       const less =
@@ -2393,78 +2797,177 @@ export function draftAnswer(ctx, env, question) {
         lookup: `${HOW} colors`,
       };
     }
-    // A color the theme generates, named by its role.
-    const roles = /** @type {Array<[RegExp, string, string]>} */ ([
+    const named = roleAnswer(c);
+    if (named) return named;
+    // A color with nothing else named, in a question about a look ("Duolingo
+    // vibes: green #58cc02"), is the brand color.
+    if (
+      /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch)\(/.test(c.text) &&
+      !c.parts.length &&
+      !c.aspects.length &&
+      !c.lengths.length &&
+      c.text
+        .replace(/#[0-9a-f]+|\b(?:rgba?|hsla?|oklch)\([^)]*\)/g, '')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean).length <= 2 &&
+      /\b(look|vibes?|style|like|feel|brand|theme)\b/.test(
+        question.toLowerCase(),
+      )
+    )
+      return roleAnswer({...c, text: `accent ${c.text}`});
+    return null;
+  }
+
+  /**
+   * The colors the theme generates that a clause names, each with its own
+   * color: the color right after the word, or right before it when nothing
+   * follows ("#0d6efd primary"). A color is used once.
+   * @param {Clause} c
+   * @returns {Draft | null}
+   */
+  function roleAnswer(c) {
+    const t = c.text;
+    const ROLES = /** @type {Array<[RegExp, string, string]>} */ ([
       [
-        /\b(accent|brand|primary colou?r|main colou?r|key colou?r)\b|\bprimary\s*:?\s*(?=#|rgb|hsl|oklch)/,
+        /\b(accent|brand|primary|main colou?r|key colou?r)\b/g,
         'accent',
         '--color-accent',
       ],
-      [/\b(errors?|danger|destructive)\b/, 'danger', '--color-error'],
-      [/\b(success|positive)\b/, 'success', '--color-success'],
-      [/\b(warnings?|caution)\b/, 'warning', '--color-warning'],
-      [/\b(info|notices?)\b/, 'info', '--color-info'],
+      [/\b(errors?|danger|destructive)\b/g, 'danger', '--color-error'],
+      [/\b(success|positive)\b/g, 'success', '--color-success'],
+      [/\b(warnings?|caution)\b/g, 'warning', '--color-warning'],
+      [/\b(info|notices?)\b/g, 'info', '--color-info'],
       [
-        /\b(neutrals?|gr[ae]ys?|warm(er)?|cool(er)?)\b/,
+        /\b(neutrals?|gr[ae]ys?|warm(er)?|cool(er)?)\b/g,
         'neutral',
         '--color-neutral',
       ],
+      [/\bsecondary\b(?! (text|buttons?))/g, 'secondary', ''],
     ]);
-    const role = roles.find(([re]) => re.test(t));
-    if (role) {
-      seenAspect('colors');
-      const [, dial, token] = role;
-      let color =
-        c.colors.find(
-          x =>
-            !(
-              dial === 'neutral' &&
-              ['#9ca3af', '#e5e7eb', '#374151', '#f3f4f6'].includes(x)
-            ),
-        ) ?? null;
-      if (dial === 'neutral' && !color)
-        color = /\bwarm(er)?\b/.test(t)
+    /** @type {Array<{at: number, dial: string, token: string}>} */
+    const found = [];
+    for (const [re, dial, token] of ROLES)
+      for (const m of t.matchAll(re))
+        if (!found.some(x => x.dial === dial))
+          found.push({at: m.index ?? 0, dial, token});
+    if (!found.length) return null;
+    found.sort((x, y) => x.at - y.at);
+    seenAspect('colors');
+    // Each color written in the clause, where it is.
+    const placed = [
+      ...t.matchAll(
+        /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\([^)]*\)/g,
+      ),
+    ]
+      .filter(m => parseColor(m[0]))
+      .map(m => ({at: m.index ?? 0, color: m[0], used: false}));
+    const hues = c.colors.filter(x => !placed.some(p => p.color === x));
+    /** @type {Draft[]} */
+    const answers = [];
+    for (let i = 0; i < found.length; i++) {
+      const {at, dial, token} = found[i];
+      const end = found[i + 1]?.at ?? Infinity;
+      const after = placed.find(p => !p.used && p.at > at && p.at < end);
+      const before = [...placed].reverse().find(p => !p.used && p.at < at);
+      const pick = after ?? (found.length === 1 || !after ? before : undefined);
+      if (pick) pick.used = true;
+      answers.push(
+        one1(
+          dial,
+          token,
+          pick?.color ?? (found.length === 1 ? hues[0] : undefined) ?? null,
+          c,
+        ),
+      );
+    }
+    const doing = answers.filter(x => x.options.length);
+    if (doing.length > 1)
+      return {
+        text: doing.map(x => x.text).join('; '),
+        options: [doing.map(x => x.options[0][0])],
+        sequence: true,
+      };
+    return doing[0] ?? answers[0];
+  }
+
+  /**
+   * One color the theme generates, set from a clause.
+   * @param {string} dial @param {string} token @param {string | null} given @param {Clause} c
+   * @returns {Draft}
+   */
+  function one1(dial, token, given, c) {
+    const t = c.text;
+    if (dial === 'secondary')
+      return given
+        ? {
+            text: `no setting is a second brand color; for secondary buttons, their fill: background ${given} --on button --when variant:secondary`,
+            options: [
+              [
+                set('background', given, {
+                  on: 'button',
+                  when: 'variant:secondary',
+                }),
+              ],
+            ],
+          }
+        : {text: 'no setting is a second brand color', options: []};
+    let color =
+      given &&
+      !(
+        dial === 'neutral' &&
+        ['#9ca3af', '#e5e7eb', '#374151', '#f3f4f6'].includes(given)
+      )
+        ? given
+        : null;
+    if (dial === 'neutral' && !color)
+      // "too warm" asks for cooler, "too cool" for warmer.
+      color = /\btoo warm\b|\bcool(er)?\b/.test(t)
+        ? '#64748b'
+        : /\btoo cool\b|\bwarm(er)?\b/.test(t)
           ? '#78716c'
-          : /\bcool(er)?\b/.test(t)
-            ? '#64748b'
-            : null;
-      // "make the error red darker": the hue names the color; the change is darker.
-      const NATURAL = /** @type {Record<string, string>} */ ({
-        danger: HUES.red,
-        success: HUES.green,
-        warning: HUES.yellow,
-        info: HUES.blue,
-      });
-      if (c.dir && color && (color === NATURAL[dial] || color === HUES.amber))
-        color = null;
-      if (!color && c.dir) {
-        const now = current(token, c.mode ?? 'light');
-        const lighter = /\b(light(er)?|brighter|paler)\b/.test(t);
-        color = shift(now, lighter ? 0.2 : -0.2);
-        if (color && c.mode && modal)
-          return {
-            text: `${dial} in ${c.mode} mode: the exact token ${token} (now ${now}), only in ${c.mode} mode`,
-            options: [[set(token, color, modeOf(c))]],
-          };
-      }
-      // No color given: say how, and never pick one.
-      if (!color)
-        return {
-          text: `${DIALS[dial].help} Give the color: set ${env.slug} ${dial} <color>.`,
-          options: [],
-          lookup: `${HOW} ${dial}`,
-        };
-      if (c.mode && modal)
+          : null;
+    // "make the error red darker": the hue names the color; the change is darker.
+    const NATURAL = /** @type {Record<string, string>} */ ({
+      danger: HUES.red,
+      success: HUES.green,
+      warning: HUES.yellow,
+      info: HUES.blue,
+    });
+    if (c.dir && color && (color === NATURAL[dial] || color === HUES.amber))
+      color = null;
+    if (!color && c.dir && !/\btoo (warm|cool)\b/.test(t)) {
+      const lighter = /\b(light(er)?|brighter|paler)\b/.test(t);
+      if (c.mode && modal) {
+        const steps = perMode(
+          token,
+          token,
+          {},
+          now => shift(now, lighter ? 0.2 : -0.2),
+          c,
+        );
         return {
           text: `${dial} in ${c.mode} mode only: the exact token ${token}`,
-          options: [[set(token, color, modeOf(c))]],
+          options: steps.length ? [steps] : [],
         };
-      return {
-        text: `${dial}: the editor makes its light and dark shades from ${color}`,
-        options: [[set(dial, color)], [set(token, color)]],
-      };
+      }
+      color = shift(current(token, 'light'), lighter ? 0.2 : -0.2);
     }
-    return null;
+    if (!color)
+      return {
+        text: `${DIALS[dial].help} Give the color: set ${env.slug} ${dial} <color>.`,
+        options: [],
+        lookup: `${HOW} ${dial}`,
+      };
+    if (c.mode && modal)
+      return {
+        text: `${dial} in ${c.mode} mode only: the exact token ${token}`,
+        options: [[set(token, color, modeOf(c))]],
+      };
+    return {
+      text: `${dial}: the editor makes its light and dark shades from ${color}`,
+      options: [[set(dial, color)], [set(token, color)]],
+    };
   }
 
   /**
@@ -2555,10 +3058,25 @@ export function draftAnswer(ctx, env, question) {
 /**
  * A font a clause names: a preset, an open font, or a family written with
  * capitals in the question.
- * @param {string} c the clause, lower-case
+ * @param {{text: string, quoted?: string[]}} cl the clause, lower-case
  * @param {string} question the question as typed
  */
-function fontIn(c, question) {
+function fontIn(cl, question) {
+  const c = cl.text;
+  // A family written in quotes, as typed: a shipped font when it names one.
+  for (const name of cl.quoted ?? []) {
+    const low = name.toLowerCase();
+    const slug =
+      Object.keys(OPEN_FONTS).find(
+        k =>
+          OPEN_FONTS[k].family.toLowerCase() === low ||
+          k === low.replace(/\s+/g, '-'),
+      ) ??
+      Object.keys(FONTS).find(
+        k => k === low || FONTS[k][0].toLowerCase() === low,
+      );
+    return slug ?? name;
+  }
   if (/\bmono(space|spaced)?\b/.test(c)) return 'mono';
   if (/\bsans(-serif)?\b/.test(c)) return 'system';
   if (/\bserif\b/.test(c)) return 'serif';
@@ -2568,6 +3086,10 @@ function fontIn(c, question) {
   }
   const typed =
     /\b(?:use|font|typeface)\s+["']?([A-Z][\w-]*(?: [A-Z][\w-]*)?)["']?/.exec(
+      question,
+    )?.[1] ??
+    // "Circular font": a capitalized name before the word.
+    /\b([A-Z][\w-]*(?: [A-Z][\w-]*)?)\s+(?:font|typeface)\b/.exec(
       question,
     )?.[1];
   return typed ?? null;

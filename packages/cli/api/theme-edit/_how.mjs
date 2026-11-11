@@ -76,6 +76,19 @@ export function isPicture(subject, cwd) {
 }
 
 /**
+ * A dial's help, with what `set` does now where that differs from it: Core
+ * gives headings the body family when the theme names no heading family,
+ * so `font --on body` moves headings too.
+ * @param {string} key
+ * @param {{bodyFontReachesHeadings: boolean}} env
+ */
+function dialHelp(key, env) {
+  return key === 'font' && env.bodyFontReachesHeadings
+    ? `${DIALS.font.help} Note: font --on body also sets the heading font while the theme sets no heading font; for body text alone, set --font-family-body.`
+    : DIALS[key].help;
+}
+
+/**
  * Explain anything a theme change can name, or answer a question about one:
  * a part (what it reads for each aspect, under which `--when` or `--state`,
  * its variants, states and the parts inside it), a group (its members), a
@@ -253,12 +266,15 @@ async function answer(subject, options, cwd) {
     if (key === 'text' || key === 'background')
       results.unshift(
         ...['accent', 'neutral'].map(d => ({
-          text: DIALS[d].help,
+          text: dialHelp(d, env),
           commands: dialCommands(d),
         })),
       );
     if (dial)
-      results.unshift({text: DIALS[dial].help, commands: dialCommands(dial)});
+      results.unshift({
+        text: dialHelp(dial, env),
+        commands: dialCommands(dial),
+      });
     results.push({
       text: `for one part: ${HOW} <part> lists what it reads for ${key}`,
       commands: [`${HOW} button`],
@@ -272,7 +288,7 @@ async function answer(subject, options, cwd) {
       subject: t,
       source: 'dial',
       values: d.values,
-      help: d.help,
+      help: dialHelp(key, env),
       ...(PALETTE_DIALS.includes(key) ? {shades: mappingRows(key)} : {}),
       ...themeFields,
       examples: dialCommands(key),
@@ -385,7 +401,7 @@ function finish(env, drafts) {
     const lookups = d.lookup ? [d.lookup] : [];
     if (!commands.length && d.options.length && !lookups.length) {
       out.push({
-        text: `${d.text}: no command does it on ${env.slug}`,
+        text: `${d.text}: no command does it on ${env.slug}${refused[0] ? `: ${refused[0].why}` : ''}`,
         commands: [],
         refused,
       });
@@ -798,7 +814,7 @@ async function listItems(kind, filter, cwd) {
         .map(([name, d]) => ({
           name,
           values: d.values,
-          help: d.help,
+          help: dialHelp(name, env),
           examples: d.examples
             .map(exampleStep)
             .filter(st => st != null)
