@@ -567,20 +567,30 @@ export function MobileNav({
     }
 
     if (side === 'auto') {
-      const trigger = document.activeElement as HTMLElement | null;
-      if (trigger && trigger !== document.body) {
+      // The opener is the focused element. A touch tap does not focus a button
+      // in every mobile browser, so on the first open nothing may be focused;
+      // the Toggle that controls this drawer is the opener then.
+      const active = document.activeElement as HTMLElement | null;
+      const trigger =
+        active && active !== document.body
+          ? active
+          : Array.from(
+              document.querySelectorAll<HTMLElement>('[aria-controls]'),
+            ).find(el => el.getAttribute('aria-controls') === dialogId);
+      if (trigger) {
         const rect = trigger.getBoundingClientRect();
         const triggerCenter = rect.left + rect.width / 2;
+        // The left half is the inline start in LTR and the inline end in RTL.
+        const isRtl = getComputedStyle(trigger).direction === 'rtl';
+        const isInLeftHalf = triggerCenter < window.innerWidth / 2;
         // eslint-disable-next-line @eslint-react/set-state-in-effect -- side is resolved from trigger layout immediately before showModal()
-        setResolvedSide(
-          triggerCenter < window.innerWidth / 2 ? 'start' : 'end',
-        );
+        setResolvedSide(isInLeftHalf !== isRtl ? 'start' : 'end');
       }
     } else {
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- side prop changes must update the open dialog placement
       setResolvedSide(side);
     }
-  }, [isOpen, side]);
+  }, [isOpen, side, dialogId]);
 
   // Open/close the dialog via showModal()/close()
   // close() is delayed so the slide-out transition can play.
