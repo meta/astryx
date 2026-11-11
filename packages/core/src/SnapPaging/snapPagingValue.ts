@@ -201,10 +201,39 @@ export function snapPages(
   return {stops: n > 0 ? stops : [0], skipped: []};
 }
 
+/** The translate an item's styles show now, in the row's pixels. */
+const translateOf = (item: Element) =>
+  Number.parseFloat(getComputedStyle(item).translate) || 0;
+
+/**
+ * An item's rect, and the paging translate it carried in that rect. A
+ * browser can resolve each read of a running animation at its own time. A
+ * translate read after the rect can then show the item one move later.
+ * Equal translates on both sides of the rect show the translate the rect
+ * carried.
+ */
+function heldRead(
+  item: Element,
+  isHeld: boolean,
+): {rect: DOMRect; held: number} {
+  if (!isHeld) {
+    return {rect: item.getBoundingClientRect(), held: 0};
+  }
+  let before = translateOf(item);
+  let rect = item.getBoundingClientRect();
+  let after = translateOf(item);
+  for (let read = 1; read < 4 && Math.abs(after - before) > 0.01; read++) {
+    before = translateOf(item);
+    rect = item.getBoundingClientRect();
+    after = translateOf(item);
+  }
+  return {rect, held: after};
+}
+
 /**
  * How far the row's items reach, start to end. A held row's items carry the
- * paging's translate, so each rect takes its own item's translate off, read
- * right after it. The span is then the layout's, whenever each rect was read.
+ * paging's translate, so each rect takes its own item's translate off. The
+ * span is then the layout's, whenever each rect was read.
  */
 export function itemsSpan(element: HTMLElement, isHeld = false): number {
   const items = Array.from(element.children).filter(
@@ -219,10 +248,7 @@ export function itemsSpan(element: HTMLElement, isHeld = false): number {
   let start = Infinity;
   let end = -Infinity;
   for (const item of items) {
-    const rect = item.getBoundingClientRect();
-    const held = isHeld
-      ? Number.parseFloat(getComputedStyle(item).translate) || 0
-      : 0;
+    const {rect, held} = heldRead(item, isHeld);
     start = Math.min(start, rect.left / scale - held);
     end = Math.max(end, rect.right / scale - held);
   }
@@ -247,12 +273,9 @@ function itemStops(
       rtl ? style.scrollPaddingRight : style.scrollPaddingLeft,
     ) || 0;
   return Array.from(element.children, item => {
-    const rect = item.getBoundingClientRect();
-    // A held row's children carry the paging's translate. The rect shows the
-    // translate at the time of its read, so the next read takes it off.
-    const held = isHeld
-      ? Number.parseFloat(getComputedStyle(item).translate) || 0
-      : 0;
+    // A held row's children carry the paging's translate. Each rect takes
+    // its own item's translate off.
+    const {rect, held} = heldRead(item, isHeld);
     const fromEdge =
       (rtl ? box.right - rect.right : rect.left - box.left) / scale +
       (rtl ? held : -held);

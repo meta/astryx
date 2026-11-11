@@ -51,9 +51,19 @@ windowing module computes which rows render and where the scroll range ends.
 Each consumer keeps its own records for when it windows, what it renders, and
 how it exposes the full list to assistive technology.
 
+The module windows a list on either scroll axis. On the block axis, all rows
+share one pitch. On the inline axis, each item has its own width. The
+consumer names the viewport space that its pinned items cover at each edge,
+and the module plans only for the space between them. The module reads the
+inline scroll position as a distance from the inline start, so a
+right-to-left list windows the same way. On both axes, one shared focus island
+keeps the focused item mounted outside the window.
+
 Consumers:
 
 - Table's row virtualization, behind `module:Table/useTableRowsVirtualization`.
+- Table's column virtualization, behind
+  `module:Table/useTableColumnsVirtualization`, on the inline axis.
 - Selector's option list.
 - Chat's message list.
 
@@ -94,6 +104,8 @@ windowing symbol.
   packages.
 - `module:Table/useTableRowsVirtualization` — Table's public virtualization
   hook, a consumer.
+- `module:Table/useTableColumnsVirtualization` — Table's public column
+  virtualization hook, a consumer on the inline axis.
 - `packages/core/src/Selector/` — a consumer.
 - `packages/core/src/Chat/` — a consumer.
 
@@ -119,4 +131,4 @@ only. The module stays private while OQ1 is open.
 | --------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | INV1      | `packages/core/src/virtualization/useListWindow.test.tsx`; review of each Core list that windows                | A Core component keeps its own windowing implementation beside the module  |
 | INV2      | Public export review of every package entry point; the module is exported only from `./internal/virtualization` | The module, or a type only it uses, is reachable from a public entry point |
-| INV3      | The public-API report (`packages/core/api-report.md`) for `useTableRowsVirtualization` and each consumer        | Adopting the module changes a consumer's public props, types, or exports   |
+| INV3      | The pull request's API delta for `useTableRowsVirtualization` and each consumer                                 | Adopting the module changes a consumer's public props, types, or exports   |

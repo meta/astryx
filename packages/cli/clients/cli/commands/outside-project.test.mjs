@@ -51,6 +51,8 @@ const RELEASED_REFUSAL_CODES = {
   'integration add': 'ERR_FILE_NOT_FOUND',
   'theme use': 'ERR_THEME_INVALID',
   'theme remove': 'ERR_THEME_INVALID',
+  'experimental theme use': 'ERR_THEME_INVALID',
+  'experimental theme remove': 'ERR_THEME_INVALID',
 };
 
 /** Every `own` command; each has a describe block below. */
@@ -62,6 +64,8 @@ const OWN_TESTED = new Set([
   'integration verify',
   'integration pack',
   'theme add',
+  'experimental theme add',
+  'experimental theme preview app',
   'upgrade',
 ]);
 
@@ -752,6 +756,88 @@ describe('theme add outside a project (own)', () => {
       expect(r.written).toEqual([]);
       expect(r.kind).toBe('ERR_THEME_INVALID');
       expect(r.envelope.error).toContain('app project');
+    },
+    SLOW,
+  );
+});
+
+describe('experimental theme add outside a project (own)', () => {
+  it(
+    'lists the available themes with no slug, as in a new project',
+    async () => {
+      const empty = await answer(
+        ['--json', 'experimental', 'theme', 'add'],
+        tmpDir('experimental-theme-add'),
+      );
+      const project = await answer(
+        ['--json', 'experimental', 'theme', 'add'],
+        newProject(),
+      );
+      expect(empty.status).toBe(0);
+      expect(empty.envelope.type).toBe('theme.list');
+      expect(empty.envelope.data.map(t => t.slug)).toEqual(
+        project.envelope.data.map(t => t.slug),
+      );
+    },
+    SLOW,
+  );
+
+  it(
+    'writes nothing and names the app project it needs, given a slug',
+    async () => {
+      const r = await answer(
+        ['--json', 'experimental', 'theme', 'add', 'butter'],
+        tmpDir('experimental-theme-add-slug'),
+      );
+      expect(r.status).toBe(1);
+      expect(r.written).toEqual([]);
+      expect(r.kind).toBe('ERR_THEME_INVALID');
+      expect(r.envelope.error).toContain('app project');
+    },
+    SLOW,
+  );
+});
+
+describe('experimental theme preview app outside a project (own)', () => {
+  it(
+    'makes the new starter app with the preview in it, writing only inside its folder',
+    async () => {
+      const r = await answer(
+        ['--json', 'experimental', 'theme', 'preview', 'app', 'theme-app'],
+        tmpDir('theme-preview-app'),
+      );
+      expect(r.status).toBe(0);
+      expect(r.kind).toBe('themeEdit.previewApp');
+      expect(r.written).toContain(path.join('theme-app', 'package.json'));
+      expect(r.written).toContain(
+        path.join('theme-app', 'src', 'app', 'theme-preview', 'page.tsx'),
+      );
+      expect(
+        r.written.filter(file => !file.startsWith(`theme-app${path.sep}`)),
+      ).toEqual([]);
+    },
+    SLOW,
+  );
+
+  it(
+    'writes nothing for a theme that is not there',
+    async () => {
+      const r = await answer(
+        [
+          '--json',
+          'experimental',
+          'theme',
+          'preview',
+          'app',
+          'theme-app',
+          '--theme',
+          'brand',
+        ],
+        tmpDir('theme-preview-app-theme'),
+      );
+      expect(r.status).toBe(1);
+      expect(r.written).toEqual([]);
+      expect(r.kind).toBe('ERR_UNKNOWN_THEME');
     },
     SLOW,
   );
