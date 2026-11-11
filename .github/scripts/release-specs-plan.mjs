@@ -29,10 +29,7 @@ import {
   proofImporters,
 } from './a11y-pr-contracts.mjs';
 import {releaseSpecs, specVisits, storyFiles} from './release-spec-visits.mjs';
-import {
-  assertEachOnce,
-  splitByDuration,
-} from '../../scripts/lib/duration-split.mjs';
+import {fitLegsToBudget} from '../../scripts/lib/duration-split.mjs';
 
 export {isReleaseFile} from './release-spec-visits.mjs';
 
@@ -54,31 +51,12 @@ export function shardSpecs(specs, seconds) {
   if (specs.length === 0) return [];
   const cost = spec =>
     Number.isFinite(seconds[spec]) ? seconds[spec] : UNKNOWN_SECONDS;
-  const shardOf = leg => ({
-    specs: leg,
-    seconds: leg.reduce((sum, spec) => sum + cost(spec), 0),
-  });
-  const alone = specs.filter(spec => cost(spec) > SHARD_SECONDS).sort();
-  const rest = specs.filter(spec => cost(spec) <= SHARD_SECONDS);
-  const total = rest.reduce((sum, spec) => sum + cost(spec), 0);
-  let shared = [];
-  for (
-    let count = Math.max(1, Math.ceil(total / SHARD_SECONDS));
-    rest.length > 0;
-    count += 1
-  ) {
-    shared = splitByDuration(rest, count, cost)
-      .filter(leg => leg.length > 0)
-      .map(shardOf);
-    if (shared.every(shard => shard.seconds <= SHARD_SECONDS)) break;
-  }
-  const shards = [...alone.map(spec => shardOf([spec])), ...shared];
-  assertEachOnce(
-    specs,
-    shards.map(shard => shard.specs),
-    'release spec',
+  return fitLegsToBudget(specs, cost, {budget: SHARD_SECONDS}).shares.map(
+    leg => ({
+      specs: leg,
+      seconds: leg.reduce((sum, spec) => sum + cost(spec), 0),
+    }),
   );
-  return shards;
 }
 
 /**

@@ -285,7 +285,7 @@ describe('the release specs of this repository', () => {
     ];
     for (const folder of folders)
       expect(
-        listed.some(file => file.startsWith(folder)),
+        listed.some(file => componentPathOf(file) === folder),
         folder,
       ).toBe(true);
   });
