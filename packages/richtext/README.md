@@ -13,7 +13,9 @@ import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';
 The editor is deliberately minimal and extensible: pass `nodes` and `plugins` to
 layer richer behaviour (toolbars, mentions, hover cards) on top without forking.
 `RichTextEditorToolbar` is a composable formatting toolbar for the editor's
-`toolbar` slot, and `markdownToEditorStateJSON` / `editorStateJSONToMarkdown`
+`toolbar` slot, `RichTextEditorSelectionToolbar` shows the same formatting
+beside selected text from the `plugins` slot, and
+`markdownToEditorStateJSON` / `editorStateJSONToMarkdown`
 convert Markdown to and from serialized editor state headlessly (no mounted
 editor required). The server-safe serializers are also available from
 `@astryxdesign/richtext/markdown`.

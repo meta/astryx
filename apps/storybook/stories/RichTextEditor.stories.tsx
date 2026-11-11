@@ -10,6 +10,7 @@ import {
   RichTextEditorToolbar,
   RichTextEditorAutoLinkPlugin,
   RichTextEditorLinkPopoverPlugin,
+  RichTextEditorSelectionToolbar,
   type RichTextEditorRef,
 } from '@astryxdesign/richtext';
 import type {EditorState} from 'lexical';
@@ -185,6 +186,19 @@ export const WithAutoLink: Story = {
     toolbar: <RichTextEditorToolbar />,
     // Auto-linkify typed/pasted URLs + emails (open in a new tab).
     plugins: <RichTextEditorAutoLinkPlugin />,
+  },
+};
+
+/**
+ * Formatting beside selected text, from the `plugins` slot. Alt+F10 (⌥F10)
+ * moves focus into it and Escape returns to the selection. Under a coarse
+ * pointer it docks to the bottom of the screen.
+ */
+export const WithSelectionToolbar: Story = {
+  args: {
+    label: 'Notes',
+    placeholder: 'Type, then select some words to format them…',
+    plugins: <RichTextEditorSelectionToolbar />,
   },
 };
 

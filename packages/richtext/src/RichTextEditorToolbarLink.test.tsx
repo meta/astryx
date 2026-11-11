@@ -9,7 +9,8 @@
  *   icon buttons; Enter applies; Escape and Cancel give the editor back its
  *   focus and selection; an invalid URL keeps focus in the field with an
  *   inline error; Cmd/Ctrl+K opens it; `promptForUrl` still replaces it.
- * @position Testing; validates the link UI of RichTextEditorToolbar.tsx
+ * @position Testing; validates the link UI of RichTextEditorToolbar.tsx,
+ *   whose popover and form live in ToolbarLinkPopover.tsx
  */
 
 import {beforeAll, describe, expect, it, vi} from 'vitest';
