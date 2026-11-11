@@ -7,8 +7,7 @@
  *   input clock (inputAge.ts) and the document's pointer, keyboard, scroll
  *   and visibility events
  * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps,
- *   pressFadeMs, installPressFeedback, cancelPress, installBoxHold and
- *   installFinePress
+ *   pressFadeMs, installPressFeedback, cancelPress and installBoxHold
  * @position The DOM half of the touch press model. usePressFeedback installs
  *   it, and the CSS arms live in interactionOverlay.stylex.ts.
  *
@@ -63,7 +62,7 @@ import {isInsideScrollView} from './scrollView';
 import {msSinceInput} from './inputAge';
 import {TOUCH_QUERY} from './touchPresentation';
 import {pressBoxesIn} from '../privateAttributes/pressBox.stylex';
-import {sharedState} from './sharedRealm';
+import {isPrimaryClick} from './primaryClick';
 import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
 
@@ -185,24 +184,6 @@ let boxHold: BoxHold | null = null;
  */
 export function installBoxHold(hold: BoxHold): void {
   boxHold = hold;
-}
-
-/** Whether a button press is a primary click (utils/primaryClick.ts). */
-type PrimaryClick = (event: PointerEvent) => boolean;
-
-// Every copy of Core shares the rule: a surface one copy marks can take its
-// press from another copy's controller.
-const finePress = sharedState('utils/press-feedback/fine-press', 1, () => ({
-  isPrimary: null as PrimaryClick | null,
-}));
-
-/**
- * @internal Installs the primary-click rule for a surface that declares the
- * fine-pointer press. Only a page with such a surface loads it, so a page of
- * buttons and links carries none of its code.
- */
-export function installFinePress(isPrimaryClick: PrimaryClick): void {
-  finePress.isPrimary = isPrimaryClick;
 }
 const button: Slot = {live: null};
 /** How many callers hold the controller installed; listeners exist while > 0. */
@@ -646,7 +627,7 @@ function onPointerDown(event: PointerEvent): void {
     if (
       stylesheetDroppedActive()
         ? event.button === 0
-        : finePress.isPrimary?.(event) === true && paintsFinePress(event.target)
+        : isPrimaryClick(event) && paintsFinePress(event.target)
     ) {
       pressButton(event.target, event.pointerId);
     }
@@ -655,7 +636,7 @@ function onPointerDown(event: PointerEvent): void {
   // A pen's barrel or eraser button on a fine-pointer surface is not a press.
   if (
     event.pointerType === 'pen' &&
-    finePress.isPrimary?.(event) === false &&
+    !isPrimaryClick(event) &&
     paintsFinePress(event.target)
   ) {
     return;

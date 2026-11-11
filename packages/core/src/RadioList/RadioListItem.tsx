@@ -36,7 +36,6 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
 import {registerBoxHold} from '../utils/boxHold';
-import {registerFinePress} from '../utils/finePress';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useIndicator} from '../Indicator/useIndicator';
 import {Item, type ItemAlign} from '../Item/Item';
@@ -46,7 +45,6 @@ import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 // Registered here, not in the press controller, so a page with no box carries
 // none of its code.
 registerBoxHold();
-registerFinePress();
 
 // The touch press's paint, declared by the shared overlay styles on the
 // element the controller writes to (`pressedAlpha`) at the press's strength,

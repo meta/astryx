@@ -44,10 +44,6 @@ import {
 } from './pressGesture';
 import {pointerQuery} from '../gestures/__tests__/pointerQuery';
 import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
-import {registerFinePress} from './finePress';
-
-// The components that mark fine-pointer surfaces load this rule as they load.
-registerFinePress();
 
 /** Gives `surface` a control's box, so it takes the fine-pointer press. */
 function ownBox(surface: HTMLElement): void {
