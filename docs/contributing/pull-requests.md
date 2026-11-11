@@ -161,7 +161,9 @@ each finding at its file and line.
   decision; review does not ask you to remove it
   ([`architecture:public-component-api`](../architecture/public-component-api.md#boundaries-and-invariants)
   INV24 and INV25).
-  A new internal module or hook that no record defines gets REQUEST_CHANGES:
+  A new internal module or hook that another component can import (a package
+  `internal/` export, or a hook used outside the component that owns it) and
+  that no record defines gets REQUEST_CHANGES:
   it needs an owner API decision, with the delta as usage, why it is needed,
   and why existing modules are not enough
   ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#contract-before-escalation)
