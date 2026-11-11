@@ -666,8 +666,12 @@ they are separately named.
   triggers it; a missing, skipped, or stale-head result waits and fails
   closed. A timing-budget miss in the job is a failure, not a flake; it is not
   retried automatically, and a budget question goes to the specification
-  owner (DEC-29). FR32 gap: no workflow job runs changed release specs on a
-  pull request.
+  owner (DEC-29). FR32 gap: the `release-specs (changed)` job runs only
+  `*.release.*.spec.ts` files that a pull request adds or changes, or whose
+  imported modules it changes. It does not run specs tagged
+  `@pr-a11y release-only`, does not trigger on a changed component that a
+  spec visits (and has no map from pattern stories and fixture pages to
+  components), and does not run on a Lab-only pull request.
 
 ### Platform support
 
