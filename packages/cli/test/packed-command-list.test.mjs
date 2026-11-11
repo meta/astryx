@@ -20,7 +20,6 @@ import {
 } from '../test-utils/global-local-fixtures.mjs';
 
 const STORE = 'clients/cli/commands.generated.json';
-const SANDBOX = path.resolve(CLI_ROOT, '..', '..', 'apps', 'sandbox');
 const VERSION = JSON.parse(
   fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
 ).version;
@@ -29,21 +28,45 @@ const VERSION = JSON.parse(
 let work;
 /** @type {string} */
 let packed;
+/**
+ * A project of no CLI of its own, where each CLI answers itself: inside a
+ * project with its own CLI (such as apps/sandbox), a run hands off to that
+ * copy.
+ * @type {string}
+ */
+let outside;
 
 beforeAll(() => {
   work = fs.mkdtempSync(path.join(os.tmpdir(), 'packed-commands-'));
   // The run's packed CLI, as `pnpm publish` makes it, placed with its
   // dependencies as an install would.
   packed = placeCli(path.join(work, 'cli'), VERSION).dir;
+  outside = fs.mkdtempSync(path.join(os.tmpdir(), 'packed-commands-run-'));
+  // A consumer project with Core installed and no CLI of its own, so both
+  // copies see the same Core and neither hands off.
+  fs.writeFileSync(
+    path.join(outside, 'package.json'),
+    JSON.stringify({name: 'consumer', private: true}),
+  );
+  fs.mkdirSync(path.join(outside, 'node_modules', '@astryxdesign'), {
+    recursive: true,
+  });
+  fs.symlinkSync(
+    path.resolve(CLI_ROOT, '..', 'core'),
+    path.join(outside, 'node_modules', '@astryxdesign', 'core'),
+    'dir',
+  );
 }, 120_000);
 
 afterAll(() => {
   recyclePlacedCopies();
   if (work) fs.rmSync(work, {recursive: true, force: true});
+  if (outside) fs.rmSync(outside, {recursive: true, force: true});
 });
 
 /**
- * Run a CLI's root help, listing the command modules it loads.
+ * Run a CLI's root help, listing the command modules it loads (a command's
+ * doc file is not a command module: the manifest's is read by every run).
  * @param {string} cliRoot
  * @param {string} arg
  * @returns {{stdout: string, commands: string[]}}
@@ -56,7 +79,7 @@ import {register} from 'node:module';
 register('data:text/javascript,' + encodeURIComponent(\`
 import fs from 'node:fs';
 export async function load(url, context, next) {
-  if (url.includes('/clients/cli/commands/')) fs.appendFileSync(process.env.LOAD_LOG, url + '\\\\n');
+  if (url.includes('/clients/cli/commands/') && !url.endsWith('.doc.mjs')) fs.appendFileSync(process.env.LOAD_LOG, url + '\\\\n');
   return next(url, context);
 }\`));
 `)}`;
@@ -69,12 +92,14 @@ export async function load(url, context, next) {
       arg,
     ],
     {
-      cwd: SANDBOX,
+      cwd: outside,
       encoding: 'utf8',
       env: {...process.env, LOAD_LOG: log, NO_UPDATE_NOTIFIER: '1'},
     },
   );
   expect(run.status, run.stderr).toBe(0);
+  // The copy run answered, not one it handed off to.
+  expect(run.stderr).not.toContain('handed over');
   return {
     stdout: run.stdout,
     commands: fs.readFileSync(log, 'utf8').split('\n').filter(Boolean),
