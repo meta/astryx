@@ -54,6 +54,7 @@ document.body.innerHTML = `
     ul { list-style: none; margin: 0; padding: 0; }
     li { box-sizing: border-box; height: 60px; padding: 0 16px; display: flex; align-items: center; gap: 8px; background: rgb(255, 255, 255); border-bottom: 1px solid rgb(221, 221, 221); color: rgb(17, 17, 17); }
     li:first-child { border-radius: 12px 12px 0 0; }
+    li:last-child { border-radius: 0 0 12px 12px; }
     #menu { position: fixed; inset: auto; margin: 0; padding: 0; border: 0; left: 40px; top: 420px; width: 250px; height: 180px; background: rgb(238, 238, 238); border-radius: 16px; }
   </style>
   <div class="panel">

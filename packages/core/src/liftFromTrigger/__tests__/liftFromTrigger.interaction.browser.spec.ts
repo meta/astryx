@@ -135,6 +135,36 @@ test('a row lifts itself into the top layer at its lifted rect while one placeho
   await page.evaluate(() => window.__lift.dispose());
 });
 
+test('the last row keeps its rounded corners while lifted, though the placeholder after it ends its last-child match', async ({
+  page,
+}) => {
+  await open(page);
+  const read = async () =>
+    page.evaluate(() => {
+      const row = document.getElementById('row4') as HTMLElement;
+      const style = getComputedStyle(row);
+      return {
+        isOpen: row.matches(':popover-open'),
+        corners: [
+          style.borderTopLeftRadius,
+          style.borderTopRightRadius,
+          style.borderBottomRightRadius,
+          style.borderBottomLeftRadius,
+        ],
+      };
+    });
+  const before = await read();
+  expect(before.corners).toEqual(['0px', '0px', '12px', '12px']);
+  expect(
+    await page.evaluate(() => window.__lift.lift('row4', 0.2)),
+  ).not.toBeNull();
+  await page.waitForTimeout(800);
+  const after = await read();
+  expect(after.isOpen).toBe(true);
+  expect(after.corners).toEqual(before.corners);
+  await page.evaluate(() => window.__lift.dispose());
+});
+
 test('a source a fraction of a pixel wide lifts at that width, so its content keeps its lines', async ({
   page,
 }) => {
