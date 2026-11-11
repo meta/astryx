@@ -430,6 +430,10 @@ range (Gap 11). Each other gap below is open.
   Gboard's slide. Chrome checks the focused field in the resize's own commit
   and pans to a field it finds covered, so the reveal finishes in that frame.
   Firefox for Android takes the same path.
+- **Gap 19 — A field in a modal BottomSheet shorter than `tall`:** the sheet's
+  full-viewport dialog has no scroller, and BottomSheet's keyboard path runs
+  only for `height="tall"`, so the field keeps the browser's own reveal; Chrome
+  on Android then pans the page (336 px, field 64 px clear).
 
 ### Follow-up
 
