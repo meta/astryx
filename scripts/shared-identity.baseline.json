@@ -94,8 +94,8 @@
       "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/core/src/Markdown/parser.ts:incrementalStateMode": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
+      "status": "allowed",
+      "reason": "A type-only brand (declare const) with no runtime value, so no copy can split it at runtime."
     },
     "packages/core/src/Markdown/parser.ts:listMarkerShapes": {
       "status": "allowed",
@@ -108,18 +108,6 @@
     "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformClaim": {
       "status": "allowed",
       "reason": "Deliberately unshared: a shared key would let any module forge trust or a parse claim."
-    },
-    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformHasRenderer": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
-    },
-    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformPluginName": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
-    },
-    "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformSourceUnchanged": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
     },
     "packages/core/src/Markdown/plugins/protocol.ts:markdownTransformTrusted": {
       "status": "allowed",
@@ -144,10 +132,6 @@
     "packages/core/src/Markdown/plugins/protocol.ts:sourceHeadingMarker": {
       "status": "open",
       "group": "triage"
-    },
-    "packages/core/src/Markdown/plugins/semanticFence.ts:markdownFenceProposal": {
-      "status": "open",
-      "group": "F11 Markdown protocol metadata"
     },
     "packages/core/src/Markdown/plugins/textTransform.ts:adoptedReplacements": {
       "status": "open",

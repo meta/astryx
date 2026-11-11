@@ -11,6 +11,14 @@
 
 import {render, screen} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
+import type {MarkdownExtensionNode} from './protocol';
+
+type DiagramNode = MarkdownExtensionNode<
+  'diagram-fences',
+  'diagram',
+  {readonly code: string},
+  'block'
+>;
 
 afterEach(() => {
   vi.resetModules();
@@ -21,10 +29,9 @@ describe('a fence plugin from the package in a swizzled Markdown', () => {
     vi.resetModules();
     const {createMarkdownPlugin} = await import('./protocol');
     const {createMarkdownFenceTransform} = await import('./semanticFence');
-    const plugin = createMarkdownPlugin({
+    const plugin = createMarkdownPlugin<'diagram-fences', DiagramNode>({
       name: 'diagram-fences',
       apiVersion: 1,
-      parseKey: 'v1',
       transform: createMarkdownFenceTransform({
         languages: ['diagram'],
         createNode: context => ({
