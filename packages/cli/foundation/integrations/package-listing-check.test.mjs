@@ -119,6 +119,18 @@ describe('isListingImage', () => {
       '<!DOCTYPE svg [<!ENTITY x "y">]><svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>',
     ],
     [
+      'a comment opened inside an attribute value',
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="<!--"/><script>alert(1)</script><rect fill="-->"/></svg>',
+    ],
+    [
+      'a character reference spelling an outside fill',
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="&#117;rl(https:&#47;&#47;e.x/p)"/></svg>',
+    ],
+    [
+      'a character reference in a mask',
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect mask="&#117;rl(https://e.x/m)"/></svg>',
+    ],
+    [
       'text outside a title',
       '<svg xmlns="http://www.w3.org/2000/svg"><g>hi</g></svg>',
     ],
