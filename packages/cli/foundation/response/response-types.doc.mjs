@@ -135,7 +135,7 @@ export const doc = {
       value: 'themeEdit.undo',
       stability: 'experimental',
       description:
-        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page and any `pictures`. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` and `removed` both naming the setting removed (not the value now in effect: that is the base theme's, and `changedTokens` lists it). Experimental: may change or be removed in a patch release.",
+        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page and any `pictures`. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` and `removed` both naming the setting removed, and `now` saying what applies instead (a whole-theme setting of the same thing, or the base theme's value; `changedTokens` lists the values). Experimental: may change or be removed in a patch release.",
     },
     {
       value: 'themeEdit.previewAdd',

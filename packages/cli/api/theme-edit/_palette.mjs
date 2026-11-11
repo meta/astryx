@@ -614,7 +614,20 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     /** @type {Array<[string, string]>} */
     const out = [];
     for (const n of names) {
-      const v = tokens[n]?.[m].color ?? base[m][n];
+      // The theme's own exact page and surface colors win, as they do in
+      // the built theme.
+      const exact = [...data.settings]
+        .reverse()
+        .find(
+          s =>
+            s.source === 'token' &&
+            s.thing === n &&
+            !s.on &&
+            !s.when &&
+            !s.state &&
+            (!s.mode || s.mode === m),
+        )?.value;
+      const v = exact ?? tokens[n]?.[m].color ?? base[m][n];
       if (v && parseColor(v)) out.push([n, v]);
     }
     if (!out.length)
@@ -805,7 +818,7 @@ export function mappingRows(dial) {
   const t = (/** @type {string} */ a, /** @type {string} */ b) =>
     word ? a.replace('$', word) : b;
   const rows = [
-    `${t('--color-$', '--color-accent')}: the color you gave, exactly, in light and in dark; in dark, when no text on it reads at ${TEXT}:1, shade ${FILL[1]} or the nearest shade where text does, and the result says so`,
+    `${t('--color-$', '--color-accent')}: the color you gave, exactly, in light, and in dark when text on it reads at ${TEXT}:1 and it stands out from the dark page at ${NON_TEXT}:1; otherwise dark mode uses the shade nearest your color that passes both, and the result says so`,
     `${t('--color-on-$', '--color-on-accent')}: shade ${ON_FILL.light[0]} or ${ON_FILL.light[1]} in light, ${ON_FILL.dark[0]} or ${ON_FILL.dark[1]} in dark, whichever reads better on the fill`,
     `${t('--color-text-$', '--color-text-accent')} and ${t('--color-icon-$', '--color-icon-accent')}: light shade ${TEXT_STOP[0]}, dark shade ${TEXT_STOP[1]} (moves until it reads at ${TEXT}:1 on the surfaces and the muted tint)`,
     `${t('--color-$-muted', '--color-accent-muted')}: light shade ${MUTED[0]}, dark shade ${MUTED[1]}`,

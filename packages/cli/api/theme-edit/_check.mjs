@@ -803,9 +803,25 @@ export function answerHow(ctx, question) {
   // "border color" or "a gray border" is the border's color, not a fill; a
   // color word for anything else ("a dark card with a border", "the card
   // color and its border", "colored buttons") is the fill's.
-  const looseColor = new RegExp(
-    `(?<!\\b(border|outline|stroke|edge)\\s)\\b(${[...COLOR_WORDS, 'dark', 'light', 'colou?r(ed)?'].join('|')})\\b(?!\\s+(border|outline|stroke|edge|text|labels?)s?\\b)`,
-  ).test(text);
+  const fillWords = [...COLOR_WORDS, 'dark', 'light', 'colou?r(ed)?'].join('|');
+  // Take out every color word that belongs to the border, the text or the
+  // mode ("a light gray border", "the color of the border", "in dark
+  // mode"); a color word left over is the fill's.
+  const rest = text
+    .replace(/\b(dark|light) (mode|theme)\b/g, ' ')
+    .replace(
+      /\bcolou?r of (the |its |a )?(border|outline|stroke|edge|text|labels?)s?\b/g,
+      ' ',
+    )
+    .replace(/\b(border|outline|stroke|edge|text)s? colou?r\b/g, ' ')
+    .replace(
+      new RegExp(
+        `\\b((${fillWords}|thin|thick|subtle|bold)\\s+)+(border|outline|stroke|edge|text|labels?)s?\\b`,
+        'g',
+      ),
+      ' ',
+    );
+  const looseColor = new RegExp(`\\b(${fillWords})\\b`).test(rest);
   if (
     intents.includes('border') &&
     intents.includes('background') &&

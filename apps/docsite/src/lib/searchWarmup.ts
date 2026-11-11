@@ -10,14 +10,13 @@
  *   answers (runningSearchWarmup).
  * @position Called by SharedTopNav.tsx.
  *
- * The site's search runs the CLI's `search()` on the server (spec:AST-033
+ * The site's search runs the CLI's search on the server (spec:AST-033
  * DEC-8). A server that has not answered for a while starts cold: it loads the
- * CLI and gathers its catalog, which takes seconds, and the reader's first
- * query used to wait for all of it. A warm-up request does that work while the
- * reader is still reading or reaching for Search, so their first query only
- * ranks. Warm-ups are throttled per tab (sessionStorage survives reloads and
- * client navigation) so hovering or reopening Search never sends a request
- * each time.
+ * CLI and the candidates the build stored before it answers. A warm-up request
+ * does that work while the reader is still reading or reaching for Search, so
+ * their first query only ranks. Warm-ups are throttled per tab (sessionStorage
+ * survives reloads and client navigation) so hovering or reopening Search
+ * never sends a request each time.
  *
  * While the warm-up runs, its server is starting and cannot take requests, so
  * the host would start another cold server for a query sent then. The search
