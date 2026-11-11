@@ -4,10 +4,9 @@
  * @file The type check of one `set` or `undo <theme> <thing>`: the part, the variant, the
  * state, the mode, the token's type, and whether the part (or anything in
  * it) reads the token. A change that cannot take effect is refused, and the
- * refusal leads with the command that works. Also `how`, which answers a
- * plain-words question with exact commands from the same part data.
+ * refusal leads with the command that works.
  *
- * @position api/theme-edit — checks and questions over the part data
+ * @position api/theme-edit — checks over the part data
  */
 
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -17,24 +16,22 @@ import {
   COLOR_PROPS,
   COMMON_STATES,
   CORNERS,
-  DESIGN,
   DIALS,
-  DIRECT,
   FAMILIES,
   GROUPS,
   HEADING_TRACKING,
   HEADING_WEIGHTS,
-  INTENTS,
   LIKE,
   HOW,
   P,
-  PART_WORDS,
   SPACING,
   TEXT_SIZE,
   THING_HINTS,
   familyOf,
 } from './_tables.mjs';
 import {
+  COLOR_NAMES,
+  colorProblem,
   isColorValue,
   isNumber,
   isSafeValue,
@@ -60,6 +57,45 @@ import {
 } from './_settings.mjs';
 
 const E = ERROR_CODES;
+
+/**
+ * The other words for each color dial and vibrancy (gray, brand, error,
+ * saturation), from the dial tables, without words that name a part, a CSS
+ * property or a plain color.
+ */
+const COLOR_DIAL_WORDS = (() => {
+  const generic = new Set([
+    'color',
+    'colour',
+    'text',
+    'background',
+    'border',
+    'surface',
+    'surfaces',
+    'main',
+    'key',
+    'link',
+    'selection',
+    'seed',
+    'status',
+    'tint',
+    'highlight',
+    'muted',
+    'red',
+    'green',
+    'blue',
+    'yellow',
+    'orange',
+  ]);
+  /** @type {Map<string, string[]>} */
+  const out = new Map();
+  for (const d of [...PALETTE_DIALS, 'vibrancy'])
+    for (const w of String(DIALS[d]?.words ?? '').split(/\s+/)) {
+      if (!w || w === d || generic.has(w)) continue;
+      out.set(w, [...(out.get(w) ?? []), d]);
+    }
+  return out;
+})();
 
 /**
  * @typedef {object} SetFlags
@@ -484,14 +520,36 @@ export function checkSetting(
     };
     if (PALETTE_DIALS.includes(thing) && (s.on || s.mode)) {
       const token = paletteToken(thing);
+      const value = q(v || '#7c3aed');
+      /** @type {string[]} */
+      let run = [
+        `${P} set ${slug} ${token} ${value}${onFlag}${s.mode ? ` --mode ${s.mode}` : ''}`,
+      ];
+      // The token is suggested only where the part reads it; otherwise the
+      // part's own route, as a token set on the part would be refused.
+      if (s.on && !ctx.unchecked) {
+        /** @param {string} t */
+        const works = t => {
+          try {
+            checkSetting(ctx, slug, data, t, v || '#7c3aed', {
+              on: s.on,
+              when: s.when,
+              state: s.state,
+            });
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        const direct = `${P} set ${slug} background-color ${value}${onFlag}`;
+        // The neutral color is a surface: on a part, that is its background.
+        if (thing === 'neutral') run = [direct, ...run];
+        else if (!works(token) && works('background-color')) run = [direct];
+      }
       refuse(
         E.ERR_THEME_BAD_VALUE,
-        `${thing} generates the colors of the whole theme, light and dark from one color; drop ${s.on ? '--on' : '--mode'}. For an exact color on one part or in one mode, set the token itself.`,
-        {
-          run: [
-            `${P} set ${slug} ${token} ${q(v || '#7c3aed')}${onFlag}${s.mode ? ` --mode ${s.mode}` : ''}`,
-          ],
-        },
+        `${thing} generates the colors of the whole theme, light and dark from one color; drop ${s.on ? '--on' : '--mode'}. For an exact color on one part or in one mode, set ${thing === 'neutral' && s.on ? "the part's background, or " : ''}the token itself.`,
+        {run},
       );
     }
     if (s.mode)
@@ -551,18 +609,33 @@ export function checkSetting(
         refuse(E.ERR_THEME_BAD_VALUE, `${thing} takes a color, not a step.`, {
           run: [`${P} set ${slug} ${thing} "#7c3aed"`],
         });
-      if (!isColorValue(v))
-        refuse(E.ERR_THEME_BAD_VALUE, `"${v}" is not a CSS color.`, {
-          fix: 'give one like "#7c3aed"',
-        });
-      if (!seedOf(v))
+      const problem = colorProblem(v);
+      if (problem) {
+        // What the value most likely meant: without quotes, a trailing `;`
+        // or `!important`, a bare hex with its #, the opaque color, or the
+        // nearest color name.
+        const cleaned = v
+          .replace(/^(["'])(.*)\1$/, '$2')
+          .replace(/\s*!important\s*$/i, '')
+          .replace(/;+\s*$/, '')
+          .trim()
+          .replace(/^([0-9a-f]{3}|[0-9a-f]{6})$/i, '#$1');
+        const near =
+          problem.kind === 'unknown'
+            ? nearest(v.toLowerCase(), COLOR_NAMES)
+            : [];
+        const better =
+          problem.opaque ??
+          (cleaned !== v && !colorProblem(cleaned) ? cleaned : near[0]);
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `"${v}" has no fixed color, so no shades can be generated from it.`,
+          `"${v}" ${problem.message}.${problem.kind === 'unknown' || problem.kind === 'malformed' ? ' Give a hex, a color name, or an rgb(), hsl(), hwb(), lab(), lch(), oklab(), oklch() or color() color.' : ''}`,
           {
-            fix: 'give a hex, a color name, or an rgb(), hsl(), hwb(), lab(), lch(), oklab() or oklch() color',
+            didYouMean: better ? [better] : near,
+            run: [`${P} set ${slug} ${thing} ${q(better ?? '#7c3aed')}`],
           },
         );
+      }
     } else if (thing === 'vibrancy') {
       if (s.on)
         refuse(
@@ -575,16 +648,33 @@ export function checkSetting(
           [...data.settings].reverse().find(x => x.thing === 'vibrancy')
             ?.value ?? VIBRANCY_DEFAULT,
         );
-        s.value = String(
-          Math.max(0, Math.min(100, cur + (v === 'more' ? 10 : -10))),
+        const next = Math.max(
+          0,
+          Math.min(100, cur + (v === 'more' ? 10 : -10)),
         );
-      } else if (!/^\d{1,3}$/.test(v) || Number(v) > 100)
+        if (next === cur)
+          refuse(
+            E.ERR_THEME_NO_EFFECT,
+            `vibrancy is already ${cur}, the ${cur >= 100 ? 'most vivid' : 'grayest'}, so ${v} changes nothing.`,
+            {
+              run: [
+                `${P} set ${slug} vibrancy ${v === 'more' ? 'less' : 'more'}`,
+              ],
+            },
+          );
+        s.value = String(next);
+      } else if (!/^\d{1,3}$/.test(v) || Number(v) > 100) {
+        // A number out of range suggests the nearest one in range.
+        const n = Number(v);
+        const near = /^[+-]?(\d+\.?\d*|\.\d+)$/.test(v)
+          ? Math.max(0, Math.min(100, Math.round(n)))
+          : 60;
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `vibrancy takes a whole number from 0 (gray) to 100 (most vivid), or more or less, not "${v}".`,
-          {run: [`${P} set ${slug} vibrancy 60`]},
+          {run: [`${P} set ${slug} vibrancy ${near}`]},
         );
-      else s.value = String(Number(v));
+      } else s.value = String(Number(v));
       const colors = data.settings.filter(
         x => x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
       );
@@ -866,6 +956,22 @@ export function checkSetting(
     /** @type {((v: string, on: string | undefined) => string[]) | undefined} */ (
       THING_HINTS[thing.toLowerCase()]
     );
+  // A dial by another name or case: Accent, gray, saturation, error.
+  const lower = thing.toLowerCase();
+  const aliases = DIALS[lower] ? [lower] : (COLOR_DIAL_WORDS.get(lower) ?? []);
+  if (!hint && aliases.length)
+    return refuse(
+      E.ERR_THEME_UNKNOWN_THING,
+      `"${thing}" is not a dial, a token, or a CSS property. ${aliases.length > 1 ? `The dials ${aliases.join(' and ')} mean that` : `The dial for that is ${aliases[0]}`}.`,
+      {
+        didYouMean: aliases,
+        run: aliases.map(d =>
+          unset
+            ? `${P} undo ${slug} ${d}${onFlag}`
+            : `${P} set ${slug} ${d} ${q(v)}${onFlag}`,
+        ),
+      },
+    );
   return refuse(
     E.ERR_THEME_UNKNOWN_THING,
     `"${thing}" is not a dial, a token, or a CSS property.`,
@@ -918,479 +1024,6 @@ const dialWrites = token =>
   /^--(text-(heading|display)-\d-weight|radius-|spacing-|size-element-|font-size-)/.test(
     token,
   );
-
-/** Hues a question can name, each with or without light, dark or pale. */
-const HUES = [
-  'gray',
-  'grey',
-  'red',
-  'blue',
-  'green',
-  'yellow',
-  'orange',
-  'purple',
-  'pink',
-  'navy',
-];
-/** Color words that can name a part's fill, longest first. */
-const COLOR_WORDS = [
-  ...HUES.flatMap(h => ['light', 'dark', 'pale'].map(s => `${s} ${h}`)),
-  ...HUES,
-  'white',
-  'black',
-  'cream',
-  'beige',
-];
-/** Fills for the plain grays, so the command has a real value. */
-const NAMED_FILLS = /** @type {Record<string, string>} */ ({
-  'light gray': '#e5e7eb',
-  'light grey': '#e5e7eb',
-  gray: '#9ca3af',
-  grey: '#9ca3af',
-  'dark gray': '#374151',
-  'dark grey': '#374151',
-  'light blue': '#dbeafe',
-  'pale blue': '#eff6ff',
-  white: '#ffffff',
-  black: '#000000',
-});
-/** Nouns for parts that have a fill. */
-const PART_NOUNS = [
-  'button',
-  'card',
-  'panel',
-  'banner',
-  'header',
-  'input',
-  'field',
-  'badge',
-  'tab',
-  'chip',
-  'pill',
-  'toast',
-  'tooltip',
-  'dialog',
-  'modal',
-  'sidebar',
-  'row',
-];
-
-/**
- * Answer a plain-words question with exact commands: the parts it names,
- * the aspects it asks about, and what each part really reads for them.
- * @param {import('./_settings.mjs').Ctx} ctx
- * @param {string} question
- * @returns {{parts: string[], aspects: string[], results: Array<{text: string, commands: string[]}>}}
- */
-export function answerHow(ctx, question) {
-  const {C} = ctx;
-  const TARGET = ctx.project.target;
-  const TOKENS = ctx.project.core.tokenDefaults;
-  const text = question.toLowerCase();
-  /** @type {Array<string | null>} */
-  let intents = INTENTS.filter(([, re]) => re.test(text)).map(([g]) => g);
-  // "pill" is a corner shape when the question is about corners.
-  const partText = intents.includes('corners')
-    ? text.replace(/\bpills?\b/g, '')
-    : text;
-  /** @type {string[]} */
-  let parts = [];
-  for (const [re, ts] of PART_WORDS)
-    if (re.test(partText))
-      for (const t of ts) if (!parts.includes(t)) parts.push(t);
-  // A variant of a part ("secondary button") answers for the part.
-  parts = parts.filter(p => !parts.some(x => x.startsWith(`${p}:`)));
-  const whiteText =
-    /\bwhite (text|labels?|writing|words)\b|\b(text|labels?|writing|words) (in |is |are )?white\b/.test(
-      text,
-    );
-  // A color word right before a part ("light gray button") is the part's
-  // fill, so it keeps the background aspect beside text.
-  const fillMatch =
-    new RegExp(
-      `\\b(${COLOR_WORDS.join('|')})\\s+(?:${PART_NOUNS.join('|')})s?\\b`,
-    ).exec(text) ??
-    new RegExp(
-      `\\b(?:${PART_NOUNS.join('|')})s?\\s+(?:with\\s+an?\\s+|in\\s+|is\\s+)?(${COLOR_WORDS.join('|')})\\b(?!\\s+(?:text|labels?|writing|words))`,
-    ).exec(text);
-  const fillWord = Boolean(fillMatch);
-  // A fill named outright ("a blue tint") keeps the background aspect.
-  const namedFill =
-    /background|fill|gradient|glossy|\btint(ed)?\b|\bbg\b/.test(text) ||
-    fillWord;
-  if (
-    intents.includes('text') &&
-    intents.includes('background') &&
-    !namedFill &&
-    !(/\bwhite\b/.test(text) && !whiteText)
-  )
-    intents = intents.filter(g => g !== 'background');
-  // "border color" or "a gray border" is the border's color, not a fill; a
-  // color word for anything else ("a dark card with a border", "the card
-  // color and its border", "colored buttons") is the fill's.
-  const fillWords = [...COLOR_WORDS, 'dark', 'light', 'colou?r(ed)?'].join('|');
-  // Take out every color word that belongs to the border, the text or the
-  // mode ("a light gray border", "the color of the border", "in dark
-  // mode"); a color word left over is the fill's.
-  const rest = text
-    .replace(/\b(dark|light) (mode|theme)\b/g, ' ')
-    .replace(
-      /\bcolou?r of (the |its |a )?(border|outline|stroke|edge|text|labels?)s?\b/g,
-      ' ',
-    )
-    .replace(/\b(border|outline|stroke|edge|text)s? colou?r\b/g, ' ')
-    .replace(
-      new RegExp(
-        `\\b((${fillWords}|thin|thick|subtle|bold)\\s+)+(border|outline|stroke|edge|text|labels?)s?\\b`,
-        'g',
-      ),
-      ' ',
-    );
-  const looseColor = new RegExp(`\\b(${fillWords})\\b`).test(rest);
-  if (
-    intents.includes('border') &&
-    intents.includes('background') &&
-    !namedFill &&
-    !looseColor
-  )
-    intents = intents.filter(g => g !== 'background');
-  if (!intents.length && parts.length) intents = [null];
-  const design = Object.keys(DESIGN).filter(w => text.includes(w));
-  const tracking = /letter ?spacing|tracking|kerning/.test(text);
-  // Letter spacing is a font answer, so a spacing intent it raised goes.
-  if (tracking && intents.includes('font'))
-    intents = intents.filter(g => g !== 'spacing');
-  const weight = /\b(bold|weight|heav\w*|light(er)?|thin)\b/.test(text);
-  const px = /\b(\d+(?:\.\d+)?px)\b/.exec(text)?.[1];
-  /** @type {Array<{text: string, commands: string[]}>} */
-  const results = [];
-  /** @param {string | null} g */
-  const V = g => {
-    const bg = design.find(d => ['gradient', 'glossy'].includes(d));
-    const sh = design.find(d =>
-      ['bevel', 'raised', 'flat', 'sunken'].includes(d),
-    );
-    if (g === 'background' && bg) return DESIGN[bg];
-    if (g === 'shadow' && sh) return DESIGN[sh];
-    if (g === 'font' && tracking)
-      return /tight/.test(text) ? '-0.02em' : '0.04em';
-    if (g === 'font' && /bold|heav/.test(text)) return '700';
-    if (g === 'font' && /\b(light(er)?|thin)\b/.test(text)) return '300';
-    if (g === 'text' && whiteText) return '"#ffffff"';
-    if (g === 'text' && /\bdark (text|labels?|writing|words)\b/.test(text))
-      return '"#111827"';
-    if (g === 'background' && fillMatch) {
-      const named = NAMED_FILLS[fillMatch[1]];
-      if (named) return `"${named}"`;
-    }
-    if (g === 'border')
-      return `"${/\bthick\b/.test(text) ? '2px' : '1px'} solid <color>"`;
-    if (g === 'text' && /\baccent[- ]?(colou?red )?(text|labels?)\b/.test(text))
-      return '"var(--color-text-accent)"';
-    if (g === 'background' && /\bwhite\b/.test(text) && !whiteText)
-      return '"#ffffff"';
-    return '<value>';
-  };
-  /**
-   * A value for one token, of its own type: a whole border value suits only
-   * the border property, so a color token takes a color and a width token a
-   * width.
-   * @param {string} token @param {string} group
-   */
-  const tokenValue = (token, group) => {
-    const v = V(group);
-    const whole = /\s(solid|dashed|dotted)\s/.test(v);
-    if (!whole) return v;
-    const type = C.typeOf(token);
-    if (type === 'color') return '"<color>"';
-    if (type === 'size' || /width/.test(token))
-      return /\b2px\b/.test(v) ? '2px' : '1px';
-    return '<value>';
-  };
-  for (const raw of parts.slice(0, 3)) {
-    let [part, wp, wv] = raw.split(':');
-    const named = Boolean(wp);
-    const one = FAMILIES[part] ? FAMILIES[part][0] : part;
-    if (!TARGET.has(one)) continue;
-    // A size in the question ("small buttons") is a --when condition.
-    if (!wp) {
-      const sizes = C.variantValues(one).size ?? [];
-      const word = /\b(small|sm)\b/.test(text)
-        ? ['sm', 'small']
-        : /\b(large|lg|big)\b/.test(text)
-          ? ['lg', 'large']
-          : /\b(medium|md)\b/.test(text)
-            ? ['md', 'medium']
-            : [];
-      const hit = word.find(w => sizes.includes(w));
-      if (hit) [wp, wv] = ['size', hit];
-    }
-    const when = wp ? ` --when ${wp}:${wv}` : '';
-    // A part with variants: a change without --when reaches every variant.
-    const variants = Object.entries(C.variantValues(one)).filter(
-      ([p, vals]) =>
-        ['status', 'variant', 'tone', 'color'].includes(p) && vals.length > 1,
-    );
-    for (const g of intents.slice(0, 3)) {
-      if (g === null) {
-        results.push({
-          text: `what ${one} reads`,
-          commands: [`${HOW} ${one}`],
-        });
-        continue;
-      }
-      if (g === 'corners' && !named) {
-        // Each clause with its own size ("small 6px, large stay pill").
-        const sizes = C.variantValues(one).size ?? [];
-        const clauses = text
-          .split(/,|;|\bbut\b|\band\b/)
-          .map(c => {
-            const size = /\b(small|sm)\b/.test(c)
-              ? 'sm'
-              : /\b(large|lg|big)\b/.test(c)
-                ? 'lg'
-                : /\b(medium|md)\b/.test(c)
-                  ? 'md'
-                  : null;
-            const value =
-              /\b(\d+(?:\.\d+)?px)\b/.exec(c)?.[1] ??
-              (/pill|circ/.test(c)
-                ? 'pill'
-                : /sharp|square/.test(c)
-                  ? 'square'
-                  : null);
-            return {size, value};
-          })
-          .filter(c => c.size && sizes.includes(c.size) && c.value);
-        if (clauses.length > 1) {
-          results.push({
-            text: `corners on ${part}, by size`,
-            commands: clauses.map(c =>
-              /px$/.test(/** @type {string} */ (c.value))
-                ? `${P} set <theme> border-radius ${c.value} --on ${part} --when size:${c.size}`
-                : `${P} set <theme> corners ${c.value} --on ${part} --when size:${c.size}`,
-            ),
-          });
-          continue;
-        }
-      }
-      if (g === 'corners') {
-        results.push({
-          text: `corners on ${part}${when ? ` (${wp} ${wv})` : ''}`,
-          commands: [
-            `${P} set <theme> corners ${/pill|circ/.test(text) ? 'pill' : /sharp|square/.test(text) ? 'square' : 'round'} --on ${part}${when}`,
-            `${P} set <theme> border-radius ${px ?? '6px'} --on ${part}${when}`,
-          ],
-        });
-        continue;
-      }
-      if (g === 'shadow') {
-        const shadows = Object.keys(ctx.project.core.tokenDefaults).filter(k =>
-          /^--shadow-(low|med|high)$/.test(k),
-        );
-        const value =
-          V('shadow') !== '<value>'
-            ? V('shadow')
-            : shadows.length
-              ? `"var(${/soft|subtle|light/.test(text) ? shadows[0] : /strong|deep|heavy/.test(text) ? shadows[shadows.length - 1] : shadows[Math.min(1, shadows.length - 1)]})"`
-              : '"0 2px 6px rgb(0 0 0 / 0.2)"';
-        results.push({
-          text: `shadow on ${part}${when ? ` (${wp} ${wv})` : ''}: box-shadow${shadows.length ? `; the theme's shadow tokens are ${shadows.join(', ')}` : ''}`,
-          commands: [
-            `${P} set <theme> box-shadow ${value} --on ${part}${when}`,
-            ...(shadows.length
-              ? [
-                  `${P} set <theme> ${shadows[0]} "0 1px 3px rgb(0 0 0 / 0.12)"   # change the shared shadow everywhere`,
-                ]
-              : []),
-          ],
-        });
-        continue;
-      }
-      if (g === 'spacing' && !tracking) {
-        results.push({
-          text: `room inside ${part}`,
-          commands: [
-            `${P} set <theme> spacing ${/dense|compact|tight|cramped/.test(text) ? 'compact' : 'roomy'} --on ${part}`,
-            `${P} set <theme> padding ${px ?? '12px'} --on ${part}${when}`,
-          ],
-        });
-        continue;
-      }
-      const group = g === 'spacing' ? 'font' : g;
-      if (group === 'font' && tracking && weight)
-        results.push({
-          text: `${part} weight: font-weight on the part${part === 'heading' ? ', or the headings dial for every heading' : ''}`,
-          commands: [
-            `${P} set <theme> font-weight ${/\b(light(er)?|thin)\b/.test(text) ? 300 : 700} --on ${part}${when}`,
-            ...(part === 'heading'
-              ? [
-                  `${P} set <theme> headings ${/\b(light(er)?|thin)\b/.test(text) ? 'light' : 'bold'}`,
-                ]
-              : []),
-          ],
-        });
-      const reads = C.partReads(one, group);
-      const filtered = wv
-        ? reads.filter(
-            r =>
-              r.when.some(w => w.includes(`${wp}=${wv}`)) ||
-              r.when.includes(''),
-          )
-        : reads;
-      // Weight and tracking questions name only the tokens for them.
-      const aspect =
-        group === 'font' && tracking
-          ? /letter|tracking/
-          : group === 'font' && weight
-            ? /weight/
-            : null;
-      const fitting = aspect
-        ? (filtered.length ? filtered : reads).filter(r => aspect.test(r.token))
-        : filtered.length
-          ? filtered
-          : reads;
-      // Text with no color token of its own takes the page's text color.
-      const inherited =
-        !fitting.length && group === 'text' ? '--color-text-primary' : null;
-      const list = fitting.slice(0, 4);
-      const direct =
-        group === 'font' && tracking
-          ? 'letter-spacing'
-          : group === 'font' && /bold|weight|heav/.test(text)
-            ? 'font-weight'
-            : group === 'font'
-              ? 'font-family'
-              : DIRECT[group];
-      const restingBorder =
-        group === 'border' && list.every(r => r.when.some(w => /:/.test(w)));
-      const tokenRoute =
-        (group === 'text' || group === 'background' || group === 'border') &&
-        !restingBorder &&
-        !/gradient|inset/.test(V(group));
-      results.push({
-        text: `${part} ${aspect ? (tracking ? 'letter spacing' : 'weight') : group}${when ? ` (${wp} ${wv})` : ''}: ${restingBorder ? `the resting border is the border property (no token sets it)${list.length ? `; in states it reads ${list.map(r => r.token + C.fmtWhen(r.when)).join(', ')}` : ''}` : list.length ? `comes from ${list.map(r => r.token + C.fmtWhen(r.when) + C.statusNote(one, r.token)).join(', ')}` : inherited ? `inherits the page's text color (${inherited} for the whole theme); set the property for this part alone` : 'no token of its own; set the property directly'}`,
-        commands: [
-          `${P} set <theme> ${direct} ${V(group)} --on ${part}${when}   # direct: always works`,
-          ...(inherited
-            ? [`${P} set <theme> ${inherited} ${V(group)}   # the whole theme`]
-            : []),
-          ...(tokenRoute
-            ? list
-                .slice(0, 2)
-                .map(
-                  r =>
-                    `${P} set <theme> ${r.token} ${tokenValue(r.token, group)} --on ${part}   # via the token${C.fmtWhen(r.when)}`,
-                )
-            : []),
-        ],
-      });
-      if (
-        !when &&
-        variants.length &&
-        ['text', 'background', 'border'].includes(group)
-      ) {
-        const [vp, vals] = variants[0];
-        results.push({
-          text: `${part} has ${vp} ${vals.join('|')}: without --when the change reaches every ${vp}. To change one, add --when ${vp}:<value>.`,
-          commands: [
-            `${P} set <theme> ${direct} ${V(group)} --on ${part} --when ${vp}:${vals[0]}`,
-          ],
-        });
-      }
-      const kids = (C.MAP[one]?.contains ?? [])
-        .filter(
-          k =>
-            C.partReads(k, group).length && !(FAMILIES[part] ?? []).includes(k),
-        )
-        .slice(0, 3);
-      if (kids.length && group === 'text') {
-        results.push({
-          text: `parts inside ${part} with their own text color: ${kids.join(', ')}. A text token set --on ${part} reaches them; a color property does not.`,
-          commands: kids.slice(0, 1).map(k => `${HOW} ${k}`),
-        });
-      }
-    }
-  }
-  if (!parts.length) {
-    if (tracking)
-      results.push({
-        text: 'letter spacing is a CSS property on a part; for headings there is a dial',
-        commands: [
-          `${P} set <theme> letter-spacing 0.02em --on <part>`,
-          `${P} set <theme> headings tight`,
-        ],
-      });
-    for (const g of /** @type {string[]} */ (intents.filter(Boolean)).slice(
-      0,
-      2,
-    )) {
-      const dial = /** @type {Record<string, string>} */ ({
-        corners: 'corners',
-        spacing: 'spacing',
-        font: 'font',
-        size: 'text-size',
-      })[g];
-      if (dial && !(tracking && (g === 'spacing' || g === 'font')))
-        results.push({
-          text: DIALS[dial].help,
-          commands: DIALS[dial].examples.map(e => `${P} ${e}`),
-        });
-      // Text and background colors come from their tokens first; the brand
-      // color after.
-      results.push(...wholeThemeTokens(ctx, g));
-      if (g === 'background' || g === 'text')
-        results.push({
-          text: DIALS.accent.help,
-          commands: DIALS.accent.examples.map(e => `${P} ${e}`),
-        });
-    }
-  }
-  if (!results.length) {
-    for (const d of Object.values(DIALS)) {
-      if (d.words.split(' ').some(w => w.length > 3 && text.includes(w)))
-        results.push({
-          text: d.help,
-          commands: d.examples.map(e => `${P} ${e}`),
-        });
-    }
-  }
-  void TOKENS;
-  const seen = new Set();
-  return {
-    parts,
-    aspects: /** @type {string[]} */ (intents.filter(Boolean)),
-    results: results
-      .filter(r => {
-        const key = `${r.text}\n${r.commands.join('\n')}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, 10),
-  };
-}
-
-/**
- * The tokens most parts read for one aspect, for a whole-theme change.
- * @param {import('./_settings.mjs').Ctx} ctx
- * @param {string} aspect
- * @returns {Array<{text: string, commands: string[]}>}
- */
-export function wholeThemeTokens(ctx, aspect) {
-  const {C} = ctx;
-  const toks = Object.keys(ctx.project.core.tokenDefaults)
-    .filter(k => C.groupOfToken(k) === aspect && C.anyReader(k).length)
-    .sort((a, b) => C.anyReader(b).length - C.anyReader(a).length)
-    .slice(0, 6);
-  if (!toks.length) return [];
-  return [
-    {
-      text: `whole-theme tokens for ${aspect}, most used first: ${toks.map(k => `${k} (${C.anyReader(k).length} parts)`).join(', ')}`,
-      commands: [`${P} set <theme> ${toks[0]} <value>`],
-    },
-  ];
-}
 
 /** The aspects `how` answers at the whole-theme level. */
 export const ASPECTS = [...Object.keys(GROUPS), 'colors'];

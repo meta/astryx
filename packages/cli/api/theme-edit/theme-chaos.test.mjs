@@ -583,21 +583,17 @@ describe('known chaos findings', () => {
     expect(fs.existsSync(path.join(cwd, 'themes/kd/kd.theme.ts'))).toBe(true);
   }, 120_000);
 
-  it.fails(
-    'F5: a preview page with an empty template name is refused',
-    async () => {
-      const x = await step(['preview', 'add', '--template', '']);
-      try {
-        expect(x.r.status).toBe(1);
-      } finally {
-        fs.rmSync(path.join(cwd, 'src/app/theme-preview'), {
-          recursive: true,
-          force: true,
-        });
-      }
-    },
-    120_000,
-  );
+  it('F5: a preview page with an empty template name is refused', async () => {
+    const x = await step(['preview', 'add', '--template', '']);
+    try {
+      expect(x.r.status).toBe(1);
+    } finally {
+      fs.rmSync(path.join(cwd, 'src/app/theme-preview'), {
+        recursive: true,
+        force: true,
+      });
+    }
+  }, 120_000);
 
   it('F3: a theme name with a dash before a digit is made (b-2)', async () => {
     const x = await step(['editor', 'new', 'k-2']);
@@ -629,25 +625,21 @@ describe('known chaos findings', () => {
     expect(clean(await step(['editor', 'show', 'ks']))).toBe(true);
   }, 120_000);
 
-  it.fails(
-    'F8: a preview data file of the wrong shape is refused with a code',
-    async () => {
-      fs.mkdirSync(path.join(cwd, 'src/app/theme-preview'), {recursive: true});
-      fs.writeFileSync(
-        path.join(cwd, 'src/app/theme-preview/theme-preview.json'),
-        '{"pages": "x", "files": 7}',
-      );
-      try {
-        expect(clean(await step(['preview', 'list']))).toBe(true);
-      } finally {
-        fs.rmSync(path.join(cwd, 'src/app/theme-preview'), {
-          recursive: true,
-          force: true,
-        });
-      }
-    },
-    120_000,
-  );
+  it('F8: a preview data file of the wrong shape is refused with a code', async () => {
+    fs.mkdirSync(path.join(cwd, 'src/app/theme-preview'), {recursive: true});
+    fs.writeFileSync(
+      path.join(cwd, 'src/app/theme-preview/theme-preview.json'),
+      '{"pages": "x", "files": 7}',
+    );
+    try {
+      expect(clean(await step(['preview', 'list']))).toBe(true);
+    } finally {
+      fs.rmSync(path.join(cwd, 'src/app/theme-preview'), {
+        recursive: true,
+        force: true,
+      });
+    }
+  }, 120_000);
 
   it.fails(
     'F14: an option with its value missing is refused with a parse code, not ERR_UNKNOWN',
@@ -664,23 +656,19 @@ describe('known chaos findings', () => {
     expect(x.changed.filter(k => k.endsWith('/km.css'))).not.toEqual([]);
   }, 120_000);
 
-  it.fails(
-    'F9: undo after a color restores the palette files exactly',
-    async () => {
-      await run(['editor', 'new', 'kp', '--accent', '#e11d48']);
-      const before = snapshot();
-      await run(['editor', 'set', 'kp', 'warning', '#FFF']);
-      await run(['editor', 'undo', 'kp']);
-      expect(
-        changes(
-          before,
-          snapshot(),
-          k => k.includes('/themes/kp/') && !k.endsWith('.history.json'),
-        ),
-      ).toEqual([]);
-    },
-    120_000,
-  );
+  it('F9: undo after a color restores the palette files exactly', async () => {
+    await run(['editor', 'new', 'kp', '--accent', '#e11d48']);
+    const before = snapshot();
+    await run(['editor', 'set', 'kp', 'warning', '#FFF']);
+    await run(['editor', 'undo', 'kp']);
+    expect(
+      changes(
+        before,
+        snapshot(),
+        k => k.includes('/themes/kp/') && !k.endsWith('.history.json'),
+      ),
+    ).toEqual([]);
+  }, 120_000);
 
   it('F10: vibrancy is refused when the only color is a gray', async () => {
     await run(['editor', 'new', 'kv', '--accent', 'black']);

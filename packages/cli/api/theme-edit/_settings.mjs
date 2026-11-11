@@ -49,9 +49,10 @@ import {
 } from './_color.mjs';
 import {
   PALETTE_DIALS,
-  paletteFiles,
+  paletteImport,
   paletteMapping,
   syncPalette,
+  syncPaletteRefs,
   writeWhole,
 } from './_palette.mjs';
 import {MODAL} from './_compiler.mjs';
@@ -858,7 +859,9 @@ function settingsSource(slug, data, theme, pal) {
   const REF = '@@palette:';
   /** @param {string} family @param {'light' | 'dark'} m @param {import('./_palette.mjs').StopRef} r */
   const refOf = (family, m, r) =>
-    `${REF}${family}.${r.from ?? m}.${r.stop}${r.alpha ? `+${r.alpha}` : ''}`;
+    r.family === 'black' || r.family === 'white'
+      ? `${REF}${r.family}`
+      : `${REF}${r.family ?? family}.${m}.${r.stop}${r.alpha ? `+${r.alpha}` : ''}`;
   const out = {...theme, name: `${slug}-settings`};
   const only =
     data.mode === 'light-only'
@@ -886,9 +889,10 @@ function settingsSource(slug, data, theme, pal) {
   }
   let usesPalette = false;
   const body = JSON.stringify(out, null, 2).replace(
-    /"@@palette:([a-z][a-z0-9-]*)\.(light|dark)\.(\d+)(?:\+([0-9a-f]{2}))?"/g,
-    (_, family, m, stop, alpha) => {
+    /"@@palette:(?:(black|white)|([a-z][a-z0-9-]*)\.(light|dark)\.(\d+)(?:\+([0-9a-f]{2}))?)"/g,
+    (_, end, family, m, stop, alpha) => {
       usesPalette = true;
+      if (end) return `palette.${end}`;
       return `palette${/^[a-z]\w*$/.test(family) ? `.${family}` : `[${JSON.stringify(family)}]`}.${m}[${stop}]${alpha ? ` + '${alpha}'` : ''}`;
     },
   );
@@ -902,9 +906,7 @@ function settingsSource(slug, data, theme, pal) {
           `import {${like}Theme as base} from '@astryxdesign/theme-${like}/built';`,
         ]
       : []),
-    ...(usesPalette
-      ? [`import {palette} from '${paletteFiles(slug).importPath}';`]
-      : []),
+    ...(usesPalette ? [paletteImport(slug)] : []),
     '',
     `export const ${camel(slug)}Settings = defineTheme({`,
     ...(like ? ['  extends: base,'] : []),
@@ -941,7 +943,7 @@ function themeModuleSource(slug) {
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {ThemeData} data
- * @returns {Promise<{warnings: string[], lifted: string[]}>}
+ * @returns {Promise<{warnings: string[], lifted: string[], notes: string[]}>} `notes`: what the color config kept or replaced of a hand edit
  */
 export async function buildTheme(ctx, slug, data) {
   const {cwd} = ctx.project;
@@ -960,9 +962,12 @@ export async function buildTheme(ctx, slug, data) {
   // Each write is recorded for a rollback; the time between them is not.
   /** @type {<T>(fn: () => T) => Promise<Awaited<T>>} */
   const step = fn => track(f.dir, ctx.wrote ?? new Map(), fn);
+  /** @type {string[]} */
+  let notes = [];
   await step(() => {
-    syncPalette(cwd, slug, data);
+    notes = syncPalette(cwd, slug, data, base);
     writeAtomic(f.settingsTs, settingsSource(slug, data, theme, pal));
+    syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
     if (!fs.existsSync(f.ts)) writeAtomic(f.ts, themeModuleSource(slug));
   });
   let receipt = await step(() => runBuild(ctx, slug));
@@ -977,9 +982,10 @@ export async function buildTheme(ctx, slug, data) {
       (t[x.key] ??= {})[x.prop] ??= x.value;
       lifted.push(`${x.target} ${x.key} ${kebab(x.prop)}`);
     }
-    await step(() =>
-      writeAtomic(f.settingsTs, settingsSource(slug, data, theme, pal)),
-    );
+    await step(() => {
+      writeAtomic(f.settingsTs, settingsSource(slug, data, theme, pal));
+      syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
+    });
     receipt = await step(() => runBuild(ctx, slug));
   }
   // Font notices are reported by the font dial itself, once.
@@ -989,7 +995,7 @@ export async function buildTheme(ctx, slug, data) {
   ]
     .map(String)
     .filter(w => !/^Font "/.test(w));
-  return {warnings, lifted};
+  return {warnings, lifted, notes};
 }
 
 /** @param {Ctx} ctx @param {string} slug @returns {Promise<any>} */
@@ -1446,7 +1452,7 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
   const wrote = new Map();
   ctx.wrote = wrote;
   fs.mkdirSync(f.dir, {recursive: true});
-  /** @type {{warnings: string[], lifted: string[]}} */
+  /** @type {{warnings: string[], lifted: string[], notes: string[]}} */
   let built;
   try {
     built = await buildTheme(ctx, slug, data);
@@ -1484,7 +1490,13 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
         [],
         ERROR_CODES.ERR_WRITE_FAILED,
       );
-    if (e instanceof AstryxError && e.code === ERROR_CODES.ERR_UNKNOWN_THEME)
+    // The color config's own refusals already name the file and the fix.
+    if (
+      e instanceof AstryxError &&
+      (e.code === ERROR_CODES.ERR_UNKNOWN_THEME ||
+        e.code === ERROR_CODES.ERR_THEME_INVALID ||
+        e.code === ERROR_CODES.ERR_PALETTE_GENERATION)
+    )
       throw e;
     const why = (e instanceof Error ? e.message : String(e))
       .split(`${cwd}${path.sep}`)
@@ -1505,6 +1517,7 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
+  notes.push(...built.notes);
   // The change is saved from here on: a failure to check it is reported
   // as "saved, not checked", never as a failed change.
   /** @type {Record<'light' | 'dark', Record<string, string>>} */

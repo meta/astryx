@@ -47,7 +47,24 @@ import {tryLock} from '../../foundation/release/cache.mjs';
 import {q} from './_settings.mjs';
 
 export {themeEditHow, parsePoints} from './_how.mjs';
-export const {themeEditPreviewApp} = preview;
+import {isPicture as howPicture} from './_how.mjs';
+
+/**
+ * Whether `how`'s first word names a picture, as the API decides it, for
+ * the command line's own argument checks. The file system is read here.
+ * @param {string} word
+ * @param {string} [cwd]
+ */
+export const isHowPicture = (word, cwd = process.cwd()) =>
+  howPicture(word, cwd);
+
+/**
+ * Whether a file named on the command line exists, read here.
+ * @param {string} file
+ * @param {string} [cwd]
+ */
+export const fileExists = (file, cwd = process.cwd()) =>
+  fs.existsSync(path.resolve(cwd, file));
 
 /**
  * The project a command acts on: the Astryx project at or above `cwd`, found
@@ -345,6 +362,26 @@ export const themeEditPreviewAdd = (description, options = {}) =>
   inProject(options, 'preview', o =>
     preview.themeEditPreviewAdd(description, o),
   );
+/**
+ * `preview app` runs from the project root, with `dir` kept pointing where
+ * it was given. With a theme it holds that theme's lock, since it may build
+ * the theme and copies its files: a `set` beside it waits.
+ * @type {typeof preview.themeEditPreviewApp}
+ */
+export const themeEditPreviewApp = (dir, options = {}) => {
+  const from = options.cwd ?? process.cwd();
+  return inProject(
+    options,
+    options.theme == null ? null : lockName(options.theme),
+    o =>
+      preview.themeEditPreviewApp(
+        typeof dir === 'string' && dir.trim() && dir === dir.trim()
+          ? path.relative(o.cwd, path.resolve(from, dir)) || '.'
+          : dir,
+        o,
+      ),
+  );
+};
 /** @type {typeof preview.themeEditPreviewList} */
 export const themeEditPreviewList = (options = {}) =>
   inProject(options, null, async o => preview.themeEditPreviewList(o));

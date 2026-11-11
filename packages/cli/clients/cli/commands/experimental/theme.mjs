@@ -42,6 +42,10 @@ import {
   themeEditShow,
   themeEditUndo,
 } from '../../../../api/theme-edit/theme-edit.mjs';
+import {
+  fileExists,
+  isHowPicture,
+} from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
 import {doc as editorDoc} from '../experimental-theme-editor.doc.mjs';
@@ -82,8 +86,15 @@ const HOW = `${EDITOR} ${howDoc.name.split(' ').pop()}`;
  * Commands in a line, with the run prefix this project uses.
  * @param {string} line
  */
-const cmd = line =>
-  line.split(PREFIX).join(`${getCliInvocation()} experimental theme`);
+const cmd = line => {
+  const stem = `${getCliInvocation()} experimental theme`;
+  // A line that already starts its commands this way (how's answers do,
+  // in JSON too) keeps them.
+  return line
+    .split(stem)
+    .map(part => part.split(PREFIX).join(stem))
+    .join(stem);
+};
 
 /**
  * Print blocks, a blank line between them, with this project's run prefix
@@ -396,13 +407,87 @@ function showBlocks(d) {
  * @param {any} d
  */
 function lookupBlocks(d) {
-  if (d.kind === 'question' && !d.results.length)
-    return [
-      `No match for "${d.subject}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold).`,
-      ...project(d),
-      `Tip: ${HOW} --list parts`,
-    ];
-  return project(d);
+  // Echoed user text never drives the terminal: control characters print
+  // as escapes.
+  const safe = (/** @type {unknown} */ v) =>
+    typeof v === 'string'
+      ? v.replace(
+          /\p{Cc}/gu,
+          c => `\\x${(c.charCodeAt(0) + 0x100).toString(16).slice(1)}`,
+        )
+      : v;
+  /** @type {Record<string, unknown>} */
+  const shown = {};
+  for (const [k, v] of Object.entries(d)) shown[k] = safe(v);
+  const {
+    hint,
+    run: next,
+    results,
+    examples,
+    refused,
+    points,
+    items,
+    ...rest
+  } = /** @type {any} */ (shown);
+  // Commands print one to a line and are never wrapped, so a line pasted
+  // into a shell runs exactly one whole command; a sequence is one line.
+  /** @param {string[]} cmds @param {boolean} [sequence] */
+  const commandLines = (cmds, sequence) =>
+    sequence && cmds.length > 1
+      ? [`  ${cmds.join(' && ')}`, '  sequence: run as one line, in this order']
+      : cmds.map(c => `  ${c}`);
+  /** @param {Array<{command: string, why: string}>} list */
+  const refusedLines = list =>
+    list.flatMap(r => [`  x ${r.command}`, `    not run: ${r.why}`]);
+  /** @type {Array<string | import('../../formatters/index.mjs').Block>} */
+  const blocks = [...(hint ? [String(hint)] : []), ...project(rest)];
+  if (Array.isArray(results) && results.length)
+    blocks.push(
+      section('results:'),
+      text(
+        results
+          .flatMap((/** @type {any} */ r) => [
+            String(r.text),
+            ...commandLines(r.commands ?? [], r.sequence),
+            ...refusedLines(r.refused ?? []),
+          ])
+          .join('\n'),
+      ),
+    );
+  if (Array.isArray(examples) && examples.length)
+    blocks.push(section('examples:'), text(commandLines(examples).join('\n')));
+  if (Array.isArray(refused) && refused.length)
+    blocks.push(section('refused:'), text(refusedLines(refused).join('\n')));
+  if (Array.isArray(points) && points.length)
+    blocks.push(
+      section('points:'),
+      text(
+        points
+          .map(
+            (/** @type {any} */ x) => `  ${x.at}  ${x.color}  alpha ${x.alpha}`,
+          )
+          .join('\n'),
+      ),
+    );
+  if (Array.isArray(items) && items.length) {
+    if (items.some((/** @type {any} */ x) => Array.isArray(x.examples)))
+      blocks.push(
+        section('items:'),
+        text(
+          items
+            .flatMap((/** @type {any} */ x) => [
+              `${x.name}  ${x.values}`,
+              `  help: ${x.help}`,
+              ...commandLines(x.examples),
+            ])
+            .join('\n'),
+        ),
+      );
+    else blocks.push(...project({items}).slice(1));
+  }
+  if (Array.isArray(next) && next.length)
+    blocks.push(`Tip: ${next.map(String).join(', or ')}`);
+  return blocks;
 }
 
 /**
@@ -629,7 +714,7 @@ export function registerExperimentalTheme(group, program) {
               cwd: process.cwd(),
               theme: o.theme,
               template: o.template,
-              top: o.top == null ? undefined : Number(o.top),
+              top: o.top,
               path: o.path,
             }),
           r => {
@@ -680,7 +765,7 @@ export function registerExperimentalTheme(group, program) {
             ...project(/** @type {any} */ (r.data)),
           ],
         ),
-    }),
+    }).allowExcessArguments(false),
     previewAppDoc,
   );
 
@@ -696,7 +781,7 @@ export function registerExperimentalTheme(group, program) {
               ? project(/** @type {any} */ (r.data))
               : [
                   ...project(/** @type {any} */ (r.data)),
-                  `Tip: ${PREFIX} preview add`,
+                  `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path '${String(o.path).replace(/'/g, `'\\''`)}'`}`,
                 ],
           r =>
             resultSet({
@@ -705,7 +790,7 @@ export function registerExperimentalTheme(group, program) {
               empty: r.data.pages.length === 0,
             }),
         ),
-    }),
+    }).allowExcessArguments(false),
     previewListDoc,
   );
 
@@ -724,7 +809,7 @@ export function registerExperimentalTheme(group, program) {
             ...project(/** @type {any} */ (r.data)),
           ],
         ),
-    }),
+    }).allowExcessArguments(false),
     previewRemoveDoc,
   );
 
@@ -740,7 +825,7 @@ export function registerExperimentalTheme(group, program) {
           if (program.opts().json) c?.outputHelp();
           else
             print([
-              `Usage: ${HOW} [<part|setting|"question"|picture.png>] [--at x,y] [--list dials|tokens|parts|groups|properties [filter]]`,
+              `Usage: ${HOW} [<part|setting|"question"|picture.png>] [--theme <name>] [--at x,y] [--list dials|tokens|parts|groups|properties [filter]]`,
               '',
               'Examples:',
               ...(howDoc.examples ?? []).flatMap(e => [
@@ -750,30 +835,106 @@ export function registerExperimentalTheme(group, program) {
             ]);
           return NO_RESULT_SET;
         }
-        const stray = strayOption('how', words.slice(1));
+        // `--list=tokens` and a second --list are mistakes of form.
+        /** @type {string[]} */
+        const raw = /** @type {any} */ (program).rawArgs ?? process.argv;
+        const listFlags = raw.filter(
+          w => w === '--list' || w.startsWith('--list='),
+        );
+        const themeFlags = raw.filter(
+          w => w === '--theme' || w.startsWith('--theme='),
+        );
+        if (themeFlags.length > 1)
+          return cliError('--theme is given twice; give it once.', {
+            suggestions: [{name: `${HOW} --help`, reason: 'give --theme once'}],
+            code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+          });
+        if (listFlags.length > 1)
+          return cliError('--list is given twice; give it once.', {
+            suggestions: [
+              {
+                name: `${HOW} --list tokens accent`,
+                reason: 'one list, then the filter',
+              },
+            ],
+            code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+          });
+        let list = o.list;
+        let rest = [...words];
+        const eq = rest.find(w => w.startsWith('--list='));
+        if (eq) {
+          list = true;
+          rest = [eq.slice('--list='.length), ...rest.filter(w => w !== eq)];
+        }
+        if (list) {
+          // The kind is the first word that names one ("accent --list
+          // tokens" too); the other words filter, and may start with --.
+          const kinds =
+            /^(dials?|tokens?|parts?|groups?|propert(y|ies)|kinds?)$/i;
+          const at = rest.findIndex(w => kinds.test(w));
+          const kind = at >= 0 ? rest[at] : (rest[0] ?? '');
+          const filter = (
+            at >= 0 ? rest.filter((_, i) => i !== at) : rest.slice(1)
+          )
+            .filter(w => w !== '--')
+            .join(' ');
+          return run(
+            program,
+            () =>
+              themeEditHow(filter, {
+                cwd: process.cwd(),
+                list: kind,
+                at: o.at ?? [],
+                theme: o.theme,
+              }),
+            r => lookupBlocks(/** @type {any} */ (r.data)),
+            r => {
+              const n = /** @type {any} */ (r.data).items.length;
+              return resultSet({count: n, resultKind: 'mixed', empty: n === 0});
+            },
+          );
+        }
+        // A picture first: the only other word is how many colors to list.
+        const picture = isHowPicture(rest[0] ?? '');
+        if (picture && rest.length > 2)
+          return cliError(
+            `After a picture, give only how many colors to list, not "${rest.slice(1).join(' ')}".`,
+            {
+              suggestions: [
+                {name: `${HOW} ${rest[0]} 5`, reason: 'do this instead'},
+              ],
+              code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+            },
+          );
+        // A missing picture is the first thing to say, before a bad count.
+        if (
+          picture &&
+          rest.length === 2 &&
+          !/^[1-9]\d*$/.test(rest[1]) &&
+          fileExists(rest[0])
+        )
+          return cliError(
+            `The count after a picture must be a positive whole number, not "${rest[1]}".`,
+            {
+              suggestions: [
+                {name: `${HOW} ${rest[0]} 5`, reason: 'do this instead'},
+              ],
+              code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+            },
+          );
+        const stray = picture ? null : strayOption('how', rest.slice(1));
         if (stray) return stray;
-        // A number after a picture is how many colors to list.
         const count =
-          words.length === 2 &&
-          /\.png$/i.test(words[0]) &&
-          /^\d+$/.test(words[1])
-            ? Number(words[1])
-            : undefined;
-        // --list is a switch, as everywhere in the CLI: the first word is
-        // what to list, and the rest filters it.
-        const subject = o.list
-          ? words.slice(1).join(' ')
-          : count == null
-            ? words.join(' ')
-            : words[0];
+          picture && rest.length === 2 ? Number(rest[1]) : undefined;
+        const subject = picture ? rest[0] : rest.join(' ');
         return run(
           program,
           () =>
             themeEditHow(subject, {
               cwd: process.cwd(),
-              list: o.list ? (words[0] ?? '') : undefined,
               at: o.at ?? [],
               count,
+              theme: o.theme,
             }),
           r => lookupBlocks(/** @type {any} */ (r.data)),
           r => {

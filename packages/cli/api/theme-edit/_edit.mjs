@@ -268,8 +268,7 @@ function asNewRefusal(e, slug, settings) {
  */
 async function previewAndRoute(ctx, slug, data, png) {
   const p = await previewAfter(ctx, slug, data, png);
-  await keepPreviewRoute(ctx, slug);
-  return p;
+  return {...p, previewStale: await keepPreviewRoute(ctx, slug)};
 }
 
 /**
@@ -278,12 +277,15 @@ async function previewAndRoute(ctx, slug, data, png) {
  * the next `preview add` writes the route again.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
+ * @returns {Promise<string[]>} preview files changed by hand, left showing
+ *   the theme as it was
  */
 async function keepPreviewRoute(ctx, slug) {
   try {
-    await refreshPreviewRoute(ctx.project.cwd, slug);
+    return (await refreshPreviewRoute(ctx.project.cwd, slug)).stale;
   } catch {
     // A damaged or moved preview.
+    return [];
   }
 }
 
@@ -362,6 +364,8 @@ async function change(sub, slug, thing, value, options) {
   }
   const k = keyOf(s);
   const prevIdx = data.settings.findIndex(x => keyOf(x) === k);
+  /** @type {string | null} */
+  let vibrancyGone = null;
   const prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
   if (sub === 'undo') {
     if (!prev) {
@@ -378,6 +382,22 @@ async function change(sub, slug, thing, value, options) {
       );
     }
     data.settings.splice(prevIdx, 1);
+    // Vibrancy needs a color: undoing the last one takes it along, so the
+    // theme never holds a state `set` refuses.
+    if (
+      PALETTE_DIALS.includes(s.thing) &&
+      !data.settings.some(
+        x => x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
+      )
+    ) {
+      const v = data.settings.findIndex(
+        x => x.source === 'dial' && x.thing === 'vibrancy',
+      );
+      if (v >= 0)
+        vibrancyGone = /** @type {string} */ (
+          data.settings.splice(v, 1)[0]?.value
+        );
+    }
   } else if (prev) data.settings[prevIdx] = s;
   else data.settings.push(s);
   const r = await commitTheme(ctx, slug, data, {history: true});
@@ -416,6 +436,11 @@ async function change(sub, slug, thing, value, options) {
   if (PALETTE_DIALS.includes(s.thing) && sub === 'undo')
     notes.push(
       `the ${s.thing} color is no longer generated, and the tokens it fed go back to the base theme's values`,
+      ...(vibrancyGone != null
+        ? [
+            `vibrancy ${vibrancyGone} is removed too: it sets how saturated the colors are, and the theme sets no color now`,
+          ]
+        : []),
     );
   if (s.thing === 'neutral' && sub === 'set') {
     // Only the theme's own modes; a dark theme gets no white-page offer.
@@ -464,7 +489,11 @@ async function change(sub, slug, thing, value, options) {
         ? {removed: prev, now: nowApplies(ctx, data, prev, base)}
         : {}),
       replaced: sub === 'set' ? prev : null,
-      was: null,
+      // A whole-theme dial names the value it replaced, as base and mode do.
+      was:
+        sub === 'set' && prev && prev.source === 'dial' && !prev.on
+          ? prev.value
+          : null,
       notes,
       parts,
       group: group
@@ -542,7 +571,7 @@ export async function themeEditShow(theme, options = {}) {
     ctx.project.core.tokenDefaults,
   );
   const preview = await renderPreview(ctx, theme, data);
-  await keepPreviewRoute(ctx, theme);
+  const previewStale = await keepPreviewRoute(ctx, theme);
   const sheet = await renderSheet(ctx, theme, data, {group: section});
   const modes = modesOf(data);
   const shots = png
@@ -586,6 +615,7 @@ export async function themeEditShow(theme, options = {}) {
       ...colorsReport(pal, data),
       problems,
       preview,
+      previewStale,
       sheet: sheet.file,
       sheetComponents: sheet.components,
       skipped: sheet.skipped,
@@ -734,7 +764,9 @@ function colorsReport(pal, data) {
   );
   /** @param {import('./_palette.mjs').StopRef} r */
   const shade = r =>
-    `${r.stop}${r.alpha ? ` at opacity ${r.alpha}` : ''} ${r.color}${r.from ? ' (your exact color)' : ''}`;
+    r.family === 'black' || r.family === 'white'
+      ? `${r.family} ${r.color}`
+      : `${r.family ? `${r.family} ` : ''}${r.stop}${r.alpha ? ` at opacity ${r.alpha}` : ''} ${r.color}${r.exact ? ' (your exact color)' : ''}`;
   /** What the user set for each token exactly, by mode when it differs. */
   const exactValue = /** @type {Record<string, string>} */ ({});
   for (const s of data.settings)
@@ -763,16 +795,19 @@ function colorsReport(pal, data) {
           ]),
       ),
     })),
-    colorNotes: pal.contrast
-      .filter(c => modes.includes(c.mode))
-      .filter(c => !c.pass || c.stop !== c.preferred)
-      .map(c =>
-        c.against.startsWith('the text on it')
-          ? `${c.token} ${c.mode}: shade ${c.stop}, not your exact color: ${c.against.slice('the text on it: '.length)}`
-          : c.pass
-            ? `${c.token} ${c.mode}: shade ${c.stop}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`
-            : `${c.token} ${c.mode}: only ${c.ratio}:1 on ${c.against} at shade ${c.stop} (needs ${c.needs}:1)`,
-      ),
+    colorNotes: [
+      ...pal.notes,
+      ...pal.contrast
+        .filter(c => modes.includes(c.mode))
+        .filter(c => c.note || !c.pass || c.stop !== c.preferred)
+        .map(c =>
+          c.note
+            ? c.note
+            : c.pass
+              ? `${c.token} ${c.mode}: shade ${c.stop}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`
+              : `${c.token} ${c.mode}: only ${c.ratio}:1 on ${c.against} at shade ${c.stop} (needs ${c.needs}:1)`,
+        ),
+    ],
   };
 }
 
