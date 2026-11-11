@@ -5,8 +5,7 @@
 /**
  * @file useLayer.tsx
  * @input Uses React hooks, Popover API (its `beforetoggle`/`toggle` events through the popoverOperations ledger), CSS anchor positioning, shared text/provider boundaries
- * @output Exports the public useLayer hook plus internal trigger helpers, and
- *   `observeLayerResettle`, the watcher a layer-bound measurement subscribes to.
+ * @output Exports the public useLayer hook plus internal trigger helpers.
  * @position Core layer utility; used by useHoverCard, useTooltip, etc.
  *
  * SYNC: When modified, update:
@@ -456,15 +455,6 @@ interface InternalLayerFields {
  */
 interface InternalContextLayerOptions extends ContextLayerOptions {
   /**
-   * The layer clamps itself on the placement axis instead of flipping. The
-   * runtime emits no `position-area` and `position-try-fallbacks: none`, and
-   * does not clamp: the consumer's render `style` supplies the placement-axis
-   * inset. The layer stays anchored, so the keyboard cap, the viewport fit
-   * and the gutters still apply. Ignored when the render's `positioning` is
-   * `'custom'`.
-   */
-  clampsOnPlacementAxis?: boolean;
-  /**
    * The layer must never settle over its anchor (spec:AST-059 FR4). When the
    * standard fallback list settles it over its anchor, it switches to its
    * anchor-clear list: beside the trigger, then whichever block side is
@@ -714,54 +704,36 @@ function observeMove(element: HTMLElement, onMove: () => void): () => void {
 }
 
 /**
- * Keep an open layer clear of its anchor (spec:AST-059 FR4, FR8). On every
- * change `observeLayerResettle` reports, call `keepAnchorClear` for this
- * layer and anchor, while `isCurrent` says they are still the live pair.
- * Returns the function that removes every observer and listener it added.
+ * Watch an open layer that keeps its anchor clear, and its anchor, for every
+ * change that can re-settle the layer over the anchor or give it a scroll
+ * range (spec:AST-059 FR4, FR8): the layer, its content or the anchor
+ * resizing (ResizeObserver, before paint), the viewport resizing (before
+ * paint), and the anchor moving on screen without resizing, in layout or by a
+ * scroll (`observeMove`, reported after paint). Each calls `keepAnchorClear`
+ * for this layer and anchor while `isCurrent` says they are still the live
+ * pair. A move is read in the next animation frame, not in the task that
+ * reports it: placing the layer afresh there, right after the frame that
+ * scrolled its anchor, lets Chromium lay it out for one more frame against
+ * the anchor's position before the scroll, over the anchor, so the second
+ * painted frame would still cover it. Read in the next frame, before it
+ * paints, the fresh placement uses the moved anchor. Reports in one frame
+ * share one read. Returns the function that removes every observer and
+ * listener it added.
  */
 function observeAnchorClearance(
   layer: HTMLElement,
   anchor: HTMLElement,
   isCurrent: () => boolean,
 ): () => void {
-  return observeLayerResettle(layer, anchor, () => {
-    if (isCurrent()) {
-      keepAnchorClear(layer, anchor);
-    }
-  });
-}
-
-/**
- * Calls `onResettle` on every change that can re-settle an open layer over
- * its anchor. The layer, its children or the anchor resizing, and the
- * viewport resizing, report before paint (ResizeObserver, the window's
- * `resize`). The anchor moving on screen at the same size, in layout or by a
- * scroll, is read in the next animation frame. `observeMove` reports that
- * move after paint. A fresh placement in the report's own task would come
- * right after the frame that scrolled the anchor. Chromium would then lay the
- * layer out for one more frame against the anchor's old position, over the
- * anchor. The second painted frame would still cover it. Read in the next
- * frame, before it paints, the fresh placement uses the moved anchor. Reports
- * in one frame share one read.
- *
- * One watcher for the question "what re-settles a layer": the runtime's own
- * anchor clearance and a component's layer-bound measurement both subscribe
- * here. A subscriber reads fresh layout in its callback, never state another
- * subscriber writes, so the order of subscriptions does not matter. A layer
- * that keeps its anchor clear has the runtime rewrite its placement, so a
- * subscriber there must not read it. Returns the function that removes every
- * observer and listener it added.
- */
-export function observeLayerResettle(
-  layer: HTMLElement,
-  anchor: HTMLElement,
-  onResettle: () => void,
-): () => void {
   const view = layer.ownerDocument.defaultView;
   if (!view) {
     return () => {};
   }
-  const reread = onResettle;
+  const reread = () => {
+    if (isCurrent()) {
+      keepAnchorClear(layer, anchor);
+    }
+  };
   let observer: ResizeObserver | null = null;
   if (typeof ResizeObserver !== 'undefined') {
     observer = new ResizeObserver(reread);
@@ -1117,8 +1089,6 @@ function useLayerImplementation(
   const onCloseStartRef = useRef<(() => void) | undefined>(undefined);
   onCloseStartRef.current =
     mode === 'context' ? options.onCloseStart : undefined;
-  const clampsOnPlacementAxis =
-    mode === 'context' ? (options.clampsOnPlacementAxis ?? false) : false;
   const id = useId();
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
 
@@ -1860,22 +1830,14 @@ function useLayerImplementation(
           ? // Consumer authors its own position styles via `style` — keep
             // only the anchor wiring, derive nothing from placement.
             {positionAnchor: anchorId}
-          : clampsOnPlacementAxis
-            ? // The consumer's inset clamps the layer on the placement axis,
-              // so no fallback flips it: a clamped layer has no other side.
-              {
-                positionAnchor: anchorId,
-                positionTryFallbacks: 'none',
-                ...getSelfAlignment(placement, alignment, isAnchorInView),
-              }
-            : {
-                positionAnchor: anchorId,
-                positionArea: getPositionArea(placement, alignment),
-                positionTryFallbacks: clearFallbacks
-                  ? `var(${LAYER_TRY_FALLBACKS_PROPERTY}, ${standardFallbacks})`
-                  : standardFallbacks,
-                ...getSelfAlignment(placement, alignment, isAnchorInView),
-              };
+          : {
+              positionAnchor: anchorId,
+              positionArea: getPositionArea(placement, alignment),
+              positionTryFallbacks: clearFallbacks
+                ? `var(${LAYER_TRY_FALLBACKS_PROPERTY}, ${standardFallbacks})`
+                : standardFallbacks,
+              ...getSelfAlignment(placement, alignment, isAnchorInView),
+            };
 
       const clearance = offset ? toCssLength(offset) : null;
       const clearanceProperty: Record<string, string> =
@@ -1969,7 +1931,6 @@ function useLayerImplementation(
     },
     [
       anchorId,
-      clampsOnPlacementAxis,
       declaredInset,
       id,
       isAnchorInView,
