@@ -971,8 +971,8 @@ describe('Link tooltip mount on the first interaction', () => {
     });
   }, 15000);
 
-  it('keyboard focus mounts the tooltip', async () => {
-    withPopover();
+  it('a keyboard Tab opens the tooltip', async () => {
+    const showPopover = withPopover();
     render(
       <Link href="/save" tooltip="Save your changes">
         Save
@@ -980,14 +980,17 @@ describe('Link tooltip mount on the first interaction', () => {
     );
     await settle();
     const link = screen.getByRole('link', {name: 'Save'});
+    // Tab focus matches :focus-visible in a browser; jsdom does not model it
+    // for a tab.
+    const realMatches = link.matches.bind(link);
+    vi.spyOn(link, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
     await userEvent.tab();
     expect(document.activeElement).toBe(link);
-    // Whether focus opens it follows :focus-visible, which the browser
-    // specs check; jsdom does not model it.
-    await waitFor(
-      () => expect(document.querySelector('[role="tooltip"]')).not.toBeNull(),
-      {timeout: 8000},
-    );
+    await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
+      timeout: 8000,
+    });
   }, 15000);
 
   it('a pointer that leaves before the tooltip mounts opens nothing', async () => {
