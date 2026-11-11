@@ -554,11 +554,6 @@ function evict(dir) {
 }
 
 /**
- * The cache folder and how much it holds, for `doctor`: null when the CLI
- * keeps no gathers (a checkout) or has no usable folder.
- * @returns {{dir: string, bytes: number, entries: number} | null}
- */
-/**
  * Whether this run is under Yarn Plug'n'Play's loader (`yarn astryx` in a PnP
  * project): Node's module hooks hand PnP's resolver options it refuses, so
  * such a run keeps and uses no catalogs. The plain `astryx` command in the
@@ -569,6 +564,12 @@ export function runsUnderPnp() {
   return Boolean(process.versions.pnp);
 }
 
+/**
+ * The cache folder and how much it holds, for `doctor`: null when the CLI
+ * keeps no gathers (a checkout) or has no usable folder.
+ * @returns {{dir: string, bytes: number, entries: number, pnp: boolean} | null}
+ *   `pnp`: whether this run is under Yarn Plug'n'Play's loader (runsUnderPnp)
+ */
 export function gatherCacheSummary() {
   if (buildId() == null) return null;
   const dir = gatherCacheDir();
