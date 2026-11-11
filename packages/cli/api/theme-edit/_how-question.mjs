@@ -22,7 +22,8 @@ import {
   COMMON_STATES,
 } from './_tables.mjs';
 import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
-import {COLOR_PROPS} from './_tables.mjs';
+import {COLOR_PROPS, GROUPS} from './_tables.mjs';
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
 /** @typedef {import('./_how-commands.mjs').Step} Step */
 
@@ -88,12 +89,20 @@ const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
   ])
 );
 
-/** Words a near miss is corrected to (one or two letters off). */
-const VOCAB = [
-  'button',
-  'buttons',
-  'card',
-  'cards',
+/**
+ * Words a near miss is corrected to (one or two letters off), besides the
+ * one-word target names Core's catalog gives (partLexicon): design words,
+ * and the words the part overrides read.
+ */
+const DESIGN_WORDS = [
+  'header',
+  'headers',
+  'input',
+  'inputs',
+  'checkbox',
+  'toggle',
+  'sidebar',
+  'progress',
   'shadow',
   'shadows',
   'border',
@@ -105,24 +114,6 @@ const VOCAB = [
   'radius',
   'padding',
   'spacing',
-  'header',
-  'banner',
-  'input',
-  'inputs',
-  'dialog',
-  'dialogs',
-  'tooltip',
-  'heading',
-  'headings',
-  'checkbox',
-  'switch',
-  'toggle',
-  'table',
-  'badge',
-  'badges',
-  'avatar',
-  'avatars',
-  'sidebar',
   'gradient',
   'color',
   'colour',
@@ -136,11 +127,6 @@ const VOCAB = [
   'compact',
   'accent',
   'remove',
-  'shadows',
-  'rounded',
-  'headers',
-  'tables',
-  'progress',
   'outline',
 ];
 
@@ -173,23 +159,17 @@ const KEEP = new Set([
   'agent',
   'tighter',
   'tight',
-  'lighter',
   'brighter',
   'wider',
   'danger',
   'orange',
   'ranger',
   'rows',
-  'darker',
   'thinner',
   'rounds',
   'should',
-  'button',
-  'buttons',
-  'color',
   'colors',
   'italics',
-  'border',
   'fonts',
   'title',
   'titles',
@@ -199,7 +179,6 @@ const KEEP = new Set([
   'muted',
   'filled',
   'spaced',
-  'wider',
   'bolder',
   'cord',
   'board',
@@ -210,9 +189,7 @@ const KEEP = new Set([
   'later',
   'darken',
   'ladder',
-  'header',
   'leader',
-  'bigger',
   'cars',
   'care',
   'hard',
@@ -220,53 +197,34 @@ const KEEP = new Set([
   'bottom',
   'botton',
   'inside',
-  'tables',
-  'colors',
   'colours',
   'sitch',
   'witch',
-  'border',
   'sharper',
-  'shadows',
-  'smaller',
   'taller',
 ]);
 
 /**
- * Edit distance where two swapped letters count as one edit, capped at 3.
- * @param {string} a @param {string} b
+ * A word with a near miss corrected: two swapped letters count as one edit.
+ * @param {string} w
+ * @param {string[]} vocab
  */
-function distance(a, b) {
-  if (Math.abs(a.length - b.length) > 2) return 3;
-  /** @type {number[][]} */
-  const d = Array.from({length: a.length + 1}, (_, i) =>
-    Array.from({length: b.length + 1}, (_, j) =>
-      i === 0 ? j : j === 0 ? i : 0,
-    ),
-  );
-  for (let i = 1; i <= a.length; i++)
-    for (let j = 1; j <= b.length; j++) {
-      d[i][j] = Math.min(
-        d[i - 1][j] + 1,
-        d[i][j - 1] + 1,
-        d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1])
-        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
-    }
-  return Math.min(3, d[a.length][b.length]);
-}
-
-/** @param {string} w */
-function corrected(w) {
+function corrected(w, vocab) {
   if (SHORT[w]) return SHORT[w];
-  if (w.length < 5 || KEEP.has(w) || VOCAB.includes(w) || !/^[a-z]+$/.test(w))
+  // A state word ("selected") is read as a state, never corrected.
+  if (
+    w.length < 5 ||
+    KEEP.has(w) ||
+    vocab.includes(w) ||
+    !/^[a-z]+$/.test(w) ||
+    STATE_WORDS.some(([re]) => re.test(w))
+  )
     return w;
   const limit = w.length >= 8 ? 2 : 1;
   let best = w;
   let bestD = limit + 1;
-  for (const v of VOCAB) {
-    const d = distance(w, v);
+  for (const v of vocab) {
+    const d = levenshteinDistance(w, v, 2, {swaps: true});
     if (d < bestD) [best, bestD] = [v, d];
   }
   return bestD <= limit ? best : w;
@@ -498,15 +456,9 @@ function stronger(color, f, mode) {
 function weightIn(c) {
   const n = /\b([1-9]00)\b(?!\s*(px|ms|%))/.exec(c.text)?.[1];
   if (n) return n;
-  const w = /\b(semibold|semi-bold|medium|regular|normal)\b/.exec(c.text)?.[1];
+  const w = /\b(semi-?bold|medium|regular|normal)\b/.exec(c.text)?.[1];
   return w
-    ? /** @type {Record<string, string>} */ ({
-        semibold: '600',
-        'semi-bold': '600',
-        medium: '500',
-        regular: '400',
-        normal: '400',
-      })[w]
+    ? HEADING_WEIGHTS[w === 'normal' ? 'regular' : w.replace('-', '')]
     : null;
 }
 
@@ -519,11 +471,17 @@ function scaled(v, f) {
 }
 
 /**
- * Words for parts, longest phrase first. Each gives the part (or group),
- * and maybe a `--when` condition, a heading level or a font role.
- * @type {Array<[RegExp, {on: string, when?: string, role?: string, level?: string}]>}
+ * @typedef {{on: string, when?: string, role?: string, level?: string}} PartRef
  */
-const PARTS = [
+
+/**
+ * Phrases for parts that Core's catalog cannot give: groups, variants,
+ * font roles, phrases of several words, and words two components share.
+ * They are read before the catalog's names and doc keywords
+ * (partLexicon), longest phrase first.
+ * @type {Array<[RegExp, PartRef]>}
+ */
+const OVERRIDES = [
   [/\b(focus (ring|outline)s?)\b/, {on: 'focus-ring'}],
   [/\b((modal |dialog )?(overlay|scrim|backdrop))\b/, {on: 'overlay'}],
   [/\bicons?\b/, {on: 'icons'}],
@@ -564,8 +522,6 @@ const PARTS = [
     /\b(danger|destructive|delete) (buttons?|ones?|variant)\b/,
     {on: 'button', when: 'variant:destructive'},
   ],
-  [/\bbuttons?\b/, {on: 'button'}],
-  [/\bcards?\b/, {on: 'card'}],
   [/\b(panels?|windows?|boxes|tiles?|containers?)\b/, {on: 'containers'}],
   [/\b(banners?|alerts?|notices?|announcements?)\b/, {on: 'banner'}],
   [/\b(text ?areas?|multi-?line (inputs?|fields?))\b/, {on: 'text-area'}],
@@ -586,19 +542,73 @@ const PARTS = [
   ],
   [/\b((table )?cells?)\b/, {on: 'table-cell'}],
   [/\b(table rows?|rows?|tables?)\b/, {on: 'table-row'}],
-  [/\btabs?\b/, {on: 'tab'}],
   [/\b(badges?|chips?|tags?)\b/, {on: 'badge'}],
   [/\bh([1-4])\b/, {on: 'heading'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
-  [/\b(dialogs?|modals?|popups?)\b/, {on: 'dialog'}],
-  [/\btooltips?\b/, {on: 'tooltip'}],
-  [/\bpopovers?\b/, {on: 'popover'}],
-  [/\btoasts?\b/, {on: 'toast'}],
-  [/\bavatars?\b/, {on: 'avatar'}],
-  [/\blinks?\b/, {on: 'link'}],
+  [/\bpopups?\b/, {on: 'dialog'}],
   [/\bcode\b/, {on: 'code', role: 'code'}],
   [/\bbody( text)?\b/, {on: 'body', role: 'body'}],
 ];
+
+/**
+ * Target names in Core's catalog that are plain words a question uses for
+ * something else ("more padding", "align the text").
+ */
+const NOT_PART_WORDS = new Set([
+  'center',
+  'divider',
+  'grid',
+  'item',
+  'layout',
+  'list',
+  'outline',
+  'section',
+  'stack',
+  'step',
+  'token',
+]);
+
+/** @type {WeakMap<object, {parts: Array<[RegExp, PartRef]>, vocab: string[]}>} */
+const lexicons = new WeakMap();
+
+/**
+ * The words for parts: the overrides, then every theming target's name read
+ * from Core's catalog, longest first; and the words a near miss is
+ * corrected to.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ */
+function partLexicon(ctx) {
+  const {project} = ctx;
+  const known = lexicons.get(project);
+  if (known) return known;
+  // A one-word name how reads as something else is never a part's name:
+  // "text" is an aspect, "overlay" and "code" have overrides.
+  const other = (/** @type {string} */ w) =>
+    NOT_PART_WORDS.has(w) ||
+    aspectsOf(w).includes(w) ||
+    Object.hasOwn(DIALS, w) ||
+    OVERRIDES.some(([re]) => re.test(` ${w} `) || re.test(` ${w}s `));
+  /** @type {Array<[RegExp, PartRef]>} */
+  const derived = [...project.target.keys()]
+    .filter(key => key.includes('-') || !other(key))
+    .sort((x, y) => y.length - x.length)
+    .map(key => [
+      new RegExp(`\\b${key.replace(/-/g, '[\\s-]?')}s?\\b`),
+      {on: key},
+    ]);
+  // Near misses are corrected to one-word part names and design words.
+  const vocab = [
+    ...new Set([
+      ...DESIGN_WORDS,
+      ...[...project.target.keys()]
+        .filter(key => !key.includes('-'))
+        .flatMap(key => [key, `${key}s`]),
+    ]),
+  ].filter(w => w.length >= 5);
+  const lex = {parts: [...OVERRIDES, ...derived], vocab};
+  lexicons.set(project, lex);
+  return lex;
+}
 
 /** Words for a color the theme generates. */
 const ROLE_WORDS =
@@ -773,9 +783,10 @@ const FONT_NAMES = [...Object.keys(OPEN_FONTS), ...Object.keys(FONTS)]
 /**
  * Read a question into clauses.
  * @param {string} q lower-case, translated, corrected
+ * @param {Array<[RegExp, PartRef]>} partWords
  * @returns {Clause[]}
  */
-function clausesOf(q) {
+function clausesOf(q, partWords) {
   // "swap X and Y" is one ask.
   const pieces = (/\bswap\b/.test(q) ? q.replace(/\band\b/g, '&') : q)
     .split(
@@ -788,7 +799,7 @@ function clausesOf(q) {
     const parts = [];
     let rest = ` ${text} `;
     const cornerWords = /\b(round|corner|radius|shape|circular)/.test(text);
-    for (const [re, part] of PARTS) {
+    for (const [re, part] of partWords) {
       const m = re.exec(rest);
       if (!m) continue;
       const p = {...part};
@@ -923,6 +934,7 @@ export function draftAnswer(ctx, env, question) {
   const {C} = ctx;
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
+  const lex = partLexicon(ctx);
   /** Family names written in quotes, kept as typed: qq<n>qq in the text. */
   const quoted = /** @type {string[]} */ ([]);
   let q = question
@@ -1045,7 +1057,7 @@ export function draftAnswer(ctx, env, question) {
     // "bordes redondeados": rounded edges are corners.
     .replace(/\bborders?\s+rounded\b/g, 'rounded corners')
     .replace(/\bbutton-s\b/g, 'buttons')
-    .replace(/[a-z]+/g, w => corrected(w))
+    .replace(/[a-z]+/g, w => corrected(w, lex.vocab))
     .replace(/\b(everything|everywhere|all) but\b/g, '$1 except')
     .replace(
       /\b(apart from|other than|excluding|but not (on|in|for)|but not)\b/g,
@@ -1053,7 +1065,7 @@ export function draftAnswer(ctx, env, question) {
     )
     .replace(/\s+/g, ' ')
     .trim();
-  const clauses = clausesOf(q);
+  const clauses = clausesOf(q, lex.parts);
   for (const c of clauses) {
     c.quoted = [...c.text.matchAll(/qq(\d+)qq/g)].map(
       m => quoted[Number(m[1])],
@@ -1099,7 +1111,7 @@ export function draftAnswer(ctx, env, question) {
     for (const p of c.parts) {
       if (p.when || !C.MAP[p.on]) continue;
       const own = JSON.stringify(C.MAP[p.on].own ?? {});
-      const noun = PARTS.find(([, x]) => x.on === p.on && !x.when)?.[0];
+      const noun = lex.parts.find(([, x]) => x.on === p.on && !x.when)?.[0];
       for (const m of c.text.matchAll(/\b([a-z]+)\s+([a-z]+)\b/g))
         if (own.includes(`variant=${m[1]}"`) && noun?.test(m[2])) {
           p.when = `variant:${m[1]}`;
@@ -1119,7 +1131,8 @@ export function draftAnswer(ctx, env, question) {
       !c.except &&
       prev.aspects.length &&
       prev.parts.length &&
-      !PARTS.reduce((t, [re]) => t.replace(re, ' '), ` ${c.text} `)
+      !lex.parts
+        .reduce((t, [re]) => t.replace(re, ' '), ` ${c.text} `)
         .replace(/\b(the|a|an|all|every|on|for|too|both)\b/g, ' ')
         .trim()
     ) {
@@ -3198,20 +3211,7 @@ export function draftAnswer(ctx, env, question) {
         case: 'font',
         italic: 'font',
       })[a] ?? a;
-    if (
-      !C.MAP[one(on)] ||
-      ![
-        'text',
-        'background',
-        'border',
-        'corners',
-        'shadow',
-        'spacing',
-        'font',
-        'size',
-      ].includes(group)
-    )
-      return '';
+    if (!C.MAP[one(on)] || !Object.hasOwn(GROUPS, group)) return '';
     // Reads that always apply first; partReads sorts them so.
     const toks = C.partReads(one(on), group)
       .map(r => r.token)
