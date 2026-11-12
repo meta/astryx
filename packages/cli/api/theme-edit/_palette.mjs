@@ -81,22 +81,31 @@ export function writeWhole(file, text) {
  * before each write.
  */
 export function refuseIfLockLost() {
+  if (lockHeld()) return;
+  const error = new AstryxError(
+    `Another command took over the theme's lock while this one was stopped (Ctrl-Z, a sleeping computer, a debugger). This command's change was not applied, and it touched nothing more: the files stay as the other command left them. Run it again if you still want it.`,
+    [{name: `${P} how --list dials`, reason: 'what you can set'}],
+    ERROR_CODES.ERR_THEME_BUSY,
+  );
+  /** @type {any} */ (error).lockLost = true;
+  throw error;
+}
+
+/** Whether this command still holds its lock (true outside a lock). */
+export function lockHeld() {
   try {
     stillHolds();
+    return true;
   } catch {
-    throw new AstryxError(
-      `Another command took over the theme's lock while this one was stopped (Ctrl-Z, a sleeping computer, a debugger), so this one wrote nothing more and its change was undone. Run it again.`,
-      [],
-      ERROR_CODES.ERR_THEME_BUSY,
-    );
+    return false;
   }
 }
 
 /**
  * Remove the editor's own temp files a stopped command left in a folder:
  * only names the editor makes (`.<name>.astryx-<pid>-<random>.tmp`) whose
- * process is gone. Links are never followed. A theme folder holds a few
- * files, so every write looks.
+ * process is gone, or that are older than ten minutes. Links are never
+ * followed. A theme folder holds a few files, so every write looks.
  * @param {string} dir
  */
 function sweepTemps(dir) {
@@ -115,7 +124,12 @@ function sweepTemps(dir) {
       // Writes into a theme folder run under its lock, so a temp file
       // whose process is gone is never one a live command still renames.
       if (!st.isFile()) continue;
-      if (isAlive(Number(m[1]))) continue;
+      // A process id from another process space (pid 1 in a container)
+      // may look alive here: past ten minutes, an editor temp file is a
+      // leftover whatever its id says (a live writer renames it in
+      // moments, and holds the lock this write holds now).
+      if (isAlive(Number(m[1])) && Date.now() - st.mtimeMs < 10 * 60_000)
+        continue;
       fs.rmSync(p, {force: true});
     } catch {
       // Gone already, or not ours to judge.

@@ -114,6 +114,15 @@ function matchWith(value, match) {
     }
   };
   if (!vars.length) return tryOne(value);
+  // A value that is only a variable can stand for any value, also on a
+  // property that takes only keywords (display, font-weight).
+  if (vars.length === 1 && value.trim() === vars[0]) {
+    try {
+      return parse(value, {context: 'value'});
+    } catch {
+      return null;
+    }
+  }
   if (vars.length > 3) return null;
   /** @param {string} v @param {number} i @returns {any | null} */
   const fill = (v, i) => {

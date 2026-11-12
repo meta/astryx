@@ -17,19 +17,10 @@ import * as path from 'node:path';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import * as os from 'node:os';
 import {isAlive, lockIdentity, pidSpace, tryLock} from './cache.mjs';
-import {LEASE_RENEW_MS, renewLock} from './lock-lease.mjs';
+import {foreignLockIsSilent, LEASE_RENEW_MS, renewLock} from './lock-lease.mjs';
 
 /** How long a held lock's record may stand unrenewed before it is taken over. */
 export const SILENT_MS = 3 * LEASE_RENEW_MS;
-
-/** @param {string} file @returns {string} */
-const recordText = file => {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch {
-    return '';
-  }
-};
 
 /**
  * Move a silent lock aside and remove it; another run that moved it first
@@ -143,22 +134,17 @@ export async function withFolderLock(lockDir, fn, {waitMs = 30_000, onBusy}) {
   // not changed for three of those, as this run sees it, has stopped,
   // whatever computer or process id it names (pid 1 in a container, a
   // computer whose processes this run cannot check).
-  let record = recordText(ownerFile);
-  let judged = lockIdentity(lockDir);
-  let since = Date.now();
   for (let waited = 0; !tryLock(lockDir, {leased: true}); waited += 50) {
-    const text = recordText(ownerFile);
-    const identity = lockIdentity(lockDir);
-    if (text !== record || identity !== judged) {
-      record = text;
-      judged = identity;
-      since = Date.now();
-    } else if (
-      Date.now() - since >= SILENT_MS &&
+    // The release cache's own judge of silence (what this process saw of
+    // the record), with the editor's shorter window. The lock is judged by
+    // its identity on disk, so the one moved aside is the one judged.
+    const judged = lockIdentity(lockDir);
+    if (
+      judged &&
+      foreignLockIsSilent(lockDir, Date.now(), SILENT_MS) &&
       !aliveHere(readOwner(ownerFile))
     ) {
       takeOver(lockDir, judged);
-      since = Date.now();
       continue;
     }
     const now = holderOf();

@@ -51,6 +51,7 @@
  * @property {string[]} pictures - PNG pictures taken (only with `png`).
  * @property {string | null} pictureProblem - Why no picture was taken, and how to get a browser for it.
  * @property {{code: string, cause: string} | null} notChecked - Set when the change is saved but the components could not be rendered, so it was not checked and has no preview: the cause, such as two copies of React.
+ * @property {string} [sheetStale] - Set when sheet.html (the sheet of every component, made by `show`) shows the theme as it was before this change: it says so at its top until `show` makes it again.
  * @property {string[]} [previewStale] - Files of the in-app theme preview that were not written again and still show the theme as it was: changed by hand, or a preview folder where a stopped preview change waits for the next preview command.
  */
 

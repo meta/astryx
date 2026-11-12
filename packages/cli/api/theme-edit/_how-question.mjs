@@ -22,6 +22,7 @@ import {
   COMMON_STATES,
 } from './_tables.mjs';
 import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
+import {focusStateOf} from './_settings.mjs';
 import {COLOR_PROPS, GROUPS} from './_tables.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {SYSTEM_FAMILIES} from '../theme/build/font-warning.mjs';
@@ -1556,12 +1557,8 @@ export function draftAnswer(ctx, env, question) {
   const stateFor = (on, word) => {
     const t = TARGET.get(one(on));
     const states = [...(t?.states ?? []), ...COMMON_STATES];
-    if (word === 'focus') {
-      const conds = JSON.stringify(C.MAP[one(on)]?.own ?? {});
-      for (const s of ['focus-within', 'focus-visible', 'focus'])
-        if (conds.includes(`:${s}`)) return s;
-      return 'focus-visible';
-    }
+    if (word === 'focus')
+      return focusStateOf(/** @type {any} */ ({C}), one(on)) ?? 'focus-visible';
     if (word === 'invalid') return null;
     return states.includes(word) ? word : null;
   };

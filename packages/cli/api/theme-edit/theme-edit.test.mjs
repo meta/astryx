@@ -232,12 +232,14 @@ describe('colors', () => {
     const r = await themeEditSet(
       't',
       '--color-text-primary',
-      'var(--brand-ink)',
+      // A variable the app sets (with a fallback, as one that is not a
+      // design token needs) has no fixed color.
+      'var(--brand-ink, currentcolor)',
       {cwd},
     );
     // What cannot be measured is a note, not a problem.
     expect(r.data.notes.join(' ')).toContain('not checked');
-    expect(r.data.notes.join(' ')).toContain('var(--brand-ink)');
+    expect(r.data.notes.join(' ')).toContain('currentcolor');
     await themeEditUndo('t', {cwd, thing: '--color-text-primary'});
   });
 

@@ -45,6 +45,7 @@ import {
   paletteMapping,
   tempFor,
   writeWhole,
+  refuseIfLockLost,
 } from './_palette.mjs';
 import {build} from '../build/build.mjs';
 import {search} from '../search/search.mjs';
@@ -1279,6 +1280,9 @@ function checkWrite(cwd, dir, data, w, elsewhere) {
             run: [elsewhere],
           },
     );
+  // A file another command wrote while this one was stopped is not a hand
+  // edit: say the lock was taken.
+  refuseIfLockLost();
   if (editedByHand(dir, data, w.rel))
     refuse(
       E.ERR_FILE_EXISTS,
@@ -3486,6 +3490,7 @@ async function removePreview(page, options, box) {
   // The whole preview: every entry is checked before the first delete. A
   // route changed by hand would be kept and still import the pages, so it
   // stops the remove instead.
+  refuseIfLockLost();
   if (data.files.includes('page.tsx') && editedByHand(at.dir, data, 'page.tsx'))
     refuse(
       E.ERR_FILE_EXISTS,

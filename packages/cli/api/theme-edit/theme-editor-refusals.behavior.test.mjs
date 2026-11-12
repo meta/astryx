@@ -161,6 +161,11 @@ const CASES = [
     [...E, 'undo', 't', 'vibrancy'],
   ],
   [
+    '--section given twice',
+    'ERR_INVALID_ARGUMENT',
+    [...E, 'show', 't', '--section', 'inputs', '--section', 'actions'],
+  ],
+  [
     'how with --at and --list',
     'ERR_INVALID_ARGUMENT',
     [...E, 'how', '--list', 'parts', '--at', '1,1'],

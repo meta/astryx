@@ -17,7 +17,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {isAlive} from '../../foundation/release/cache.mjs';
 import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -246,13 +245,14 @@ export function catalogItems(project) {
 }
 
 /**
- * Refuse, before anything is built or written, when the project cannot
- * render the editor's pages: react and react-dom must resolve from it.
+ * What of React the project cannot resolve (react, react-dom/server), to
+ * render the editor's pages; empty when both resolve.
  * @param {string} cwd
+ * @returns {string[]}
  */
-export function refuseWithoutReact(cwd) {
+export function reactMissing(cwd) {
   const req = createRequire(path.join(cwd, 'package.json'));
-  const missing = ['react', 'react-dom/server'].filter(m => {
+  return ['react', 'react-dom/server'].filter(m => {
     try {
       req.resolve(m);
       return false;
@@ -260,6 +260,15 @@ export function refuseWithoutReact(cwd) {
       return true;
     }
   });
+}
+
+/**
+ * Refuse, before anything is built or written, when the project cannot
+ * render the editor's pages: react and react-dom must resolve from it.
+ * @param {string} cwd
+ */
+export function refuseWithoutReact(cwd) {
+  const missing = reactMissing(cwd);
   if (missing.length)
     throw new AstryxError(
       `This project cannot render the theme's pages: ${missing.join(' and ')} cannot be found from it. The theme command renders components on the server, so react and react-dom must be installed. Nothing was written.`,
@@ -291,8 +300,8 @@ export const renderDir = project =>
 
 /**
  * Remove render folders a stopped command left (killed, out of memory):
- * only `.astryx-render-<pid>-<random>` folders whose process is gone. Links
- * are never followed.
+ * only `.astryx-render-<pid>-<random>` folders more than ten minutes old.
+ * Links are never followed.
  * @param {string} themes
  */
 function sweepRenders(themes) {
@@ -305,8 +314,18 @@ function sweepRenders(themes) {
   for (const n of names) {
     const m = /^\.astryx-render-(\d+)-[a-z0-9]+$/.exec(n);
     if (!m || Number(m[1]) === process.pid) continue;
-    if (isAlive(Number(m[1]))) continue;
     const p = path.join(themes, n);
+    // A process id from another process space may look gone or alive here,
+    // so age decides: a render takes at most three minutes, and a folder
+    // older than ten is a leftover.
+    /** @type {number} */
+    let age;
+    try {
+      age = Date.now() - fs.lstatSync(p).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (age < 10 * 60_000) continue;
     try {
       if (fs.lstatSync(p).isDirectory())
         fs.rmSync(p, {recursive: true, force: true});

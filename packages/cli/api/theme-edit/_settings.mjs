@@ -59,6 +59,7 @@ import {
   syncPalette,
   syncPaletteRefs,
   refuseIfLockLost,
+  lockHeld,
   removeEmptyFolder,
   writeWhole,
 } from './_palette.mjs';
@@ -106,6 +107,21 @@ export const NAME_RULE =
 /** A theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most. @param {string} s */
 export const slugOk = s =>
   typeof s === 'string' && s.length <= 64 && /^[a-z][a-z0-9-]*$/.test(s);
+/**
+ * The theme name closest to what was typed: spaces and accents dropped,
+ * lower case, anything else a dash.
+ * @param {unknown} name
+ */
+export const slugFor = name =>
+  String(name ?? '')
+    .trim()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^[^a-z]+/, '')
+    .replace(/-+$/, '')
+    .slice(0, 64) || 'my-theme';
 /** @param {string} s */
 export const kebab = s =>
   s.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
@@ -245,19 +261,18 @@ export function loadTheme(
   if (!slugOk(slug)) {
     // A path or a capital letter typed for a theme that exists names it.
     const plain = String(slug ?? '')
+      .trim()
       .toLowerCase()
       .replace(/^.*themes[\\/]/, '')
       .replace(/[\\/].*$/, '');
-    const same =
-      slugOk(plain) && fs.existsSync(themeFiles(cwd, plain).settings)
-        ? plain
-        : null;
+    const fixed = slugFor(plain);
+    const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
     refuse(
       ERROR_CODES.ERR_INVALID_ARGUMENT,
       `"${String(slug ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}).`,
       same
         ? {didYouMean: [same], run: [`${P} show ${same}`]}
-        : {run: [`${P} new my-theme`]},
+        : {run: [`${P} new ${fixed}`]},
     );
   }
   const f = themeFiles(cwd, slug);
@@ -335,6 +350,17 @@ export function loadTheme(
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
+  // Valid JSON of the wrong shape ([], {}, settings: null) is damage like
+  // invalid JSON: `new` makes the theme again, keeping the file aside.
+  if (!settingsShapeOk(data))
+    throw new AstryxError(
+      `themes/${slug}/${slug}.settings.json is damaged: ${settingsProblem(data) ?? 'it is not a settings object'}. Fix it by hand${steps ? `, step back to the settings before the last change with ${P} undo ${slug},` : ''} or make the theme again with ${P} new ${slug}, which keeps the damaged file beside it and every file of yours. Nothing was changed.`,
+      [
+        ...recover.run.filter(r => !/ new /.test(r.name)),
+        {name: `${P} new ${slug}`, reason: 'do this instead'},
+      ],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
   const problem = settingsProblem(data, skip);
   // A value made under looser rules is not damage: the command that
   // changes or removes that setting still works, with the other bad ones
@@ -1023,14 +1049,11 @@ export function compileTheme(ctx, data, base) {
           for (const t of parts) {
             // A rung on a part gives what the whole-theme rung gives the
             // radius token the part reads; an exact size is as given.
-            const token = /^var\((--radius-[\w-]+)\)$/.exec(
-              partDefault(ctx, t, 'borderRadius', s.when) ?? '',
-            )?.[1];
             putComp(
               {...s, mode: undefined},
               t,
               'borderRadius',
-              rung || pill ? derived(token ?? '--radius-element') : `${px}px`,
+              rung || pill ? derived(radiusTokenOf(ctx, t, s.when)) : `${px}px`,
             );
           }
         else
@@ -1922,10 +1945,25 @@ export async function contrastProblems(ctx, data, res) {
 function parseSettings(text) {
   if (text == null) return null;
   try {
-    return JSON.parse(text);
+    const data = JSON.parse(text);
+    return settingsShapeOk(data) ? data : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether parsed settings have the shape the editor reads: an object with a
+ * list of settings.
+ * @param {any} data
+ */
+export function settingsShapeOk(data) {
+  return (
+    !!data &&
+    typeof data === 'object' &&
+    !Array.isArray(data) &&
+    Array.isArray(data.settings)
+  );
 }
 
 /**
@@ -1968,6 +2006,46 @@ export function baseComponent(base, ctx, target, prop, s) {
 }
 
 /**
+ * The focus state a part's own styles key on: a part whose styled element
+ * is a wrapper (a text input's box) shows focus only through
+ * `focus-within`; null when it keys on none.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string | null}
+ */
+export function focusStateOf(ctx, part) {
+  const conds = JSON.stringify(ctx.C.MAP[part]?.own ?? {});
+  for (const st of ['focus-within', 'focus-visible', 'focus'])
+    if (conds.includes(`:${st}`)) return st;
+  return null;
+}
+
+/**
+ * The radius token a part's resting corners read. A part the census saw
+ * closed (a menu, a popover) has none recorded: a container or menu reads
+ * the container radius, like every Core surface; any other part reads the
+ * element radius.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @param {string} [when]
+ * @returns {string}
+ */
+export function radiusTokenOf(ctx, part, when) {
+  return (
+    /var\((--radius-[\w-]+)\)/.exec(
+      partDefault(ctx, part, 'borderRadius', when) ?? '',
+    )?.[1] ??
+    ctx.C.partReads(part, 'corners').find(
+      (/** @type {any} */ x) =>
+        x.props.includes('border-radius') && /^--radius-/.test(x.token),
+    )?.token ??
+    (['containers', 'menus'].includes(familyOf(part) ?? '')
+      ? '--radius-container'
+      : '--radius-element')
+  );
+}
+
+/**
  * The radius, in px, the build writes for a radius token at a corners value
  * (a rung, or a size). The derived radii keep the base theme's own
  * proportions to the element radius (matcha's page is 3.5 times it), so a
@@ -1992,18 +2070,18 @@ export function radiusAt(base, value, token) {
   const roundPx = CORNERS.find(([n]) => n === 'round')?.[1] ?? 16;
   if (token === '--radius-inner')
     return pill ? 6 : Math.round(px * Math.min(1, ratio(token, 0.6)));
-  if (token === '--radius-container')
+  // A container or page is never rounder than at pill, so pill never makes
+  // one less round, and a size just under 1000px meets pill smoothly.
+  if (token === '--radius-container') {
+    const atPill = Math.max(24, 1.5 * roundPx * ratio(token, 1.25));
     return Math.round(
-      pill
-        ? Math.max(24, 1.5 * roundPx * ratio(token, 1.25))
-        : px * ratio(token, 1.25),
+      pill ? atPill : Math.min(atPill, px * ratio(token, 1.25)),
     );
-  if (token === '--radius-page')
-    return Math.round(
-      pill
-        ? Math.max(32, 1.5 * roundPx * ratio(token, 2.5))
-        : px * ratio(token, 2.5),
-    );
+  }
+  if (token === '--radius-page') {
+    const atPill = Math.max(32, 1.5 * roundPx * ratio(token, 2.5));
+    return Math.round(pill ? atPill : Math.min(atPill, px * ratio(token, 2.5)));
+  }
   return pill ? 9999 : px;
 }
 
@@ -2420,6 +2498,9 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
     } finally {
       ctx.keepStops = null;
     }
+    // The build writes its outputs itself: a lock lost meanwhile is seen
+    // before anything else is written.
+    refuseIfLockLost();
     data.lifted = built.lifted;
     // The undo step and the settings are part of the change: written whole,
     // inside the rollback, the settings first. A command stopped between
@@ -2440,6 +2521,14 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
         );
     });
   } catch (e) {
+    // A command that lost its lock while stopped owns none of these files
+    // now: it puts nothing back and deletes nothing (that would undo the
+    // other command's change).
+    if (/** @type {any} */ (e)?.lockLost || !lockHeld()) {
+      ctx.keepStops = null;
+      if (/** @type {any} */ (e)?.lockLost) throw e;
+      refuseIfLockLost();
+    }
     const {failed, skipped} = restoreWritten(was, wrote);
     removeEmptyFolder(path.join(f.dir, 'tokens'));
     if (dirMade) removeEmptyFolder(f.dir);

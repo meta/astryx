@@ -328,6 +328,9 @@ export async function previewAfter(ctx, slug, data, png) {
         : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
+  // The sheet of every component is made by show only: after a change it
+  // says, at its top, that it shows the theme as it was.
+  const sheetStale = markSheetStale(f.sheet, slug);
   const shots =
     png && preview
       ? await pictures(
@@ -341,7 +344,40 @@ export async function previewAfter(ctx, slug, data, png) {
     pictures: shots.files,
     pictureProblem: shots.problem,
     notChecked: notChecked(cause),
+    ...(sheetStale
+      ? {
+          sheetStale: `sheet.html shows ${slug} as it was before this change; ${P} show ${slug} makes it again`,
+        }
+      : {}),
   };
+}
+
+const STALE_MARK = '<!-- astryx: sheet older than the theme -->';
+
+/**
+ * Put a notice at the top of a sheet the last change made out of date
+ * (once). Returns whether there is such a sheet.
+ * @param {string} file
+ * @param {string} slug
+ */
+function markSheetStale(file, slug) {
+  let html;
+  try {
+    html = fs.readFileSync(file, 'utf8');
+  } catch {
+    return false;
+  }
+  if (html.includes(STALE_MARK)) return true;
+  const banner = `${STALE_MARK}<div style="position:sticky;top:0;z-index:9999;padding:8px 12px;background:#fff3cd;color:#3d2c00;font:14px system-ui,sans-serif;border-bottom:1px solid #e0c870">This sheet shows ${slug} as it was before the last change. Run ${P} show ${slug} to make it again.</div>`;
+  const at = html.search(/<body[^>]*>/i);
+  const next =
+    at < 0 ? banner + html : html.replace(/<body[^>]*>/i, m => `${m}${banner}`);
+  try {
+    fs.writeFileSync(file, next);
+  } catch {
+    // Read-only: the note in the result still says so.
+  }
+  return true;
 }
 
 /**

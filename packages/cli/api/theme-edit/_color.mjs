@@ -602,6 +602,7 @@ export function ratio(a, b) {
  * numbers must be well formed; one with `var()`, `calc()`, `env()` or a
  * relative color is taken as written.
  * @param {unknown} v
+ * @returns {boolean}
  */
 export const isColorValue = v => {
   const s = String(v).trim();
@@ -619,6 +620,9 @@ export const isColorValue = v => {
     /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) ||
     FUNCTIONS.test(s) ||
     /^var\(--[a-z0-9-]+\)$/i.test(s) ||
+    // A variable with a color to fall back to.
+    (/^var\(--[a-z0-9-]+\s*,\s*(.+)\)$/i.test(s) &&
+      isColorValue(/^var\(--[a-z0-9-]+\s*,\s*(.+)\)$/i.exec(s)?.[1] ?? '')) ||
     Object.hasOwn(NAMED, s.toLowerCase()) ||
     KEYWORDS.includes(s.toLowerCase()) ||
     SYSTEM.includes(s.toLowerCase())

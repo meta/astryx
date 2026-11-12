@@ -11,7 +11,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Start a theme in themes/<theme>/, optionally on a built-in theme',
   description:
-    'Makes themes/<theme>/ with <theme>.settings.json (the settings this command owns), the generated <theme>.settings.ts, <theme>.theme.ts (which extends it and is yours), and the built <theme>.css and <theme>.js (the same build as `astryx theme build`), then writes preview.html, the sample app page with the theme. --like builds on a built-in theme (neutral, stone, matcha, y2k, gothic, chocolate, butter; its package must be installed); without it the theme starts from Astryx defaults. Any `set` dial can be a flag too (--accent "#7c3aed" --font inter --corners round --vibrancy 60 ...): the same names, values and checks as `set`, all applied in the one build, with one result that lists them. Change the base later with `astryx experimental theme editor set <theme> base <theme|none>`. Afterwards, <theme>.theme.ts is yours: it extends the generated <theme>.settings.ts, and every later change rewrites only the settings files, so your own edits in <theme>.theme.ts survive. A theme name is lowercase letters, digits and dashes. Experimental: it may change or be removed in a patch release.',
+    'Makes themes/<theme>/ with <theme>.settings.json (the settings this command owns), the generated <theme>.settings.ts, <theme>.theme.ts (which extends it and is yours), and the built <theme>.css and <theme>.js (the same build as `astryx theme build`), then writes preview.html, the sample app page with the theme. --like builds on a built-in theme (neutral, stone, matcha, y2k, gothic, chocolate, butter; its package must be installed); without it, or with --like none, the theme starts from Astryx defaults. Any `set` dial can be a flag too (--accent "#7c3aed" --font inter --corners round --vibrancy 60 ...): the same names, values and checks as `set`, all applied in the one build, with one result that lists them. Change the base later with `astryx experimental theme editor set <theme> base <theme|none>`. Afterwards, <theme>.theme.ts is yours: it extends the generated <theme>.settings.ts, and every later change rewrites only the settings files, so your own edits in <theme>.theme.ts survive. A theme name is lowercase letters, digits and dashes, starts with a letter, has 64 characters at most, and is not the name of a built-in theme. Experimental: it may change or be removed in a patch release.',
   fn: 'themeEditNew',
   args: [
     {
@@ -25,7 +25,7 @@ export const doc = {
       flag: '--like <theme>',
       param: 'options.like',
       description:
-        'A built-in theme to build on: neutral, stone, matcha, y2k, gothic, chocolate, or butter',
+        'A built-in theme to build on: neutral, stone, matcha, y2k, gothic, chocolate, or butter; or none, for Astryx defaults (the same as leaving it out)',
     },
     {
       flag: '--png',
@@ -158,7 +158,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'a name that is not lowercase letters, digits and dashes, a theme that already exists, a --like that is not a built-in theme or is not installed, a setting flag that `set` would refuse, no Core installed in the folder, or a build failure (nothing is left behind)',
+      when: 'a name that is not lowercase letters, digits and dashes starting with a letter (64 at most) or is the name of a built-in theme, a theme that already exists, a --like that is not a built-in theme or is not installed, a setting flag that `set` would refuse, no Core installed in the folder, or a build failure (nothing is left behind)',
     },
   ],
   related: ['experimental theme editor', 'experimental theme compile'],

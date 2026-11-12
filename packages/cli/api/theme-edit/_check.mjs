@@ -72,6 +72,8 @@ import {
   refuse,
   lengthPx,
   radiusAt,
+  radiusTokenOf,
+  focusStateOf,
   valueProblem,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
@@ -99,11 +101,11 @@ function tokenPx(base, token) {
  * @param {string} slug
  * @param {string} thing
  * @param {string} value
- * @param {{on?: string, when?: string, state?: string, mode?: string}} s
+ * @param {{on?: string, when?: string, state?: string, mode?: string, only?: boolean}} s
  * @param {boolean} [unset]
  */
 const setLine = (slug, thing, value, s, unset = false) =>
-  `${P} ${unset ? 'undo' : 'set'} ${slug} ${thing}${value ? ` ${quoteCommandArgument(value)}` : ''}${s.on ? ` --on ${s.on}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`;
+  `${P} ${unset ? 'undo' : 'set'} ${slug} ${thing}${value ? ` ${quoteCommandArgument(value)}` : ''}${s.on ? ` --on ${s.on}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`;
 
 /** @param {string} v */
 const cornerPxOf = v =>
@@ -700,11 +702,24 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
   const v = (value ?? '').replace(/\s*[\r\n]+\s*/g, ' ').trim();
   // A var() that misspells a design token would read nothing.
   if (!unset)
-    for (const [, name] of v.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
+    for (const [, name, comma] of v.matchAll(
+      /var\(\s*(--[a-z0-9-]+)\s*(,)?/gi,
+    )) {
       if (name in TOKENS || name.startsWith('--_')) continue;
       const near = nearest(name, Object.keys(TOKENS)).filter(
         n => levenshteinDistance(n, name) <= 2,
       );
+      // Without a fallback, a variable no design token names reads
+      // nothing; var(--x, <value>) falls back to the value.
+      if (!near.length && !comma && !DIALS[thing])
+        refuse(
+          E.ERR_THEME_UNKNOWN_TOKEN,
+          `${name} is not a design token, so var(${name}) would read nothing. Give a fallback (var(${name}, <value>)) for a variable your app sets, or use a design token.`,
+          {
+            didYouMean: nearest(name, Object.keys(TOKENS)).slice(0, 3),
+            run: [`${HOW} --list tokens`],
+          },
+        );
       if (near.length)
         refuse(
           E.ERR_THEME_UNKNOWN_TOKEN,
@@ -862,6 +877,24 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         },
       );
   }
+  // A part whose styled element is a wrapper (a text input's box) shows
+  // focus only through focus-within: focus or focus-visible there would
+  // never apply. Named the way `how` names it.
+  if (!unset && s.on && (s.state === 'focus' || s.state === 'focus-visible')) {
+    const parts = partsOf(ctx, s).filter(t => focusStateOf(ctx, t));
+    if (
+      parts.length &&
+      parts.every(t => focusStateOf(ctx, t) === 'focus-within')
+    )
+      refuse(
+        E.ERR_THEME_NO_EFFECT,
+        `${s.on} shows focus on its box, around the field itself, so ${s.state} never applies there; focus-within does (the box while the field inside has focus).`,
+        {
+          didYouMean: ['focus-within'],
+          run: [setLine(slug, thing, v, {...s, state: 'focus-within'}, unset)],
+        },
+      );
+  }
   // On a group, a variant or state must belong to at least one member.
   if (s.on && FAMILIES[s.on] && (s.when || s.state)) {
     const members =
@@ -1003,7 +1036,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       // The value in effect for the target: its own setting, else the
       // whole-theme one, else the starting point.
       // Same target: the part, and the same variant and state.
-      const own = (/** @type {string} */ on) =>
+      const latest = (/** @type {string} */ on) =>
         [...data.settings].reverse().find(
           x =>
             x.thing === thing &&
@@ -1013,12 +1046,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             // A member set alone (--only) is not the member as the group
             // spreads it.
             Boolean(x.only) === (on === s.on ? Boolean(s.only) : false),
-        )?.value;
-      // A member of a group set on the group steps from the group's value.
+        );
+      const own = (/** @type {string} */ on) => latest(on)?.value;
+      // A member covered by a later group setting shows the group's value
+      // (the later one wins, as the build applies them).
       const fam = s.on ? familyOf(s.on) : null;
+      const mine = latest(s.on ?? '');
+      const group = fam && fam !== s.on && !s.only ? latest(fam) : undefined;
+      const shown =
+        mine && group
+          ? data.settings.indexOf(group) > data.settings.indexOf(mine)
+            ? group
+            : mine
+          : (mine ?? group);
       const cur =
-        own(s.on ?? '') ??
-        (fam && fam !== s.on && !s.only ? own(fam) : undefined) ??
+        shown?.value ??
         // A part's own radius (a number) already counts a whole-theme
         // setting.
         (s.on && typeof def !== 'number' ? own('') : undefined) ??
@@ -1117,30 +1159,37 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           light: /** @type {Record<string, string>} */ ({}),
           dark: /** @type {Record<string, string>} */ ({}),
         };
-        const token =
-          (s.on
-            ? /^var\((--radius-[\w-]+)\)$/.exec(
-                partDefault(
-                  ctx,
-                  partsOf(ctx, s)[0] ?? s.on,
-                  'borderRadius',
-                  s.when,
-                ) ?? '',
-              )?.[1]
-            : null) ?? '--radius-element';
+        const token = s.on
+          ? radiusTokenOf(ctx, partsOf(ctx, s)[0] ?? s.on, s.when)
+          : '--radius-element';
         // What the part shows: a setting on it or on its group (the later
         // one wins), else a whole-theme setting, else the base theme.
         const fam = s.on ? familyOf(s.on) : null;
+        // A setting reaches the part when it is on the part itself, on its
+        // group, or spread from a member (pill on text-input reaches the
+        // whole inputs group). One for the same variant and state wins,
+        // else the part's plain one (it applies there too).
+        const part = partsOf(ctx, s)[0] ?? s.on;
+        const reaches = (/** @type {import('./_settings.mjs').Setting} */ x) =>
+          x.thing === 'corners' &&
+          x.on &&
+          (x.on === s.on ||
+            (fam && fam !== s.on && x.on === fam && !x.only) ||
+            (!x.only && partsOf(ctx, x).includes(part)));
         const onPart = s.on
-          ? [...data.settings].reverse().find(
-              x =>
-                x.thing === 'corners' &&
-                (x.when ?? '') === (s.when ?? '') &&
-                (x.state ?? '') === (s.state ?? '') &&
-                // A member set alone shows that value too.
-                (x.on === s.on ||
-                  (fam && fam !== s.on && x.on === fam && !x.only)),
-            )
+          ? ([...data.settings]
+              .reverse()
+              .find(
+                x =>
+                  reaches(x) &&
+                  (x.when ?? '') === (s.when ?? '') &&
+                  (x.state ?? '') === (s.state ?? ''),
+              ) ??
+            (s.when || s.state
+              ? [...data.settings]
+                  .reverse()
+                  .find(x => reaches(x) && !x.when && !x.state)
+              : undefined))
           : undefined;
         // A step on a member set alone stays on that member alone.
         if (onPart && onPart.on === s.on && onPart.only && !s.only)
@@ -1184,9 +1233,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           // What it most likely means, as a value corners takes.
           const len = lengthPx(lower);
           const pct = /^(\d+(?:\.\d+)?)%$/.exec(lower);
+          // A radius below zero means none: square.
           const meant =
             len != null
-              ? `${len}px`
+              ? len <= 0
+                ? 'square'
+                : `${Math.round(len * 100) / 100}px`
               : pct
                 ? Number(pct[1]) >= 50
                   ? 'pill'
@@ -1200,9 +1252,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             `corners takes ${DIALS.corners.values}, not "${v}".`,
             {
               ...(meant ? {didYouMean: [meant]} : {}),
-              run: [
-                `${P} set ${slug} corners ${meant ?? 'medium'}${onFlag}${s.when ? ` --when ${s.when}` : ''}`,
-              ],
+              // The same scope, flags included.
+              run: [setLine(slug, 'corners', meant ?? 'medium', s)],
             },
           );
         }
@@ -1941,9 +1992,8 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
     `${s.on} has no background, border or shadow of its own, so rounding its corners changes nothing you see.${kids.length ? ` Parts inside it that do show an edge: ${kids.join(', ')}.` : ''}`,
     {
       run: kids.length
-        ? kids.map(
-            k =>
-              `${P} set ${slug} corners ${quoteCommandArgument(s.value || 'round')} --on ${k}`,
+        ? kids.map(k =>
+            setLine(slug, 'corners', s.value || 'round', {...s, on: k}),
           )
         : [`${HOW} ${s.on}`],
     },

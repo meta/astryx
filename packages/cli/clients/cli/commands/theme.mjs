@@ -1068,6 +1068,9 @@ function registerThemeCommands(theme, program, docs, words) {
     /** @type {(() => Promise<void>) | undefined} */
     let release;
     buildCli.hook('preAction', async (_, cmd) => {
+      // Under --watch each rebuild runs on its own and takes the locks
+      // itself; holding them for the whole watch would block every one.
+      if (cmd.opts().watch) return;
       release = await words.hold?.(cmd.args, {cwd: process.cwd()});
     });
     buildCli.hook('postAction', async () => {

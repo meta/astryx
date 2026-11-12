@@ -315,6 +315,9 @@ describe('chaos round 3', () => {
     const left = path.join(cwd, 'themes/.astryx-render-999999-abcdef');
     fs.mkdirSync(left, {recursive: true});
     fs.writeFileSync(path.join(left, 'preview-t.mjs'), '');
+    // A leftover is one more than ten minutes old.
+    const old = new Date(Date.now() - 11 * 60_000);
+    fs.utimesSync(left, old, old);
     await themeEditSet('t', 'corners', 'small', {cwd});
     await themeEditUndo('t', {cwd});
     expect(fs.existsSync(left)).toBe(false);
