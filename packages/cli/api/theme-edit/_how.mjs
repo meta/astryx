@@ -28,7 +28,7 @@ import {
   familyOf,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
-import {baseThemeFile, installLine} from './_project.mjs';
+import {baseInstalled, installLine} from './_project.mjs';
 import {loadTheme, nearest, refuse, themeSourceProblem} from './_settings.mjs';
 import {ASPECTS, checkSetting} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
@@ -332,14 +332,8 @@ async function answer(subject, options, cwd) {
     const d = DIALS[key];
     // A base is named only when it is installed here; the others are
     // listed with the line that installs them.
-    const installed = (/** @type {string} */ b) => {
-      try {
-        baseThemeFile(ctx.project, b);
-        return true;
-      } catch {
-        return false;
-      }
-    };
+    const installed = (/** @type {string} */ b) =>
+      baseInstalled(ctx.project, b);
     const missing = key === 'base' ? LIKE.filter(b => !installed(b)) : [];
     return {
       kind: 'setting',

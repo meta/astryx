@@ -11,7 +11,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
 import {
   AUTO_SPREAD,
@@ -80,7 +79,7 @@ import {
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
 import {refreshPreviewRoute} from './_preview-app.mjs';
-import {baseResolved, installLine} from './_project.mjs';
+import {baseInstalled, baseResolved, installLine} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
   requireProject,
@@ -206,7 +205,7 @@ export async function themeEditNew(name, options = {}) {
   // project has installed: another would be refused in turn. A base named
   // in other letters is the one meant, installed or not (its refusal then
   // offers the install, or the same new on no base).
-  const have = LIKE.filter(b => baseInstalledHere(cwd, b));
+  const have = LIKE.filter(b => baseInstalled(cwd, b));
   const likeFixed =
     like == null
       ? options.like === 'none'
@@ -300,9 +299,9 @@ export async function themeEditNew(name, options = {}) {
       E.ERR_THEME_BAD_VALUE,
       `--like takes a built-in theme (${LIKE.join(', ')}), not "${like}"${fs.existsSync(themeFiles(cwd, String(like)).settings) ? `; ${like} is a theme made here, and a new theme builds only on a built-in one` : ''}.`,
       {
-        didYouMean: nearest(String(like).toLowerCase(), LIKE),
-        // The built-in theme it names in another case, or the nearest one,
-        // else none.
+        // The built-in theme it names in another case, or the nearest
+        // installed one, else none: the did-you-mean and the run agree.
+        didYouMean: likeFixed ? [likeFixed] : [],
         run: [again(name, likeFixed ?? null)],
       },
     );
@@ -2183,20 +2182,4 @@ export async function themeEditUndo(theme, options = {}) {
 export async function editorStale(cwd, slug) {
   const data = loadTheme(cwd, slug);
   return staleBuild(cwd, slug, data) || null;
-}
-
-/**
- * Whether the built-in theme package for a base resolves from the project.
- * @param {string} cwd
- * @param {string} like
- */
-function baseInstalledHere(cwd, like) {
-  try {
-    createRequire(path.join(cwd, 'package.json')).resolve(
-      `@astryxdesign/theme-${like}/built`,
-    );
-    return true;
-  } catch {
-    return false;
-  }
 }

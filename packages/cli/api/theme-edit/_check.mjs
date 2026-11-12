@@ -12,7 +12,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {baseThemeFile} from './_project.mjs';
+import {baseInstalled, baseThemeFile} from './_project.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   MATH_FUNCTION,
@@ -1985,15 +1985,26 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           .toLowerCase()
           .replace(/^base\s*[=:]\s*/, '')
           .trim();
+        // The base named in other letters is the one meant; a guess is only
+        // among the bases installed here (and none).
         const near = [...LIKE, 'none'].includes(meant)
           ? [meant]
-          : nearest(meant, [...LIKE, 'none']);
+          : nearest(meant, [
+              ...LIKE.filter(b => baseInstalled(ctx.project, b)),
+              'none',
+            ]);
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `base takes ${DIALS.base.values}, not "${v}".`,
           {
             didYouMean: near,
-            run: near[0] ? [`${P} set ${slug} base ${near[0]}`] : [],
+            // With nothing near, every base that works here, none first.
+            run: near[0]
+              ? [`${P} set ${slug} base ${near[0]}`]
+              : [
+                  'none',
+                  ...LIKE.filter(b => baseInstalled(ctx.project, b)),
+                ].map(b => `${P} set ${slug} base ${b}`),
           },
         );
       }
