@@ -58,7 +58,7 @@ export const doc = {
       name: 'options.out',
       type: 'string',
       description:
-        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. An existing folder, or a path that ends in a separator, names the folder: the CSS is written there as <name>.css. A file path should end in .css; another name still builds, with a warning, and the import line it prints names the file as written.',
+        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. An existing folder, or a path that ends in a separator, names the folder: the CSS is written there as <name>.css. A file path should end in .css; another name still builds, with a warning, and the import line it prints names the file as written. A path in a folder the theme editor made (folder <slug>/ holds <slug>.settings.json) takes the outputs of a source outside that folder too, and the CLI warns; to keep the editor folder to its own theme, build beside the source, or pick an out path outside it.',
     },
     {
       name: 'options.check',
@@ -90,7 +90,7 @@ export const doc = {
     {
       type: 'theme.build.check',
       description:
-        'The {check: true} receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: "missing" | "outdated"}), and the full list of checked paths. Writes nothing. Resolves to null, like a normal build, when the theme produces no CSS.',
+        'The {check: true} receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: "missing" | "outdated"}), the full list of checked paths, and, when stale, code ERR_THEME_STALE. Writes nothing. Resolves to null, like a normal build, when the theme produces no CSS.',
     },
   ],
   throws: [
@@ -108,7 +108,7 @@ export const doc = {
     },
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'a path that out names holds a non-empty file without the generated header, such as package.json, app source, or an output from a CLI before 0.6.7; nothing is written. Delete the file and run the same build again (the suggestion), or pick another out path. At the default paths beside the source, and at family output paths, a header-less file is an output of a CLI before 0.6.7 and is replaced',
+      when: 'a path that out names holds a non-empty file without the generated header, such as package.json, app source, or an output from a CLI before 0.6.7; nothing is written. The suggestions name a free out path beside it and the build beside the source; the file is left as it is. At the default paths beside the source, and at family output paths, a header-less file is an output of a CLI before 0.6.7 and is replaced',
     },
     {
       code: 'ERR_INVALID_ARGUMENT',

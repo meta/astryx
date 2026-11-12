@@ -6,13 +6,13 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   PREVIEW_IMAGE_WIDTH,
-  fontStylesheetOf,
-  previewDocument,
+  previewMarkup,
   previewPageSource,
   stagePreviewPage,
+  stageThemesStorePage,
+  themesStorePageSource,
 } from '../../scripts/generate-landing-template-previews.mjs';
 import templateRows from '../app/(site)/_landing/landingTemplateRows.json';
-import {previewColorModeFragment} from '../app/(site)/_landing/templatePreviewColorMode';
 
 const docsiteDir = path.resolve(__dirname, '../..');
 const templatesDir = path.resolve(
@@ -22,7 +22,7 @@ const templatesDir = path.resolve(
 
 const RENDERED = [
   '<!doctype html><html><head><title>Page</title><style>.a{color:red}</style></head>',
-  '<body><img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',
+  '<body><div data-astryx-theme="neutral"><img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/></div>',
   '<script type="application/x-astryx-source">{"files":[{"path":"page.tsx","text":"/template-assets/light-product-1.png"}]}</script>',
   '</body></html>',
 ].join('');
@@ -42,81 +42,107 @@ describe('previewPageSource', () => {
     );
     expect(source).toContain('<Theme theme={neutralTheme} mode="system">');
   });
+
+  it('keeps the preview-viewport wrapper of the live template previews', () => {
+    expect(previewPageSource('./template/page')).toContain(
+      '<div className="preview-viewport">\n        <Page />\n      </div>',
+    );
+  });
 });
 
-describe('fontStylesheetOf', () => {
-  it('reads the stylesheet URL from the theme fonts file', () => {
+describe('themesStorePageSource', () => {
+  it('renders the staged store template inside the Butter theme', () => {
+    const source = themesStorePageSource('../../src/ThemesStorePreview');
+    expect(source).toContain(
+      'import ThemesStorePreview from "../../src/ThemesStorePreview";',
+    );
+    expect(source).toContain(
+      'import {ThemeShowcaseStore} from "./template/page";',
+    );
+    expect(source).toContain('<Theme theme={butterTheme} mode="system">');
+    expect(source).toContain(
+      '<ThemesStorePreview Store={ThemeShowcaseStore} />',
+    );
+  });
+});
+
+describe('previewMarkup', () => {
+  const markup = previewMarkup(RENDERED);
+
+  it('keeps only the body, without the page styles or the embedded source', () => {
+    expect(markup.startsWith('<div data-astryx-theme="neutral">')).toBe(true);
+    expect(markup).not.toContain('<style');
+    expect(markup).not.toContain('<script');
+    expect(markup).not.toContain('x-astryx-source');
+  });
+
+  it('keeps the image URLs of the rendered page and loads them at low priority', () => {
+    expect(markup).toContain(
+      '<img fetchpriority="low" decoding="async" src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',
+    );
+  });
+});
+
+describe('stageThemesStorePage', () => {
+  const STORE = "const icon = 'store-icon';";
+  let work: string;
+  let pageDir: string;
+  let templates: string;
+
+  beforeEach(() => {
+    work = fs.mkdtempSync(path.join(os.tmpdir(), 'landing-store-'));
+    pageDir = path.join(work, 'out', 'themes-store');
+    templates = path.join(work, 'templates');
+    fs.mkdirSync(pageDir, {recursive: true});
+    fs.mkdirSync(path.join(templates, 'theme-showcase'), {recursive: true});
+    fs.writeFileSync(path.join(templates, 'theme-showcase', 'page.tsx'), STORE);
+  });
+
+  afterEach(() => {
+    fs.rmSync(work, {recursive: true, force: true});
+  });
+
+  it('draws the store with the icons of the named sets, like every template preview', async () => {
+    const rewrite = vi.fn(async (source: string) => `${source} WITH SET ICONS`);
+    await stageThemesStorePage({
+      pageDir,
+      templatesDir: templates,
+      iconSets: ['pkg/glyphs'],
+      projectDir: work,
+      storeModule: '../../src/ThemesStorePreview',
+      isServed: () => true,
+      rewrite,
+    });
+
+    expect(rewrite).toHaveBeenCalledWith(
+      STORE,
+      path.join(templates, 'theme-showcase', 'page.tsx'),
+      {projectDir: work, list: ['pkg/glyphs']},
+    );
     expect(
-      fontStylesheetOf(
-        "/* Fonts */\n@import url('https://fonts.example/css2?family=Figtree');\n",
-      ),
-    ).toBe('https://fonts.example/css2?family=Figtree');
-    expect(fontStylesheetOf('body { margin: 0 }')).toBeNull();
-  });
-});
-
-describe('previewDocument', () => {
-  const html = previewDocument(RENDERED, {
-    fontStylesheet: 'https://fonts.example/css2?family=Figtree',
-  });
-
-  it('drops the embedded source, so the file carries no script', () => {
-    expect(html).not.toContain('<script');
-    expect(html).not.toContain('x-astryx-source');
-  });
-
-  it('keeps the image URLs of the rendered page', () => {
-    expect(html).toContain(
-      '<img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',
+      fs.readFileSync(path.join(pageDir, 'template', 'page.tsx'), 'utf8'),
+    ).toBe(`${STORE} WITH SET ICONS`);
+    expect(fs.readFileSync(path.join(pageDir, 'page.tsx'), 'utf8')).toContain(
+      'import {ThemeShowcaseStore} from "./template/page";',
     );
   });
 
-  it('loads the theme fonts and stays out of search results', () => {
-    expect(html).toContain(
-      '<meta name="robots" content="noindex"><link rel="stylesheet" href="https://fonts.example/css2?family=Figtree"><style>',
-    );
-  });
+  it('keeps the store template icons when no set is named', async () => {
+    const rewrite = vi.fn();
+    await stageThemesStorePage({
+      pageDir,
+      templatesDir: templates,
+      iconSets: [],
+      projectDir: work,
+      storeModule: '../../src/ThemesStorePreview',
+      isServed: () => true,
+      rewrite,
+    });
 
-  it('adds no font stylesheet when the theme names none', () => {
-    expect(previewDocument(RENDERED, {fontStylesheet: null})).toContain(
-      '<meta name="robots" content="noindex"><style>',
-    );
-  });
-
-  it('fills the frame and never scrolls', () => {
-    expect(html).toContain('html,body{height:100%;overflow:hidden}');
-    expect(html).toContain(
-      'body>[data-astryx-theme]>:first-child{height:100%!important;min-height:100%!important}',
-    );
-  });
-
-  it('takes its color mode from the URL fragment', () => {
-    expect(html).toContain(
-      '<body><a id="light" hidden></a><a id="dark" hidden></a><img',
-    );
-    expect(html).toContain(
-      ':root:has(#dark:target),:root:has(#dark:target) [data-astryx-theme]{color-scheme:dark!important}',
-    );
-    expect(html).toContain(
-      ':root:has(#light:target),:root:has(#light:target) [data-astryx-theme]{color-scheme:light!important}',
-    );
-  });
-});
-
-describe('previewColorModeFragment', () => {
-  it('adds nothing while the site follows the OS', () => {
-    expect(previewColorModeFragment('light', false)).toBe('');
-    expect(previewColorModeFragment('dark', true)).toBe('');
-  });
-
-  it('adds nothing on the server and through hydration, whatever the OS scheme reads as', () => {
-    expect(previewColorModeFragment('system', false)).toBe('');
-    expect(previewColorModeFragment('system', true)).toBe('');
-  });
-
-  it('names the mode that a visitor set against the OS', () => {
-    expect(previewColorModeFragment('dark', false)).toBe('#dark');
-    expect(previewColorModeFragment('light', true)).toBe('#light');
+    expect(rewrite).not.toHaveBeenCalled();
+    expect(
+      fs.readFileSync(path.join(pageDir, 'template', 'page.tsx'), 'utf8'),
+    ).toBe(STORE);
   });
 });
 

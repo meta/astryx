@@ -118,7 +118,7 @@ export function demoProps(project, name) {
       // A doc that declares no props of its own name is a family page,
       // not a component the Core exports.
       !Object.keys(info.props ?? {}).length ||
-      (info.subComponentOf && isItemOf(project, name)))
+      needsParent(project, name))
   )
     return null;
   const props = given ?? {};
@@ -142,6 +142,22 @@ export function demoProps(project, name) {
     }
   }
   return props;
+}
+
+/**
+ * Whether a part works only inside its parent: its parent lists it as an
+ * item, or it is a piece of its parent by name (TableBody of Table) and
+ * its doc gives no playground of its own.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ */
+export function needsParent(project, name) {
+  const info = project.components[name];
+  const parent = info?.subComponentOf;
+  if (!parent) return false;
+  if (isItemOf(project, name)) return true;
+  const own = info.defaults && typeof info.defaults === 'object';
+  return !own && name.startsWith(parent) && name !== parent;
 }
 
 /**
@@ -477,6 +493,38 @@ async function buildPartData(project) {
     rendered: (markup.match(/<section data-cat=/g) ?? []).length,
     items: all.length,
   };
+}
+
+/** @type {Map<string, Set<string>>} */
+const multipliedCache = new Map();
+
+/**
+ * The tokens Core's stylesheet multiplies by another value inside calc()
+ * (`var(--text-body-size) * var(--text-body-leading)`): a unit there makes
+ * the declaration invalid. Empty with no stylesheet.
+ * @param {any} project
+ * @returns {Set<string>}
+ */
+export function multipliedTokens(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return new Set();
+  }
+  const cached = multipliedCache.get(file);
+  if (cached) return cached;
+  const css = fs.readFileSync(file, 'utf8');
+  /** @type {Set<string>} */
+  const out = new Set();
+  // Each side of a `*` on its own, so `a * b * c` names all three.
+  for (const m of css.matchAll(/var\((--[a-z0-9-]+)\)(?=\s*\*)/gi))
+    out.add(m[1].toLowerCase());
+  for (const m of css.matchAll(/\*\s*var\((--[a-z0-9-]+)\)/gi))
+    out.add(m[1].toLowerCase());
+  multipliedCache.set(file, out);
+  return out;
 }
 
 /**

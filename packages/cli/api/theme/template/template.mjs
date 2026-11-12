@@ -15,8 +15,11 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {CLI_ROOT} from '../../../foundation/fs/paths.mjs';
-import {assertWithin, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
+import {CLI_ROOT, projectWritePath} from '../../../foundation/fs/paths.mjs';
+import {
+  assertWithin,
+  PathSafetyError,
+} from '../../../foundation/fs/path-safety.mjs';
 import {stripCopyrightHeader} from '../../../foundation/text/copyright-header.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 import {fsErrorMessage} from '../../../foundation/fs/fs-error.mjs';
@@ -25,7 +28,15 @@ import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 
 /** The annotated `defineTheme` reference that ships with the CLI. */
-export const THEME_TEMPLATE_SRC = path.join(CLI_ROOT, 'assets', 'theme.template.ts');
+export const THEME_TEMPLATE_SRC = path.join(
+  CLI_ROOT,
+  'assets',
+  'theme.template.ts',
+);
+
+/** The warning the CLI prints when it writes the template outside a project. */
+export const OUTSIDE_PROJECT_WARNING =
+  'Warning: no package.json is in this folder or above it, so the template is written here. Run it inside a project, or run `npm init -y` here first, to write it at a project root.';
 
 /** Where it lands when the caller does not say. */
 export const THEME_TEMPLATE_DEFAULT_PATH = 'theme.template.ts';
@@ -100,20 +111,33 @@ export function themeTemplate(options = {}) {
     );
   }
 
+  // The project the folder belongs to bounds the path, as for other theme
+  // commands: a path given is read from the current folder, and no path
+  // means the project root.
+  // With no package.json at or above the folder it writes here, and the CLI
+  // prints OUTSIDE_PROJECT_WARNING.
+  // Read as every theme command reads a path it writes; a backslash
+  // separates folders on every platform.
+  const {projectDir, relative: fromRoot} = projectWritePath(
+    cwd,
+    options.targetPath == null ? undefined : String(targetPath),
+    THEME_TEMPLATE_DEFAULT_PATH,
+  );
   let resolved;
   try {
-    resolved = assertWithin(targetPath, cwd, {label: 'theme template path'});
+    resolved = assertWithin(fromRoot, projectDir, {
+      label: 'theme template path',
+    });
   } catch (err) {
     if (err instanceof PathSafetyError) {
       throw new AstryxError(
-        err.message,
+        // The path as typed, not as read from the project root.
+        err.message.replace(`"${fromRoot}"`, `"${targetPath}"`),
         [
           {
-            name: formatCliCommand(
-              `theme template ${THEME_TEMPLATE_DEFAULT_PATH}`,
-              cwd,
-            ),
-            reason: 'write the template in this project',
+            // No path: the template at the project root.
+            name: formatCliCommand('theme template', cwd),
+            reason: 'write the template at the project root',
           },
         ],
         ERROR_CODES.ERR_PATH_TRAVERSAL,
@@ -212,7 +236,9 @@ export function themeTemplate(options = {}) {
   }
 
   // Our repo header has no business in someone else's source tree.
-  const contents = stripCopyrightHeader(fs.readFileSync(THEME_TEMPLATE_SRC, 'utf-8'));
+  const contents = stripCopyrightHeader(
+    fs.readFileSync(THEME_TEMPLATE_SRC, 'utf-8'),
+  );
   try {
     fs.mkdirSync(path.dirname(resolved), {recursive: true});
     fs.writeFileSync(resolved, contents);
@@ -223,7 +249,10 @@ export function themeTemplate(options = {}) {
     throw new AstryxError(message, undefined, ERROR_CODES.ERR_WRITE_FAILED);
   }
 
-  return {type: 'theme.template', data: {path: relative, written: true, reason: null}};
+  return {
+    type: 'theme.template',
+    data: {path: relative, written: true, reason: null},
+  };
 }
 
 /** @param {string} file */
