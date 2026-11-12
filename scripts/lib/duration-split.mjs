@@ -66,3 +66,58 @@ export function splitByDuration(items, count, cost) {
   assertEachOnce(items, result, 'file');
   return result;
 }
+
+/**
+ * Legs that each hold at most `budget` seconds: from `start` legs, one more at
+ * a time while a leg is over, up to `maxLegs`. An item longer than the budget
+ * runs in a leg of its own and does not raise the other legs' limit. When
+ * those legs, and one more for the rest, would pass `maxLegs`, the items split
+ * into `maxLegs` legs by time instead, so there are never more than `maxLegs`.
+ * @param {string[]} items
+ * @param {(item: string) => number} cost
+ * @param {{budget: number, maxLegs?: number, start?: number}} limits
+ * @returns {{count: number, shares: string[][], longest: number}} `longest`
+ *   in seconds
+ */
+export function fitLegsToBudget(items, cost, {budget, maxLegs, start = 1}) {
+  const unique = [...new Set(items)];
+  const total = leg => leg.reduce((sum, item) => sum + cost(item), 0);
+  const alone = unique.filter(item => cost(item) > budget).sort();
+  const rest = unique.filter(item => cost(item) <= budget);
+  if (maxLegs != null && alone.length + (rest.length > 0 ? 1 : 0) > maxLegs) {
+    const shares = splitByDuration(unique, maxLegs, cost).filter(
+      leg => leg.length > 0,
+    );
+    return {
+      count: shares.length,
+      shares,
+      longest: Math.max(0, ...shares.map(total)),
+    };
+  }
+  let shared = [];
+  if (rest.length > 0) {
+    const most =
+      maxLegs == null
+        ? rest.length
+        : Math.max(1, Math.min(maxLegs - alone.length, rest.length));
+    let count = Math.min(
+      Math.max(1, start - alone.length, Math.ceil(total(rest) / budget)),
+      most,
+    );
+    shared = splitByDuration(rest, count, cost);
+    while (shared.some(leg => total(leg) > budget) && count < most) {
+      count += 1;
+      shared = splitByDuration(rest, count, cost);
+    }
+  }
+  const shares = [
+    ...alone.map(item => [item]),
+    ...shared.filter(leg => leg.length > 0),
+  ];
+  assertEachOnce(unique, shares);
+  return {
+    count: shares.length,
+    shares,
+    longest: Math.max(0, ...shares.map(total)),
+  };
+}

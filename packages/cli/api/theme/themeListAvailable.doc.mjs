@@ -36,7 +36,7 @@ export const doc = {
     {
       type: 'theme.list',
       description:
-        'Every available theme as ThemeListEntry[], plus optional meta.unmigratedCopies entries with the source path, missing descriptor, and upgrade command. Unmigrated copies are not included in data.',
+        'Every available theme as ThemeListEntry[], plus optional meta.unmigratedCopies entries with the source path, missing descriptor, and upgrade command. Unmigrated copies are not included in data. A broken local theme folder is left out of data and listed in meta.skippedThemes ({slug, path, reason}); the other themes are still listed.',
     },
   ],
   throws: [

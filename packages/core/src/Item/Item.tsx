@@ -73,6 +73,7 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {isCoarsePointer} from '../utils/coarsePointer';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ItemSwipeBridge} from './ItemSwipeLayer';
 
@@ -133,10 +134,12 @@ export interface ItemSwipeActions {
 }
 
 /**
- * `reveal`: past half the panel the row rests open with every entry a real
- * button; a long drag or a fling fires the outermost. `commit`: a release
- * past the commit point slides the row out and fires the outermost entry;
- * nothing rests, and the panel is presentational.
+ * `reveal`: past half the panel, or after a fling, the row rests open with
+ * every entry a real button; a long drag fires the outermost. On a side with
+ * two or more entries, only a drag that starts on the open row fires it.
+ * `commit`: a release past the commit point slides the row out and fires a
+ * side's one entry; nothing rests, and the panel is presentational. On a side
+ * with two or more entries, `commit` fires none. A fling never fires an entry.
  */
 export type ItemSwipeBehavior = 'reveal' | 'commit';
 
@@ -280,7 +283,7 @@ export interface ItemProps extends BaseProps<HTMLElement> {
   isSelected?: boolean;
 
   /**
-   * Disabled state.
+   * Disabled state. Interactive rows stay keyboard-reachable but cannot activate.
    * @default false
    */
   isDisabled?: boolean;
@@ -308,9 +311,11 @@ export interface ItemProps extends BaseProps<HTMLElement> {
   swipeActions?: ItemSwipeActions;
 
   /**
-   * What a swipe does: `reveal` rests the row open with every entry tappable
-   * and fires the outermost on a long drag; `commit` slides the row out and
-   * fires the outermost on release. `commit` fits one entry per side.
+   * What a swipe does. `reveal` rests the row open with every entry tappable,
+   * and a long drag fires the outermost. On a side with two or more entries,
+   * only a drag from the open row fires it. `commit` slides the row out and
+   * fires a side's one entry on release. On a side with two or more entries,
+   * `commit` fires none.
    * @default 'reveal'
    */
   swipeBehavior?: ItemSwipeBehavior;
@@ -729,9 +734,9 @@ export function Item({
   });
   useDevWarning(
     'Item',
-    '`swipeBehavior="commit"` fires only the outermost entry of a side; the ' +
-      'other entries have no touch path. Give a committing side one entry, ' +
-      'or use `swipeBehavior="reveal"`.',
+    '`swipeBehavior="commit"` fires no entry on a side with two or more ' +
+      'entries. Give a committing side one entry, or use ' +
+      '`swipeBehavior="reveal"`.',
     hasSwipe &&
       swipeBehavior === 'commit' &&
       (leadingSwipe.length > 1 || trailingSwipe.length > 1),
@@ -893,7 +898,7 @@ export function Item({
         <RowAnchor
           ref={anchorRef}
           {...(isDisabled
-            ? {role: 'link', 'aria-disabled': true, tabIndex: -1}
+            ? {role: 'link', 'aria-disabled': true, tabIndex: 0}
             : {href, target, rel})}
           {...stylex.props(
             styles.invisibleAnchor,
@@ -907,7 +912,10 @@ export function Item({
           ref={actionButtonRef}
           type="button"
           onClick={onClick}
-          disabled={isDisabled}
+          aria-disabled={isDisabled || undefined}
+          {...(isDisabled
+            ? disabledInteractionProps<HTMLButtonElement>()
+            : null)}
           {...stylex.props(
             styles.invisibleButton,
             isInline && styles.inlineContent,

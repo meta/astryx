@@ -363,10 +363,13 @@ presses nothing.
 - **Claim at the begin.** A pan claims its touch only as it begins, at
   UIKit's 10 pt (`spec:AST-094` FR19), before WebKit commits a slow drag to
   a scroll at 10–11 px; a drag the browser took first stays the browser's
-  (FR14). Two exceptions: a `scrollEdge` pan cancels its finger's moves from
-  the first one while every scroller under the finger is at its edge and
-  the finger pulls away from it, the pan's own way (the browser could only
-  rubber-band there); it still begins at 10 pt. A `firstMoveDecides` pan, a
+  (FR14). Two exceptions: a `scrollEdge` pan cancels its finger's moves
+  from the one that reaches a tap's 5 px wobble along its axis, while every
+  scroller under the finger is at its edge and the finger pulls away from it,
+  the pan's own way (the browser could only rubber-band there); it still
+  begins at 10 pt. Inside the wobble the moves stay the browser's, because
+  WebKit ends a touch's click when one of its moves is cancelled, and Mobile
+  Safari commits its native pan on a kept move of 5 px. A `firstMoveDecides` pan, a
   toast's swipe (`component:Toast` FR4), holds its finger from a first move
   its own way and fails on any other first move. Each holds only while that
   is the one finger on the screen: with a second down anywhere, the moves stay
@@ -409,9 +412,11 @@ presses nothing.
 finger. This is the sheet over its own list: the pan begins only if nothing
 under the touch could scroll for that movement, the finger landed at the
 edge and pulls away from it. The browser has not committed yet, so beginning
-claims the touch and the content never moves. From the first move that
-pulls away from such an edge the pan already holds the finger, so its moves
-are cancelled before it begins and the page does not rubber-band either.
+claims the touch and the content never moves. From the move that pulls
+5 px away from such an edge, a tap's wobble, the pan already holds the
+finger, so its moves are cancelled before it begins and the page does not
+rubber-band either. A tap that wobbles less keeps every move, and so its
+click.
 
 Who gets a drag is decided once, when it begins, as in UIKit: a drag that
 began as a scroll stays the scroll view's for its whole length (it scrolls

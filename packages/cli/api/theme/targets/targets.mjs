@@ -34,6 +34,19 @@ function matchesLoosely(target, filter) {
 }
 
 /**
+ * A targets filter as it is matched: trimmed, lowercase, and without a
+ * leading `.`, so a class copied from the output (`.astryx-switch`) reads as
+ * its name. Null when nothing is left, which means no filter.
+ * @param {string | undefined | null} filter
+ * @returns {string | null}
+ */
+export function normalizeTargetFilter(filter) {
+  return filter
+    ? String(filter).trim().replace(/^\./, '').toLowerCase() || null
+    : null;
+}
+
+/**
  * List every component theming target — the `defineTheme` `components` keys,
  * with the props and states each one accepts.
  *
@@ -49,7 +62,7 @@ export async function themeTargets(filter, {cwd = process.cwd()} = {}) {
   const coreDir = coreDirOrThrow(requireThemeCoreDir, cwd);
 
   const all = await collectThemingTargets(path.join(coreDir, 'src'));
-  const needle = filter ? String(filter).toLowerCase() : null;
+  const needle = normalizeTargetFilter(filter);
   let targets = all;
   if (needle) {
     const named = all.filter(t => t.component.toLowerCase() === needle);
