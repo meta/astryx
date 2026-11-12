@@ -18,6 +18,16 @@ import {useInsertionEffect, useRef} from 'react';
  * Returns a ref whose `current` is the value of the last committed render.
  * The ref object stays the same for the life of the component. Read
  * `current` only in event and gesture callbacks, never during render.
+ *
+ * In an Effect cleanup, read `current` through a function that the Effect
+ * body declares. A direct read in the cleanup trips
+ * `@eslint-react/exhaustive-deps`.
+ *
+ * ```
+ * const getTarget = () => committed.current;
+ * subscribe(getTarget());
+ * return () => unsubscribe(getTarget());
+ * ```
  */
 export function useCommittedRef<T>(value: T): {readonly current: T} {
   const ref = useRef(value);

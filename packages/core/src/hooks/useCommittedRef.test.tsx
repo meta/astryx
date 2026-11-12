@@ -156,6 +156,27 @@ describe('useCommittedRef', () => {
     expect(second).toHaveBeenCalledWith('row-1');
   });
 
+  it('lets an Effect cleanup read the latest committed value through a function', () => {
+    const released: string[] = [];
+    function Holder({target}: {target: string}) {
+      const committed = useCommittedRef(target);
+      useEffect(() => {
+        // Reads the target that is current when the Effect cleans up.
+        const getTarget = () => committed.current;
+        return () => {
+          released.push(getTarget());
+        };
+      }, [committed]);
+      return null;
+    }
+    const {rerender, unmount} = render(<Holder target="first" />);
+    rerender(<Holder target="second" />);
+
+    unmount();
+
+    expect(released).toEqual(['second']);
+  });
+
   it('keeps the same ref object across renders', () => {
     const refs: {readonly current: string}[] = [];
     function Probe({value}: {value: string}) {
