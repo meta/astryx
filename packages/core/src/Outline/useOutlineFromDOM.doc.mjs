@@ -78,7 +78,8 @@ export const docsDense = {
     bestPractices: [
       {
         guidance: true,
-        description: 'Give each listed heading an id. A heading without one is omitted.',
+        description:
+          'Give each listed heading an id. A heading without one is omitted.',
       },
       {
         guidance: true,

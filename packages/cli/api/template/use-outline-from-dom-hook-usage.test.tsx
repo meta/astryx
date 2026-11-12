@@ -19,8 +19,9 @@ let root: Root | null = null;
 let container: HTMLElement;
 
 function labels(): string[] {
-  return Array.from(container.querySelectorAll('nav a[href^="#"]'), link =>
-    link.textContent ?? '',
+  return Array.from(
+    container.querySelectorAll('nav a[href^="#"]'),
+    link => link.textContent ?? '',
   );
 }
 

@@ -10,5 +10,12 @@ export const doc = {
     'An article of headings and an Outline built from those headings through useOutlineFromDOM. "Add section" appends a heading, and a new entry that links to it appears in the outline.',
   isReady: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['Outline', 'ScrollableArea', 'Button', 'Heading', 'Text', 'Layout'],
+  componentsUsed: [
+    'Outline',
+    'ScrollableArea',
+    'Button',
+    'Heading',
+    'Text',
+    'Layout',
+  ],
 };
