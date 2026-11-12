@@ -217,11 +217,14 @@ const logicalSide = prop =>
 function putBack(kept, tokensDir) {
   for (const [file, bytes] of kept)
     if (bytes) writeWhole(file, bytes);
-    else fs.rmSync(file, {force: true});
+    else if (!fs.existsSync(file) || fs.lstatSync(file).isFile())
+      fs.rmSync(file, {force: true});
   if (kept.size && fs.existsSync(tokensDir))
     for (const n of fs.readdirSync(tokensDir)) {
       const file = path.join(tokensDir, n);
-      if (!kept.has(file)) fs.rmSync(file, {force: true});
+      // Only a file the build made new; a folder the user put there stays.
+      if (!kept.has(file) && fs.lstatSync(file).isFile())
+        fs.rmSync(file, {force: true});
     }
 }
 

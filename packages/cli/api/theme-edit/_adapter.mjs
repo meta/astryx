@@ -228,9 +228,12 @@ function lockDir(root) {
  * @param {boolean} [bestEffort] a command that can run read-only runs
  *   without the lock when it cannot be taken (a read-only node_modules),
  *   told so, and then writes nothing
+ * @param {string | null} [again] the command's own words after the CLI
+ *   name, to suggest running it again (never the host process's argv: an
+ *   API caller is not a CLI run)
  * @returns {Promise<T>}
  */
-async function withLock(root, name, fn, bestEffort = false) {
+async function withLock(root, name, fn, bestEffort = false, again = null) {
   /** @type {string | null} */
   let dir;
   try {
@@ -275,18 +278,14 @@ async function withLock(root, name, fn, bestEffort = false) {
             `Another command has been changing ${name.replace(/^theme-/, '')} for 30 seconds${o ? ` (process ${o.pid} on ${o.host}${held != null ? `, holding it ${held} s` : ''})` : ''}. Nothing was changed; run this command again once the other one ends. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
             // Every editor command (show too) takes this lock, so none of
             // them works meanwhile: this same command, once the other ends.
-            [
-              {
-                name: runLine(
-                  root,
-                  process.argv
-                    .slice(2)
-                    .map(a => quoteCommandArgument(a))
-                    .join(' '),
-                ),
-                reason: 'run it again once the other command ends',
-              },
-            ],
+            again
+              ? [
+                  {
+                    name: runLine(root, again),
+                    reason: 'run it again once the other command ends',
+                  },
+                ]
+              : [],
             ERROR_CODES.ERR_THEME_BUSY,
           );
         },
@@ -384,9 +383,11 @@ function absolute(result, root, from) {
  * @param {O} options
  * @param {string | null} lock
  * @param {(o: O & {cwd: string}) => Promise<T>} fn
+ * @param {boolean} [bestEffort]
+ * @param {string | null} [again] the command's own words, for a busy lock
  * @returns {Promise<T>}
  */
-async function inProject(options, lock, fn, bestEffort = false) {
+async function inProject(options, lock, fn, bestEffort = false, again = null) {
   const from = options.cwd ?? process.cwd();
   const o = atRoot(options);
   try {
@@ -398,6 +399,7 @@ async function inProject(options, lock, fn, bestEffort = false) {
           lock,
           locked => fn(locked ? o : {...o, readOnly: true}),
           bestEffort,
+          again,
         )
       : await fn(o);
     return absolute(r, o.cwd, from);
@@ -472,20 +474,64 @@ const withThemeLock = o => ({
   ) => withLock(o.cwd, lockName(slug), fn),
 });
 
+/**
+ * A command's own words, from what it was called with: the editor command,
+ * its arguments and the scope flags it took.
+ * @param {string} sub
+ * @param {unknown[]} args
+ * @param {Record<string, unknown>} [options]
+ */
+const again = (sub, args, options = {}) =>
+  [
+    `experimental theme editor ${sub}`,
+    ...args
+      .filter(a => a != null && a !== '')
+      .map(a => quoteCommandArgument(String(a))),
+    ...['on', 'when', 'state', 'mode']
+      .filter(k => options[k] != null)
+      .map(k => `--${k} ${quoteCommandArgument(String(options[k]))}`),
+  ].join(' ');
+
 /** @type {typeof edit.themeEditNew} */
 export const themeEditNew = (name, options = {}) =>
-  inProject(options, lockName(name), o => edit.themeEditNew(name, o));
+  inProject(
+    options,
+    lockName(name),
+    o => edit.themeEditNew(name, o),
+    false,
+    again('new', [name]),
+  );
 /** @type {typeof edit.themeEditSet} */
 export const themeEditSet = (theme, thing, value, options = {}) =>
-  inProject(options, lockName(theme), o =>
-    edit.themeEditSet(theme, thing, value, o),
+  inProject(
+    options,
+    lockName(theme),
+    o => edit.themeEditSet(theme, thing, value, o),
+    false,
+    again('set', [theme, thing, value], options),
   );
 /** @type {typeof edit.themeEditUndo} */
 export const themeEditUndo = (theme, options = {}) =>
-  inProject(options, lockName(theme), o => edit.themeEditUndo(theme, o));
+  inProject(
+    options,
+    lockName(theme),
+    o => edit.themeEditUndo(theme, o),
+    false,
+    again(
+      'undo',
+      [theme, options.thing, options.value],
+      /** @type {any} */ (options),
+    ),
+  );
 /** @type {typeof edit.themeEditShow} */
 export const themeEditShow = (theme, options = {}) =>
-  inProject(options, lockName(theme), o => edit.themeEditShow(theme, o), true);
+  inProject(
+    options,
+    lockName(theme),
+    o => edit.themeEditShow(theme, o),
+    true,
+    again('show', [theme]),
+  );
 /** @type {typeof preview.themeEditPreviewAdd} */
 export const themeEditPreviewAdd = (description, options = {}) =>
   inProject(options, 'preview', o =>

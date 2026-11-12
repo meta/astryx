@@ -1502,6 +1502,10 @@ export function compileTheme(ctx, data, base) {
           ? `--astryx-${target}-padding-${physical}`
           : camel(`padding-${physical}`)]: value,
       };
+    // A physical left or right is written as it is (its keyword resolved),
+    // never split as an axis: there is no padding-left-start.
+    if (prop === 'padding-left' || prop === 'padding-right')
+      return {[camel(prop)]: value};
     const w = splitTop(value, ' ').map(x => x.trim());
     if (!w.length || w.length > (prop === 'padding' ? 4 : 2)) return null;
     const scoped = s.when != null || s.state != null;

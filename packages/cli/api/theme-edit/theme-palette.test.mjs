@@ -3135,3 +3135,23 @@ describe('r19 (1): physical sides stay physical', () => {
     await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
   });
 });
+
+describe('r19b (1): a card physical side beside other sides', () => {
+  it('writes padding-left as itself after another side, with a keyword, and with math', async () => {
+    for (const [first, value, want] of [
+      [['padding-top', '12px'], '20px', /(^|[;{\s])padding-left:\s*20px/],
+      [null, 'initial', /(^|[;{\s])padding-left:\s*0/],
+      [null, 'calc(4px + 2px)', /(^|[;{\s])padding-left:\s*calc\(4px \+ 2px\)/],
+    ]) {
+      if (first) await themeEditSet('p', first[0], first[1], {cwd, on: 'card'});
+      await themeEditSet('p', 'padding-left', value, {cwd, on: 'card'});
+      const css = read('p.css');
+      const at = css.indexOf('.astryx-card {');
+      const body = css.slice(at, css.indexOf('}', at));
+      expect(body, value).toMatch(want);
+      expect(body, value).not.toContain('padding-left-start');
+      await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
+      if (first) await themeEditUndo('p', {cwd, thing: first[0], on: 'card'});
+    }
+  });
+});

@@ -120,6 +120,26 @@ describe('r19 (3): a failed render in show leaves no output it made new', () => 
   }, 240_000);
 });
 
+describe('r19b (4): a failed render keeps a folder the user put in tokens/', () => {
+  it('neither crashes nor removes the folder', async () => {
+    const dir = path.join(cwd, 'themes/t');
+    fs.appendFileSync(path.join(dir, 't.css'), '/* z */\n');
+    const mine = path.join(dir, 'tokens', 'mine');
+    fs.mkdirSync(mine, {recursive: true});
+    fs.writeFileSync(path.join(mine, 'note.txt'), 'keep');
+    /** @type {any} */ (globalThis).__failRender = true;
+    try {
+      const err = await refusal(() => themeEditShow('t', {cwd}));
+      expect(err.code).toBe('ERR_RENDER_FAILED');
+      expect(fs.readFileSync(path.join(mine, 'note.txt'), 'utf8')).toBe('keep');
+    } finally {
+      /** @type {any} */ (globalThis).__failRender = false;
+      fs.rmSync(mine, {recursive: true, force: true});
+    }
+    await themeEditShow('t', {cwd});
+  }, 240_000);
+});
+
 describe('N3: a workspace root with Core hoisted', () => {
   it('is refused from the root and from a folder without a package.json, naming the app', async () => {
     const root = path.dirname(cwd);
