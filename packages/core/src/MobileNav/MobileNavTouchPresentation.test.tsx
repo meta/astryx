@@ -252,6 +252,7 @@ describe('MobileNav under a finger', () => {
     await advance(100);
     fireEvent.click(open);
     expect(dialog).toHaveAttribute('open');
+    expect(isInHeldLayer(dialog)).toBe(true);
     expect(dialog.contains(document.activeElement)).toBe(true);
     expect(
       screen.getByRole('link', {name: 'Home', hidden: true}).closest('[inert]'),

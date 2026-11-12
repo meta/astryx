@@ -573,9 +573,6 @@ export function MobileNav({
   // stopped being rendered — #4290 again.
   useLayoutEffect(() => {
     if (!isOpen) {
-      if (side === 'auto') {
-        setAutoSideResolved(false);
-      }
       return;
     }
 
@@ -590,10 +587,12 @@ export function MobileNav({
           triggerCenter < window.innerWidth / 2 !== isRtl ? 'start' : 'end',
         );
       }
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- auto side is resolved from trigger layout before the dialog opens
       setAutoSideResolved(true);
     } else {
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- side prop changes must update the open dialog placement
       setResolvedSide(side);
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- fixed side is resolved before the dialog opens
       setAutoSideResolved(true);
     }
   }, [isOpen, side]);
@@ -617,19 +616,20 @@ export function MobileNav({
         triggerElementRef.current =
           document.activeElement as HTMLElement | null;
         dialog.showModal();
-        // A fresh entrance is the only time the input hold belongs here. A
-        // reopen during a pending close keeps the existing modal and skips a
-        // second entrance hold.
-        releaseHoldRef.current = holdEntranceInput(dialog, {
-          entrance: drawerRef.current,
-          capMs: MAX_EXIT_MS,
-        });
       }
+      // A reopen keeps the native modal, but it still starts a new visible
+      // entrance for the drawer. Hold pointer input for that entrance too.
+      releaseHoldRef.current = holdEntranceInput(dialog, {
+        entrance: drawerRef.current,
+        capMs: MAX_EXIT_MS,
+      });
     } else if (!isOpen && dialog.open) {
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
       closeTimeoutRef.current = setTimeout(() => {
         closeAndRestoreFocus(dialog, triggerElementRef);
+
+        setAutoSideResolved(false);
         releasePresentation();
       }, resolveCloseDelay(dialog));
     } else {
@@ -670,6 +670,8 @@ export function MobileNav({
       releaseHoldRef.current = null;
       if (dialog?.open) {
         closeAndRestoreFocus(dialog, triggerElementRef);
+
+        setAutoSideResolved(false);
       }
     };
   }, []);
@@ -719,8 +721,7 @@ export function MobileNav({
   );
 
   const isStart = resolvedSide === 'start';
-  const isAutoSidePending =
-    isOpen && side === 'auto' && !autoSideResolved && !dialogRef.current?.open;
+  const isAutoSidePending = isOpen && side === 'auto' && !autoSideResolved;
   const mergedDialogRef = useMergedRefs(ref, dialogRef);
   const navigationLabel =
     label ??
