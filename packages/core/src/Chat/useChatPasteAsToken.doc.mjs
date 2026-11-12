@@ -34,7 +34,7 @@ export const docs = {
       name: 'onPaste',
       type: '(event, text: string) => boolean',
       description:
-        "Pass this to ChatComposerInput's pasteAsToken, or call it from onPaste. True means the paste became a token. False means the composer should insert the text.",
+        'True means the paste became a token. False means the composer should insert the text. Pass the whole object this hook returns as ChatComposerInput pasteAsToken. That prop does not take this function by itself.',
     },
   ],
   usage: {
@@ -74,7 +74,7 @@ export const docsDense = {
   },
   returnDescriptions: {
     onPaste:
-      'pass as pasteAsToken. True means the paste became a token.',
+      'true when the paste became a token. Pass the whole return value as pasteAsToken.',
   },
   usage: {
     description:

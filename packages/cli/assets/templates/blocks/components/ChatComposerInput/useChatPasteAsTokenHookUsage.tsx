@@ -7,11 +7,20 @@ import {
   ChatComposerInput,
   useChatPasteAsToken,
   type ChatComposerInputHandle,
+  type ChatComposerToken,
 } from '@astryxdesign/core/Chat';
+
+function pastedNote(text: string): ChatComposerToken {
+  return {value: text, label: 'Pasted note', variant: 'neutral'};
+}
 
 export default function UseChatPasteAsTokenHookUsage() {
   const inputRef = useRef<ChatComposerInputHandle>(null);
-  const pasteAsToken = useChatPasteAsToken({inputRef});
+  const pasteAsToken = useChatPasteAsToken({
+    inputRef,
+    threshold: 40,
+    toToken: pastedNote,
+  });
 
   return (
     <ChatComposerInput

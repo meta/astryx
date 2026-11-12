@@ -2,14 +2,14 @@
 // @vitest-environment jsdom
 
 /**
- * The useChatPasteAsToken example turns a long plain-text paste into a token
- * and leaves a short paste inline.
+ * The useChatPasteAsToken example uses a threshold of 40 and a Pasted note
+ * label. A paste between that threshold and the default 200 becomes that token.
  */
 
 import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import UseChatPasteAsTokenHookUsage from '../../assets/templates/blocks/components/Chat/useChatPasteAsTokenHookUsage';
+import UseChatPasteAsTokenHookUsage from '../../assets/templates/blocks/components/ChatComposerInput/useChatPasteAsTokenHookUsage';
 
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean}).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -48,7 +48,7 @@ describe('useChatPasteAsToken example', () => {
     const textbox = container.querySelector('[role="textbox"]');
     expect(textbox).toBeInstanceOf(HTMLElement);
     const editor = textbox as HTMLElement;
-    const long = 'a'.repeat(250);
+    const long = 'a'.repeat(80);
     const paste = new Event('paste', {bubbles: true, cancelable: true});
     Object.defineProperty(paste, 'clipboardData', {
       value: {
@@ -61,6 +61,7 @@ describe('useChatPasteAsToken example', () => {
       window.getSelection()?.removeAllRanges();
       editor.dispatchEvent(paste);
     });
-    expect(editor.querySelector('[data-astryx-token]')).not.toBeNull();
+    const token = editor.querySelector('[data-astryx-token]');
+    expect(token?.textContent).toContain('Pasted note');
   });
 });
