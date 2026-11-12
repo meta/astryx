@@ -832,6 +832,9 @@ importers:
       commander:
         specifier: ^12.1.0
         version: 12.1.0
+      css-tree:
+        specifier: 3.2.1
+        version: 3.2.1
       ignore:
         specifier: ^7.0.14
         version: 7.0.14

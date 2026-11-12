@@ -103,6 +103,7 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {string} build - The build subcommand's name: `build` or `compile`.
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
  * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
+ * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
  */
 
 /** @type {ThemeCommandWords} */
@@ -764,7 +765,7 @@ function registerPaletteCommands(
  * @param {ThemeCommandWords} words
  */
 function registerThemeCommands(theme, program, docs, words) {
-  defineCommand(theme, docs.build, {
+  const buildCli = defineCommand(theme, docs.build, {
     fn: themeBuildFn,
     action: async (
       /** @type {string[]} */ files,
@@ -1024,6 +1025,19 @@ function registerThemeCommands(theme, program, docs, words) {
       return NO_RESULT_SET;
     },
   });
+  // A group may hold locks while a build or check runs (the editor's theme
+  // lock), so it never reads a change half written.
+  if (words.hold) {
+    /** @type {(() => Promise<void>) | undefined} */
+    let release;
+    buildCli.hook('preAction', async (_, cmd) => {
+      release = await words.hold?.(cmd.args, {cwd: process.cwd()});
+    });
+    buildCli.hook('postAction', async () => {
+      await release?.();
+      release = undefined;
+    });
+  }
 
   const listCli = defineCommand(theme, docs.list, {
     fn: themeListFn,

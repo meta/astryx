@@ -10,7 +10,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -28,6 +28,15 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -70,7 +79,9 @@ beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-edit-', FIXTURE_PACKAGES);
   // CI builds only Core, so the base theme is a fixture, not a built package.
   writeFixtureBaseTheme(cwd, 'neutral');
-  await themeEditNew('t', {cwd, like: 'neutral'});
+  // The first theme renders for real: its preview and render folder are
+  // checked below.
+  await withRealRenders(() => themeEditNew('t', {cwd, like: 'neutral'}));
 }, 120_000);
 
 afterAll(() => {
@@ -535,7 +546,9 @@ describe('settings round trip', () => {
 
   it('show lists the settings and writes both pages', async () => {
     await themeEditSet('t', 'surfaces', 'outlined', {cwd});
-    const r = await themeEditShow('t', {cwd, section: 'actions'});
+    const r = await withRealRenders(() =>
+      themeEditShow('t', {cwd, section: 'actions'}),
+    );
     expect(r.data.settings.map(s => s.thing)).toContain('surfaces');
     expect(fs.readFileSync(path.join(cwd, r.data.sheet), 'utf8')).toContain(
       'astryx-button',
