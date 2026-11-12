@@ -46,6 +46,7 @@ import {
   type GestureRecognizerOptions,
   type NativeTouchBehavior,
 } from './GestureRecognizer';
+import {TAP_WOBBLE} from './tapWobble';
 import type {GestureEventContext, GestureTouch, Point} from './types';
 import {VelocityTracker} from './VelocityTracker';
 
@@ -424,12 +425,11 @@ export class PanGestureRecognizer extends GestureRecognizer {
   }
 
   /**
-   * A scroll-edge pan holds its finger from the first move while every
-   * scroller under it is at its edge and the finger pulls away from that
-   * edge, the pan's own way (`spec:AST-094` FR19, DEC-18):
-   * the browser would only rubber-band there. It still begins at its
-   * hysteresis; a move the content can still scroll stays the browser's,
-   * and so does every move while a second finger is down (a pinch).
+   * Inside a tap's wobble the moves stay the browser's, so WebKit keeps the
+   * tap's click. Past it, at an edge where the browser would only rubber-band,
+   * the pan holds the finger before it begins (`spec:AST-094` FR19, DEC-18).
+   * A move the content can still scroll stays the browser's, and so does every
+   * move while a second finger is down (a pinch).
    */
   protected override keepsTouch(touchId: number): boolean {
     const touch = this.touches.get(touchId);
@@ -451,10 +451,21 @@ export class PanGestureRecognizer extends GestureRecognizer {
     }
     const moved = this.raw;
     return (
-      (moved.x !== 0 || moved.y !== 0) &&
+      this.travelAlongAxis(moved) >= TAP_WOBBLE &&
       this.classify(moved) === 'begin' &&
       !this.nativeCanScroll(moved.x, moved.y)
     );
+  }
+
+  private travelAlongAxis(moved: Point): number {
+    if (this.direction === 'any') {
+      return Math.max(Math.abs(moved.x), Math.abs(moved.y));
+    }
+    const isHorizontal =
+      this.direction === 'horizontal' ||
+      this.direction === 'left' ||
+      this.direction === 'right';
+    return Math.abs(isHorizontal ? moved.x : moved.y);
   }
 
   private nativeCanScroll(dx: number, dy: number): boolean {

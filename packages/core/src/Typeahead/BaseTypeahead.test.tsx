@@ -3,7 +3,8 @@
 /**
  * @file BaseTypeahead.test.tsx
  * @input BaseTypeahead and composed public props with synchronous and deferred SearchSources
- * @output Combobox contracts, including source refresh and empty-to-pending red/green coverage
+ * @output Combobox contracts, including source refresh, empty-to-pending red/green coverage,
+ *   and pending work that settles after a dismissal
  * @position Colocated verification for BaseTypeahead
  */
 
@@ -25,15 +26,16 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import {createRef} from 'react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
-import {BaseTypeahead} from './BaseTypeahead';
+import {BaseTypeahead, type BaseTypeaheadHandle} from './BaseTypeahead';
 import {CommittedChoicesKeyContext} from './committedChoicesKey';
 import {Typeahead} from './Typeahead';
 import {Tokenizer} from '../Tokenizer';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
-import type {SearchSource, SearchableItem} from './types';
+import type {SearchContext, SearchSource, SearchableItem} from './types';
 
 const popoverOpenState = new WeakMap<HTMLElement, boolean>();
 const originalMatchesDescriptor = Object.getOwnPropertyDescriptor(
@@ -1036,5 +1038,678 @@ describe('BaseTypeahead', () => {
         },
       );
     });
+  });
+});
+
+describe('BaseTypeahead pending work after a dismissal', () => {
+  // A source that cannot abort: every search answers when the test says so.
+  function pendingSource() {
+    const answers = new Map<string, (items: SearchableItem[]) => void>();
+    const search = vi.fn(
+      async (query: string) =>
+        new Promise<SearchableItem[]>(resolve => answers.set(query, resolve)),
+    );
+    const source: SearchSource<SearchableItem> = {search, bootstrap: () => []};
+    const answer = async (query: string, labels: string[]) => {
+      await waitFor(() => expect(answers.has(query)).toBe(true));
+      answers.get(query)?.(labels.map(label => ({id: label, label})));
+      await act(async () => {});
+    };
+    return {source, search, answer};
+  }
+
+  function renderPending(extra: Partial<Parameters<typeof BaseTypeahead>[0]>) {
+    const pending = pendingSource();
+    render(
+      <>
+        <BaseTypeahead
+          searchSource={pending.source}
+          value={null}
+          onChange={() => {}}
+          debounceMs={0}
+          {...extra}
+        />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    return {...pending, input: screen.getByRole('combobox')};
+  }
+
+  async function openWithPendingQuery(
+    input: HTMLElement,
+    answer: (query: string, labels: string[]) => Promise<void>,
+  ) {
+    input.focus();
+    fireEvent.change(input, {target: {value: 'a'}});
+    await answer('a', ['Alpha']);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.change(input, {target: {value: 'al'}});
+    await waitFor(() => expect(input).toHaveAttribute('aria-busy', 'true'));
+  }
+
+  it('stays closed and stops being busy when a search answers after Escape', async () => {
+    const {input, answer} = renderPending({});
+    await openWithPendingQuery(input, answer);
+
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).not.toHaveAttribute('aria-busy');
+
+    await answer('al', ['Alpine']);
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).not.toHaveAttribute('aria-busy');
+  });
+
+  it('stays closed when a search answers after an outside click closed the popup', async () => {
+    const {input, answer} = renderPending({});
+    await openWithPendingQuery(input, answer);
+
+    // Native light dismissal closes the popover itself and reports a toggle.
+    const popup = screen
+      .getByRole('listbox', {hidden: true})
+      .closest('[popover]') as HTMLElement;
+    act(() => popup.hidePopover());
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).not.toHaveAttribute('aria-busy');
+
+    await answer('al', ['Alpine']);
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('does not open when a search answers after focus left the field', async () => {
+    const {input, answer} = renderPending({});
+    input.focus();
+    fireEvent.change(input, {target: {value: 'a'}});
+    await waitFor(() => expect(input).toHaveAttribute('aria-busy', 'true'));
+
+    fireEvent.blur(input, {
+      relatedTarget: screen.getByRole('button', {name: 'Elsewhere'}),
+    });
+    expect(input).not.toHaveAttribute('aria-busy');
+
+    await answer('a', ['Alpha']);
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('does not open when focus bootstrap answers after focus left the field', async () => {
+    let resolve: (items: SearchableItem[]) => void = () => {};
+    const source: SearchSource<SearchableItem> = {
+      search: () => [],
+      bootstrap: async () =>
+        new Promise<SearchableItem[]>(r => {
+          resolve = r;
+        }),
+    };
+    render(
+      <>
+        <BaseTypeahead
+          searchSource={source}
+          value={null}
+          onChange={() => {}}
+          hasEntriesOnFocus
+        />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    await waitFor(() => expect(input).toHaveAttribute('aria-busy', 'true'));
+
+    fireEvent.blur(input, {
+      relatedTarget: screen.getByRole('button', {name: 'Elsewhere'}),
+    });
+    expect(input).not.toHaveAttribute('aria-busy');
+
+    await act(async () => resolve([{id: '1', label: 'Suggested'}]));
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('shows the late answer, without searching again, when the same query is reopened', async () => {
+    const {input, search, answer} = renderPending({});
+    await openWithPendingQuery(input, answer);
+    fireEvent.keyDown(input, {key: 'Escape'});
+    await answer('al', ['Alpine']);
+
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      screen.getByRole('option', {name: 'Alpine', hidden: true}),
+    ).toBeInTheDocument();
+    expect(search.mock.calls.filter(([q]) => q === 'al')).toHaveLength(1);
+  });
+
+  it('drops a late answer for a query the person has since changed', async () => {
+    const {input, answer} = renderPending({});
+    await openWithPendingQuery(input, answer);
+    fireEvent.keyDown(input, {key: 'Escape'});
+
+    fireEvent.change(input, {target: {value: 'alp'}});
+    await answer('al', ['Stale']);
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.queryByRole('option', {name: 'Stale', hidden: true}),
+    ).not.toBeInTheDocument();
+
+    await answer('alp', ['Alpine']);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      screen.getByRole('option', {name: 'Alpine', hidden: true}),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('option', {name: 'Stale', hidden: true}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not keep or show a late answer while a changed query waits on its debounce', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const {input, search, answer} = renderPending({debounceMs: 200});
+      input.focus();
+      fireEvent.change(input, {target: {value: 'a'}});
+      await act(async () => vi.advanceTimersByTime(200));
+      await answer('a', ['Alpha']);
+      fireEvent.change(input, {target: {value: 'al'}});
+      await act(async () => vi.advanceTimersByTime(200));
+      await waitFor(() => expect(input).toHaveAttribute('aria-busy', 'true'));
+      fireEvent.keyDown(input, {key: 'Escape'});
+
+      // The next query is typed but its search has not started yet.
+      fireEvent.change(input, {target: {value: 'alp'}});
+      await answer('al', ['Stale']);
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+
+      // Asking for the menu searches the text the field holds now.
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      expect(search).toHaveBeenLastCalledWith('alp', expect.anything());
+      expect(input).toHaveAttribute('aria-busy', 'true');
+      await answer('alp', ['Alpine']);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.getByRole('option', {name: 'Alpine', hidden: true}),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('option', {name: 'Stale', hidden: true}),
+      ).not.toBeInTheDocument();
+      await act(async () => vi.advanceTimersByTime(200));
+      expect(search.mock.calls.filter(([q]) => q === 'alp')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['with', true],
+    ['without', false],
+  ] as const)(
+    'reopens on ArrowDown %s entries on focus by waiting for the search still running for the typed text',
+    async (_label, hasEntriesOnFocus) => {
+      const bootstrap = vi.fn(() => [{id: 'b', label: 'Suggested'}]);
+      const pending = pendingSource();
+      pending.source.bootstrap = bootstrap;
+      render(
+        <BaseTypeahead
+          searchSource={pending.source}
+          value={null}
+          onChange={() => {}}
+          debounceMs={0}
+          hasEntriesOnFocus={hasEntriesOnFocus}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      input.focus();
+      fireEvent.change(input, {target: {value: 'a'}});
+      await pending.answer('a', ['Alpha']);
+      fireEvent.change(input, {target: {value: 'al'}});
+      await waitFor(() => expect(input).toHaveAttribute('aria-busy', 'true'));
+      fireEvent.keyDown(input, {key: 'Escape'});
+      expect(input).not.toHaveAttribute('aria-busy');
+      bootstrap.mockClear();
+
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      // The pending answer is the one wanted: no bootstrap, no second search.
+      expect(bootstrap).not.toHaveBeenCalled();
+      expect(input).toHaveAttribute('aria-busy', 'true');
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+
+      await pending.answer('al', ['Alpine']);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(input).not.toHaveAttribute('aria-busy');
+      expect(
+        screen.getByRole('option', {name: 'Alpine', hidden: true}),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('option', {name: 'Suggested', hidden: true}),
+      ).not.toBeInTheDocument();
+      expect(
+        pending.search.mock.calls.filter(([q]) => q === 'al'),
+      ).toHaveLength(1);
+    },
+  );
+
+  it('opens with the pending answer when focus returns while its search still runs', async () => {
+    const {input, search, answer} = renderPending({});
+    input.focus();
+    fireEvent.change(input, {target: {value: 'a'}});
+    await waitFor(() => expect(input).toHaveAttribute('aria-busy', 'true'));
+    fireEvent.blur(input, {
+      relatedTarget: screen.getByRole('button', {name: 'Elsewhere'}),
+    });
+    expect(input).not.toHaveAttribute('aria-busy');
+
+    fireEvent.focus(input);
+    expect(input).toHaveAttribute('aria-busy', 'true');
+    await answer('a', ['Alpha']);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(search).toHaveBeenCalledTimes(1);
+  });
+
+  it('still opens the entries on focus with ArrowDown for an empty field', async () => {
+    const source: SearchSource<SearchableItem> = {
+      search: () => [],
+      bootstrap: () => [{id: 'b', label: 'Suggested'}],
+    };
+    render(
+      <BaseTypeahead
+        searchSource={source}
+        value={null}
+        onChange={() => {}}
+        hasEntriesOnFocus
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'));
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'));
+    expect(
+      screen.getByRole('option', {name: 'Suggested', hidden: true}),
+    ).toBeInTheDocument();
+  });
+
+  it('does not run a search still waiting on its debounce after Escape', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const {input, search, answer} = renderPending({debounceMs: 200});
+      input.focus();
+      fireEvent.change(input, {target: {value: 'a'}});
+      await act(async () => vi.advanceTimersByTime(200));
+      await answer('a', ['Alpha']);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+
+      fireEvent.change(input, {target: {value: 'al'}});
+      fireEvent.keyDown(input, {key: 'Escape'});
+      await act(async () => vi.advanceTimersByTime(400));
+      expect(search.mock.calls.some(([query]) => query === 'al')).toBe(false);
+      expect(input).not.toHaveAttribute('aria-busy');
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      expect(search).toHaveBeenLastCalledWith('al', expect.anything());
+      await answer('al', ['Alpine']);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('settles a search cancelled by focus leaving without an empty result', async () => {
+    // A source whose cancel rejects the request in flight.
+    let reject: ((reason: unknown) => void) | null = null;
+    const source: SearchSource<SearchableItem> = {
+      search: async () =>
+        new Promise<SearchableItem[]>((_, fail) => {
+          reject = fail;
+        }),
+      bootstrap: () => [],
+      cancel: () => reject?.(new Error('aborted')),
+    };
+    render(
+      <>
+        <BaseTypeahead
+          searchSource={source}
+          value={null}
+          onChange={() => {}}
+          debounceMs={0}
+        />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'al'}});
+    await waitFor(() => expect(input).toHaveAttribute('aria-busy', 'true'));
+
+    fireEvent.blur(input, {
+      relatedTarget: screen.getByRole('button', {name: 'Elsewhere'}),
+    });
+    await act(async () => {});
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(screen.queryByText('No results found')).not.toBeInTheDocument();
+  });
+
+  it('searches the typed text when the handle opens after Escape inside the debounce', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const handleRef = createRef<BaseTypeaheadHandle>();
+      const {input, search, answer} = renderPending({
+        debounceMs: 200,
+        handleRef,
+      });
+      input.focus();
+      fireEvent.change(input, {target: {value: 'a'}});
+      await act(async () => vi.advanceTimersByTime(200));
+      await answer('a', ['Alpha']);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+
+      fireEvent.change(input, {target: {value: 'al'}});
+      fireEvent.keyDown(input, {key: 'Escape'});
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+
+      act(() => handleRef.current?.open());
+      expect(search).toHaveBeenLastCalledWith('al', expect.anything());
+      await answer('al', ['Alpine']);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('Alpine')).toBeInTheDocument();
+      expect(screen.queryByText('Alpha')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reopens on an empty answer kept through Escape without searching again', async () => {
+    const {input, search, answer} = renderPending({});
+    input.focus();
+    fireEvent.change(input, {target: {value: 'zz'}});
+    await waitFor(() => expect(input).toHaveAttribute('aria-busy', 'true'));
+    fireEvent.keyDown(input, {key: 'Escape'});
+    await answer('zz', []);
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('No results found')).toBeInTheDocument();
+    expect(search.mock.calls.filter(([query]) => query === 'zz')).toHaveLength(
+      1,
+    );
+  });
+
+  it('reopens a partial list kept through Escape as busy while its search is pending', async () => {
+    let finish: ((items: SearchableItem[]) => void) | null = null;
+    const source: SearchSource<SearchableItem> = {
+      search: async (_query, context) =>
+        new Promise<SearchableItem[]>(resolve => {
+          context?.update([{id: 'Alpine', label: 'Alpine'}]);
+          finish = resolve;
+        }),
+      bootstrap: () => [],
+    };
+    render(
+      <BaseTypeahead
+        searchSource={source}
+        value={null}
+        onChange={() => {}}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'al'}});
+    await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'));
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    fireEvent.keyDown(input, {key: 'Escape'});
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).not.toHaveAttribute('aria-busy');
+
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Alpine')).toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    await act(async () =>
+      finish?.([
+        {id: 'Alpine', label: 'Alpine'},
+        {id: 'Alps', label: 'Alps'},
+      ]),
+    );
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(screen.getByText('Alps')).toBeInTheDocument();
+  });
+
+  it('announces the count of an answer kept through Escape when the menu reopens', async () => {
+    __resetLiveRegionsForTest();
+    try {
+      const {input, answer} = renderPending({});
+      await openWithPendingQuery(input, answer);
+      fireEvent.keyDown(input, {key: 'Escape'});
+      await answer('al', ['Alpine', 'Alps']);
+      const liveRegion = () =>
+        document.querySelector('[data-astryx-live-region="polite"]');
+      // The announcer writes on the next frame.
+      await act(
+        async () =>
+          new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+      );
+      expect(liveRegion()?.textContent ?? '').not.toContain('2 results');
+
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      await waitFor(() => expect(liveRegion()).toHaveTextContent('2 results'));
+    } finally {
+      __resetLiveRegionsForTest();
+    }
+  });
+
+  describe('every open path after a dismissal shows the kept list at once', () => {
+    // A source that shows a partial list at once and answers when the test
+    // says so. It cannot abort.
+    function partialSource() {
+      let finish: ((items: SearchableItem[]) => void) | null = null;
+      const search = vi.fn(
+        async (_query: string, context?: SearchContext<SearchableItem>) =>
+          new Promise<SearchableItem[]>(resolve => {
+            context?.update([{id: 'Alpine', label: 'Alpine'}]);
+            finish = resolve;
+          }),
+      );
+      const settle = async () => {
+        await act(async () =>
+          finish?.([
+            {id: 'Alpine', label: 'Alpine'},
+            {id: 'Alps', label: 'Alps'},
+          ]),
+        );
+      };
+      return {source: {search, bootstrap: () => []}, search, settle};
+    }
+
+    type OpenPath = {
+      dismiss: (input: HTMLElement) => void;
+      open: (input: HTMLElement, handle: BaseTypeaheadHandle | null) => void;
+    };
+    const pressEscape = (input: HTMLElement) =>
+      fireEvent.keyDown(input, {key: 'Escape'});
+    const OPEN_PATHS: [string, OpenPath][] = [
+      [
+        'ArrowDown',
+        {
+          dismiss: pressEscape,
+          open: input => fireEvent.keyDown(input, {key: 'ArrowDown'}),
+        },
+      ],
+      [
+        'focus return',
+        {
+          dismiss: () =>
+            act(() => screen.getByRole('button', {name: 'Elsewhere'}).focus()),
+          open: input => act(() => input.focus()),
+        },
+      ],
+      [
+        'pointer press',
+        {
+          dismiss: pressEscape,
+          open: input => {
+            fireEvent.pointerDown(input);
+            fireEvent.click(input);
+          },
+        },
+      ],
+      [
+        'handle open()',
+        {
+          dismiss: pressEscape,
+          open: (_input, handle) => act(() => handle?.open()),
+        },
+      ],
+    ];
+
+    async function renderDismissed() {
+      __resetLiveRegionsForTest();
+      const handleRef = createRef<BaseTypeaheadHandle>();
+      const pending = partialSource();
+      render(
+        <>
+          <BaseTypeahead
+            searchSource={pending.source}
+            value={null}
+            onChange={() => {}}
+            debounceMs={0}
+            handleRef={handleRef}
+          />
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const input = screen.getByRole('combobox');
+      act(() => input.focus());
+      fireEvent.change(input, {target: {value: 'al'}});
+      await waitFor(() =>
+        expect(input).toHaveAttribute('aria-expanded', 'true'),
+      );
+      expect(input).toHaveAttribute('aria-busy', 'true');
+      return {...pending, input, handleRef};
+    }
+    const liveRegion = () =>
+      document.querySelector('[data-astryx-live-region="polite"]');
+    afterEach(() => __resetLiveRegionsForTest());
+
+    it.each(OPEN_PATHS)(
+      '%s shows the kept partial list, busy while its search is pending',
+      async (_name, path) => {
+        const {input, handleRef, search, settle} = await renderDismissed();
+        path.dismiss(input);
+        await waitFor(() =>
+          expect(input).toHaveAttribute('aria-expanded', 'false'),
+        );
+        expect(input).not.toHaveAttribute('aria-busy');
+
+        path.open(input, handleRef.current);
+        await waitFor(() =>
+          expect(input).toHaveAttribute('aria-expanded', 'true'),
+        );
+        expect(screen.getByText('Alpine')).toBeInTheDocument();
+        expect(input).toHaveAttribute('aria-busy', 'true');
+        expect(search).toHaveBeenCalledOnce();
+
+        await settle();
+        expect(input).not.toHaveAttribute('aria-busy');
+        expect(screen.getByText('Alps')).toBeInTheDocument();
+        await waitFor(() =>
+          expect(liveRegion()).toHaveTextContent('2 results'),
+        );
+      },
+    );
+
+    it.each(OPEN_PATHS)(
+      '%s shows a kept settled answer, not busy, and announces its count',
+      async (_name, path) => {
+        const {input, handleRef, search, settle} = await renderDismissed();
+        path.dismiss(input);
+        await waitFor(() =>
+          expect(input).toHaveAttribute('aria-expanded', 'false'),
+        );
+        await settle();
+        await act(
+          async () =>
+            new Promise<void>(resolve =>
+              requestAnimationFrame(() => resolve()),
+            ),
+        );
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+        expect(liveRegion()?.textContent ?? '').not.toContain('2 results');
+
+        path.open(input, handleRef.current);
+        await waitFor(() =>
+          expect(input).toHaveAttribute('aria-expanded', 'true'),
+        );
+        expect(screen.getByText('Alps')).toBeInTheDocument();
+        expect(input).not.toHaveAttribute('aria-busy');
+        expect(search).toHaveBeenCalledOnce();
+        await waitFor(() =>
+          expect(liveRegion()).toHaveTextContent('2 results'),
+        );
+      },
+    );
+
+    it("searches the typed text when a press on the field's label dismissed it inside the debounce", async () => {
+      vi.useFakeTimers({shouldAdvanceTime: true});
+      try {
+        const {input, search, answer} = renderPending({debounceMs: 200});
+        input.focus();
+        fireEvent.change(input, {target: {value: 'al'}});
+        // A press on the label takes focus from the input with no target in
+        // the field, then the label returns focus to the input.
+        act(() => input.blur());
+        await act(async () => vi.advanceTimersByTime(400));
+        expect(search).not.toHaveBeenCalled();
+
+        act(() => input.focus());
+        expect(search).toHaveBeenLastCalledWith('al', expect.anything());
+        expect(input).toHaveAttribute('aria-busy', 'true');
+        await answer('al', ['Alpine']);
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByText('Alpine')).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('searches again on ArrowDown for an empty settled answer not kept through a dismissal', async () => {
+      const {input, search, answer} = renderPending({});
+      input.focus();
+      fireEvent.change(input, {target: {value: 'zz'}});
+      await answer('zz', []);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.keyDown(input, {key: 'Escape'});
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      await waitFor(() =>
+        expect(
+          search.mock.calls.filter(([query]) => query === 'zz'),
+        ).toHaveLength(2),
+      );
+    });
+  });
+
+  it('does not run a search still waiting on its debounce after focus leaves', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const {input, search} = renderPending({debounceMs: 200});
+      input.focus();
+      fireEvent.change(input, {target: {value: 'a'}});
+      fireEvent.blur(input, {
+        relatedTarget: screen.getByRole('button', {name: 'Elsewhere'}),
+      });
+      await act(async () => vi.advanceTimersByTime(400));
+      expect(search).not.toHaveBeenCalled();
+      expect(input).not.toHaveAttribute('aria-busy');
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

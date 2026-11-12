@@ -1021,7 +1021,7 @@ function validateReleaseTestRepairAtRef(
   const changeDigest = exactChangeDigest(diff);
   const files = [
     ...new Set(entries.flatMap(entry => diffEntryFiles(entry) ?? [])),
-  ];
+  ].sort();
   const mainPatches = new Map();
   if (mainRef) {
     const candidates = git(root, [
@@ -1035,11 +1035,29 @@ function validateReleaseTestRepairAtRef(
       .split('\n')
       .filter(Boolean);
     for (const commit of candidates) {
+      const candidateEntries = git(root, [
+        'diff-tree',
+        '--root',
+        '--no-commit-id',
+        '--name-status',
+        '-r',
+        commit,
+      ])
+        .split('\n')
+        .filter(Boolean);
+      const candidateEntryFiles = candidateEntries.map(diffEntryFiles);
+      if (candidateEntryFiles.some(candidateFiles => candidateFiles === null))
+        continue;
+      const candidateFiles = [...new Set(candidateEntryFiles.flat())].sort();
+      if (canonicalJson(candidateFiles) !== canonicalJson(files)) continue;
+
       const candidateDiff = gitRaw(root, [
         'show',
         '--format=',
         '--binary',
         commit,
+        '--',
+        ...candidateFiles,
       ]);
       const candidatePatchId = stablePatchId(root, candidateDiff);
       if (!candidatePatchId || candidatePatchId !== patchId) continue;

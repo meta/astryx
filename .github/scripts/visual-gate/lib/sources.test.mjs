@@ -6,7 +6,7 @@ import * as path from 'node:path';
 
 import {afterEach, describe, expect, it} from 'vitest';
 
-import {loadThemeOverrides} from './sources.mjs';
+import {READ_ONLY_ENV, loadThemeOverrides, readOnlyGate} from './sources.mjs';
 
 /** @type {string[]} */
 const made = [];
@@ -64,7 +64,7 @@ describe('loadThemeOverrides', () => {
     const overrides = await loadThemeOverrides(root, 'probe', (_root, pkg) => {
       builds.push(pkg);
       writeBuilt(dir);
-    });
+    }, {readOnly: false});
 
     expect(builds).toEqual(['@astryxdesign/theme-butter']);
     expect(overrides).toEqual({butter: {badge: ['base', 'variant:info']}});
@@ -79,7 +79,7 @@ describe('loadThemeOverrides', () => {
     await loadThemeOverrides(root, 'probe', (_root, pkg) => {
       builds.push(pkg);
       if (pkg === '@astryxdesign/theme-butter') writeBuilt(dir);
-    });
+    }, {readOnly: false});
 
     expect(builds).toEqual(['@astryxdesign/core', '@astryxdesign/theme-butter']);
   });
@@ -87,8 +87,62 @@ describe('loadThemeOverrides', () => {
   it('says it tried when the rebuild does not produce a loadable theme', async () => {
     const {root} = fixture({built: false});
 
-    await expect(loadThemeOverrides(root, 'probe', () => {})).rejects.toThrow(
+    await expect(loadThemeOverrides(root, 'probe', () => {}, {readOnly: false})).rejects.toThrow(
       /could not load theme butter[\s\S]*rebuilt @astryxdesign\/theme-butter here and the import still fails/,
     );
+  });
+
+  describe('read-only, as a gate a test runs', () => {
+    it('is the default in the Node test project, and nowhere else sets it', () => {
+      expect(readOnlyGate()).toBe(true);
+      const repo = path.resolve(import.meta.dirname, '../../../..');
+      const workflows = path.join(repo, '.github/workflows');
+      for (const file of fs.readdirSync(workflows))
+        expect(fs.readFileSync(path.join(workflows, file), 'utf8'), file).not.toContain(READ_ONLY_ENV);
+      expect(fs.readFileSync(path.join(repo, 'vitest.config.ts'), 'utf8')).toContain(
+        `env: {${READ_ONLY_ENV}: '1'}`,
+      );
+    });
+
+    it('builds nothing for a theme it cannot read, and names it', async () => {
+      const {root} = fixture({built: false});
+      /** @type {string[]} */
+      const builds = [];
+      /** @type {string[]} */
+      const notBuilt = [];
+
+      const overrides = await loadThemeOverrides(root, 'probe', (_root, pkg) => builds.push(pkg), {notBuilt});
+
+      expect(builds).toEqual([]);
+      expect(notBuilt).toEqual(['butter']);
+      expect(overrides).toEqual({});
+    });
+
+    it('builds no core either when its dist is missing, and names the theme', async () => {
+      const {root} = fixture({built: false});
+      fs.rmSync(path.join(root, 'packages/core/dist'), {recursive: true});
+      /** @type {string[]} */
+      const builds = [];
+      /** @type {string[]} */
+      const notBuilt = [];
+
+      await loadThemeOverrides(root, 'probe', (_root, pkg) => builds.push(pkg), {notBuilt});
+
+      expect(builds).toEqual([]);
+      expect(notBuilt).toEqual(['butter']);
+    });
+
+    it('still reads a built theme, and still fails on a built one that does not load', async () => {
+      const {root} = fixture({built: true});
+      expect(await loadThemeOverrides(root, 'probe', () => {}, {notBuilt: []})).toEqual({
+        butter: {badge: ['base', 'variant:info']},
+      });
+      // A separate tree: the module cache keeps the first import of a path.
+      const broken = fixture({built: false});
+      fs.writeFileSync(path.join(broken.dir, 'dist/source.mjs'), 'export const = ;\n');
+      await expect(loadThemeOverrides(broken.root, 'probe', () => {}, {notBuilt: []})).rejects.toThrow(
+        /could not load theme butter/,
+      );
+    });
   });
 });
