@@ -60,13 +60,25 @@ const RUNNERS = {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
   },
+  'api/theme-edit/_context.mjs': {
+    runs: "the project's installed Core registry of the variables a part's plain corners or padding also write, to refuse a state they would miss",
+    sites: ['import(<computed>)'],
+  },
+  'api/theme-edit/_css.mjs': {
+    runs: 'css-tree and the MDN property data it ships, on the first CSS name or value check, so other commands do not load them',
+    sites: [
+      'require(@csstools/css-syntax-patches-for-csstree)',
+      'require(css-tree)',
+      'require(mdn-data/css/properties.json)',
+    ],
+  },
   'api/theme-edit/_preview.mjs': {
     runs: 'a Playwright the project has installed, or a Chrome found on the machine, to picture a preview only with --png',
     sites: ['child_process.spawnSync', 'import(<computed>)'],
   },
   'api/theme-edit/_project.mjs': {
     runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
-    sites: ['import(<computed>) ×2', 'require'],
+    sites: ['createRequire', 'import(<computed>) ×2', 'require'],
   },
   'api/theme-edit/_settings.mjs': {
     runs: 'the built theme module, to read its resolved tokens after a build',
@@ -311,6 +323,13 @@ const RUNNERS = {
     runs: 'the command modules, to register each command',
     sites: ['import(<computed>)'],
   },
+  'clients/cli/lib/cli-error.mjs': {
+    runs: 'the experimental theme editor and preview command docs, for the subcommand names an unknown-command refusal suggests',
+    sites: [
+      'import ../commands/experimental-theme-editor.doc.mjs',
+      'import ../commands/experimental-theme-preview.doc.mjs',
+    ],
+  },
   'clients/cli/lib/manifest.mjs': {
     runs: 'the manifest command doc, for the exit codes the manifest reports',
     sites: ['import ../commands/manifest.doc.mjs'],
@@ -326,6 +345,10 @@ const RUNNERS = {
   'foundation/agent-docs/agent-docs.mjs': {
     runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
     sites: ['child_process.spawnSync'],
+  },
+  'foundation/fs/gather-cache.mjs': {
+    runs: 'nothing; a module hook that notes each module a search or build loads, with its state, and loads it unchanged',
+    sites: ['module.registerHooks'],
   },
   'foundation/fs/file-protection.mjs': {
     runs: 'the ignore matcher (CommonJS), loaded when a resolver first reads an ignore file',
@@ -375,6 +398,10 @@ const RUNNERS = {
       'require(typescript/package.json)',
     ],
   },
+  'foundation/discovery/module-exports.mjs': {
+    runs: "@babel/parser, loaded on first use, to read a module's exports",
+    sites: ['require(@babel/parser)'],
+  },
   'foundation/discovery/template-adapter.mjs': {
     runs: '@babel/parser, to find the fixture references and page-local bindings in template source; and a template doc that does not validate, to read the replacement it declares',
     sites: ['importDocModule', 'require(@babel/parser)'],
@@ -391,11 +418,11 @@ const RUNNERS = {
     runs: 'authored doc files, for the doc reader and discovery, and again after an edit, without the cache entry of a CommonJS doc',
     sites: [
       '.import() ×2',
-      'createJiti ×2',
       'importUrl ×2',
       'importUserModule ×2',
       'readFreshInTurn',
       'readInTurn',
+      'require(jiti)',
     ],
   },
   'foundation/doc-compiler/read.mjs': {
@@ -426,7 +453,7 @@ const RUNNERS = {
   },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache',
-    sites: ['.import() ×3', 'createJiti ×3', 'importUrl ×2', 'require.cache'],
+    sites: ['.import() ×3', 'importUrl ×2', 'require(jiti)', 'require.cache'],
   },
   'foundation/fs/read-record.mjs': {
     runs: "nothing; it wraps node:fs's read calls to record the paths an operation reads, and republishes them to ESM imports",
@@ -445,8 +472,8 @@ const RUNNERS = {
     sites: ['importUserModule'],
   },
   'foundation/integrations/validate-contributions.mjs': {
-    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a template loads an asset (no lifecycle script runs, nothing is written)",
-    sites: ['child_process.spawnSync'],
+    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a template loads an asset (no lifecycle script runs, nothing is written); and @babel/parser, loaded on first use, to read a contribution's source",
+    sites: ['child_process.spawnSync', 'require(@babel/parser)'],
   },
   'foundation/release/cache.mjs': {
     runs: 'npm (under npm-guard.mjs), to install and look up CLI releases in the per-user cache; each installed release once, to check it starts and reports its version; and ps (tasklist on Windows), to confirm the process a stale lock records is node or npm before ending it',
@@ -471,6 +498,14 @@ const RUNNERS = {
   'scripts/generate-cli-readme.mjs': {
     runs: '`astryx manifest` and the error-code and response-type docs, to write the README tables (build time, not shipped)',
     sites: ['child_process.spawnSync', 'import(<computed>)'],
+  },
+  'scripts/generate-manifest.mjs': {
+    runs: "`astryx manifest --json`, from a folder beside each package manager's lockfile, to store the manifest at `prepack` (build time)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-self-audit.mjs': {
+    runs: "`npm pack --dry-run --json --ignore-scripts`, to list the files the package publishes, and node, to run Doctor's audit of the CLI's own files on a copy of exactly those files (at `prepack`)",
+    sites: ['child_process.spawnSync ×2'],
   },
   'scripts/generate-stored-docs.mjs': {
     runs: 'each shipped doc file that imports nothing and runs nothing as it loads, to store its exports (build time, not shipped)',

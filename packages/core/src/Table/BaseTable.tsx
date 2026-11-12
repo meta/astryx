@@ -18,7 +18,7 @@ import {
   memo,
   useId,
   useMemo,
-  useRef,
+  useSyncExternalStore,
   type ReactElement,
   type ReactNode,
   type Ref,
@@ -53,6 +53,7 @@ import type {
   BodyCellRenderProps,
   ScrollWrapperRenderProps,
   TableRenderContext,
+  TablePluginRenderState,
   TableRowContext,
   TableRowComponentProps,
   TableCellComponentProps,
@@ -72,6 +73,7 @@ import {TableHeader} from './TableHeader';
 import {TableBody} from './TableBody';
 import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {internByIdentity} from './internByIdentity';
 import {
   readsRowCount,
   readsRowIndex,
@@ -186,25 +188,6 @@ function applyRowPlugins<
 
 // Stable empty array to avoid creating new reference on each render
 const EMPTY_PLUGINS: TablePlugin<Record<string, unknown>>[] = [];
-
-/**
- * Shallow-compare two arrays by element identity.
- * Used to stabilize the resolved columns array across renders.
- */
-function areArraysShallowEqual<T>(a: T[], b: T[]): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (a.length !== b.length) {
-    return false;
-  }
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
 
 interface TableRowProps<T extends Record<string, unknown>> {
   item: T;
@@ -608,11 +591,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // new array on every call, but if the contents haven't changed, we
   // reuse the previous reference. This prevents MemoizedTableRow from
   // re-rendering all rows when the column array is structurally identical.
-  const resolvedColumnsRef = useRef(transformedColumns);
-  if (!areArraysShallowEqual(resolvedColumnsRef.current, transformedColumns)) {
-    resolvedColumnsRef.current = transformedColumns;
-  }
-  const resolvedColumns = resolvedColumnsRef.current;
+  // Every render with the same columns gets one array, so a render React
+  // discards cannot leave another. No state or ref is written during render.
+  const resolvedColumns = internByIdentity(transformedColumns);
   const headerRowCount = mode === 'data' && resolvedColumns.length > 0 ? 1 : 0;
   const config = getTableVirtualizationConfig(virtualization);
   const windowFallbackReason = useMemo(() => {
@@ -704,6 +685,50 @@ function BaseTableInner<T extends Record<string, unknown>>({
   );
   const textOverflow =
     textOverflowProp ?? (windowPlan.isWindowed ? 'truncate' : 'wrap');
+
+  // A loading plugin publishes its request state through `renderState`. Table
+  // reads it before it builds the sections, and only where loading is
+  // admitted: data mode, a flat row model, and the default scroll wrapper.
+  const loadingSource = useMemo(() => {
+    const sources = plugins.flatMap(plugin =>
+      plugin.renderState ? [plugin.renderState] : [],
+    );
+    // The snapshot is a number, so the store compares it by value: bit 0 is
+    // set while a source loads, bit 1 while a source has more rows.
+    const readIsLoading = (
+      read: (source: TablePluginRenderState) => {
+        isLoading: boolean;
+        hasMore?: boolean;
+      },
+    ) =>
+      (sources.some(source => read(source).isLoading) ? 1 : 0) |
+      (sources.some(source => read(source).hasMore === true) ? 2 : 0);
+    return {
+      subscribe(onChange: () => void) {
+        const cleanups = sources.map(source => source.subscribe(onChange));
+        return () => cleanups.forEach(cleanup => cleanup());
+      },
+      getSnapshot: () => readIsLoading(source => source.getSnapshot()),
+      getServerSnapshot: () =>
+        readIsLoading(source => source.getServerSnapshot()),
+    };
+  }, [plugins]);
+  const loadingSnapshot = useSyncExternalStore(
+    loadingSource.subscribe,
+    loadingSource.getSnapshot,
+    loadingSource.getServerSnapshot,
+  );
+  // Table admits loading only with its own scroll wrapper. The loading plugin
+  // reads this admission from the runtime context, so a caller's wrapper gets
+  // the whole loading behavior or none of it.
+  const isLoadingAdmitted =
+    mode === 'data' &&
+    admission.rowModel === 'flat' &&
+    ScrollWrapper != null &&
+    isTableScrollWrapperOwned(ScrollWrapper);
+  const isLoading = isLoadingAdmitted && (loadingSnapshot & 1) === 1;
+  // While any admitted source may load more rows, the total is unknown.
+  const hasMoreRows = isLoadingAdmitted && (loadingSnapshot & 2) === 2;
 
   // Resolve all column widths in a single pass — produces per-column
   // inline styles and the aggregate table min-width.
@@ -886,7 +911,11 @@ function BaseTableInner<T extends Record<string, unknown>>({
     <table
       ref={useMergedRefs(ref, runtime.setTable)}
       {...(windowPlan.isWindowed
-        ? {'aria-rowcount': headerRowCount + (data?.length ?? 0)}
+        ? {
+            'aria-rowcount': hasMoreRows
+              ? -1
+              : headerRowCount + (data?.length ?? 0),
+          }
         : ariaRowCount != null
           ? {'aria-rowcount': ariaRowCount}
           : null)}
@@ -981,7 +1010,10 @@ function BaseTableInner<T extends Record<string, unknown>>({
                   return rows;
                 })
               : data != null &&
-                emptyState !== false && (
+                emptyState !== false &&
+                // While the first rows load, the default "no data" message
+                // would be wrong. Caller-owned empty content still shows.
+                !(isLoading && emptyState == null) && (
                   <tr>
                     <td colSpan={resolvedColumns.length}>
                       {emptyState ?? (
@@ -1064,8 +1096,14 @@ function BaseTableInner<T extends Record<string, unknown>>({
       viewportHeight: windowPlan.isWindowed
         ? config?.initialViewportHeight
         : undefined,
+      isLoadingAdmitted,
     }),
-    [runtime, windowPlan.isWindowed, config?.initialViewportHeight],
+    [
+      runtime,
+      windowPlan.isWindowed,
+      config?.initialViewportHeight,
+      isLoadingAdmitted,
+    ],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>

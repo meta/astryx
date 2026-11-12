@@ -11,12 +11,23 @@
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
-import {CLOSEST_OPEN_FONT, OPEN_FONTS, P, SYSTEM_FONTS} from './_tables.mjs';
+import {
+  CLOSEST_OPEN_FONT,
+  FONT_ROLES,
+  FONTS,
+  OPEN_FONTS,
+  isDesktopFamily,
+  oneSystemOf,
+  P,
+  SYSTEM_FONTS,
+} from './_tables.mjs';
 import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
+import {writeWhole} from './_palette.mjs';
 import {
   fontOf,
   fontPackages,
@@ -42,7 +53,12 @@ export function requireProject(cwd) {
   if (fs.existsSync(path.join(cwd, '.pnp.cjs')))
     throw new AstryxError(
       "This app uses Yarn Plug'n'Play, which astryx experimental theme does not support: it reads the installed Core from node_modules. Set `nodeLinker: node-modules` in .yarnrc.yml and run yarn install. Nothing was written.",
-      [],
+      [
+        {
+          name: 'yarn config set nodeLinker node-modules',
+          reason: 'do this first, then yarn install',
+        },
+      ],
       E.ERR_PROJECT_REQUIRED,
     );
   // A package.json with no Core: an app (or a workspace root) that needs it.
@@ -54,7 +70,12 @@ export function requireProject(cwd) {
     );
   throw new AstryxError(
     'No package.json found. astryx experimental theme works inside an app project, which it writes the theme into and whose installed Core it checks every change against. Nothing was written.',
-    [],
+    [
+      {
+        name: 'npm init -y',
+        reason: 'make a package.json here, then install @astryxdesign/core',
+      },
+    ],
     E.ERR_PROJECT_REQUIRED,
   );
 }
@@ -72,11 +93,14 @@ export async function context(cwd) {
   let parts;
   /** @type {string | null} */
   let unchecked = null;
+  /** @type {string | null} the render error's code */
+  let uncheckedCode = null;
   try {
     parts = await partData(project);
   } catch (e) {
     if (!isRenderFailure(e)) throw e;
     unchecked = renderCause(project, /** @type {Error} */ (e).message);
+    uncheckedCode = /** @type {any} */ (e).code ?? null;
     parts = {
       version: 0,
       coreKey: project.coreKey,
@@ -86,7 +110,31 @@ export async function context(cwd) {
       items: 0,
     };
   }
-  return {project, C: makeCompiler(project, parts), parts, unchecked};
+  return {
+    project,
+    C: makeCompiler(project, parts),
+    parts,
+    unchecked,
+    uncheckedCode,
+    derived: await derivedVars(project.coreDir),
+  };
+}
+
+/**
+ * Core's registry of the variables a part's plain border-radius or padding
+ * also writes (a card's inner corners), or empty on a Core without it.
+ * @param {string} coreDir
+ * @returns {Promise<Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>>}
+ */
+async function derivedVars(coreDir) {
+  const file = path.join(coreDir, 'dist', 'theme', 'derivedVarRegistry.js');
+  if (!fs.existsSync(file)) return {};
+  try {
+    const mod = await import(pathToFileURL(file).href);
+    return mod.derivedVarRegistry ?? {};
+  } catch {
+    return {};
+  }
 }
 
 /** @param {unknown} e */
@@ -142,6 +190,8 @@ const notChecked = cause =>
 export async function pictures(project, shots, modes) {
   /** @type {string[]} */
   const files = [];
+  /** @type {string[]} */
+  const cut = [];
   for (const {html, png} of shots) {
     for (const m of modes) {
       const out =
@@ -151,9 +201,16 @@ export async function pictures(project, shots, modes) {
       const r = await screenshot(project, html, out, m);
       if (!r.ok) return {files, problem: r.reason};
       files.push(r.file);
+      if (r.cut) cut.push(r.file);
     }
   }
-  return {files, problem: null};
+  return {
+    files,
+    // A picture of the window shows the top of a longer page only.
+    problem: cut.length
+      ? `${cut.join(', ')} show${cut.length === 1 ? 's' : ''} the top 2400 pixels of the page only (Chrome takes the window, not the whole page); open the .html beside ${cut.length === 1 ? 'it' : 'them'} to see all of it, or install Playwright (${installLine(project.cwd, ['playwright'])}) for whole-page pictures`
+      : null,
+  };
 }
 
 /**
@@ -167,7 +224,8 @@ export async function pictures(project, shots, modes) {
 export function fontNotes(ctx, data) {
   /** @type {string[]} */
   const notes = [];
-  for (const {pkg, family, installed} of fontPackages(ctx, data)) {
+  const packages = fontPackages(ctx, data);
+  for (const {pkg, family, installed} of packages) {
     const fallbacks =
       Object.values(OPEN_FONTS).find(f => f.pkg === pkg)?.fallbacks ?? '';
     const near = /monospace/.test(fallbacks)
@@ -181,20 +239,49 @@ export function fontNotes(ctx, data) {
         : `${family} is not installed, so it does not load: the previews and the app show the next font in the stack. Install it: ${installLine(ctx.project.cwd, [pkg])}. Then the preview imports it on the next set or show, and the app imports it once: import '${pkg}'; Until then, the closest font that needs no install is ${near}: ${P} set ${data.name} font ${near}`,
     );
   }
+  // A family the editor's own presets lead with, where the preset gets no
+  // note (Comic Sans MS, of comic), is no more a font to load typed by name.
+  const presetFamily = (/** @type {string} */ family) => {
+    const f = family.replace(/["']/g, '').trim().toLowerCase();
+    // A one-system font keeps its note, preset or not.
+    if (oneSystemOf(family.replace(/["']/g, '').trim())) return false;
+    return Object.entries(FONTS).some(
+      ([k, [first]]) =>
+        (SYSTEM_FONTS.includes(k) || k === 'comic' || k === 'rounded') &&
+        first.replace(/["']/g, '').trim().toLowerCase() === f,
+    );
+  };
   for (const s of data.settings) {
     if (
       s.thing !== 'font' ||
       SYSTEM_FONTS.includes(s.value) ||
+      isDesktopFamily(fontOf(s.value).family.replace(/["']/g, '')) ||
       OPEN_FONTS[s.value] ||
       fontOf(s.value).pkg ||
+      packages.some(x => x.of === s) ||
       s.value === 'rounded' ||
-      s.value === 'comic'
+      s.value === 'comic' ||
+      presetFamily(fontOf(s.value).family)
     )
       continue;
     const family = fontOf(s.value).family.replace(/["']/g, '').toLowerCase();
     const near = CLOSEST_OPEN_FONT[family];
+    const named = fontOf(s.value).family.replace(/^["']|["']$/g, '');
+    const system = oneSystemOf(named);
+    const on = s.on ? ` --on ${s.on}` : '';
+    if (system) {
+      // A system font, on one system: the others show the next font.
+      const next =
+        fontOf(s.value).fallbacks.split(',')[0]?.trim() || 'system-ui';
+      notes.push(
+        /^(-apple-system|blinkmacsystemfont)$/.test(family)
+          ? `"${named}" names the macOS interface font, which only macOS has: other systems show the next font in the stack (${next}). The system preset gives each system its own interface font: ${P} set ${data.name} font system${on}`
+          : `"${named}" ships only on ${system}: other systems show the next font in the stack (${next}).${near ? ` The closest open font, which loads everywhere, is ${near}: ${P} set ${data.name} font ${near}${on}` : ''}`,
+      );
+      continue;
+    }
     notes.push(
-      `"${fontOf(s.value).family.replace(/["']/g, '')}" is not a system font and no package loads it: the app must load it, or it falls back.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
+      `"${fontOf(s.value).family.replace(/^["']|["']$/g, '')}" is not a system font and no package loads it: the app must load it, or it falls back.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
     );
   }
   return notes;
@@ -218,13 +305,31 @@ export function styledChanges(before, after) {
     ])) {
       const x = a[target]?.[key] ?? {};
       const y = b[target]?.[key] ?? {};
+      /** @param {string} p */
+      const cssName = p =>
+        p.startsWith('--')
+          ? p
+          : p.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
       for (const prop of new Set([...Object.keys(x), ...Object.keys(y)])) {
         if (JSON.stringify(x[prop]) === JSON.stringify(y[prop])) continue;
-        const name = prop.startsWith('--')
-          ? prop
-          : prop.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+        const where = `${target}${key === 'base' ? '' : ` ${key}`}`;
+        // A state block (`:hover`) lists each property it changes.
+        if (
+          prop.startsWith(':') &&
+          ((y[prop] && typeof y[prop] === 'object') ||
+            (x[prop] && typeof x[prop] === 'object'))
+        ) {
+          const xs = x[prop] ?? {};
+          const ys = y[prop] ?? {};
+          for (const p of new Set([...Object.keys(xs), ...Object.keys(ys)]))
+            if (JSON.stringify(xs[p]) !== JSON.stringify(ys[p]))
+              out.push(
+                `${where} ${prop}: ${cssName(p)} ${ys[p] === undefined ? '(removed)' : String(ys[p])}`,
+              );
+          continue;
+        }
         out.push(
-          `${target}${key === 'base' ? '' : ` ${key}`}: ${name} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
+          `${where}: ${cssName(prop)} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
         );
       }
     }
@@ -232,7 +337,7 @@ export function styledChanges(before, after) {
   const ta = JSON.stringify(before?.typography ?? {});
   const tb = JSON.stringify(after?.typography ?? {});
   if (ta !== tb) {
-    for (const role of ['body', 'heading', 'code']) {
+    for (const role of FONT_ROLES) {
       const x = after?.typography?.[role];
       if (
         JSON.stringify(before?.typography?.[role] ?? null) !==
@@ -274,11 +379,17 @@ export async function previewAfter(ctx, slug, data, png) {
     preview = await renderPreview(ctx, slug, data);
   } catch (e) {
     // The change is already saved: any failure here leaves it unchecked.
+    const code = /** @type {any} */ (e)?.code;
     cause ??= isRenderFailure(e)
       ? renderCause(ctx.project, /** @type {Error} */ (e).message)
-      : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
+      : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
+        ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
+        : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
+  // The sheet of every component is made by show only: after a change it
+  // says, at its top, that it shows the theme as it was.
+  const sheetStale = markSheetStale(f.sheet, slug);
   const shots =
     png && preview
       ? await pictures(
@@ -292,7 +403,42 @@ export async function previewAfter(ctx, slug, data, png) {
     pictures: shots.files,
     pictureProblem: shots.problem,
     notChecked: notChecked(cause),
+    ...(sheetStale
+      ? {
+          sheetStale: `sheet.html shows ${slug} as it was before this change; ${P} show ${slug} makes it again`,
+        }
+      : {}),
   };
+}
+
+const STALE_MARK = '<!-- astryx: sheet older than the theme -->';
+
+/**
+ * Put a notice at the top of a sheet the last change made out of date
+ * (once). Returns whether there is such a sheet.
+ * @param {string} file
+ * @param {string} slug
+ */
+function markSheetStale(file, slug) {
+  let html;
+  try {
+    html = fs.readFileSync(file, 'utf8');
+  } catch {
+    return false;
+  }
+  if (html.includes(STALE_MARK)) return true;
+  const banner = `${STALE_MARK}<div style="position:sticky;top:0;z-index:9999;padding:8px 12px;background:#fff3cd;color:#3d2c00;font:14px system-ui,sans-serif;border-bottom:1px solid #e0c870">This sheet shows ${slug} as it was before the last change. Run ${P} show ${slug} to make it again.</div>`;
+  const at = html.search(/<body[^>]*>/i);
+  const next =
+    at < 0 ? banner + html : html.replace(/<body[^>]*>/i, m => `${m}${banner}`);
+  try {
+    // Fenced like every editor write under the theme lock.
+    writeWhole(file, next);
+  } catch (e) {
+    if (/** @type {any} */ (e)?.lockLost) throw e;
+    // Read-only: the note in the result still says so.
+  }
+  return true;
 }
 
 /**

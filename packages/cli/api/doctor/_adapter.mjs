@@ -66,9 +66,22 @@ export {
   readThemeState,
   resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
-export {themeBuild, validateThemePrivateInputs} from '../theme/build/build.mjs';
+export {
+  missingThemePackage,
+  themeBuild,
+  validateThemePrivateInputs,
+} from '../theme/build/build.mjs';
+export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+
+// What the authoring-docs check reads (./_authoring-audit.mjs), reached only
+// through this adapter.
+export {
+  AUTHORING_AUDIT,
+  authoringAudit,
+  authoringAuditData,
+} from './_authoring-audit.mjs';
 
 /**
  * Package written to the generated app record for one discovered theme.

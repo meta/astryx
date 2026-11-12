@@ -8,22 +8,24 @@ import {loadTaskSet, renderPrompt, TASKS_ROOT} from './tasks.mjs';
 
 const arms = Object.values(ARMS);
 
-describe('pilot task set', () => {
-  const tasks = loadTaskSet('pilot');
+const SETS = {pilot: 5, v1: 8};
 
-  it('has a probe and a reference solution for every arm', () => {
-    expect(tasks.length).toBeGreaterThanOrEqual(4);
+describe.each(Object.entries(SETS))('%s task set', (set, size) => {
+  const tasks = loadTaskSet(set);
+
+  it('has its fixed size, a probe, and a reference solution for every arm', () => {
+    expect(tasks).toHaveLength(size);
     for (const task of tasks) {
       expect(fs.existsSync(task.probePath)).toBe(true);
       for (const arm of arms) {
-        expect(fs.existsSync(path.join(TASKS_ROOT, 'pilot', 'reference', arm.id, `${task.id}.tsx`))).toBe(true);
+        expect(fs.existsSync(path.join(TASKS_ROOT, set, 'reference', arm.id, `${task.id}.tsx`))).toBe(true);
       }
     }
   });
 
-  it('never names a component or a library in the task text', () => {
+  it('never names a library or a component in the task text', () => {
     for (const task of tasks) {
-      expect(task.prompt).not.toMatch(/astryx|shadcn|radix|RadioList|AlertDialog|TabList|TextInput/i);
+      expect(task.prompt).not.toMatch(/astryx|shadcn|radix|base ui|RadioList|AlertDialog|TabList|TextInput|Typeahead|DropdownMenu/i);
     }
   });
 
