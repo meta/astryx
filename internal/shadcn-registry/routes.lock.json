@@ -4022,6 +4022,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-theme-name-active-theme",
+      "path": "examples/use-theme-name/active-theme",
+      "aliases": []
+    },
+    {
       "name": "example-use-theme-token-values",
       "path": "examples/use-theme/token-values",
       "aliases": []
@@ -4454,6 +4459,11 @@
     {
       "name": "hook-use-theme",
       "path": "hooks/use-theme",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-theme-name",
+      "path": "hooks/use-theme-name",
       "aliases": []
     },
     {

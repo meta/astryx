@@ -76,10 +76,12 @@ registerEnglishFallback(english);
 // none of its code.
 registerBoxHold();
 
-/** Written by the touch press controller while the row is pressed. */
+/** Written by the press controller while the row is pressed. */
 const PRESSED_ON = '[data-astryx-press="on"]';
-/** Written by the touch press controller for the press's release. */
+/** Written by the press controller for the press's release. */
 const PRESSED_FADING = '[data-astryx-press="fading"]';
+/** The row is pressed, and the press controller does not paint the press. */
+const ACTIVE_UNPAINTED = `:active:not(${PRESSED_ON},${PRESSED_FADING})`;
 
 // The touch press's paint, declared by the shared overlay styles on the
 // element the controller writes to (`pressedAlpha`) at the press's strength,
@@ -113,12 +115,21 @@ const styles = stylex.create({
       [PRESSED_ON]: 'var(--_press-paint-image)',
       [PRESSED_FADING]: 'var(--_press-paint-image)',
     },
+    // While the controller paints the press, the indicator's `:active` fill
+    // stays off, so a mouse's press paints once.
+    '--_indicator-active-press': {
+      default: null,
+      [PRESSED_ON]: 'transparent',
+      [PRESSED_FADING]: 'transparent',
+    },
   },
   // Under a row that owns the press (CheckboxRowPressContext), this row is
   // never pressed. So it hands down that row's press paint, which the
   // built-in box reads too.
   indicatorRowPressImage: {
     '--_indicator-press-image': 'var(--_checkbox-row-press-paint, none)',
+    // The row paints every press, so the indicator draws no `:active` fill.
+    '--_indicator-active-press': 'transparent',
   },
   checkboxWrapper: {
     position: 'relative',
@@ -131,12 +142,13 @@ const styles = stylex.create({
   // The owner paints this layer over the resolved indicator, so a plain theme
   // replacement keeps the pressed feedback. An indicator with
   // `indicatorPressScope` paints its own press from what the row hands down,
-  // so this layer stays off over it. A mouse keeps `:active` (see
-  // interactionOverlay.stylex.ts). Under a coarse pointer that arm is dropped.
-  // The touch press controller then writes the press attribute on the row.
-  // This layer reads it off the scope marker, as the hover tint does. Under a
-  // row that owns the press (CheckboxRowPressContext), the row's own checkbox
-  // paints that row's press paint instead (indicatorRowPressOverlay).
+  // so this layer stays off over it. The press controller writes the press
+  // attribute on the row for every pointer: a finger, a mouse and a pen. This
+  // layer reads it off the scope marker, as the hover tint does. `:active`
+  // paints only a press the controller does not paint, and under a coarse
+  // pointer it is dropped. Under a row that owns the press
+  // (CheckboxRowPressContext), the row's own checkbox paints that row's press
+  // paint instead (indicatorRowPressOverlay).
   indicatorPressOverlay: {
     '::after': {
       // `when.descendant` takes a pseudo-class; `:is(*)` matches any marked
@@ -151,34 +163,31 @@ const styles = stylex.create({
       pointerEvents: 'none',
       backgroundColor: {
         default: 'transparent',
-        [stylex.when.ancestor(':active', indicatorScope)]: {
+        [stylex.when.ancestor(ACTIVE_UNPAINTED, indicatorScope)]: {
           default: colorVars['--color-overlay-pressed'],
           '@media (pointer: coarse)': 'transparent',
         },
       },
-      // The touch press, as an image layer over the colour: an image change is
-      // discrete, so no transition can delay the onset, and the strength the
-      // row's `pressedAlpha` arms own (1 while on, 1 → 0 over the release) is
-      // what moves. Coarse pointers only, like the drop above.
+      // The controller's press paints as an image layer over the colour. An
+      // image change is discrete, so no transition can delay the onset. Only
+      // the strength moves: the row's `pressedAlpha` arms set it to 1 while
+      // on, and 1 → 0 over the release. This holds for every pointer, because
+      // the controller writes the attribute only for a press it paints.
       backgroundImage: {
         default: null,
-        [stylex.when.ancestor(PRESSED_ON, indicatorScope)]: {
-          default: null,
-          '@media (pointer: coarse)': pressedOverlayImage,
-        },
-        [stylex.when.ancestor(PRESSED_FADING, indicatorScope)]: {
-          default: null,
-          '@media (pointer: coarse)': pressedOverlayImage,
-        },
+        [stylex.when.ancestor(PRESSED_ON, indicatorScope)]: pressedOverlayImage,
+        [stylex.when.ancestor(PRESSED_FADING, indicatorScope)]:
+          pressedOverlayImage,
       },
     },
   },
   // The row's own checkbox when its row owns the press
   // (CheckboxRowPressContext). It paints only the paint that row declares
-  // (`--_checkbox-row-press-paint`). No outer row, card or fine pointer
-  // reaches it.
+  // (`--_checkbox-row-press-paint`), so it draws no `:active` fill. No outer
+  // row or card reaches it.
   indicatorRowPressOverlay: {
     '::after': {
+      backgroundColor: 'transparent',
       backgroundImage: 'var(--_checkbox-row-press-paint, none)',
     },
   },
