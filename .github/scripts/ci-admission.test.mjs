@@ -788,11 +788,34 @@ describe('ci admission', () => {
         ...options,
       });
 
-    it('passes a granted run in one check, without looking at CI', async () => {
+    it('passes a granted run in one check: one look, and no wait', async () => {
       const result = await room();
       expect(result.outputs.fits).toBe('true');
-      expect(result.looks).toBe(0);
+      expect(result.looks).toBe(1);
+      expect(result.lookTimes).toEqual([0]);
       expect(result.info.join('\n')).toContain('granted by owner-a');
+    });
+
+    it('waits like any run while a main check waits, even when granted (DEC-16)', async () => {
+      const result = await room({
+        active: [...full(), waitingRun(70, {event: 'workflow_dispatch'})],
+      });
+      // It waits: after the grant's look and its own first look, it looks
+      // again later rather than passing at once.
+      expect(result.lookTimes.some(time => time > 0)).toBe(true);
+      expect(result.info.join('\n')).toContain(
+        'a main check is waiting; waiting like any run',
+      );
+    });
+
+    it("counts an engineering owner's own grant on their pull request", async () => {
+      const result = await room({
+        pull: {
+          head: {repo: {full_name: 'o/r'}, sha: 'head-sha'},
+          user: {login: 'owner-a'},
+        },
+      });
+      expect(result.outputs.fits).toBe('true');
     });
 
     it.each([
@@ -817,7 +840,7 @@ describe('ci admission', () => {
         "not an engineering owner's",
       ],
       [
-        "a fake marker the pull request's author set on its head",
+        'a fake marker a non-owner author set on its head',
         {statuses: [grant({creator: {login: 'pr-author'}})]},
         "not an engineering owner's (pr-author)",
       ],

@@ -86,10 +86,13 @@ const GRANT_SKEW_MS = 60_000;
 
 /**
  * Whether a pull-request run was started through a capacity tool's grant, so
- * it starts without waiting for room (spec:AST-030 FR16): its first attempt,
+ * it passes admission in one check (spec:AST-030 FR16): its first attempt,
  * from a branch in this repository, whose head carries a `ci-slot` success
  * status that an engineering owner set at most thirty minutes before the run
- * began. A fork cannot set a status here, and a re-run or an older grant waits.
+ * began (or up to a minute after, for clock skew). Only an engineering owner's
+ * status counts: anyone else's, the author's included when the author is not
+ * an engineering owner, and the run's own workflow token's, are refused. A
+ * fork cannot set a status here, and a re-run or an older grant waits.
  * @param {object} options
  * @param {object} options.pr the event's pull request
  * @param {string} options.repo `owner/name`

@@ -107,7 +107,7 @@ describe("a capacity tool's grant", () => {
         ],
       },
       {statuses: [status({creator: {login: 'someone'}})]},
-      // A marker the pull request's author or its own workflow token set.
+      // A marker a non-owner author or the run's own workflow token set.
       {statuses: [status({creator: {login: 'pr-author'}})]},
       {
         statuses: [

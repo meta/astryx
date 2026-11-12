@@ -216,13 +216,31 @@ runs:
                 statuses,
                 granters: process.env.GRANTERS || '',
               });
-              if (grant.granted) {
+              // One look, for the one rule a grant does not cover: while a
+              // `main` check waits, pull-request runs wait too (DEC-16).
+              const look = grant.granted
+                ? await countLook({
+                    listRuns: async status => {
+                      const {data, headers} = await github.rest.actions.listWorkflowRunsForRepo({...context.repo, status, per_page: 100});
+                      return {runs: data.workflow_runs, remaining: Number(headers?.['x-ratelimit-remaining'])};
+                    },
+                    listJobs: async run_id => (await github.rest.actions.listJobsForWorkflowRun({...context.repo, run_id, filter: 'latest', per_page: 100})).data.jobs,
+                    selfId: context.runId,
+                    main,
+                    maxWaitMs: MAX_WAIT_MS,
+                  })
+                : null;
+              if (grant.granted && !look.mainWaiting) {
                 core.setOutput('fits', 'true');
                 core.setOutput('started', String(Date.now()));
                 core.info(`A capacity tool granted this run (${grant.why}); it passes admission in one check, without waiting.`);
                 return;
               }
-              core.info(`No grant to start at once (${grant.why}); waiting for room.`);
+              core.info(
+                grant.granted
+                  ? `A capacity tool granted this run (${grant.why}), but a main check is waiting; waiting like any run.`
+                  : `No grant to start at once (${grant.why}); waiting for room.`,
+              );
             } catch (error) {
               core.info(`The grant could not be checked (${error.message}); waiting for room.`);
             }
