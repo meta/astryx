@@ -46,6 +46,34 @@ function Harness() {
   );
 }
 
+function StatefulHarness() {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setIsOpen(true)}>
+        Open stateful navigation
+      </button>
+      <MobileNav
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        data-testid="mobile-nav">
+        <StatefulContent />
+      </MobileNav>
+    </>
+  );
+}
+
+function StatefulContent() {
+  const [isExpanded, setIsExpanded] = useState(false);
+  return (
+    <button type="button" onClick={() => setIsExpanded(value => !value)}>
+      {isExpanded
+        ? 'Expanded navigation section'
+        : 'Collapsed navigation section'}
+    </button>
+  );
+}
+
 // jsdom has no Web Animations, so a case under a finger gives the drawer a
 // slide-in (stubSlideIn) that ends when the case says, or at MAX_EXIT_MS.
 // jsdom resolves no `var()`, so a close lands MAX_CLOSE_DELAY_MS in.
@@ -233,6 +261,45 @@ describe('MobileNav under a finger', () => {
     expect(dialog).toHaveAttribute('open');
     expect(isInHeldLayer(dialog)).toBe(false);
   });
+
+  it('keeps the mounted dialog and its content state when reopened mid-close', async () => {
+    render(<StatefulHarness />);
+    const open = screen.getByRole('button', {
+      name: 'Open stateful navigation',
+    });
+    fireEvent.click(open);
+    const dialog = screen.getByTestId('mobile-nav');
+
+    fireEvent.click(
+      screen.getByRole('button', {name: /Collapsed navigation section/}),
+    );
+    expect(
+      screen.getByRole('button', {name: /Expanded navigation section/}),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', {name: /close navigation/i}));
+    await advance(100);
+    fireEvent.click(open);
+
+    expect(screen.getByTestId('mobile-nav')).toBe(dialog);
+    expect(
+      screen.getByRole('button', {name: /Expanded navigation section/}),
+    ).toBeInTheDocument();
+    await advance(MAX_CLOSE_DELAY_MS + 10);
+    expect(dialog).toHaveAttribute('open');
+  });
+
+  it('closes the native dialog when the open navigation unmounts', () => {
+    const close = vi.spyOn(HTMLDialogElement.prototype, 'close');
+    const {unmount} = render(<Harness />);
+    fireEvent.click(screen.getByRole('button', {name: 'Open'}));
+    expect(screen.getByTestId('mobile-nav')).toHaveAttribute('open');
+
+    unmount();
+
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it('holds nothing when the drawer has no slide-in to wait for', () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', {name: 'Open'}));

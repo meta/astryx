@@ -712,13 +712,8 @@ export function MobileNav({
   );
 
   const isStart = resolvedSide === 'start';
+  const isAutoSidePending = isOpen && side === 'auto' && !autoSideResolved;
   const mergedDialogRef = useMergedRefs(ref, dialogRef);
-  // Do not mount an auto-side dialog for the opening commit. The layout effect
-  // above resolves the trigger's side first; mounting after that state update
-  // makes the first browser frame use the correct entrance transform.
-  if (isOpen && side === 'auto' && !autoSideResolved) {
-    return null;
-  }
   const navigationLabel =
     label ??
     (typeof header === 'string' ? header : t('@astryx.mobileNav.navigation'));
@@ -734,7 +729,7 @@ export function MobileNav({
           layerStructureReset.reset,
           styles.dialog,
           overlayPaddingReset.reset,
-          isPresentationHeld && styles.open,
+          isPresentationHeld && !isAutoSidePending && styles.open,
           styles.backdrop,
           isOpen && styles.backdropOpen,
           xstyle,
