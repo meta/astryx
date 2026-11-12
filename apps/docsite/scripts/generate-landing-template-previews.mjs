@@ -3,7 +3,8 @@
 /**
  * @file Renders the landing templates card previews to static HTML files.
  * @input The tile rows, the page templates, the neutral theme, the CLI's
- *   experimental page renderer, and the experimental DOCSITE_ICON_SET setting.
+ *   experimental page renderer, the image and icon rewrites of the template
+ *   previews, and the experimental DOCSITE_ICON_SET setting.
  * @output public/landing/template-previews/<slug>.html: each tile's template
  *   as one self-contained page with no script. `#light` or `#dark` in its URL
  *   sets its color mode.
@@ -20,6 +21,7 @@ import {
   previewIconSetList,
   rewriteTemplatePreview,
 } from './template-icon-loader.mjs';
+import {optimizeTemplateImages} from './template-image-loader.mjs';
 
 const docsiteDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -31,8 +33,8 @@ const rowsFile = path.join(
 );
 const outDir = path.join(docsiteDir, 'public/landing/template-previews');
 // The renderer inlines an image that the page's project serves. This folder
-// is a project of its own with no `public` folder, so the previews keep their
-// image URLs.
+// is a project of its own with no `public` folder, so the previews keep the
+// image URLs that the staged copies name.
 const workDir = path.join(docsiteDir, '.landing-template-previews');
 const templatesDir = path.resolve(
   docsiteDir,
@@ -45,7 +47,7 @@ const themeFontsFile = path.resolve(
 
 // A tile shows its page at less than half size, so this width is enough on a
 // high-density screen. It must be a width the image optimizer allows.
-const PREVIEW_IMAGE_WIDTH = 640;
+export const PREVIEW_IMAGE_WIDTH = 640;
 
 // The page fills the frame and never scrolls, as a live template preview
 // fills its tile: without this, a template taller than the frame shows a
@@ -65,8 +67,6 @@ const COLOR_MODE_ANCHORS = '<a id="light" hidden></a><a id="dark" hidden></a>';
 
 const SOURCE_BLOCK =
   /<script type="application\/x-astryx-source">[\s\S]*?<\/script>/u;
-const TEMPLATE_IMAGE =
-  /(?<=['"(])\/template-assets\/[\w@.-]+\.(?:png|jpe?g)(?=['")])/gu;
 
 /**
  * The page that the renderer renders for a tile: the template inside the
@@ -104,8 +104,7 @@ export function fontStylesheetOf(fontsCss) {
 
 /**
  * Turns a rendered page into a preview document. It drops the embedded
- * source, which only `render --reverse` reads. It loads each template photo
- * through the image optimizer at preview size, and loads the theme's fonts.
+ * source, which only `render --reverse` reads, and loads the theme's fonts.
  * It makes the page fill its frame, and lets the URL fragment set the color
  * mode. Search engines must not index the file.
  * @param {string} html
@@ -120,26 +119,24 @@ export function previewDocument(html, {fontStylesheet}) {
   ].join('');
   return html
     .replace(SOURCE_BLOCK, '')
-    .replace(
-      TEMPLATE_IMAGE,
-      image =>
-        `/_next/image?url=${encodeURIComponent(image)}&w=${PREVIEW_IMAGE_WIDTH}&q=75`,
-    )
     .replace('</head>', `${head}</head>`)
     .replace(/<body[^>]*>/u, body => `${body}${COLOR_MODE_ANCHORS}`);
 }
 
 /**
- * Writes the page that the renderer renders for one tile into `pageDir`.
- * With icon sets named, the page renders a copy of the template whose icons
- * come from those sets, the rewrite that the Webpack loader gives every other
- * template preview.
+ * Writes the page that the renderer renders for one tile into `pageDir`: a
+ * copy of the template with the rewrites that the Webpack loaders give every
+ * other template preview. Each photo that the docsite serves loads through
+ * the image optimizer at preview size. With icon sets named, the icons come
+ * from those sets.
  * @param {object} input
  * @param {string} input.slug
  * @param {string} input.pageDir an empty folder for this tile
  * @param {string} input.templatesDir the folder of the page templates
  * @param {string[]} input.iconSets the sets DOCSITE_ICON_SET names
  * @param {string} input.projectDir the docsite, where the sets are installed
+ * @param {(path: string) => boolean} [input.isServed] whether the docsite's
+ *   `public` folder serves a file at the path
  * @param {typeof rewriteTemplatePreview} [input.rewrite]
  */
 export async function stagePreviewPage({
@@ -148,29 +145,33 @@ export async function stagePreviewPage({
   templatesDir,
   iconSets,
   projectDir,
+  isServed = file => fs.existsSync(path.join(projectDir, 'public', file)),
   rewrite = rewriteTemplatePreview,
 }) {
   const templateDir = path.join(templatesDir, slug);
-  let templatePage = path
-    .relative(pageDir, path.join(templateDir, 'page'))
-    .split(path.sep)
-    .join('/');
-  if (iconSets.length > 0) {
-    const copyDir = path.join(pageDir, 'template');
-    fs.cpSync(templateDir, copyDir, {recursive: true});
-    const file = path.join(templateDir, 'page.tsx');
-    fs.writeFileSync(
-      path.join(copyDir, 'page.tsx'),
-      await rewrite(fs.readFileSync(file, 'utf8'), file, {
+  const copyDir = path.join(pageDir, 'template');
+  fs.cpSync(templateDir, copyDir, {recursive: true});
+  const sources = fs
+    .readdirSync(copyDir, {recursive: true, encoding: 'utf8'})
+    .filter(file => file.endsWith('.tsx'));
+  for (const relative of sources) {
+    let source = optimizeTemplateImages(
+      fs.readFileSync(path.join(copyDir, relative), 'utf8'),
+      isServed,
+      PREVIEW_IMAGE_WIDTH,
+    );
+    if (iconSets.length > 0) {
+      // The rewrite finds the template's doc by the path of the original.
+      source = await rewrite(source, path.join(templateDir, relative), {
         projectDir,
         list: iconSets,
-      }),
-    );
-    templatePage = './template/page';
+      });
+    }
+    fs.writeFileSync(path.join(copyDir, relative), source);
   }
   fs.writeFileSync(
     path.join(pageDir, 'page.tsx'),
-    previewPageSource(templatePage),
+    previewPageSource('./template/page'),
   );
 }
 

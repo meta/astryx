@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
+  PREVIEW_IMAGE_WIDTH,
   fontStylesheetOf,
   previewDocument,
   previewPageSource,
@@ -20,10 +21,8 @@ const templatesDir = path.resolve(
 );
 
 const RENDERED = [
-  '<!doctype html><html><head><title>Page</title><style>.a{background:url(/template-assets/hero.png)}</style></head>',
-  '<body><img src="/template-assets/light-product-1.png" alt=""/>',
-  '<img src="/template-assets/logo.svg" alt=""/>',
-  '<img src="https://example.com/template-assets/remote.png" alt=""/>',
+  '<!doctype html><html><head><title>Page</title><style>.a{color:red}</style></head>',
+  '<body><img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',
   '<script type="application/x-astryx-source">{"files":[{"path":"page.tsx","text":"/template-assets/light-product-1.png"}]}</script>',
   '</body></html>',
 ].join('');
@@ -66,19 +65,9 @@ describe('previewDocument', () => {
     expect(html).not.toContain('x-astryx-source');
   });
 
-  it('loads template photos through the image optimizer at preview size', () => {
+  it('keeps the image URLs of the rendered page', () => {
     expect(html).toContain(
-      '<img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&w=640&q=75" alt=""/>',
-    );
-    expect(html).toContain(
-      'url(/_next/image?url=%2Ftemplate-assets%2Fhero.png&w=640&q=75)',
-    );
-  });
-
-  it('keeps vector images and images on other hosts', () => {
-    expect(html).toContain('<img src="/template-assets/logo.svg" alt=""/>');
-    expect(html).toContain(
-      '<img src="https://example.com/template-assets/remote.png" alt=""/>',
+      '<img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',
     );
   });
 
@@ -132,6 +121,19 @@ describe('previewColorModeFragment', () => {
 });
 
 describe('stagePreviewPage', () => {
+  const PAGE = [
+    "const photo = '/template-assets/hero.png';",
+    "const missing = '/template-assets/does-not-exist.png';",
+    "const logo = '/template-assets/logo.svg';",
+  ].join('\n');
+  const PAGE_FOR_PREVIEW = [
+    "const photo = '/_next/image?url=%2Ftemplate-assets%2Fhero.png&w=640&q=75';",
+    "const missing = '/template-assets/does-not-exist.png';",
+    "const logo = '/template-assets/logo.svg';",
+  ].join('\n');
+  const isServed = (file: string) =>
+    file !== '/template-assets/does-not-exist.png';
+
   let work: string;
   let pageDir: string;
   let templates: string;
@@ -142,7 +144,7 @@ describe('stagePreviewPage', () => {
     templates = path.join(work, 'templates');
     fs.mkdirSync(pageDir, {recursive: true});
     fs.mkdirSync(path.join(templates, 'ide'), {recursive: true});
-    fs.writeFileSync(path.join(templates, 'ide', 'page.tsx'), 'PAGE');
+    fs.writeFileSync(path.join(templates, 'ide', 'page.tsx'), PAGE);
     fs.writeFileSync(path.join(templates, 'ide', 'data.ts'), 'DATA');
   });
 
@@ -150,7 +152,7 @@ describe('stagePreviewPage', () => {
     fs.rmSync(work, {recursive: true, force: true});
   });
 
-  it('renders the template where it is when no icon set is named', async () => {
+  it('renders a copy whose photos load through the image optimizer at preview size', async () => {
     const rewrite = vi.fn();
     await stagePreviewPage({
       slug: 'ide',
@@ -158,36 +160,14 @@ describe('stagePreviewPage', () => {
       templatesDir: templates,
       iconSets: [],
       projectDir: work,
+      isServed,
       rewrite,
     });
 
     expect(rewrite).not.toHaveBeenCalled();
-    expect(fs.readdirSync(pageDir)).toEqual(['page.tsx']);
-    expect(fs.readFileSync(path.join(pageDir, 'page.tsx'), 'utf8')).toContain(
-      'import Page from "../../templates/ide/page";',
-    );
-  });
-
-  it('renders a copy with the icons of the named sets', async () => {
-    const rewrite = vi.fn(async (source: string) => `${source} WITH SET ICONS`);
-    await stagePreviewPage({
-      slug: 'ide',
-      pageDir,
-      templatesDir: templates,
-      iconSets: ['pkg/glyphs', 'pkg/backup'],
-      projectDir: work,
-      rewrite,
-    });
-
-    // The rewrite finds the template's doc by the path of the original.
-    expect(rewrite).toHaveBeenCalledWith(
-      'PAGE',
-      path.join(templates, 'ide', 'page.tsx'),
-      {projectDir: work, list: ['pkg/glyphs', 'pkg/backup']},
-    );
     expect(
       fs.readFileSync(path.join(pageDir, 'template', 'page.tsx'), 'utf8'),
-    ).toBe('PAGE WITH SET ICONS');
+    ).toBe(PAGE_FOR_PREVIEW);
     expect(
       fs.readFileSync(path.join(pageDir, 'template', 'data.ts'), 'utf8'),
     ).toBe('DATA');
@@ -196,6 +176,39 @@ describe('stagePreviewPage', () => {
     );
     expect(
       fs.readFileSync(path.join(templates, 'ide', 'page.tsx'), 'utf8'),
-    ).toBe('PAGE');
+    ).toBe(PAGE);
+  });
+
+  it('asks the optimizer for a width that it allows', async () => {
+    const {default: nextConfig} = await import('../../next.config.mjs');
+    const {imageConfigDefault} =
+      await import('next/dist/shared/lib/image-config');
+    const images = {...imageConfigDefault, ...nextConfig.images};
+    expect([...images.deviceSizes, ...images.imageSizes]).toContain(
+      PREVIEW_IMAGE_WIDTH,
+    );
+  });
+
+  it('draws the copy with the icons of the named sets, after the image rewrite', async () => {
+    const rewrite = vi.fn(async (source: string) => `${source} WITH SET ICONS`);
+    await stagePreviewPage({
+      slug: 'ide',
+      pageDir,
+      templatesDir: templates,
+      iconSets: ['pkg/glyphs', 'pkg/backup'],
+      projectDir: work,
+      isServed,
+      rewrite,
+    });
+
+    // The rewrite finds the template's doc by the path of the original.
+    expect(rewrite).toHaveBeenCalledWith(
+      PAGE_FOR_PREVIEW,
+      path.join(templates, 'ide', 'page.tsx'),
+      {projectDir: work, list: ['pkg/glyphs', 'pkg/backup']},
+    );
+    expect(
+      fs.readFileSync(path.join(pageDir, 'template', 'page.tsx'), 'utf8'),
+    ).toBe(`${PAGE_FOR_PREVIEW} WITH SET ICONS`);
   });
 });
