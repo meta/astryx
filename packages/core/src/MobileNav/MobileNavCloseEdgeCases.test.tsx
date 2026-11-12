@@ -223,6 +223,30 @@ describe('MobileNav close path edge cases', () => {
     }
   });
 
+  it('reopens a fixed-side drawer without waiting for auto-side resolution', () => {
+    vi.useFakeTimers();
+    try {
+      const {rerender} = render(<Drawer isOpen side="start" />);
+      const dialog = screen.getByTestId('mobile-nav');
+
+      act(() => {
+        rerender(<Drawer isOpen={false} side="start" />);
+      });
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(dialog).not.toHaveAttribute('open');
+
+      act(() => {
+        rerender(<Drawer isOpen side="start" />);
+      });
+
+      expect(dialog).toHaveAttribute('open');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('settles closed after a rapid open/close/open/close burst', () => {
     vi.useFakeTimers();
     try {
