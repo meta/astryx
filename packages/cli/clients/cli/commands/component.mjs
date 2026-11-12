@@ -49,6 +49,42 @@ import {doc as componentFn} from '../../../api/component/component.doc.mjs';
  */
 
 /**
+ * The theme values the text output marks with `*`, for the JSON result: the
+ * configured theme's name and the custom values it adds, by component key and
+ * prop. `null` when no theme is configured. Text is a projection of the JSON,
+ * so the JSON carries what the text prints.
+ *
+ * @param {Awaited<ReturnType<typeof resolveTheme>>} themeData
+ * @returns {{name: string | null; values: Record<string, Record<string, string[]>>} | null}
+ */
+function themeJson(themeData) {
+  if (!themeData) return null;
+  return {name: themeData.name ?? null, values: themeData.variants ?? {}};
+}
+
+/**
+ * The result with `data.theme` on every response whose text view can print
+ * theme values: a component detail, a list, and a batch.
+ *
+ * @param {ComponentResult} result
+ * @param {ReturnType<typeof themeJson>} theme
+ * @returns {ComponentResult}
+ */
+function withTheme(result, theme) {
+  if (
+    result.type === 'component.detail' ||
+    result.type === 'component.list' ||
+    result.type === 'component.batch'
+  ) {
+    return /** @type {ComponentResult} */ ({
+      ...result,
+      data: {...result.data, theme},
+    });
+  }
+  return result;
+}
+
+/**
  * What the run answered with, read off the response the api returned.
  *
  * Naming a component resolves it or fails, so every detail view is a direct
@@ -255,15 +291,6 @@ export function registerComponent(program) {
       ) {
         process.exitCode = 1;
       }
-      if (json) {
-        jsonOut(result);
-        return answered;
-      }
-
-      // ── Text output ────────────────────────────────────────────
-      // The api layer already resolved against core (result exists), so core is
-      // present on this path; narrow away the null branch findCoreDir allows.
-      const coreDir = /** @type {string} */ (findCoreDir(process.cwd()));
       let themeData;
       try {
         themeData = await resolveTheme(process.cwd());
@@ -276,6 +303,15 @@ export function registerComponent(program) {
           code: ERROR_CODES.ERR_THEME_LOAD,
         });
       }
+      if (json) {
+        jsonOut(withTheme(result, themeJson(themeData)));
+        return answered;
+      }
+
+      // ── Text output ────────────────────────────────────────────
+      // The api layer already resolved against core (result exists), so core is
+      // present on this path; narrow away the null branch findCoreDir allows.
+      const coreDir = /** @type {string} */ (findCoreDir(process.cwd()));
 
       // Footer shared by the compact + names list views (prose → text()).
       const listFooter = text(

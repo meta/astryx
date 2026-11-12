@@ -719,6 +719,14 @@ describe('theme build custom-variant augmentations', () => {
     expect(brief.code).toBe(0);
     expect(brief.stdout).toContain('theme: container:glass*, status:critical*');
     expect(brief.stdout).not.toMatch(/container:critical|status:glass/);
+
+    // The JSON result carries the values the text marks with `*`.
+    const json = await runCli(['--json', 'component', 'Banner'], tmpDir);
+    expect(json.code).toBe(0);
+    expect(JSON.parse(json.stdout).data.theme).toEqual({
+      name: 'variants-theme',
+      values: {banner: {container: ['glass'], status: ['critical']}},
+    });
   });
 
   it('keeps runtime variants aligned with the .d.ts: non-augmentable props are excluded', async () => {
