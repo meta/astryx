@@ -34,6 +34,17 @@ export const THEME_TEMPLATE_SRC = path.join(
   'theme.template.ts',
 );
 
+/**
+ * Whether `theme template` refuses outside a project (no package.json in the
+ * folder or above it). Off in this release: it writes in the current folder,
+ * as released CLIs did, with a warning; the next minor turns it on.
+ */
+export const TEMPLATE_REFUSES_OUTSIDE_PROJECT = false;
+
+/** The warning the CLI prints when it writes the template outside a project. */
+export const OUTSIDE_PROJECT_WARNING =
+  'Warning: no package.json is in this folder or above it, so the template is written here; the next minor version refuses theme template outside a project.';
+
 /** Where it lands when the caller does not say. */
 export const THEME_TEMPLATE_DEFAULT_PATH = 'theme.template.ts';
 
@@ -110,7 +121,18 @@ export function themeTemplate(options = {}) {
   // The project the folder belongs to bounds the path, as for other theme
   // commands: a path given is read from the current folder, and no path
   // means the project root.
-  const projectDir = findPackageRoot(cwd) ?? path.resolve(cwd);
+  const foundRoot = findPackageRoot(cwd);
+  if (!foundRoot) {
+    if (TEMPLATE_REFUSES_OUTSIDE_PROJECT)
+      throw new AstryxError(
+        'theme template writes into a project, and no package.json is in this folder or above it.',
+        [{name: 'npm init -y', reason: 'make this folder a project'}],
+        ERROR_CODES.ERR_PROJECT_REQUIRED,
+      );
+    // Released CLIs wrote here, outside any project; the next minor refuses.
+    // The CLI prints OUTSIDE_PROJECT_WARNING.
+  }
+  const projectDir = foundRoot ?? path.resolve(cwd);
   const typed =
     options.targetPath == null
       ? path.join(projectDir, THEME_TEMPLATE_DEFAULT_PATH)

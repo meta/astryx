@@ -57,7 +57,11 @@ import {themeAdd} from '../../../api/theme/add/add.mjs';
 import {themeRemove} from '../../../api/theme/remove/remove.mjs';
 import {themeUse} from '../../../api/theme/use/use.mjs';
 import {themeEject} from '../../../api/theme/eject/eject.mjs';
-import {themeTemplate} from '../../../api/theme/template/template.mjs';
+import {
+  OUTSIDE_PROJECT_WARNING,
+  themeTemplate,
+} from '../../../api/theme/template/template.mjs';
+import {findPackageRoot} from '../../../foundation/fs/paths.mjs';
 import {
   themeListAvailable,
   themeListCopySources,
@@ -1526,6 +1530,10 @@ function registerThemeCommands(theme, program, docs, words) {
         ]);
       }
 
+      // Outside a project the template is written here, as released CLIs
+      // did, with a warning on stderr (text and --json alike).
+      if (!findPackageRoot(process.cwd()))
+        process.stderr.write(`${OUTSIDE_PROJECT_WARNING}\n`);
       // Writes a starter theme file, or declines to overwrite one.
       if (json) {
         jsonOut(result);
