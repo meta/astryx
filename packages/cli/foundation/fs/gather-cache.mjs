@@ -244,7 +244,7 @@ export async function recordRunFor(argv, fn) {
   // it, so a one-off run never pays to store one.
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {
-    // doctor uses the folder once a search or build made it; it never makes
+    // Once the per-user cache folder exists doctor uses it; it never makes
     // it, so a doctor alone changes nothing on the machine (nor its own
     // cache row).
     if (command === 'doctor') return fn();

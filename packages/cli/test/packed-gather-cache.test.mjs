@@ -1113,6 +1113,13 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     }
   }, 180_000);
 
+  it('leaves a missing cache folder missing when doctor runs', () => {
+    const tmp = freshTmp();
+    run(['doctor'], {tmp});
+    run(['doctor'], {tmp});
+    expect(fs.existsSync(path.join(tmp, CACHE_NAME))).toBe(false);
+  }, 60_000);
+
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
     const notAFolder = path.join(work, 'tmp', 'file-tmp');
