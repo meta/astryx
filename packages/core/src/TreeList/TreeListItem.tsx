@@ -631,11 +631,9 @@ export function TreeListItem({
     />
   );
 
-  // A custom icon renders as handed over: no rotation (an open folder must not
-  // also turn 90°) and no RTL mirror, since a folder is not directional; the
-  // caller swaps per state, and owns any direction-bearing artwork. It is
-  // decorative: hidden from the accessibility tree and never focusable, so the
-  // toggle's own name and state stay the row's.
+  // A custom icon renders as given. It does not rotate, so an open folder does
+  // not also turn. It does not mirror; the caller owns any directional
+  // artwork. It is decorative, so the toggle keeps the row's name and state.
   const indicatorIcon = hasCustomIcon ? (
     <span aria-hidden="true" inert {...stylex.props(styles.customGlyph)}>
       {customIcon}
