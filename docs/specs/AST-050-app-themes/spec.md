@@ -141,8 +141,9 @@ described.
   A backslash in `[path]` separates folders. Eject MUST refuse the local
   themes root itself and a folder in it named after another theme the project
   can use, because `theme list` and `theme add` read each local theme from a
-  folder named after it, and name the default target. A folder with a new name
-  is accepted.
+  folder named after it, and name the default target. A fork into a folder there
+  with a new name takes that name, in its descriptor and its `defineTheme`
+  call.
   `theme template [path]` leaves an existing file as it is without
   `--overwrite`. Its receipt then says whether `--overwrite` would replace that
   file (`overwritable`), and when it would not, it names a free path for the
@@ -185,8 +186,9 @@ described.
   replaces its own earlier outputs. It replaces the output of another theme
   source that still exists and warns, naming both sources. It warns when that
   path does not end in `.css`, and the import it prints names the file as
-  written. An
-  import MUST fail and name the build command
+  written. `theme build --watch` rebuilds when the source or any local file it
+  imports changes. `--check` and `integration verify` treat CRLF and LF line
+  endings as the same text. An import MUST fail and name the build command
   when the built module or stylesheet is missing. When a local theme and a
   package theme share a slug, an import adds the local theme unless `--package`
   names the package, and `theme list` shows both with their owners. The copying

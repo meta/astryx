@@ -12,6 +12,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {themeEject} from './eject.mjs';
+import {themeAdd} from '../add/add.mjs';
+import {themeListAvailable} from '../list/list.mjs';
 
 let tmpDir;
 
@@ -337,5 +339,35 @@ describe('themeEject (api/theme/eject)', () => {
         package: '@astryxdesign/theme-neutral',
       }),
     ).resolves.toMatchObject({type: 'theme.eject', data: {slug: 'neutral'}});
+  });
+
+  it('names a fork in a new local themes folder after the folder, so list and add find it', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    await themeEject('neutral', {
+      cwd: tmpDir,
+      targetPath: 'src/themes/acme-ocean',
+    });
+    const dir = path.join(tmpDir, 'src', 'themes', 'acme-ocean');
+    expect(
+      fs.readFileSync(path.join(dir, 'neutralTheme.doc.mjs'), 'utf-8'),
+    ).toContain('name: "acme-ocean"');
+    expect(fs.readFileSync(path.join(dir, 'neutralTheme.ts'), 'utf-8')).toMatch(
+      /defineTheme\(\{\s*name: 'acme-ocean'/,
+    );
+    const listed = await themeListAvailable({cwd: tmpDir});
+    expect(listed.data.map((/** @type {any} */ t) => t.slug)).toContain(
+      'acme-ocean',
+    );
+    // Not built yet: add names the build, not a broken theme.
+    await expect(
+      themeAdd('acme-ocean', {cwd: tmpDir, import: true}),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining(
+        'Local theme "acme-ocean" is not built.',
+      ),
+    });
+    await expect(
+      themeEject('neutral', {cwd: tmpDir, targetPath: 'src/themes/Acme_Ocean'}),
+    ).rejects.toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
   });
 });

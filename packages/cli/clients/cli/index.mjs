@@ -27,6 +27,7 @@ import {isCi} from '../../foundation/release/update-notice-env.mjs';
 import {buildManifest, storedManifest} from './lib/manifest.mjs';
 import {
   cliError,
+  experimentalSubcommandPointer,
   experimentalThemePointer,
   unknownSubcommandSuggestions,
 } from './lib/cli-error.mjs';
@@ -742,20 +743,10 @@ export async function createProgram({argv} = {}) {
         // `experimental theme <word>` when the word is one of its commands.
         const word = String(unknown);
         const invocation = getCliInvocation(process.cwd());
-        const themeGroup = actionCommand.commands.find(
-          c => c.name() === 'theme',
-        );
         const moved =
           fullName === 'theme'
             ? experimentalThemePointer(invocation, word)
-            : themeGroup?.commands.some(c => c.name() === word)
-              ? [
-                  {
-                    name: `${invocation} experimental theme ${word}`,
-                    reason: `${word} is a theme subcommand`,
-                  },
-                ]
-              : [];
+            : experimentalSubcommandPointer(invocation, word, actionCommand);
         cliError(
           `unknown subcommand '${fullName} ${word}'${moved.length > 0 ? `; it is ${moved[0].name}` : ''}`,
           {

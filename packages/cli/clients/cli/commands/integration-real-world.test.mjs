@@ -544,9 +544,10 @@ export const oceanTheme = defineTheme({
     );
     expect(built.status, `${built.stdout}\n${built.stderr}`).toBe(0);
     const buildReceipt = parseEnvelope(built.stdout);
+    // The fork takes the name of its folder in the local themes root.
     expect(buildReceipt).toMatchObject({
       type: 'theme.build',
-      data: {name: 'ocean'},
+      data: {name: 'acme-ocean'},
     });
     for (const output of Object.values(buildReceipt.data.outputs)) {
       expect(fs.existsSync(path.join(consumerDir, output))).toBe(true);

@@ -50,7 +50,11 @@
  * NEVER add ad-hoc fields. NEVER vary the shape. Consumers depend on it.
  */
 
-import {isJsonMode, jsonError as _jsonError, humanWarn} from '../../../foundation/response/json.mjs';
+import {
+  isJsonMode,
+  jsonError as _jsonError,
+  humanWarn,
+} from '../../../foundation/response/json.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setOutcome} from '../../../foundation/debug/index.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
@@ -127,7 +131,9 @@ export function cliError(message, options = {}) {
     console.error('');
     for (const s of suggestions) {
       // A suggested command stays bare in JSON and is prefixed here.
-      const name = /^astryx(\s|$)/.test(s.name) ? formatCliCommand(s.name) : s.name;
+      const name = /^astryx(\s|$)/.test(s.name)
+        ? formatCliCommand(s.name)
+        : s.name;
       const tag = s.reason ? `  ${name}  (${s.reason})` : `  ${name}`;
       console.error(tag);
     }
@@ -242,6 +248,28 @@ export function experimentalThemePointer(invocation, word) {
         {
           name: `${invocation} ${command}`,
           reason: `${word} is in the experimental theme commands`,
+        },
+      ]
+    : [];
+}
+
+/**
+ * The pointer for a word under `experimental` that is a command of
+ * `experimental theme` (`experimental editor` is `experimental theme
+ * editor`). Empty for any other word.
+ * @param {string} invocation how to run the CLI
+ * @param {string} word
+ * @param {import('commander').Command | undefined} experimental the loaded
+ *   `experimental` group
+ * @returns {Array<{name: string, reason: string}>}
+ */
+export function experimentalSubcommandPointer(invocation, word, experimental) {
+  const theme = experimental?.commands.find(c => c.name() === 'theme');
+  return theme?.commands.some(c => c.name() === word)
+    ? [
+        {
+          name: `${invocation} experimental theme ${word}`,
+          reason: `${word} is a theme subcommand`,
         },
       ]
     : [];

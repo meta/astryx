@@ -1556,10 +1556,19 @@ describe('themeBuild() — outputs it may replace', () => {
       path.join(tmpDir, 'parts', 'base.ts'),
       "export const BG = '#fff';\n",
     );
+    fs.appendFileSync(
+      path.join(tmpDir, 'parts', 'base.ts'),
+      `export {X} from ${JSON.stringify(path.join(tmpDir, 'parts', 'abs.ts'))};\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'parts', 'abs.ts'),
+      'export const X = 1;\n',
+    );
     expect(themeSourceFiles(path.join(tmpDir, 'split.ts'))).toEqual([
       path.join(tmpDir, 'split.ts'),
       path.join(tmpDir, 'parts', 'colors.ts'),
       path.join(tmpDir, 'parts', 'base.ts'),
+      path.join(tmpDir, 'parts', 'abs.ts'),
     ]);
   });
 

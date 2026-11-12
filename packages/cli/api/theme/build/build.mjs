@@ -939,47 +939,25 @@ export function themeSourceFiles(filePath) {
       continue;
     }
     for (const spec of parsedSpecifiers(source)) {
-      if (!spec.startsWith('.')) continue;
-      const target = resolveLocalImport(path.dirname(file), spec);
-      if (target && !seen.has(target)) {
-        seen.add(target);
-        queue.push(target);
+      // Resolved as the build resolves it; what resolves into a package is
+      // not the theme's own.
+      let target;
+      try {
+        target = path.resolve(resolveThemeModule(spec, file));
+      } catch {
+        continue;
       }
+      if (
+        target.split(path.sep).includes('node_modules') ||
+        seen.has(target) ||
+        !fs.existsSync(target)
+      )
+        continue;
+      seen.add(target);
+      queue.push(target);
     }
   }
   return [...seen];
-}
-
-/**
- * A relative import resolved as the build resolves it: the path as written,
- * then with each theme module extension, then as a folder's index file.
- * @param {string} dir
- * @param {string} spec
- * @returns {string | null}
- */
-function resolveLocalImport(dir, spec) {
-  const base = path.resolve(dir, spec);
-  const candidates = [
-    base,
-    ...THEME_MODULE_EXTENSIONS.map(extension => base + extension),
-    ...THEME_MODULE_EXTENSIONS.map(extension =>
-      path.join(base, 'index' + extension),
-    ),
-  ];
-  // A `.js` specifier in TypeScript names its `.ts` source.
-  if (/\.[cm]?js$/.test(spec)) {
-    const stem = base.replace(/\.([cm]?)js$/, '.$1ts');
-    candidates.splice(1, 0, stem, stem.replace(/ts$/, 'tsx'));
-  }
-  return (
-    candidates.find(candidate => {
-      try {
-        return fs.statSync(candidate).isFile();
-      } catch {
-        return false;
-      }
-    }) ?? null
-  );
 }
 
 /**
