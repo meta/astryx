@@ -2964,6 +2964,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         !/radius/.test(prop);
       const side = /^padding-/.test(prop);
       const density = prop === 'padding' && /^density:/.test(s.when ?? '');
+      // Core reads the composer's padding inside calc() (the send button's
+      // radius, the status row): one length with a unit is all it takes.
+      if (prop === 'padding' && !density) {
+        const n = cssNumber(v.trim());
+        if (!n || !n.unit || n.unit === '%')
+          refuse(
+            E.ERR_THEME_BAD_VALUE,
+            `${s.on} reads its padding inside calc() (the send button's corners, the status row), where only one length with a unit works, not "${v.trim()}".`,
+            {
+              run: [
+                `${P} set ${slug} padding ${quoteCommandArgument(n && !n.unit ? `${n.value}px` : '12px')} --on ${s.on}`,
+              ],
+            },
+          );
+      }
       if (surface || side || density)
         refuse(
           E.ERR_THEME_BAD_VALUE,

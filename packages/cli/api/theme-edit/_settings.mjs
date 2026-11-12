@@ -43,6 +43,7 @@ import {
   TYPE_STYLES,
   familyOf,
   WRAPPED_PARTS,
+  CARD_LIKE,
 } from './_tables.mjs';
 import {
   alphaOf,
@@ -1941,6 +1942,155 @@ export function compileTheme(ctx, data, base) {
     return name ? {[name]: String(s.value).trim()} : null;
   };
   /**
+   * The prefix of the padding variables a part's box reads, for a part whose
+   * padding Core writes to them (its derivedVarRegistry's container
+   * expansion), or for one drawn by such a part (a clickable card is a
+   * card); null for any other part.
+   * @param {string} target
+   */
+  const padVars = target => {
+    if (
+      (ctx.derived?.[target] ?? []).some(
+        d => d.property === 'padding' && d.expand,
+      )
+    )
+      return `--astryx-${target}-padding`;
+    return CARD_LIKE.includes(target) ? '--astryx-card-padding' : null;
+  };
+  /**
+   * Padding settings per part and per scope (the block a setting writes
+   * to), in the order they were made.
+   * @type {Map<string, {target: string, s: Setting, list: Setting[]}>}
+   */
+  const padQueue = new Map();
+  /** @param {Setting} s @param {string} target */
+  const queuePadding = (s, target) => {
+    const key = `${target}\0${s.when ?? ''}\0${s.state ?? ''}`;
+    const q = padQueue.get(key) ?? {target, s, list: []};
+    q.list.push(s);
+    padQueue.set(key, q);
+  };
+  /**
+   * One padding model: each scope's settings, in order, resolved to the
+   * four logical sides for each direction (a physical left is the
+   * inline-start in a left-to-right box and the inline-end in a
+   * right-to-left one; the padding shorthand is physical too), then written
+   * to the variables the part's box reads: a side the same in both
+   * directions in the scope's own block, one that differs in a rule for
+   * each direction (one level deep under a state). So the derived and
+   * full-bleed values follow, and a variant or a state out-ranks the base
+   * as Core's own rules do.
+   */
+  const emitPadding = () => {
+    for (const {target, s, list} of padQueue.values()) {
+      const prefix = /** @type {string} */ (padVars(target));
+      /** @type {Record<'ltr' | 'rtl', Record<string, string>>} */
+      const side = {ltr: {}, rtl: {}};
+      for (const x of list) {
+        const prop = kebab(x.thing);
+        const raw = String(x.value).trim();
+        const value = /^(initial|unset)$/i.test(raw) ? '0' : raw;
+        const w = splitTop(value, ' ').map(y => y.trim());
+        for (const dir of /** @type {const} */ (['ltr', 'rtl'])) {
+          const o = side[dir];
+          const left = dir === 'ltr' ? 'inline-start' : 'inline-end';
+          const right = dir === 'ltr' ? 'inline-end' : 'inline-start';
+          if (prop === 'padding') {
+            const [top, r = top, bottom = top, l = r] = w;
+            Object.assign(o, {
+              'block-start': top,
+              [right]: r,
+              'block-end': bottom,
+              [left]: l,
+            });
+          } else if (prop === 'padding-block') {
+            o['block-start'] = w[0];
+            o['block-end'] = w[1] ?? w[0];
+          } else if (prop === 'padding-inline') {
+            o['inline-start'] = w[0];
+            o['inline-end'] = w[1] ?? w[0];
+          } else if (prop === 'padding-top') o['block-start'] = value;
+          else if (prop === 'padding-bottom') o['block-end'] = value;
+          else if (prop === 'padding-left') o[left] = value;
+          else if (prop === 'padding-right') o[right] = value;
+          else {
+            const k = prop.slice('padding-'.length);
+            if (/^(block|inline)-(start|end)$/.test(k)) o[k] = value;
+          }
+        }
+      }
+      /** @type {Record<string, string>} */
+      const plain = {};
+      /** @type {Record<string, string>} */
+      const ltr = {};
+      /** @type {Record<string, string>} */
+      const rtl = {};
+      for (const k of [
+        'block-start',
+        'block-end',
+        'inline-start',
+        'inline-end',
+      ]) {
+        const [a, b] = [side.ltr[k], side.rtl[k]];
+        if (a != null && a === b) plain[`${prefix}-${k}`] = a;
+        else {
+          if (a != null) ltr[`${prefix}-${k}`] = a;
+          if (b != null) rtl[`${prefix}-${k}`] = b;
+        }
+      }
+      // Four equal sides are the whole padding too, as Core writes it.
+      const vals = Object.values(plain);
+      if (vals.length === 4 && vals.every(v => v === vals[0]))
+        plain[prefix] = vals[0];
+      for (const [k, v] of Object.entries(plain)) putComp(s, target, k, v);
+      for (const [dir, rule] of /** @type {const} */ ([
+        [':dir(ltr)', ltr],
+        [':dir(rtl)', rtl],
+      ]))
+        if (Object.keys(rule).length) {
+          const [b, key] = dirBlock(s, target, dir);
+          b[key] = {...(b[key] ?? {}), ...rule};
+        }
+    }
+  };
+  /**
+   * Each part's blocks with its base first, and in each block the rules for
+   * a direction before a state's: Core writes them in this order, and a
+   * variant or a state comes after the base it out-ranks (rules of the same
+   * weight win by order).
+   */
+  const orderBlocks = () => {
+    /** @param {Record<string, any>} b @returns {Record<string, any>} */
+    const dirFirst = b => {
+      const keys = Object.keys(b);
+      const plain = keys.filter(k => !k.startsWith(':'));
+      const dirs = keys.filter(k => /^:dir\(/.test(k));
+      const rest = keys.filter(k => k.startsWith(':') && !/^:dir\(/.test(k));
+      return Object.fromEntries(
+        [...plain, ...dirs, ...rest].map(k => [
+          k,
+          k.startsWith(':') && b[k] && typeof b[k] === 'object'
+            ? dirFirst(b[k])
+            : b[k],
+        ]),
+      );
+    };
+    for (const [target, blocks] of Object.entries(theme.components ?? {})) {
+      const keys = Object.keys(blocks);
+      const ordered = keys.includes('base')
+        ? ['base', ...keys.filter(k => k !== 'base')]
+        : keys;
+      theme.components[target] = Object.fromEntries(
+        ordered.map(k => [
+          k,
+          blocks[k] && typeof blocks[k] === 'object'
+            ? dirFirst(blocks[k])
+            : blocks[k],
+        ]),
+      );
+    }
+  };
+  /**
    * Where a per-direction rule goes for a setting, one level deep, as the
    * block and its key: in the setting's own block, or under a state Core
    * writes as a pseudo-class, beside that state with the direction after it.
@@ -2207,6 +2357,12 @@ export function compileTheme(ctx, data, base) {
       else putTok(s.thing, s.value, s.mode);
     } else if (s.source === 'property') {
       for (const t of parts) {
+        // A padding on a part whose box reads Core's padding variables is
+        // resolved with the rest of that part's padding, below.
+        if (padVars(t) && /^padding(-|$)/.test(kebab(s.thing))) {
+          queuePadding(s, t);
+          continue;
+        }
         const sides =
           wrappedPadding(t, s) ??
           containerSides(t, s) ??
@@ -2281,6 +2437,8 @@ export function compileTheme(ctx, data, base) {
       }
     }
   }
+  emitPadding();
+  orderBlocks();
   // Core gives headings the body font when a theme sets only the body's:
   // a font for the body alone keeps the base theme's heading font.
   if (theme.typography?.body && !theme.typography.heading) {
