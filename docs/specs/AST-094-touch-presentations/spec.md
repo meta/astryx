@@ -631,7 +631,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   shrink plays on the theme's exit duration and easing (FR7). The shrink plays in full after the surface has
   closed. This is its exit under FR7 (`family:overlay-dismissal` AV6); under
   reduced motion FR8 applies. A menu or popover presented as a bottom sheet
-  follows the sheet instead.
+  follows the sheet instead. `motion/morphPath.ts` gives the rect a grow-out
+  presentation shows at each progress (a straight line, or a popover's edge
+  grow); `motion/rectMorph.ts` imports it; no other motion module maps a
+  progress to a rect.
 - **FR32 — A pan outside dismisses.** Under a finger, an open anchored menu MUST close as a touch outside it
   begins to pan, and at the lift of a tap or hold outside it. A Popover's
   dismissal is unchanged. A pinch stays available over it: its surface
