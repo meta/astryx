@@ -306,8 +306,8 @@ behavior made for accessibility conformance to FR53.
 - A form posts the committed value's text, never rejected text (FR4). On the
   latest stable release, two submissions post rejected text instead: kept
   nonexistent or out-of-range `DateInput` and `DateTimeInput` date text, and an
-  unparsable `NumberInput` or `TimeInput` draft submitted by Enter. OQ1 asks
-  the owner to confirm that these post the committed value's text.
+  unparsable `NumberInput` or `TimeInput` draft submitted by Enter. These now
+  post the committed value's text (DEC-13).
 - Two screens an app chose change, as part of the same fix:
   - A `NumberInput`, `TimeInput`, or time segment with a caller `warning` or
     `success` status shows the rejection's message in place of that status
@@ -541,17 +541,15 @@ numbers and decimals.
 A form posts the field's value, so it never posts text the field rejects. While
 rejected typed text stays, a hidden input carries the caller's `name` with the
 committed value's text, and an app's server receives the value its `onChange`
-already reported (FR4). OQ1 asks whether this also covers the submissions that
-post rejected text on the latest stable release.
+already reported (FR4). This also covers the two submissions that post
+rejected text on the latest stable release: kept nonexistent or out-of-range
+`DateInput` and `DateTimeInput` date text, and an unparsable `NumberInput` or
+`TimeInput` draft submitted by Enter.
+
+Rejected: posting the typed text in those two submissions. It would keep
+today's result there, but the four members would post different things, and a
+server would receive text the field rejects.
 
 ## Open questions
 
-- **OQ1 — Do the submissions that post rejected text on the latest stable
-  release post the committed value's text?** (`human-api`) FR4 states option
-  (a).
-  - (a) Yes. Kept nonexistent or out-of-range `DateInput` and `DateTimeInput`
-    date text, and an unparsable `NumberInput` or `TimeInput` draft submitted
-    by Enter, post the committed value's text, so a form never posts rejected
-    text.
-  - (b) No. Those submissions post the typed text, and the hidden input covers
-    only unreadable date text and the drafts that blur keeps.
+None.
