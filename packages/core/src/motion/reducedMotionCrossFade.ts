@@ -32,7 +32,10 @@ export interface ReducedMotionCrossFade {
   readonly finished: Promise<boolean>;
 }
 
-/** The properties that place or fade an element: the copy's rect has them. */
+/**
+ * The properties that place an element. The copy's rect already includes
+ * them.
+ */
 const PLACING_PROPERTIES = ['translate', 'transform', 'scale', 'rotate'];
 
 /**
@@ -78,8 +81,8 @@ export function playReducedMotionCrossFade(
     clipTo(copy, rect, visible, scale);
   }
   land();
-  // Both fades start in this task, on the same frame, with the same easing.
-  // So the two opacities add up to the old one on every frame.
+  // Both fades start in this task with one easing. So the content shows at
+  // 0.75 or more on every frame.
   const fadeIn = element.animate(
     [{opacity: ENTRANCE_OPACITY_FLOOR, easing: fade.easing}, {opacity}],
     {duration: fade.duration, fill: 'backwards'},

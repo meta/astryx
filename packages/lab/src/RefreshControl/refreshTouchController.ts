@@ -636,7 +636,16 @@ export function useRefreshTouchController({
         finish();
         return;
       }
-      if (crossFadeContent(finish, false) != null) {
+      // Under Reduce Motion, the list cross-fades onto where the slide ends.
+      // It takes the scroll back once the cross-fade ends, as the slide does,
+      // so the task that lays the copy reads no scroll.
+      const crossFaded = crossFadeContent(() => place(animateTo), false);
+      if (crossFaded != null) {
+        crossFaded.then(done => {
+          if (done) {
+            finish();
+          }
+        });
         return;
       }
       const {ms, points} = timing;

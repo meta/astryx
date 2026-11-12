@@ -1185,6 +1185,106 @@ test('under Reduce Motion the list and its indicator show on every frame: the re
   ).toBeGreaterThanOrEqual(0.5);
 });
 
+test('under Reduce Motion an end scrolled into the inset reads no layout between laying its copy and starting its fade, and takes the scroll back once it ends', async ({
+  page,
+}) => {
+  // The end of a refresh scrolled 30 px into the 60 px inset cross-fades onto
+  // where its slide would end. It takes the 30 px of scroll back only once the
+  // cross-fade ends, as the slide does. A scroll read in the task that lays
+  // the copy would lay the page out a second time before the fade starts.
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await primaryPointer(page, 'coarse');
+  const {driver, content, start} = await openRefresh(page, undefined, {
+    refreshMs: '-1',
+  });
+  await driver.play(slowPull(start, 300, 200));
+  await waitForContentRest(content);
+  expect(await shownPull(content)).toBeCloseTo(HEIGHT, 1);
+  const scroller = page.locator('[data-refresh-scroller]').first();
+  const scrollTop = () => scroller.evaluate(el => el.scrollTop);
+  await scroller.evaluate(el => {
+    el.scrollTop = 30;
+  });
+  await expect.poll(scrollTop).toBe(30);
+  // Logs each layout read outside the content's copy, the copy's laying and
+  // its fade's start.
+  await page.evaluate(() => {
+    const log: string[] = [];
+    (window as unknown as {__endLog: string[]}).__endLog = log;
+    const isCopy = (node: unknown) =>
+      node instanceof Element &&
+      node.hasAttribute('data-refresh-content') &&
+      node.hasAttribute('inert');
+    const inCopy = (node: Element) =>
+      node.closest('[data-refresh-content][inert]') != null;
+    const scroll = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      'scrollTop',
+    );
+    Object.defineProperty(Element.prototype, 'scrollTop', {
+      configurable: true,
+      get(this: Element) {
+        if (!inCopy(this)) {
+          log.push('read the scroll');
+        }
+        return scroll?.get?.call(this);
+      },
+      set(this: Element, value: number) {
+        scroll?.set?.call(this, value);
+      },
+    });
+    const rect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (!inCopy(this)) {
+        log.push('read a box');
+      }
+      return rect.call(this);
+    };
+    const insert = Node.prototype.insertBefore;
+    Node.prototype.insertBefore = function <T extends Node>(
+      this: Node,
+      node: T,
+      child: Node | null,
+    ): T {
+      if (isCopy(node)) {
+        log.push('lay the copy');
+      }
+      return insert.call(this, node, child) as T;
+    };
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      if (isCopy(this)) {
+        log.push('fade the copy');
+      }
+      return animate.apply(this, args);
+    };
+  });
+  const endLog = () =>
+    page.evaluate(() => (window as unknown as {__endLog: string[]}).__endLog);
+  await endRefresh(page);
+  await expect
+    .poll(async () => (await endLog()).includes('fade the copy'), {
+      timeout: 8000,
+    })
+    .toBe(true);
+  const log = await endLog();
+  const laid = log.indexOf('lay the copy');
+  const faded = log.indexOf('fade the copy');
+  expect(laid, 'the end laid no copy').toBeGreaterThanOrEqual(0);
+  expect(log.slice(laid, faded + 1)).toEqual(['lay the copy', 'fade the copy']);
+  // Once the cross-fade ends, the list rests at the top with the scroll
+  // taken back, as after the slide.
+  await expect
+    .poll(() => shownPull(content), {timeout: 8000})
+    .toBeCloseTo(0, 1);
+  await waitForContentRest(content);
+  expect(await scrollTop()).toBe(0);
+  expect(await shownPull(content)).toBeCloseTo(0, 1);
+});
+
 test('under Reduce Motion a release cross-fades onto the inset: opacity only, within 200 ms', async ({
   page,
 }) => {
