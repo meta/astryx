@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The three page templates the default theme preview copies into an
- * app (`experimental theme preview add`) typecheck in an app with the
- * strictest common settings, `noUncheckedIndexedAccess` included.
+ * @file The three page templates the theme editor's theme-building page
+ * shows in full (`PAGE_TEMPLATES` in `api/theme-edit/_preview.mjs`)
+ * typecheck in an app with the strictest common settings,
+ * `noUncheckedIndexedAccess` included.
  */
 
 import * as path from 'node:path';
