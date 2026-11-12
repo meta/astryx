@@ -420,6 +420,9 @@ describe('DateInput onChange while typing a Gregorian date', () => {
     );
     const input = screen.getByRole('combobox');
     fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
+    fireEvent.blur(input);
     expectShown(input, container, 'Enter a real date');
     expect(input).toHaveAccessibleDescription('Enter a real date');
   });
@@ -431,6 +434,9 @@ describe('DateInput onChange while typing a Gregorian date', () => {
     });
     fireEvent.change(input, {target: {value: '03/15/2026'}});
     expect(onChange).not.toHaveBeenCalled();
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
+    fireEvent.blur(input);
     expectShown(input, container, 'Enter an available date');
   });
 
