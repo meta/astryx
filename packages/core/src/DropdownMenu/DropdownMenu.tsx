@@ -1026,9 +1026,10 @@ function DropdownMenuPopover({
   // The touch presentation's grow out of the trigger and shrink back into
   // it, on Popover's own surface motion (Popover/usePopoverSurfaceMotion.ts).
   const surfaceMotion = usePopoverSurfaceMotion(MENU_SURFACE_MOTION);
-  // Whether a finger or a pen opened the menu, a tap's open at its lift
-  // included, until the layer shows.
-  const isTouchOpenRef = useRef(false);
+  // The gesture of a finger's or a pen's open, a tap's open at its lift
+  // included, until the layer shows. A show in another gesture, such as a
+  // later open from code, plays the layer's own entrance.
+  const touchOpenRef = useRef<{gesture: number} | null>(null);
   // Runs as the menu opens, before it paints; set once `usePopoverInternal`
   // has returned the surface it presents.
   const presentSurfaceRef = useRef<() => void>(() => {});
@@ -1040,7 +1041,7 @@ function DropdownMenuPopover({
   // keyboard (the modality tracker decides; the suppressed style hides the
   // pointer case, which Safari would otherwise paint after a touch pick).
   const handleLayerHide = useCallback(() => {
-    isTouchOpenRef.current = false;
+    touchOpenRef.current = null;
     releaseEntranceRef.current?.();
     releaseEntranceRef.current = null;
     // Whatever closed the menu — light dismiss, the dismissal stack, Escape
@@ -1105,7 +1106,7 @@ function DropdownMenuPopover({
     acceptedOpenRef.current = true;
     holdOpeningPressRef.current();
     presentSurfaceRef.current();
-    isTouchOpenRef.current = false;
+    touchOpenRef.current = null;
     holdEntranceRef.current();
     resetFocusReturn();
     if (renderTrigger != null) {
@@ -1168,7 +1169,7 @@ function DropdownMenuPopover({
       buttonRef.current,
       null,
       pressTouchModel === 'uikit' &&
-        isTouchOpenRef.current &&
+        touchOpenRef.current?.gesture === currentGesture() &&
         reducedMotionFade(surface) == null,
     );
   });
@@ -1409,7 +1410,7 @@ function DropdownMenuPopover({
       notifyClick = false,
     ): boolean => {
       if (modality === 'keyboard') {
-        isTouchOpenRef.current = false;
+        touchOpenRef.current = null;
       }
       // An unavailable trigger never opens the menu. Button keeps an
       // aria-disabled trigger focusable for its tooltip and swallows only
@@ -1418,7 +1419,7 @@ function DropdownMenuPopover({
       if (
         buttonRef.current?.matches(':disabled, [aria-disabled="true"]') === true
       ) {
-        isTouchOpenRef.current = false;
+        touchOpenRef.current = null;
         return false;
       }
       acceptedOpenRef.current = false;
@@ -1492,7 +1493,8 @@ function DropdownMenuPopover({
         focusForLastInput(buttonRef.current, {preventScroll: true});
       }
       openingPressRef.current = {gesture: currentGesture()};
-      isTouchOpenRef.current = pointerType !== 'mouse';
+      touchOpenRef.current =
+        pointerType !== 'mouse' ? {gesture: currentGesture()} : null;
       const didOpen = openAndFocus('pointer', true);
       // A mouse can release away from the trigger, or the trigger can move
       // away under it. So the layer claims a mouse's press, and that release
@@ -1546,10 +1548,12 @@ function DropdownMenuPopover({
       const pressPointerType = triggerClickPointerType();
       // Only a click that opens the menu marks a finger's or a pen's open.
       const openFromClick = () => {
-        isTouchOpenRef.current =
+        touchOpenRef.current =
           modality === 'pointer' &&
           pressPointerType != null &&
-          pressPointerType !== 'mouse';
+          pressPointerType !== 'mouse'
+            ? {gesture: currentGesture()}
+            : null;
         openAndFocus(modality, true);
       };
       if (isControlled) {
