@@ -4,40 +4,16 @@
  * @file toast.ts
  * @input Nothing; data only
  * @output Exports `toast`: how a Toast's card follows a swipe toward its edge
- *   under a finger (a coarse primary pointer). It also holds the values a release
- *   decides by: settle back or leave. With a fine pointer Toast runs its own
- *   swipe
- * @position The Toast domain of the UIKit constants table (motion/uikit)
- *
- * The same values apply under any coarse primary pointer. iOS has no
- * toast control. The reference is the system notification banner. SpringBoard
- * draws it out of process, so nothing can read its animations. The values
- * come from 60 fps recordings of HID-driven drags on the iOS 26.2 simulator.
- * The banner's position was tracked per frame against the touch stream
- * (method B in MEASUREMENTS.md), over three runs of 8 to 22 releases.
- *
- * The banner starts to follow the finger late and at about half its speed.
- * On release it leaves if it is far enough out, or if the finger still moved
- * toward the edge fast enough. Otherwise it springs back on the smooth system
- * spring. Seven recorded settles from 6.7 to 31 pt out fit a critically damped
- * spring with a 0.5 s response within 0.3 pt. That spring is `springs.settle`,
- * the role Toast's settle plays. However it is dismissed, the banner leaves by
- * retracting past the top edge, whatever the release speed. A touch never
- * catches a banner that settles back or leaves. Reduce Motion changes none of
- * this on iOS. Toast follows Astryx's reduced-motion rules instead, so the
- * animator turns the spring-back and the retract into its cross-fade.
- *
- * Every leaf carries one or more `@source`; webkit and GUESS values also carry
- * the `@measure` task that will confirm or replace them. uikit.test.ts
- * enforces both.
- *
- * Every value here is an internal constant: touch motion stays internal, and
- * no theme sets it. The retract's duration and curve are the banner's own,
- * and no motion role carries them.
+ *   under a finger (a coarse primary pointer). It also says when a release
+ *   lets the card go, and how the card leaves. Each value is the iOS 26.2
+ *   notification banner's, from 60 fps recordings (method B in
+ *   MEASUREMENTS.md), with its `@source`
+ * @position The Toast domain of the UIKit constants table (motion/uikit).
+ *   Its values are internal constants that no theme sets. The settle plays
+ *   `springs.settle`
  *
  * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md and
- *   /packages/core/src/Toast/useToastBannerSwipe.ts (its header lists the
- *   rule).
+ *   /packages/core/src/Toast/useToastBannerSwipe.ts.
  */
 
 export const toast = {

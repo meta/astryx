@@ -455,6 +455,8 @@ export function ToastSurface({
   const isDismissingRef = useRef(false);
   const isExitingRef = useRef(isExiting);
   isExitingRef.current = isExiting;
+  const onRetractEndRef = useRef(onRetractEnd);
+  onRetractEndRef.current = onRetractEnd;
   requestDismissRef.current = (reason: ToastDismissReason) => {
     if (!isNotification) {
       onDismissRef.current(reason);
@@ -464,8 +466,19 @@ export function ToastSurface({
       return;
     }
     isDismissingRef.current = true;
-    void retract().then(() => {
+    const retracting = retract();
+    // A viewport's row holds the card until the retract ends (onRetractEnd).
+    // So the viewport hears the dismissal now, and a toast with the same
+    // uniqueID opens a new row. A standalone Toast reports it once the card
+    // is gone, so its owner can unmount it then.
+    const isHosted = onRetractEndRef.current != null;
+    if (isHosted) {
       onDismissRef.current(reason);
+    }
+    void retracting.then(() => {
+      if (!isHosted) {
+        onDismissRef.current(reason);
+      }
       // A standalone Toast that its owner keeps on screen after onDismiss
       // comes back to rest, as it does with a fine pointer. It is still
       // mounted and not exiting two frames later. In a viewport the row is
@@ -482,8 +495,6 @@ export function ToastSurface({
       });
     });
   };
-  const onRetractEndRef = useRef(onRetractEnd);
-  onRetractEndRef.current = onRetractEnd;
   // A dismissal from outside (the viewport, an app's `dismiss()`) reaches
   // this surface only as `isExiting`, with no event of its own here. This
   // effect keeps the card's compositor animation in step with it by starting

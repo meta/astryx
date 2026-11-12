@@ -5,7 +5,8 @@
  * @input The error Toast story (no auto-hide) on a phone, under a finger
  * @output Proves that a finger catches the card while it springs back and
  *   while it leaves. The card stays where the finger caught it, then follows
- *   the finger. A card caught on its way out leaves once the finger lifts
+ *   the finger. A card caught on its way out, or dismissed while a finger
+ *   drags it, leaves once the finger lifts
  * @position Toast's interaction proofs that its motion is interruptible
  */
 
@@ -335,5 +336,53 @@ test('a finger catches a card on its way out where it shows, and the card leaves
   ).toBeLessThanOrEqual(1);
   expect(ys[0], 'the card had started to leave (px)').toBeGreaterThan(0.5);
   // Its toast is dismissed, so the card leaves when the finger lifts.
+  await expect(page.locator('.astryx-toast')).toHaveCount(0, {timeout: 3000});
+});
+
+test('a dismissal while a finger drags the card lets the card leave once the finger lifts', async ({
+  page,
+}) => {
+  const card = await showToast(page);
+  const box = await card.boundingBox();
+  if (box == null) {
+    throw new Error('no toast');
+  }
+  const driver = await touchDriver(page);
+  // The close button dismisses the toast after the finger's third move,
+  // while the finger drags the card.
+  await page
+    .getByRole('button', {name: 'Dismiss notification'})
+    .evaluate(element => {
+      let moves = 0;
+      window.addEventListener(
+        'touchmove',
+        () => {
+          moves += 1;
+          if (moves === 3) {
+            setTimeout(() => (element as HTMLElement).click(), 0);
+          }
+        },
+        {capture: true, passive: true},
+      );
+    });
+  // The finger drags the bottom toast 24 px toward its edge, then brings it
+  // back to 4 px and rests. So the lift alone would not dismiss it.
+  const start = {
+    x: Math.round(box.x + box.width * 0.3),
+    y: Math.round(box.y + box.height / 2),
+  };
+  const out = {x: start.x, y: start.y + 24};
+  const back = {x: start.x, y: start.y + 4};
+  const frames: TouchFrame[] = [
+    {t: 0, fingers: [{id: 0, ...start}]},
+    ...move(0, start, out, 0, 100),
+    ...move(0, out, back, 100, 160),
+    ...hold(0, back, 260 + FRAME_MS, 60),
+  ];
+  await driver.play([
+    ...frames,
+    {t: +(frames[frames.length - 1].t + FRAME_MS).toFixed(3), fingers: []},
+  ]);
+  // Its toast is dismissed, so the card leaves once the finger lifts.
   await expect(page.locator('.astryx-toast')).toHaveCount(0, {timeout: 3000});
 });

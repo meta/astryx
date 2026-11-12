@@ -1681,8 +1681,8 @@ describe('Toast native motion contract', () => {
   });
 });
 
-// Everywhere but iOS (Android, other touch screens, a pen on a laptop),
-// Toast keeps its own swipe.
+// With a fine pointer (a mouse, a trackpad, a pen on a laptop), Toast keeps
+// its own swipe.
 describe('Toast swipe dismissal', () => {
   function renderSwipeToast(
     options: ToastOptions = SWIPE_TOAST,
@@ -2686,7 +2686,7 @@ describe('Toast swipe dismissal under a finger', () => {
     return strokeClock;
   }
 
-  /** A dismissal on iOS waits for the card's retract (`toastMotion.exitMs`). */
+  /** A dismissal under a finger waits for the card's retract (`toastMotion.exitMs`). */
   async function afterRetract() {
     await act(async () => {
       await new Promise(resolve =>
@@ -2949,7 +2949,8 @@ describe('Toast swipe dismissal under a finger', () => {
   it('retracts past its edge from where the finger left the card, unclipped by its row, then dismisses', async () => {
     // A long drag carries the card 74 px. It leaves from there by sliding
     // past its edge without fading, never back toward rest, as the banner
-    // retracts. Only then is the toast dismissed.
+    // retracts. The toast reports its dismissal at once, and its row holds
+    // the card until the retract ends.
     const {visualToast, onHide} = await renderSwipeToast();
     const wrapper = visualToast.closest('[data-toast-id]') as HTMLElement;
     const start = strokeStart();
@@ -2972,10 +2973,225 @@ describe('Toast swipe dismissal under a finger', () => {
     expect(
       getComputedStyle(wrapper.firstElementChild as HTMLElement).overflow,
     ).toBe('visible');
+    expect(onHide).toHaveBeenCalledWith('manual');
+    expect(wrapper.isConnected).toBe(true);
+    await afterRetract();
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens a new row for a uniqueID update raised while the card retracts, and reports the dismissed toast once', async () => {
+    const onHide = vi.fn();
+    const onHideUpdate = vi.fn();
+    render(
+      <ToastViewport isTopLayer={false} position="bottomEnd">
+        <ShowToastButton options={{...SWIPE_TOAST, uniqueID: 'same', onHide}} />
+        <ShowToastButton
+          options={{
+            body: 'Updated toast',
+            isAutoHide: false,
+            uniqueID: 'same',
+            onHide: onHideUpdate,
+          }}
+          triggerLabel="Update"
+        />
+      </ToastViewport>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Trigger'));
+    });
+    const card = screen
+      .getByText('Swipe toast')
+      .closest('[data-type]') as HTMLElement;
+    // The close button dismisses it, and under a finger the card retracts
+    // first. An update with the same uniqueID comes during the retract.
+    act(() => {
+      fireEvent.click(
+        within(card).getByRole('button', {name: 'Dismiss notification'}),
+      );
+    });
+    act(() => {
+      fireEvent.click(screen.getByText('Update'));
+    });
+    await afterRetract();
+    // The update keeps its own row, and only the dismissed toast reports.
+    expect(onHideUpdate).not.toHaveBeenCalled();
+    expect(screen.getByText('Updated toast')).toBeTruthy();
+    expect(onHide).toHaveBeenCalledTimes(1);
+    expect(onHide).toHaveBeenCalledWith('manual');
+  });
+
+  it('does not start a swipe from interactive descendants', async () => {
+    const onAction = vi.fn();
+    const {visualToast, onHide} = await renderSwipeToast({
+      ...SWIPE_TOAST,
+      endContent: (
+        <>
+          <Button label="Undo" size="sm" onClick={onAction} />
+          <span role="switch" tabIndex={-1}>
+            Mode
+          </span>
+        </>
+      ),
+    });
+
+    const targets = [
+      screen.getByRole('button', {name: 'Undo'}),
+      screen.getByRole('switch', {name: 'Mode'}),
+    ];
+    targets.forEach((target, index) => {
+      const pointerId = 20 + index;
+      act(() => {
+        fireEvent.pointerDown(target, {
+          pointerId,
+          pointerType: 'pen',
+          button: 0,
+          clientX: 0,
+          clientY: 0,
+        });
+        fireEvent.pointerMove(target, {
+          pointerId,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 80,
+        });
+        fireEvent.pointerUp(target, {
+          pointerId,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 80,
+        });
+      });
+    });
+
     expect(onHide).not.toHaveBeenCalled();
+    expect(cardY(visualToast)).toBe(0);
+    act(() => {
+      fireEvent.click(targets[0]);
+    });
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a horizontal drag to the page and returns a cancelled swipe to rest', async () => {
+    const {visualToast, onHide} = await renderSwipeToast();
+
+    act(() => {
+      fireEvent.pointerDown(visualToast, {
+        pointerId: 7,
+        pointerType: 'pen',
+        button: 0,
+        clientX: 0,
+        clientY: 0,
+      });
+      fireEvent.pointerMove(visualToast, {
+        pointerId: 7,
+        pointerType: 'pen',
+        clientX: 80,
+        clientY: 20,
+      });
+    });
+    expect(onHide).not.toHaveBeenCalled();
+    expect(cardY(visualToast)).toBe(0);
+
+    act(() => {
+      // A failed gesture stays failed until its pen lifts.
+      fireEvent.pointerUp(visualToast, {
+        pointerId: 7,
+        pointerType: 'pen',
+        clientX: 80,
+        clientY: 20,
+      });
+      fireEvent.pointerDown(visualToast, {
+        pointerId: 8,
+        pointerType: 'pen',
+        button: 0,
+        clientX: 0,
+        clientY: 0,
+      });
+      fireEvent.pointerMove(visualToast, {
+        pointerId: 8,
+        pointerType: 'pen',
+        clientX: 0,
+        clientY: 54,
+      });
+    });
+    expect(cardY(visualToast)).toBeCloseTo(22, 5);
+    act(() => {
+      fireEvent.pointerCancel(visualToast, {
+        pointerId: 8,
+        pointerType: 'pen',
+        clientX: 0,
+        clientY: 54,
+      });
+    });
+    expect(onHide).not.toHaveBeenCalled();
+    expect(cardY(visualToast)).toBe(0);
+  });
+
+  it('keeps a moving swipe when a second finger lands on the card, and dismisses on the first lift (spec:AST-094 FR10)', async () => {
+    const {visualToast, onHide} = await renderSwipeToast();
+    const dispatchTouch = (
+      target: HTMLElement,
+      type: 'touchstart' | 'touchmove' | 'touchend',
+      touches: {identifier: number; clientX: number; clientY: number}[],
+      changedTouches = touches,
+    ) => {
+      const event = new Event(type, {bubbles: true, cancelable: true});
+      Object.defineProperty(event, 'touches', {value: touches});
+      Object.defineProperty(event, 'changedTouches', {value: changedTouches});
+      target.dispatchEvent(event);
+      return event;
+    };
+    // Real targets, so the gesture host counts both fingers.
+    const first = {
+      identifier: 51,
+      clientX: 10,
+      clientY: 0,
+      target: visualToast,
+    };
+    const second = {
+      identifier: 52,
+      clientX: 30,
+      clientY: 40,
+      target: visualToast,
+    };
+
+    act(() => {
+      dispatchTouch(visualToast, 'touchstart', [first]);
+      dispatchTouch(visualToast, 'touchmove', [{...first, clientY: 40}]);
+    });
+    expect(cardY(visualToast)).toBeCloseTo(0.55 * (40 - 14), 5);
+
+    // The swipe has claimed the touch: a second finger neither cancels nor
+    // redirects it.
+    act(() => {
+      dispatchTouch(
+        visualToast,
+        'touchstart',
+        [{...first, clientY: 40}, second],
+        [second],
+      );
+    });
+    let multitouchMove: Event;
+    act(() => {
+      multitouchMove = dispatchTouch(visualToast, 'touchmove', [
+        {...first, clientY: 70},
+        {...second, clientY: 90},
+      ]);
+    });
+    expect(multitouchMove!.defaultPrevented).toBe(true);
+    expect(cardY(visualToast)).toBeCloseTo(0.55 * (70 - 14), 5);
+    expect(onHide).not.toHaveBeenCalled();
+
+    act(() => {
+      dispatchTouch(
+        visualToast,
+        'touchend',
+        [{...second, clientY: 90}],
+        [{...first, clientY: 70}],
+      );
+    });
     await afterRetract();
     expect(onHide).toHaveBeenCalledWith('manual');
-    expect(onHide).toHaveBeenCalledTimes(1);
   });
 });
 

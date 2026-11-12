@@ -390,7 +390,9 @@ cannot see it: a lab app posts the notifications (foreground presentation
 `.banner`) and drives HID touches, and a 60 fps recording is tracked per frame
 (method B). Run on an iPhone 17 Pro simulator, iOS 26.2. Three runs (Oct 23 2026) measured the follow distance and ratio, the release rule
 (`toast.dismissOffset`, `toast.flickVelocity`) and the settle spring
-(`springs.settle`); what remains is below.
+(`springs.settle`); what remains is below. Each run had 8 to 22 releases.
+Seven recorded settles, from 6.7 to 31 pt out, fit a critically damped spring
+with a 0.5 s response within 0.3 pt: `springs.settle`.
 
 | ID   | What                  | App and gesture                                                                                                  | Extract                                                        | Method | Feeds             |
 | ---- | --------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------ | ----------------- |

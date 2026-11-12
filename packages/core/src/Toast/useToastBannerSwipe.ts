@@ -4,71 +4,19 @@
 
 /**
  * @file useToastBannerSwipe.ts
- * @input The Toast card's root ref, its edge, its timer pause and resume
- *   hooks, its dismissal callback, and its interactive-descendant check. It reads the UIKit table (motion/uikit/toast) and runs on the
- *   shared gesture system and the compositor animator
- * @output Attaches a PanGestureRecognizer that drives swipe-to-dismiss and an
- *   animator that moves the card. Returns `retract`, the exit every
- *   dismissal under a finger plays, and `rest`. Also exports the swipe's
- *   math: `followOffset`, `isDismissRelease`, `retractTarget` and
- *   `retractCurve`
- * @position Toast's touch layer: its one module of touch-only work, imported
- *   only by Toast.tsx. It is live under a coarse primary pointer
- *   (useTouchPresentation). With a fine pointer it is inert, and
+ * @input The Toast card's root ref, its edge, its timer hooks, its dismissal
+ *   callback and its interactive-descendant check
+ * @output Under a finger, the swipe that follows iOS's notification banner
+ *   (motion/uikit/toast) and `retract`, the exit every dismissal plays there.
+ *   A finger catches the card mid-motion. Also the swipe's math:
+ *   `followOffset`, `isDismissRelease`, `retractTarget` and `retractCurve`
+ * @position Toast's touch layer, imported only by Toast.tsx. It is live under
+ *   a coarse primary pointer. With a fine pointer it is inert, and
  *   useToastGesture runs
  *
- * Under a finger (a coarse primary pointer), the swipe follows iOS's
- * notification banner. The values and their sources are in
- * motion/uikit/toast.ts. With a fine pointer Toast keeps
- * its own swipe (useToastGesture).
- *
- * - The swipe is a one-way pan toward the Toast's edge, for touch and pen, on
- *   the shared gesture system (../gestures). A mouse keeps text selection.
- *   The pan decides on the touch's first move, as the browser does. A first
- *   move toward the edge, `toast.axisRatio` times more vertical than
- *   horizontal, holds the touch from that move. Any other first move fails
- *   the pan and leaves the browser the touch. The swipe begins at UIKit's pan
- *   hysteresis. Once it began, the touch stays the toast's: a second finger
- *   that lands anywhere leaves the swipe going. A second finger before it
- *   began fails it, so two fingers stay the page's pinch zoom.
- * - The card stays still for the first `toast.followFrom` px of finger
- *   travel. Then it follows at `toast.followRatio` of the finger, and only
- *   its translation is written (no render, no layout read). A drag that turns
- *   back away from the edge stretches the card that way too, as the banner
- *   does. Its release always springs the card back.
- * - A release dismisses (`isDismissRelease`) when the card is
- *   `toast.dismissOffset` out. It also dismisses when the card is at or past
- *   rest and the finger moved toward the edge at `toast.flickVelocity` as it
- *   lifted. The
- *   speed is the shared release filter's. A release moving back toward rest
- *   always springs back. A card stretched away from the edge always springs
- *   back. Otherwise the card springs back to rest on the compositor, with its
- *   release velocity. The spring is `springs.settle`, which the banner's
- *   measured settle matches.
- * - `retract` is how the card leaves, whatever dismissed it: a release, the
- *   close button or the timeout. From where it is, the card slides past its
- *   edge on the compositor over `toast.exitMs` on `toast.exitCurve`, without
- *   fading, as the banner retracts. After a dismissing release it starts at
- *   the card's release velocity. It starts in the call (an input event or the
- *   timer), so no render can delay it. It calls `onRetract`, so the row stops
- *   clipping the card, and resolves when the card is gone. `rest` brings back
- *   a card that its owner kept on screen after the dismissal.
- * - Under reduced motion the animator replaces travel with its cross-fade (a
- *   release is a touch release). The spring-back lands at rest and fades in,
- *   and the retract fades out in place.
- * - A finger that lands on the card while it springs back or retracts
- *   catches it where it shows, read from its curve. The card then follows
- *   the finger, and the release decides as before. A card caught on its way
- *   out leaves from there when the finger lifts: its toast is dismissed.
- * - A touch-down pauses the auto-hide timer. Anything but a dismissal resumes
- *   it.
- *
- * With a fine pointer the recognizer takes no touches and nothing here moves
- * the card, so it is useToastGesture's alone.
- *
- * SYNC: When modified, update Toast.doc.mjs, toastSwipe.test.ts and the finger
- *   swipe tests in ToastViewport.test.tsx and
- *   __tests__/ToastSwipe.interaction.browser.spec.ts.
+ * SYNC: When modified, update Toast.doc.mjs, toastSwipe.test.ts, the finger
+ *   tests in ToastViewport.test.tsx and
+ *   __tests__/ToastCatch.interaction.browser.spec.ts.
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
@@ -92,8 +40,6 @@ interface SwipeSession {
   offset: number;
   /** Where the finger caught the card, px from rest toward the edge. */
   caughtAt: number;
-  /** The finger caught the card on its way out. */
-  isLeaving: boolean;
 }
 
 /** A retract in flight: where the card ends, and what its callers wait on. */
@@ -248,6 +194,7 @@ export function useToastBannerSwipe(
   const settlingRef = useRef<MotionHandle | null>(null);
   const retractingRef = useRef<Promise<void> | null>(null);
   const exitRef = useRef<Exit | null>(null);
+  const exitHandleRef = useRef<MotionHandle | null>(null);
   /** The next retract follows a release (a touch release, for Reduced Motion). */
   const releasedRef = useRef(false);
   /** The card's speed toward its edge at a dismissing release (px/s). */
@@ -314,12 +261,7 @@ export function useToastBannerSwipe(
             if (pausedTimer) {
               current.pauseTimer();
             }
-            sessionRef.current = {
-              pausedTimer,
-              offset: caughtAt,
-              caughtAt,
-              isLeaving,
-            };
+            sessionRef.current = {pausedTimer, offset: caughtAt, caughtAt};
           }
           return true;
         },
@@ -356,7 +298,11 @@ export function useToastBannerSwipe(
         },
         {crossfadeAs: 'exit', touchRelease},
       );
+      exitHandleRef.current = handle;
       void handle.finished.then(isFinished => {
+        if (exitHandleRef.current === handle) {
+          exitHandleRef.current = null;
+        }
         // A finger that catches the card stops the curve. Its release plays
         // the exit again, and only an exit that ends lets the card go.
         if (isFinished && exitRef.current === exit) {
@@ -396,9 +342,9 @@ export function useToastBannerSwipe(
         }
         sessionRef.current = null;
         const fingerVelocity = recognizer.velocity().y * direction;
-        if (session.isLeaving) {
-          // Its toast is dismissed, so the card leaves from where the finger
-          // let it go, at its speed toward the edge.
+        if (exitRef.current != null) {
+          // The toast was dismissed before the lift, so the card leaves from
+          // where the finger lets it go, at its speed toward the edge.
           playExit(
             to === 'ended' && fingerVelocity > 0
               ? fingerVelocity * toast.followRatio
@@ -451,6 +397,10 @@ export function useToastBannerSwipe(
   // in the input event or the timer that asked for it.
   const retract = useCallback(async (): Promise<void> => {
     if (retractingRef.current != null) {
+      // An exit that nothing plays and no finger holds plays again.
+      if (exitHandleRef.current == null && sessionRef.current == null) {
+        playExit(undefined, false);
+      }
       await retractingRef.current;
       return;
     }
@@ -473,12 +423,15 @@ export function useToastBannerSwipe(
       done = resolve;
     });
     exitRef.current = {to, done};
-    // After a dismissing release: the card's speed toward its edge.
-    const touchRelease = releasedRef.current;
-    playExit(
-      touchRelease ? releaseVelocityRef.current : undefined,
-      touchRelease,
-    );
+    // A finger on the card holds it, and its release plays the exit. After a
+    // dismissing release: the card's speed toward its edge.
+    if (sessionRef.current == null) {
+      const touchRelease = releasedRef.current;
+      playExit(
+        touchRelease ? releaseVelocityRef.current : undefined,
+        touchRelease,
+      );
+    }
     await retractingRef.current;
   }, [playExit, rootRef]);
 
