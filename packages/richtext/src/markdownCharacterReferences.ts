@@ -747,8 +747,21 @@ function hasUnescapedPipe(text: string): boolean {
   return false;
 }
 
-/** A GFM table's delimiter row: cells of hyphens with optional colons. */
-const TABLE_DELIMITER_ROW = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+/**
+ * Whether `line` is a GFM table's delimiter row: cells of hyphens with
+ * optional colons, between optional outer pipes. Each cell is tested on its
+ * own, so the time stays linear in the line length.
+ */
+function isTableDelimiterRow(line: string): boolean {
+  let body = line.trim();
+  if (body.startsWith('|')) {
+    body = body.slice(1);
+  }
+  if (body.endsWith('|')) {
+    body = body.slice(0, -1);
+  }
+  return body.split('|').every(cell => /^:?-+:?$/.test(cell.trim()));
+}
 
 /**
  * The ranges of `markdown` a code span must not start in: inline link
@@ -795,7 +808,7 @@ function tableRowRanges(markdown: string): Array<readonly [number, number]> {
     const line = lines[index];
     if (
       line.includes('|') &&
-      TABLE_DELIMITER_ROW.test(line) &&
+      isTableDelimiterRow(line) &&
       lines[index - 1].includes('|')
     ) {
       let end = index + 1;
