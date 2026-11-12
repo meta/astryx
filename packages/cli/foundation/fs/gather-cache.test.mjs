@@ -16,7 +16,7 @@ const identity = {
 
 // A recorded run arms through module.registerHooks, which Node has from 22.15
 // and 23.5. On an older Node the CLI supports (its oldest is 22.13), a recorded
-// run only runs the gather, as the last case here shows.
+// run only runs the gather, as the fallback case below shows.
 const hasModuleHooks =
   typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
 

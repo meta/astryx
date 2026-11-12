@@ -330,12 +330,13 @@ async function expectSameAsFresh(tmp, options = {}) {
 
 // The CLI keeps a catalog through module.registerHooks, which Node has from
 // 22.15 and 23.5. On an older Node the CLI supports (its oldest is 22.13), it
-// keeps none and gathers fresh each run, as the suite after this one shows.
+// keeps none and gathers fresh each run, as the suite after this one shows, so
+// the cases below that need a kept catalog or kept check results skip there.
 const hasModuleHooks =
   typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
 
-describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)('a kept catalog', () => {
-  it('answers as a fresh gather, and is used while nothing changed', async () => {
+describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
+  it.skipIf(!hasModuleHooks)('answers as a fresh gather, and is used while nothing changed', async () => {
     const tmp = keptTmp('warm');
     const cold = run(QUERIES[0], {tmp});
     const stored = entries(tmp);
@@ -350,7 +351,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)('a kept catalog
     await expectSameAsFresh(tmp);
   }, 120_000);
 
-  it('is not used after an edit, an added or removed file, or a copy that keeps the time', async () => {
+  it.skipIf(!hasModuleHooks)('is not used after an edit, an added or removed file, or a copy that keeps the time', async () => {
     const tmp = keptTmp('stale');
     expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
     writeTemplate('ledger', 'Entries as rows with running balances.');
@@ -372,7 +373,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)('a kept catalog
     writeTemplate('roster', 'People as rows with role and team.');
   }, 300_000);
 
-  it('is not used by another project, another CLI, or another environment', async () => {
+  it.skipIf(!hasModuleHooks)('is not used by another project, another CLI, or another environment', async () => {
     const tmp = keptTmp('other');
     await expectSameAsFresh(tmp);
     const other = makeProject();
@@ -390,7 +391,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)('a kept catalog
     expect((await expectSameAsFresh(tmp, {env: {CI: '1'}}))[0]).toBe('miss');
   }, 300_000);
 
-  it('is not used after an integration is installed or removed', async () => {
+  it.skipIf(!hasModuleHooks)('is not used after an integration is installed or removed', async () => {
     const tmp = keptTmp('install');
     expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
     const extra = path.join(project, 'node_modules', '@acme', 'extra');
@@ -484,7 +485,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)('a kept catalog
     }
   }, 300_000);
 
-  it('answers as a fresh gather after random changes', async () => {
+  it.skipIf(!hasModuleHooks)('answers as a fresh gather after random changes', async () => {
     const tmp = keptTmp('random');
     let seed = 7;
     const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -516,7 +517,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)('a kept catalog
     }
   }, 600_000);
 
-  it('is not kept by the first run, which only makes its folder', () => {
+  it.skipIf(!hasModuleHooks)('is not kept by the first run, which only makes its folder', () => {
     const tmp = path.join(work, 'tmp', 'first');
     const first = run(QUERIES[0], {tmp});
     expect(fs.readdirSync(path.join(tmp, 'astryx'))).toContain('catalogs');
@@ -527,7 +528,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)('a kept catalog
     expect(entries(tmp).size).toBe(1);
   }, 120_000);
 
-  it("is used once a TypeScript integration's first load filled the transpile cache", () => {
+  it.skipIf(!hasModuleHooks)("is used once a TypeScript integration's first load filled the transpile cache", () => {
     const tmp = keptTmp('typescript');
     const other = makeProject();
     try {
@@ -561,7 +562,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)('a kept catalog
     }
   }, 120_000);
 
-  it("installs no module hook unless it keeps a catalog, and keeps none under Plug'n'Play", () => {
+  it.skipIf(!hasModuleHooks)("installs no module hook unless it keeps a catalog, and keeps none under Plug'n'Play", () => {
     // A resolver as strict as Yarn PnP's: it refuses the options Node's module
     // hooks hand it, so any hook installed by the run breaks a require.
     const strict = path.join(work, 'strict-resolver.cjs');
@@ -607,7 +608,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(run(QUERIES[0], {tmp: kept, env: asPnp})).toEqual(fresh);
   }, 120_000);
 
-  it("is not used when another entry is copied over this one's name", () => {
+  it.skipIf(!hasModuleHooks)("is not used when another entry is copied over this one's name", () => {
     const tmp = keptTmp('copied');
     const other = makeProject();
     try {
@@ -721,7 +722,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(derivedEntries(tmp)).toEqual([]);
   }, 180_000);
 
-  it('keeps a digest of each environment value it read, never the value', () => {
+  it.skipIf(!hasModuleHooks)('keeps a digest of each environment value it read, never the value', () => {
     const tmp = keptTmp('secrets');
     const secret = 'probe-secret-value-4f1c';
     const env = {PROBE_API_TOKEN: secret};
@@ -742,7 +743,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(states).toBeGreaterThan(0);
   }, 120_000);
 
-  it("keeps search's entry table beside the catalog, and reads it back the same", () => {
+  it.skipIf(!hasModuleHooks)("keeps search's entry table beside the catalog, and reads it back the same", () => {
     const tmp = keptTmp('table');
     const fresh = run(QUERIES[0], {tmp: freshTmp()});
     expect(run(QUERIES[0], {tmp})).toEqual(fresh);
@@ -810,7 +811,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       fs.writeFileSync(cardsFile, cardsText);
     }
   }, 180_000);
-  it("keeps build's block catalog beside the search catalog, and reads it back the same", () => {
+  it.skipIf(!hasModuleHooks)("keeps build's block catalog beside the search catalog, and reads it back the same", () => {
     const tmp = keptTmp('blocks');
     // A request that picks blocks.
     const ask = ['build', 'a dashboard with a chart and a table'];
@@ -894,7 +895,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     }
   }, 240_000);
 
-  it("keeps each integration's check results, and checks again after an edit", async () => {
+  it.skipIf(!hasModuleHooks)("keeps each integration's check results, and checks again after an edit", async () => {
     const tmp = keptTmp('issues');
     const other = makeProject();
     try {
@@ -997,7 +998,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     }
   }, 120_000);
 
-  it('keeps the check results of an integration installed beside the CLI, run outside a project', () => {
+  it.skipIf(!hasModuleHooks)('keeps the check results of an integration installed beside the CLI, run outside a project', () => {
     const tmp = keptTmp('computer');
     // A computer-level integration: installed in the CLI's own install root.
     const beside = path.join(
