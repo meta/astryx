@@ -12,9 +12,9 @@
  * with no hint of the fix. This check runs first in `generate` (so both `dev`
  * and `build` gate on it) and prints a clear, actionable message.
  *
- * `generate` also renders the landing templates card previews inside the
- * neutral theme (scripts/generate-landing-template-previews.mjs), which reads
- * that theme's built stylesheet and module. The other theme packages' CSS is
+ * `generate` also renders the landing previews inside the neutral and Butter
+ * themes (scripts/generate-landing-template-previews.mjs), which reads the
+ * neutral theme's built stylesheet and module and Butter's built module. The other theme packages' CSS is
  * a `next dev`/`next build` runtime concern, not a `generate` prerequisite,
  * so it is intentionally not required here.
  *
@@ -36,8 +36,9 @@ const ROOT = join(__dirname, '..', '..', '..');
 // .../dist/theme/index.js".
 //
 // The landing template previews render inside the neutral theme, so the last
-// step of `generate` reads that theme's built stylesheet and module. Without
-// them it fails inside the page renderer.
+// step of `generate` reads that theme's built stylesheet and module. The
+// themes card's store renders inside the Butter theme, so that step also
+// reads Butter's built module. Without them it fails inside the page renderer.
 //
 // We intentionally do NOT require the other theme packages' built theme.css
 // here. Their CSS is a runtime/`next build` concern, not a `generate`
@@ -46,6 +47,7 @@ const REQUIRED = [
   'packages/core/dist/theme/index.js',
   'packages/themes/neutral/dist/theme.css',
   'packages/themes/neutral/dist/neutral.js',
+  'packages/themes/butter/dist/butter.js',
 ];
 
 const missing = REQUIRED.filter(rel => !existsSync(join(ROOT, rel)));

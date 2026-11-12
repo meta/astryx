@@ -13,9 +13,10 @@
  *   gathers fresh and stores that.
  * @position Used by search's adapter (api/search/_adapter.mjs) for the
  *   catalog `search` and `build` rank, and by the project
- *   (foundation/config/project.mjs) for each integration's contribution-check
- *   results, which `component`, `template`, `theme`, `discover` and `search`
- *   report. Gathers are kept only once the folder exists: the first such run
+ *   (foundation/config/project.mjs) for its integration issues: each
+ *   integration's contribution-check results and the whole list (with the
+ *   template and component replacement passes), which `component`,
+ *   `template`, `theme`, `discover` and `search` report. Gathers are kept only once the folder exists: the first such run
  *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
@@ -36,6 +37,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {CLI_ROOT} from './paths.mjs';
+import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
 import {jitiCacheDir} from './jiti-cache.mjs';
@@ -46,6 +48,17 @@ import {
   stillInState,
   withoutRecording,
 } from './read-record.mjs';
+
+/**
+ * The kept commands whose only kept gather is their integrations' check
+ * results: a project with no integration records none of them.
+ */
+const INTEGRATION_COMMANDS = new Set([
+  'component',
+  'template',
+  'theme',
+  'discover',
+]);
 
 /** The run's commands whose gathers are kept. */
 const KEPT_COMMANDS = new Set([
@@ -215,7 +228,11 @@ export async function recordRunFor(argv, fn) {
     !KEPT_COMMANDS.has(command) ||
     runsUnderPnp() ||
     currentUid() == null ||
-    withoutRecording(buildId) == null
+    withoutRecording(buildId) == null ||
+    // Last, being a few file checks: those commands keep only their
+    // integrations' check results, so a project with none records nothing.
+    (INTEGRATION_COMMANDS.has(command) &&
+      !withoutRecording(() => mayHaveIntegrations(process.cwd())))
   ) {
     return fn();
   }
