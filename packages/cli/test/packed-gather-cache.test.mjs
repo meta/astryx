@@ -906,7 +906,8 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
       expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
       const kept = issuesEntries(tmp);
-      expect(kept.size).toBe(1);
+      // The integration's own checks, and the project's whole issue list.
+      expect(kept.size).toBe(2);
       // Read back, not checked again: the same file, and the same answer.
       expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
       expect(issuesEntries(tmp)).toEqual(kept);
@@ -1028,12 +1029,51 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       );
       expect(answer(run(ask, {tmp, cwd: outside, json: false}))).toEqual(fresh);
       const kept = issuesEntries(tmp);
-      expect(kept.size).toBe(1);
+      // The integration's own checks, and the project's whole issue list.
+      expect(kept.size).toBe(2);
       expect(answer(run(ask, {tmp, cwd: outside, json: false}))).toEqual(fresh);
       expect(issuesEntries(tmp)).toEqual(kept);
     } finally {
       fs.rmSync(beside, {recursive: true, force: true});
       fs.rmSync(outside, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('keeps the whole issue list, and finds a replacement problem after an edit', async () => {
+    const tmp = keptTmp('replacement');
+    const other = makeProject();
+    try {
+      const templates = path.join(other.widgets, 'templates');
+      fs.mkdirSync(templates, {recursive: true});
+      const doc = path.join(templates, 'tally.doc.mjs');
+      const page = `{type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'`;
+      fs.writeFileSync(doc, `export default ${page}};\n`);
+      fs.writeFileSync(
+        path.join(templates, 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = ['component', 'Button'];
+      const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      const kept = issuesEntries(tmp);
+      expect(kept.size).toBe(2);
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      expect(issuesEntries(tmp)).toEqual(kept);
+      // The template now claims to replace a Core page that does not exist:
+      // only the replacement pass, which reads every template, finds it.
+      fs.writeFileSync(
+        doc,
+        `export default ${page}, replaces: 'no-such-page'};\n`,
+      );
+      const [again, edited] = await Promise.all([
+        runAsync(ask, {tmp, cwd: other.dir, json: false}),
+        runAsync(ask, {tmp: freshTmp(), cwd: other.dir, json: false}),
+      ]);
+      expect(edited.stderr).toContain('@acme/widgets');
+      expect(fresh.stderr).not.toContain('@acme/widgets');
+      expect(again).toEqual(edited);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
     }
   }, 120_000);
 
