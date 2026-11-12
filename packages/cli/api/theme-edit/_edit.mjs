@@ -1614,8 +1614,16 @@ export async function themeEditUndo(theme, options = {}) {
   const same = (/** @type {string} */ a, /** @type {string} */ b) => {
     try {
       return (
-        JSON.stringify({...JSON.parse(a.replace(/^\uFEFF/, '')), lifted: 0}) ===
-        JSON.stringify({...JSON.parse(b.replace(/^\uFEFF/, '')), lifted: 0})
+        JSON.stringify({
+          ...JSON.parse(a.replace(/^\uFEFF/, '')),
+          lifted: 0,
+          built: 0,
+        }) ===
+        JSON.stringify({
+          ...JSON.parse(b.replace(/^\uFEFF/, '')),
+          lifted: 0,
+          built: 0,
+        })
       );
     } catch {
       return false;
@@ -1636,6 +1644,23 @@ export async function themeEditUndo(theme, options = {}) {
   );
   // A step always restores into this theme, whatever name it holds.
   prev.name = theme;
+  // What the step's build showed is restored with it, not saved as a
+  // setting.
+  const built = /** @type {any} */ (prev).built;
+  delete (/** @type {any} */ (prev).built);
+  const radii =
+    built?.radii && typeof built.radii === 'object'
+      ? /** @type {Record<string, string>} */ (
+          Object.fromEntries(
+            Object.entries(built.radii).filter(
+              ([k, v]) =>
+                /^--radius-(element|inner|container|page)$/.test(k) &&
+                typeof v === 'string' &&
+                /^\d+(\.\d+)?px$/.test(v),
+            ),
+          )
+        )
+      : null;
   // The step it goes back to is checked like the settings file itself. A
   // value the editor no longer accepts is left out of that step (with a
   // note); a step whose shape is broken is refused.
@@ -1660,6 +1685,7 @@ export async function themeEditUndo(theme, options = {}) {
   const committed = await commitTheme(ctx, theme, prev, {
     history: false,
     historyAfter: history,
+    radii,
   });
   /** @type {string[]} */
   const undone = current

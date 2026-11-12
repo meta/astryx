@@ -96,7 +96,7 @@ import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -1063,7 +1063,10 @@ export function compileTheme(ctx, data, base) {
             '--radius-container',
             '--radius-page',
           ])
-            putTok(token, derived(token));
+            // The radii the build already shows for this corners value (a
+            // build by an earlier editor, or a step back) are kept, as the
+            // colors are: they change only when corners or the base does.
+            putTok(token, ctx.keepRadii?.[token] ?? derived(token));
       } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
         // The palette mapping above sets these tokens.
       } else if (s.thing === 'font') {
@@ -2070,6 +2073,40 @@ export function radiusTokenOf(ctx, part, when) {
 }
 
 /**
+ * The whole-theme radius tokens a generated settings module writes, or null
+ * when it writes none.
+ * @param {string} source
+ * @returns {Record<string, string> | null}
+ */
+export function radiiIn(source) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const m of source.matchAll(
+    /^ {4}"(--radius-(?:element|inner|container|page))": "([^"]+)"/gm,
+  ))
+    out[m[1]] = m[2];
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * A history step: the settings as they were, with the radii their build
+ * showed (so a step back restores them exactly, also for a theme an earlier
+ * editor built). A step an older CLI wrote has none, and is read as before.
+ * @param {string} text
+ * @param {Record<string, string> | null} radii
+ */
+function withBuilt(text, radii) {
+  if (!radii) return text;
+  try {
+    const data = JSON.parse(text.replace(/^\uFEFF/, ''));
+    if (!settingsShapeOk(data)) return text;
+    return `${JSON.stringify({...data, built: {radii}}, null, 2)}\n`;
+  } catch {
+    return text;
+  }
+}
+
+/**
  * The radius, in px, the build writes for a radius token at a corners value
  * (a rung, or a size). The derived radii keep the base theme's own
  * proportions to the element radius (matcha's page is 3.5 times it), so a
@@ -2431,10 +2468,16 @@ export function readHistory(file) {
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {ThemeData} data
- * @param {{history: boolean, historyAfter?: string[]}} options
- *   `historyAfter`: the history to write with the change (a step back pops it)
+ * @param {{history: boolean, historyAfter?: string[], radii?: Record<string, string> | null}} options
+ *   `historyAfter`: the history to write with the change (a step back pops it);
+ *   `radii`: the whole-theme radii the step being restored was built with
  */
-export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
+export async function commitTheme(
+  ctx,
+  slug,
+  data,
+  {history, historyAfter, radii},
+) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   refuseLinks(cwd, slug);
@@ -2504,6 +2547,21 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
     before && colorKey(before) === colorKey(data) && fs.existsSync(f.settingsTs)
       ? stopsIn(fs.readFileSync(f.settingsTs, 'utf8'))
       : null;
+  // The same for the whole-theme radii: kept while corners and the base
+  // stay as they are; a step back restores the radii it was built with.
+  /** @param {ThemeData | null} d */
+  const cornersKey = d =>
+    d &&
+    JSON.stringify({
+      like: d.like ?? null,
+      corners: d.settings.filter(x => x.thing === 'corners' && !x.on),
+    });
+  const radiiNow = fs.existsSync(f.settingsTs)
+    ? radiiIn(fs.readFileSync(f.settingsTs, 'utf8'))
+    : null;
+  ctx.keepRadii =
+    radii ??
+    (before && cornersKey(before) === cornersKey(data) ? radiiNow : null);
   // What this run writes is recorded as it writes it, so a failed change
   // puts back exactly that and nothing else.
   const rootMade = !fs.existsSync(f.root);
@@ -2541,7 +2599,9 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
       else if (snapBefore && history)
         writeWhole(
           f.history,
-          JSON.stringify([...past, snapBefore].slice(-HISTORY_STEPS)),
+          JSON.stringify(
+            [...past, withBuilt(snapBefore, radiiNow)].slice(-HISTORY_STEPS),
+          ),
         );
     });
   } catch (e) {
