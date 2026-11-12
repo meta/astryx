@@ -48,6 +48,7 @@ import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
 import {DELAYS_CONTENT_TOUCHES_MS} from '../motion/uikit/scroll';
 import {isInsideScrollView} from '../utils/scrollView';
 import {edgeAutoscroll} from '../utils/edgeAutoscroll';
+import {subscribeInput} from '../utils/inputStream';
 import {focusForLastInput} from '../utils/focusReturn';
 import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import {
@@ -286,6 +287,26 @@ function normalizePointerType(type: string): MenuPressPointerType | null {
   return type === 'mouse' || type === 'touch' || type === 'pen' ? type : null;
 }
 
+/**
+ * The identifier of the touch that a pointer's touchstart started. WebKit
+ * gives the touch the pointer's id. Chromium gives it its own id, so a lone
+ * changed touch is the pointer's. Several changed touches, none with the
+ * pointer's id, name no touch.
+ */
+function touchOfPointer(
+  changed: TouchList | undefined,
+  pointerId: number,
+): number | null {
+  if (changed == null) {
+    return null;
+  }
+  const touches = Array.from(changed);
+  if (touches.some(touch => touch.identifier === pointerId)) {
+    return pointerId;
+  }
+  return touches.length === 1 ? touches[0].identifier : null;
+}
+
 function isRowFocusable(row: HTMLElement): boolean {
   return row.matches(FOCUSABLE_ROW_SELECTOR);
 }
@@ -407,6 +428,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
 
   const gestureRef = useRef<MenuPressState<HTMLElement>>(IDLE_MENU_PRESS);
   const pointerIdRef = useRef<number | null>(null);
+  const touchIdentifierRef = useRef<number | null>(null);
   const detachRef = useRef<(() => void) | null>(null);
   // `useLongPress` detects the held finger, as in ContextMenu, so the hold
   // time and the movement tolerance have one home. A ref holds the handle,
@@ -666,6 +688,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
           armClickGuard(doc, {
             staysInstalled: true,
             cancelsTouchEnd: native?.pointerType === 'touch',
+            touchIdentifier: touchIdentifierRef.current ?? undefined,
           });
           if (native != null) {
             activate(effect.row, native);
@@ -697,6 +720,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
             armClickGuard(doc, {
               staysInstalled: true,
               cancelsTouchEnd: native?.pointerType === 'touch',
+              touchIdentifier: touchIdentifierRef.current ?? undefined,
             });
           }
           if (effect.dismiss) {
@@ -793,7 +817,21 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
       const doc = getDocument();
       const view = doc.defaultView;
       pointerIdRef.current = pointerId;
+      touchIdentifierRef.current = null;
 
+      // The touchstart after this pointerdown names the touch, so the guard
+      // at the lift cancels only that touch's touchend.
+      let stopTouchStart: (() => void) | null = null;
+      if (view != null) {
+        stopTouchStart = subscribeInput(view, 'touchstart', event => {
+          stopTouchStart?.();
+          stopTouchStart = null;
+          touchIdentifierRef.current = touchOfPointer(
+            event.changedTouches,
+            pointerId,
+          );
+        });
+      }
       const onMove = (event: PointerEvent) => {
         if (event.pointerId !== pointerIdRef.current) {
           return;
@@ -883,6 +921,7 @@ export function useMenuPressInternal(input: UseMenuPressOptions): {
       doc.addEventListener('pointerdown', onOtherPointerDown, true);
       view?.addEventListener('blur', onBlur);
       detachRef.current = () => {
+        stopTouchStart?.();
         doc.removeEventListener('pointermove', onMove, true);
         doc.removeEventListener('pointerup', onUp, true);
         doc.removeEventListener('pointercancel', onCancel, true);

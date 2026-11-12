@@ -49,7 +49,7 @@ import {
   list,
 } from '../formatters/index.mjs';
 import {logger} from '../../../api/logger.mjs';
-import {cliError} from '../lib/cli-error.mjs';
+import {cliError, themeGroupUnknownSubcommand} from '../lib/cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
@@ -57,7 +57,11 @@ import {themeAdd} from '../../../api/theme/add/add.mjs';
 import {themeRemove} from '../../../api/theme/remove/remove.mjs';
 import {themeUse} from '../../../api/theme/use/use.mjs';
 import {themeEject} from '../../../api/theme/eject/eject.mjs';
-import {themeTemplate} from '../../../api/theme/template/template.mjs';
+import {
+  OUTSIDE_PROJECT_WARNING,
+  themeTemplate,
+} from '../../../api/theme/template/template.mjs';
+import {findPackageRoot} from '../../../foundation/fs/paths.mjs';
 import {
   themeListAvailable,
   themeListCopySources,
@@ -76,6 +80,7 @@ import {
   themeBuild,
   themeBuildFamily,
   themeBuildForReport,
+  themeSourceFiles,
   themeSourceGuesses,
   writeDeferredBuildOutputs,
 } from '../../../api/theme/build/build.mjs';
@@ -222,6 +227,20 @@ function themeCommand(words, sub, args = [], reason = '') {
 }
 
 /**
+ * The message type a `theme build` child sends its watcher in place of a
+ * warning a build prints once per invocation (the --out editor-folder
+ * warning), so a watch session prints it once, not on every rebuild.
+ */
+const WATCH_WARNING = 'astryx.theme.build.warning';
+
+/**
+ * The `argv0` a watcher starts each `theme build` child with. With the IPC
+ * channel it marks the child as the watcher's own, so a CLI run another way
+ * with an IPC channel (forked by a tool or test runner) still prints.
+ */
+const WATCH_CHILD_ARGV0 = 'astryx-theme-watch';
+
+/**
  * Path to this CLI's real entry (clients/cli/bin/astryx.mjs), resolved from
  * this module's location (clients/cli/commands/theme.mjs → ../bin/
  * astryx.mjs). Used to re-invoke `theme build` as a child process in watch mode.
@@ -243,9 +262,17 @@ function resolveCliBin() {
  * @param {(child: import('node:child_process').ChildProcess) => void} [onSpawn] -
  *   Receives the child, so a watcher that stops can stop it too.
  * @param {ThemeCommandWords} [words]
+ * @param {(message: unknown) => void} [onMessage] - Receives what the child
+ *   hands over the channel (WATCH_WARNING messages).
  * @returns {Promise<number>}
  */
-function runThemeBuildOnceChild(file, options, onSpawn, words = THEME_WORDS) {
+function runThemeBuildOnceChild(
+  file,
+  options,
+  onSpawn,
+  words = THEME_WORDS,
+  onMessage,
+) {
   const cliBin = resolveCliBin();
   const command = [...words.group.split(' '), words.build];
   // A detail level the user chose applies to every rebuild.
@@ -256,10 +283,15 @@ function runThemeBuildOnceChild(file, options, onSpawn, words = THEME_WORDS) {
   if (options.iconsSpecifier)
     args.push('--icons-specifier', options.iconsSpecifier);
   return new Promise((/** @type {(code: number) => void} */ resolve) => {
+    // The IPC channel and argv0 tell the child it builds for this watcher: it
+    // hands its once-per-invocation warnings over the channel instead of
+    // printing them.
     const child = spawn(process.execPath, args, {
-      stdio: 'inherit',
+      argv0: WATCH_CHILD_ARGV0,
+      stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
       env: process.env,
     });
+    child.on('message', message => onMessage?.(message));
     onSpawn?.(child);
     child.on('close', code => resolve(code ?? 0));
     child.on('error', () => resolve(1));
@@ -289,9 +321,28 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
     .map(e => rel(e.filePath))
     .join(', ')} for changes — press Ctrl-C to stop.`;
 
+  // A warning a build prints once per invocation is printed at most once
+  // per watch session (spec:AST-017 FR29a), not on every rebuild.
+  let warned = false;
+  // Watch never runs under --json, so the logger prints (cli-surface INV12).
+  logger.setSilent(false);
+  const onMessage = (/** @type {unknown} */ message) => {
+    const m = /** @type {{type?: unknown, text?: unknown}} */ (message);
+    if (warned || m?.type !== WATCH_WARNING || typeof m.text !== 'string')
+      return;
+    warned = true;
+    logger.warn(m.text);
+  };
+
   // Initial build.
   for (const entry of entries) {
-    await runThemeBuildOnceChild(entry.file, options, undefined, words);
+    await runThemeBuildOnceChild(
+      entry.file,
+      options,
+      undefined,
+      words,
+      onMessage,
+    );
   }
 
   let building = false;
@@ -322,6 +373,7 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
         rebuildChild = child;
       },
       words,
+      onMessage,
     );
     rebuildDone = done.then(() => {});
     await done;
@@ -330,6 +382,8 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
     building = false;
     // A stop during this build has already ended the watch.
     if (stopped) return;
+    // The rebuilt source may import other files now.
+    watchSourceFiles(entry);
     emit(text(watchingLine));
     const next = queued.values().next();
     if (!next.done) {
@@ -338,21 +392,56 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
     }
   };
 
-  // Some editors replace the file (rename) rather than writing in place, which
-  // can drop the watch. Watch the containing directory and filter to our file
-  // so edits survive atomic-save/rename.
-  const watchers = entries.map(entry => {
-    const baseName = path.basename(entry.filePath);
-    return fs.watch(path.dirname(entry.filePath), (_eventType, changed) => {
-      if (changed && changed !== baseName) return;
-      clearTimeout(debounces.get(entry.filePath));
-      // Debounce: editors often emit several events per save.
-      debounces.set(
-        entry.filePath,
-        setTimeout(() => rebuild(entry), 100),
-      );
-    });
-  });
+  // A theme is its source and the local files it imports (an ejected fork's
+  // palettes, a split theme); a change to any of them rebuilds it. Some
+  // editors replace a file (rename) rather than write in place, which can drop
+  // a file watch, so each containing folder is watched and filtered by name.
+  /** @type {Map<{file: string, filePath: string}, Set<string>>} */
+  const sourceFiles = new Map();
+  /** @type {Map<string, import('node:fs').FSWatcher>} */
+  const folderWatchers = new Map();
+  /** @param {{file: string, filePath: string}} entry */
+  const changed = entry => {
+    clearTimeout(debounces.get(entry.filePath));
+    // Debounce: editors often emit several events per save.
+    debounces.set(
+      entry.filePath,
+      setTimeout(() => rebuild(entry), 100),
+    );
+  };
+  /** @param {string} dir */
+  const watchFolder = dir => {
+    if (folderWatchers.has(dir)) return;
+    folderWatchers.set(
+      dir,
+      fs.watch(dir, (_eventType, name) => {
+        const file = name ? path.join(dir, name.toString()) : null;
+        for (const [entry, files] of sourceFiles) {
+          if (
+            file
+              ? files.has(file)
+              : [...files].some(f => path.dirname(f) === dir)
+          ) {
+            changed(entry);
+          }
+        }
+      }),
+    );
+  };
+  /** @param {{file: string, filePath: string}} entry */
+  function watchSourceFiles(entry) {
+    const files = new Set(themeSourceFiles(entry.filePath));
+    files.add(path.resolve(entry.filePath));
+    sourceFiles.set(entry, files);
+    for (const file of files) {
+      try {
+        watchFolder(path.dirname(file));
+      } catch {
+        // A folder that went away is watched again after the next build.
+      }
+    }
+  }
+  for (const entry of entries) watchSourceFiles(entry);
 
   // Announce readiness only AFTER fs.watch is armed — the log is the "safe to
   // edit" signal (tests and humans rely on it), so printing it before the watch
@@ -370,7 +459,7 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
       stopped = true;
       queued.clear();
       for (const d of debounces.values()) clearTimeout(d);
-      for (const w of watchers) w.close();
+      for (const w of folderWatchers.values()) w.close();
       // A rebuild in progress would otherwise keep the process alive after
       // "Stopped watching.". In a terminal, Ctrl-C already reached it.
       rebuildChild?.kill(signal);
@@ -655,13 +744,13 @@ export function registerTheme(program) {
       // us as a positional in cmd.args — exit 1 with a clear error.
       const extras = (cmd && cmd.args) || [];
       if (extras.length > 0) {
-        const unknown = String(extras[0]);
-        const known = (theme.commands || []).map(c => c.name());
-        const suggestions = known.map(name => ({
-          name,
-          reason: 'available subcommand',
-        }));
-        return cliError(`unknown subcommand 'theme ${unknown}'`, {
+        const {message, suggestions} = themeGroupUnknownSubcommand(
+          'theme',
+          String(extras[0]),
+          (theme.commands || []).map(c => c.name()),
+          theme,
+        );
+        return cliError(message, {
           suggestions,
           code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
         });
@@ -1036,6 +1125,12 @@ function registerThemeCommands(theme, program, docs, words) {
       // [ok]/[warn] lines, and the install instructions are all emitted from
       // inside themeBuild via the shared logger.
       logger.setSilent(json);
+      // Started by a watcher (runThemeBuildWatch): hand the editor-folder
+      // warning to it, and let the channel not keep this build alive.
+      const watchChild =
+        typeof process.send === 'function' &&
+        process.argv0 === WATCH_CHILD_ARGV0;
+      if (watchChild) process.channel?.unref();
       let privateVarError = false;
       const onPrivateVarError = () => {
         privateVarError = true;
@@ -1064,7 +1159,12 @@ function registerThemeCommands(theme, program, docs, words) {
           if (json) jsonOut(result);
           if (
             privateVarError ||
-            (result.type === 'theme.build.check' && !result.data.upToDate)
+            (result.type === 'theme.build.check' &&
+              !(
+                /** @type {import('../../../api/theme/theme.type.mjs').ThemeBuildCheckResponse} */ (
+                  result
+                ).data.upToDate
+              ))
           ) {
             process.exitCode = 1;
           }
@@ -1139,6 +1239,15 @@ function registerThemeCommands(theme, program, docs, words) {
             __claimedOutputs: claimedOutputs,
             __deferredWrites: deferred ? writes : undefined,
             __commandWords: words,
+            __onEditorFolder: watchChild
+              ? (/** @type {string} */ warning) => {
+                  // Held open until the message is out, then let go again.
+                  process.channel?.ref();
+                  process.send?.({type: WATCH_WARNING, text: warning}, () =>
+                    process.channel?.unref(),
+                  );
+                }
+              : undefined,
           };
           let result;
           if (report) {
@@ -1483,6 +1592,12 @@ function registerThemeCommands(theme, program, docs, words) {
         ]);
       }
 
+      // Outside a project the template is written here, with one warning
+      // on stderr when a file was written; the logger is silent under --json
+      // (cli-surface INV12).
+      logger.setSilent(json);
+      if (result.data.written && !findPackageRoot(process.cwd()))
+        logger.warn(OUTSIDE_PROJECT_WARNING);
       // Writes a starter theme file, or declines to overwrite one.
       if (json) {
         jsonOut(result);

@@ -76,7 +76,10 @@ described.
   regenerates the module and reports no change. Importing a slug that is already
   added from a different owner switches it to the new owner and reports that
   change. `--import` with a target path or `--overwrite`, which belong to the
-  copy (FR12), MUST fail before writing.
+  copy (FR12), MUST fail before writing. The `--package` option of
+  `theme add`, `theme list` and `theme eject` takes either name of a theme's
+  package: the package that provides it, or the package the app imports it
+  from, which the record holds.
 - **FR2 — One generated theme module.** The CLI MUST keep one module that
   imports each added theme's built module and stylesheet. It exports `themes`,
   every added theme keyed by its slug, and `defaultThemeSlug`, the default slug;
@@ -135,7 +138,20 @@ described.
   folder with a package.json), the default target is the project's local
   themes root, a relative `[path]` is read from the working folder and MUST
   stay inside the project, and `outputDir` is relative to the working folder.
-  `theme template [path]` leaves an existing file as it is without
+  A backslash in `[path]` separates folders. Eject MUST refuse the local
+  themes root itself and a folder in it named after another theme the project
+  can use, because `theme list` and `theme add` read each local theme from a
+  folder named after it, and name the default target. A fork into a folder there
+  with a new name takes that name: its `defineTheme` name is the folder's,
+  and its entry, descriptor and export take the build's binding for it
+  (`acme-ocean` → `acmeOceanTheme.ts`, `acmeOceanTheme.doc.mjs`,
+  `acmeOceanTheme`), so `theme build` and `theme add` read it as that theme.
+  `theme template [path]` reads `[path]` from the working folder, and with no
+  `[path]` writes `theme.template.ts` at the project root (the nearest folder
+  with a package.json); the path MUST stay inside that folder, and a backslash
+  in it separates folders. With no package.json at or above the working folder,
+  it writes there and warns, naming how to write it at a project root. It leaves an
+  existing file as it is without
   `--overwrite`. Its receipt then says whether `--overwrite` would replace that
   file (`overwritable`), and when it would not, it names a free path for the
   template (`alternative`).
@@ -175,10 +191,16 @@ described.
   header names its source from the project root of the outputs, so a build
   from any folder writes the same outputs. At a path `--out` names, it
   replaces its own earlier outputs. It replaces the output of another theme
-  source that still exists and warns, naming both sources. It warns when that
-  path does not end in `.css`, and the import it prints names the file as
-  written. An
-  import MUST fail and name the build command
+  source that still exists and warns, naming both sources. Into a folder the
+  theme editor made (folder `<slug>/` holds `<slug>.settings.json`), `--out`
+  for a source outside that folder writes there and warns, naming the build
+  beside the source and another `--out`.
+  `--check` on stale outputs exits 1, and its result carries
+  `code: ERR_THEME_STALE`. It warns when the path `--out` names does not end in
+  `.css`, and the import it prints names the file as
+  written. `theme build --watch` rebuilds when the source or any local file it
+  imports changes. `--check` and `integration verify` treat CRLF and LF line
+  endings as the same text. An import MUST fail and name the build command
   when the built module or stylesheet is missing. When a local theme and a
   package theme share a slug, an import adds the local theme unless `--package`
   names the package, and `theme list` shows both with their owners. The copying
