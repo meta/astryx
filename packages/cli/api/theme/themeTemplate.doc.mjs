@@ -22,10 +22,9 @@ export const doc = {
     'Read it, copy what you need into your own theme file, delete it. Use `theme add` to ' +
     'use an installed built theme, extend that theme for ordinary customization, or use ' +
     '`theme eject` for a complete source fork. This command starts a new blank theme. Refuses to overwrite without ' +
-    '`overwrite`, so it is safe to re-run. Deprecated (DEP-0030): with no package.json at or above ' +
-    'cwd, it still writes in cwd, as released CLIs did, and the CLI warns; the next minor version ' +
-    'refuses it (ERR_PROJECT_REQUIRED). Instead, pass a cwd inside a project, or run `npm init -y` ' +
-    'in that folder first.',
+    '`overwrite`, so it is safe to re-run. With no package.json at or above cwd, it writes in cwd ' +
+    'and the CLI warns; pass a cwd inside a project, or run `npm init -y` in that folder first, to ' +
+    'write it at a project root.',
   importPath: '@astryxdesign/cli/api',
   signature:
     'themeTemplate(options?: {targetPath?: string, overwrite?: boolean, cwd?: string}): ThemeTemplateResponse',

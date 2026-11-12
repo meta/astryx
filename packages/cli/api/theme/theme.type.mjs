@@ -32,9 +32,6 @@
  * about a correct theme — most of them cannot be fixed in a theme file at all,
  * so folding them into `warnings` makes a clean build look dirty.
  * @property {{name: string, tokenCount: number, componentCount: number, sizeKB: number, outputs: {css: string, cssDts: string, js: string, dts: string, variantsDts?: string}, warnings: string[], notices: string[]}} data
- * @property {{deprecations: Array<{id: string, replacements: string[]}>}} [meta]
- *   set when --out wrote into a folder the theme editor made for a source
- *   outside it (DEP-0031)
  */
 
 /**

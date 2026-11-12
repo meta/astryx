@@ -613,23 +613,6 @@ function headerRoot(outDir, cwd) {
 const OUT_REFUSES_OTHER_SOURCE = false;
 
 /**
- * Whether `--out` into a folder the theme editor made refuses a theme source
- * outside that folder. Off in this release: it writes there, as released
- * CLIs did, with a warning (DEP-0031); the next minor turns it on.
- */
-export const OUT_REFUSES_EDITOR_FOLDER = false;
-
-/**
- * The deprecation of `--out` into a folder the theme editor made for a theme
- * source outside it (DEP-0031): the stable lifecycle id and the commands that
- * replace it.
- */
-export const EDITOR_FOLDER_DEPRECATION = Object.freeze({
-  id: 'DEP-0031',
-  replacements: Object.freeze(['theme build', 'theme build --out']),
-});
-
-/**
  * Where a source name in a build header may point. A header names its source
  * from the outputs' project root; older CLIs named it from the folder the
  * build ran in, which is the output's folder or one above it, up to a
@@ -1087,18 +1070,23 @@ function assertThemeSourceFile(filePath, cwd) {
  * @param {Array<{dest: string}>} writes
  * @param {string} filePath the theme source
  * @param {string} cwd
- * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, elsewhere?: string}} [options]
+ * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, elsewhere?: string, onEditorFolder?: (warning: string) => void}} [options]
  *   `claimed`: outputs written earlier in this run, by the source that wrote
  *   them; `rerun`: this build's command with another --out, or without one;
- *   `elsewhere`: the option that moves the outputs
- * @returns {{editorFolder: boolean}} `editorFolder`: --out writes into a
- *   folder the theme editor made for a source outside it (DEP-0031)
+ *   `elsewhere`: the option that moves the outputs; `onEditorFolder`: takes
+ *   the editor-folder warning instead of the logger (a watcher prints it once)
  */
 function assertOutputsReplaceable(
   writes,
   filePath,
   cwd,
-  {claimed, rerun, refuseUnmarked = false, elsewhere = '--out'} = {},
+  {
+    claimed,
+    rerun,
+    refuseUnmarked = false,
+    elsewhere = '--out',
+    onEditorFolder,
+  } = {},
 ) {
   const rel = (/** @type {string} */ file) => path.relative(cwd, file);
   const sourceKey = outputKey(filePath);
@@ -1113,8 +1101,8 @@ function assertOutputsReplaceable(
   };
   // A folder the theme editor made holds that theme's outputs only: another
   // source's outputs there would sit beside its settings as if they were
-  // its own. A source inside the folder builds there as always. Released
-  // CLIs wrote there; this release warns (DEP-0031), the next minor refuses.
+  // its own. A source inside the folder builds there as always; one outside
+  // it writes there too, with a warning.
   let editorFolder = false;
   if (refuseUnmarked && writes.length) {
     const dir = path.resolve(path.dirname(writes[0].dest));
@@ -1122,15 +1110,7 @@ function assertOutputsReplaceable(
     const fromDir = path.relative(dir, path.resolve(filePath));
     // On Windows a source on another drive has an absolute relative path.
     const inside = !fromDir.startsWith('..') && !path.isAbsolute(fromDir);
-    if (record && !inside) {
-      if (OUT_REFUSES_EDITOR_FOLDER)
-        throw new AstryxError(
-          `${rel(dir) || '.'} is a theme the theme editor made (${record} is beside it), so the build does not write another theme's outputs there. Pick another ${elsewhere}.`,
-          [beside],
-          ERROR_CODES.ERR_FILE_EXISTS,
-        );
-      editorFolder = true;
-    }
+    if (record && !inside) editorFolder = true;
   }
   for (const write of writes) {
     const key = outputKey(write.dest);
@@ -1230,11 +1210,10 @@ function assertOutputsReplaceable(
   // happens.
   if (editorFolder) {
     const dir = path.dirname(writes[0].dest);
-    logger.warn(
-      `Warning (DEP-0031): ${rel(dir) || '.'} is a theme the theme editor made, and ${rel(filePath)} is outside it; writing another theme's outputs there is deprecated, and the next minor version refuses it. Build beside the source, or pass an --out outside the editor folder.`,
-    );
+    const warning = `Warning: ${rel(dir) || '.'} is a folder the theme editor made, and ${rel(filePath)} is outside it; the build writes there anyway. Build beside the source, or pick another ${elsewhere}, to keep the editor's folder to its own theme.`;
+    if (onEditorFolder) onEditorFolder(warning);
+    else logger.warn(warning);
   }
-  return {editorFolder};
 }
 
 /**
@@ -3595,13 +3574,14 @@ function validateHeadingTypeAugmentationSupport(themeDef) {
  * `logger` (silent by default).
  *
  * @param {string} file - Theme file path, resolved against `cwd`.
- * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __deferredWrites?: Array<Array<{dest: string, content: string}>>, __commandWords?: {group: string, build: string}}} [options] -
+ * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __deferredWrites?: Array<Array<{dest: string, content: string}>>, __commandWords?: {group: string, build: string}, __onEditorFolder?: (warning: string) => void}} [options] -
  *   `out` overrides the output CSS path, or names the folder for it; `check` compares against on-disk outputs
  *   instead of writing. `__claimedOutputs` records the outputs earlier builds
  *   in one run wrote, so a later theme cannot replace them; with
  *   `__deferredWrites` the build adds its outputs to that list instead of
  *   writing them, for writeDeferredBuildOutputs. `__writeRoot` replaces `cwd` as the directory every
- *   output must stay inside, for a CLI-internal scratch build. `iconsSpecifier` overrides the icon registry import
+ *   output must stay inside, for a CLI-internal scratch build. `__onEditorFolder`
+ *   takes the editor-folder warning instead of the logger. `iconsSpecifier` overrides the icon registry import
  *   specifier in the generated module (e.g. `./icons.mjs`); when omitted, the
  *   direct registry specifiers from the theme source are emitted unchanged.
  * @param {{cwd?: string, projectCore?: boolean}} [ctx] `projectCore`: only the
@@ -4311,8 +4291,6 @@ async function themeBuildInternal(
   // Every output a build writes stays inside cwd, including the defaults
   // beside the theme file. Check mode writes nothing, so it compares outputs
   // outside cwd read-only.
-  // Set when --out writes into a folder the theme editor made (DEP-0031).
-  let editorFolder = false;
   if (!options.check) {
     confineOutputs(writes, writeRoot, options.out ? OUT_REMEDY : SOURCE_REMEDY);
     // prettier-ignore
@@ -4320,11 +4298,12 @@ async function themeBuildInternal(
     // A header-less file at the default paths beside the source is an output
     // of a CLI before 0.6.7, which the build has always replaced. A path that
     // --out names may hold anything, so there only build outputs are replaced.
-    ({editorFolder} = assertOutputsReplaceable(writes, filePath, cwd, {
+    assertOutputsReplaceable(writes, filePath, cwd, {
       claimed: options.__claimedOutputs,
       rerun,
       refuseUnmarked: Boolean(options.out),
-    }));
+      onEditorFolder: options.__onEditorFolder,
+    });
   }
 
   // Check mode: compare generated content against what's on disk instead of
@@ -4451,18 +4430,6 @@ async function themeBuildInternal(
       warnings: warningMessages,
       notices: noticeMessages,
     },
-    ...(editorFolder
-      ? {
-          meta: {
-            deprecations: [
-              {
-                id: EDITOR_FOLDER_DEPRECATION.id,
-                replacements: [...EDITOR_FOLDER_DEPRECATION.replacements],
-              },
-            ],
-          },
-        }
-      : {}),
   };
 }
 

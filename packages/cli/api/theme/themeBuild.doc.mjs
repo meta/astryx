@@ -58,7 +58,7 @@ export const doc = {
       name: 'options.out',
       type: 'string',
       description:
-        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. An existing folder, or a path that ends in a separator, names the folder: the CSS is written there as <name>.css. A file path should end in .css; another name still builds, with a warning, and the import line it prints names the file as written. Deprecated (DEP-0031): a path in a folder the theme editor made (folder <slug>/ holds <slug>.settings.json) still takes the outputs of a source outside that folder, as in released CLIs, with a warning, and the receipt carries `meta.deprecations`; the next minor version refuses it. Instead, build beside the source, or pick an out path outside the editor folder.',
+        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. An existing folder, or a path that ends in a separator, names the folder: the CSS is written there as <name>.css. A file path should end in .css; another name still builds, with a warning, and the import line it prints names the file as written. A path in a folder the theme editor made (folder <slug>/ holds <slug>.settings.json) takes the outputs of a source outside that folder too, and the CLI warns; to keep the editor folder to its own theme, build beside the source, or pick an out path outside it.',
     },
     {
       name: 'options.check',
@@ -85,7 +85,7 @@ export const doc = {
     {
       type: 'theme.build',
       description:
-        "Build receipt {name, tokenCount, componentCount, sizeKB, outputs, warnings, notices}: the theme name; how many tokens (portable plus theme-local) and component targets it overrides; the CSS size in KB; the written outputs {css, cssDts for strict side-effect imports, js, dts, and variantsDts when custom prop values were augmented}; warnings, the defects the author should fix, including exact canonical replacements for deprecated component target keys and declarations the generator dropped; and notices, advisories about a correct theme, such as a font it names but does not load. Beside data, `meta.deprecations` is `[{id: 'DEP-0031', replacements: ['theme build', 'theme build --out']}]` when out wrote into a folder the theme editor made for a source outside it. Resolves to null instead when the theme produced no CSS (nothing to build).",
+        'Build receipt {name, tokenCount, componentCount, sizeKB, outputs, warnings, notices}: the theme name; how many tokens (portable plus theme-local) and component targets it overrides; the CSS size in KB; the written outputs {css, cssDts for strict side-effect imports, js, dts, and variantsDts when custom prop values were augmented}; warnings, the defects the author should fix, including exact canonical replacements for deprecated component target keys and declarations the generator dropped; and notices, advisories about a correct theme, such as a font it names but does not load. Resolves to null instead when the theme produced no CSS (nothing to build).',
     },
     {
       type: 'theme.build.check',

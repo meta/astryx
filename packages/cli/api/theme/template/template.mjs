@@ -15,11 +15,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-  CLI_ROOT,
-  findPackageRoot,
-  projectWritePath,
-} from '../../../foundation/fs/paths.mjs';
+import {CLI_ROOT, projectWritePath} from '../../../foundation/fs/paths.mjs';
 import {
   assertWithin,
   PathSafetyError,
@@ -38,25 +34,9 @@ export const THEME_TEMPLATE_SRC = path.join(
   'theme.template.ts',
 );
 
-/**
- * Whether `theme template` refuses outside a project (no package.json in the
- * folder or above it). Off in this release: it writes in the current folder,
- * as released CLIs did, with a warning; the next minor turns it on.
- */
-export const TEMPLATE_REFUSES_OUTSIDE_PROJECT = false;
-
-/**
- * The deprecation of `theme template` outside a project (DEP-0030): the
- * stable lifecycle id and the commands that replace it.
- */
-export const OUTSIDE_PROJECT_DEPRECATION = Object.freeze({
-  id: 'DEP-0030',
-  replacements: Object.freeze(['npm init -y', 'theme template']),
-});
-
 /** The warning the CLI prints when it writes the template outside a project. */
 export const OUTSIDE_PROJECT_WARNING =
-  'Warning (DEP-0030): no package.json is in this folder or above it, so the template is written here; the next minor version refuses theme template outside a project. Run it inside a project, or run `npm init -y` here first.';
+  'Warning: no package.json is in this folder or above it, so the template is written here. Run it inside a project, or run `npm init -y` here first, to write it at a project root.';
 
 /** Where it lands when the caller does not say. */
 export const THEME_TEMPLATE_DEFAULT_PATH = 'theme.template.ts';
@@ -134,17 +114,8 @@ export function themeTemplate(options = {}) {
   // The project the folder belongs to bounds the path, as for other theme
   // commands: a path given is read from the current folder, and no path
   // means the project root.
-  const foundRoot = findPackageRoot(cwd);
-  if (!foundRoot) {
-    if (TEMPLATE_REFUSES_OUTSIDE_PROJECT)
-      throw new AstryxError(
-        'theme template writes into a project, and no package.json is in this folder or above it.',
-        [{name: 'npm init -y', reason: 'make this folder a project'}],
-        ERROR_CODES.ERR_PROJECT_REQUIRED,
-      );
-    // Released CLIs wrote here, outside any project; the next minor refuses.
-    // The CLI prints OUTSIDE_PROJECT_WARNING.
-  }
+  // With no package.json at or above the folder it writes here, and the CLI
+  // prints OUTSIDE_PROJECT_WARNING.
   // Read as every theme command reads a path it writes; a backslash
   // separates folders on every platform.
   const {projectDir, relative: fromRoot} = projectWritePath(

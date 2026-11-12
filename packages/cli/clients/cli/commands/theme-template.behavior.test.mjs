@@ -149,7 +149,7 @@ describe('theme template and eject next steps', () => {
 });
 
 describe('astryx theme template outside a project', () => {
-  it('writes in the current folder, as released CLIs did, and warns that the next minor refuses', async () => {
+  it('writes in the current folder, as released CLIs did, and warns how to write it at a project root', async () => {
     const bare = fs.mkdtempSync(
       path.join(os.tmpdir(), 'astryx-template-bare-'),
     );
@@ -158,8 +158,9 @@ describe('astryx theme template outside a project', () => {
       expect(text.status).toBe(0);
       expect(text.stdout).toMatch(/Wrote theme\.template\.ts/);
       expect(text.stderr).toMatch(
-        /no package\.json .* the next minor version refuses theme template outside a project/,
+        /no package\.json is in this folder or above it, so the template is written here/,
       );
+      expect(text.stderr).not.toMatch(/DEP-|deprecated|next minor|refuse/);
       expect(fs.existsSync(path.join(bare, 'theme.template.ts'))).toBe(true);
 
       const json = await runCli(['--json', 'theme', 'template', 'x.ts'], {
@@ -171,16 +172,15 @@ describe('astryx theme template outside a project', () => {
         written: true,
         reason: null,
       });
-      // A deprecation (DEP-0030): silent on stderr under --json, named in
-      // the envelope's meta with the migration step.
-      expect(json.stderr).not.toMatch(/the next minor version refuses/);
-      expect(JSON.parse(json.stdout).meta.deprecations).toEqual([
-        {id: 'DEP-0030', replacements: ['npm init -y', 'theme template']},
-      ]);
-      expect(text.stderr).toMatch(/run `npm init -y` here first/);
+      // A text-only warning: silent under --json, with nothing added to meta.
+      expect(json.stderr).not.toMatch(/no package\.json/);
+      expect(JSON.parse(json.stdout).meta?.deprecations).toBeUndefined();
+      expect(text.stderr).toMatch(
+        /run `npm init -y` here first, to write it at a project root/,
+      );
       // A file left as it is gets no warning.
       const again = await runCli(['theme', 'template'], {cwd: bare});
-      expect(again.stderr).not.toMatch(/DEP-0030/);
+      expect(again.stderr).not.toMatch(/no package\.json/);
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
     }
@@ -188,6 +188,6 @@ describe('astryx theme template outside a project', () => {
 
   it('warns nothing inside a project', async () => {
     const {stderr} = await runCli(['theme', 'template'], {cwd: tmpDir});
-    expect(stderr).not.toMatch(/next minor version refuses/);
+    expect(stderr).not.toMatch(/no package\.json/);
   });
 });

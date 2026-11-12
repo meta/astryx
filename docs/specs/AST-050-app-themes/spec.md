@@ -150,7 +150,7 @@ described.
   `[path]` writes `theme.template.ts` at the project root (the nearest folder
   with a package.json); the path MUST stay inside that folder, and a backslash
   in it separates folders. With no package.json at or above the working folder,
-  it writes there and warns (`architecture:cli-surface` DEP-0030). It leaves an
+  it writes there and warns, naming how to write it at a project root. It leaves an
   existing file as it is without
   `--overwrite`. Its receipt then says whether `--overwrite` would replace that
   file (`overwritable`), and when it would not, it names a free path for the
@@ -193,9 +193,8 @@ described.
   replaces its own earlier outputs. It replaces the output of another theme
   source that still exists and warns, naming both sources. Into a folder the
   theme editor made (folder `<slug>/` holds `<slug>.settings.json`), `--out`
-  for a source outside that folder writes there and warns
-  (`architecture:cli-surface` DEP-0031); the next minor version MUST refuse
-  it (CLN-0031), even where it would otherwise replace with a warning.
+  for a source outside that folder writes there and warns, naming the build
+  beside the source and another `--out`.
   `--check` on stale outputs fails with
   `ERR_THEME_STALE`. It warns when the path `--out` names does not end in
   `.css`, and the import it prints names the file as

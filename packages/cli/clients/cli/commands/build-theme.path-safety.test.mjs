@@ -415,7 +415,7 @@ describe('astryx theme build --out into a folder the theme editor made', () => {
     return editor;
   }
 
-  it('writes a source outside it as released CLIs did, warning in text and naming DEP-0031 in JSON meta', async () => {
+  it('writes a source outside it as released CLIs did, warning in text and silent under --json', async () => {
     const editor = project();
     const text = await runCli(
       ['theme', 'build', 'src/theme.mjs', '--out', 'themes/g/a.css'],
@@ -423,9 +423,9 @@ describe('astryx theme build --out into a folder the theme editor made', () => {
     );
     expect(text.status).toBe(0);
     expect(fs.existsSync(path.join(editor, 'a.css'))).toBe(true);
-    expect(text.stderr).toMatch(/Warning \(DEP-0031\)/);
+    expect(text.stderr.match(/theme editor made/g)).toHaveLength(1);
     expect(text.stderr).toMatch(
-      /Build beside the source, or pass an --out outside the editor folder/,
+      /Build beside the source, or pick another --out, to keep the editor's folder to its own theme/,
     );
 
     const json = await runCli(
@@ -434,11 +434,9 @@ describe('astryx theme build --out into a folder the theme editor made', () => {
     );
     expect(json.status).toBe(0);
     expect(fs.existsSync(path.join(editor, 'b.css'))).toBe(true);
-    // A deprecation: silent on stderr under --json, named in meta.
-    expect(json.stderr).not.toMatch(/DEP-0031/);
-    expect(JSON.parse(json.stdout).meta.deprecations).toEqual([
-      {id: 'DEP-0031', replacements: ['theme build', 'theme build --out']},
-    ]);
+    // A text-only warning: silent under --json, with nothing added to meta.
+    expect(json.stderr).not.toMatch(/theme editor made/);
+    expect(JSON.parse(json.stdout).meta?.deprecations).toBeUndefined();
   });
 
   it('warns nothing for a source inside it', async () => {
@@ -449,7 +447,7 @@ describe('astryx theme build --out into a folder the theme editor made', () => {
       {cwd: tmpDir},
     );
     expect(text.status).toBe(0);
-    expect(text.stderr).not.toMatch(/DEP-0031/);
+    expect(text.stderr).not.toMatch(/theme editor made/);
     const json = await runCli(
       [
         '--json',

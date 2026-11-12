@@ -1820,7 +1820,7 @@ describe('themeBuild() — --out into a folder the theme editor made', () => {
       `export default { name: 'other', tokens: { '--color-bg': '#0a0a0a' } };\n`,
     );
 
-  it('writes another source there as released CLIs did, with the DEP-0031 warning and meta entry', async () => {
+  it('writes another source there as released CLIs did, with one plain warning', async () => {
     const editor = editorFolder('g');
     writeOther();
     const warn = vi.spyOn(logger, 'warn');
@@ -1829,23 +1829,20 @@ describe('themeBuild() — --out into a folder the theme editor made', () => {
         await themeBuild('other.mjs', {out: 'themes/g/x.css'}, {cwd: tmpDir})
       );
       expect(fs.existsSync(path.join(editor, 'x.css'))).toBe(true);
-      expect(receipt.meta).toEqual({
-        deprecations: [
-          {id: 'DEP-0031', replacements: ['theme build', 'theme build --out']},
-        ],
-      });
+      expect(receipt.meta).toBeUndefined();
       const lines = warn.mock.calls.map(c => String(c[0]));
-      const dep = lines.filter(l => l.includes('DEP-0031'));
+      const dep = lines.filter(l => l.includes('theme editor made'));
       expect(dep).toHaveLength(1);
-      expect(dep[0]).toMatch(/next minor version refuses it/);
+      expect(dep[0]).toMatch(/the build writes there anyway/);
+      expect(dep[0]).not.toMatch(/DEP-|deprecated|next minor|refuse/);
       expect(dep[0]).toMatch(
-        /Build beside the source, or pass an --out outside the editor folder\./,
+        /Build beside the source, or pick another --out, to keep the editor's folder to its own theme\./,
       );
-      // A rebuild over its own outputs there is the same deprecated use.
+      // A rebuild over its own outputs there warns the same way.
       warn.mockClear();
       await themeBuild('other.mjs', {out: 'themes/g/x.css'}, {cwd: tmpDir});
       expect(
-        warn.mock.calls.filter(c => String(c[0]).includes('DEP-0031')),
+        warn.mock.calls.filter(c => String(c[0]).includes('theme editor made')),
       ).toHaveLength(1);
     } finally {
       warn.mockRestore();
@@ -1875,7 +1872,7 @@ describe('themeBuild() — --out into a folder the theme editor made', () => {
       / theme build other\.mjs --icons-specifier my-icons$/m,
     );
     expect(
-      warn.mock.calls.filter(c => String(c[0]).includes('DEP-0031')),
+      warn.mock.calls.filter(c => String(c[0]).includes('theme editor made')),
     ).toHaveLength(0);
     expect(fs.readdirSync(editor)).toEqual(['s.settings.json']);
   });
@@ -1906,7 +1903,7 @@ describe('themeBuild() — --out into a folder the theme editor made', () => {
       expect(first.meta).toBeUndefined();
       expect(second.meta).toBeUndefined();
       expect(
-        warn.mock.calls.filter(c => String(c[0]).includes('DEP-0031')),
+        warn.mock.calls.filter(c => String(c[0]).includes('theme editor made')),
       ).toHaveLength(0);
     } finally {
       warn.mockRestore();
