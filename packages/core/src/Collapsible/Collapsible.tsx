@@ -593,13 +593,17 @@ export function Collapsible({
             !isOpen && !isExiting && styles.contentHidden,
           ),
         )}>
-        {presentation != null ? (
-          <CollapsibleGroupPresentationContext value={null}>
-            {children}
-          </CollapsibleGroupPresentationContext>
-        ) : (
-          children
-        )}
+        {/* One box holds the content, so an opening or closing slides it
+            under the region's clip: a translation cannot move bare text. */}
+        <div>
+          {presentation != null ? (
+            <CollapsibleGroupPresentationContext value={null}>
+              {children}
+            </CollapsibleGroupPresentationContext>
+          ) : (
+            children
+          )}
+        </div>
       </div>
     </div>
   );

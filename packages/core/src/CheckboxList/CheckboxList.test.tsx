@@ -69,7 +69,60 @@ beforeEach(() => {
   };
 });
 
+/** A pointer press on `target`, as the press controller and React read it. */
+function pointerDown(
+  target: Element,
+  init: {pointerType: string; button: number; ctrlKey?: boolean},
+): void {
+  fireEvent.pointerDown(target, {pointerId: 1, ...init});
+  fireEvent.pointerUp(target, {pointerId: 1, ...init});
+}
+
+/** Runs `check` on macOS, where a ctrl-click is the context click. */
+function onApplePlatform(check: () => void): void {
+  Object.defineProperty(navigator, 'platform', {
+    configurable: true,
+    get: () => 'MacIntel',
+  });
+  try {
+    check();
+  } finally {
+    Reflect.deleteProperty(navigator, 'platform');
+  }
+}
+
 describe('CheckboxList', () => {
+  it("paints a primary mouse press on a row's box at once, and none for a macOS ctrl-click or a pen's barrel button", () => {
+    render(
+      <CheckboxList label="Alerts" value={[]} onChange={() => {}}>
+        <CheckboxListItem label="Email" value="email" />
+        <CheckboxListItem label="SMS" value="sms" />
+      </CheckboxList>,
+    );
+    const target = screen.getByRole('checkbox', {name: 'SMS'});
+    const row = target.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    onApplePlatform(() =>
+      pointerDown(target, {pointerType: 'mouse', button: 0, ctrlKey: true}),
+    );
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    pointerDown(target, {pointerType: 'pen', button: 2});
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+  });
+
   it('forwards CheckboxListItem align to its Item row unchanged', () => {
     render(
       <CheckboxList label="Toppings" value={[]} onChange={() => {}}>
@@ -90,6 +143,48 @@ describe('CheckboxList', () => {
       'data-align',
       'first-line',
     );
+  });
+
+  it('reflects a checked row as selected on its row targets, so a theme can restyle checked rows (FR15)', () => {
+    render(
+      <>
+        <CheckboxList label="Toppings" value={['cheese']} onChange={() => {}}>
+          <CheckboxListItem
+            label="Cheese"
+            value="cheese"
+            data-testid="cheese"
+          />
+          <CheckboxListItem
+            label="Olives"
+            value="olives"
+            data-testid="olives"
+          />
+        </CheckboxList>
+        <CheckboxList
+          label="Locked"
+          value={['ham']}
+          onChange={() => {}}
+          isReadOnly>
+          <CheckboxListItem label="Ham" value="ham" data-testid="ham" />
+        </CheckboxList>
+        <CheckboxList
+          label="Off"
+          value={['egg']}
+          onChange={() => {}}
+          isDisabled>
+          <CheckboxListItem label="Egg" value="egg" data-testid="egg" />
+        </CheckboxList>
+      </>,
+    );
+    const cheese = screen.getByTestId('cheese');
+    expect(cheese).toHaveClass('astryx-item');
+    expect(cheese).toHaveClass('astryx-list-item');
+    expect(cheese).toHaveAttribute('data-selected', 'selected');
+    expect(screen.getByTestId('olives')).not.toHaveAttribute('data-selected');
+    // The state follows the checked-row fill, which a read-only or disabled
+    // row does not paint.
+    expect(screen.getByTestId('ham')).not.toHaveAttribute('data-selected');
+    expect(screen.getByTestId('egg')).not.toHaveAttribute('data-selected');
   });
 
   it('renders with label', () => {
@@ -492,6 +587,38 @@ describe('CheckboxList', () => {
     expect(
       screen.getByRole('link', {name: 'pricing page'}),
     ).toBeInTheDocument();
+  });
+
+  it('paints no row press for a mouse press on a control nested in the label, and one for a press on the label text', () => {
+    render(
+      <CheckboxList label="Alerts" value={[]} onChange={() => {}}>
+        <CheckboxListItem
+          label={
+            <>
+              Weekly digest{' '}
+              <span role="switch" aria-checked="false" tabIndex={0}>
+                Snooze
+              </span>
+            </>
+          }
+          aria-label="Weekly digest"
+          value="digest"
+        />
+      </CheckboxList>,
+    );
+    const nested = screen.getByRole('switch');
+    const label = nested.parentElement;
+    const row = nested.closest('[data-astryx-pressable]');
+    if (label == null || row == null) {
+      throw new Error('the row has no label or no press surface');
+    }
+    const mouse = {pointerId: 1, pointerType: 'mouse', button: 0};
+    fireEvent.pointerDown(nested, mouse);
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerUp(nested, mouse);
+    fireEvent.pointerDown(label, mouse);
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(label, mouse);
   });
 
   it('keeps a link in a ReactNode label independent from selection', async () => {
@@ -1021,7 +1148,9 @@ describe('CheckboxListItem ARIA props', () => {
     // The spinner is decorative — it lives inside the checkbox's
     // aria-hidden visual box, so query with hidden:true. The accessible
     // loading signal is `aria-busy` on the item (asserted above).
-    expect(screen.getByRole('status', {hidden: true})).toBeInTheDocument();
+    const spinner = screen.getByRole('progressbar', {hidden: true});
+    expect(spinner).toBeInTheDocument();
+    expect(spinner.closest('[aria-hidden="true"]')).not.toBeNull();
   });
 
   it('does not toggle when item-level isLoading is set', () => {
@@ -1059,12 +1188,12 @@ describe('CheckboxListItem ARIA props', () => {
     // The toggled item becomes busy and shows a spinner; the sibling stays idle.
     // The spinner is decorative (inside the aria-hidden box), so query hidden.
     expect(
-      await within(itemA).findByRole('status', {hidden: true}),
+      await within(itemA).findByRole('progressbar', {hidden: true}),
     ).toBeInTheDocument();
     expect(itemA).toHaveAttribute('aria-busy', 'true');
     expect(itemB).not.toHaveAttribute('aria-busy');
     expect(
-      within(itemB).queryByRole('status', {hidden: true}),
+      within(itemB).queryByRole('progressbar', {hidden: true}),
     ).not.toBeInTheDocument();
     expect(changeAction).toHaveBeenCalledWith(['a']);
   });
@@ -1133,7 +1262,7 @@ describe('CheckboxListItem ARIA props', () => {
     await waitFor(() => expect(itemB).toHaveAttribute('aria-busy', 'true'));
     expect(itemA).toHaveAttribute('aria-busy', 'true');
     expect(
-      within(itemA).getByRole('status', {hidden: true}),
+      within(itemA).getByRole('progressbar', {hidden: true}),
     ).toBeInTheDocument();
 
     // Re-toggling the still-pending item stays blocked.
@@ -1433,8 +1562,8 @@ describe('CheckboxList group disabled state', () => {
 describe('CheckboxListItem press surface', () => {
   const hoverScopeClass = stylex.props(indicatorScope).className ?? '';
 
-  // The row owns its checkbox's press only under a coarse primary pointer (a
-  // finger). On a fine-pointer page the box keeps its own press.
+  // The row owns its checkbox's press under every primary pointer: a
+  // finger's, a mouse's and a pen's.
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -1524,9 +1653,7 @@ describe('CheckboxListItem press surface', () => {
           /^\.[\w-]+(?:\.[\w-]+)*:is\(\[data-astryx-press="(?:on|fading)"\]\)(?::not\(#\\#\))*$/.test(
             rule.selector,
           ) &&
-          rule.conditions.some(condition =>
-            condition.includes('pointer: coarse'),
-          ),
+          !rule.conditions.some(condition => condition.includes('pointer')),
       )
     );
   }
@@ -1567,17 +1694,17 @@ describe('CheckboxListItem press surface', () => {
       expect(control).not.toHaveAttribute('data-astryx-pressable');
       // The row declares the press paint at the press's strength and runs
       // the release. It hands its box that paint through its own press
-      // paint, set only while the row itself is pressed under a coarse
-      // pointer. The box reads nothing else: no outer row, pressed ancestor
-      // or pen on a fine-pointer page.
+      // paint, set only while the row itself is pressed. The box reads
+      // nothing else: no outer row or pressed ancestor.
       expect(declaresPressPaint(row)).toBe(true);
       expect(hasReleaseFade(row)).toBe(true);
       expect(declaresRowPressPaint(row)).toBe(true);
       expect(readsRowPressPaint(wrapper)).toBe(true);
-      // A mouse's press and hover stay the checkbox's own.
+      // Hover stays the checkbox's own. The row paints every press, so the
+      // box draws no `:active` fill.
       expect(classesOf(control)).toContain(hoverScopeClass);
       expect(classesOf(row)).not.toContain(hoverScopeClass);
-      expect(hasPressedArm(wrapper)).toBe(true);
+      expect(hasPressedArm(wrapper)).toBe(false);
     }
   });
 
@@ -1637,11 +1764,11 @@ describe('CheckboxListItem press surface', () => {
     expect(handed[0]).toMatch(/^var\(--_checkbox-row-press-paint,\s*none\)$/);
   });
 
-  it('keeps the box its own press owner on a fine-pointer page', () => {
-    // On a fine-pointer page, a pen or a finger on a touchscreen laptop
-    // presses the box itself. The box keeps its own press marker, so it is
-    // the innermost pressable under the pen. The row hands its box no press
-    // paint, so no row press fades after the lift.
+  it('makes the row the one press surface on a fine-pointer page too', () => {
+    // On a fine-pointer page, a mouse or a pen presses the row wherever it
+    // lands, as a finger does. The box carries no press marker, so the row
+    // owns it and takes the fine-pointer press. The controller paints the row
+    // and its box at once.
     stubMatchMedia({matches: false});
     render(
       <CheckboxList label="Notifications" value={['email']} onChange={() => {}}>
@@ -1650,20 +1777,23 @@ describe('CheckboxListItem press surface', () => {
     );
     const row = rowOf('Email');
     const {wrapper, control} = parts(row);
-    expect(control).toHaveAttribute('data-astryx-pressable');
-    expect(Array.from(row.querySelectorAll('[data-astryx-pressable]'))).toEqual(
-      [control],
-    );
-    expect(declaresRowPressPaint(row)).toBe(false);
-    expect(readsRowPressPaint(wrapper)).toBe(false);
-    expect(hasPressedArm(wrapper)).toBe(true);
+    expect(row).toHaveAttribute('data-astryx-pressable');
+    expect(
+      row
+        .querySelector('[data-astryx-press-box]')
+        ?.closest('[data-astryx-pressable]'),
+    ).toBe(row);
+    expect(control).not.toHaveAttribute('data-astryx-pressable');
+    expect(declaresRowPressPaint(row)).toBe(true);
+    expect(readsRowPressPaint(wrapper)).toBe(true);
+    expect(hasPressedArm(wrapper)).toBe(false);
   });
 
   it.each([false, true])(
     'adds no touch-query listener per row (coarse pointer: %s), and none remain once the rows unmount',
     async coarse => {
-      // A repeated row adds no touch observer of its own. Every row reads a
-      // shared answer, on a fine pointer and on a coarse one alike.
+      // A repeated row adds no touch observer of its own, on a fine pointer
+      // and on a coarse one alike.
       let live = 0;
       const count = (query: string, delta: number) => {
         if (query.includes('pointer: coarse')) {
@@ -1696,10 +1826,10 @@ describe('CheckboxListItem press surface', () => {
             ))}
           </CheckboxList>,
         );
-        // The rows still answer the pointer they are on: under a finger the
-        // row owns its box's press, so the box carries no press marker.
+        // Under every pointer the row owns its box's press, so the box
+        // carries no press marker.
         const {control} = parts(rowOf('Option 0'));
-        expect(control.hasAttribute('data-astryx-pressable')).toBe(!coarse);
+        expect(control.hasAttribute('data-astryx-pressable')).toBe(false);
         const mounted = live;
         unmount();
         // A ref's last release waits one microtask, so a ref that attaches
@@ -1708,8 +1838,7 @@ describe('CheckboxListItem press surface', () => {
         return {mounted, after: live};
       };
       const one = await heldBy(1);
-      // The stub sees the shared watches, and each one stops with the rows.
-      expect(one.mounted).toBeGreaterThan(0);
+      // Each watch the rows hold stops with them.
       expect(one.after).toBe(0);
       const many = await heldBy(40);
       // 40 rows hold what one row holds.

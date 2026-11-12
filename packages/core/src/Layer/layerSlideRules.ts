@@ -18,22 +18,26 @@
  * gutter on both alignment-axis edges, and the clearance facing the anchor
  * with the gutter on the far edge of the side it lands on.
  *
- * A layer that must never settle over its anchor (spec:AST-059 FR4, Tooltip)
- * has a second fallback list, for when its settled box covers its anchor:
- * content taller than the room above and below its trigger. `beside` lands on a
+ * An above or below layer that must never settle over its anchor
+ * (spec:AST-059 FR4, Tooltip) uses one combined fallback list from the start,
+ * and no option in it overlaps the anchor. `beside` lands on a
  * side across the alignment axis, spanning the whole block axis, at the
  * content's own inline size, so it fits only where the layer fits without
  * squeezing. `fit` lands above or below sized to the room on that side, so
  * overflow scrolls inside the layer, and is never smaller than half of the room
  * the trigger leaves on the block axis, so it fits only on the side with more
- * room; the list tries both only after the layer's own position, `beside` and
- * the opposite side at the layer's own size, so only content taller than the
+ * room; the list tries both only after the layer's own position, the opposite
+ * side at the layer's own size and `beside`, so only content taller than the
  * room on both sides is sized to a room. No option is sized to whatever room
  * is left: a browser keeps a layer on the option it last used for as long as
  * that option still fits, so such an option would hold an open layer on a side
  * shrunk to a sliver after its anchor moved. Chromium applies a position
  * option's width and height properties but not their min/max forms, so the
- * sizes are `inline-size` and `block-size`.
+ * sizes are `inline-size` and `block-size`. Inside a scrolling panel, Chromium
+ * does not choose an option again while the panel scrolls, and it shifts a box
+ * that runs out of room back into the room, onto the anchor. So the layer and
+ * every option align `unsafe` toward the anchor on the placement axis: a box
+ * that runs out of room overflows away from the anchor instead.
  *
  * The rules are static — the anchor clearance travels through a custom
  * property — so one style sheet per document carries all of them. It is
@@ -141,6 +145,18 @@ const PLACEMENTS: ReadonlyArray<LayerPlacement> = [
 ];
 const ALIGNMENTS: ReadonlyArray<LayerAlignment> = ['start', 'center', 'end'];
 
+/**
+ * The placement-axis alignment of a layer that keeps its anchor clear, on
+ * `side` of its anchor: `unsafe`, toward the anchor, so a box that runs out of
+ * room overflows away from the anchor rather than being shifted onto it.
+ * `flip-block` swaps it with the side.
+ */
+export function anchorClearAlignment(side: LayerPlacement): string {
+  return side === 'above' || side === 'start'
+    ? 'unsafe self-end'
+    : 'unsafe self-start';
+}
+
 /** The name of the `beside` option that lands on `side`, across the block axis. */
 export function besideRuleName(side: 'start' | 'end'): string {
   return `--astryx-layer-beside-${side}`;
@@ -158,10 +174,12 @@ export function fitRuleName(side: 'above' | 'below'): string {
 /**
  * `beside`: the slide's geometry on an inline side, at the content's own
  * inline size. A content-sized layer would otherwise wrap to whatever sliver
- * of room the trigger leaves and always fit.
+ * of room the trigger leaves and always fit. On the block axis it drops the
+ * layer's own alignment toward its anchor, so it centres on the trigger and
+ * slides into view.
  */
 function besideRule(side: 'start' | 'end'): string {
-  return `@position-try ${besideRuleName(side)}{position-area:${areaFor(side)};${placementMargins(side)}${alignmentMargins(side)}inline-size:max-content;}`;
+  return `@position-try ${besideRuleName(side)}{position-area:${areaFor(side)};${placementMargins(side)}${alignmentMargins(side)}inline-size:max-content;align-self:normal;justify-self:${anchorClearAlignment(side)};}`;
 }
 
 /** The block size of the room on one block side: the area minus its margins. */
@@ -193,56 +211,28 @@ function fitRule(side: 'above' | 'below'): string {
     size('100vh', layerViewportInset.gutterBlockFallback),
     size('100dvb', layerViewportInset.gutterBlock),
   );
-  return `@position-try ${fitRuleName(side)}{position-area:${areaFor(side)};${placementMargins(side)}${alignmentMargins(side)}${blockSize}}`;
+  return `@position-try ${fitRuleName(side)}{position-area:${areaFor(side)};${placementMargins(side)}${alignmentMargins(side)}${blockSize}align-self:${anchorClearAlignment(side)};}`;
 }
 
 /**
- * The fallback list of a layer that must never settle over its anchor, once
- * the standard list has failed it (FR4). After the layer's own position (the
- * preferred block side, at its own size): beside the trigger on the inline
- * end, then the inline start, then the opposite block side at its own size,
- * and only then the preferred block side and the opposite one sized to the
- * room there, each only while it is the roomier side. Every option before the
- * last two keeps the layer at its own size, so a layer whose content fits
- * somewhere is never stretched to a room; the last two are for content taller
- * than the room on both sides. Chromium tries no more than five options, so
- * this replaces the standard list rather than extending it. Side placements
- * already slide along the block axis at full height, so they have none.
+ * The one combined fallback list of an above or below layer that must never
+ * settle over its anchor (FR4). After the layer's own position (the preferred
+ * block side, at its own size): the opposite block side at its own size, then
+ * beside the trigger on the inline end, then the inline start, and only then
+ * the preferred block side and the opposite one sized to the room there, each
+ * only while it is the roomier side. Every option before the last two keeps
+ * the layer at its own size, so a layer whose content fits somewhere is never
+ * stretched to a room; the last two are for content taller than the room on
+ * both sides. Chromium tries no more than five options, so this replaces the
+ * standard list rather than extending it. Side placements already slide along
+ * the block axis at full height, so they have none.
  */
 export function getAnchorClearFallbacks(placement: LayerPlacement): string {
   if (placement !== 'above' && placement !== 'below') {
     return '';
   }
   const opposite = placement === 'above' ? 'below' : 'above';
-  return `${besideRuleName('end')}, ${besideRuleName('start')}, flip-block, ${fitRuleName(placement)}, ${fitRuleName(opposite)}`;
-}
-
-/** The custom property a layer writes its anchor-clear fallback list to. */
-export const LAYER_CLEAR_FALLBACKS_PROPERTY = '--_astryx-layer-clear-fallbacks';
-
-/** The custom property its `position-try-fallbacks` reads first. */
-export const LAYER_TRY_FALLBACKS_PROPERTY = '--_astryx-layer-try-fallbacks';
-
-/**
- * The attribute the runtime sets on a layer whose settled box covered its
- * anchor; it switches the layer to its anchor-clear list.
- */
-export const LAYER_CLEARS_ANCHOR_ATTRIBUTE = 'data-astryx-clears-anchor';
-
-/**
- * The attribute the runtime sets on a layer that keeps its anchor clear while
- * its content overflows the box it was given; only then does it scroll, so a
- * layer that fits stays a plain box and a wheel over it still scrolls the
- * page.
- */
-export const LAYER_SCROLLS_ATTRIBUTE = 'data-astryx-layer-scrolls';
-
-/**
- * Switches a layer that set the attribute to its anchor-clear list, and lets
- * a layer whose content overflows scroll it.
- */
-function clearSwitchCss(): string {
-  return `[${LAYER_CLEARS_ANCHOR_ATTRIBUTE}]{${LAYER_TRY_FALLBACKS_PROPERTY}:var(${LAYER_CLEAR_FALLBACKS_PROPERTY});}[${LAYER_SCROLLS_ATTRIBUTE}]{overflow-y:auto;overscroll-behavior-block:contain;}`;
+  return `flip-block, ${besideRuleName('end')}, ${besideRuleName('start')}, ${fitRuleName(placement)}, ${fitRuleName(opposite)}`;
 }
 
 /**
@@ -261,7 +251,6 @@ export function slideRulesCss(): string {
     besideRule('start'),
     fitRule('above'),
     fitRule('below'),
-    clearSwitchCss(),
   ].join('');
 }
 

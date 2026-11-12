@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Timestamp.test.tsx
+ * @input Uses Timestamp, Testing Library, and mocked browser APIs
+ * @output Regression coverage for formatting and the focusable details trigger
+ * @position Colocated Timestamp behavior and accessibility tests
+ */
+
 import 'temporal-polyfill/full/global';
 import {
   describe,
@@ -32,23 +39,32 @@ import {InternationalizationProvider} from '../i18n';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {withChineseTemporalAheadOfIntl} from '../__tests__/temporalAheadOfIntl';
 import {__resetDevWarnings} from '../utils/devWarning';
+import type {ComponentIconMap} from '../Icon/index';
+import {defineTheme} from '../theme/defineTheme';
+import {Theme} from '../theme/Theme';
+
+let slotThemeCount = 0;
 
 async function openTimestampHoverCard(): Promise<HTMLElement> {
   const timestamp = document.querySelector('time');
   if (timestamp == null) {
     throw new Error('Expected Timestamp to render a <time> element');
   }
-  const trigger = timestamp.parentElement;
-  if (trigger == null) {
-    throw new Error('Expected Timestamp to render a hover-card trigger');
-  }
-
-  fireEvent.mouseEnter(trigger);
+  await userEvent.hover(timestamp);
   await waitFor(() => {
     expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
   });
 
   return screen.getByRole('dialog', {hidden: true});
+}
+
+/** The long name of a zone at an instant, as Intl spells it in en-US. */
+function longZoneName(timeZone?: string, at: Date = new Date()): string {
+  return (
+    new Intl.DateTimeFormat('en-US', {timeZoneName: 'long', timeZone})
+      .formatToParts(at)
+      .find(part => part.type === 'timeZoneName')?.value ?? ''
+  );
 }
 
 describe('Timestamp', () => {
@@ -756,9 +772,15 @@ describe('Timestamp', () => {
       // installs fake timers, which would stall them).
       vi.useRealTimers();
 
-      // Mock the Popover API, which jsdom does not implement.
-      HTMLElement.prototype.showPopover = vi.fn();
-      HTMLElement.prototype.hidePopover = vi.fn();
+      // Match HoverCard's Popover API mock so dismissal can observe which
+      // layer is actually open, including the copy button's nested tooltip.
+      const openPopovers = new WeakSet<HTMLElement>();
+      HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+        openPopovers.add(this);
+      });
+      HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+        openPopovers.delete(this);
+      });
 
       // jsdom does not derive :focus-visible from keyboard focus for a <time>
       // element; treat the focused element as focus-visible so the card's
@@ -767,6 +789,9 @@ describe('Timestamp', () => {
       (HTMLElement.prototype as any).matches = function (
         selector: string,
       ): boolean {
+        if (selector === ':popover-open') {
+          return openPopovers.has(this);
+        }
         if (selector === ':focus-visible') {
           return this === document.activeElement;
         }
@@ -806,23 +831,39 @@ describe('Timestamp', () => {
       expect(screen.getByTestId('ts')).toHaveAttribute('tabindex', '0');
     });
 
-    it('does not put aria-expanded on the role-less hover-card trigger', async () => {
-      render(
-        <Timestamp
-          value={Date.now() / 1000 - 3600}
-          format="relative"
-          data-testid="ts"
-        />,
-      );
-      const trigger = screen.getByTestId('ts').parentElement;
-      // The trigger is Text's <span>, which has no role, so aria-expanded is
-      // invalid on it (axe aria-allowed-attr, critical). aria-haspopup is
-      // global and still advertises the dialog.
-      await waitFor(() => {
-        expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
-      });
-      expect(trigger).not.toHaveAttribute('aria-expanded');
-    });
+    it.each([
+      ['relative', {format: 'relative'}],
+      ['relative_short', {format: 'relative_short'}],
+      ['auto', {format: 'auto'}],
+      ['configured absolute', {format: 'date_time', tooltipEntries: [{}]}],
+    ] as const)(
+      'names the %s details card from the tab stop only while it is open',
+      async (_, props) => {
+        render(
+          <Timestamp
+            value={Date.now() / 1000 - 3600}
+            {...props}
+            data-testid="ts"
+          />,
+        );
+        const trigger = screen.getByTestId('ts');
+        expect(trigger).toHaveAttribute('tabindex', '0');
+        expect(trigger).not.toHaveAttribute('aria-controls');
+        act(() => trigger.focus());
+        const card = await screen.findByRole('dialog', {hidden: true});
+        await waitFor(() => {
+          expect(trigger).toHaveAttribute('aria-controls', card.id);
+        });
+        // The time role supports neither aria-haspopup nor aria-expanded, and
+        // the time keeps its own role.
+        expect(trigger).not.toHaveAttribute('aria-haspopup');
+        expect(trigger).not.toHaveAttribute('aria-expanded');
+        expect(trigger).not.toHaveAttribute('role');
+        expect(trigger.closest('.astryx-timestamp')).not.toHaveAttribute(
+          'aria-haspopup',
+        );
+      },
+    );
 
     it('shows the hover card when the timestamp receives keyboard focus', async () => {
       const user = userEvent.setup();
@@ -861,6 +902,176 @@ describe('Timestamp', () => {
       });
       const card = screen.getByRole('dialog', {hidden: true});
       expect(normalize(card.textContent ?? '')).toContain(normalize(expected));
+      expect(el).toHaveAttribute('aria-controls', card.id);
+      expect(el).not.toHaveAttribute('aria-expanded');
+
+      // Move into the card before dismissing it: focus must return to the
+      // same semantic timestamp that exposed the popup relationship.
+      const copy = screen.getByRole('button', {name: /^Copy /, hidden: true});
+      act(() => copy.focus());
+      expect(copy).toHaveFocus();
+      // The copy button's own tooltip is the topmost layer on focus.
+      if (screen.queryByRole('tooltip', {hidden: true})) {
+        await user.keyboard('{Escape}');
+      }
+      await user.keyboard('{Escape}');
+      await waitFor(() => {
+        expect(el).not.toHaveAttribute('aria-controls');
+      });
+      expect(el).toHaveFocus();
+      expect(el).not.toHaveAttribute('aria-haspopup');
+    });
+
+    it('keeps the ref, caller props, and text styling when a card is attached', async () => {
+      const ref = {current: null as HTMLTimeElement | null};
+      const onFocus = vi.fn();
+      const {rerender} = render(
+        <Timestamp
+          ref={ref}
+          value="2026-02-19T17:00:00Z"
+          format="date_time"
+          tooltipEntries={[{}]}
+          aria-label="Published"
+          aria-controls="related-content"
+          id="published-at"
+          data-source="cms"
+          onFocus={onFocus}
+          type="body"
+          color="primary"
+          weight="bold"
+          className="custom-timestamp"
+          style={{marginInlineStart: 12}}
+          data-testid="ts"
+        />,
+      );
+      const time = screen.getByTestId('ts');
+      expect(ref.current).toBe(time);
+      expect(time).toHaveAttribute('aria-label', 'Published');
+      expect(time).toHaveAttribute('id', 'published-at');
+      expect(time).toHaveAttribute('data-source', 'cms');
+      const text = time.closest('.astryx-timestamp');
+      expect(text).toHaveClass('astryx-text', 'custom-timestamp');
+      expect(text).toHaveAttribute('data-type', 'body');
+      expect(text).toHaveAttribute('data-color', 'primary');
+      expect(text).toHaveStyle({marginInlineStart: '12px'});
+
+      act(() => time.focus());
+      const card = await screen.findByRole('dialog', {hidden: true});
+      await waitFor(() => {
+        expect(time).toHaveAttribute(
+          'aria-controls',
+          `related-content ${card.id}`,
+        );
+      });
+      expect(onFocus).toHaveBeenCalledOnce();
+
+      rerender(
+        <Timestamp
+          ref={ref}
+          value="2026-02-19T17:00:00Z"
+          format="date_time"
+          tooltipEntries={[{}]}
+          hasTooltip={false}
+          aria-controls="related-content"
+          data-testid="ts"
+        />,
+      );
+      expect(ref.current).toBe(screen.getByTestId('ts'));
+      expect(ref.current).not.toHaveAttribute('tabindex');
+      expect(ref.current).not.toHaveAttribute('aria-haspopup');
+      expect(ref.current).toHaveAttribute('aria-controls', 'related-content');
+      expect(
+        screen.queryByRole('dialog', {hidden: true}),
+      ).not.toBeInTheDocument();
+    });
+
+    it('keeps a caller aria-controls changed while the card is open', async () => {
+      const props = {
+        value: '2026-02-19T17:00:00Z',
+        format: 'date_time',
+        tooltipEntries: [{}],
+        'data-testid': 'ts',
+      } as const;
+      const {rerender} = render(<Timestamp {...props} aria-controls="first" />);
+      const time = screen.getByTestId('ts');
+      act(() => time.focus());
+      const card = await screen.findByRole('dialog', {hidden: true});
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', `first ${card.id}`);
+      });
+
+      rerender(<Timestamp {...props} aria-controls="second" />);
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', `second ${card.id}`);
+      });
+
+      act(() => time.blur());
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', 'second');
+      });
+    });
+
+    it('names no card after an open card is removed and a new one attaches', async () => {
+      const view = (hasTooltip: boolean) => (
+        <>
+          <Timestamp
+            value="2026-02-19T17:00:00Z"
+            format="date_time"
+            tooltipEntries={[{}]}
+            hasTooltip={hasTooltip}
+            data-testid="ts"
+          />
+          <button type="button">Elsewhere</button>
+        </>
+      );
+      const {rerender} = render(view(true));
+      const time = screen.getByTestId('ts');
+      act(() => time.focus());
+      const card = await screen.findByRole('dialog', {hidden: true});
+      await waitFor(() => {
+        expect(time).toHaveAttribute('aria-controls', card.id);
+      });
+
+      // The open card unmounts without a hide. Focus then moves on, and a new
+      // card attaches closed.
+      rerender(view(false));
+      act(() => screen.getByRole('button', {name: 'Elsewhere'}).focus());
+      rerender(view(true));
+      await act(async () => {});
+      expect(time).toHaveAttribute('tabindex', '0');
+      expect(time).not.toHaveAttribute('aria-controls');
+    });
+
+    it('keeps the default hover-card row in the viewer zone with timezoneID set', async () => {
+      const user = userEvent.setup();
+      const originalTZ = process.env.TZ;
+      process.env.TZ = 'UTC';
+      try {
+        render(
+          <Timestamp
+            value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
+            format="relative"
+            timezoneID="Asia/Tokyo"
+            data-testid="ts"
+          />,
+        );
+        const el = screen.getByTestId('ts');
+        await user.tab();
+        expect(el).toHaveFocus();
+        await waitFor(() => {
+          expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+        });
+        const card = screen.getByRole('dialog', {hidden: true});
+        // FR7: the default row reads the viewer's zone, not the pinned one.
+        expect(card.textContent).toContain('10:00:00');
+        expect(card.textContent).not.toContain('19:00:00');
+      } finally {
+        if (originalTZ === undefined) {
+          delete process.env.TZ;
+        } else {
+          process.env.TZ = originalTZ;
+        }
+      }
     });
 
     it('does not add a tab stop when the hover card is disabled', () => {
@@ -953,7 +1164,12 @@ describe('Timestamp', () => {
       // aria-label spells the timezone out in full (WCAG 3.1.4), so the two
       // strings intentionally differ — compare the row against an
       // independently formatted short-form string.
-      expect(card.querySelectorAll('dd')).toHaveLength(1);
+      // Without labels the card is still a description list: the value is
+      // named by its long time-zone name, which is visually hidden.
+      expect(card.querySelectorAll('dl > div > dd')).toHaveLength(1);
+      expect(card.querySelector('dl > div > dt')?.textContent).toBe(
+        longZoneName(),
+      );
       expect(card.querySelectorAll('button')).toHaveLength(1);
 
       const normalize = (s: string) => s.replace(/\s+/g, ' ');
@@ -975,7 +1191,7 @@ describe('Timestamp', () => {
     it("copies the default absolute row's value", async () => {
       render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
       const card = await openTimestampHoverCard();
-      const rowValue = card.querySelector('dd')?.textContent ?? '';
+      const rowValue = card.querySelector('dd > span')?.textContent ?? '';
       expect(rowValue).toBeTruthy();
       fireEvent.click(card.querySelector('button')!);
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(rowValue);
@@ -986,6 +1202,41 @@ describe('Timestamp', () => {
           screen.getByRole('button', {name: 'Copied', hidden: true}),
         ).toBeInTheDocument();
       });
+    });
+
+    it('names and announces a failed copy, then returns to rest', async () => {
+      (
+        navigator.clipboard.writeText as ReturnType<typeof vi.fn>
+      ).mockRejectedValueOnce(new Error('clipboard denied'));
+      render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
+      const card = await openTimestampHoverCard();
+      const button = card.querySelector('button')!;
+      const restName = button.getAttribute('aria-label');
+      fireEvent.mouseEnter(button);
+      fireEvent.click(button);
+      await waitFor(() =>
+        expect(button).toHaveAccessibleName(
+          'Failed to copy value to clipboard.',
+        ),
+      );
+      // The tooltip says the same, in step with the name.
+      await waitFor(() =>
+        expect(
+          screen.getByText('Failed to copy value to clipboard.', {
+            selector: '[role="tooltip"] *, [role="tooltip"]',
+          }),
+        ).toBeInTheDocument(),
+      );
+      // A failure is an error, so it goes to the assertive region.
+      await waitFor(() =>
+        expect(
+          document.querySelector('[data-astryx-live-region="assertive"]'),
+        ).toHaveTextContent('Failed to copy value to clipboard.'),
+      );
+      await waitFor(
+        () => expect(button).toHaveAttribute('aria-label', restName ?? ''),
+        {timeout: 3000},
+      );
     });
 
     it("shows a 'Copy' tooltip on the copy button, flipping to 'Copied' after a copy", async () => {
@@ -1012,6 +1263,117 @@ describe('Timestamp', () => {
           }),
         ).toBeInTheDocument(),
       );
+    });
+
+    describe('copy icon slot', () => {
+      // Label each shared icon's artwork, so a test reads which name rendered.
+      const icons = {
+        copy: <span data-icon="copy" />,
+        check: <span data-icon="check" />,
+        clock: <span data-icon="clock" />,
+        checkDouble: <span data-icon="checkDouble" />,
+        close: <span data-icon="close" />,
+      };
+
+      async function renderCard(componentIcons?: ComponentIconMap<never>) {
+        const theme = defineTheme({
+          name: `timestamp-copy-slot-${slotThemeCount++}`,
+          icons,
+          componentIcons,
+        });
+        render(
+          <Theme theme={theme}>
+            <Timestamp value={Date.now() / 1000 - 3600} format="relative" />
+          </Theme>,
+        );
+        const card = await openTimestampHoverCard();
+        return card.querySelector('button')!;
+      }
+
+      const glyph = (button: HTMLElement) =>
+        button.querySelector('[data-icon]')?.getAttribute('data-icon') ?? null;
+
+      async function copy(button: HTMLElement) {
+        fireEvent.click(button);
+        await waitFor(() => expect(button).toHaveAccessibleName('Copied'));
+      }
+
+      it('draws copy, then check while copied, when the theme maps nothing', async () => {
+        const button = await renderCard();
+        expect(glyph(button)).toBe('copy');
+        await copy(button);
+        expect(glyph(button)).toBe('check');
+      });
+
+      it('draws close while a failed copy shows, when the theme maps nothing', async () => {
+        (
+          navigator.clipboard.writeText as ReturnType<typeof vi.fn>
+        ).mockRejectedValueOnce(new Error('clipboard denied'));
+        const button = await renderCard();
+        fireEvent.click(button);
+        await waitFor(() =>
+          expect(button).toHaveAccessibleName(
+            'Failed to copy value to clipboard.',
+          ),
+        );
+        expect(glyph(button)).toBe('close');
+      });
+
+      it('passes `copied: false` to a slot function while a failure that follows a success shows', async () => {
+        const slot = vi.fn(({copied}: {copied: boolean}) => ({
+          icon: copied ? ('checkDouble' as const) : ('clock' as const),
+        }));
+        const button = await renderCard({'timestamp-copy': slot});
+        await copy(button);
+        expect(slot).toHaveBeenLastCalledWith({copied: true});
+
+        // A second write fails within the 1.5 seconds the success shows.
+        (
+          navigator.clipboard.writeText as ReturnType<typeof vi.fn>
+        ).mockRejectedValueOnce(new Error('clipboard denied'));
+        fireEvent.click(button);
+        await waitFor(() =>
+          expect(button).toHaveAccessibleName(
+            'Failed to copy value to clipboard.',
+          ),
+        );
+        expect(slot).toHaveBeenLastCalledWith({copied: false});
+        expect(glyph(button)).toBe('clock');
+      });
+
+      it('passes `copied` to a slot function and draws the name it returns', async () => {
+        const slot = vi.fn(({copied}: {copied: boolean}) => ({
+          icon: copied ? ('checkDouble' as const) : ('clock' as const),
+        }));
+        const button = await renderCard({'timestamp-copy': slot});
+
+        expect(glyph(button)).toBe('clock');
+        expect(slot).toHaveBeenLastCalledWith({copied: false});
+        await copy(button);
+        expect(glyph(button)).toBe('checkDouble');
+        expect(slot).toHaveBeenLastCalledWith({copied: true});
+      });
+
+      it('hides only the glyph for null; the button keeps its name and copy action', async () => {
+        const button = await renderCard({'timestamp-copy': null});
+
+        expect(button.querySelector('.astryx-icon')).toBeNull();
+        expect(button).toHaveClass('astryx-timestamp-copy-button');
+        expect(button.getAttribute('aria-label')).toMatch(/^Copy /);
+        await copy(button);
+        expect(navigator.clipboard.writeText).toHaveBeenCalled();
+      });
+
+      it('changes only the icon size for a size request, not the button', async () => {
+        const button = await renderCard({'timestamp-copy': {size: 'lg'}});
+
+        expect(button.querySelector('.astryx-icon')).toHaveAttribute(
+          'data-size',
+          'lg',
+        );
+        expect(glyph(button)).toBe('copy');
+        expect(button).toHaveAttribute('data-size', 'sm');
+      });
     });
   });
 
@@ -1342,10 +1704,37 @@ describe('Timestamp', () => {
       );
       const card = await openTimestampHoverCard();
       // An unlabeled entry still emits its label cell, so the grid stays
-      // aligned and the <dl> stays valid markup.
+      // aligned; its zone's long name, visually hidden, names its value.
       expect(card.querySelectorAll('dt')).toHaveLength(3);
       expect(card.querySelectorAll('dd')).toHaveLength(3);
-      expect(card.querySelectorAll('dt')[1].textContent).toBe('');
+      expect(card.querySelectorAll('dt')[1].textContent).toBe(
+        longZoneName('Asia/Tokyo', new Date(VALUE)),
+      );
+    });
+
+    it('keeps a copyable labelled card a valid description list', async () => {
+      render(
+        <Timestamp
+          value={VALUE}
+          format="relative"
+          tooltipEntries={[
+            {timezoneID: 'UTC', label: 'UTC', isCopyable: true},
+            {timezoneID: 'Asia/Tokyo', label: 'Tokyo'},
+          ]}
+        />,
+      );
+      const card = await openTimestampHoverCard();
+      const list = card.querySelector('dl')!;
+      // Each group holds only its dt and dd (WCAG 2.2 1.3.1); the copy
+      // button sits inside the value.
+      for (const group of Array.from(list.children)) {
+        expect(group.tagName).toBe('DIV');
+        expect(Array.from(group.children, el => el.tagName)).toEqual([
+          'DT',
+          'DD',
+        ]);
+      }
+      expect(list.querySelectorAll('dd button')).toHaveLength(1);
     });
 
     it('gives the tab stop back when entries are removed', () => {
@@ -1542,6 +1931,16 @@ describe('Timestamp server rendering', () => {
     vi.useRealTimers();
   });
 
+  const originalTZ = process.env.TZ;
+
+  afterEach(() => {
+    if (originalTZ === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = originalTZ;
+    }
+  });
+
   it.each(['date', 'date_time', 'time', 'unix_seconds'] as const)(
     'never reads the current time for the absolute %s format',
     format => {
@@ -1596,16 +1995,6 @@ describe('Timestamp server rendering', () => {
   });
 
   describe('across time zones', () => {
-    const originalTZ = process.env.TZ;
-
-    afterEach(() => {
-      if (originalTZ === undefined) {
-        delete process.env.TZ;
-      } else {
-        process.env.TZ = originalTZ;
-      }
-    });
-
     it('writes the same server markup whatever the server time zone', () => {
       const element = (
         <Timestamp value="2026-03-25T10:00:00Z" format="relative" />
@@ -1669,6 +2058,145 @@ describe('Timestamp server rendering', () => {
       errors.mockRestore();
       act(() => root?.unmount());
       host.remove();
+    }
+  });
+
+  it('renders an explicit time zone identically whatever the host zone', () => {
+    // Oct 15 in UTC, Oct 14 in Los Angeles: without the prop the host zone
+    // decides which day renders.
+    const element = (
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timezoneID="UTC"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'UTC';
+    const utc = renderToString(element);
+    expect(utc).toContain('Oct 15, 2022');
+    process.env.TZ = 'America/Los_Angeles';
+    expect(renderToString(element)).toBe(utc);
+    process.env.TZ = 'Asia/Tokyo';
+    expect(renderToString(element)).toBe(utc);
+  });
+
+  it('shifts the reading into the named zone', () => {
+    process.env.TZ = 'UTC';
+    const {rerender} = render(
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timezoneID="America/Los_Angeles"
+        hasTooltip={false}
+      />,
+    );
+    expect(screen.getByText('Oct 14, 2022')).toBeInTheDocument();
+    rerender(
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timezoneID="Asia/Tokyo"
+        hasTooltip={false}
+      />,
+    );
+    expect(screen.getByText('Oct 15, 2022')).toBeInTheDocument();
+  });
+
+  it('hydrates explicit-zone server markup from another host zone without a mismatch', () => {
+    const element = (
+      <Timestamp
+        value={1665792474000}
+        format="date_time"
+        timezoneID="UTC"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'UTC';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = renderToString(element);
+
+    process.env.TZ = 'America/Los_Angeles';
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let root: Root | undefined;
+    try {
+      act(() => {
+        root = hydrateRoot(host, element, {
+          onRecoverableError: error => {
+            throw error;
+          },
+        });
+      });
+      expect(host.textContent).toContain('Oct 15, 2022');
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+      act(() => root?.unmount());
+      host.remove();
+    }
+  });
+
+  it('keeps the UTC-labelled placeholder for a relative format with timezoneID', () => {
+    // FR3/ORD1: while the clock is pending the server placeholder is UTC
+    // with its label, whatever `timezoneID` pins.
+    const element = (
+      <Timestamp
+        value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
+        format="relative"
+        timezoneID="America/Los_Angeles"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'America/Los_Angeles';
+    const html = renderToString(element);
+    expect(html).toContain('UTC');
+    expect(html).not.toContain('PDT');
+  });
+
+  it('ignores timezoneID in the relative accessible name', () => {
+    const value = Date.now() / 1000 - 3600;
+    const {rerender} = render(
+      <Timestamp
+        value={value}
+        format="relative"
+        hasTooltip={false}
+        data-testid="ts"
+      />,
+    );
+    const viewerLabel = screen.getByTestId('ts').getAttribute('aria-label');
+    rerender(
+      <Timestamp
+        value={value}
+        format="relative"
+        timezoneID="Asia/Tokyo"
+        hasTooltip={false}
+        data-testid="ts"
+      />,
+    );
+    expect(screen.getByTestId('ts').getAttribute('aria-label')).toBe(
+      viewerLabel,
+    );
+  });
+
+  it('falls back to the viewer zone on an unknown time zone', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      process.env.TZ = 'UTC';
+      render(
+        <Timestamp
+          value={1665792474000}
+          format="date"
+          timezoneID="Never/Whence"
+          hasTooltip={false}
+        />,
+      );
+      expect(screen.getByText('Oct 15, 2022')).toBeInTheDocument();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('Never/Whence'),
+      );
+    } finally {
+      warn.mockRestore();
     }
   });
 });

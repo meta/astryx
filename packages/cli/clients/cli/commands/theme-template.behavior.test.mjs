@@ -95,3 +95,20 @@ describe('astryx theme template', () => {
     expect(JSON.parse(stdout).code).toBe('ERR_WRITE_FAILED');
   });
 });
+
+describe('theme subcommands refuse a stray word', () => {
+  it.each([
+    [['theme', 'template', 'a.ts', 'b.ts']],
+    [['theme', 'use', 'neutral', 'dark']],
+    [['theme', 'remove', 'neutral', 'extra']],
+    [['theme', 'list', 'neutral']],
+    [['theme', 'targets', 'Switch', 'Button']],
+    [['theme', 'eject', 'neutral', 'a', 'b']],
+  ])('%j exits 1 with ERR_INVALID_ARGUMENT and writes nothing', async args => {
+    const before = fs.readdirSync(tmpDir).sort();
+    const {status, stdout} = await runCli(['--json', ...args], {cwd: tmpDir});
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout).code).toBe('ERR_INVALID_ARGUMENT');
+    expect(fs.readdirSync(tmpDir).sort()).toEqual(before);
+  });
+});
