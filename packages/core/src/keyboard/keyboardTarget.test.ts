@@ -13,6 +13,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act} from '@testing-library/react';
 import {animatorFor} from '../motion/animator';
 import {__resetLayoutViewportForTest} from '../utils/layoutViewport';
+import {sharedWeakMap} from '../utils/sharedRealm';
 import {getResizedRoom, watchRevealPan} from './keyboardHeight';
 import {
   FIELD_OFFSET,
@@ -624,6 +625,46 @@ describe('keepFieldAboveKeyboard', () => {
     expect(getResizedRoom(window).room).toBe(300);
     focusOn(second);
     expect(getResizedRoom(window).room).toBe(300);
+  });
+
+  it('keeps its own store beside a copy of Core whose store has the earlier shape, and reads its own room (spec:AST-110 FR3)', () => {
+    // An earlier copy of Core made the window's store under the first
+    // version, without the room's fields.
+    const earlier = sharedWeakMap<Window, object>(
+      'keyboard/keyboard-height/stores',
+      1,
+    );
+    const previous = earlier.get(window);
+    const theirs = {
+      height: 0,
+      listeners: new Set(),
+      focusListeners: new Set(),
+      detach: null,
+      detachFocus: null,
+    };
+    earlier.set(window, theirs);
+    try {
+      vi.stubGlobal('scrollBy', vi.fn());
+      const input = element('input', {top: 600, height: 40});
+      document.body.append(input);
+      track(keepFieldAboveKeyboard(input));
+      focusOn(input);
+      resizeForKeyboard(300);
+      expect(getResizedRoom(window).room).toBe(300);
+      expect(Object.keys(theirs)).toEqual([
+        'height',
+        'listeners',
+        'focusListeners',
+        'detach',
+        'detachFocus',
+      ]);
+    } finally {
+      if (previous == null) {
+        earlier.delete(window);
+      } else {
+        earlier.set(window, previous);
+      }
+    }
   });
 
   it('keeps a field in the page 10 px above the keyboard where the browser shrinks the layout viewport for it, in the report\u2019s own frame', () => {
