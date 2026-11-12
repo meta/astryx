@@ -395,6 +395,12 @@ works on is `spec:AST-040` FR9's.
     under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and uses no
     catalog; `doctor` lists that folder and its size in an info row, which in
     such a run also says that it keeps none;
+  - the same per-user cache directory, for the code jiti transpiles from the
+    TypeScript files the CLI loads (an integration's manifest, TypeScript doc
+    topics and codemods, a TypeScript config), in `astryx/jiti`: made `0700`
+    on first use and used at once, only while it is a real folder the user
+    owns and others cannot open; otherwise nothing is cached on disk, and
+    where the system has no user ids jiti keeps its own default;
   - the platform's temporary directory, for scratch work such as building or
     verifying a package;
   - the per-user configuration directory of the platform, for the documented
