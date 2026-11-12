@@ -239,12 +239,16 @@ async function contrastPairs(page: Page) {
       const [r, g, b, a = '1'] = m[1].split(/[ ,/]+/).filter(Boolean);
       return [Number(r), Number(g), Number(b), Number(a)];
     };
+    let unreadable: string[] = [];
     const backdrop = (el: Element) => {
       const layers: number[][] = [];
       let node: Element | null = el;
       while (node != null) {
-        const color = parse(getComputedStyle(node).backgroundColor);
-        if (color != null && color[3] > 0) {
+        const value = getComputedStyle(node).backgroundColor;
+        const color = parse(value);
+        if (color == null) {
+          unreadable.push(value);
+        } else if (color[3] > 0) {
           layers.push(color);
           if (color[3] >= 1) {
             break;
@@ -272,10 +276,7 @@ async function contrastPairs(page: Page) {
       ['link', 'a'],
       ['strikethrough', 'del, s'],
       ['inline code', 'li code'],
-      [
-        'blockquote text',
-        '.astryx-markdown-blockquote p, .astryx-markdown-blockquote',
-      ],
+      ['blockquote text', '.astryx-markdown-blockquote p'],
       ['table header', 'th'],
       ['table cell', 'td'],
       ['list item', '.astryx-markdown-list li'],
@@ -286,7 +287,12 @@ async function contrastPairs(page: Page) {
         return [];
       }
       const style = getComputedStyle(el);
-      const fg = parse(style.color) as number[];
+      unreadable = [];
+      const parsed = parse(style.color);
+      if (parsed == null) {
+        unreadable.push(style.color);
+      }
+      const fg = parsed ?? [0, 0, 0, 1];
       const bg = backdrop(el);
       const composite = bg.map((c, i) => fg[i] * fg[3] + c * (1 - fg[3]));
       const [hi, lo] = [luminance(composite), luminance(bg)].sort(
@@ -302,6 +308,7 @@ async function contrastPairs(page: Page) {
           backdrop: `rgb(${bg.map(Math.round).join(', ')})`,
           ratio: Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100,
           threshold: large ? 3 : 4.5,
+          unreadable,
         },
       ];
     });
@@ -346,13 +353,17 @@ for (const mode of ['light', 'dark'] as const) {
       const contrast = await contrastPairs(page);
       for (const pair of contrast) {
         check(
+          pair.unreadable.length === 0,
+          `${pair.part} colors not read: ${pair.unreadable.join(', ')}`,
+        );
+        check(
           pair.ratio >= pair.threshold,
           `${pair.part} contrast ${pair.ratio} below ${pair.threshold}`,
         );
       }
       await frame('rest', {shape, contrast});
 
-      const link = page.getByRole('link', {name: 'Links'});
+      const link = page.getByRole('link', {name: 'Links', exact: true});
       await link.hover();
       await settle(page);
       const hovered = await link.evaluate(el => {
@@ -385,8 +396,7 @@ for (const mode of ['light', 'dark'] as const) {
       });
       check(focus.name === 'Links', `focused ${focus.name}`);
       check(focus.focusVisible, 'the link is not :focus-visible');
-      // The default link draws the browser's own focus outline. It is
-      // visible; whether it takes the shared focus tokens is not settled.
+      // The check accepts the browser's default focus outline.
       check(
         !focus.outline.startsWith('none') || focus.boxShadow !== 'none',
         `no focus indicator: ${focus.outline} / ${focus.boxShadow}`,
@@ -630,6 +640,24 @@ for (const mode of ['light', 'dark'] as const) {
     direction: 'ltr',
     viewport: MEDIUM,
     run: async (page, check, frame) => {
+      const loaded = await page.evaluate(async () => {
+        const imgs = Array.from(
+          document.querySelectorAll<HTMLImageElement>(
+            '#storybook-root .astryx-markdown-image img',
+          ),
+        );
+        const results = await Promise.all(
+          imgs.map(async img =>
+            img.decode().then(
+              () => img.naturalWidth > 0,
+              () => false,
+            ),
+          ),
+        );
+        return results.every(Boolean);
+      });
+      check(loaded, 'an image did not load');
+      await settle(page);
       const images = await page.evaluate(() =>
         Array.from(
           document.querySelectorAll('#storybook-root .astryx-markdown-image'),

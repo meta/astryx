@@ -346,7 +346,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Do not pass plugins from a Server Component into Markdown: function-bearing plugin entries cannot cross the client boundary. Run them on the server with parseMarkdownAst from @astryxdesign/core/Markdown/parser, or create them in client code.',
+          'Do not pass plugins from a Server Component into Markdown: function-bearing plugin entries cannot cross the client boundary. Create them in client code. parseMarkdownAst can run plugins on the server, but it returns a parsed tree, and Markdown renders only a source string.',
       },
       {
         guidance: false,
@@ -894,7 +894,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Do not pass plugins from a Server Component into Markdown: function-bearing plugin entries cannot cross the client boundary. Run them on the server with parseMarkdownAst from @astryxdesign/core/Markdown/parser, or create them in client code.',
+          'Do not pass plugins from a Server Component into Markdown: function-bearing plugin entries cannot cross the client boundary. Create them in client code. parseMarkdownAst can run plugins on the server, but it returns a parsed tree, and Markdown renders only a source string.',
       },
       {
         guidance: false,
@@ -1006,7 +1006,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Do not pass plugins from a Server Component into Markdown; function-bearing entries cannot cross the client boundary. Run them server-side with parseMarkdownAst.',
+          'Do not pass plugins from a Server Component into Markdown; function-bearing entries cannot cross the client boundary. Create them in client code.',
       },
       {
         guidance: false,

@@ -289,8 +289,9 @@ export interface MarkdownProps<
    */
   isStreaming?: boolean;
   /**
-   * Called when a rendered link is clicked. Return `false` to prevent the
-   * default navigation. A destination that the shared navigation rule
+   * Called when a default link is clicked. Return `false` to prevent the
+   * default navigation. A custom `link` renderer replaces the default link
+   * and does not receive this handler. A destination that the shared navigation rule
    * rejects, and every `data:` URL, renders as plain text and never reaches
    * this handler.
    */
