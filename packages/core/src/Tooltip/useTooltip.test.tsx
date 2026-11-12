@@ -25,7 +25,8 @@ import {render, screen, fireEvent, act} from '@testing-library/react';
 import {useTooltip, type TooltipOptions} from './useTooltip';
 import {useLayer} from '../Layer/useLayer';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import type {Ref} from 'react';
+import {Suspense, startTransition, use, useState} from 'react';
+import type {Ref, RefCallback} from 'react';
 
 // jsdom implements neither the Popover API nor `:popover-open`; mirror
 // Tooltip.test.tsx's shims so the layer can open.
@@ -235,6 +236,93 @@ describe('useTooltip — a trigger that detaches and attaches again', () => {
     await act(async () => {});
 
     expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+
+  it('detaches a trigger the same way after React discards a render that disables the tooltip', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    // The trigger has its own state, so its removal commits without a
+    // render of the hook.
+    function Slot({
+      triggerRef,
+      describedBy,
+    }: {
+      triggerRef: RefCallback<HTMLElement>;
+      describedBy: string | undefined;
+    }) {
+      const [isShown, setIsShown] = useState(true);
+      return (
+        <>
+          {isShown && (
+            <button
+              type="button"
+              ref={triggerRef}
+              aria-describedby={describedBy}>
+              Trigger
+            </button>
+          )}
+          <button type="button" onClick={() => setIsShown(false)}>
+            Remove
+          </button>
+        </>
+      );
+    }
+    function Host({isPending}: {isPending: boolean}) {
+      const tooltip = useTooltip({isEnabled: !isPending});
+      return (
+        <div>
+          <Slot triggerRef={tooltip.ref} describedBy={tooltip.describedBy} />
+          {tooltip.renderTooltip('Helpful text')}
+          {isPending ? <Forever /> : null}
+        </div>
+      );
+    }
+    function Screen({isPending}: {isPending: boolean}) {
+      return (
+        <Suspense fallback={null}>
+          <Host isPending={isPending} />
+        </Suspense>
+      );
+    }
+    // Opens the tooltip, removes its trigger, and reads whether it is open.
+    async function removeTrigger(discardFirst: boolean): Promise<boolean> {
+      const {rerender, unmount} = render(<Screen isPending={false} />);
+      fireEvent.mouseEnter(trigger());
+      tick(200);
+      const tip = tooltipElement();
+      expect(tip.matches(':popover-open')).toBe(true);
+      if (discardFirst) {
+        await act(async () => {
+          startTransition(() => {
+            rerender(<Screen isPending />);
+          });
+        });
+      }
+      fireEvent.click(screen.getByRole('button', {name: 'Remove'}));
+      await act(async () => {});
+      const isOpen = tip.matches(':popover-open');
+      unmount();
+      return isOpen;
+    }
+
+    const withoutDiscard = await removeTrigger(false);
+    expect(await removeTrigger(true)).toBe(withoutDiscard);
+  });
+
+  it('unmounts a disabled tooltip with no error after its detach settles', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const {unmount} = render(<Harness isEnabled={false} />);
+    unmount();
+    await act(async () => {});
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   it('stays closed on attach for pointer focus that arrived while detached', async () => {

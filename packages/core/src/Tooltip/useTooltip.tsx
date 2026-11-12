@@ -23,6 +23,7 @@ import {
   type RefCallback,
 } from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
@@ -318,12 +319,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const triggerRef = useRef<HTMLElement | null>(null);
   // Set only by a Core component that mounts the tooltip on interaction.
   const presentInterest = use(TooltipPresentInterestContext);
-  // The tooltip's enabled and controlled state now. A show that runs after a
-  // render (a pending hover show) and the trigger ref callback read it. A
-  // render-purity gap: render-written until the detach check can read this
-  // commit's isOpen.
-  const renderFlagsRef = useRef({isEnabled, isOpen});
-  renderFlagsRef.current = {isEnabled, isOpen};
   // Counts the renders in which the tooltip is disabled. A pending show
   // records it, so a show scheduled before a disable is dropped even when
   // the tooltip is enabled again before the timer fires.
@@ -696,6 +691,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     handlePointerEnter,
     handlePointerDown,
     focusTrigger,
+    isEnabled,
     isOpen,
     dropHold,
     hideNow,
@@ -712,6 +708,30 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // caller removed the wiring (DropdownMenu's Button while its menu is
   // open), so the next enabled attach reads the focus that arrived meanwhile.
   const wasSuppressedRef = useRef(false);
+  // Set by a detach until it settles on the committed flags.
+  const isDetachPendingRef = useRef(false);
+  // A caller removes the wiring as it disables the tooltip. Close an
+  // uncontrolled tooltip then, or the next attach shows a stale tooltip. A
+  // detach while enabled, such as a merged ref that changes identity on a
+  // re-render, keeps a hovered or held tooltip open.
+  const settleDetach = useCallback(() => {
+    if (!isDetachPendingRef.current) {
+      return;
+    }
+    isDetachPendingRef.current = false;
+    const latest = handlersRef.current;
+    if (!latest.isEnabled && latest.isOpen === undefined) {
+      wasSuppressedRef.current = true;
+      latest.dropHold();
+      latest.hideNow();
+    }
+  }, [handlersRef]);
+  // A commit that renders this hook settles a detach here, after its
+  // insertion Effects wrote the flags. A detach in a commit that does not
+  // render this hook settles in the microtask it queues.
+  useIsomorphicLayoutEffect(() => {
+    settleDetach();
+  });
 
   // The trigger's ref callback owns every trigger listener, and reads the
   // trigger's state when it attaches and detaches.
@@ -767,12 +787,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       // dismissed with Escape stays closed.
       const focused = el.ownerDocument.activeElement;
       const wasSuppressed = wasSuppressedRef.current;
-      if (renderFlagsRef.current.isEnabled) {
+      if (latest().isEnabled) {
         wasSuppressedRef.current = false;
       }
       if (
         wasSuppressed &&
-        renderFlagsRef.current.isEnabled &&
+        latest().isEnabled &&
         latest().isOpen === undefined &&
         latest().focusTrigger !== 'never' &&
         focused instanceof HTMLElement &&
@@ -790,7 +810,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       if (state != null) {
         state.isRead = true;
       }
-      if (renderFlagsRef.current.isEnabled && latest().isOpen === undefined) {
+      if (latest().isEnabled && latest().isOpen === undefined) {
         if (interest === 'hover') {
           latest().handleMouseEnter();
         } else if (interest === 'tap') {
@@ -821,23 +841,15 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         if (triggerRef.current === el) {
           triggerRef.current = null;
         }
-        // A caller removes the wiring as it disables the tooltip. Close an
-        // uncontrolled tooltip then, or the next attach shows a stale tooltip.
-        // A detach while enabled, such as a merged ref that changes identity
-        // on a re-render, keeps a hovered or held tooltip open.
-        if (
-          !renderFlagsRef.current.isEnabled &&
-          renderFlagsRef.current.isOpen === undefined
-        ) {
-          wasSuppressedRef.current = true;
-          latest().dropHold();
-          latest().hideNow();
-        }
+        // This cleanup runs before the commit's insertion Effects write the
+        // flags, so the detach settles once they are written.
+        isDetachPendingRef.current = true;
+        queueMicrotask(settleDetach);
       };
       detachTriggerRef.current = detach;
       return detach;
     },
-    [handlersRef],
+    [handlersRef, settleDetach],
   );
 
   // Combined ref - shorthand for calling both positionRef and interactionRef
