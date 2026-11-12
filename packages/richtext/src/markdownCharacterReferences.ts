@@ -748,9 +748,8 @@ function hasUnescapedPipe(text: string): boolean {
 }
 
 /**
- * Whether `line` is a GFM table's delimiter row: cells of hyphens with
- * optional colons, between optional outer pipes. Each cell is tested on its
- * own, so the time stays linear in the line length.
+ * Test each cell on its own. One regex over the whole row backtracks in
+ * quadratic time on a long run of spaces.
  */
 function isTableDelimiterRow(line: string): boolean {
   let body = line.trim();
