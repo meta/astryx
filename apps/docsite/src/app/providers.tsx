@@ -40,8 +40,8 @@ export function useThemeMode(): {
   toggleMode: () => void;
 } {
   const {themeMode, toggleMode} = useContext(ThemeModeContext);
-  // While the site follows the OS, each consumer reads the OS scheme itself.
-  // The provider resolves `themeMode` in a transition, which can commit
+  // Until the provider resolves `system`, each consumer reads the OS scheme
+  // itself. The provider resolves it in a transition, which can commit
   // seconds after a consumer is live on a slow device.
   const osPrefersDark = useMediaQuery(OS_DARK_SCHEME);
   const osMode: ThemeMode = osPrefersDark ? 'dark' : 'light';

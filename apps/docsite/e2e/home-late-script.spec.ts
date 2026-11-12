@@ -2,8 +2,8 @@
 
 /**
  * @file home-late-script.spec.ts
- * @input Production docsite home page, with the page's own script held until
- *   the site shell is live
+ * @input Production docsite home page at a desktop width, with the page's own
+ *   script held until the site shell is live
  * @output Regression proof that a page whose script arrives late hydrates its
  *   server HTML and does not render it again, and that the shell knows the
  *   color mode before the page is live
