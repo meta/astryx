@@ -48,6 +48,7 @@ import {
   openStory,
   PEN_SKIP,
   readLongTasks,
+  releaseVelocity,
   springStep,
   startBusyControl,
   startScreencast,
@@ -948,9 +949,14 @@ test('a flick hands the row’s velocity, the finger’s, to the settle', async 
   const openWidth = await openWidthOf(entries);
   expect(openWidth).toBeGreaterThan(0);
   await watchTravelCurves(row);
-  await driver.play(
-    flick(start, {velocity: {x: -1000, y: 0}, durationMs: 80, hz: 120}),
-  );
+  const script = flick(start, {
+    velocity: {x: -1000, y: 0},
+    durationMs: 80,
+    hz: 120,
+  });
+  // `'spacing'` keeps each gap from the touch before, and the play fails by
+  // name when the page read no throw.
+  const played = await driver.play(script, {pacing: 'spacing'});
   await waitForRest(row);
   expect(await xOf(row)).toBeCloseTo(-openWidth, 0);
   // The settle is the last curve the row played, toward the open width. It is
@@ -962,11 +968,17 @@ test('a flick hands the row’s velocity, the finger’s, to the settle', async 
   }
   expect(settle.frames.at(-1)?.x).toBeCloseTo(-openWidth, 0);
   // Its starting velocity in px/s, read off the spring fitted to its keyframes
-  // (UIKit's critically damped one). It is about the finger's 1000 px/s toward
-  // the open side; from rest it would be 0.
+  // (UIKit's critically damped one). It is the release velocity the page read,
+  // toward the open side; from rest it would be 0. WebKit's page reads that
+  // release from when each touch arrived, and a busy runner stretches the
+  // gaps between them. Chromium's page reads the script's own stamps.
+  const release =
+    played.at(-1)?.release?.pagePxPerS ?? Math.abs(releaseVelocity(script).x);
   const v0 = fittedVelocity(settle.frames, -openWidth, 0);
-  expect(v0, JSON.stringify({v0})).toBeLessThan(-700);
-  expect(v0, JSON.stringify({v0})).toBeGreaterThan(-1300);
+  expect(release, JSON.stringify({release})).toBeGreaterThan(0);
+  expect(Math.abs(v0 + release), JSON.stringify({v0, release})).toBeLessThan(
+    0.02 * release,
+  );
   // And the settle is UIKit's spring from there: no keyframe off the
   // critically damped curve from that place and velocity.
   const from = settle.frames[0].x;
