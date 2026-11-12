@@ -9,6 +9,7 @@ import {
   previewMarkup,
   previewPageSource,
   stagePreviewPage,
+  stageThemesStorePage,
   themesStorePageSource,
 } from '../../scripts/generate-landing-template-previews.mjs';
 import templateRows from '../app/(site)/_landing/landingTemplateRows.json';
@@ -50,12 +51,18 @@ describe('previewPageSource', () => {
 });
 
 describe('themesStorePageSource', () => {
-  it('renders the themes card store inside the Butter theme', () => {
+  it('renders the staged store template inside the Butter theme', () => {
     const source = themesStorePageSource('../../src/ThemesStorePreview');
     expect(source).toContain(
       'import ThemesStorePreview from "../../src/ThemesStorePreview";',
     );
+    expect(source).toContain(
+      'import {ThemeShowcaseStore} from "./template/page";',
+    );
     expect(source).toContain('<Theme theme={butterTheme} mode="system">');
+    expect(source).toContain(
+      '<ThemesStorePreview Store={ThemeShowcaseStore} />',
+    );
   });
 });
 
@@ -73,6 +80,69 @@ describe('previewMarkup', () => {
     expect(markup).toContain(
       '<img fetchpriority="low" decoding="async" src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',
     );
+  });
+});
+
+describe('stageThemesStorePage', () => {
+  const STORE = "const icon = 'store-icon';";
+  let work: string;
+  let pageDir: string;
+  let templates: string;
+
+  beforeEach(() => {
+    work = fs.mkdtempSync(path.join(os.tmpdir(), 'landing-store-'));
+    pageDir = path.join(work, 'out', 'themes-store');
+    templates = path.join(work, 'templates');
+    fs.mkdirSync(pageDir, {recursive: true});
+    fs.mkdirSync(path.join(templates, 'theme-showcase'), {recursive: true});
+    fs.writeFileSync(path.join(templates, 'theme-showcase', 'page.tsx'), STORE);
+  });
+
+  afterEach(() => {
+    fs.rmSync(work, {recursive: true, force: true});
+  });
+
+  it('draws the store with the icons of the named sets, like every template preview', async () => {
+    const rewrite = vi.fn(async (source: string) => `${source} WITH SET ICONS`);
+    await stageThemesStorePage({
+      pageDir,
+      templatesDir: templates,
+      iconSets: ['pkg/glyphs'],
+      projectDir: work,
+      storeModule: '../../src/ThemesStorePreview',
+      isServed: () => true,
+      rewrite,
+    });
+
+    expect(rewrite).toHaveBeenCalledWith(
+      STORE,
+      path.join(templates, 'theme-showcase', 'page.tsx'),
+      {projectDir: work, list: ['pkg/glyphs']},
+    );
+    expect(
+      fs.readFileSync(path.join(pageDir, 'template', 'page.tsx'), 'utf8'),
+    ).toBe(`${STORE} WITH SET ICONS`);
+    expect(fs.readFileSync(path.join(pageDir, 'page.tsx'), 'utf8')).toContain(
+      'import {ThemeShowcaseStore} from "./template/page";',
+    );
+  });
+
+  it('keeps the store template icons when no set is named', async () => {
+    const rewrite = vi.fn();
+    await stageThemesStorePage({
+      pageDir,
+      templatesDir: templates,
+      iconSets: [],
+      projectDir: work,
+      storeModule: '../../src/ThemesStorePreview',
+      isServed: () => true,
+      rewrite,
+    });
+
+    expect(rewrite).not.toHaveBeenCalled();
+    expect(
+      fs.readFileSync(path.join(pageDir, 'template', 'page.tsx'), 'utf8'),
+    ).toBe(STORE);
   });
 });
 

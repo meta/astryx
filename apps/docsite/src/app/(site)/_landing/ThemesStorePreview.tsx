@@ -2,18 +2,20 @@
 
 /**
  * @file The Butter store that the homepage themes card shows.
- * @input The /themes page's Butter showcase content and its photos.
+ * @input The store template (the build stages a copy with the preview
+ *   rewrites), and the /themes page's Butter showcase content and photos.
  * @output ThemesStorePreview: the store at its desktop layout.
  * @position Rendered only by scripts/generate-landing-template-previews.mjs,
  *   at build time. The page shows the result through FrozenPreview, so this
  *   module never ships to the browser.
  */
 
+import type {ComponentType} from 'react';
 import {
   AppShellMobileContext,
   type AppShellMobileContextValue,
 } from '@astryxdesign/core/AppShell';
-import {ThemeShowcaseStore} from '../../../../../../packages/cli/assets/templates/pages/theme-showcase/page';
+import type {ThemeShowcaseProps} from '../../../../../../packages/cli/assets/templates/pages/theme-showcase/page';
 import {getThemeShowcaseContent} from '../../../components/themeShowcaseContent';
 
 // Butter's bespoke showcase content (breakfast products + inventory), the
@@ -47,10 +49,15 @@ const FORCE_DESKTOP_MOBILE_CONTEXT: AppShellMobileContextValue = {
   hasAutoToggle: false,
 };
 
-export default function ThemesStorePreview() {
+export default function ThemesStorePreview({
+  Store,
+}: {
+  /** The store template's ThemeShowcaseStore, from the staged copy. */
+  Store: ComponentType<ThemeShowcaseProps>;
+}) {
   return (
     <AppShellMobileContext.Provider value={FORCE_DESKTOP_MOBILE_CONTEXT}>
-      <ThemeShowcaseStore {...butterContent} />
+      <Store {...butterContent} />
     </AppShellMobileContext.Provider>
   );
 }

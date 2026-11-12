@@ -34,6 +34,8 @@ const rowsFile = path.join(
   'src/app/(site)/_landing/landingTemplateRows.json',
 );
 const outFile = path.join(docsiteDir, 'src/generated/landingPreviews.ts');
+// The page template the themes card shows.
+const STORE_TEMPLATE = 'theme-showcase';
 const themesStoreModule = path.join(
   docsiteDir,
   'src/app/(site)/_landing/ThemesStorePreview',
@@ -80,20 +82,21 @@ export default function Preview() {
 }
 
 /**
- * The page that the renderer renders for the themes card: the Butter store
- * inside the Butter theme.
+ * The page that the renderer renders for the themes card: the staged store
+ * template, shown by ThemesStorePreview inside the Butter theme.
  * @param {string} storeModule the ThemesStorePreview module, relative to the wrapper
  * @returns {string}
  */
 export function themesStorePageSource(storeModule) {
   return `import {Theme} from '@astryxdesign/core/theme';
 import {butterTheme} from '@astryxdesign/theme-butter/built';
+import {ThemeShowcaseStore} from "./template/page";
 import ThemesStorePreview from ${JSON.stringify(storeModule)};
 
 export default function Preview() {
   return (
     <Theme theme={butterTheme} mode="system">
-      <ThemesStorePreview />
+      <ThemesStorePreview Store={ThemeShowcaseStore} />
     </Theme>
   );
 }
@@ -114,22 +117,24 @@ export function previewMarkup(html) {
 }
 
 /**
- * Writes the page that the renderer renders for one tile into `pageDir`: a
- * copy of the template with the rewrites that the Webpack loaders give every
- * other template preview. Each photo that the docsite serves loads through
- * the image optimizer at preview size. With icon sets named, the icons come
- * from those sets.
- * @param {object} input
- * @param {string} input.slug
- * @param {string} input.pageDir an empty folder for this tile
- * @param {string} input.templatesDir the folder of the page templates
- * @param {string[]} input.iconSets the sets DOCSITE_ICON_SET names
- * @param {string} input.projectDir the docsite, where the sets are installed
- * @param {(path: string) => boolean} [input.isServed] whether the docsite's
+ * @typedef {object} StageInput
+ * @property {string} pageDir an empty folder for this preview
+ * @property {string} templatesDir the folder of the page templates
+ * @property {string[]} iconSets the sets DOCSITE_ICON_SET names
+ * @property {string} projectDir the docsite, where the sets are installed
+ * @property {(path: string) => boolean} [isServed] whether the docsite's
  *   `public` folder serves a file at the path
- * @param {typeof rewriteTemplatePreview} [input.rewrite]
+ * @property {typeof rewriteTemplatePreview} [rewrite]
  */
-export async function stagePreviewPage({
+
+/**
+ * Copies one page template into `pageDir/template` with the rewrites that
+ * the Webpack loaders give every other template preview. Each photo that the
+ * docsite serves loads through the image optimizer at preview size. With
+ * icon sets named, the icons come from those sets.
+ * @param {StageInput & {slug: string}} input
+ */
+async function stageTemplateCopy({
   slug,
   pageDir,
   templatesDir,
@@ -159,9 +164,33 @@ export async function stagePreviewPage({
     }
     fs.writeFileSync(path.join(copyDir, relative), source);
   }
+}
+
+/**
+ * Writes the page that the renderer renders for one tile into `pageDir`: the
+ * staged copy of its template inside the neutral theme.
+ * @param {StageInput & {slug: string}} input
+ */
+export async function stagePreviewPage(input) {
+  await stageTemplateCopy(input);
   fs.writeFileSync(
-    path.join(pageDir, 'page.tsx'),
+    path.join(input.pageDir, 'page.tsx'),
     previewPageSource('./template/page'),
+  );
+}
+
+/**
+ * Writes the page that the renderer renders for the themes card into
+ * `pageDir`: a staged copy of the store template, with the same rewrites as
+ * every tile, shown by ThemesStorePreview inside the Butter theme.
+ * @param {StageInput & {storeModule: string}} input `storeModule` is the
+ *   ThemesStorePreview module, relative to `pageDir`
+ */
+export async function stageThemesStorePage({storeModule, ...input}) {
+  await stageTemplateCopy({...input, slug: STORE_TEMPLATE});
+  fs.writeFileSync(
+    path.join(input.pageDir, 'page.tsx'),
+    themesStorePageSource(storeModule),
   );
 }
 
@@ -201,12 +230,16 @@ async function main() {
     }
     const storeDir = path.join(workDir, 'themes-store');
     fs.mkdirSync(storeDir);
-    fs.writeFileSync(
-      path.join(storeDir, 'page.tsx'),
-      themesStorePageSource(
-        path.relative(storeDir, themesStoreModule).split(path.sep).join('/'),
-      ),
-    );
+    await stageThemesStorePage({
+      pageDir: storeDir,
+      templatesDir,
+      iconSets,
+      projectDir: docsiteDir,
+      storeModule: path
+        .relative(storeDir, themesStoreModule)
+        .split(path.sep)
+        .join('/'),
+    });
     await renderPage('themes-store', storeDir);
   } finally {
     fs.rmSync(workDir, {recursive: true, force: true});
