@@ -29,8 +29,12 @@ import {
 } from '../motion/animator';
 import {holdInput} from '../Layer/inputHold';
 import {ENTRANCE_OPACITY_FLOOR} from '../motion/opacityFloor';
-import {easedProgress, mapProgress, mapRange} from '../motion/progress';
-import {readThemeTiming, type ThemeTimingTokens} from '../motion/themeTiming';
+import {mapProgress, mapRange} from '../motion/progress';
+import {
+  easedProgress,
+  readThemeTiming,
+  type ThemeTimingTokens,
+} from '../motion/themeTiming';
 import {placePopoverExitCopy} from '../privateAttributes/popoverExit.stylex';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {
@@ -55,11 +59,8 @@ export type {
 /**
  * The curves from `from` to `to` as `progress` moves from 0 to 1. The scale
  * and the length move together, so the scale along the axis is their product.
- *
- * @internal Read by the rect morph's popover proofs; not exported from the
- *   package.
  */
-export function surfaceCurves(
+function surfaceCurves(
   from: SurfaceState,
   to: SurfaceState,
   axis: 'x' | 'y',
@@ -86,16 +87,8 @@ function timingOn(element: Element, tokens: ThemeTimingTokens): MotionCurve {
   return readThemeTiming(element, tokens) ?? easedProgress(0, x => x);
 }
 
-/**
- * What `animator` shows now, split back into scale and length.
- *
- * @internal Read by the rect morph's popover proofs; not exported from the
- *   package.
- */
-export function readState(
-  animator: Pick<Animator, 'get'>,
-  axis: 'x' | 'y',
-): SurfaceState {
+/** What `animator` shows now, split back into scale and length. */
+function readState(animator: Animator, axis: 'x' | 'y'): SurfaceState {
   const across = animator.get(axis === 'x' ? 'scaleY' : 'scaleX');
   const along = animator.get(axis === 'x' ? 'scaleX' : 'scaleY');
   return {

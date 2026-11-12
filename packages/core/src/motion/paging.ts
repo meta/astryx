@@ -14,8 +14,7 @@
  */
 
 import type {MotionCurve} from './animator';
-import type {BezierPoints} from './bezier';
-import {timedCurve} from './progress';
+import {cubicBezier, type BezierPoints} from './bezier';
 import {paging} from './uikit/paging';
 
 /**
@@ -124,9 +123,10 @@ export function solvePaging({
  * of the table.
  *
  * `velocity` (px/s) is the velocity of a move that this one retargets. The new
- * curve starts at it and still ends on `to`, at rest and on time
- * (`timedCurve`): a new target keeps the current velocity, where UIKit drops
- * it.
+ * curve starts at it and still ends on `to`, at rest and on time. A new target
+ * keeps the current velocity, where UIKit drops it. The carry is a Hermite
+ * term, v × duration × u(1 − u)², less the curve's own starting slope. So a
+ * move from rest is the curve itself.
  */
 export function solveAnimatedPageScroll({
   from,
@@ -141,5 +141,31 @@ export function solveAnimatedPageScroll({
   curve?: BezierPoints;
   velocity?: number;
 }): MotionCurve {
-  return timedCurve({from, to, durationMs, easing: curve, velocity});
+  const duration = durationMs / 1000;
+  const distance = to - from;
+  const ease = cubicBezier(curve);
+  const progress = (u: number) => ease(Math.min(1, Math.max(0, u)));
+  // The carry, in px: the retargeted velocity over the whole duration, less
+  // what the curve's own starting slope already gives.
+  const startSlope = progress(1e-4) / 1e-4;
+  const carry =
+    velocity == null ? 0 : velocity * duration - distance * startSlope;
+  const at = (t: number) => {
+    const u = Math.min(1, Math.max(0, t / duration));
+    return from + distance * progress(u) + carry * u * (1 - u) * (1 - u);
+  };
+  return {
+    duration,
+    at,
+    velocity: t => {
+      if (t <= 0) {
+        return velocity ?? 0;
+      }
+      if (t >= duration) {
+        return 0;
+      }
+      const h = Math.min(1e-4, t / 2, (duration - t) / 2);
+      return (at(t + h) - at(t - h)) / (2 * h);
+    },
+  };
 }
