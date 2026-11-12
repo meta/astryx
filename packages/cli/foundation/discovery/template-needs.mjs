@@ -246,6 +246,35 @@ function cliPackageRanges() {
 }
 
 /**
+ * The command that installs `packages` in the project at `cwd`, in its package
+ * manager and with the CLI workspace's version ranges. Null, with the reason,
+ * when several lockfiles leave the package manager undetermined; null with no
+ * reason when there is nothing to install.
+ * @param {string[]} packages
+ * @param {string} cwd
+ * @returns {{installCommand: string | null, noCommandReason: string | null}}
+ */
+export function installCommandFor(packages, cwd) {
+  if (packages.length === 0) {
+    return {installCommand: null, noCommandReason: null};
+  }
+  const resolved = resolveInstallVerb(cwd);
+  const ranges = cliPackageRanges();
+  const specs = packages.map(p => (ranges[p] ? `${p}@"${ranges[p]}"` : p));
+  if (resolved.verb !== null) {
+    return {
+      installCommand: `${resolved.verb} ${specs.join(' ')}`,
+      noCommandReason: null,
+    };
+  }
+  const where = path.relative(cwd, resolved.dir) || '.';
+  return {
+    installCommand: null,
+    noCommandReason: `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`,
+  };
+}
+
+/**
  * Analyze what a template source needs that the target project lacks.
  *
  * Returns a `notes` array of human-readable setup notes, a structured
@@ -285,21 +314,7 @@ export function analyzeTemplateNeeds(source, cwd) {
 
   const missing = external.filter(p => !(p in projectDeps));
 
-  // Build the install command with version ranges from the CLI workspace.
-  let installCommand = null;
-  /** @type {string | null} */
-  let noCommandReason = null;
-  if (missing.length > 0) {
-    const resolved = resolveInstallVerb(cwd);
-    const ranges = cliPackageRanges();
-    const specs = missing.map(p => (ranges[p] ? `${p}@"${ranges[p]}"` : p));
-    if (resolved.verb !== null) {
-      installCommand = `${resolved.verb} ${specs.join(' ')}`;
-    } else {
-      const where = path.relative(cwd, resolved.dir) || '.';
-      noCommandReason = `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`;
-    }
-  }
+  const {installCommand, noCommandReason} = installCommandFor(missing, cwd);
 
   // ── StyleX compiler ────────────────────────────────────────────────────
   const usesStylex = imported.has(STYLEX_RUNTIME);

@@ -50,7 +50,7 @@ export const doc = {
     {
       flag: '-w, --watch',
       description:
-        'Rebuild automatically when a theme file changes (Ctrl-C to stop). Refused with --check, --family, or --json (ERR_THEME_INVALID)',
+        'Rebuild automatically when the theme source, or a local file it imports, changes (Ctrl-C to stop). Refused with --check, --family, or --json (ERR_THEME_INVALID)',
     },
     {
       flag: '-c, --check',
@@ -89,7 +89,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'a build or validation error (an error envelope), or --check finds stale or missing outputs (the check result, with upToDate false and the stale files, is still printed: it is a result, not an error)',
+      when: 'a build or validation error (an error envelope), or --check finds stale or missing outputs (the check result, with upToDate false and the stale files, is still printed: it is a result, not an error). One exception: an editor theme whose settings changed after its build is refused (ERR_THEME_INVALID, an error envelope) before any file is checked, with `editor show <theme>` to build it again',
     },
   ],
   related: ['experimental theme add', 'experimental theme list'],

@@ -60,8 +60,8 @@ const RUNNERS = {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
   },
-  'api/theme-edit/_check.mjs': {
-    runs: 'css-tree and the MDN property data it ships, on the first CSS value check, so other commands do not load them',
+  'api/theme-edit/_css.mjs': {
+    runs: 'css-tree and the MDN property data it ships, on the first CSS name or value check, so other commands do not load them',
     sites: ['require(css-tree)', 'require(mdn-data/css/properties.json)'],
   },
   'api/theme-edit/_preview.mjs': {
@@ -314,6 +314,13 @@ const RUNNERS = {
   'clients/cli/index.mjs': {
     runs: 'the command modules, to register each command',
     sites: ['import(<computed>)'],
+  },
+  'clients/cli/lib/cli-error.mjs': {
+    runs: 'the experimental theme editor and preview command docs, for the subcommand names an unknown-command refusal suggests',
+    sites: [
+      'import ../commands/experimental-theme-editor.doc.mjs',
+      'import ../commands/experimental-theme-preview.doc.mjs',
+    ],
   },
   'clients/cli/lib/manifest.mjs': {
     runs: 'the manifest command doc, for the exit codes the manifest reports',

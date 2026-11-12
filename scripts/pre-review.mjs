@@ -63,7 +63,7 @@ export const CHECKS = {
   g: 'Records: a changed record needs a spec owner to approve its spec content',
   h: `Size (guideline): prefer under about ${SIZE_GUIDELINE.toLocaleString('en-US')} authored lines; a reviewer may suggest a split, but size alone is never a finding`,
   i: 'Shared owners: a concern Core owns in a shared module is called through that module',
-  j: 'Effects: a new Effect names the system it syncs and does more than copy into a ref; no DOM node in state',
+  j: 'Effects: interaction logic lives in callbacks, and no Effect reacts to interaction state. A new Effect names the system it syncs. A latest prop or callback is kept only with useCommittedRef or useCommittedRefInto (packages/core/src/hooks/useCommittedRef.ts), and render and useMemo never read that ref. No Effect only copies a value into a ref or into state, no ref is written during render except by lazy initialization, and no DOM node is in state',
   k: 'Release notes and records: a Changeset names each package that ships a change, its category fits, and no gap row stays for a claim the change builds',
   l: 'Mergeable: the change merges into the base without conflicts',
 };
@@ -303,6 +303,19 @@ function globalBaselines(fork, headSha, triggers) {
   return {command, claims: [...new Set(claims)].sort()};
 }
 
+/**
+ * Item h advice. Templates may exceed the size guideline, so their lines do
+ * not count.
+ */
+export function reviewSizeAdvice(changedCountByFile, isGenerated) {
+  return sizeAdvice(
+    authoredLineCount(
+      changedCountByFile,
+      file => isGenerated(file) || TEMPLATES.test(file),
+    ),
+  );
+}
+
 /** Each checklist item that has findings, with its count. */
 export function findingChecks(findings) {
   const counts = new Map();
@@ -355,9 +368,8 @@ export function buildReport({base = 'origin/main', head = null} = {}) {
       .map(change => change.filename),
   );
   const generated = generatedPaths(files, head ? headSha : null);
-  const authoredLines = authoredLineCount(changedCountByFile, file =>
-    generated.has(file),
-  );
+  const isGenerated = file => generated.has(file);
+  const authoredLines = authoredLineCount(changedCountByFile, isGenerated);
   const merge = mergeConflicts(base, head ?? 'HEAD');
   const coverage = checkCoverage({
     changes,
@@ -390,6 +402,7 @@ export function buildReport({base = 'origin/main', head = null} = {}) {
     mergeBase: fork,
     scope: classifyChanges(changes).reason,
     authoredLines,
+    sizeAdvice: reviewSizeAdvice(changedCountByFile, isGenerated),
     merge,
     findings,
     files: files.map(file => ({file, class: fileClass(file, classes[file])})),
@@ -405,7 +418,6 @@ export function formatReport(report) {
   if (report.files.length === 0) {
     return `No changes against ${report.base}...${report.head}.`;
   }
-  const advice = sizeAdvice(report.authoredLines);
   const lines = [
     `Pre-review: ${report.base}...${report.head} (merge base ${report.mergeBase.slice(0, 12)})`,
     `Scope: ${report.scope}`,
@@ -436,7 +448,7 @@ export function formatReport(report) {
         ]),
     '',
     `Authored lines: ${report.authoredLines} (guideline ${SIZE_GUIDELINE}; lockfiles, snapshots, and generated files excluded)`,
-    ...(advice ? [`  ${advice}`] : []),
+    ...(report.sizeAdvice ? [`  ${report.sizeAdvice}`] : []),
     report.merge.error
       ? `Merge into ${report.base}: not checked: ${report.merge.error}`
       : `Merge into ${report.base}: ${report.merge.conflicts.length ? `${report.merge.conflicts.length} conflicting files` : 'clean'}`,
