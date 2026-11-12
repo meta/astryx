@@ -48,10 +48,15 @@ export function splitHeredocs(command) {
   const code = [];
   const shell = command.replace(
     /([^\n]*)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n([\s\S]*?)\n\s*\3(?=\n|$)/g,
-    (_whole, before, _quote, _marker, after, body) => {
+    (_whole, before, quote, _marker, after, body) => {
       const runner = `${before} ${after}`;
       if (SHELL.test(runner)) return `${runner}\n${body}`;
       if (INTERPRETER.test(runner)) code.push(body);
+      // The shell runs command substitutions in an unquoted heredoc body.
+      if (!quote) {
+        const substitutions = [...body.matchAll(/\$\(([^)]*)\)|`([^`]*)`/g)].map(match => match[1] ?? match[2]);
+        if (substitutions.length > 0) return `${runner}\n${substitutions.join('\n')}`;
+      }
       return runner;
     },
   );
@@ -91,7 +96,8 @@ const RECURSIVE_READER =
   /(?:^|[\s|;&(])(?:rg|ag|ack|[efz]?grep\s+(?:[^|]*\s)?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive))(?=\s|$)|(?:\$\(|`)\s*find\s|\bfind\s[^|]*(?:-exec|-execdir|-ok)\b|\bfind\s.*\|\s*xargs\b/;
 
 /** Commands whose quoted arguments are text: a sed script or a search pattern. */
-const TEXT_ARGUMENTS = /^(?:\w+=\S*\s+)*(?:sed|[efz]?grep|rg|ag|ack)(?=\s|$)/;
+const TEXT_ARGUMENTS =
+  /^(?:\w+=\S*\s+)*(?:xargs(?:\s+-\S+)*\s+)?(?:sed|[efz]?grep|rg|ag|ack|git\s+grep)(?=\s|$)|\s-exec(?:dir)?\s+(?:sed|[efz]?grep)\s/;
 
 /** Splits a segment at pipes that are outside quotes. */
 function pipelineStages(segment) {

@@ -149,6 +149,8 @@ describe('reads the review found unaudited', () => {
     `node -e "console.log(require('fs').readFileSync('/repo/x.probe.mjs', 'utf8'))" | grep getByRole`,
     `bash -c "cat /repo/x.probe.mjs | grep expect"`,
     `sh -c 'cat /runs/r1/runs/other__arm__r1/workspace/src/App.tsx | grep Button'`,
+    'cat > notes.txt <<EOF\n$(cat /repo/x.probe.mjs)\nEOF',
+    'cat > notes.txt <<EOF\n`cat /repo/x.probe.mjs`\nEOF',
   ])('fails %j', command => {
     expect(audit(command).violations.length).toBeGreaterThan(0);
   });
@@ -173,6 +175,11 @@ describe('reads the review found unaudited', () => {
     `grep -n "'../" src/App.tsx`,
     `cat src/App.tsx | grep "from '../lib"`,
     'grep -rn useState /usr/include',
+    `find src -name '*.tsx' | xargs grep -l "from '../lib"`,
+    `find src -name '*.tsx' | xargs sed -i "s|'../lib/utils'|'@/lib/utils'|"`,
+    `find src -name '*.tsx' -exec sed -i "s|'../lib/utils'|'@/lib/utils'|" {} +`,
+    `git grep -n "from '../lib"`,
+    "cat > notes.txt <<'EOF'\n$(cat /repo/x.probe.mjs)\nEOF",
   ])('passes %j', command => {
     expect(audit(command).violations).toEqual([]);
   });
