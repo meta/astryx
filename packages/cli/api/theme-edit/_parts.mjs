@@ -17,25 +17,21 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {isAlive} from '../../foundation/release/cache.mjs';
+import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {importPathOf, installLine} from './_project.mjs';
+import {importPathOf, installLine, literals} from './_project.mjs';
+import {removeEmptyFolder} from './_palette.mjs';
+import {VOID} from '../../foundation/render/html-reader.mjs';
 import {
   RENDER_TIMEOUT_MS,
   renderPage,
   RenderError,
 } from '../../foundation/render/render-page.mjs';
-import {
-  EXTRA,
-  OPEN_OVERLAYS,
-  SAMPLE_PAGE,
-  elementNames,
-  pageSource,
-} from './_catalog.mjs';
+import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 3;
+const PART_DATA_VERSION = 4;
 
 /**
  * @typedef {object} PartRecord
@@ -52,33 +48,193 @@ const PART_DATA_VERSION = 3;
  */
 
 /**
- * The catalog: each component with playground defaults once per visual
- * variant value, the hand-made extras, and the sample page.
+ * A sample value for a required prop the doc declares, from its type: the
+ * component's name for text, false for a flag, the first value of a union.
+ * Undefined for a type with no plain sample, such as a function.
+ * @param {string} name
+ * @param {string} type
+ * @returns {unknown}
+ */
+function sampleOf(name, type) {
+  if (type.includes('=>')) return undefined;
+  // Null and undefined are the absence of a value, never a sample.
+  const t = type
+    .split('|')
+    .map(x => x.trim())
+    .filter(x => x !== 'null' && x !== 'undefined')
+    .join(' | ');
+  if (t === 'string' || /ReactNode$/.test(t)) return name;
+  if (t === 'boolean') return false;
+  if (t === 'number') return 1;
+  const words = literals(t);
+  if (words.length) return words[0];
+  if (/^\d+(\s*\|\s*\d+)*$/.test(t)) return Number(t.split('|')[0]);
+  return undefined;
+}
+
+/**
+ * Three items made from the element the doc suggests for a group's
+ * children, each with its own label and value; the first takes the group's
+ * value, so it shows selected.
+ * @param {{__element: string, props?: Record<string, unknown>, children?: unknown}} slot
+ * @param {unknown} selected
+ */
+function slotItems(slot, selected) {
+  return [1, 2, 3].map(i => {
+    const props = {...(slot.props ?? {})};
+    if (typeof props.label === 'string') props.label = `${props.label} ${i}`;
+    if ('value' in props || typeof selected === 'string')
+      props.value =
+        i === 1 && typeof selected === 'string'
+          ? selected
+          : `${String(props.value ?? 'item')}-${i}`;
+    return {...slot, props};
+  });
+}
+
+/**
+ * The props a component renders with: its doc's playground defaults, or,
+ * for a doc with none (an older Core), a sample for each required prop.
+ * A group with no children gets three of the items its doc suggests. Null
+ * for a doc with no defaults that has no theming targets (a hook or a
+ * helper), or that is a part its parent lists as an item: it works only
+ * inside the parent, whose own entry shows it.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @returns {Record<string, unknown> | null}
+ */
+export function demoProps(project, name) {
+  const info = project.components[name];
+  const given =
+    info.defaults && typeof info.defaults === 'object'
+      ? /** @type {Record<string, unknown>} */ ({...info.defaults})
+      : null;
+  if (
+    !given &&
+    // Only a component a theme styles: hooks, providers and helpers have
+    // docs too, and render nothing.
+    (!/^[A-Z]/.test(name) ||
+      !info.targets.length ||
+      // A doc that declares no props of its own name is a family page,
+      // not a component the Core exports.
+      !Object.keys(info.props ?? {}).length ||
+      (info.subComponentOf && isItemOf(project, name)))
+  )
+    return null;
+  const props = given ?? {};
+  if (!given)
+    for (const [p, d] of Object.entries(info.props ?? {})) {
+      if (!d.required || /^on[A-Z]/.test(p)) continue;
+      if (p === 'children' && d.slots.length) continue;
+      const v = sampleOf(name, d.type);
+      // A required prop with no plain sample, such as a render function:
+      // the component cannot be shown from its doc alone.
+      if (v === undefined) return null;
+      props[p] = v;
+    }
+  const kids = info.props?.children;
+  const slot = kids?.slots?.[0];
+  if (!('children' in props) && kids) {
+    if (slot?.__element && (kids.required || slot.__element.startsWith(name))) {
+      if (info.props.value && !('value' in props) && slot.props?.value != null)
+        props.value = `${String(slot.props.value)}-1`;
+      props.children = slotItems(slot, props.value);
+    }
+  }
+  return props;
+}
+
+/**
+ * Whether a part's parent lists it as an item of its children.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ */
+export function isItemOf(project, name) {
+  const parent = project.components[name]?.subComponentOf;
+  const slots = parent
+    ? (project.components[parent]?.props?.children?.slots ?? [])
+    : [];
+  return slots.some(s => s?.__element === name);
+}
+
+/**
+ * A component's catalog entries, all from its doc: its demo props
+ * ({@link demoProps}), then once per value of each visual prop with a
+ * closed set of values (`variant`, `status`, `color`, and a number union
+ * such as a heading's level), and its checked and disabled states. An
+ * overlay the playground shows in place renders open; on a page people
+ * see, once, as some of its variants size the window, not the card.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @param {number} cap at most this many
+ * @param {{shown?: boolean}} [opts] `shown`: for a page people see
+ * @returns {Array<{label: string, props: Record<string, unknown>}>}
+ */
+export function catalogVariants(project, name, cap, opts = {}) {
+  const info = project.components[name];
+  const demo = demoProps(project, name);
+  if (!demo) return [];
+  if (info.opens && opts.shown)
+    return [
+      {label: '', props: 'isOpen' in demo ? demo : {...demo, isOpen: true}},
+    ];
+  const base =
+    info.opens && !('isOpen' in demo) ? {...demo, isOpen: true} : demo;
+  const values = info.targets[0]?.values ?? {};
+  const variants = [{label: '', props: base}];
+  for (const p of ['variant', 'status', 'color'])
+    for (const v of values[p] ?? [])
+      variants.push({
+        label: v,
+        // A status like `{type: 'error', message?: string}` takes the
+        // value as its `type`; the bare string breaks the component.
+        props: {
+          ...base,
+          [p]: info.props?.[p]?.type.startsWith('{') ? {type: v} : v,
+        },
+      });
+  // The states the doc names that a prop sets: checked (a boolean value)
+  // and disabled. The label says the state shown.
+  const states = new Set(info.targets.flatMap(t => t.states ?? []));
+  if (states.has('checked') && info.props?.value?.type.startsWith('boolean')) {
+    const on = base.value !== true;
+    variants.push({
+      label: on ? 'on' : 'off',
+      props: {
+        ...base,
+        value: on,
+        ...(typeof base.label === 'string' ? {label: on ? 'On' : 'Off'} : {}),
+      },
+    });
+  }
+  if (states.has('disabled') && info.props?.isDisabled)
+    variants.push({label: 'disabled', props: {...base, isDisabled: true}});
+  for (const p of Object.keys(values)) {
+    const type = info.props?.[p]?.type ?? '';
+    if (!/^\s*\d+(\s*\|\s*\d+)*\s*$/.test(type)) continue;
+    for (const n of type.split('|').map(Number))
+      if (n !== base[p])
+        variants.push({label: `${p} ${n}`, props: {...base, [p]: n}});
+  }
+  return variants.slice(0, cap);
+}
+
+/**
+ * The catalog: each component with playground defaults, once per visual
+ * variant value ({@link catalogVariants}), and the sample page.
  * @param {import('./_project.mjs').ThemeProject} project
  * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, string>}}
  */
 export function catalogItems(project) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
-  for (const [name, info] of Object.entries(project.components)) {
-    const defaults = /** @type {any} */ (info.defaults);
-    if (!defaults || typeof defaults !== 'object') continue;
-    const values = info.targets[0]?.values ?? {};
-    /** @type {Array<Record<string, string>>} */
-    const variants = [{}];
-    for (const p of ['variant', 'status', 'color'])
-      for (const v of values[p] ?? []) variants.push({[p]: v});
-    for (const v of variants.slice(0, 16)) {
-      const label = Object.values(v).join(' ');
+  for (const name of Object.keys(project.components))
+    for (const v of catalogVariants(project, name, 16))
       items.push({
         name,
-        label,
-        tree: {__element: name, props: {...defaults, ...v}},
+        label: v.label,
+        tree: {__element: name, props: v.props},
       });
-    }
-  }
-  for (const [name, list] of [...EXTRA, ...OPEN_OVERLAYS])
-    for (const [label, tree] of list) items.push({name, label, tree});
   /** @type {Record<string, string>} */
   const imports = {};
   for (const n of elementNames([items.map(i => i.tree), SAMPLE_PAGE])) {
@@ -86,6 +242,24 @@ export function catalogItems(project) {
     if (spec) imports[n] = spec;
   }
   return {items, imports};
+}
+
+/**
+ * What of React the project cannot resolve (react, react-dom/server), to
+ * render the editor's pages; empty when both resolve.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+export function reactMissing(cwd) {
+  const req = createRequire(path.join(cwd, 'package.json'));
+  return ['react', 'react-dom/server'].filter(m => {
+    try {
+      req.resolve(m);
+      return false;
+    } catch {
+      return true;
+    }
+  });
 }
 
 /** How long the editor's own pages may take to render. */
@@ -106,8 +280,8 @@ export const renderDir = project =>
 
 /**
  * Remove render folders a stopped command left (killed, out of memory):
- * only `.astryx-render-<pid>-<random>` folders whose process is gone. Links
- * are never followed.
+ * only `.astryx-render-<pid>-<random>` folders more than ten minutes old.
+ * Links are never followed.
  * @param {string} themes
  */
 function sweepRenders(themes) {
@@ -120,8 +294,18 @@ function sweepRenders(themes) {
   for (const n of names) {
     const m = /^\.astryx-render-(\d+)-[a-z0-9]+$/.exec(n);
     if (!m || Number(m[1]) === process.pid) continue;
-    if (isAlive(Number(m[1]))) continue;
     const p = path.join(themes, n);
+    // A process id from another process space may look gone or alive here,
+    // so age decides: a render takes at most three minutes, and a folder
+    // older than ten is a leftover.
+    /** @type {number} */
+    let age;
+    try {
+      age = Date.now() - fs.lstatSync(p).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (age < 10 * 60_000) continue;
     try {
       if (fs.lstatSync(p).isDirectory())
         fs.rmSync(p, {recursive: true, force: true});
@@ -165,7 +349,12 @@ export async function renderGenerated(project, file, source, extra = []) {
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
   const entry = path.join(dir, file);
-  fs.writeFileSync(entry, source);
+  // Demo images point at the docs site's own folder (`/template-assets/…`),
+  // which a page opened from disk cannot reach: the inline placeholder
+  // takes their place, as when a template is scaffolded.
+  const {stripTemplateAssetRefs} =
+    await import('../../foundation/discovery/template-adapter.mjs');
+  fs.writeFileSync(entry, stripTemplateAssetRefs(source));
   for (const x of extra) {
     fs.mkdirSync(path.dirname(path.join(dir, x.name)), {recursive: true});
     fs.copyFileSync(x.from, path.join(dir, x.name));
@@ -191,7 +380,7 @@ export async function renderGenerated(project, file, source, extra = []) {
       const slow = e.code === 'ERR_RENDER_TIMEOUT';
       throw new AstryxError(
         slow
-          ? `The components did not finish rendering within ${EDITOR_RENDER_MS / 1000} seconds, so the render was stopped. The machine may be busy: run the command again when it is less loaded.`
+          ? `The components did not finish rendering within ${EDITOR_RENDER_MS / 1000} seconds, so the render was stopped. The theme files are written; only its pages were not rendered. The machine may be busy: run show again when it is less loaded.`
           : `Could not render the components with this project's React: ${e.message}${missing ? ' The theme command renders components on the server, so react and react-dom must be installed.' : ''}`,
         missing
           ? [
@@ -212,7 +401,8 @@ export async function renderGenerated(project, file, source, extra = []) {
     // it, so a render running beside this one keeps its own.
     for (const f of [entry, ...extra.map(x => path.join(dir, x.name))])
       fs.rmSync(f, {force: true});
-    removeEmpty(madeThemes ? themes : dir);
+    // Another render may still use it: a folder with a file in it stays.
+    removeEmptyFolder(madeThemes ? themes : dir, {deep: true});
     process.removeListener('SIGINT', onSignal);
     process.removeListener('SIGTERM', onSignal);
   }
@@ -220,21 +410,6 @@ export async function renderGenerated(project, file, source, extra = []) {
 
 /** @param {unknown} v @returns {v is Record<string, unknown>} */
 const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
-
-/**
- * Remove `dir` and the folders under it when no file is left in them.
- * @param {string} dir
- */
-function removeEmpty(dir) {
-  if (!fs.existsSync(dir)) return;
-  for (const e of fs.readdirSync(dir, {withFileTypes: true}))
-    if (e.isDirectory()) removeEmpty(path.join(dir, e.name));
-  try {
-    fs.rmdirSync(dir);
-  } catch {
-    // Not empty: another render is using it.
-  }
-}
 
 /**
  * The part data for the installed Core, from the cache or built now.
@@ -336,22 +511,6 @@ export function declarations(css) {
   return decls;
 }
 
-const VOID = new Set([
-  'area',
-  'base',
-  'br',
-  'col',
-  'embed',
-  'hr',
-  'img',
-  'input',
-  'link',
-  'meta',
-  'source',
-  'track',
-  'wbr',
-]);
-
 /** @param {string} v */
 const refs = v => [...v.matchAll(/var\((--[a-zA-Z0-9_-]+)/g)].map(m => m[1]);
 
@@ -393,7 +552,6 @@ export function walkMarkup(html, decls, tokens) {
   const stack = [{env: {}, target: null, fg: null, bg: null}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
-  let inSample = false;
   for (const m of html.matchAll(
     /([^<]+)|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*?)(\/?)>/g,
   )) {
@@ -412,13 +570,10 @@ export function walkMarkup(html, decls, tokens) {
       }
       continue;
     }
-    if (!close && tag === 'section')
-      inSample = /data-cat="sample-page"/.test(attrs);
     if (close) {
       if (stack.length > 1) stack.pop();
       continue;
     }
-    void inSample;
     const cls = (/class="([^"]*)"/.exec(attrs)?.[1] ?? '')
       .split(/\s+/)
       .filter(Boolean);

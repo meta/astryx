@@ -117,13 +117,13 @@ export const doc = {
       value: 'themeEdit.new',
       stability: 'experimental',
       description:
-        'A theme made by `experimental theme editor new`: `theme`, `like` (the built-in theme it builds on, or null), the `files` written (settings, source, css, module), the dial `settings` it started with, font `notes`, contrast `problems`, the `preview` page, and any `pictures` (with `pictureProblem` when none could be taken). Experimental: may change or be removed in a patch release.',
+        'A theme made by `experimental theme editor new`: `theme`, `like` (the built-in theme it builds on, or null), the `files` written (settings, source, css, module), the dial `settings` it started with, font `notes`, contrast `problems`, the `preview` page, and any `pictures` (with `pictureProblem` when none could be taken), and `sheetStale` when a sheet.html left in the folder shows an older look. Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.set',
       stability: 'experimental',
       description:
-        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, build `warnings`, the `preview` page and any `pictures`. Experimental: may change or be removed in a patch release.',
+        'One checked change written: the `setting`, the one it `replaced`, `was` (for base and mode), the `parts` and `group` it styles, resolved `changedTokens`, part styles written (`styled`), part settings a dial `kept`, newly `lifted` variant keys, `notes`, contrast `problems`, build `warnings`, the `preview` page and any `pictures`, and `sheetStale` when sheet.html (made by `show`) still shows the theme as it was before. Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.show',
@@ -135,7 +135,7 @@ export const doc = {
       value: 'themeEdit.undo',
       stability: 'experimental',
       description:
-        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page and any `pictures`. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` and `removed` both naming the setting removed, and `now` saying what applies instead (a whole-theme setting of the same thing, or the base theme's value; `changedTokens` lists the values). Experimental: may change or be removed in a patch release.",
+        "An undo. One step back (`action` `step`): what was `undone`, the `settings` count now, the `stepsLeft`, the `preview` page, any `pictures`, and `sheetStale` when sheet.html still shows the theme as it was. One setting removed (`action` `undo`): the same fields as `themeEdit.set`, with `setting` and `removed` both naming the setting removed, and `now` saying what applies instead (a whole-theme setting of the same thing, or the base theme's value; `changedTokens` lists the values). Experimental: may change or be removed in a patch release.",
     },
     {
       value: 'themeEdit.previewAdd',
@@ -153,7 +153,7 @@ export const doc = {
       value: 'themeEdit.previewList',
       stability: 'experimental',
       description:
-        'The pages of the theme preview: the route `folder` (null with no preview), the `theme`, and the `pages` (`id`, `label`). Experimental: may change or be removed in a patch release.',
+        'The pages of the theme preview: the route `folder` (null with no preview), the `theme`, `themeMissing` (true when that theme is gone), the `pages` (`id`, `label`) and `notes`. Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.previewRemove',

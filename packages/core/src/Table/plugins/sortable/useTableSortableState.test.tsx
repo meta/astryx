@@ -437,6 +437,23 @@ describe('useTableSortableState', () => {
         {sortKey: 'name', direction: 'ascending'},
       ]);
     });
+    it('calls the onSortChange from the latest render, not the one from the last sort change', async () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      const sort: TableSortState = [];
+      const {rerender} = render(
+        <SortableStateTable sort={sort} onSortChange={first} />,
+      );
+      // A new handler arrives while the sort state stays the same.
+      rerender(<SortableStateTable sort={sort} onSortChange={second} />);
+
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
+
+      expect(first).not.toHaveBeenCalled();
+      expect(second).toHaveBeenCalledWith([
+        {sortKey: 'name', direction: 'ascending'},
+      ]);
+    });
   });
 
   describe('multi-sort', () => {

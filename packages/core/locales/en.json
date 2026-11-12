@@ -1035,6 +1035,10 @@
     "defaultMessage": "Table",
     "description": "Fallback screen-reader-only accessible name for a data-table region when the consumer provides none. Noun (\"a table\"), not the verb \"to table\"."
   },
+  "@astryx.table.loadMore": {
+    "defaultMessage": "Load more",
+    "description": "Button that requests another batch of table rows. Verb phrase; shown while additional rows are available."
+  },
   "@astryx.table.noData": {
     "defaultMessage": "No data",
     "description": "Fallback empty-state text in the table body when there are zero rows. Neutral tone (not error-y); consumers commonly override with something specific like \"No results\"."
@@ -2403,6 +2407,10 @@
     "defaultMessage": "Edit history",
     "description": "Title of the dialog listing a comment's earlier versions in a lab Comments panel."
   },
+  "@astryx.comments.linkCopyFailed": {
+    "defaultMessage": "Failed to copy value to clipboard.",
+    "description": "Label, tooltip and screen-reader announcement the Copy comment link button takes for two seconds after the clipboard write fails, in a lab Comments panel. Pairs with `comments.copyLink` and `comments.linkCopied`."
+  },
   "@astryx.comments.linkCopied": {
     "defaultMessage": "Comment link copied",
     "description": "Label the Copy comment link button takes for two seconds after copying, in a lab Comments panel."
@@ -2570,5 +2578,9 @@
   "@astryx.navigationStack.back": {
     "defaultMessage": "Back",
     "description": "Label of the back button in a lab NavigationStack's bar when the screen it returns to has no title of its own. Returns to the previous screen; keep it short, as on an iOS navigation bar."
+  },
+  "@astryx.searchField.cancel": {
+    "defaultMessage": "Cancel",
+    "description": "Accessible name of a lab SearchField's close button, which ends the search: it clears the query, ends editing and deactivates the field."
   }
 }

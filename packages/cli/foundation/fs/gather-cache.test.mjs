@@ -71,6 +71,40 @@ describe('a recorded run', () => {
     expect(recordedRun()).toBe(null);
   });
 
+  it('keeps recording after a gather nested inside another, until the outer one ends', async () => {
+    const real = process.env;
+    const name = `ASTRYX_GATHER_CACHE_NESTED_${process.pid}`;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gather-cache-nested-'));
+    const late = path.join(dir, 'late.cjs');
+    fs.writeFileSync(late, 'module.exports = 1;\n');
+    try {
+      await recordRun(async () => {
+        const run = /** @type {NonNullable<ReturnType<typeof recordedRun>>} */ (
+          recordedRun()
+        );
+        await persistedGather(
+          ['outer'],
+          async () => {
+            await persistedGather(['inner'], async () => 'inner', identity);
+            // Still the outer gather: its env reads and module loads count.
+            expect(process.env).not.toBe(real);
+            void process.env[name];
+            expect(run.env.has(name)).toBe(true);
+            withoutRecording(() => createRequire(import.meta.url)(late));
+            expect(run.reads.has(late)).toBe(true);
+            return 'outer';
+          },
+          identity,
+        );
+        // The outer gather is done: the real environment again.
+        expect(process.env).toBe(real);
+      });
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+    expect(process.env).toBe(real);
+  });
+
   it('notes the modules a gather loads while it is armed', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gather-cache-hook-'));
     // Loaded through Node's own loader (vitest serves its own imports), and
