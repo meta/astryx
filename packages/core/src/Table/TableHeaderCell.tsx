@@ -96,7 +96,19 @@ const stickyHeaderStyles = stylex.create({
     position: 'sticky',
     insetBlockStart: 0,
     zIndex: 2,
-    backgroundColor: colorVars['--color-background-surface'],
+    backgroundColor:
+      'var(--table-sticky-background, var(--color-background-card))',
+    // Collapsed table borders stay at the cell's static position when the
+    // header moves. Paint the separator in the moved cell as sticky columns do.
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      insetInline: 0,
+      insetBlockEnd: 0,
+      blockSize: borderVars['--border-width'],
+      backgroundColor: colorVars['--color-border'],
+      pointerEvents: 'none',
+    },
   },
 });
 
@@ -157,7 +169,7 @@ export function TableHeaderCell({
     if (ctx.dividers === 'columns' || ctx.dividers === 'grid') {
       cellStyles.push(dividerColumnStyles.cell);
     }
-    if (ctx.stickyHeader) {
+    if (ctx.hasStickyHeader) {
       cellStyles.push(stickyHeaderStyles.cell);
     }
   }

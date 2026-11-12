@@ -122,7 +122,7 @@ const meta: Meta = {
       control: 'boolean',
       description: 'Highlight rows on hover',
     },
-    stickyHeader: {
+    hasStickyHeader: {
       control: 'boolean',
       description: 'Keep the header visible while the table scrolls vertically',
     },
@@ -179,7 +179,7 @@ export const StripedWithHover: Story = {
 
 export const StickyHeader: Story = {
   args: {
-    stickyHeader: true,
+    hasStickyHeader: true,
   },
   render: args => {
     const rows = Array.from({length: 18}, (_, index) => ({
@@ -192,6 +192,8 @@ export const StickyHeader: Story = {
       <div
         style={{
           maxHeight: '240px',
+          width: '320px',
+          maxWidth: '100%',
           overflowY: 'auto',
           border: '1px solid #d9d9de',
           borderRadius: '8px',
@@ -200,7 +202,8 @@ export const StickyHeader: Story = {
           data={rows}
           columns={columns}
           idKey="id"
-          stickyHeader={args.stickyHeader}
+          hasStickyHeader={args.hasStickyHeader}
+          style={{minWidth: '720px'}}
         />
       </div>
     );
