@@ -33,6 +33,7 @@ import {
   type DateInputEntryError,
   type DateInputProps,
 } from './DateInput';
+import {FormLayout} from '../FormLayout';
 import {Icon} from '../Icon';
 import {InputGroup} from '../InputGroup';
 import {InputGroupText} from '../InputGroup/InputGroupText';
@@ -466,6 +467,193 @@ describe('DateInput', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('shows nonexistent typed date error immediately when entry is complete by default', () => {
+    render(<DateInput label="Due" onChange={() => {}} max="2026-12-31" />);
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(/real date/i)).toBeInTheDocument();
+  });
+
+  it('shows out-of-range typed date error immediately when entry is complete by default', () => {
+    render(<DateInput label="Due" onChange={() => {}} max="2026-02-15" />);
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '03/01/2026'}});
+
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(/on or before/i)).toBeInTheDocument();
+  });
+
+  it('defers nonexistent typed date error until blur with entryErrorBehavior="blur-or-enter"', () => {
+    render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        max="2026-12-31"
+        entryErrorBehavior="blur-or-enter"
+      />,
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText(/real date/i)).not.toBeInTheDocument();
+
+    fireEvent.blur(input);
+
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(/real date/i)).toBeInTheDocument();
+  });
+
+  it('defers nonexistent typed date error until Enter with entryErrorBehavior="blur-or-enter"', () => {
+    render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        max="2026-12-31"
+        entryErrorBehavior="blur-or-enter"
+      />,
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText(/real date/i)).not.toBeInTheDocument();
+
+    fireEvent.keyDown(input, {key: 'Enter'});
+
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(/real date/i)).toBeInTheDocument();
+  });
+
+  it('defers an out-of-range typed date error until blur with entryErrorBehavior="blur-or-enter"', () => {
+    render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        max="2026-02-15"
+        entryErrorBehavior="blur-or-enter"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '03/01/2026'}});
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText(/on or before/i)).not.toBeInTheDocument();
+    fireEvent.blur(input);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('inherits defaultEntryErrorBehavior="blur-or-enter" from FormLayout', () => {
+    render(
+      <FormLayout defaultEntryErrorBehavior="blur-or-enter">
+        <DateInput label="Due" onChange={() => {}} max="2026-12-31" />
+      </FormLayout>,
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText(/real date/i)).not.toBeInTheDocument();
+
+    fireEvent.blur(input);
+
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(/real date/i)).toBeInTheDocument();
+  });
+
+  it('allows field-level entryErrorBehavior to override FormLayout default', () => {
+    render(
+      <FormLayout defaultEntryErrorBehavior="blur-or-enter">
+        <DateInput
+          label="Due"
+          onChange={() => {}}
+          max="2026-12-31"
+          entryErrorBehavior="complete"
+        />
+      </FormLayout>,
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(/real date/i)).toBeInTheDocument();
+  });
+
+  it('defers unreadable text rejection until blur or enter with entryErrorBehavior="blur-or-enter"', () => {
+    render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        entryErrorBehavior="blur-or-enter"
+      />,
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'abc'}});
+
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText(/invalid date/i)).not.toBeInTheDocument();
+
+    fireEvent.blur(input);
+
+    expect(screen.getByText(/invalid date/i)).toBeInTheDocument();
+  });
+
+  it('holds onEntryErrorChange until blur or enter with entryErrorBehavior="blur-or-enter"', () => {
+    const onEntryErrorChange = vi.fn();
+    render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        onEntryErrorChange={onEntryErrorChange}
+        max="2026-12-31"
+        entryErrorBehavior="blur-or-enter"
+      />,
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+
+    expect(onEntryErrorChange).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+
+    expect(onEntryErrorChange).toHaveBeenCalledWith(
+      expect.objectContaining({kind: 'nonexistent'}),
+    );
+  });
+
+  it('keeps revealed rejection during subsequent invalid edits under entryErrorBehavior="blur-or-enter"', () => {
+    render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        max="2026-12-31"
+        entryErrorBehavior="blur-or-enter"
+      />,
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    fireEvent.blur(input);
+
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+
+    // edit to another invalid value keeps rejection
+    fireEvent.change(input, {target: {value: '02/32/2026'}});
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+
+    // edit to valid value clears rejection
+    fireEvent.change(input, {target: {value: '02/28/2026'}});
+    expect(input).not.toHaveAttribute('aria-invalid');
+  });
   // --- P1: Input disabled during isBusy (isLoading) ---
 
   it('blocks input and button without native disabled when isLoading is true', () => {

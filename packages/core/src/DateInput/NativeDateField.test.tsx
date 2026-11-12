@@ -434,6 +434,30 @@ describe('DateInput nativePicker', () => {
     expect(getInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
+  it('defers refusal announcement until blur with entryErrorBehavior="blur-or-enter"', () => {
+    stubPointer(true);
+    const onChange = vi.fn();
+    render(
+      <DateInput
+        label="Date"
+        min="2026-03-10"
+        max="2026-03-20"
+        value="2026-03-15"
+        onChange={onChange}
+        entryErrorBehavior="blur-or-enter"
+      />,
+    );
+
+    fireEvent.change(getInput(), {target: {value: '2026-03-25'}});
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Invalid date');
+
+    fireEvent.blur(getInput());
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Invalid date');
+  });
+
   it('refuses a date dateConstraints rejects', () => {
     stubPointer(true);
     const onChange = vi.fn();

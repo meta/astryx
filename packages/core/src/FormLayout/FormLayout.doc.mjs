@@ -32,6 +32,13 @@ export const docs = {
         'The state the form treats as its default, so only the exception shows an optional/required indicator. With "optional", only fields marked isRequired show an indicator; with "required", only fields marked isOptional do. A field that restates the default shows nothing. Under "required" the unmarked fields also expose aria-required so screen readers match the visual default; aria-required only, never the native required attribute. CheckboxInput, Switch and CheckboxList are the exception: an unchecked box, an off switch or an empty group is an answer, so they take no required state from the default. A CheckboxInput or Switch is required only through its own isRequired. Leave unset for today\'s per-field behavior.',
     },
     {
+      name: 'defaultEntryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        'Default entry error timing for descendant fields that validate their own entries (DateInput, DateTimeInput). With "complete", an error appears as soon as the entry is complete. With "blur-or-enter", error display and announcement wait until the user presses Enter or moves focus away from the field. A field\'s own entryErrorBehavior prop overrides this default.',
+      default: "'complete'",
+    },
+    {
       name: 'children',
       type: 'ReactNode',
       description:

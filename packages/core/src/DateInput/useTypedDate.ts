@@ -13,8 +13,19 @@
  * @position DateInput helper hook; used by DateInput and DateTimeInput
  */
 
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type {InputStatus} from '../Field/types';
+import {
+  type EntryErrorBehavior,
+  FormLayoutContext,
+} from '../FormLayout/FormLayoutContext';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {
@@ -131,12 +142,25 @@ export interface TypedDate {
   errorMessage: (result: CalendarDateParseResult) => string;
 }
 
-/** The rejection a result shows: errors of complete text, or of committed text. */
+/** The rejection of a result according to entryErrorBehavior. */
 export function typedDateError(
   result: CalendarDateParseResult | null,
   isCommitted: boolean,
+  entryErrorBehavior: EntryErrorBehavior,
 ): TypedDateError | null {
   if (result == null) {
+    return null;
+  }
+  if (entryErrorBehavior === 'blur-or-enter') {
+    if (!isCommitted) {
+      return null;
+    }
+    if (result.kind === 'unreadable' || result.kind === 'incomplete') {
+      return 'unreadable';
+    }
+    if (result.kind === 'nonexistent' || result.kind === 'outOfRange') {
+      return result.kind;
+    }
     return null;
   }
   if (
@@ -145,11 +169,10 @@ export function typedDateError(
   ) {
     return 'unreadable';
   }
-  if (
-    (result.kind === 'nonexistent' || result.kind === 'outOfRange') &&
-    (result.isComplete || isCommitted)
-  ) {
-    return result.kind;
+  if (result.kind === 'nonexistent' || result.kind === 'outOfRange') {
+    if (result.isComplete || isCommitted) {
+      return result.kind;
+    }
   }
   return null;
 }
@@ -161,8 +184,9 @@ function dateEntryError(
   text: string,
   min: ISODateString | undefined,
   max: ISODateString | undefined,
+  entryErrorBehavior: EntryErrorBehavior,
 ): DateInputEntryError | null {
-  const error = typedDateError(result, isCommitted);
+  const error = typedDateError(result, isCommitted, entryErrorBehavior);
   if (error == null || result == null) {
     return null;
   }
@@ -348,6 +372,12 @@ export interface UseTypedDateFieldOptions extends UseTypedDateOptions {
   onEntryErrorChange?: (error: DateInputEntryError | null) => void;
   /** Whether the caller gave a placeholder, which replaces the format hint. */
   hasPlaceholder: boolean;
+  /**
+   * When an entry error is displayed and announced.
+   * - `'complete'` (default): shows as soon as the date is complete.
+   * - `'blur-or-enter'`: defers display and announcement until blur or Enter.
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
 }
 
 export interface TypedDateField {
@@ -384,13 +414,19 @@ export function useTypedDateField({
   isStatusAnnounced,
   onEntryErrorChange,
   hasPlaceholder,
+  entryErrorBehavior,
   ...options
 }: UseTypedDateFieldOptions): TypedDateField {
+  const formLayout = useContext(FormLayoutContext);
+  const resolvedBehavior =
+    entryErrorBehavior ?? formLayout?.defaultEntryErrorBehavior ?? 'complete';
+
   const typedDate = useTypedDate(options);
   // Typed text, or null when the field shows the committed value.
   const [pendingInput, setPendingInput] = useState<string | null>(null);
   // Set when Enter or blur keeps rejected text so the person can correct it.
   const [isRejectionCommitted, setIsRejectionCommitted] = useState(false);
+  const [revertedAlert, setRevertedAlert] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   // The date that typing last reported, so one typing session reports each
   // date once. Only the handlers write it. A value from outside and a
@@ -412,7 +448,7 @@ export function useTypedDateField({
   // shows again once the field is editable.
   const typedError = isDisabled
     ? null
-    : typedDateError(typedResult, isRejectionCommitted);
+    : typedDateError(typedResult, isRejectionCommitted, resolvedBehavior);
   const errorMessage =
     typedError != null && typedResult != null
       ? typedDate.errorMessage(typedResult)
@@ -434,6 +470,7 @@ export function useTypedDateField({
         pendingInput ?? '',
         options.min,
         options.max,
+        resolvedBehavior,
       );
 
   // The rejection that the caller last received. Handlers report a rejection
@@ -496,7 +533,9 @@ export function useTypedDateField({
   }
 
   let alertMessage = '';
-  if (errorMessage != null && !isCallerBehind) {
+  if (revertedAlert != null) {
+    alertMessage = revertedAlert;
+  } else if (errorMessage != null && !isCallerBehind) {
     if (callerErrorMessage != null) {
       const isStatusRepeated =
         statusRecord.isRepeatable &&
@@ -612,10 +651,19 @@ export function useTypedDateField({
       if (isDisabled) {
         return;
       }
+      if (revertedAlert !== null) {
+        setRevertedAlert(null);
+      }
       setPendingInput(text);
-      setIsRejectionCommitted(false);
-      // Report a date only once more typing cannot change it.
+
       const result = typedDate.parse(text);
+      const isAccepted =
+        !text.trim() || (result.kind === 'value' && result.isComplete);
+      if (isAccepted || resolvedBehavior !== 'blur-or-enter') {
+        setIsRejectionCommitted(false);
+      }
+
+      // Report a date only once more typing cannot change it.
       reportEntryError(
         dateEntryError(
           text.trim() ? result : null,
@@ -623,8 +671,10 @@ export function useTypedDateField({
           text,
           options.min,
           options.max,
+          resolvedBehavior,
         ),
       );
+
       if (result.kind === 'value' && result.isComplete) {
         const date = plainDateToISO(result.date);
         if (report(date)) {
@@ -635,6 +685,7 @@ export function useTypedDateField({
     [
       isDisabled,
       typedDate,
+      resolvedBehavior,
       reportEntryError,
       options.min,
       options.max,
@@ -653,6 +704,13 @@ export function useTypedDateField({
       return;
     }
     const result = typedDate.parse(pendingInput);
+    if (result.kind === 'unreadable') {
+      if (resolvedBehavior === 'blur-or-enter') {
+        setRevertedAlert(typedDate.errorMessage(result));
+      }
+      reset();
+      return;
+    }
     if (
       result.kind === 'incomplete' ||
       result.kind === 'nonexistent' ||
@@ -662,7 +720,14 @@ export function useTypedDateField({
       // the date.
       setIsRejectionCommitted(true);
       reportEntryError(
-        dateEntryError(result, true, pendingInput, options.min, options.max),
+        dateEntryError(
+          result,
+          true,
+          pendingInput,
+          options.min,
+          options.max,
+          resolvedBehavior,
+        ),
       );
       return;
     }
@@ -677,6 +742,7 @@ export function useTypedDateField({
     isDisabled,
     onClear,
     typedDate,
+    resolvedBehavior,
     reportEntryError,
     options.min,
     options.max,

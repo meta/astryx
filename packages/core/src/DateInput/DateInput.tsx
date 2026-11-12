@@ -83,6 +83,7 @@ import {
 } from '../utils/inputPresentation';
 import {useCalendarPresentation} from './useCalendarPresentation';
 import {useDevWarning} from '../hooks/useDevWarning';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 
 const styles = stylex.create({
   iconButton: {
@@ -152,6 +153,7 @@ const sizeStyles = stylex.create({
 });
 
 export type DateInputSize = keyof typeof sizeStyles;
+export type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 
 /**
  * Named display formats for a committed date value. These are the date-only
@@ -532,6 +534,19 @@ export interface DateInputProps extends Omit<
    * @default 'adaptive-native'
    */
   presentation?: DateInputPresentation;
+
+  /**
+   * When an entry error is displayed and announced (such as a typed date that
+   * does not exist or falls outside min/max).
+   *
+   * - `'complete'` (default) — shows and announces the error as soon as the date is complete.
+   * - `'blur-or-enter'` — defers the error display, `aria-invalid`, and live region
+   *   announcement until the user presses Enter or moves focus away from the field (blur).
+   *
+   * A field's own prop overrides `FormLayout`'s `defaultEntryErrorBehavior`.
+   * @default 'complete'
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
 }
 
 /**
@@ -606,6 +621,7 @@ function PointerDateField({
   controlClassName,
   controlStyle,
   ref,
+  entryErrorBehavior,
   ...restProps
 }: DateInputProps) {
   const {rest, container} = useFieldInputStyling('DateInput', restProps, {
@@ -726,6 +742,7 @@ function PointerDateField({
     isStatusAnnounced: !inputGroup,
     onEntryErrorChange,
     hasPlaceholder: placeholderFromProps != null,
+    entryErrorBehavior,
   });
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
@@ -1167,11 +1184,18 @@ export function DateInput(props: DateInputProps) {
     calendar: _calendar,
     // Only the pointer field takes typed text.
     onEntryErrorChange,
+    entryErrorBehavior,
     ...rest
   } = props;
   switch (surface) {
     case 'native':
-      return <NativeDateField {...rest} isDisabled={isDisabled} />;
+      return (
+        <NativeDateField
+          {...rest}
+          isDisabled={isDisabled}
+          entryErrorBehavior={entryErrorBehavior}
+        />
+      );
     case 'sheet':
       return (
         <TouchDateField
@@ -1189,6 +1213,7 @@ export function DateInput(props: DateInputProps) {
           calendar={calendar}
           isDisabled={isDisabled}
           onEntryErrorChange={onEntryErrorChange}
+          entryErrorBehavior={entryErrorBehavior}
         />
       );
   }

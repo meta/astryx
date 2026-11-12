@@ -24,6 +24,7 @@ import {
   useId,
   useState,
   useCallback,
+  useContext,
   useEffect,
   useRef,
   useMemo,
@@ -101,6 +102,10 @@ import type {SizeValue} from '../utils/types';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {
+  type EntryErrorBehavior,
+  FormLayoutContext,
+} from '../FormLayout/FormLayoutContext';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
@@ -612,6 +617,19 @@ export interface DateTimeInputProps extends Omit<
    * @default 'adaptive-native'
    */
   presentation?: DateTimeInputPresentation;
+
+  /**
+   * When an entry error is displayed and announced (such as an invalid typed date
+   * or one outside min/max).
+   *
+   * - `'complete'` (default) — shows and announces the error as soon as the date is complete.
+   * - `'blur-or-enter'` — defers the error display, `aria-invalid`, and live region
+   *   announcement until the user presses Enter or moves focus away from the field (blur).
+   *
+   * A field's own prop overrides `FormLayout`'s `defaultEntryErrorBehavior`.
+   * @default 'complete'
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
 }
 
 function splitDateTime(dt: ISODateTimeString | undefined): {
@@ -704,6 +722,7 @@ function PointerDateTimeField({
   controlStyle,
   ref,
   nativeMode = 'off',
+  entryErrorBehavior,
   ...restProps
 }: DateTimeInputProps & {
   nativeMode?: 'off' | 'adaptive' | 'forced' | 'legacy';
@@ -828,8 +847,17 @@ function PointerDateTimeField({
     return valueParts.date === maxParts.date ? maxParts.time : undefined;
   }, [maxParts.date, maxParts.time, valueParts.date]);
 
+  const formLayout = useContext(FormLayoutContext);
+  const resolvedEntryErrorBehavior =
+    entryErrorBehavior ?? formLayout?.defaultEntryErrorBehavior ?? 'complete';
+
   // --- Time input state ---
   const [timePendingInput, setTimePendingInput] = useState<string | null>(null);
+  const [isTimeRejectionCommitted, setIsTimeRejectionCommitted] =
+    useState(false);
+  const [timeRevertedAlert, setTimeRevertedAlert] = useState<string | null>(
+    null,
+  );
   const [isTimeFocused, setIsTimeFocused] = useState(false);
   // Native date and time are separate OS pickers. Hold a time chosen before the
   // date exists, then combine it when the date picker commits.
@@ -874,6 +902,11 @@ function PointerDateTimeField({
     }
     return isTimeInRange(parsed, timeMin, timeMax);
   }, [timePendingInput, locale, hasSeconds, timeMin, timeMax]);
+
+  const isTimeErrorRevealed =
+    resolvedEntryErrorBehavior === 'blur-or-enter'
+      ? !isTimeInputValid && isTimeRejectionCommitted
+      : !isTimeInputValid;
 
   const resolvedTimePlaceholder = useMemo(() => {
     if (isTimeFocused && !timeDisplayValue) {
@@ -1070,6 +1103,7 @@ function PointerDateTimeField({
     isStatusAnnounced: true,
     onEntryErrorChange,
     hasPlaceholder: placeholderFromProps != null,
+    entryErrorBehavior: resolvedEntryErrorBehavior,
   });
 
   // The detached message box carries its own glyph, so the helper shows no
@@ -1432,9 +1466,20 @@ function PointerDateTimeField({
         return;
       }
       const text = e.target.value;
+      if (timeRevertedAlert !== null) {
+        setTimeRevertedAlert(null);
+      }
       setTimePendingInput(text);
 
       const parsed = parseLocaleTime(text, locale, hasSeconds);
+      const isValid = parsed != null && isTimeInRange(parsed, timeMin, timeMax);
+      const isEmpty = !text.trim();
+
+      if (isEmpty || isValid) {
+        setIsTimeRejectionCommitted(false);
+      } else if (resolvedEntryErrorBehavior !== 'blur-or-enter') {
+        setIsTimeRejectionCommitted(false);
+      }
 
       // Typing narrows nothing — free-form entry is the contract, and a time
       // between two options must stay reachable. The list instead follows the
@@ -1444,11 +1489,7 @@ function PointerDateTimeField({
         setHighlightedTimeIndex(closestOptionIndex(parsed));
       }
 
-      if (
-        parsed &&
-        isTimeInRange(parsed, timeMin, timeMax) &&
-        parsed !== valueParts.time
-      ) {
+      if (isValid && parsed !== valueParts.time) {
         if (valueParts.date) {
           const combined = combineDateTime(valueParts.date, parsed);
           if (combined) {
@@ -1468,6 +1509,8 @@ function PointerDateTimeField({
       isEffectivelyDisabled,
       timePopover.isOpen,
       closestOptionIndex,
+      timeRevertedAlert,
+      resolvedEntryErrorBehavior,
     ],
   );
 
@@ -1478,8 +1521,11 @@ function PointerDateTimeField({
     if (isEffectivelyDisabled) {
       return;
     }
+    if (timeRevertedAlert !== null) {
+      setTimeRevertedAlert(null);
+    }
     setIsTimeFocused(true);
-  }, [isEffectivelyDisabled]);
+  }, [isEffectivelyDisabled, timeRevertedAlert]);
 
   const handleTimeBlur = useCallback(
     (e: FocusEvent<HTMLInputElement>) => {
@@ -1508,6 +1554,7 @@ function PointerDateTimeField({
       if (!timePendingInput.trim()) {
         // Empty time: revert display to previous value (don't emit partial datetime)
         setTimePendingInput(null);
+        setIsTimeRejectionCommitted(false);
         return;
       }
 
@@ -1519,6 +1566,12 @@ function PointerDateTimeField({
             fireChange(combined);
           }
         }
+        setIsTimeRejectionCommitted(false);
+      } else {
+        if (resolvedEntryErrorBehavior === 'blur-or-enter') {
+          setTimeRevertedAlert(t('@astryx.timeInput.invalidTime'));
+        }
+        setIsTimeRejectionCommitted(false);
       }
       setTimePendingInput(null);
     },
@@ -1531,6 +1584,8 @@ function PointerDateTimeField({
       valueParts,
       fireChange,
       timePopover,
+      resolvedEntryErrorBehavior,
+      t,
     ],
   );
 
@@ -1619,6 +1674,26 @@ function PointerDateTimeField({
             default:
               break;
           }
+        }
+      }
+
+      if (e.key === 'Enter') {
+        if (timePendingInput !== null) {
+          e.preventDefault();
+          const parsed = parseLocaleTime(timePendingInput, locale, hasSeconds);
+          if (parsed && isTimeInRange(parsed, timeMin, timeMax)) {
+            if (parsed !== valueParts.time && valueParts.date) {
+              const combined = combineDateTime(valueParts.date, parsed);
+              if (combined) {
+                fireChange(combined);
+              }
+            }
+            setTimePendingInput(null);
+            setIsTimeRejectionCommitted(false);
+          } else {
+            setIsTimeRejectionCommitted(true);
+          }
+          return;
         }
       }
 
@@ -1939,6 +2014,7 @@ function PointerDateTimeField({
               isBusy={isBusy}
               statusType={status?.type}
               ariaDescribedBy={ariaDescribedBy}
+              entryErrorBehavior={resolvedEntryErrorBehavior}
             />
           ) : (
             <>
@@ -1992,7 +2068,7 @@ function PointerDateTimeField({
                 aria-describedby={ariaDescribedBy}
                 aria-required={isEffectivelyRequired ? 'true' : undefined}
                 aria-invalid={
-                  status?.type === 'error' || !isTimeInputValid
+                  status?.type === 'error' || isTimeErrorRevealed
                     ? 'true'
                     : undefined
                 }
@@ -2000,7 +2076,7 @@ function PointerDateTimeField({
                 {...stylex.props(
                   styles.input,
                   isEffectivelyDisabled && styles.inputDisabled,
-                  !isTimeInputValid && styles.inputInvalid,
+                  isTimeErrorRevealed && styles.inputInvalid,
                 )}
               />
               {/*
@@ -2008,7 +2084,11 @@ function PointerDateTimeField({
                 technology (WCAG 3.3.1).
               */}
               <VisuallyHidden as="div" role="alert" aria-live="assertive">
-                {!isTimeInputValid ? t('@astryx.timeInput.invalidTime') : ''}
+                {timeRevertedAlert != null
+                  ? timeRevertedAlert
+                  : isTimeErrorRevealed
+                    ? t('@astryx.timeInput.invalidTime')
+                    : ''}
               </VisuallyHidden>
             </>
           )}
@@ -2151,7 +2231,11 @@ export function DateTimeInput(props: DateTimeInputProps) {
       return <PointerDateTimeField {...rest} nativeMode="adaptive" />;
     case 'sheet': {
       // The sheet takes no typed text.
-      const {onEntryErrorChange: _onEntryErrorChange, ...sheetProps} = rest;
+      const {
+        onEntryErrorChange: _onEntryErrorChange,
+        entryErrorBehavior: _entryErrorBehavior,
+        ...sheetProps
+      } = rest;
       // Month indexes depend on the calendar. A new calendar remounts the sheet.
       return <TouchDateTimeField key={calendar} {...sheetProps} />;
     }

@@ -5,8 +5,8 @@
 /**
  * @file FormLayoutContext.ts
  * @input Layer-scoped React context
- * @output Exports FormLayoutContext, FormLayoutDirection, and FormOptionality types
- * @position Context for form layout direction + default-optionality detection
+ * @output Exports FormLayoutContext, FormLayoutDirection, FormOptionality, and EntryErrorBehavior types
+ * @position Context for form layout direction + default-optionality and error behavior detection
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/FormLayout/FormLayout.tsx (prop + context value)
@@ -15,6 +15,16 @@
  */
 
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
+
+/**
+ * When a field that checks its own entries shows its error (such as a typed date
+ * that does not exist or falls outside min/max).
+ *
+ * - `'complete'` — shows the error as soon as the input is complete (default).
+ * - `'blur-or-enter'` — defers the error display, `aria-invalid`, and live region
+ *   announcement until the user presses Enter or moves focus away from the field.
+ */
+export type EntryErrorBehavior = 'complete' | 'blur-or-enter';
 
 /**
  * Direction of form field arrangement.
@@ -41,11 +51,12 @@ export type FormOptionality = 'optional' | 'required';
 /**
  * Context for detecting which form layout a component is rendered in. Children
  * can use this to adapt their rendering based on the parent layout — direction
- * for spatial arrangement, and `defaultOptionality` so a field can suppress the
- * indicator that merely restates the form-wide default.
+ * for spatial arrangement, `defaultOptionality` to suppress indicators that restate
+ * the form default, and `defaultEntryErrorBehavior` for entry error timing.
  */
 export const FormLayoutContext = createLayerScopedContext<{
   direction: FormLayoutDirection;
   defaultOptionality?: FormOptionality;
+  defaultEntryErrorBehavior?: EntryErrorBehavior;
 }>('FormLayoutContext', 1, {direction: 'vertical'});
 FormLayoutContext.displayName = 'FormLayoutContext';

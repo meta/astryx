@@ -28,6 +28,7 @@
 
 import {
   useCallback,
+  useContext,
   useEffect,
   useId,
   useOptimistic,
@@ -38,6 +39,7 @@ import {
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useCalendarConstraints} from '../Calendar';
+import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import type {DateInputProps} from './DateInput';
 import {hasEditableDateSegments} from './nativeDateSegments';
 import {
@@ -289,6 +291,7 @@ export function NativeDateField({
   controlClassName,
   controlStyle,
   ref,
+  entryErrorBehavior,
   ...restProps
 }: DateInputProps) {
   const {rest, container} = useFieldInputStyling('DateInput', restProps, {
@@ -302,8 +305,12 @@ export function NativeDateField({
     'aria-labelledby': ariaLabelledByProp,
     onFocus: onFocusProp,
     onBlur: onBlurProp,
+    onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
+  const formLayout = useContext(FormLayoutContext);
+  const resolvedBehavior =
+    entryErrorBehavior ?? formLayout?.defaultEntryErrorBehavior ?? 'complete';
   const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
@@ -370,6 +377,8 @@ export function NativeDateField({
   // A date the picker produced that `dateConstraints` refuses, held so the
   // refusal can be announced instead of looking like a dead tap.
   const [rejectedValue, setRejectedValue] = useState<string | null>(null);
+  const [announcedRefusal, setAnnouncedRefusal] = useState(false);
+  const pendingRejectedValueRef = useRef<string | null>(null);
   // Whether the control has focus — which, on a touch device, means its
   // picker is open.
   const [isFocused, setIsFocused] = useState(false);
@@ -469,10 +478,16 @@ export function NativeDateField({
         // constraint-validation flags, not clamps, and the sheet lets the
         // user land on any date. Refuse it here and let the sync effect snap
         // the control back; the live region below announces the refusal.
+        if (resolvedBehavior === 'blur-or-enter') {
+          pendingRejectedValueRef.current = newValue;
+          return;
+        }
         setRejectedValue(newValue);
         return;
       }
 
+      pendingRejectedValueRef.current = null;
+      setAnnouncedRefusal(false);
       setRejectedValue(null);
       const parsedISO = plainDateToISO(parsed);
       if (parsedISO !== value) {
@@ -487,6 +502,7 @@ export function NativeDateField({
       isEffectivelyDisabled,
       isBusy,
       locale,
+      resolvedBehavior,
     ],
   );
 
@@ -550,6 +566,8 @@ export function NativeDateField({
   }, [isFocused, nativeValue]);
 
   const handleFocus = useCallback(() => {
+    setAnnouncedRefusal(false);
+    pendingRejectedValueRef.current = null;
     setIsSegmentEditable(hasEditableDateSegments(isTouchPointer));
     setIsFocused(true);
   }, [isTouchPointer]);
@@ -557,6 +575,13 @@ export function NativeDateField({
   const handleBlur = useCallback(() => {
     const domValue = inputRef.current?.value;
     setIsFocused(false);
+    if (resolvedBehavior === 'blur-or-enter') {
+      const pendingRejected = pendingRejectedValueRef.current;
+      pendingRejectedValueRef.current = null;
+      if (pendingRejected !== null) {
+        setAnnouncedRefusal(true);
+      }
+    }
     // A refused date is reverted by the sync effect the moment focus leaves,
     // so the field is once again showing a date that IS valid. Keeping the
     // rejection past that point would mark good data invalid, with no way
@@ -566,7 +591,19 @@ export function NativeDateField({
     if (domValue !== undefined && domValue !== nativeValue) {
       commitValue(domValue);
     }
-  }, [commitValue, nativeValue]);
+  }, [commitValue, nativeValue, resolvedBehavior]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' && resolvedBehavior === 'blur-or-enter') {
+        const pendingRejected = pendingRejectedValueRef.current;
+        if (pendingRejected !== null) {
+          setRejectedValue(pendingRejected);
+        }
+      }
+    },
+    [resolvedBehavior],
+  );
 
   // Focusing a date control is what raises the OS picker, so the usual
   // focus-restore after a clear would pop the picker the tap just dismissed —
@@ -662,6 +699,7 @@ export function NativeDateField({
           onChange={handleChange}
           onFocus={chainEventHandlers(handleFocus, onFocusProp)}
           onBlur={chainEventHandlers(handleBlur, onBlurProp)}
+          onKeyDown={chainEventHandlers(handleKeyDown, onKeyDownProp)}
           min={min}
           max={max}
           aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
@@ -703,7 +741,9 @@ export function NativeDateField({
           their pick was rejected (WCAG 3.3.1).
         */}
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
-        {!isInputValid ? t('@astryx.dateInput.invalidDate') : ''}
+        {!isInputValid || announcedRefusal
+          ? t('@astryx.dateInput.invalidDate')
+          : ''}
       </VisuallyHidden>
       {hasClear && value !== undefined && !isEffectivelyDisabled && !isBusy && (
         <InputClearButton

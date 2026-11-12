@@ -46,6 +46,7 @@ import {
   type ISOTimeString,
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {nativePickerSegmentStyles as styles} from './nativePickerSegmentStyles';
 import {
   registerEnglishFallback,
@@ -92,6 +93,7 @@ export type NativeTimeSegmentProps = {
   isBusy: boolean;
   statusType?: InputStatusType;
   ariaDescribedBy?: string;
+  entryErrorBehavior?: EntryErrorBehavior;
   /**
    * The caller's base props (data-*, aria-*, DOM handlers, …) for the native
    * input, the field's semantic control (family:input-fields FR10). Focus and
@@ -124,11 +126,13 @@ export function NativeTimeSegment({
   isBusy,
   statusType,
   ariaDescribedBy,
+  entryErrorBehavior = 'complete',
   controlProps,
 }: NativeTimeSegmentProps) {
   const {
     onFocus: onFocusProp,
     onBlur: onBlurProp,
+    onKeyDown: onKeyDownProp,
     ...inputProps
   } = controlProps ?? {};
   const t = useComponentTranslator();
@@ -138,6 +142,8 @@ export function NativeTimeSegment({
   const mergedInputRef = useMergedRefs(inputRef, internalInputRef);
 
   const [rejectedValue, setRejectedValue] = useState<string | null>(null);
+  const [announcedRefusal, setAnnouncedRefusal] = useState(false);
+  const pendingRejectedValueRef = useRef<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [isSegmentEditable, setIsSegmentEditable] = useState(false);
   const valueAtFocusRef = useRef<string | null>(null);
@@ -193,17 +199,31 @@ export function NativeTimeSegment({
         return;
       }
       if (!isTimeInRange(normalized, min, max)) {
+        if (entryErrorBehavior === 'blur-or-enter') {
+          pendingRejectedValueRef.current = newValue;
+          return;
+        }
         setRejectedValue(newValue);
         return;
       }
 
+      pendingRejectedValueRef.current = null;
+      setAnnouncedRefusal(false);
       setRejectedValue(null);
       lastCommitRef.current = {text: newValue, epoch: commitEpoch};
       if (normalized !== value) {
         onChange(normalized);
       }
     },
-    [commitEpoch, isEffectivelyDisabled, max, min, onChange, value],
+    [
+      commitEpoch,
+      entryErrorBehavior,
+      isEffectivelyDisabled,
+      max,
+      min,
+      onChange,
+      value,
+    ],
   );
 
   const handleChange = useCallback(
@@ -251,6 +271,8 @@ export function NativeTimeSegment({
 
   const handleFocus = useCallback(() => {
     valueAtFocusRef.current = nativeValue;
+    setAnnouncedRefusal(false);
+    pendingRejectedValueRef.current = null;
     // The engine probe classifies whether WebKit/Blink exposes editable native
     // segments. Date and time controls share that engine-level behavior.
     setIsSegmentEditable(hasEditableDateSegments(isTouchPointer));
@@ -265,6 +287,13 @@ export function NativeTimeSegment({
     const wasRejected = rejectedValue !== null;
     valueAtFocusRef.current = null;
     setIsFocused(false);
+    if (entryErrorBehavior === 'blur-or-enter') {
+      const pendingRejected = pendingRejectedValueRef.current;
+      pendingRejectedValueRef.current = null;
+      if (pendingRejected !== null) {
+        setAnnouncedRefusal(true);
+      }
+    }
     setRejectedValue(null);
     if (
       !valueChangedWhileFocused &&
@@ -275,7 +304,19 @@ export function NativeTimeSegment({
       commitValue(domValue);
     }
     lastCommitRef.current = null;
-  }, [commitValue, nativeValue, rejectedValue]);
+  }, [commitValue, entryErrorBehavior, nativeValue, rejectedValue]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' && entryErrorBehavior === 'blur-or-enter') {
+        const pending = pendingRejectedValueRef.current;
+        if (pending !== null) {
+          setRejectedValue(pending);
+        }
+      }
+    },
+    [entryErrorBehavior],
+  );
 
   const openPicker = useCallback(() => {
     if (isEffectivelyDisabled) {
@@ -322,6 +363,7 @@ export function NativeTimeSegment({
           onChange={handleChange}
           onFocus={chainEventHandlers(handleFocus, onFocusProp)}
           onBlur={chainEventHandlers(handleBlur, onBlurProp)}
+          onKeyDown={chainEventHandlers(handleKeyDown, onKeyDownProp)}
           min={min}
           max={max}
           step={60}
@@ -367,7 +409,9 @@ export function NativeTimeSegment({
         )}
       </span>
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
-        {!isInputValid ? t('@astryx.timeInput.invalidTime') : ''}
+        {!isInputValid || announcedRefusal
+          ? t('@astryx.timeInput.invalidTime')
+          : ''}
       </VisuallyHidden>
     </>
   );

@@ -1186,6 +1186,27 @@ describe('DateTimeInput', () => {
       expect(screen.getByText('Invalid time')).toBeInTheDocument();
     });
 
+    it('defers time alert message until blur with entryErrorBehavior="blur-or-enter"', () => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T10:00' as ISODateTimeString}
+          onChange={() => {}}
+          entryErrorBehavior="blur-or-enter"
+        />,
+      );
+
+      const timeInput = screen.getByLabelText('Meeting time');
+      fireEvent.change(timeInput, {target: {value: '99:99 zz'}});
+
+      expect(screen.queryByText('Invalid time')).not.toBeInTheDocument();
+      expect(timeInput).not.toHaveAttribute('aria-invalid');
+
+      fireEvent.blur(timeInput);
+
+      expect(screen.getByText('Invalid time')).toBeInTheDocument();
+    });
+
     it('resolves the invalid date and time announcements from the i18n catalog', () => {
       render(
         <InternationalizationProvider

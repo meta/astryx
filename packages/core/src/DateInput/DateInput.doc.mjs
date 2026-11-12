@@ -179,6 +179,13 @@ export const docs = {
       default: "'adaptive-native'",
     },
     {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        'When an entry error is displayed and announced (such as a typed date that does not exist or falls outside min/max). "complete" shows and announces the error as soon as the date is complete. "blur-or-enter" defers display, aria-invalid, and live region announcement until the user commits with Enter or leaves the field (blur). Overrides FormLayout defaultEntryErrorBehavior.',
+      default: "'complete'",
+    },
+    {
       name: 'nativePicker',
       type: "'touch' | 'always' | 'never'",
       description:

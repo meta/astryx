@@ -33,6 +33,16 @@ function OptionalityReader() {
   return <span data-testid="optionality">{defaultOptionality ?? 'unset'}</span>;
 }
 
+// Helper component to read the defaultEntryErrorBehavior context value
+function EntryErrorBehaviorReader() {
+  const {defaultEntryErrorBehavior} = use(FormLayoutContext);
+  return (
+    <span data-testid="error-behavior">
+      {defaultEntryErrorBehavior ?? 'unset'}
+    </span>
+  );
+}
+
 describe('FormLayout', () => {
   // ─── Basic rendering ────────────────────────────────────────────────────
 
@@ -217,6 +227,39 @@ describe('FormLayout', () => {
       </FormLayout>,
     );
     expect(screen.getByTestId('optionality')).toHaveTextContent('required');
+  });
+
+  // ─── defaultEntryErrorBehavior context propagation ─────────────────────────
+
+  it('leaves defaultEntryErrorBehavior unset by default', () => {
+    render(
+      <FormLayout>
+        <EntryErrorBehaviorReader />
+      </FormLayout>,
+    );
+    expect(screen.getByTestId('error-behavior')).toHaveTextContent('unset');
+  });
+
+  it('provides defaultEntryErrorBehavior="blur-or-enter" to children', () => {
+    render(
+      <FormLayout defaultEntryErrorBehavior="blur-or-enter">
+        <EntryErrorBehaviorReader />
+      </FormLayout>,
+    );
+    expect(screen.getByTestId('error-behavior')).toHaveTextContent(
+      'blur-or-enter',
+    );
+  });
+
+  it('an inner layout shadows the outer defaultEntryErrorBehavior', () => {
+    render(
+      <FormLayout defaultEntryErrorBehavior="blur-or-enter">
+        <FormLayout defaultEntryErrorBehavior="complete">
+          <EntryErrorBehaviorReader />
+        </FormLayout>
+      </FormLayout>,
+    );
+    expect(screen.getByTestId('error-behavior')).toHaveTextContent('complete');
   });
 
   // ─── defaultOptionality indicator behavior (through Field) ───────────────

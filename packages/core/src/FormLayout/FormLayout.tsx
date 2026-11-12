@@ -24,6 +24,7 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {
   FormLayoutContext,
+  type EntryErrorBehavior,
   type FormLayoutDirection,
   type FormOptionality,
 } from './FormLayoutContext';
@@ -115,6 +116,19 @@ export interface FormLayoutProps extends BaseProps<HTMLDivElement> {
    * `'optional'`) shows nothing. An inner `FormLayout` shadows an outer one.
    */
   defaultOptionality?: FormOptionality;
+
+  /**
+   * Default entry error timing for descendant fields that validate their own entries
+   * (`DateInput`, `DateTimeInput`).
+   *
+   * - `'complete'` (default) — shows the error as soon as the entry is complete.
+   * - `'blur-or-enter'` — defers the error display, `aria-invalid`, and live region
+   *   announcement until the user presses Enter or leaves the field (blur).
+   *
+   * A field's own `entryErrorBehavior` prop overrides this form default. An inner
+   * `FormLayout` shadows an outer one.
+   */
+  defaultEntryErrorBehavior?: EntryErrorBehavior;
 }
 
 // =============================================================================
@@ -143,6 +157,7 @@ export function FormLayout({
   children,
   direction = 'vertical',
   defaultOptionality,
+  defaultEntryErrorBehavior,
   xstyle,
   className,
   style,
@@ -150,8 +165,8 @@ export function FormLayout({
   ...props
 }: FormLayoutProps) {
   const contextValue = useMemo(
-    () => ({direction, defaultOptionality}),
-    [direction, defaultOptionality],
+    () => ({direction, defaultOptionality, defaultEntryErrorBehavior}),
+    [direction, defaultOptionality, defaultEntryErrorBehavior],
   );
 
   return (
