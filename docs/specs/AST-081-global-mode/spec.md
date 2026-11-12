@@ -387,11 +387,13 @@ works on is `spec:AST-040` FR9's.
   - the per-user cache directory of the platform (a cache or configuration
     folder that an environment setting points at counts only when it is an
     absolute path), for saved discover answers (`spec:AST-051` FR8), for the
-    releases global mode installs into a project's run (FR2, FR3), and for the
-    catalogs `search` and `build` keep in `astryx/catalogs`, a folder only the
-    user can reach (made `0700`, used only while it is a real folder the user
-    owns and others cannot open, never where the system has no user ids), each
-    catalog used only while every input its gather read is unchanged; a run
+    releases global mode installs into a project's run (FR2, FR3), and for
+    what `search`, `build`, `component`, `template`, `theme` and `discover`
+    keep in `astryx/catalogs` (search's catalogs and each integration's
+    contribution-check results), a folder only the user can reach (made
+    `0700`, used only while it is a real folder the user owns and others
+    cannot open, never where the system has no user ids), each kept value
+    used only while every input its gather read is unchanged; a run
     under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and uses no
     catalog; `doctor` lists that folder and its size in an info row, which in
     such a run also says that it keeps none;

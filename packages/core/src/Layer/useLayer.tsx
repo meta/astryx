@@ -25,6 +25,7 @@ import React, {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {createPortal} from 'react-dom';
@@ -1207,18 +1208,19 @@ export function useKeepLayerOpenProps(
   id: string,
   isOpen: boolean,
 ): KeepLayerOpenProps {
-  const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
-
   return useMemo(
     () => ({
       onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
-        if (!isOpenRef.current) {
+        const control = event.currentTarget;
+        const doc = control.ownerDocument;
+        // The runtime shows the layer before its open state commits. The
+        // layer renders in the control's own tree, a shadow root included.
+        const root = control.getRootNode();
+        const layer = (isShadowRoot(root) ? root : doc).getElementById(id);
+        if (!isOpen && (layer == null || !isShownAsPopover(layer))) {
           return;
         }
         // The browser reads the invoker relationship at both ends of the press.
-        const control = event.currentTarget;
-        const doc = control.ownerDocument;
         control.setAttribute('popovertarget', id);
         const onPressEnd = () => {
           doc.removeEventListener('pointerup', onPressEnd);
@@ -1240,7 +1242,7 @@ export function useKeepLayerOpenProps(
         }
       },
     }),
-    [id],
+    [id, isOpen],
   );
 }
 
@@ -1273,9 +1275,8 @@ function useLayerImplementation(
     mode === 'context' ? options.watchesOutsidePans : undefined;
   const writesEntranceSide =
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
-  const onCloseStartRef = useRef<(() => void) | undefined>(undefined);
-  onCloseStartRef.current =
-    mode === 'context' ? options.onCloseStart : undefined;
+  const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
+  const onCloseStartRef = useCommittedRef(onCloseStart);
   const id = useId();
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
 
@@ -1829,12 +1830,13 @@ function useLayerImplementation(
     releaseAnchor,
     cancelPendingAnchorWait,
     stopOutsidePanWatch,
+    onCloseStartRef,
   ]);
 
   // A deferred show() replays through a ref so the queued closure reaches the
   // current callback rather than the one captured when it was queued.
   const showRef = useRef(show);
-  showRef.current = show;
+  useCommittedRefInto(showRef, show);
 
   // The open-state geometry observers of a layer that keeps its anchor clear
   // (`observeAnchorClearance`), as their teardown. The open-state layout
@@ -2037,7 +2039,7 @@ function useLayerImplementation(
         removeAnchorName(trigger, anchorId);
       }
     },
-    [anchorId],
+    [anchorId, onCloseStartRef],
   );
 
   const handleToggle = useCallback(
