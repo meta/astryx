@@ -9,7 +9,13 @@
  * SYNC: When modified, update this header
  */
 
-import {useRef} from 'react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  useRef,
+  type ComponentProps,
+} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -287,6 +293,24 @@ describe('Outline', () => {
     document.body.removeChild(intro);
     document.body.removeChild(install);
     document.body.removeChild(api);
+  });
+
+  it('reports nothing on mount while the first item is still the active one', () => {
+    // Not at the bottom of the page, and no heading has passed the line.
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      value: 4000,
+      configurable: true,
+    });
+    const onActiveIdChange = vi.fn();
+    // The hook resolves the active id from scroll position on mount. Its
+    // comparison starts from the first item, as the active state does.
+    render(<Outline items={items} onActiveIdChange={onActiveIdChange} />);
+    expect(screen.getByRole('link', {name: 'Introduction'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+    expect(onActiveIdChange).not.toHaveBeenCalled();
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight');
   });
 });
 
@@ -1084,5 +1108,134 @@ describe('useOutlineFromDOM', () => {
     expect(
       screen.getByText('2:intro:Intro|3:details:Details'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('Outline scroll spy, when React discards a render', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    // At the bottom of the page, a scroll makes the last item active.
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      value: 0,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight');
+  });
+
+  // A transition that suspends for good: React renders the new props, then
+  // keeps the committed tree and never commits that render.
+  const pending = new Promise<never>(() => {});
+  function Pending(): null {
+    use(pending);
+    return null;
+  }
+  function Screen({
+    isPending,
+    ...props
+  }: ComponentProps<typeof Outline> & {isPending: boolean}) {
+    return (
+      <Suspense fallback={null}>
+        <Outline {...props} />
+        {isPending ? <Pending /> : null}
+      </Suspense>
+    );
+  }
+  async function scrollAndWaitAFrame() {
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'));
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  }
+
+  it('reports a landed navigation to the committed onActiveIdChange', async () => {
+    const user = userEvent.setup();
+    const target = document.createElement('h2');
+    target.id = 'install';
+    document.body.appendChild(target);
+    const committed = vi.fn();
+    const discarded = vi.fn();
+    const {rerender} = render(
+      <Screen items={items} onActiveIdChange={committed} isPending={false} />,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen items={items} onActiveIdChange={discarded} isPending />,
+        );
+      });
+    });
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    await act(async () => {
+      window.dispatchEvent(new Event('scrollend'));
+    });
+    expect(discarded).not.toHaveBeenCalled();
+    expect(committed).toHaveBeenLastCalledWith('install');
+    document.body.removeChild(target);
+  });
+
+  it('resolves a scroll against the committed items', async () => {
+    const onActiveIdChange = vi.fn();
+    const {rerender} = render(
+      <Screen
+        items={items}
+        onActiveIdChange={onActiveIdChange}
+        isPending={false}
+      />,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen
+            items={items.slice(0, 2)}
+            onActiveIdChange={onActiveIdChange}
+            isPending
+          />,
+        );
+      });
+    });
+    await scrollAndWaitAFrame();
+    expect(onActiveIdChange).not.toHaveBeenCalledWith('install');
+    expect(screen.getByRole('link', {name: 'API'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+  });
+
+  it('compares a scroll with the committed active item', async () => {
+    const onActiveIdChange = vi.fn();
+    const {rerender} = render(
+      <Screen
+        items={items}
+        onActiveIdChange={onActiveIdChange}
+        isPending={false}
+      />,
+    );
+    await scrollAndWaitAFrame();
+    expect(screen.getByRole('link', {name: 'API'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+    onActiveIdChange.mockClear();
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen
+            items={items}
+            activeId="intro"
+            onActiveIdChange={onActiveIdChange}
+            isPending
+          />,
+        );
+      });
+    });
+    await scrollAndWaitAFrame();
+    // The committed item is still the active one, so nothing changes.
+    expect(onActiveIdChange).not.toHaveBeenCalled();
   });
 });

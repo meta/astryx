@@ -74,6 +74,7 @@ import {
 import {
   blockComponentsCheck,
   componentExamplesCheck,
+  packageListingCheck,
   componentDocNamesCheck,
   INVALID_CLI_COMMAND,
   isListedIssue,
@@ -448,6 +449,7 @@ async function validateAtPackageDir(
       ? resolveRoot(manifest.experimental?.iconSets, 'experimental.iconSets')
       : undefined,
     issuesUrl: manifest.issuesUrl,
+    logo: manifest.logo,
     agentDocs: manifest.agentDocs,
     cliCommand: manifest.cliCommand,
     __cliCommandError: cliCommandError,
@@ -889,6 +891,11 @@ export async function validateIntegration(pkg, options = {}) {
   const examples = integration
     ? await componentExamplesCheck(integration)
     : undefined;
+  // What a catalog needs to list the package: a logo, and an example of
+  // its components.
+  const listing = integration
+    ? packageListingCheck(integration, examples?.examples)
+    : undefined;
   const docNames = names?.[0].report;
   const blockComponents = names?.[1].report;
   // Notes fail nothing: a malformed `cliCommand`, and the findings added
@@ -913,6 +920,9 @@ export async function validateIntegration(pkg, options = {}) {
           each.notes.map(note => ({...note, next: true})),
         ),
         ...(examples?.notes ?? []).map(note => ({...note, next: true})),
+        // What a catalog needs to list the package is information only:
+        // these notes fail no check, under any flag.
+        ...(listing?.notes ?? []),
       ]
     : [];
   // The doc-syntax findings in the package's topics, as `next` notes with
@@ -926,6 +936,10 @@ export async function validateIntegration(pkg, options = {}) {
       })),
     );
   }
+  const assetsUnchecked = [
+    ...(examples?.unchecked ?? []),
+    ...(listing?.unchecked ?? []),
+  ];
   return {
     type: 'integration.validate',
     data: {
@@ -955,13 +969,13 @@ export async function validateIntegration(pkg, options = {}) {
       ...(result.found && result.olderCliNotes
         ? {olderCliNotes: result.olderCliNotes}
         : {}),
-      // Template assets npm could not place, when there are any.
-      ...(examples && examples.unchecked.length > 0
+      // Template assets and logos npm could not place, when there are any.
+      ...(assetsUnchecked.length > 0
         ? {
             exampleAssets: {
               status: 'checked',
               findings: [],
-              unchecked: examples.unchecked,
+              unchecked: assetsUnchecked,
             },
           }
         : {}),

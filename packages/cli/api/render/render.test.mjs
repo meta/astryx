@@ -1373,7 +1373,9 @@ describe('astryx experimental render (CLI)', () => {
     expect(r.status).toBe(1);
     const out = JSON.parse(r.stdout);
     expect(out.code).toBe('ERR_UNKNOWN_SUBCOMMAND');
-    expect(out.suggestions.map((/** @type {any} */ s) => s.name)).toContain('render');
+    expect(
+      out.suggestions.some((/** @type {any} */ s) => /experimental render$/.test(s.name)),
+    ).toBe(true);
   });
 
   it('fails with exit 1 and a readable message without --json', async () => {

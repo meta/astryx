@@ -438,20 +438,27 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // newer search's announcement and a rerender cannot repeat one. A first
   // render whose query is not searched owes no announcement for search 0.
   const [searchId, setSearchId] = useState(0);
-  const searchIdRef = useRef(0);
   const announcedSearchIdRef = useRef(
     isOpen && !willSearchFor(initialQuery.trim()) ? 0 : -1,
   );
   const startSearch = () => {
-    searchIdRef.current += 1;
-    setSearchId(searchIdRef.current);
+    setSearchId(id => id + 1);
   };
   const [renderedItemCount, setRenderedItemCount] = useState(
     LIST_RENDER_BATCH_SIZE,
   );
   const seqRef = useRef(0);
-  const lastLoadScrollHeightRef = useRef<number | null>(null);
+  const lastLoadScrollHeightRef = useRef<{
+    openId: number;
+    height: number;
+  } | null>(null);
   const [selectedItemsAtOpen, setSelectedItemsAtOpen] = useState<T[]>(value);
+
+  // Counts the opens, with the search each open retires.
+  const [openReset, setOpenReset] = useState<{
+    id: number;
+    retireSearchId: number | null;
+  }>({id: 0, retireSearchId: null});
 
   // Snapshot the selection and reset the rendered window in the render that
   // opens the sheet, so the first open frame already shows selected-first
@@ -463,7 +470,6 @@ function TokenizerSheetContent<T extends SearchableItem>({
       setSelectedItemsAtOpen(value);
       setValueAtOpen([...value]);
       setDraftValue([...value]);
-      lastDraftChangeRef.current = null;
       setRenderedItemCount(LIST_RENDER_BATCH_SIZE);
       setIsClearConfirmationOpen(false);
       setIsDiscardConfirmationOpen(false);
@@ -475,10 +481,14 @@ function TokenizerSheetContent<T extends SearchableItem>({
       setIsPending(willSearch);
       if (willSearch) {
         startSearch();
-      } else {
-        announcedSearchIdRef.current = searchIdRef.current;
       }
-      lastLoadScrollHeightRef.current = null;
+      // Each open gets its own id, and the search it retires unannounced
+      // when it runs none. The announcement and the load-more height read
+      // them, so a render React discards changes neither.
+      setOpenReset(reset => ({
+        id: reset.id + 1,
+        retireSearchId: willSearch ? null : searchId,
+      }));
     }
   }
 
@@ -694,7 +704,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
     if (willSearch) {
       startSearch();
     } else {
-      announcedSearchIdRef.current = searchIdRef.current;
+      announcedSearchIdRef.current = searchId;
     }
     setQuery(next);
     onChangeQuery?.(next);
@@ -782,7 +792,13 @@ function TokenizerSheetContent<T extends SearchableItem>({
     String(searchId),
   );
   useEffect(() => {
-    if (!isOpen || isPending || announcedSearchIdRef.current === searchId) {
+    if (
+      !isOpen ||
+      isPending ||
+      announcedSearchIdRef.current === searchId ||
+      // A search the open retired, unannounced, since it ran none.
+      openReset.retireSearchId === searchId
+    ) {
       return;
     }
     announcedSearchIdRef.current = searchId;
@@ -806,6 +822,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
     isQueryEmpty,
     isSettledEmpty,
     visibleItems.length,
+    openReset.retireSearchId,
     searchId,
     t,
   ]);
@@ -849,11 +866,17 @@ function TokenizerSheetContent<T extends SearchableItem>({
           const list = event.currentTarget;
           const distanceFromBottom =
             list.scrollHeight - list.scrollTop - list.clientHeight;
+          const lastLoad = lastLoadScrollHeightRef.current;
           if (
             distanceFromBottom <= LIST_LOAD_MORE_THRESHOLD_PX &&
-            lastLoadScrollHeightRef.current !== list.scrollHeight
+            (lastLoad == null ||
+              lastLoad.openId !== openReset.id ||
+              lastLoad.height !== list.scrollHeight)
           ) {
-            lastLoadScrollHeightRef.current = list.scrollHeight;
+            lastLoadScrollHeightRef.current = {
+              openId: openReset.id,
+              height: list.scrollHeight,
+            };
             setRenderedItemCount(current =>
               Math.min(current + LIST_RENDER_BATCH_SIZE, visibleItems.length),
             );

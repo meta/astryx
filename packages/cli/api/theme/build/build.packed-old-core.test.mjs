@@ -39,11 +39,13 @@ import {fileURLToPath} from 'node:url';
 import {findInstalledPackage} from '../../../foundation/fs/paths.mjs';
 import {
   cliTarball,
+  packedCli,
   releasePackedCli,
   runFolder,
   tarballFiles,
 } from '../../../test-utils/global-local-fixtures.mjs';
 import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
+import {PREPACK_FILES} from '../../../test-utils/pack-cli.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../../../..');
@@ -506,6 +508,7 @@ beforeAll(() => {
   const cli = path.join(modules, '@astryxdesign/cli');
   /** @type {Set<string>} */
   const made = new Set();
+  const prepackOutputs = new Set(PREPACK_FILES.map(({file}) => file));
   for (const file of tarballFiles(cliTarball())) {
     if (inLinkedFolder(file)) continue;
     const target = path.join(cli, file);
@@ -513,7 +516,11 @@ beforeAll(() => {
       fs.mkdirSync(path.dirname(target), {recursive: true});
       made.add(path.dirname(target));
     }
-    fs.copyFileSync(path.join(CLI_PKG, file), target);
+    // What `prepack` writes is in the tarball only, not the checkout.
+    fs.copyFileSync(
+      path.join(prepackOutputs.has(file) ? packedCli() : CLI_PKG, file),
+      target,
+    );
   }
   for (const folder of LINKED_ASSET_FOLDERS) {
     linkFolder(path.join(CLI_PKG, folder), path.join(cli, folder));
@@ -1184,7 +1191,14 @@ afterAll(() => {
 describe('the packed CLI fixture', () => {
   it("holds the CLI's packed files, three asset folders as links", () => {
     const cli = path.join(root, 'node_modules/@astryxdesign/cli');
-    const published = tarballFiles(cliTarball());
+    // A linked folder is the checkout's, which holds none of what `prepack`
+    // writes into it (the fixture's CLI then reads its sources instead).
+    const prepackInLinked = new Set(
+      PREPACK_FILES.map(({file}) => file).filter(inLinkedFolder),
+    );
+    const published = tarballFiles(cliTarball()).filter(
+      file => !prepackInLinked.has(file),
+    );
     const unresolved = published.filter(
       file => !fs.existsSync(path.join(cli, file)),
     );
