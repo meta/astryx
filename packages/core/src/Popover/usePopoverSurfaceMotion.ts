@@ -117,11 +117,10 @@ export function usePopoverSurfaceMotion({
   // Whether the presentation in progress is the touch one, held from the
   // open until its close begins (Layer/presentationHold).
   const [touchHold] = useState(() => createPresentationHold<boolean>());
-  // The hold that keeps taps off the page until the grow's first frame.
-  const frameHoldRef = useRef<(() => void) | null>(null);
-  const endFrameHold = useCallback(() => {
-    frameHoldRef.current?.();
-    frameHoldRef.current = null;
+  const tapHoldUntilFirstFrameRef = useRef<(() => void) | null>(null);
+  const endTapHoldUntilFirstFrame = useCallback(() => {
+    tapHoldUntilFirstFrameRef.current?.();
+    tapHoldUntilFirstFrameRef.current = null;
   }, []);
 
   const release = useCallback(() => {
@@ -150,9 +149,9 @@ export function usePopoverSurfaceMotion({
   useEffect(
     () => () => {
       release();
-      endFrameHold();
+      endTapHoldUntilFirstFrame();
     },
-    [endFrameHold, release],
+    [endTapHoldUntilFirstFrame, release],
   );
 
   const present = useCallback(
@@ -162,7 +161,7 @@ export function usePopoverSurfaceMotion({
       entrance: HTMLElement | null = null,
       touch?: boolean,
     ) => {
-      endFrameHold();
+      endTapHoldUntilFirstFrame();
       if (layer == null) {
         return;
       }
@@ -184,19 +183,25 @@ export function usePopoverSurfaceMotion({
         source: boxOf(source),
       }));
       if (holdUntilFirstFrame) {
-        frameHoldRef.current = holdUntilNextFrame(surface);
+        tapHoldUntilFirstFrameRef.current = holdUntilNextFrame(surface);
       }
     },
-    [endFrameHold, holdUntilFirstFrame, motionFor, release, touchHold],
+    [
+      endTapHoldUntilFirstFrame,
+      holdUntilFirstFrame,
+      motionFor,
+      release,
+      touchHold,
+    ],
   );
 
   const closeStart = useCallback(() => {
-    endFrameHold();
+    endTapHoldUntilFirstFrame();
     if (touchHold.current() === true) {
       motionRef.current?.motion.exit();
     }
     touchHold.release();
-  }, [endFrameHold, touchHold]);
+  }, [endTapHoldUntilFirstFrame, touchHold]);
 
   return useMemo(() => ({present, closeStart}), [present, closeStart]);
 }
