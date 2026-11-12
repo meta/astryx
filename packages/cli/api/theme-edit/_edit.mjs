@@ -14,6 +14,7 @@ import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {
   AUTO_SPREAD,
+  CORNERS,
   DIALS,
   FAMILIES,
   KEY_TOKENS,
@@ -27,6 +28,7 @@ import {
   commitTheme,
   compileTheme,
   cornerPx,
+  radiusAt,
   contrastProblems,
   describe,
   keyOf,
@@ -48,10 +50,11 @@ import {
   themeFiles,
   buildTheme,
   staleBuild,
+  EDITOR_SUFFIXES,
   themeSource,
   themeSourceProblem,
 } from './_settings.mjs';
-import {checkSetting, exampleOf, storedTokenProblem} from './_check.mjs';
+import {checkSetting, exampleOf, storedProblems} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {
   PALETTE_DIALS,
@@ -63,7 +66,7 @@ import {
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
 import {refreshPreviewRoute} from './_preview-app.mjs';
-import {baseResolved} from './_project.mjs';
+import {baseResolved, installLine} from './_project.mjs';
 import {
   requireProject,
   context,
@@ -103,16 +106,7 @@ function editorLeftovers(dir, slug) {
   const files = [];
   const named = (/** @type {string} */ n) =>
     n === NEW_MARKER ||
-    [
-      'settings.ts',
-      'settings.json',
-      'css',
-      'css.d.ts',
-      'js',
-      'd.ts',
-      'variants.d.ts',
-      'history.json',
-    ].some(x => n === `${slug}.${x}`) ||
+    EDITOR_SUFFIXES.some(x => n === `${slug}.${x}`) ||
     /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config\.json)$/.test(
       n,
     ) ||
@@ -150,7 +144,9 @@ function editorLeftovers(dir, slug) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditNewResponse>}
  */
 export async function themeEditNew(name, options = {}) {
-  const {cwd = process.cwd(), like, png = false, settings = {}} = options;
+  const {cwd = process.cwd(), png = false, settings = {}} = options;
+  // `--like none` builds on no base, as `set <theme> base none` does.
+  const like = options.like === 'none' ? undefined : options.like;
   requireProject(cwd);
   if (!slugOk(name)) {
     const fixed =
@@ -446,18 +442,30 @@ export async function themeEditSet(theme, thing, value, options = {}) {
  * @param {string} [skip]
  */
 function refuseStoredTokens(ctx, slug, data, skip) {
-  const bad = storedTokenProblem(ctx, slug, data, skip);
-  if (bad)
-    refuse(
-      E.ERR_THEME_INVALID,
-      `themes/${slug}/${slug}.settings.json: ${describe(bad.setting)} holds a value the editor no longer accepts (${bad.why}).`,
-      {
-        run: [
-          `${P} undo ${slug} ${undoArgs(bad.setting)}`,
-          `${P} set ${slug} ${bad.setting.thing} ${quoteCommandArgument(exampleOf(ctx.C.typeOf(bad.setting.thing), bad.setting.thing))}`,
-        ],
-      },
-    );
+  const bad = storedProblems(ctx, slug, data, skip);
+  if (!bad.length) return;
+  const one = bad.length === 1 ? bad[0] : null;
+  refuse(
+    E.ERR_THEME_INVALID,
+    `themes/${slug}/${slug}.settings.json: ${bad
+      .map(
+        b =>
+          `${describe(b.setting)} ${b.scope ? 'applies where the editor does not accept it' : 'holds a value the editor no longer accepts'} (${b.why})`,
+      )
+      .join('; ')}.`,
+    {
+      // Each undo runs while the others are still saved: an undo of one
+      // setting is never refused for another.
+      run: [
+        ...bad.slice(0, 5).map(b => `${P} undo ${slug} ${undoArgs(b.setting)}`),
+        ...(one && !one.scope
+          ? [
+              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(exampleOf(ctx.C.typeOf(one.setting.thing), one.setting.thing))}`,
+            ]
+          : []),
+      ],
+    },
+  );
 }
 
 /**
@@ -502,8 +510,27 @@ async function change(sub, slug, thing, value, options) {
     mode: options.mode,
   });
   const data = loadTheme(cwd, slug, target);
+  /** @type {string[]} */
+  const fieldNotes = [];
+  if (sub === 'set' && (thing === 'base' || thing === 'mode')) {
+    // The other field, when it is damaged too, goes back to its default,
+    // so the theme loads again.
+    if (
+      thing !== 'mode' &&
+      !['both', 'light-only', 'dark-only'].includes(data.mode)
+    ) {
+      data.mode = 'both';
+      fieldNotes.push('mode was missing or damaged, so it is both again');
+    }
+    if (thing !== 'base' && data.like != null && !LIKE.includes(data.like)) {
+      delete data.like;
+      fieldNotes.push('base was not a built-in theme, so it is none again');
+    }
+  }
   const ctx = await context(cwd);
-  refuseStoredTokens(ctx, slug, data, thing);
+  // An undo of one setting only removes it, so it never waits on the
+  // others being fixed.
+  if (sub !== 'undo') refuseStoredTokens(ctx, slug, data, thing);
   const flags = {
     on: options.on,
     when: options.when,
@@ -609,6 +636,7 @@ async function change(sub, slug, thing, value, options) {
           ...(r.unchanged
             ? [`no change: ${s.thing} is already ${s.value}`]
             : []),
+          ...fieldNotes,
           ...r.notes,
           `your ${data.settings.length} settings are kept`,
           ...otherModeNotes(data),
@@ -725,6 +753,19 @@ async function change(sub, slug, thing, value, options) {
             ),
         )
       : [];
+  // A group setting covers part settings made before it for its members.
+  const covers =
+    sub === 'set' && s.source === 'dial' && s.on && FAMILIES[s.on]
+      ? data.settings.filter(
+          x =>
+            x !== s &&
+            x.thing === s.thing &&
+            x.on &&
+            FAMILIES[/** @type {string} */ (s.on)].includes(x.on) &&
+            (x.when ?? '') === (s.when ?? '') &&
+            (x.state ?? '') === (s.state ?? ''),
+        )
+      : [];
   const r = await commitTheme(ctx, slug, data, {history: true});
   const styled = styledChanges(compiledBefore, compileTheme(ctx, data, base));
   const parts = partsOf(ctx, s);
@@ -732,9 +773,31 @@ async function change(sub, slug, thing, value, options) {
     sub === 'set' && s.source === 'dial' && !s.on
       ? data.settings.filter(x => x.thing === s.thing && x.on).map(describe)
       : [];
+  // The exact property a dial on a part competes with there.
+  const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
+    corners: /radius$/,
+    spacing: /^(padding|gap)(-|$)/,
+  });
+  const exactOver =
+    sub === 'set' && s.source === 'dial' && s.on && DIAL_PROPERTY[s.thing]
+      ? (data.settings.find(
+          x =>
+            x.source === 'property' &&
+            DIAL_PROPERTY[s.thing].test(x.thing) &&
+            x.on &&
+            partsOf(ctx, x).some(t => partsOf(ctx, s).includes(t)) &&
+            (x.when ?? '') === (s.when ?? '') &&
+            (x.state ?? '') === (s.state ?? ''),
+        ) ?? null)
+      : null;
   /** @type {string[]} */
   const notes = [
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
+    ...(covers.length
+      ? [
+          `comes after ${covers.map(describe).join(', ')}, so ${covers.length > 1 ? 'those parts show' : `${covers[0].on} shows`} this value now; set ${covers.length > 1 ? 'one' : 'it'} again to make it win`,
+        ]
+      : []),
     // Phones keep the base theme's reading sizes (a coarse pointer below
     // the lg width), so a size change says where it applies.
     ...(sub === 'set' &&
@@ -749,8 +812,17 @@ async function change(sub, slug, thing, value, options) {
     ...(sub === 'set' && ['text-size', 'type'].includes(s.thing)
       ? extremeSteps(r.res.light)
       : []),
+    // An exact property on the same part wins over a dial there.
+    ...(exactOver
+      ? [
+          `${describe(exactOver)} is an exact property and wins over ${s.thing} there, so this shows only after \`${P} undo ${slug} ${undoArgs(exactOver)}\``,
+        ]
+      : []),
     // An accepted change that the theme already showed says so.
     ...(sub === 'set' &&
+    !exactOver &&
+    // With the last build unreadable, nothing was compared.
+    !r.notes.some(n => n.includes('could not be read')) &&
     !r.unchanged &&
     !r.changed.length &&
     !styled.length &&
@@ -875,7 +947,10 @@ async function change(sub, slug, thing, value, options) {
       ...(sub === 'undo' && prev
         ? {removed: prev, now: nowApplies(ctx, data, prev, base)}
         : {}),
-      replaced: sub === 'set' ? prev : null,
+      // A plain value that replaced per-mode ones names the first of them;
+      // the notes name them all.
+      replaced:
+        sub === 'set' ? (prev ?? covered[0] ?? longhands[0] ?? null) : null,
       // A whole-theme dial names the value it replaced, as base and mode do.
       was:
         sub === 'set' && prev && prev.source === 'dial' && !prev.on
@@ -950,6 +1025,21 @@ export async function themeEditShow(theme, options = {}) {
   const data = loadTheme(cwd, theme);
   const ctx = await context(cwd);
   refuseStoredTokens(ctx, theme, data);
+  // show renders its pages with the project's React: when that cannot
+  // render, nothing is built or written, and the result says how to fix it.
+  if (ctx.unchecked && !readOnly)
+    refuse(
+      E.ERR_RENDER_FAILED,
+      `${theme} cannot be shown: ${ctx.unchecked} Nothing was written.`,
+      {
+        // Only a missing React is fixed by installing it; two copies or a
+        // component that throws are named in the message.
+        run:
+          ctx.uncheckedCode === 'ERR_RENDER_MISSING_DEPENDENCY'
+            ? [installLine(cwd, ['react', 'react-dom'])]
+            : [`${P} show ${theme}`],
+      },
+    );
   const f = themeFiles(cwd, theme);
   // A build that does not match the settings (a command stopped mid-build,
   // a hand edit, another CLI) is made again from the settings, and said.
@@ -1038,7 +1128,12 @@ export async function themeEditShow(theme, options = {}) {
             : (res[modes[0]][k] ?? null),
         ]),
       ),
-      partValues: partValues(ctx, data, res, modes[0]),
+      partValues: partValues(
+        Object.assign(ctx, {base: await baseResolved(ctx.project, data.like)}),
+        data,
+        res,
+        modes[0],
+      ),
       ...colorsReport(pal, data),
       problems,
       preview,
@@ -1131,12 +1226,16 @@ function otherModeNotes(data) {
  * @returns {string[]}
  */
 function partValues(ctx, data, res, mode) {
+  const masked = maskedSettings(data);
   return data.settings
     .filter(
       s =>
         s.source === 'dial' && s.on && ['corners', 'spacing'].includes(s.thing),
     )
     .map(s => {
+      // A setting a later group setting covers shows that one's value.
+      const hidden = masked.get(s);
+      if (hidden) return `${describe(s)} -> not shown: ${hidden}`;
       const parts = partsOf(ctx, s);
       const listed = `${parts.slice(0, 4).join(', ')}${parts.length > 4 ? `, and ${parts.length - 4} more` : ''}`;
       if (s.thing === 'corners') {
@@ -1169,7 +1268,21 @@ function partValues(ctx, data, res, mode) {
               `${token === 'unknown' ? 'unknown' : `${token} ${res[mode][token] ?? 'unset'}`}${byToken.size > 1 ? ` for ${ts.join(', ')}` : ''}`,
           )
           .join('; ');
-        return `${describe(s)} -> border-radius ${px >= 9999 ? 'fully round' : `${px}px`} on ${listed} (whole theme: ${whole})`;
+        // What the build writes on each part: a rung by the radius token
+        // the part reads, an exact size as given.
+        const rung = CORNERS.some(([n]) => n === s.value) || px >= 1000;
+        const built = [...byToken]
+          .map(([token, ts]) => {
+            const v =
+              rung && token !== 'unknown' && ctx.base
+                ? radiusAt(ctx.base, s.value, token)
+                : px >= 1000
+                  ? 9999
+                  : px;
+            return `${v >= 9999 ? 'fully round' : `${v}px`}${byToken.size > 1 ? ` on ${ts.join(', ')}` : ''}`;
+          })
+          .join('; ');
+        return `${describe(s)} -> border-radius ${built}${byToken.size > 1 ? '' : ` on ${listed}`} (whole theme: ${whole})`;
       }
       const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
       return `${describe(s)} -> spacing x${f} inside ${listed} (whole theme: --spacing-4 ${res[mode]['--spacing-4'] ?? 'unset'})`;
@@ -1436,6 +1549,9 @@ export async function themeEditUndo(theme, options = {}) {
       undone,
       settings: prev.settings.length,
       stepsLeft: history.length,
+      // What the step back changed, as a change reports it.
+      changedTokens: committed.changed,
+      problems: committed.problems,
       ...p,
     },
   };

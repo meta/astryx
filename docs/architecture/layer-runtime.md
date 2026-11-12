@@ -314,8 +314,8 @@ close is not reported.
 
 `gestureCounter` identifies the physical pointer or keyboard gesture in flight.
 `useLayer` records the gesture and the trigger associated with a browser close,
-and a show from that trigger in the same gesture does not reopen the layer.
-DropdownMenu and Selector-family trigger paths consume this guard.
+and a `show()` from that trigger does not reopen the layer during that same
+gesture, so every trigger path gets this guard from `useLayer` (INV7).
 
 `useMenuHover` adds a real native invoker relationship for applicable auto
 popovers. It separately suppresses the synthetic `mouseenter` produced when a
