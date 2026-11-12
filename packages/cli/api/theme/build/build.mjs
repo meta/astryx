@@ -84,6 +84,7 @@ import {
   PathSafetyError,
 } from '../../../foundation/fs/path-safety.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
+import {editorThemeRecord} from '../../../foundation/config/theme-state.mjs';
 import {validatePrivateVars} from '../../../foundation/config/theme-private-vars.mjs';
 import {AstryxError} from '../../error.mjs';
 import {applyWrites} from '../../integration/add-helpers.mjs';
@@ -1069,9 +1070,9 @@ function assertThemeSourceFile(filePath, cwd) {
  * @param {Array<{dest: string}>} writes
  * @param {string} filePath the theme source
  * @param {string} cwd
- * @param {{claimed?: Map<string, string>, rerun?: string, refuseUnmarked?: boolean, elsewhere?: string}} [options]
+ * @param {{claimed?: Map<string, string>, rerun?: (out: string) => string, refuseUnmarked?: boolean, elsewhere?: string}} [options]
  *   `claimed`: outputs written earlier in this run, by the source that wrote
- *   them; `rerun`: this build's command, to run again once the file is gone;
+ *   them; `rerun`: this build's command with another --out;
  *   `elsewhere`: the option that moves the outputs
  */
 function assertOutputsReplaceable(
@@ -1084,6 +1085,23 @@ function assertOutputsReplaceable(
   const sourceKey = outputKey(filePath);
   const seen = new Set();
   let warnedOtherSource = false;
+  const beside = {
+    name: formatCliCommand(`theme build ${shellWord(rel(filePath))}`, cwd),
+    reason: 'write the outputs beside this source',
+  };
+  // A folder the theme editor made holds that theme's outputs only: another
+  // source's outputs there would sit beside its settings as if they were
+  // its own. The editor's own source builds there as always.
+  if (refuseUnmarked && writes.length) {
+    const dir = path.dirname(writes[0].dest);
+    const record = editorThemeRecord(dir);
+    if (record && path.resolve(path.dirname(filePath)) !== path.resolve(dir))
+      throw new AstryxError(
+        `${rel(dir) || '.'} is a theme the theme editor made (${record} is beside it), so the build does not write another theme's outputs there. Pick another ${elsewhere}.`,
+        [beside],
+        ERROR_CODES.ERR_FILE_EXISTS,
+      );
+  }
   for (const write of writes) {
     const key = outputKey(write.dest);
     if (key === sourceKey) {
@@ -1166,20 +1184,46 @@ function assertOutputsReplaceable(
       stat.size > 0 &&
       !fileHead(write.dest).includes(GENERATED_MARKER)
     ) {
+      // Never advice to delete it: it may be the person's file (a settings
+      // file, app source). A path that takes every output instead.
+      const free = freeOutPath(writes);
       throw new AstryxError(
-        `${rel(write.dest)} was written by an older CLI (before 0.6.7) or by hand, so the build does not replace it. Delete that file and run the same build again, or pick another ${elsewhere}.`,
-        rerun
-          ? [
-              {
-                name: rerun,
-                reason: 'run the same build again once the file is deleted',
-              },
-            ]
-          : undefined,
+        `${rel(write.dest)} is a file this build did not write (it has no build header: your own file, another tool's, or an output from a CLI before 0.6.7), so the build does not replace it. Pick another ${elsewhere}.`,
+        [
+          ...(free && rerun
+            ? [{name: rerun(rel(free)), reason: 'a path no file holds yet'}]
+            : []),
+          beside,
+        ],
         ERROR_CODES.ERR_FILE_EXISTS,
       );
     }
   }
+}
+
+/**
+ * A stylesheet path beside the first output where no output of this build
+ * exists yet (`brand-2.css` and its `.js` and `.d.ts`), or null.
+ * @param {Array<{dest: string}>} writes the stylesheet first
+ * @returns {string | null}
+ */
+function freeOutPath(writes) {
+  const css = writes[0]?.dest;
+  if (!css) return null;
+  const dir = path.dirname(css);
+  const stem = path.basename(css).replace(/\.css$/i, '');
+  for (let n = 2; n < 100; n += 1) {
+    const next = `${stem}-${n}`;
+    const taken = writes.some(w => {
+      const base = path.basename(w.dest);
+      return (
+        base.startsWith(stem) &&
+        fs.existsSync(path.join(dir, next + base.slice(stem.length)))
+      );
+    });
+    if (!taken) return path.join(dir, `${next}.css`);
+  }
+  return null;
 }
 
 /**
@@ -4223,7 +4267,7 @@ async function themeBuildInternal(
   if (!options.check) {
     confineOutputs(writes, writeRoot, options.out ? OUT_REMEDY : SOURCE_REMEDY);
     // prettier-ignore
-    const rerun = formatCliCommand(['theme', 'build', path.relative(cwd, filePath), ...(options.out ? ['--out', options.out] : []), ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])].map(shellWord).join(' '), cwd);
+    const rerun = (/** @type {string} */ out) => formatCliCommand(['theme', 'build', path.relative(cwd, filePath), '--out', out, ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])].map(shellWord).join(' '), cwd);
     // A header-less file at the default paths beside the source is an output
     // of a CLI before 0.6.7, which the build has always replaced. A path that
     // --out names may hold anything, so there only build outputs are replaced.
@@ -4263,15 +4307,17 @@ async function themeBuildInternal(
           `\n  Rebuild with: ${rebuildLine(rebuildCommand, options.__commandWords)}`,
         );
     }
-    return {
+    return /** @type {import('../theme.type.mjs').ThemeBuildCheckResponse} */ ({
       type: 'theme.build.check',
       data: {
         name: themeDef.name,
         upToDate,
         stale,
         checked: checkedBuildOutputs(writes, cwd),
+        // The code a stale check exits 1 with, for --json callers.
+        ...(upToDate ? {} : {code: ERROR_CODES.ERR_THEME_STALE}),
       },
-    };
+    });
   }
 
   // A batch publishes every theme's outputs after all of them are built, so
@@ -4931,15 +4977,17 @@ export async function themeBuildFamily(
           `\n  Rebuild with: ${rebuildLine(rebuildCommand, options.__commandWords)}`,
         );
     }
-    return {
+    return /** @type {import('../theme.type.mjs').ThemeBuildCheckResponse} */ ({
       type: 'theme.build.check',
       data: {
         name: root.theme.name,
         upToDate,
         stale,
         checked: checkedBuildOutputs(writes, cwd),
+        // The code a stale check exits 1 with, for --json callers.
+        ...(upToDate ? {} : {code: ERROR_CODES.ERR_THEME_STALE}),
       },
-    };
+    });
   }
   writeBuildOutputs(writes);
   for (const output of Object.values(outputs)) logger.log(`[ok] ${output}`);

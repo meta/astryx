@@ -91,7 +91,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'a build or validation error, or --check finds stale or missing outputs',
+      when: 'a build or validation error (an error envelope), or --check finds stale or missing outputs (the check result, with upToDate false, the stale files and code ERR_THEME_STALE)',
     },
   ],
   related: ['theme add', 'theme list'],

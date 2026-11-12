@@ -90,7 +90,7 @@ export const doc = {
     {
       type: 'theme.build.check',
       description:
-        'The {check: true} receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: "missing" | "outdated"}), and the full list of checked paths. Writes nothing. Resolves to null, like a normal build, when the theme produces no CSS.',
+        'The {check: true} receipt: theme name, an upToDate flag, the stale outputs (each {path, reason: "missing" | "outdated"}), the full list of checked paths, and, when stale, code ERR_THEME_STALE. Writes nothing. Resolves to null, like a normal build, when the theme produces no CSS.',
     },
   ],
   throws: [
@@ -108,7 +108,7 @@ export const doc = {
     },
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'a path that out names holds a non-empty file without the generated header, such as package.json, app source, or an output from a CLI before 0.6.7; nothing is written. Delete the file and run the same build again (the suggestion), or pick another out path. At the default paths beside the source, and at family output paths, a header-less file is an output of a CLI before 0.6.7 and is replaced',
+      when: 'a path that out names holds a non-empty file without the generated header, such as package.json, app source, or an output from a CLI before 0.6.7; nothing is written. The suggestions name a free out path beside it and the build beside the source; the file is left as it is. A path in a folder the theme editor made (beside its settings) is refused for any other source, with the build beside the source. At the default paths beside the source, and at family output paths, a header-less file is an output of a CLI before 0.6.7 and is replaced',
     },
     {
       code: 'ERR_INVALID_ARGUMENT',

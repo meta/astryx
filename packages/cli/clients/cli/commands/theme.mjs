@@ -1102,7 +1102,12 @@ function registerThemeCommands(theme, program, docs, words) {
           if (json) jsonOut(result);
           if (
             privateVarError ||
-            (result.type === 'theme.build.check' && !result.data.upToDate)
+            (result.type === 'theme.build.check' &&
+              !(
+                /** @type {import('../../../api/theme/theme.type.mjs').ThemeBuildCheckResponse} */ (
+                  result
+                ).data.upToDate
+              ))
           ) {
             process.exitCode = 1;
           }

@@ -456,6 +456,7 @@ describe('themeBuild() — check mode', () => {
     expect(result?.data.upToDate).toBe(true);
     expect(result?.data.stale).toEqual([]);
     expect(result?.data.checked).toContain('chk.css');
+    expect(/** @type {any} */ (result)?.data?.code).toBeUndefined();
     // Check mode must not rewrite the file.
     expect(fs.readFileSync(path.join(tmpDir, 'chk.css'), 'utf8')).toBe(before);
   });
@@ -508,6 +509,8 @@ describe('themeBuild() — check mode', () => {
         s => s.path === 'drift.css' && s.reason === 'outdated',
       ),
     ).toBe(true);
+    // A stale check carries the code it exits 1 with.
+    expect(/** @type {any} */ (result)?.data?.code).toBe('ERR_THEME_STALE');
   });
 
   it('flags a missing output', async () => {
@@ -1334,14 +1337,18 @@ describe('themeBuild() — outputs it may replace', () => {
     }
     expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
     expect(error.message).toBe(
-      `${path.join('dist', 'o.css')} was written by an older CLI (before 0.6.7) or by hand, so the build does not replace it. Delete that file and run the same build again, or pick another --out.`,
+      `${path.join('dist', 'o.css')} is a file this build did not write (it has no build header: your own file, another tool's, or an output from a CLI before 0.6.7), so the build does not replace it. Pick another --out.`,
     );
     expect(error.suggestions).toEqual([
       {
         name: expect.stringMatching(
-          / theme build ocean\.mjs --out dist\/o\.css$/,
+          / theme build ocean\.mjs --out dist\/o-2\.css$/,
         ),
-        reason: 'run the same build again once the file is deleted',
+        reason: 'a path no file holds yet',
+      },
+      {
+        name: expect.stringMatching(/ theme build ocean\.mjs$/),
+        reason: 'write the outputs beside this source',
       },
     ]);
     expect(error.suggestions[0].name).not.toMatch(/\brm\b/);
@@ -1793,5 +1800,33 @@ describe.each([
     expect(error.message).not.toMatch(
       /reading 'then'|imports in the theme file/,
     );
+  });
+});
+
+describe('themeBuild() — --out into a folder the theme editor made', () => {
+  it('refuses another source, naming the build beside it, and writes nothing', async () => {
+    const editor = path.join(tmpDir, 'themes', 'g');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(
+      path.join(editor, 'g.settings.json'),
+      JSON.stringify({like: 'neutral', settings: []}),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'other.mjs'),
+      `export default { name: 'other', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    for (const out of ['themes/g/x.css', 'themes/g/g.settings.json']) {
+      let error;
+      try {
+        await themeBuild('other.mjs', {out}, {cwd: tmpDir});
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error, out).toMatchObject({code: 'ERR_FILE_EXISTS'});
+      expect(error.message).toMatch(/theme editor made/);
+      expect(error.message).not.toMatch(/[Dd]elete/);
+      expect(error.suggestions[0].name).toMatch(/ theme build other\.mjs$/);
+    }
+    expect(fs.readdirSync(editor)).toEqual(['g.settings.json']);
   });
 });
