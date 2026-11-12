@@ -7,7 +7,8 @@
  *   plays on, for its theme's tempo (themeTempo.ts)
  * @output resolveMotion: the role's value at the theme's tempo.
  *   resolveSettleMs: how long a spring role, or one move on it, takes to
- *   settle there, for a CSS part that plays with it
+ *   settle there, for a CSS part that plays with it. resolveMoveTiming: that
+ *   move's duration and its progress as CSS easing
  * @position Motion foundation; the animator resolves every spring and curve
  *   it is handed with it, and components resolve the durations they time
  *   with it
@@ -37,6 +38,7 @@ import {
   toSpring,
   type SpringDescription,
 } from './spring';
+import {linearEasing} from './linearEasing';
 import {themeTempo} from './themeTempo';
 
 /**
@@ -178,4 +180,27 @@ export function resolveSettleMs(
   return move == null
     ? settlingDuration(resolved) * 1000
     : solveSpring(resolved, move).settleTime(move.epsilon) * 1000;
+}
+
+/**
+ * How `move` on `spring` plays at the tempo of the theme `element` is in: how
+ * long it takes, as `resolveSettleMs` gives it, and its progress over that
+ * time as CSS `linear()` easing. A CSS part that takes both follows the
+ * spring frame by frame, so the two start and land together. A sheet's scrim
+ * fades this way under the sheet's close.
+ */
+export function resolveMoveTiming(
+  element: Element | null | undefined,
+  spring: SpringDescription,
+  move: SpringMove,
+): {durationMs: number; easing: string} {
+  const curve = solveSpring(toSpring(resolveMotion(element, spring)), move);
+  const durationMs = curve.settleTime(move.epsilon) * 1000;
+  const span = move.to - move.from;
+  return {
+    durationMs,
+    easing: linearEasing(durationMs, t =>
+      span === 0 ? 1 : (curve.value(t / 1000) - move.from) / span,
+    ),
+  };
 }
