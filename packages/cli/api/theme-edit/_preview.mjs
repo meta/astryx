@@ -32,7 +32,7 @@ import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {camel, fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
 import {importPathOf, installLine} from './_project.mjs';
-import {DIRECT, P} from './_tables.mjs';
+import {COLOR_PROP_PARTS, DIRECT, P} from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 
@@ -585,7 +585,7 @@ const CELL = [
   '    if (!row) return;',
   "    const shown = Array.from(row.querySelectorAll('.tp-item > :not(.tp-label)')).some(el => {",
   '      const box = el.getBoundingClientRect();',
-  "      return (box.width > 2 && box.height > 2) || (el.textContent ?? '').trim() !== '';",
+  "      return (box.width > 0 && box.height > 0 && (box.width > 2 || box.height > 2)) || (el.textContent ?? '').trim() !== '';",
   '    });',
   '    setEmpty(!shown);',
   '  }, []);',
@@ -623,7 +623,10 @@ function changeLine(project, C, name, theme) {
     ['text', '"<color>"'],
   ]))
     if (C.partReads(part, aspect).length)
-      return `${P} set ${t} ${DIRECT[aspect]} ${value} --on ${part}`;
+      // A part whose color comes from its color prop takes the text token.
+      return aspect === 'text' && COLOR_PROP_PARTS.includes(part)
+        ? `${P} set ${t} --color-text-primary ${value}`
+        : `${P} set ${t} ${DIRECT[aspect]} ${value} --on ${part}`;
   if (C.showsCorners(part)) return `${P} set ${t} corners round --on ${part}`;
   return `${P} how ${part}`;
 }
@@ -649,7 +652,12 @@ const PAGE_SKIP = new Set([
  */
 export function componentsPageSource(project, {theme = null, C} = {}) {
   const items = showcaseItems(project, undefined)
-    .items.filter(it => it.group !== 'pages' && !PAGE_SKIP.has(it.name))
+    .items.filter(
+      it =>
+        it.group !== 'pages' &&
+        !PAGE_SKIP.has(it.name) &&
+        !project.components[it.name]?.overlay,
+    )
     .map(it => ({
       ...it,
       tree: withHandlers(withSources(project, withCoreNames(project, it.tree))),
@@ -673,7 +681,7 @@ export function componentsPageSource(project, {theme = null, C} = {}) {
           const body = list
             .map(
               it =>
-                `          <div className="tp-item">${it.label ? `\n            <div className="tp-label">${it.label}</div>` : ''}\n            <Safe name=${JSON.stringify(name)}>\n              ${jsx(/** @type {any} */ (it.tree), 7)}\n            </Safe>\n          </div>`,
+                `          <div className="${project.components[name]?.category === 'Layout' ? 'tp-item tp-fill' : 'tp-item'}">${it.label ? `\n            <div className="tp-label">${it.label}</div>` : ''}\n            <Safe name=${JSON.stringify(name)}>\n              ${jsx(/** @type {any} */ (it.tree), 7)}\n            </Safe>\n          </div>`,
             )
             .join('\n');
           const line = C ? changeLine(project, C, name, theme) : null;
@@ -683,7 +691,7 @@ export function componentsPageSource(project, {theme = null, C} = {}) {
       return `      <section>\n        <h2 className="tp-group">${GROUP_TITLES[g] ?? g}</h2>\n        <div className="tp-grid">\n${cells}\n        </div>\n      </section>`;
     })
     .join('\n');
-  const css = `.tp-group{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}.tp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}.tp-cell{border:1px dashed #8885;padding:10px;overflow:hidden}.tp-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}.tp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.tp-label{font:10px ui-monospace,monospace;opacity:.5}.tp-cmd{display:block;margin-top:10px;font:10px ui-monospace,monospace;opacity:.75;overflow-wrap:break-word}.tp-note{font:11px ui-monospace,monospace;opacity:.6;padding:6px 8px;border:1px dashed #8886}`;
+  const css = `.tp-group{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}.tp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}.tp-cell{border:1px dashed #8885;padding:10px;overflow:hidden}.tp-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}.tp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.tp-fill{flex:1 1 100%}.tp-label{font:10px ui-monospace,monospace;opacity:.5}.tp-cmd{display:block;margin-top:10px;font:10px ui-monospace,monospace;opacity:.75;overflow-wrap:break-word}.tp-note{font:11px ui-monospace,monospace;opacity:.6;padding:6px 8px;border:1px dashed #8886}`;
   const source = [
     '// Written by `astryx experimental theme preview add`: every component grouped, each variant side by side, overlays open.',
     "'use client';",

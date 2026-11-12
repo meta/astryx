@@ -299,6 +299,40 @@ describe('preview add', () => {
   });
 });
 
+describe('the components page', () => {
+  it('shows what each doc sets up, and every cell suggests a command that runs', async () => {
+    const page = read('src/app/theme-preview/_pages/components.tsx');
+    // A doc for several components gives each its own playground.
+    expect(page).toMatch(/<C\.Stack\b[^>]*>\s*<C\.Card/);
+    // A nav that opens over the whole page is left out, as a drawer is.
+    expect(page).not.toContain('<C.MobileNav');
+    // A part that only draws a line fills its row.
+    expect(page).toMatch(
+      /<div className="tp-item tp-fill">\s*<Safe name="Divider">/,
+    );
+    const cmds = [
+      ...page.matchAll(/<code className="tp-cmd">\{("[^\n]*")\}<\/code>/g),
+    ].map(m => /** @type {string} */ (JSON.parse(m[1])));
+    expect(cmds.length).toBeGreaterThan(40);
+    expect(cmds).toContain(
+      'astryx experimental theme editor set brand --color-text-primary "<color>"',
+    );
+    for (const c of cmds) {
+      const args = [...c.matchAll(/"([^"]*)"|(\S+)/g)]
+        .map(m => m[1] ?? m[2])
+        .map(w => w.replace('<color>', '#336699'))
+        .slice(1);
+      const r = await runCli(['--json', ...args], {cwd});
+      expect(r.status, `${c}\n${r.stdout.slice(0, 300)}`).toBe(0);
+      if (args[3] === 'set')
+        await runCli(
+          ['--json', 'experimental', 'theme', 'editor', 'undo', args[4]],
+          {cwd},
+        );
+    }
+  }, 600_000);
+});
+
 describe('preview options and errors', () => {
   it('refuses conflicting or bad options before writing anything', async () => {
     const at = path.join(cwd, 'src/app/opts');
@@ -527,6 +561,12 @@ describe('the preview commands succeed from the command line', () => {
 });
 
 describe('preview app', () => {
+  it('names a cd that works for a folder named like a flag', async () => {
+    const r = await themeEditPreviewApp('-k', {cwd});
+    expect(r.data.open.startsWith('cd ./-k && npm install')).toBe(true);
+    fs.rmSync(path.join(cwd, '-k'), {recursive: true, force: true});
+  }, 120_000);
+
   it('writes a starter app with Astryx pinned to this release and the preview route in it', async () => {
     const version = JSON.parse(
       fs.readFileSync(path.join(CLI, 'package.json'), 'utf8'),

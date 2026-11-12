@@ -18,6 +18,12 @@ import {
 /** The command prefix every suggested command starts with. */
 export const P = 'astryx experimental theme editor';
 
+/**
+ * Parts that take their color from a color prop, whose rule Core writes
+ * after part styles: a color set on them never shows.
+ */
+export const COLOR_PROP_PARTS = ['text', 'heading', 'link'];
+
 /** The lookup command: what a part reads, a setting, a question, a picture. */
 export const HOW = `${P} how`;
 

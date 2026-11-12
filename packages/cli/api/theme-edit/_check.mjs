@@ -26,6 +26,7 @@ import {
 } from './_css.mjs';
 import {
   AUTO_SPREAD,
+  COLOR_PROP_PARTS,
   COLOR_PROPS,
   COMMON_STATES,
   CORNERS,
@@ -1722,9 +1723,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
-    // Text, headings and links take their color from the color prop, whose
-    // rule Core writes after part styles: a color set on them never shows.
-    const textParts = ['text', 'heading', 'link'];
+    // Text, headings and links take their color from the color prop.
+    const textParts = COLOR_PROP_PARTS;
     if (
       (prop === 'color' || prop === '-webkit-text-fill-color') &&
       partsOf(ctx, s).some(t => textParts.includes(t))

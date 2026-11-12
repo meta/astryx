@@ -44,6 +44,7 @@ import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
  * @property {unknown} defaults - Playground defaults, or null.
  * @property {{component: string, props: Record<string, unknown>} | null} wrapper - The parent the playground renders it in, or null.
  * @property {boolean} opens - An overlay its playground shows in place: the pages render it open.
+ * @property {boolean} overlay - Its playground opens it over the whole page, so a page of components leaves it out.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
  * @property {string[]} keywords - The doc's search keywords.
  * @property {Record<string, {type: string, required: boolean, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, and the elements the doc suggests for it.
@@ -54,7 +55,7 @@ import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 4;
+const DOCS_VERSION = 5;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
@@ -136,11 +137,12 @@ async function readComponents(coreDir) {
       if (!doc || typeof doc.name !== 'string') continue;
       // A doc for several components lists each one's props under its own
       // entry.
-      const own = Array.isArray(doc.props)
-        ? doc.props
-        : (Array.isArray(doc.components) ? doc.components : []).find(
-            (/** @type {any} */ c) => c?.name === doc.name,
-          )?.props;
+      const mine = (Array.isArray(doc.components) ? doc.components : []).find(
+        (/** @type {any} */ c) => c?.name === doc.name,
+      );
+      const own = Array.isArray(doc.props) ? doc.props : mine?.props;
+      // Its playground too: the doc's, or its own entry's.
+      const pg = doc.playground ?? mine?.playground;
       /** @type {Record<string, any>} */
       const props = Object.fromEntries(
         (Array.isArray(own) ? own : []).map((/** @type {any} */ p) => [
@@ -151,19 +153,20 @@ async function readComponents(coreDir) {
       out[doc.name] = {
         importPath: resolveImportPath(coreDir, doc.name),
         category: typeof doc.category === 'string' ? doc.category : '',
-        defaults: doc.playground?.defaults ?? null,
+        defaults: pg?.defaults ?? null,
         wrapper:
-          typeof doc.playground?.wrapper?.component === 'string'
+          typeof pg?.wrapper?.component === 'string'
             ? {
-                component: doc.playground.wrapper.component,
-                props: doc.playground.wrapper.props ?? {},
+                component: pg.wrapper.component,
+                props: pg.wrapper.props ?? {},
               }
             : null,
+        overlay: pg?.overlay === true,
         // An overlay with an open state, unless its playground opens it as
         // a real overlay over the page.
         opens:
           doc.category === 'Overlay' &&
-          doc.playground?.overlay !== true &&
+          pg?.overlay !== true &&
           [doc, ...(Array.isArray(doc.components) ? doc.components : [])].some(
             (/** @type {any} */ d) =>
               Array.isArray(d?.props) &&

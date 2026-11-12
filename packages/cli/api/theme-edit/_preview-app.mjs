@@ -3192,7 +3192,8 @@ export async function themeEditPreviewApp(dir, options = {}) {
       pages: data.pages.map(x => x.id),
       files,
       notes,
-      open: `cd ${quoteCommandArgument(folder)} && npm install && npm run dev, then open /theme-preview`,
+      // A folder named like a flag (`-`, `-k`) is a path to cd only with ./.
+      open: `cd ${quoteCommandArgument(folder.startsWith('-') ? `./${folder}` : folder)} && npm install && npm run dev, then open /theme-preview`,
     },
   };
 }
