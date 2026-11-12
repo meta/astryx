@@ -1,4 +1,4 @@
-Results for "delete" (20 of 21)
+Results for "delete" (20)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
@@ -25,11 +25,6 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs global/uninstall reset
 parent:      pnpm exec astryx docs global/uninstall --index
-name:        cli/api/functions/theme-build
-domain:      doc
-package:     @astryxdesign/cli
-command:     pnpm exec astryx docs cli/api/functions/theme-build
-parent:      pnpm exec astryx docs cli/api/functions
 name:        cli/api/functions/theme-template
 domain:      doc
 package:     @astryxdesign/cli
@@ -99,3 +94,8 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/IconButton
 command:     pnpm exec astryx component IconButton
+name:        ToggleButton
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/ToggleButton
+command:     pnpm exec astryx component ToggleButton

@@ -24,7 +24,7 @@ import {
 } from './_catalog.mjs';
 import {
   catalogVariants,
-  isItemOf,
+  needsParent,
   renderDir,
   renderGenerated,
 } from './_parts.mjs';
@@ -187,7 +187,7 @@ function inParentOf(project, name) {
   const wrapper = info.wrapper;
   // A part its parent does not list as an item, such as a heading of the
   // text family, renders on its own.
-  if (!wrapper) return isItemOf(project, name) ? null : tree => tree;
+  if (!wrapper) return needsParent(project, name) ? null : tree => tree;
   if (project.components[wrapper.component]?.wrapper) return null;
   const props = Object.fromEntries(
     Object.entries(wrapper.props).filter(([k]) => !OPEN_PROPS.includes(k)),
@@ -984,7 +984,7 @@ export function previewRouteSource({
     '            ))}',
     '          </SideNav>',
     '        }>',
-    '        <current.Page />',
+    '        {ready ? <current.Page /> : null}',
     '      </AppShell>',
     '      </div>',
   ];
@@ -1028,6 +1028,10 @@ export function previewRouteSource({
     '',
     'export default function ThemePreviewPage() {',
     '  const [page, setPage] = React.useState(PAGES[0]?.id);',
+    // Pages render only in the browser: some components crash a server
+    // render, and Next prerenders a client page's first state.
+    '  const [ready, setReady] = React.useState(false);',
+    '  React.useEffect(() => setReady(true), []);',
     ...(theme
       ? [
           oneMode

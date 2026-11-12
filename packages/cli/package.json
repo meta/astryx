@@ -128,6 +128,7 @@
     "@babel/parser": "7.29.8",
     "@babel/plugin-transform-typescript": "7.29.7",
     "@babel/types": "7.29.8",
+    "@csstools/css-syntax-patches-for-csstree": "1.1.6",
     "@stylexjs/babel-plugin": "catalog:",
     "ast-types": "0.16.3",
     "commander": "^12.1.0",
