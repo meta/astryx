@@ -877,7 +877,9 @@ describe('text-json-parity', () => {
           textStatus: textResult.status,
           jsonStatus: jsonResult.status,
         };
-      });
+        // The editor commands build and render a theme twice here, which can
+        // pass the default hook budget on a loaded CI runner.
+      }, tc.name.startsWith('experimental theme editor') ? 120_000 : undefined);
 
       it('JSON output is a valid envelope', () => {
         expect(run.json).not.toBeNull();

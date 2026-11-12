@@ -61,7 +61,10 @@ export function readDurations(file = DURATIONS) {
 /** Seconds per Node test file from Vitest's default reporter lines. */
 export function recordDurations(text) {
   const seconds = {};
-  for (const line of text.replace(/\x1b\[[0-9;]*m/g, '').split('\n')) {
+  // Colour codes arrive as escape bytes, or, in `gh run view --log` output,
+  // spelled out as `^[[…m`.
+  const plain = text.replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
+  for (const line of plain.split('\n')) {
     const match =
       /[✓❯×]\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\(\d+ tests?[^)]*\)\s+(\d+(?:\.\d+)?)(ms|s)\s*$/.exec(
         line,
