@@ -9,12 +9,7 @@
 
 import {NO_RESULT_SET} from '../../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
-import {
-  cliError,
-  experimentalSubcommandPointer,
-  unknownSubcommandSuggestions,
-} from '../../lib/cli-error.mjs';
-import {getCliInvocation} from '../../../../foundation/env/package-manager.mjs';
+import {cliError, themeGroupUnknownSubcommand} from '../../lib/cli-error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {doc as experimentalGroup} from '../experimental.doc.mjs';
 import {registerExperimentalIcon} from './icon.mjs';
@@ -31,26 +26,16 @@ export function registerExperimental(program) {
     ) => {
       const extras = cmd?.args ?? [];
       if (extras.length > 0) {
-        const word = String(extras[0]);
-        const invocation = getCliInvocation(process.cwd());
-        const here = `${invocation} experimental`;
-        const moved = experimentalSubcommandPointer(
-          invocation,
-          word,
+        const {message, suggestions} = themeGroupUnknownSubcommand(
+          'experimental',
+          String(extras[0]),
+          (experimental.commands ?? []).map(command => command.name()),
           experimental,
         );
-        return cliError(
-          `unknown subcommand 'experimental ${word}'${moved.length > 0 ? `; it is ${moved[0].name}` : ''}`,
-          {
-            suggestions: unknownSubcommandSuggestions(
-              here,
-              word,
-              (experimental.commands ?? []).map(command => command.name()),
-              moved,
-            ),
-            code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
-          },
-        );
+        return cliError(message, {
+          suggestions,
+          code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+        });
       }
       experimental.help();
       return NO_RESULT_SET;

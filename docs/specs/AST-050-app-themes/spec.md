@@ -142,8 +142,10 @@ described.
   themes root itself and a folder in it named after another theme the project
   can use, because `theme list` and `theme add` read each local theme from a
   folder named after it, and name the default target. A fork into a folder there
-  with a new name takes that name, in its descriptor and its `defineTheme`
-  call.
+  with a new name takes that name: its `defineTheme` name is the folder's,
+  and its entry, descriptor and export take the build's binding for it
+  (`acme-ocean` → `acmeOceanTheme.ts`, `acmeOceanTheme.doc.mjs`,
+  `acmeOceanTheme`), so `theme build` and `theme add` read it as that theme.
   `theme template [path]` leaves an existing file as it is without
   `--overwrite`. Its receipt then says whether `--overwrite` would replace that
   file (`overwritable`), and when it would not, it names a free path for the

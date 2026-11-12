@@ -49,11 +49,7 @@ import {
   list,
 } from '../formatters/index.mjs';
 import {logger} from '../../../api/logger.mjs';
-import {
-  cliError,
-  experimentalThemePointer,
-  unknownSubcommandSuggestions,
-} from '../lib/cli-error.mjs';
+import {cliError, themeGroupUnknownSubcommand} from '../lib/cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
@@ -697,23 +693,16 @@ export function registerTheme(program) {
       // us as a positional in cmd.args — exit 1 with a clear error.
       const extras = (cmd && cmd.args) || [];
       if (extras.length > 0) {
-        const unknown = String(extras[0]);
-        const known = (theme.commands || []).map(c => c.name());
-        const invocation = getCliInvocation(process.cwd());
-        // The theme editor and previews live only in `experimental theme`.
-        const moved = experimentalThemePointer(invocation, unknown);
-        return cliError(
-          `unknown subcommand 'theme ${unknown}'${moved.length > 0 ? `; it is ${moved[0].name}` : ''}`,
-          {
-            suggestions: unknownSubcommandSuggestions(
-              `${invocation} theme`,
-              unknown,
-              known,
-              moved,
-            ),
-            code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
-          },
+        const {message, suggestions} = themeGroupUnknownSubcommand(
+          'theme',
+          String(extras[0]),
+          (theme.commands || []).map(c => c.name()),
+          theme,
         );
+        return cliError(message, {
+          suggestions,
+          code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+        });
       }
       // Bare `astryx theme` — show the subcommand list. Exit 0 (help is success).
       theme.help();

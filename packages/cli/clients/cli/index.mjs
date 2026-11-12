@@ -25,12 +25,7 @@ import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
 import {cliInstallAdvice, installFolder, projectRelease, SETUP_REMINDER_KEY, takeNotice} from '../../foundation/release/notices.mjs';
 import {isCi} from '../../foundation/release/update-notice-env.mjs';
 import {buildManifest, storedManifest} from './lib/manifest.mjs';
-import {
-  cliError,
-  experimentalSubcommandPointer,
-  experimentalThemePointer,
-  unknownSubcommandSuggestions,
-} from './lib/cli-error.mjs';
+import {cliError, themeGroupUnknownSubcommand} from './lib/cli-error.mjs';
 import {section, text, records} from './formatters/index.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
@@ -741,24 +736,16 @@ export async function createProgram({argv} = {}) {
       if (fullName === 'theme' || fullName === 'experimental') {
         // The theme groups name whole commands, closest first, and point at
         // `experimental theme <word>` when the word is one of its commands.
-        const word = String(unknown);
-        const invocation = getCliInvocation(process.cwd());
-        const moved =
-          fullName === 'theme'
-            ? experimentalThemePointer(invocation, word)
-            : experimentalSubcommandPointer(invocation, word, actionCommand);
-        cliError(
-          `unknown subcommand '${fullName} ${word}'${moved.length > 0 ? `; it is ${moved[0].name}` : ''}`,
-          {
-            code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
-            suggestions: unknownSubcommandSuggestions(
-              `${invocation} ${fullName}`,
-              word,
-              names,
-              moved,
-            ),
-          },
+        const {message, suggestions} = themeGroupUnknownSubcommand(
+          fullName,
+          String(unknown),
+          names,
+          actionCommand,
         );
+        cliError(message, {
+          code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+          suggestions,
+        });
       }
       cliError(`unknown subcommand '${fullName} ${unknown}'`, {
         code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,

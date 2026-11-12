@@ -510,8 +510,8 @@ export const oceanTheme = defineTheme({
         package: '@acme/brand-integration',
         outputDir: target,
         files: expect.arrayContaining([
-          'oceanTheme.ts',
-          'oceanTheme.doc.mjs',
+          'acmeOceanTheme.ts',
+          'acmeOceanTheme.doc.mjs',
           'tokens/ocean.palette.receipt.json',
           'tokens/ocean.palette.ts',
         ]),
@@ -537,7 +537,7 @@ export const oceanTheme = defineTheme({
       ).recipe,
     ).toBe('astryx-oklch-v1');
 
-    const copiedEntry = path.join(target, 'oceanTheme.ts');
+    const copiedEntry = path.join(target, 'acmeOceanTheme.ts');
     const built = await runCli(
       ['theme', 'build', copiedEntry, '--json'],
       consumerDir,

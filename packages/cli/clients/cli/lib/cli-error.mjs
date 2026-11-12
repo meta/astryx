@@ -57,7 +57,10 @@ import {
 } from '../../../foundation/response/json.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setOutcome} from '../../../foundation/debug/index.mjs';
-import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
+import {
+  formatCliCommand,
+  getCliInvocation,
+} from '../../../foundation/env/package-manager.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {doc as experimentalEditorDoc} from '../commands/experimental-theme-editor.doc.mjs';
 import {doc as experimentalPreviewDoc} from '../commands/experimental-theme-preview.doc.mjs';
@@ -273,4 +276,31 @@ export function experimentalSubcommandPointer(invocation, word, experimental) {
         },
       ]
     : [];
+}
+
+/**
+ * The refusal of an unknown subcommand of `theme` or `experimental`: its
+ * message, and whole commands to run, closest first, led by the
+ * `experimental theme` command the word names when it names one.
+ * @param {'theme' | 'experimental'} group
+ * @param {string} word the unknown word
+ * @param {string[]} names the group's subcommand names
+ * @param {import('commander').Command | undefined} loaded the loaded group
+ * @returns {{message: string, suggestions: Array<{name: string, reason: string}>}}
+ */
+export function themeGroupUnknownSubcommand(group, word, names, loaded) {
+  const invocation = getCliInvocation(process.cwd());
+  const moved =
+    group === 'theme'
+      ? experimentalThemePointer(invocation, word)
+      : experimentalSubcommandPointer(invocation, word, loaded);
+  return {
+    message: `unknown subcommand '${group} ${word}'${moved.length > 0 ? `; it is ${moved[0].name}` : ''}`,
+    suggestions: unknownSubcommandSuggestions(
+      `${invocation} ${group}`,
+      word,
+      names,
+      moved,
+    ),
+  };
 }
