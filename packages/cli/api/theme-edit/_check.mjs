@@ -16,6 +16,7 @@ import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   MATH_FUNCTION,
   belowRange,
+  fontShorthandParts,
   cssProperties,
   grammarText,
   initialOf,
@@ -580,6 +581,17 @@ function checkCycle(thing, value, TOKENS, data) {
 }
 
 /**
+ * The CSS color name nearest a word typed as a color (`banan` is not one,
+ * `rd` is red), or null when none is near.
+ * @param {string} v
+ */
+function nearestColorName(v) {
+  const w = v.trim().toLowerCase();
+  if (!/^[a-z]+$/.test(w)) return null;
+  return nearest(w, COLOR_NAMES)[0] ?? null;
+}
+
+/**
  * Why a value is not one the property takes, or null. Colors are checked
  * by the editor's own color check; a property css-tree has no grammar for
  * is not checked.
@@ -598,9 +610,13 @@ function propertyProblem(prop, value) {
   const near = /^[a-z-]+$/i.test(v)
     ? (nearest(v.toLowerCase(), keywordsOf(prop))[0] ?? null)
     : null;
+  // A value that works, for the suggestion: a keyword near the one typed,
+  // the property's initial value, or an example of its kind.
+  const example = exampleOf(groupOfPropType(prop), prop);
   return {
     takes: `a value its CSS grammar takes (${grammarText(known)})`,
-    near: near ?? initialOf(prop),
+    near:
+      near ?? initialOf(prop) ?? (matchValue(prop, example) ? example : null),
   };
 }
 
@@ -1646,16 +1662,30 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             ],
           },
         );
-      if (s.on && !isRole)
+      if (s.on && !isRole) {
+        // A CSS font shorthand goes to its longhands, each a command that
+        // works; a value that is neither gets a family that works.
+        const parts = matchValue('font-family', v)
+          ? null
+          : fontShorthandParts(v);
+        const runs = matchValue('font-family', v)
+          ? [
+              `${P} set ${slug} font-family ${quoteCommandArgument(v)} --on ${s.on}`,
+            ]
+          : parts
+            ? Object.entries(parts).map(
+                ([k, x]) =>
+                  `${P} set ${slug} ${k} ${quoteCommandArgument(x)} --on ${s.on}`,
+              )
+            : [
+                `${P} set ${slug} font-family ${quoteCommandArgument(exampleOf('font', 'font-family'))} --on ${s.on}`,
+              ];
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          "font --on takes body, heading, or code. For one part's font use font-family.",
-          {
-            run: [
-              `${P} set ${slug} font-family ${quoteCommandArgument(v)} --on ${s.on}`,
-            ],
-          },
+          `font --on takes body, heading, or code. For one part's font use font-family${parts ? ', and the other parts of the font shorthand one by one' : ''}.`,
+          {run: runs},
         );
+      }
       if (step)
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -1967,6 +1997,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     return s;
   }
   const prop = kebab(thing);
+  // A dial typed in other letters (Font, FONT) is the dial, not the CSS
+  // property of the same name.
+  if (thing !== thing.toLowerCase() && DIALS[thing.toLowerCase()])
+    refuse(
+      E.ERR_THEME_UNKNOWN_THING,
+      `"${thing}" is not a dial, a token, or a CSS property. The dial for that is ${thing.toLowerCase()}.`,
+      {
+        didYouMean: [thing.toLowerCase()],
+        run: [
+          unset
+            ? `${P} undo ${slug} ${thing.toLowerCase()}${s.on ? ` --on ${s.on}` : ''}`
+            : `${P} set ${slug} ${thing.toLowerCase()} ${quoteCommandArgument(v || 'inter')}${s.on ? ` --on ${s.on}` : ''}`,
+        ],
+      },
+    );
   if (cssProperties().has(prop)) {
     if (!s.on)
       refuse(
@@ -2099,7 +2144,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             ? [
                 `${P} set ${slug} background ${quoteCommandArgument(v)} --on ${s.on}`,
               ]
-            : [],
+            : [
+                `${P} set ${slug} ${prop} ${quoteCommandArgument(nearestColorName(v) ?? exampleOf('color', prop))} --on ${s.on}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+              ],
         },
       );
     }

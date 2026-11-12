@@ -570,9 +570,52 @@ export function keywordsOf(prop) {
 export function initialOf(prop) {
   const initial = mdnProperties()[prop]?.initial;
   if (Array.isArray(initial)) return initial[0] ? initialOf(initial[0]) : null;
-  return typeof initial === 'string' && matchValue(prop, initial)
+  // MDN writes a note, not a value, where the initial value varies
+  // (dependsOnUserAgent): one camelCase word, never a CSS value.
+  return typeof initial === 'string' &&
+    !/^[a-z]+[A-Z]\w*$/.test(initial) &&
+    matchValue(prop, initial)
     ? initial
     : null;
+}
+
+/**
+ * The parts of a `font` shorthand (`bold 16px/1.5 Georgia, serif`), by
+ * longhand, as written; null when the value is not one.
+ * @param {string} value
+ * @returns {Record<string, string> | null}
+ */
+export function fontShorthandParts(value) {
+  const {lexer, parse, generate} = csstree();
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parse(value, {context: 'value', positions: true});
+  } catch {
+    return null;
+  }
+  const r = lexer.matchProperty('font', ast);
+  if (r.error || !r.matched) return null;
+  /** @type {Record<string, any[]>} */
+  const parts = {};
+  /** @param {any} m @param {string | null} under */
+  const visit = (m, under) => {
+    const name = m.syntax?.type === 'Property' ? String(m.syntax.name) : under;
+    if (m.node && name) (parts[name] ??= []).push(m.node);
+    for (const c of m.match ?? []) visit(c, name);
+  };
+  visit(r.matched, null);
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const [k, nodes] of Object.entries(parts)) {
+    if (k === 'font') continue;
+    // The family list is the rest of the value, as written.
+    out[k] =
+      k === 'font-family'
+        ? value.slice(nodes[0].loc?.start.offset ?? 0).trim()
+        : nodes.map(n => generate(n)).join(' ');
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /**

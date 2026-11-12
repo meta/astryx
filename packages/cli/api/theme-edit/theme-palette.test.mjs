@@ -2080,3 +2080,50 @@ describe('colors10, final-4', () => {
     fs.rmSync(dir, {recursive: true, force: true});
   });
 });
+
+describe('colors11: refusals name a command that works', () => {
+  it('reads a dial typed in other letters as the dial', async () => {
+    const r = await refusal(() => themeEditSet('p', 'Font', 'inter', {cwd}));
+    expect(r.message).toContain('The dial for that is font');
+    expect(r.run).toContain(
+      r.run.find(x => / set p font inter$/.test(x)) ?? 'missing',
+    );
+  });
+
+  it('splits a font shorthand on a part into commands that work', async () => {
+    const r = await refusal(() =>
+      themeEditSet('p', 'font', 'bold 16px/1.5 Georgia, serif', {
+        cwd,
+        on: 'card',
+      }),
+    );
+    expect(
+      r.run.some(x => /font-family 'Georgia, serif' --on card$/.test(x)),
+    ).toBe(true);
+    expect(r.run.some(x => /font-size 16px --on card$/.test(x))).toBe(true);
+    for (const [prop, value] of [
+      ['font-family', 'Georgia, serif'],
+      ['font-size', '16px'],
+    ]) {
+      await themeEditSet('p', prop, value, {cwd, on: 'card'});
+      await themeEditUndo('p', {cwd, thing: prop, on: 'card'});
+    }
+  });
+
+  it('never suggests an MDN note as a value, and names a color that works', async () => {
+    const family = await refusal(() =>
+      themeEditSet('p', 'font-family', '16px inter', {cwd, on: 'card'}),
+    );
+    expect(family.run.join(' ')).not.toContain('dependsOnUserAgent');
+    expect(family.run.join(' ')).toContain('font-family');
+    for (const prop of ['color', 'background-color', 'border-color']) {
+      const r = await refusal(() =>
+        themeEditSet('p', prop, 'banana', {cwd, on: 'card'}),
+      );
+      expect(r.run.length, prop).toBeGreaterThan(0);
+      expect(r.run[0], prop).toMatch(
+        new RegExp(` set p ${prop} \\S+ --on card$`),
+      );
+    }
+  });
+});
