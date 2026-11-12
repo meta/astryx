@@ -966,6 +966,27 @@ describe('pass 3', () => {
     expect(group.code).toBe('ERR_FILE_EXISTS');
     expect(group.run[0]).toContain('--path src/app/theme-preview-2');
     rm('src/app/(marketing)');
+    // A route handler in a route group, and the app's own route or page in
+    // the folder itself.
+    for (const file of [
+      'src/app/(api)/theme-preview/route.ts',
+      'src/app/theme-preview/route.ts',
+      'src/app/theme-preview/page.jsx',
+    ]) {
+      const had = exists('src/app/theme-preview/page.tsx');
+      write(file, 'export default 1;\n');
+      try {
+        const r = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
+        expect(r.code, file).toBe('ERR_FILE_EXISTS');
+        expect(r.message, file).toContain(
+          `${file} already serves /theme-preview`,
+        );
+        expect(exists('src/app/theme-preview/page.tsx'), file).toBe(had);
+      } finally {
+        rm(file);
+      }
+    }
+    rm('src/app/(api)');
     write('src/pages/theme-preview.tsx', 'export default 1;\n');
     try {
       const pages = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
@@ -1124,6 +1145,28 @@ describe('pass 3', () => {
     const r = await themeEditPreviewAdd(undefined, {cwd, template: 'LOGIN'});
     expect(r.data.added).toEqual(['login']);
   }, 120_000);
+
+  it("refuses Next's build folder for an app or a preview: the next build empties it", async () => {
+    for (const dir of ['.next/demo', 'out/demo'])
+      expect(
+        (await refusal(() => themeEditPreviewApp(dir, {cwd}))).message,
+        dir,
+      ).toContain('is where Next writes its build');
+    const add = await refusal(() =>
+      themeEditPreviewAdd(undefined, {cwd, path: '.next/tp'}),
+    );
+    expect(add.code).toBe('ERR_INVALID_ARGUMENT');
+    write('next.config.mjs', "export default {distDir: 'build'};\n");
+    try {
+      expect(
+        (await refusal(() => themeEditPreviewApp('build/demo', {cwd}))).message,
+      ).toContain('build/ is where Next writes its build');
+    } finally {
+      rm('next.config.mjs');
+    }
+    for (const dir of ['.next', 'out', 'build'])
+      expect(exists(`${dir}/demo`), dir).toBe(false);
+  });
 
   it('refuses an app in public/ or with a name Windows does not allow', async () => {
     write('public/robots.txt', 'x\n');

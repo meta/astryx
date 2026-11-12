@@ -306,6 +306,12 @@ describe('the components page', () => {
     expect(page).toMatch(/<C\.Stack\b[^>]*>\s*<C\.Card/);
     // A nav that opens over the whole page is left out, as a drawer is.
     expect(page).not.toContain('<C.MobileNav');
+    // A part as tall as the window scrolls in a frame, and a cell is only
+    // as tall as its content.
+    expect(page).toContain(
+      '.tp-fill{flex:1 1 100%;max-height:300px;overflow:auto}',
+    );
+    expect(page).toContain('align-items:start}');
     // A part that only draws a line fills its row.
     expect(page).toMatch(
       /<div className="tp-item tp-fill">\s*<Safe name="Divider">/,

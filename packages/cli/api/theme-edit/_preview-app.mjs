@@ -132,10 +132,35 @@ function checkFolderName(where, what, retry) {
 }
 
 /**
+ * The build folder next.config names (`distDir`), read as text (best
+ * effort), or null.
+ * @param {string} cwd
+ */
+function nextDistDir(cwd) {
+  for (const name of [
+    'next.config.mjs',
+    'next.config.js',
+    'next.config.ts',
+    'next.config.cjs',
+  ]) {
+    try {
+      const text = fs.readFileSync(path.join(cwd, name), 'utf8');
+      const m = /distDir\s*:\s*['"`]\.?\/?([^'"`/]+)/.exec(text);
+      return m ? m[1] : null;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
  * Why a folder is no place for files this command writes, or null: themes
  * live in themes/ (and a preview app's whole tree would ship with the
- * theme), packages in node_modules/, and Next serves every file under a
- * Pages Router folder (`pages/` or `src/pages/`) as a page.
+ * theme), packages in node_modules/, Next empties its build folder
+ * (`.next/`, `out/` or the `distDir` next.config names) on every build,
+ * and Next serves every file under a Pages Router folder (`pages/` or
+ * `src/pages/`) as a page.
  * @param {string} cwd
  * @param {string} dir
  */
@@ -147,6 +172,11 @@ function reservedFolder(cwd, dir) {
     return 'node_modules/ belongs to the package manager, which replaces it';
   if (segs[0] === 'public')
     return 'Next serves every file in public/ as it is, at the site root, so anyone could download it';
+  const built = [...new Set(['.next', 'out', nextDistDir(cwd)])].find(
+    d => d && segs[0] === d,
+  );
+  if (built)
+    return `${built}/ is where Next writes its build, and the next build empties it`;
   const odd = segs.find(
     seg =>
       /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(seg) || /^\.+$/.test(seg),
@@ -213,9 +243,13 @@ function pageExtensions(cwd) {
   return null;
 }
 
+/** A file Next serves a URL from: a page or a route handler. */
+const ROUTE_FILE = /^(page\.(tsx|ts|jsx|js|mdx)|route\.(tsx|ts|jsx|js))$/;
+
 /**
- * A page of the app that Next serves at the same URL as `dir`, which would
- * stop the whole app from building, or null.
+ * A page or route handler of the app that Next serves at the same URL as
+ * `dir`, or null: beside the preview, Next refuses to build (a route and a
+ * page), or the preview takes that URL from it.
  * @param {string} cwd
  * @param {string} app the routes folder
  * @param {string} dir
@@ -239,14 +273,22 @@ function sameUrlPage(cwd, app, dir) {
         const hit = walk(full);
         if (hit) return hit;
       } else if (
-        folder !== dir &&
-        /^page\.(tsx|ts|jsx|js|mdx)$/.test(e.name) &&
+        ROUTE_FILE.test(e.name) &&
         urlSegments(app, folder).join('/') === url
       )
         return full;
     }
     return null;
   };
+  // The preview's own folder: a route handler, or a page other than the
+  // page.tsx the preview writes.
+  try {
+    for (const name of fs.readdirSync(dir))
+      if (ROUTE_FILE.test(name) && name !== 'page.tsx')
+        return path.join(dir, name);
+  } catch {
+    // No folder yet.
+  }
   const inApp = walk(app);
   if (inApp) return inApp;
   for (const pages of [path.join(cwd, 'pages'), path.join(cwd, 'src', 'pages')])
@@ -398,7 +440,7 @@ function checkPlacement(cwd, dir, where, retry) {
     for (let n = 3; fs.existsSync(free); n++) free = `${dir}-${n}`;
     refuse(
       E.ERR_FILE_EXISTS,
-      `${shown(cwd, clash)} already serves /${urlSegments(app, dir).join('/')}, so a preview in ${where} would stop the app from building.`,
+      `${shown(cwd, clash)} already serves /${urlSegments(app, dir).join('/')}, so a preview in ${where} would stop the app from building, or take that URL from it.`,
       {run: [retry(shown(cwd, free))]},
     );
   }
