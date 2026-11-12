@@ -658,8 +658,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   reduced motion FR8 applies. A menu or popover presented as a bottom sheet
   follows the sheet instead. Tap-opened layers (Popover, DropdownMenu,
   MoreMenu) grow on Popover's surface motion. A menu opened without an
-  accepted press (keyboard, programmatic, or a press the menu's press model
-  ignores, such as a second finger) uses the layer's own entrance.
+  accepted press uses the layer's own entrance. That covers a keyboard or
+  programmatic open and a press the menu's press model ignores, such as a
+  second finger.
 - **FR32 — A pan outside dismisses.** Under a finger, an open anchored menu MUST close as a touch outside it
   begins to pan, and at the lift of a tap or hold outside it. A Popover's
   dismissal is unchanged. A pinch stays available over it: its surface

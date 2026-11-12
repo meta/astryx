@@ -156,7 +156,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 `useMenuPressInternal` (not exported from any entry) also reports the accepted
 press's pointer type, which DropdownMenu reads to choose its grow; the public
-hook's contract stays as released.
+hook does not expose it.
 
 ## Behavioral contract
 
