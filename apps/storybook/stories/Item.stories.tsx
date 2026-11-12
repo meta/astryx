@@ -7,7 +7,7 @@
  * @position Storybook examples and Item/List regression evidence
  */
 
-import {useState, type ReactNode} from 'react';
+import {useMemo, useState, type ReactNode} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
@@ -590,19 +590,55 @@ export const SwipeActions: Story = {
         label: `Message ${index + 1}`,
       })),
     );
-    const remove = (id: number) =>
-      setRows(current => current.filter(row => row.id !== id));
-    const toggleRead = (id: number) =>
-      setRows(current =>
-        current.map(row =>
-          row.id === id ? {...row, isUnread: !row.isUnread} : row,
-        ),
-      );
+    // Each swipe is defined once and serves every row: a handler reads its
+    // row from the key. Unread rows offer Read and read rows offer Unread, so
+    // there are two.
+    const [unreadSwipe, readSwipe] = useMemo(() => {
+      const toggleRead = ({itemKey}: {itemKey: string | number | undefined}) =>
+        setRows(current =>
+          current.map(row =>
+            row.id === itemKey ? {...row, isUnread: !row.isUnread} : row,
+          ),
+        );
+      const remove = ({itemKey}: {itemKey: string | number | undefined}) =>
+        setRows(current => current.filter(row => row.id !== itemKey));
+      const swipeFor = (leadingLabel: string) =>
+        createSwipe({
+          leading: [
+            {
+              id: 'read',
+              label: leadingLabel,
+              icon: <Icon icon={EnvelopeIcon} size="sm" />,
+              onActivate: toggleRead,
+            },
+          ],
+          trailing: [
+            {
+              id: 'archive',
+              label: 'Archive',
+              icon: <Icon icon={ArchiveBoxIcon} size="sm" />,
+              onActivate: remove,
+              variant: 'neutral',
+              hasRemoval: true,
+            },
+            {
+              id: 'delete',
+              label: 'Delete',
+              icon: <Icon icon={TrashIcon} size="sm" />,
+              onActivate: remove,
+              variant: 'destructive',
+              hasRemoval: true,
+            },
+          ],
+        });
+      return [swipeFor('Read'), swipeFor('Unread')];
+    }, []);
     return (
       <List>
         {rows.map(row => (
           <ListItem
             key={row.id}
+            itemKey={row.id}
             label={row.label}
             description={row.isUnread ? 'Unread' : 'Read'}
             onClick={() => {}}
@@ -611,34 +647,7 @@ export const SwipeActions: Story = {
                 {row.isUnread ? 'Mark read' : 'Mark unread'} · Archive · Delete
               </Text>
             }
-            swipe={createSwipe({
-              leading: [
-                {
-                  id: 'read',
-                  label: row.isUnread ? 'Read' : 'Unread',
-                  icon: <Icon icon={EnvelopeIcon} size="sm" />,
-                  onActivate: () => toggleRead(row.id),
-                },
-              ],
-              trailing: [
-                {
-                  id: 'archive',
-                  label: 'Archive',
-                  icon: <Icon icon={ArchiveBoxIcon} size="sm" />,
-                  onActivate: () => remove(row.id),
-                  variant: 'neutral',
-                  hasRemoval: true,
-                },
-                {
-                  id: 'delete',
-                  label: 'Delete',
-                  icon: <Icon icon={TrashIcon} size="sm" />,
-                  onActivate: () => remove(row.id),
-                  variant: 'destructive',
-                  hasRemoval: true,
-                },
-              ],
-            })}
+            swipe={row.isUnread ? unreadSwipe : readSwipe}
           />
         ))}
         {rows.length === 0 && <ListItem label="All done." />}
@@ -660,30 +669,36 @@ export const SwipeCommit: Story = {
         label: `Notification ${index + 1}`,
       })),
     );
-    const remove = (id: number) =>
-      setRows(current => current.filter(row => row.id !== id));
+    // One swipe serves every row: the handler reads its row from the key.
+    const dismissSwipe = useMemo(
+      () =>
+        createSwipe({
+          trailing: [
+            {
+              id: 'dismiss',
+              label: 'Dismiss',
+              icon: <Icon icon={TrashIcon} size="sm" />,
+              onActivate: ({itemKey}) =>
+                setRows(current => current.filter(row => row.id !== itemKey)),
+              variant: 'destructive',
+              hasRemoval: true,
+            },
+          ],
+          swipeBehavior: 'commit',
+        }),
+      [],
+    );
     return (
       <List>
         {rows.map(row => (
           <ListItem
             key={row.id}
+            itemKey={row.id}
             label={row.label}
             description="Swipe toward the start to dismiss"
             onClick={() => {}}
             endContent={<Text color="secondary">Dismiss</Text>}
-            swipe={createSwipe({
-              trailing: [
-                {
-                  id: 'dismiss',
-                  label: 'Dismiss',
-                  icon: <Icon icon={TrashIcon} size="sm" />,
-                  onActivate: () => remove(row.id),
-                  variant: 'destructive',
-                  hasRemoval: true,
-                },
-              ],
-              swipeBehavior: 'commit',
-            })}
+            swipe={dismissSwipe}
           />
         ))}
         {rows.length === 0 && <ListItem label="All caught up." />}
