@@ -375,4 +375,19 @@ describe('MoreMenu', () => {
       'm',
     );
   });
+
+  it('passes data-* attributes to the bottom-sheet trigger, not the sheet', () => {
+    render(
+      <MoreMenu
+        items={[{label: 'Edit', onClick: () => {}}]}
+        presentation="bottom-sheet"
+        data-tag="m"
+      />,
+    );
+    expect(document.querySelectorAll('[data-tag="m"]')).toHaveLength(1);
+    expect(screen.getByRole('button', {name: 'More options'})).toHaveAttribute(
+      'data-tag',
+      'm',
+    );
+  });
 });
