@@ -58,18 +58,24 @@ const codes = (/** @type {{notes: {code: string}[]}} */ result) =>
 
 describe('isListingImage', () => {
   it('accepts PNG and shapes-only SVG, refuses scripts, links and oversize', () => {
-    expect(isListingImage(PNG)).toBe(true);
-    expect(isListingImage(Buffer.from(SVG))).toBe(true);
-    expect(isListingImage(Buffer.from('<svg><script>x()</script></svg>'))).toBe(
-      false,
-    );
+    expect(isListingImage(PNG, 'logo.png')).toBe(true);
+    expect(isListingImage(Buffer.from(SVG), 'logo.svg')).toBe(true);
+    expect(
+      isListingImage(
+        Buffer.from('<svg><script>x()</script></svg>'),
+        'logo.svg',
+      ),
+    ).toBe(false);
     expect(
       isListingImage(
         Buffer.from('<svg><image href="https://e.x/a.png"/></svg>'),
+        'logo.svg',
       ),
     ).toBe(false);
-    expect(isListingImage(Buffer.from('not an image'))).toBe(false);
-    expect(isListingImage(Buffer.alloc(512 * 1024 + 1, 137))).toBe(false);
+    expect(isListingImage(Buffer.from('not an image'), 'logo.svg')).toBe(false);
+    expect(isListingImage(Buffer.alloc(512 * 1024 + 1, 137), 'logo.png')).toBe(
+      false,
+    );
   });
 
   it.each([
@@ -86,11 +92,15 @@ describe('isListingImage', () => {
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 8 8"><defs><circle id="c" r="2"/></defs><use href="#c"/><use xlink:href="#c" x="4"/></svg>',
     ],
     [
+      'a design tool generator comment',
+      `<?xml version="1.0"?>\n<!-- Generator: Adobe Illustrator 24.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->\n${SVG}`,
+    ],
+    [
       'a title',
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><title>Acme &amp; Co</title><rect width="8" height="8"/></svg>',
     ],
   ])('accepts a shapes-only SVG with %s', (_label, svg) => {
-    expect(isListingImage(Buffer.from(svg))).toBe(true);
+    expect(isListingImage(Buffer.from(svg), 'logo.svg')).toBe(true);
   });
 
   it.each([
@@ -131,11 +141,44 @@ describe('isListingImage', () => {
       '<svg xmlns="http://www.w3.org/2000/svg"><rect mask="&#117;rl(https://e.x/m)"/></svg>',
     ],
     [
+      'a comment ended early by --!>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><!-- --!><image href="x" onerror="alert(1)"/> --></svg>',
+    ],
+    [
+      'a comment ended early by <!-->',
+      '<svg xmlns="http://www.w3.org/2000/svg"><!--><image href="x" onerror="alert(1)"/>--></svg>',
+    ],
+    [
+      'a comment ended early by <!--->',
+      '<svg xmlns="http://www.w3.org/2000/svg"><!---><image href="x" onerror="alert(1)"/>--></svg>',
+    ],
+    [
+      'PNG bytes ahead of SVG markup',
+      Buffer.concat([
+        PNG,
+        Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>',
+        ),
+      ]),
+    ],
+    [
       'text outside a title',
       '<svg xmlns="http://www.w3.org/2000/svg"><g>hi</g></svg>',
     ],
   ])('refuses an SVG with %s', (_label, svg) => {
-    expect(isListingImage(Buffer.from(svg))).toBe(false);
+    expect(isListingImage(Buffer.from(svg), 'logo.svg')).toBe(false);
+  });
+
+  it('takes the format from the extension and refuses a mismatch', () => {
+    const jpeg = Buffer.from([255, 216, 255, 224, 0, 16]);
+    const webp = Buffer.from('RIFF\0\0\0\0WEBPVP8 ', 'latin1');
+    expect(isListingImage(jpeg, 'logo.jpg')).toBe(true);
+    expect(isListingImage(jpeg, 'logo.JPEG')).toBe(true);
+    expect(isListingImage(webp, 'logo.webp')).toBe(true);
+    expect(isListingImage(PNG, 'logo.jpg')).toBe(false);
+    expect(isListingImage(Buffer.from(SVG), 'logo.png')).toBe(false);
+    expect(isListingImage(PNG, 'logo.gif')).toBe(false);
+    expect(isListingImage(Buffer.from(SVG), 'logo')).toBe(false);
   });
 });
 

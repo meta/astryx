@@ -175,7 +175,8 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   needs.** An integration manifest MAY set `logo: {light, dark?}`, paths
   relative to the package root to images the package ships, so catalogs that
   list the package can show its logo. Each image is a PNG, JPEG, WebP, or an
-  SVG drawn only with shapes, at most 512 KB. The CLI MUST accept `logo` as a
+  SVG drawn only with shapes, at most 512 KB, whose file extension names its
+  format. The CLI MUST accept `logo` as a
   known key and refuse a `logo` that is not an object with a string `light`.
   `integration check` adds two package-level notes. `package_without_logo`
   names a logo that is not set, not such an image, or not packed; when the

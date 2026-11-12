@@ -2658,9 +2658,19 @@ function isShapesOnlySvg(source) {
   while (rest.length > 0) {
     // A comment is skipped only where a tag could start, so one opened
     // inside an attribute value cannot hide markup.
+    // Its body may not start with `>` or `->` or hold `--`: an HTML parser
+    // ends such a comment early, at `<!-->`, `<!--->` or `--!>`.
     if (rest.startsWith('<!--')) {
       const end = rest.indexOf('-->', 4);
       if (end === -1) return false;
+      const body = rest.slice(4, end);
+      if (
+        body.startsWith('>') ||
+        body.startsWith('->') ||
+        body.includes('--')
+      ) {
+        return false;
+      }
       rest = rest.slice(end + 3);
       continue;
     }
@@ -2703,23 +2713,36 @@ function isShapesOnlySvg(source) {
 }
 
 /**
- * Whether these bytes are an image a catalog can show as a logo: PNG, JPEG,
- * WebP, or an SVG drawn only with shapes, at most 512 KB.
+ * Whether these bytes are an image a catalog can show as a logo, in the
+ * format the file's extension names: `.png`, `.jpg` or `.jpeg`, `.webp`, or
+ * `.svg` drawn only with shapes; at most 512 KB. A file whose bytes claim
+ * another format, or any other extension, is refused.
  * @param {Buffer} bytes
+ * @param {string} file the image's path or name
  * @returns {boolean}
  */
-export function isListingImage(bytes) {
+export function isListingImage(bytes, file) {
   if (bytes.length === 0 || bytes.length > LOGO_MAX_BYTES) return false;
-  const png = [137, 80, 78, 71, 13, 10, 26, 10];
-  if (png.every((byte, index) => bytes[index] === byte)) return true;
-  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return true;
-  if (
+  const png = [137, 80, 78, 71, 13, 10, 26, 10].every(
+    (byte, index) => bytes[index] === byte,
+  );
+  const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+  const webp =
     bytes.subarray(0, 4).toString('latin1') === 'RIFF' &&
-    bytes.subarray(8, 12).toString('latin1') === 'WEBP'
-  ) {
-    return true;
+    bytes.subarray(8, 12).toString('latin1') === 'WEBP';
+  switch (path.extname(file).toLowerCase()) {
+    case '.png':
+      return png;
+    case '.jpg':
+    case '.jpeg':
+      return jpeg;
+    case '.webp':
+      return webp;
+    case '.svg':
+      return !png && !jpeg && !webp && isShapesOnlySvg(bytes.toString('utf8'));
+    default:
+      return false;
   }
-  return isShapesOnlySvg(bytes.toString('utf8'));
 }
 
 /**
@@ -2799,8 +2822,8 @@ export function packageListingCheck(integration, examples) {
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
       return `${where} names ${rel}, which does not exist`;
     }
-    if (!isListingImage(fs.readFileSync(file))) {
-      return `${where} names ${rel}, which is not a PNG, JPEG, WebP or shapes-only SVG of at most 512 KB`;
+    if (!isListingImage(fs.readFileSync(file), rel)) {
+      return `${where} names ${rel}, which is not a PNG, JPEG, WebP or shapes-only SVG of at most 512 KB whose contents match its extension`;
     }
     const state = packState(base, rel, pkg.files, npm);
     if (state.packed === true) return null;
