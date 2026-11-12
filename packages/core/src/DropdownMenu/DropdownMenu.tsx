@@ -77,6 +77,7 @@ import {
   type DropdownMenuSurfaceHost,
   type DropdownMenuSurfaceValue,
 } from './DropdownMenuContext';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInternalListFocus} from '../hooks/useListFocus';
@@ -1158,8 +1159,8 @@ function DropdownMenuPopover({
     xstyle: layerAnimations[placement],
   });
   // The layer's show handler calls this as the menu opens. It reads the
-  // surface and the trigger when it runs, so a render-time store is safe.
-  presentSurfaceRef.current = () => {
+  // surface and the trigger when it runs.
+  useCommittedRefInto(presentSurfaceRef, () => {
     const surface = popover.contentRef.current;
     // A finger's or a pen's open grows the menu. Under Reduce Motion the
     // layer's own entrance plays: it only fades in, where the menu rests.
@@ -1171,7 +1172,7 @@ function DropdownMenuPopover({
         isTouchOpenRef.current &&
         reducedMotionFade(surface) == null,
     );
-  };
+  });
 
   const closeMenu = useCallback(() => {
     popover.hide();
