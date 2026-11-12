@@ -12,6 +12,21 @@
  */
 
 import {createRequire} from 'node:module';
+import * as path from 'node:path';
+import {CLI_ROOT} from '../fs/paths.mjs';
+
+/**
+ * Where what parsing returns for each template Astryx ships is stored at
+ * publish (scripts/generate-template-components.mjs): its component list
+ * under its source's key, and the module specifiers it imports under
+ * `imports:` and that key.
+ */
+export const TEMPLATE_COMPONENTS_FILE = path.join(
+  CLI_ROOT,
+  'assets',
+  'templates',
+  'components.generated.json',
+);
 
 const require = createRequire(import.meta.url);
 

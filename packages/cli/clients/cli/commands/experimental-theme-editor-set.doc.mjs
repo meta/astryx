@@ -126,9 +126,8 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'an unknown option, a refused change (an unknown part, variant, state, token or thing; a value of the wrong type; --mode on something that has no mode; a token the part never reads for that; corners on a part that shows no edge), a theme that does not exist, or a build failure; nothing is written',
+      when: 'an unknown option, a refused change (an unknown part, variant, state, token or thing; a value of the wrong type; --mode on something that has no mode; a token the part never reads for that; corners on a part that shows no edge), a theme that does not exist, or a build failure, or a folder outside a project with Core installed (ERR_PROJECT_REQUIRED); nothing is written',
     },
   ],
   related: ['experimental theme editor', 'experimental theme compile'],
-  replaces: ['theme palette generate'],
 };

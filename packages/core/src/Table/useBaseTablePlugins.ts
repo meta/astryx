@@ -36,7 +36,8 @@
  * - /packages/core/src/Table/Table.tsx (primary consumer)
  */
 
-import {useRef} from 'react';
+import {useEffect, useRef} from 'react';
+import {internByIdentity} from './internByIdentity';
 import type {TablePlugin} from './types';
 import {devWarn} from '../utils/devWarning';
 
@@ -170,7 +171,8 @@ function validatePlugin<T extends Record<string, unknown>>(
  *
  * @param basePlugins - Stable array of built-in plugins (e.g. Astryx style plugin)
  * @param userPlugins - Named plugin record from the consumer
- * @returns Stable array of plugins suitable for BaseTable
+ * @returns Stable array of plugins suitable for BaseTable. Every caller with
+ *   the same plugins gets this one array, so treat it as read-only.
  *
  * @example
  * ```
@@ -182,77 +184,39 @@ export function useBaseTablePlugins<T extends Record<string, unknown>>(
   basePlugins: TablePlugin<T>[],
   userPlugins: Record<string, TablePlugin<T>> | undefined,
 ): TablePlugin<T>[] {
-  const prevRef = useRef<{
-    basePlugins: TablePlugin<T>[];
-    userPlugins: Record<string, TablePlugin<T>> | undefined;
-    result: TablePlugin<T>[];
-  } | null>(null);
+  // Every render with the same merged plugins, in the same order, gets one
+  // array, so a render React discards cannot leave another. No state or ref
+  // is written during render.
+  const result = internByIdentity(mergePlugins(basePlugins, userPlugins));
 
-  // Check if we can reuse the previous result
-  if (prevRef.current != null) {
-    const prev = prevRef.current;
-
-    // Fast path: same references
-    if (prev.basePlugins === basePlugins && prev.userPlugins === userPlugins) {
-      return prev.result;
+  // The array the dev console last validated.
+  const validatedRef = useRef<TablePlugin<T>[] | null>(null);
+  // Syncs the dev console's plugin warnings with the committed plugins. Each
+  // array is validated once, so a StrictMode replay prints nothing more.
+  useEffect(() => {
+    if (validatedRef.current === result) {
+      return;
     }
-
-    // Deep identity comparison: check if all plugin values are the same
-    if (
-      prev.basePlugins === basePlugins &&
-      arePluginRecordsEqual(prev.userPlugins, userPlugins)
-    ) {
-      // Update stored reference but return same result array
-      prev.userPlugins = userPlugins;
-      return prev.result;
+    validatedRef.current = result;
+    if (userPlugins) {
+      for (const [name, plugin] of Object.entries(userPlugins)) {
+        validatePlugin(name, plugin);
+      }
     }
-  }
-
-  // Sort user plugins into canonical order
-  const sortedUserPlugins = userPlugins
-    ? sortPluginEntries(Object.entries(userPlugins)).map(([, plugin]) => plugin)
-    : [];
-
-  const result = [...basePlugins, ...sortedUserPlugins];
-
-  // Validate plugins in dev mode
-  if (userPlugins) {
-    for (const [name, plugin] of Object.entries(userPlugins)) {
-      validatePlugin(name, plugin);
-    }
-  }
-
-  prevRef.current = {basePlugins, userPlugins, result};
+  }, [result, userPlugins]);
   return result;
 }
 
 /**
- * Compares two plugin records by checking that they have the same keys
- * and each key maps to the same plugin instance (by reference).
+ * Sorts user plugins into canonical order after the base plugins.
  */
-function arePluginRecordsEqual<T extends Record<string, unknown>>(
-  a: Record<string, TablePlugin<T>> | undefined,
-  b: Record<string, TablePlugin<T>> | undefined,
-): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (a == null || b == null) {
-    return false;
-  }
+function mergePlugins<T extends Record<string, unknown>>(
+  basePlugins: TablePlugin<T>[],
+  userPlugins: Record<string, TablePlugin<T>> | undefined,
+): TablePlugin<T>[] {
+  const sortedUserPlugins = userPlugins
+    ? sortPluginEntries(Object.entries(userPlugins)).map(([, plugin]) => plugin)
+    : [];
 
-  const keysA = Object.keys(a);
-  const keysB = Object.keys(b);
-
-  if (keysA.length !== keysB.length) {
-    return false;
-  }
-
-  for (const key of keysA) {
-    if (a[key] !== b[key]) {
-      return false;
-    }
-  }
-
-  return true;
+  return [...basePlugins, ...sortedUserPlugins];
 }

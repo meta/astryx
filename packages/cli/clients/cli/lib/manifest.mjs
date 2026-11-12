@@ -66,6 +66,10 @@ const CLI_LAYER_RESPONSE_TYPES = {
   manifest: ['manifest'],
   'theme build': ['theme.build.batch'],
   'theme add': ['theme.list'],
+  // The experimental theme groups answer a bare --json with their help.
+  'experimental theme': ['help'],
+  'experimental theme editor': ['help'],
+  'experimental theme preview': ['help'],
 };
 
 /**
