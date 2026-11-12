@@ -20,6 +20,8 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {baseInstalled} from './_project.mjs';
+import {LIKE} from './_tables.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -45,6 +47,19 @@ const settings = () =>
   JSON.parse(
     fs.readFileSync(path.join(cwd, 'themes/t/t.settings.json'), 'utf8'),
   ).settings.map((/** @type {any} */ x) => x.thing);
+
+/**
+ * What `new y --like neutralx …` may suggest: the CLI guesses the nearest base
+ * only among the bases installed where the project resolves them. The fixture
+ * installs none, but a theme package that resolves from a folder above it (on
+ * a machine that has one) counts too, so ask the way the CLI asks.
+ */
+function guessedNew() {
+  const have = LIKE.filter(b => baseInstalled(cwd, b));
+  return have.length === 0
+    ? / new y (?!.*--like)/
+    : new RegExp(` new y (?!.*--like)| new y --like (${have.join('|')}) `);
+}
 
 /** @param {() => Promise<unknown>} run */
 async function refusal(run) {
@@ -191,8 +206,8 @@ describe('corrected new commands keep every option', () => {
         '--mode',
         'dark-only',
       ],
-      // The nearest base is guessed only among installed ones (none here).
-      / new y (?!.*--like)/,
+      // The nearest base is guessed only among installed ones.
+      'guessed among installed bases',
     ],
     [
       ['new', 'z', '--accent', '#ggg', '--mode', 'light-only', '--png'],
@@ -201,6 +216,8 @@ describe('corrected new commands keep every option', () => {
   ])(
     '%j',
     async (args, expected) => {
+      const pattern =
+        expected === 'guessed among installed bases' ? guessedNew() : expected;
       const r = await runCli(
         ['--json', 'experimental', 'theme', 'editor', ...args],
         cwd,
@@ -210,7 +227,7 @@ describe('corrected new commands keep every option', () => {
         (/** @type {any} */ x) => x.name,
       );
       expect(
-        names.some((/** @type {string} */ n) => expected.test(n)),
+        names.some((/** @type {string} */ n) => pattern.test(n)),
         names.join('\n'),
       ).toBe(true);
     },
