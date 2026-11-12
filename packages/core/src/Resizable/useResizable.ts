@@ -15,11 +15,11 @@
 import {
   useCallback,
   useReducer,
-  useRef,
   useState,
   useSyncExternalStore,
   type RefObject,
 } from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import type {SizeValue} from '../utils/types';
 import type {ResizableSize} from './utils';
@@ -571,11 +571,8 @@ function useResizableController(
   options: CreateResizableOptions,
   regionSlot?: RegionPaneSlot,
 ): ResizableReading {
-  const optionsRef = useRef(options);
-  // Syncs the options the factory starts from with the committed ones.
-  useIsomorphicLayoutEffect(() => {
-    optionsRef.current = options;
-  });
+  // The committed options, which the factory starts from.
+  const optionsRef = useCommittedRef(options);
   const [slot] = useState(() => createSlot(readInitialResizableState(options)));
   const [serverInitial] = useState(() =>
     readInitialResizableState(options, 'server'),
@@ -604,7 +601,7 @@ function useResizableController(
     const passed = optionsRef.current;
     const resizable = start(passed);
     slot.set({resizable, passed});
-  }, [slot, start]);
+  }, [optionsRef, slot, start]);
   useIsomorphicLayoutEffect(() => {
     follow();
   });
@@ -683,7 +680,7 @@ function useResizableController(
     readResizableInternals(resizable)?.suspend();
     slot.set({resizable, passed});
     return resizable;
-  }, [slot, start]);
+  }, [optionsRef, slot, start]);
   const collapse = useCallback(() => {
     ensureResizable().collapse();
   }, [ensureResizable]);
