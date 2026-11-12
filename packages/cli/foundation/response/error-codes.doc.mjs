@@ -332,7 +332,7 @@ export const doc = {
       value: 'ERR_RENDER_FAILED',
       stability: 'experimental',
       description:
-        'The page threw while rendering, or Node crashed while it rendered the page. Nothing was written. Raised only by the experimental render command.',
+        "The page threw while rendering, or Node crashed while it rendered the page. Raised by the experimental render command, which then writes nothing, and by the experimental theme editor when it cannot render a theme's pages (two copies of React, a component that throws, or a render past its time limit; the theme it built is kept, and the refusal says so). A React that is not installed is ERR_RENDER_MISSING_DEPENDENCY.",
     },
     {
       value: 'ERR_RENDER_NOT_ASTRYX',
