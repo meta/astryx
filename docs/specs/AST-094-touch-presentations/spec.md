@@ -822,7 +822,7 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   A label tied to the field is a target and focuses the field, as it does
   without the band. A field's status message and the space beside its frame
   are empty space (owner
-  decision, 2026-11-10; DEC-32). A hit area a component or module
+  decision, 2026-11-10; DEC-33). A hit area a component or module
   record sets on purpose, such as `component:Thumbnail` AR4's, is unaffected.
   Mobile size increases belong to theme adaptations (DEC-20). Implementation
   gap: a tap that the press check hands to another target gets that target's
@@ -1575,9 +1575,9 @@ cancelled, so waiting out the wobble keeps a tap's click on a control in the
 sheet. The trade-off: a tap that wobbles 5 to 8 px toward the edge loses its
 click.
 
-### DEC-32 — Touch hit areas are checked at press, not watched
+### DEC-33 — Touch hit areas are checked at press, not watched
 
-**Reference:** `spec:AST-094/DEC-32`
+**Reference:** `spec:AST-094/DEC-33`
 **Decider:** `cixzhang`, `2026-11-10`
 
 A phone visitor pays for no page-wide measuring. Four rules hold: no

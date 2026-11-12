@@ -361,7 +361,7 @@ above match the current Spinner and FieldStatus targets.
 FR13 rests on owner direction of 2026-10-26: the thumb keeps its circle and its
 size on every device, and a coarse pointer gets a hit area that grows toward
 44 × 44 px, with nothing visible added (FR10). A tap on another target's
-visible box stays that target's (`spec:AST-094` DEC-32). FR14 rests on owner direction of 2026-10-25. Under a mouse or a pen a
+visible box stays that target's (`spec:AST-094` DEC-33). FR14 rests on owner direction of 2026-10-25. Under a mouse or a pen a
 press slid off keeps the native checkbox's cancel: `spec:AST-094` FR11 lets a
 toggle under `spec:AST-020` FR9's slide-off exception complete only on a lift
 after the finger slid off. Switch otherwise applies `spec:AST-021` and
