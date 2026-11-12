@@ -3664,6 +3664,19 @@ async function addPreview(description, options, box) {
     writes.set(w.rel, w);
     if (!data.files.includes(w.rel)) data.files.push(w.rel);
   }
+  // Every recorded page this command writes again is named, the Colors page
+  // the route writes included.
+  for (const p of data.pages)
+    if (
+      writes.has(`${p.file}.tsx`) &&
+      !added.includes(p.id) &&
+      !refreshed.includes(p.id) &&
+      !rewrote.includes(p.id) &&
+      fs.existsSync(path.join(at.dir, `${p.file}.tsx`)) &&
+      fs.readFileSync(path.join(at.dir, `${p.file}.tsx`), 'utf8') !==
+        writes.get(`${p.file}.tsx`)?.text
+    )
+      refreshed.push(p.id);
   await buildWorn(cwd, theme, options, notes);
   commitPreview(
     cwd,

@@ -2386,4 +2386,67 @@ describe('final pass 5', () => {
       rm('src/app/lm');
     }
   }, 120_000);
+
+  it('imports the base fonts sheet only while the theme still uses a family it loads, and names every page it writes again', async () => {
+    const pkg = path.join(
+      path.dirname(cwd),
+      'node_modules/@astryxdesign/theme-neutral',
+    );
+    const pkgFile = path.join(pkg, 'package.json');
+    const before = fs.readFileSync(pkgFile, 'utf8');
+    const json = JSON.parse(before);
+    fs.writeFileSync(
+      pkgFile,
+      JSON.stringify({
+        ...json,
+        exports: {...json.exports, './fonts.css': './fonts.css'},
+      }),
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'fonts.css'),
+      "@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;700&display=swap');\n",
+    );
+    await themeEditNew('fz', {cwd, like: 'neutral'});
+    try {
+      const route = 'src/app/fz/page.tsx';
+      // The build names Figtree, which the sheet loads.
+      await themeEditSet('fz', 'font', 'Figtree', {cwd, on: 'code'});
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'fz',
+        path: 'src/app/fz',
+      });
+      expect(read(route)).toContain('@astryxdesign/theme-neutral/fonts.css');
+      // Once no family the sheet loads is named, it is left out.
+      await themeEditSet('fz', 'font', 'system', {cwd, on: 'code'});
+      await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/fz'});
+      expect(read(route)).not.toContain(
+        '@astryxdesign/theme-neutral/fonts.css',
+      );
+      // A switch to a theme with colors rewrites the Colors page, and says so.
+      await themeEditSet('brand', 'accent', '#7c3aed', {cwd});
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'brand',
+        path: 'src/app/fz',
+      });
+      const sea = await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'sea',
+        path: 'src/app/fz',
+      });
+      const back = await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'brand',
+        path: 'src/app/fz',
+      });
+      expect([...back.data.added, ...back.data.refreshed]).toContain('colors');
+      expect(sea.data.pages).toBeDefined();
+    } finally {
+      fs.writeFileSync(pkgFile, before);
+      fs.rmSync(path.join(pkg, 'fonts.css'), {force: true});
+      rm('src/app/fz');
+      rm('themes/fz');
+    }
+  }, 240_000);
 });

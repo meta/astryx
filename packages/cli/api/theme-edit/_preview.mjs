@@ -220,20 +220,53 @@ function templateFiles(imports) {
  * The fonts stylesheet of the theme a theme is built on, when its package
  * ships one (`@astryxdesign/theme-neutral/fonts.css` loads Figtree): naming
  * a family does not load it, and the base theme's families apply until the
- * theme sets its own.
+ * theme sets its own. Once the theme's build names none of the families the
+ * sheet loads, it is left out.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @returns {string[]}
  */
 export function baseFontsCss(ctx, data) {
   if (!data.like) return [];
-  const sheet = `@astryxdesign/theme-${data.like}/fonts.css`;
+  const pkg = `@astryxdesign/theme-${data.like}`;
+  const sheet = `${pkg}/fonts.css`;
+  // Read off disk: the package must export the sheet for an app to import
+  // it.
+  const found = findNodeModulesPackage(ctx.project.cwd, pkg);
+  /** @type {string} */
+  let text;
   try {
-    ctx.project.req.resolve(sheet);
-    return [sheet];
+    if (!found) return [];
+    const exportsMap = JSON.parse(
+      fs.readFileSync(path.join(found.packageDir, 'package.json'), 'utf8'),
+    ).exports;
+    if (
+      !exportsMap ||
+      typeof exportsMap !== 'object' ||
+      !('./fonts.css' in exportsMap)
+    )
+      return [];
+    text = fs.readFileSync(path.join(found.packageDir, 'fonts.css'), 'utf8');
   } catch {
     return [];
   }
+  // The families the sheet loads; with the theme's build at hand, the sheet
+  // is imported only while the build still names one of them.
+  const families = [...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
+    decodeURIComponent(m[1].replace(/\+/g, ' ')),
+  );
+  /** @type {string | null} */
+  let built = null;
+  try {
+    built = fs.readFileSync(themeFiles(ctx.project.cwd, data.name).css, 'utf8');
+  } catch {
+    // Not built yet: the base families may still apply.
+  }
+  if (built != null && families.length) {
+    const css = built;
+    if (!families.some(f => css.includes(f))) return [];
+  }
+  return [sheet];
 }
 
 /**
