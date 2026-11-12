@@ -29,20 +29,53 @@ export const docs = {
     {
       name: 'options.interimResults',
       type: 'boolean',
-      description: 'Whether partial transcripts are reported before the final one.',
+      description:
+        'Whether partial transcripts are reported before the final one.',
       default: 'true',
+      required: false,
+    },
+    {
+      name: 'options.audioContext',
+      type: 'AudioContext',
+      description:
+        "A shared audio context for the microphone level. Omit it to use the hook's own context.",
+      required: false,
+    },
+    {
+      name: 'options.transformTranscript',
+      type: '(text: string) => string',
+      description: 'Rewrites each transcript before it is reported.',
+      required: false,
+    },
+    {
+      name: 'options.onTranscript',
+      type: '(transcript: string, isFinal: boolean) => void',
+      description: 'Called for each partial transcript and each final one.',
       required: false,
     },
     {
       name: 'options.onResult',
       type: '(transcript: string) => void',
-      description: 'Called with each final transcript.',
+      description:
+        'Called with each final transcript. Keep this text: interimTranscript clears when the phrase is final.',
       required: false,
     },
     {
       name: 'options.onError',
       type: '(error: {error: string, message?: string}) => void',
       description: 'Called when recognition fails.',
+      required: false,
+    },
+    {
+      name: 'options.onStart',
+      type: '() => void',
+      description: 'Called when recognition starts.',
+      required: false,
+    },
+    {
+      name: 'options.onEnd',
+      type: '() => void',
+      description: 'Called when recognition ends.',
       required: false,
     },
   ],
@@ -58,6 +91,11 @@ export const docs = {
       description: 'Whether recognition is active.',
     },
     {
+      name: 'isSpeaking',
+      type: 'boolean',
+      description: 'Whether the microphone currently hears speech.',
+    },
+    {
       name: 'interimTranscript',
       type: 'string',
       description: 'The partial transcript, empty when none is pending.',
@@ -66,6 +104,16 @@ export const docs = {
       name: 'volume',
       type: 'number',
       description: 'Microphone level from 0 to 1 while listening.',
+    },
+    {
+      name: 'bands',
+      type: 'number[]',
+      description: 'Frequency band levels from low to high, each from 0 to 1.',
+    },
+    {
+      name: 'rawBands',
+      type: 'number[]',
+      description: 'The same bands before calibration.',
     },
     {
       name: 'start',
@@ -94,8 +142,7 @@ export const docs = {
     bestPractices: [
       {
         guidance: true,
-        description:
-          'Hide or disable the control when isSupported is false.',
+        description: 'Hide or disable the control when isSupported is false.',
       },
       {
         guidance: true,
@@ -124,14 +171,25 @@ export const docsDense = {
     'options.lang': 'BCP-47 recognition language.',
     'options.continuous': 'keep listening until stop or abort.',
     'options.interimResults': 'report partial transcripts.',
-    'options.onResult': 'called with each final transcript.',
+    'options.audioContext': 'shared audio context for the microphone level.',
+    'options.transformTranscript':
+      'rewrites each transcript before it is reported.',
+    'options.onTranscript':
+      'called for each partial and each final transcript.',
+    'options.onResult':
+      'called with each final transcript. interimTranscript clears then.',
     'options.onError': 'called when recognition fails.',
+    'options.onStart': 'called when recognition starts.',
+    'options.onEnd': 'called when recognition ends.',
   },
   returnDescriptions: {
     isSupported: 'whether the browser has speech recognition.',
     isListening: 'whether recognition is active.',
-    interimTranscript: 'the partial transcript.',
+    isSpeaking: 'whether speech is currently heard.',
+    interimTranscript: 'the partial transcript. Empty after a final phrase.',
     volume: 'microphone level from 0 to 1.',
+    bands: 'frequency band levels, each from 0 to 1.',
+    rawBands: 'band levels before calibration.',
     start: 'start recognition.',
     stop: 'stop and wait for the final transcript.',
     abort: 'stop immediately.',
