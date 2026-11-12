@@ -31,6 +31,7 @@ import {
 import {logger} from '../../logger.mjs';
 import {
   themeBuild,
+  themeSourceFiles,
   validateComponentOverridesAgainstRegistry,
   validateThemePrivateInputs,
 } from './build.mjs';
@@ -1539,6 +1540,27 @@ describe('themeBuild() — outputs it may replace', () => {
     ).rejects.toMatchObject({
       message: expect.stringContaining('It was built from themes/ocean.mjs.'),
     });
+  });
+
+  it('lists the local files a theme source imports, through other local files', () => {
+    fs.mkdirSync(path.join(tmpDir, 'parts'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'split.ts'),
+      "import {BG} from './parts/colors.js';\nimport {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'split', tokens: {'--color-bg': BG}});\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'parts', 'colors.ts'),
+      "export {BG} from './base';\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'parts', 'base.ts'),
+      "export const BG = '#fff';\n",
+    );
+    expect(themeSourceFiles(path.join(tmpDir, 'split.ts'))).toEqual([
+      path.join(tmpDir, 'split.ts'),
+      path.join(tmpDir, 'parts', 'colors.ts'),
+      path.join(tmpDir, 'parts', 'base.ts'),
+    ]);
   });
 
   it('replaces its own earlier outputs', async () => {

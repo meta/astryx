@@ -70,6 +70,20 @@ export function themeRecordOwner(theme) {
 }
 
 /**
+ * Whether `--package <name>` selects a theme. It takes either name the CLI
+ * shows for it: the package that provides it (`@astryxdesign/cli` for a
+ * bundled theme) or the package the app imports it from, which the record
+ * holds (`@astryxdesign/theme-butter`).
+ * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string | undefined} name
+ */
+export function themeInPackage(theme, name) {
+  return (
+    name == null || theme.package === name || themeImportPackage(theme) === name
+  );
+}
+
+/**
  * A bundled theme entry kept for the historical public `listThemes()` helper.
  * @typedef {Pick<import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme, 'slug' | 'displayName' | 'description' | 'maintained' | 'entry' | 'exportName' | 'files'>} BundledTheme
  */
@@ -506,6 +520,44 @@ function assertEjectTargetFree(theme, dir, cwd, projectDir) {
 }
 
 /**
+ * Refuse a fork target that `theme list` and `theme add` would then misread:
+ * the local themes folder itself, where every theme has its own folder, or a
+ * folder in it named after another theme.
+ * @param {string} slug
+ * @param {string} dir absolute target
+ * @param {string} projectDir
+ * @param {string} cwd
+ */
+function assertEjectTargetPlace(slug, dir, projectDir, cwd) {
+  const themesRoot = path.resolve(projectDir, LOCAL_THEME_ROOT);
+  const resolved = path.resolve(dir);
+  const own = defaultEjectTarget(slug).split(path.sep).join('/');
+  const suggestion = [
+    {
+      name: formatCliCommand(`theme eject ${slug}`, cwd),
+      reason: `fork into ${own}`,
+    },
+  ];
+  if (resolved === themesRoot) {
+    throw new AstryxError(
+      `${path.relative(cwd, dir) || '.'} is the folder that holds the local themes, each in its own folder. Fork ${slug} into ${own}.`,
+      suggestion,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  if (
+    path.dirname(resolved) === themesRoot &&
+    path.basename(resolved) !== slug
+  ) {
+    throw new AstryxError(
+      `A local theme's folder carries its name, so ${slug} forks into ${own}, not ${path.relative(cwd, dir)}.`,
+      suggestion,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+}
+
+/**
  * The `name` of a theme descriptor, read as text so a broken file cannot run.
  * @param {string} file
  * @returns {string | null}
@@ -526,11 +578,17 @@ function themeDescriptorName(file) {
  * @param {{cwd: string, targetPath?: string, overwrite?: boolean}} options
  * @returns {string} project-relative output directory
  */
-export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
+export function ejectThemeFiles(
+  theme,
+  {cwd, targetPath: typedPath, overwrite = false},
+) {
   // The fork lands in the project, as list and add read it: the default root
   // is the project's, and a relative [path] is read from the working folder
   // but must stay inside the project.
   const projectDir = findPackageRoot(cwd) ?? path.resolve(cwd);
+  // A Windows-style path names the same folders on every platform, as
+  // compile reads it; a folder name with a backslash in it is never meant.
+  const targetPath = typedPath?.replace(/\\/g, '/');
   const target = !targetPath
     ? defaultEjectTarget(theme.slug)
     : path.isAbsolute(targetPath)
@@ -591,6 +649,7 @@ export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
   }
 
   assertEjectTargetFree(theme, resolvedDir, cwd, projectDir);
+  assertEjectTargetPlace(theme.slug, resolvedDir, projectDir, cwd);
 
   if (!overwrite) {
     const existing = writes.find(write => fs.existsSync(write.dest));
@@ -692,7 +751,9 @@ function asThemeError(error) {
       ? ERROR_CODES.ERR_FILE_EXISTS
       : ERROR_CODES.ERR_THEME_INVALID;
   const suggestions =
-    error instanceof ThemeStateError ? error.suggestions : undefined;
+    error instanceof ThemeStateError || error instanceof ThemeImportError
+      ? error.suggestions
+      : undefined;
   return new AstryxError(message, suggestions, code);
 }
 
@@ -716,7 +777,7 @@ export async function findTheme(slug, options = {}) {
   const matches = themes.filter(
     theme =>
       theme.slug.toLowerCase() === normalized &&
-      (options.package == null || theme.package === options.package),
+      themeInPackage(theme, options.package),
   );
   const broken = skipped.find(entry => entry.slug.toLowerCase() === normalized);
   if (

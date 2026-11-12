@@ -293,4 +293,47 @@ describe('themeEject (api/theme/eject)', () => {
     expect(atDefault).toMatchObject({code: 'ERR_FILE_EXISTS'});
     expect(atDefault.suggestions).toBeUndefined();
   });
+
+  it('refuses the local themes folder itself, and a folder named after another theme', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    await expect(
+      themeEject('neutral', {cwd: tmpDir, targetPath: 'src/themes'}),
+    ).rejects.toMatchObject({
+      code: 'ERR_INVALID_ARGUMENT',
+      message: expect.stringContaining(
+        'is the folder that holds the local themes',
+      ),
+      suggestions: [{name: expect.stringMatching(/ theme eject neutral$/)}],
+    });
+    await expect(
+      themeEject('neutral', {cwd: tmpDir, targetPath: 'src/themes/stone'}),
+    ).rejects.toMatchObject({
+      code: 'ERR_INVALID_ARGUMENT',
+      message: expect.stringContaining('neutral forks into src/themes/neutral'),
+    });
+    expect(fs.existsSync(path.join(tmpDir, 'src'))).toBe(false);
+    await expect(
+      themeEject('neutral', {cwd: tmpDir, targetPath: 'src/themes/neutral'}),
+    ).resolves.toMatchObject({type: 'theme.eject'});
+  });
+
+  it('reads backslashes in the target as folder separators', async () => {
+    const result = await themeEject('neutral', {
+      cwd: tmpDir,
+      targetPath: 'lib\\mine',
+    });
+    expect(result.data.outputDir).toBe(path.join('lib', 'mine'));
+    expect(
+      fs.existsSync(path.join(tmpDir, 'lib', 'mine', 'neutralTheme.ts')),
+    ).toBe(true);
+  });
+
+  it('accepts the package the app imports a bundled theme from as --package', async () => {
+    await expect(
+      themeEject('neutral', {
+        cwd: tmpDir,
+        package: '@astryxdesign/theme-neutral',
+      }),
+    ).resolves.toMatchObject({type: 'theme.eject', data: {slug: 'neutral'}});
+  });
 });

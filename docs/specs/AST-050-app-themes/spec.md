@@ -76,7 +76,10 @@ described.
   regenerates the module and reports no change. Importing a slug that is already
   added from a different owner switches it to the new owner and reports that
   change. `--import` with a target path or `--overwrite`, which belong to the
-  copy (FR12), MUST fail before writing.
+  copy (FR12), MUST fail before writing. The `--package` option of
+  `theme add`, `theme list` and `theme eject` takes either name of a theme's
+  package: the package that provides it, or the package the app imports it
+  from, which the record holds.
 - **FR2 — One generated theme module.** The CLI MUST keep one module that
   imports each added theme's built module and stylesheet. It exports `themes`,
   every added theme keyed by its slug, and `defaultThemeSlug`, the default slug;
@@ -135,6 +138,10 @@ described.
   folder with a package.json), the default target is the project's local
   themes root, a relative `[path]` is read from the working folder and MUST
   stay inside the project, and `outputDir` is relative to the working folder.
+  A backslash in `[path]` separates folders. Eject MUST refuse the local
+  themes root itself and a folder in it named after another theme, because
+  `theme list` and `theme add` read each local theme from a folder named after
+  it, and name the default target.
   `theme template [path]` leaves an existing file as it is without
   `--overwrite`. Its receipt then says whether `--overwrite` would replace that
   file (`overwritable`), and when it would not, it names a free path for the

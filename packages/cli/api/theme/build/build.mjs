@@ -100,7 +100,10 @@ import {
   formatFontLoadingHelp,
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
-import {installCommandFor} from '../../../foundation/discovery/template-needs.mjs';
+import {
+  installCommandFor,
+  parsedSpecifiers,
+} from '../../../foundation/discovery/template-needs.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
 
@@ -911,6 +914,69 @@ function themeFilesIn(dir) {
   } catch {
     return [];
   }
+}
+
+/**
+ * The files a theme source is made of: the source and every local file it
+ * imports, directly or through other local files, read from their import
+ * statements. A watch rebuilds when any of them changes. Package imports and
+ * files that cannot be read are left out.
+ * @param {string} filePath absolute theme source
+ * @returns {string[]} absolute paths, the source first
+ */
+export function themeSourceFiles(filePath) {
+  const seen = new Set([path.resolve(filePath)]);
+  const queue = [path.resolve(filePath)];
+  while (queue.length > 0 && seen.size < 500) {
+    const file = /** @type {string} */ (queue.shift());
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const spec of parsedSpecifiers(source)) {
+      if (!spec.startsWith('.')) continue;
+      const target = resolveLocalImport(path.dirname(file), spec);
+      if (target && !seen.has(target)) {
+        seen.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  return [...seen];
+}
+
+/**
+ * A relative import resolved as the build resolves it: the path as written,
+ * then with each theme module extension, then as a folder's index file.
+ * @param {string} dir
+ * @param {string} spec
+ * @returns {string | null}
+ */
+function resolveLocalImport(dir, spec) {
+  const base = path.resolve(dir, spec);
+  const candidates = [
+    base,
+    ...THEME_MODULE_EXTENSIONS.map(extension => base + extension),
+    ...THEME_MODULE_EXTENSIONS.map(extension =>
+      path.join(base, 'index' + extension),
+    ),
+  ];
+  // A `.js` specifier in TypeScript names its `.ts` source.
+  if (/\.[cm]?js$/.test(spec)) {
+    const stem = base.replace(/\.([cm]?)js$/, '.$1ts');
+    candidates.splice(1, 0, stem, stem.replace(/ts$/, 'tsx'));
+  }
+  return (
+    candidates.find(candidate => {
+      try {
+        return fs.statSync(candidate).isFile();
+      } catch {
+        return false;
+      }
+    }) ?? null
+  );
 }
 
 /**
