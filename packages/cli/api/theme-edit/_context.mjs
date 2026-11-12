@@ -15,6 +15,11 @@ import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {
+  findDeclaredWorkspaceRoot,
+  findNodeModulesPackage,
+  homeFolder,
+} from '../../foundation/fs/paths.mjs';
+import {
   detectPackageManager,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
@@ -69,7 +74,7 @@ export function requireProject(cwd) {
       ],
       E.ERR_PROJECT_REQUIRED,
     );
-  if (coreDirFrom(app)) return;
+  if (findNodeModulesPackage(app, '@astryxdesign/core')) return;
   // The app lists Core but it is not installed.
   throw new AstryxError(
     `${path.relative(path.resolve(cwd), app) || 'This app'}'s package.json lists @astryxdesign/core, but it is not installed. astryx experimental theme checks every change against the installed Core: install the app's packages, then run the command again. Nothing was written.`,
@@ -150,7 +155,7 @@ const isRenderFailure = e =>
  * @returns {string | null}
  */
 export function coreApp(cwd) {
-  const home = homeDir();
+  const home = homeFolder();
   let dir = path.resolve(cwd);
   // An installed package is never the app: resume above the outermost
   // node_modules.
@@ -177,26 +182,12 @@ export function coreApp(cwd) {
  * @param {string} app
  */
 function pnpAbove(app) {
-  const root = workspaceRoot(app);
+  const root = findDeclaredWorkspaceRoot(app);
   for (let dir = app; ; dir = path.dirname(dir)) {
     if (fs.existsSync(path.join(dir, '.pnp.cjs'))) return true;
     if (dir === root || (!root && fs.existsSync(path.join(dir, '.git'))))
       return false;
     if (path.dirname(dir) === dir) return false;
-  }
-}
-
-/**
- * The installed Core a folder reads: the nearest node_modules at or above
- * it that holds @astryxdesign/core, or null.
- * @param {string} from
- * @returns {string | null}
- */
-function coreDirFrom(from) {
-  for (let dir = path.resolve(from); ; dir = path.dirname(dir)) {
-    const at = path.join(dir, 'node_modules', '@astryxdesign', 'core');
-    if (fs.existsSync(path.join(at, 'package.json'))) return at;
-    if (path.dirname(dir) === dir) return null;
   }
 }
 
@@ -207,17 +198,6 @@ function coreDirFrom(from) {
 function installAll(dir) {
   const pm = detectPackageManager(dir);
   return pm === 'npm' || pm === 'npx' ? 'npm install' : `${pm} install`;
-}
-
-/** The home folder, real path, or null. */
-function homeDir() {
-  const h = process.env.HOME || process.env.USERPROFILE;
-  if (!h) return null;
-  try {
-    return fs.realpathSync(h);
-  } catch {
-    return path.resolve(h);
-  }
 }
 
 /**
@@ -231,7 +211,7 @@ function refuseNoApp(cwd) {
   const start = path.resolve(cwd);
   // A repository inside a home-folder app (a submodule, a vendored clone) is
   // its own project: name the app above instead of claiming there is none.
-  const home = homeDir();
+  const home = homeFolder();
   if (
     home &&
     !path.relative(home, start).startsWith('..') &&
@@ -250,8 +230,9 @@ function refuseNoApp(cwd) {
     );
   }
   // Where Core resolves from: the nearest node_modules above that holds it.
-  const resolved = coreDirFrom(start);
-  const root = workspaceRoot(start);
+  const resolved =
+    findNodeModulesPackage(start, '@astryxdesign/core')?.packageDir ?? null;
+  const root = findDeclaredWorkspaceRoot(start);
   const where = resolved
     ? ` @astryxdesign/core resolves from ${path.relative(start, resolved) || '.'}, but the theme editor needs the app's package.json to list it.`
     : '';
@@ -289,27 +270,6 @@ function refuseNoApp(cwd) {
     ],
     E.ERR_PROJECT_REQUIRED,
   );
-}
-
-/**
- * The workspace root above a folder: the nearest folder at or above it with
- * a package.json `workspaces` field or a pnpm-workspace.yaml; null outside
- * a workspace. The workspace config is not read beyond that.
- * @param {string} start
- * @returns {string | null}
- */
-function workspaceRoot(start) {
-  let dir = start;
-  for (;;) {
-    if (
-      fs.existsSync(path.join(dir, 'pnpm-workspace.yaml')) ||
-      readJson(path.join(dir, 'package.json'))?.workspaces != null
-    )
-      return dir;
-    const up = path.dirname(dir);
-    if (up === dir) return null;
-    dir = up;
-  }
 }
 
 /**
