@@ -14,22 +14,31 @@
  * unpaired label is a NAME mismatch, not proof the component has no demos —
  * blocks attach to a page via exampleFor regardless of name.
  *
+ * It also lists each public hook (a hook in the built API surface) that has
+ * no hook doc, or no block that names it in exampleFor/alsoExampleFor. The
+ * caller supplies the hook-doc names from the generated component registry,
+ * so the list matches the hook pages the docsite renders. It cannot tell
+ * whether a block really demonstrates its hook; review checks that.
+ *
  * REPORTS, NEVER GATES. Core does not require doc examples to have paired
  * blocks, and integration packages are intentionally no stricter (owner
  * decision, 2026-09-30). Whether example↔block pairing should gate CI is an
  * open repo-wide decision; until then tests print this inventory for CI-log
  * visibility only.
  *
- * @input Authored component docs (src/X/X.doc.mjs) and template descriptors
- *   (the package's declared templates root, e.g. packages/lab/blocks)
- * @output Per-component pairing of example labels to block names, plus
- *   structural findings (missing same-stem sources, descriptor load failures)
+ * @input Authored component docs (src/X/X.doc.mjs), template descriptors
+ *   (the package's declared templates root, e.g. packages/lab/blocks), and
+ *   each package's report in a built API surface (`cli.mjs --surface <dir>`)
+ * @output Per-component pairing of example labels to block names, structural
+ *   findings (missing same-stem sources, descriptor load failures), and
+ *   per-hook doc and example-block coverage
  * @position Shared by docsite reporting tests; no generator consumes this.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {parseReport} from '../../../../scripts/api-report/changes.mjs';
 
 /**
  * Basename prefix reserved for the automaticity test fixture
@@ -205,6 +214,22 @@ export async function inventoryPackageExamples({repoRoot, srcDir, blocksDir}) {
 }
 
 /**
+ * Loaded blocks that name `target` in `exampleFor` or `alsoExampleFor`.
+ *
+ * @param {AuthoredBlock[]} blocks
+ * @param {string} target component or hook name
+ * @returns {AuthoredBlock[]}
+ */
+function blocksAttributedTo(blocks, target) {
+  return blocks.filter(
+    block =>
+      block.type === 'block' &&
+      block.loadError == null &&
+      (block.exampleFor === target || block.alsoExampleFor.includes(target)),
+  );
+}
+
+/**
  * @typedef {object} ComponentCoverage
  * @property {string} component
  * @property {string[]} labels
@@ -226,13 +251,7 @@ export async function inventoryPackageExamples({repoRoot, srcDir, blocksDir}) {
  */
 export function pairExampleCoverage(components, blocks) {
   return components.map(component => {
-    const attributed = blocks.filter(
-      block =>
-        block.type === 'block' &&
-        block.loadError == null &&
-        (block.exampleFor === component.name ||
-          block.alsoExampleFor.includes(component.name)),
-    );
+    const attributed = blocksAttributedTo(blocks, component.name);
     const pairedNames = attributed.map(block => block.name);
     const nameSet = new Set(pairedNames);
     return {
@@ -290,6 +309,136 @@ export function formatCoverageReport(packageName, coverage, blocks) {
   for (const block of broken) {
     lines.push(
       `  ! ${block.file}: ${block.loadError ?? 'missing same-stem .tsx source'}`,
+    );
+  }
+  return lines.join('\n');
+}
+
+const SURFACE_HINT = 'node scripts/api-report/cli.mjs --surface <dir>';
+
+/**
+ * Packages the docsite-build CI job does not build, so its API surface lists
+ * them as not built. Neither has a public hook.
+ */
+export const NOT_BUILT_IN_DOCSITE_BUILD = Object.freeze([
+  '@astryxdesign/cli',
+  '@astryxdesign/build',
+]);
+export const NOT_BUILT_REASON = 'not built in docsite-build';
+
+/**
+ * The built API surface the hook coverage reads: `ASTRYX_API_SURFACE`, a
+ * directory relative to the repository root that holds `surface.json`. In CI a
+ * missing or unreadable surface is an error, and so is a package the surface
+ * lists as not built that NOT_BUILT_IN_DOCSITE_BUILD does not name: a package
+ * never leaves the hook coverage without a stated reason. Outside CI the hook
+ * coverage is skipped with a note, and an unexpected package is only named.
+ *
+ * @param {{env: Record<string, string | undefined>, repoRoot: string}} input
+ * @returns {{dir: string, excluded: string[], unexpected: string[]} | {skip: string}}
+ */
+export function resolveApiSurface({env, repoRoot}) {
+  const ci = env.CI === 'true';
+  const value = env.ASTRYX_API_SURFACE;
+  const dir = value ? path.resolve(repoRoot, value) : null;
+  let surface = null;
+  try {
+    surface = dir
+      ? JSON.parse(fs.readFileSync(path.join(dir, 'surface.json'), 'utf8'))
+      : null;
+  } catch {
+    surface = null;
+  }
+  if (!surface) {
+    if (ci) {
+      throw new Error(
+        `ASTRYX_API_SURFACE is required in CI: build it with ${SURFACE_HINT}`,
+      );
+    }
+    return {
+      skip: value
+        ? `Hook coverage skipped: ${value} holds no readable surface.json; build it with ${SURFACE_HINT}.`
+        : `Hook coverage skipped: set ASTRYX_API_SURFACE to a directory that ${SURFACE_HINT} wrote.`,
+    };
+  }
+  const notBuilt = (Array.isArray(surface.skipped) ? surface.skipped : []).map(
+    entry => String(entry?.name ?? ''),
+  );
+  const excluded = notBuilt.filter(name =>
+    NOT_BUILT_IN_DOCSITE_BUILD.includes(name),
+  );
+  const unexpected = notBuilt.filter(
+    name => !NOT_BUILT_IN_DOCSITE_BUILD.includes(name),
+  );
+  if (ci && unexpected.length) {
+    throw new Error(
+      `The API surface lists ${unexpected.join(', ')} as not built, so hook coverage would skip ${unexpected.length === 1 ? 'it' : 'them'}. Build ${unexpected.length === 1 ? 'it' : 'them'} before writing the surface, or add ${unexpected.length === 1 ? 'it' : 'them'} to NOT_BUILT_IN_DOCSITE_BUILD with a reason.`,
+    );
+  }
+  return {dir, excluded, unexpected};
+}
+
+/**
+ * Hook names that an API report lists in its Hooks sections, sorted and
+ * listed once each.
+ *
+ * @param {string} reportText one package's report from a built API surface
+ * @returns {string[]}
+ */
+export function readReportedHooks(reportText) {
+  const hookRows = [...parseReport(reportText).values()].filter(
+    row => row.section === 'Hooks' && row.member == null,
+  );
+  return [
+    ...new Set(hookRows.map(row => row.item.replace(/^hook /, ''))),
+  ].sort();
+}
+
+/**
+ * @typedef {object} HookCoverage
+ * @property {string} hook
+ * @property {boolean} hasDoc
+ * @property {string[]} exampleBlocks names of blocks that name the hook
+ */
+
+/**
+ * @param {string[]} hooks public hook names
+ * @param {Set<string>} hookDocNames names of the hook pages the docsite renders
+ * @param {AuthoredBlock[]} blocks
+ * @returns {HookCoverage[]}
+ */
+export function pairHookExampleCoverage(hooks, hookDocNames, blocks) {
+  return hooks.map(hook => ({
+    hook,
+    hasDoc: hookDocNames.has(hook),
+    exampleBlocks: blocksAttributedTo(blocks, hook).map(block => block.name),
+  }));
+}
+
+/**
+ * Human-readable hook coverage for one package, for CI-log visibility.
+ *
+ * @param {string} packageName
+ * @param {HookCoverage[]} coverage
+ * @returns {string}
+ */
+export function formatHookCoverageReport(packageName, coverage) {
+  const withoutDoc = coverage.filter(entry => !entry.hasDoc);
+  const withoutExample = coverage.filter(
+    entry => entry.exampleBlocks.length === 0,
+  );
+  const lines = [
+    `hook example coverage — ${packageName}`,
+    `  ${coverage.length} public hook(s); ${withoutDoc.length} without a hook doc; ${withoutExample.length} without a block naming them in exampleFor/alsoExampleFor`,
+  ];
+  if (withoutDoc.length > 0) {
+    lines.push(
+      `  - no hook doc: ${withoutDoc.map(entry => entry.hook).join(', ')}`,
+    );
+  }
+  if (withoutExample.length > 0) {
+    lines.push(
+      `  - no example block: ${withoutExample.map(entry => entry.hook).join(', ')}`,
     );
   }
   return lines.join('\n');

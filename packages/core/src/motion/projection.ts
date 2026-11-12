@@ -4,8 +4,7 @@
  * @file projection.ts
  * @input A release position and velocity, candidate rest points
  * @output Exports `projectDistance` / `project` (WWDC18's momentum
- *   projection), `selectSnapPoint` (the release target UIKit-style) and
- *   `selectPage` (paging: at most one page per release)
+ *   projection) and `selectSnapPoint` (the release target UIKit-style)
  * @position Pure math; no DOM, no React
  *
  * WWDC18 "Designing Fluid Interfaces" (session 803): a thrown object goes to
@@ -58,7 +57,10 @@ export interface SnapSelection {
 
 /**
  * The rest point a release goes to: the one nearest the projected rest
- * position. `fromIndex` + `maxSteps` limit how many points away from the
+ * position. This is the math primitive (projection + nearest); the release
+ * policy on top of it (a flick advances at least one detent, a release moving
+ * back toward its start cancels) is `resolveSnapPoint` (resolveSnapPoint.ts), so a
+ * component's release rule calls that rather than adding its own. `fromIndex` + `maxSteps` limit how many points away from the
  * starting one a single release may travel (by index order; pass points
  * sorted along the axis). Ties go to the point in the direction of travel.
  *
@@ -111,38 +113,4 @@ export function selectSnapPoint(
     }
   }
   return {index: best, value: points[best], projected};
-}
-
-/**
- * UIScrollView paging (`isPagingEnabled`): the page a release settles on, at
- * most one page from `currentPage`, chosen by projecting the release with
- * the paging projection rate (uikit/scroll.ts; a GUESS until measured).
- * Pages are `pageSize` apart starting at 0.
- */
-export function selectPage({
-  position,
-  velocity,
-  pageSize,
-  pageCount,
-  currentPage,
-  rate = scroll.paging.projectionRate,
-}: {
-  position: number;
-  velocity: number;
-  pageSize: number;
-  pageCount: number;
-  currentPage: number;
-  rate?: number;
-}): SnapSelection {
-  const points = Array.from(
-    {length: Math.max(1, pageCount)},
-    (_, i) => i * pageSize,
-  );
-  return selectSnapPoint(points, {
-    position,
-    velocity,
-    rate,
-    fromIndex: currentPage,
-    maxSteps: 1,
-  });
 }

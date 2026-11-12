@@ -24,41 +24,28 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import * as fs from 'node:fs';
-import {createJiti} from 'jiti';
+import {findPresentFiles} from './present-files.mjs';
+import {importUrl} from './import-url.mjs';
+import {jitiCacheOptions} from './jiti-cache.mjs';
+
+export {findPresentFiles};
 
 /** @type {ReturnType<typeof createJiti> | undefined} */
 let jitiInstance;
 let freshImportNonce = 0;
 const requireFromHere = createRequire(import.meta.url);
-function getJiti() {
-  if (!jitiInstance) {
-    jitiInstance = createJiti(import.meta.url);
-  }
-  return jitiInstance;
-}
 
 /**
- * Node treats `.js` as ESM only inside the nearest package scope whose
- * package.json declares `"type": "module"`; no package.json defaults to
- * CommonJS.
- * @param {string} file
- * @returns {boolean}
+ * jiti, loaded on first use: only TypeScript files and built theme modules
+ * need it, so a run that reads neither never loads it.
+ * @type {typeof import('jiti').createJiti}
  */
-function isCommonJsFile(file) {
-  let dir = path.dirname(file);
-  for (;;) {
-    const packageJson = path.join(dir, 'package.json');
-    if (fs.existsSync(packageJson)) {
-      try {
-        return JSON.parse(fs.readFileSync(packageJson, 'utf-8')).type !== 'module';
-      } catch {
-        return true;
-      }
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) return true;
-    dir = parent;
+const createJiti = (...args) => requireFromHere('jiti').createJiti(...args);
+function getJiti() {
+  if (!jitiInstance) {
+    jitiInstance = createJiti(import.meta.url, jitiCacheOptions());
   }
+  return jitiInstance;
 }
 
 let loadsInFlight = 0;
@@ -101,9 +88,9 @@ async function withStdoutOnStderr(load) {
 /**
  * Import a user-authored module. `.ts` is loaded via jiti; `.mjs`/`.js` use
  * native dynamic import for ordinary cached reads. A fresh `.ts` read uses a
- * no-cache jiti instance. A fresh CommonJS `.js` read evicts and reloads through
- * `require`; an ESM `.js` or `.mjs` read uses a cache-busted file URL. The
- * nearest package.json `type` decides `.js`, matching Node's package scopes.
+ * no-cache jiti instance. Any other fresh read drops the module from the
+ * require cache and imports a cache-busted file URL. Node then chooses its
+ * format as for the first read, so a fresh read gives what a first read gives.
  * Normal loads retain module caching. `fresh` rereads a file that changed
  * during this process: one a codemod rewrote, or an edited doc file (the doc
  * importers in ../doc-compiler/import.mjs read each change once).
@@ -215,6 +202,7 @@ function isMissingPackageExport(error) {
 export async function importThemeArtifact(specifier, cwd) {
   let themeModule = path.join(cwd, 'package.json');
   const loader = createJiti(path.join(cwd, 'package.json'), {
+    ...jitiCacheOptions(),
     moduleCache: false,
     jsx: true,
     interopDefault: true,
@@ -246,46 +234,85 @@ export async function importThemeArtifact(specifier, cwd) {
  */
 async function importModule(file, fresh) {
   if (fresh && file.endsWith('.ts')) {
-    return await createJiti(import.meta.url, {moduleCache: false}).import(file);
-  }
-  if (fresh && file.endsWith('.js') && isCommonJsFile(file)) {
-    const resolved = requireFromHere.resolve(file);
-    delete requireFromHere.cache[resolved];
-    const value = requireFromHere(file);
-    if (
-      value != null &&
-      typeof value === 'object' &&
-      value.__esModule === true &&
-      Object.prototype.hasOwnProperty.call(value, 'default')
-    ) {
-      return value;
-    }
-    return {
-      ...(value != null && typeof value === 'object' ? value : {}),
-      default: value,
-    };
+    return await createJiti(import.meta.url, {
+      ...jitiCacheOptions(),
+      moduleCache: false,
+    }).import(file);
   }
   if (file.endsWith('.ts')) {
     return await getJiti().import(file);
   }
   const url = pathToFileURL(file);
-  if (fresh) {
-    url.searchParams.set('astryx-fresh', String(++freshImportNonce));
-  }
-  return await import(url.href);
+  // The node test project loads import-url.mjs natively. An import from here
+  // would be a request to the test runner, and a theme build reads every Core
+  // doc through it.
+  if (!fresh) return await readInTurn(file, () => importUrl(url.href));
+  // Node chooses the format again, as for the first import: a package's
+  // "type", the extension, or the source's syntax. The query names a new ES
+  // module. A CommonJS module also needs its cache entry gone.
+  url.searchParams.set('astryx-fresh', String(++freshImportNonce));
+  return await readFreshInTurn(file, () => importUrl(url.href));
 }
 
 /**
- * Return the conventional files (by basename, in the given precedence order)
- * that exist directly in `dir`, as absolute paths. Never throws.
- * @param {string} dir
- * @param {string[]} basenames precedence-ordered
- * @returns {string[]} absolute paths of present files, in basenames order
+ * The name Node's CommonJS cache gives `file`: its real path, so a link and
+ * its target name one entry. A file that does not resolve keeps its path.
+ * @param {string} file absolute path
+ * @returns {string}
  */
-export function findPresentFiles(dir, basenames) {
-  return basenames
-    .filter(name => fs.existsSync(path.join(dir, name)))
-    .map(name => path.join(dir, name));
+function cacheKey(file) {
+  try {
+    return requireFromHere.resolve(file);
+  } catch {
+    return file;
+  }
+}
+
+/**
+ * Each file's latest read, by its cache name, settled once that read ends.
+ * @type {Map<string, Promise<void>>}
+ */
+const readsInProgress = new Map();
+
+/**
+ * Run `read`, an import of `file`, once the imports of `file` started before
+ * it have ended. Imports of other files do not wait. A fresh read removes the
+ * file from Node's CommonJS cache. A CommonJS import still in progress needs
+ * that entry until it ends.
+ * @template T
+ * @param {string} file absolute path
+ * @param {() => Promise<T>} read
+ * @returns {Promise<T>}
+ */
+export function readInTurn(file, read) {
+  const key = cacheKey(file);
+  const before = readsInProgress.get(key) ?? Promise.resolve();
+  const result = before.then(read);
+  const ended = result.then(
+    () => {},
+    () => {},
+  );
+  readsInProgress.set(key, ended);
+  void ended.then(() => {
+    if (readsInProgress.get(key) === ended) readsInProgress.delete(key);
+  });
+  return result;
+}
+
+/**
+ * Run `read`, a fresh import of `file`, in the file's turn (`readInTurn`),
+ * once the file is gone from Node's CommonJS cache. A new URL names a new ES
+ * module only, so a CommonJS module also needs its cache entry gone.
+ * @template T
+ * @param {string} file absolute path
+ * @param {() => Promise<T>} read
+ * @returns {Promise<T>}
+ */
+export function readFreshInTurn(file, read) {
+  return readInTurn(file, () => {
+    delete requireFromHere.cache[cacheKey(file)];
+    return read();
+  });
 }
 
 /**

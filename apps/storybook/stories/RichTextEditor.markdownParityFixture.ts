@@ -10,7 +10,9 @@
  *
  * Coverage: ATX headings 1-4; emphasis, strong, strikethrough, inline code,
  * titled and bare links; soft and hard line breaks; a blockquote; nested
- * unordered (2-space) and ordered (3-space) lists; a GFM task list, and a
+ * unordered (2-space) and ordered (3-space) lists; an ordered list whose
+ * counters widen (99 to 100, and i to viii two lists down); a
+ * GFM task list, and a
  * list that mixes task and plain items; a fenced
  * code block with an info string; a GFM table with column alignment; a
  * thematic break; backslash escapes and character references; a right-to-left
@@ -122,6 +124,29 @@ export const MARKDOWN_PARITY_BLOCKS: readonly MarkdownParityBlock[] = [
       '  return Math.min(30_000, 2 ** attempt * 250);',
       '}',
       '```',
+    ),
+  },
+  {
+    key: 'list-ordered-wide',
+    label: 'Ordered list with wide counters',
+    probe: 'Wide step ninety-eight',
+    // 99 to 100 at the top and i to viii two lists down: counters that
+    // outgrow the ones before them. A nested list starts at 1, as only that
+    // number may interrupt the item's paragraph. Not right after the ordered
+    // list, which it would continue as one list.
+    markdown: lines(
+      '98. Wide step ninety-eight',
+      '99. Wide step ninety-nine',
+      '    1. Lettered step a',
+      '       1. Roman step i',
+      '       2. Roman step ii',
+      '       3. Roman step iii',
+      '       4. Roman step iv',
+      '       5. Roman step v',
+      '       6. Roman step vi',
+      '       7. Roman step vii',
+      '       8. Roman step viii',
+      '100. Wide step one hundred',
     ),
   },
   {

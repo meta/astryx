@@ -65,7 +65,11 @@ interface MarkdownFenceProposal {
   >;
 }
 
-const markdownFenceProposal = Symbol('MarkdownFenceProposal');
+// A registered key, so a swizzled Markdown reads the proposal a fence
+// transform made with the package's helper attaches, and the reverse.
+const markdownFenceProposal = Symbol.for(
+  '@astryxdesign/core/markdown/semantic-fence/fence-proposal/v1',
+);
 
 type FenceCode = MarkdownAstCode & {
   readonly [markdownFenceProposal]?: MarkdownFenceProposal;

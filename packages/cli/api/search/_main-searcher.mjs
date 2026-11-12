@@ -8,13 +8,14 @@
  * domain the query wants. Its weights are static numbers in
  * _main-searcher.weights.json.
  * @input {query, options} and the gathered catalog with its static data
- * @output the search response, the lexical response's shape and size
+ * @output the search response, the lexical response's shape and count
  * @position api/search; a child of the root dispatcher in tree.mjs
  */
 
 import {routeKit} from '../../foundation/route/route.mjs';
 import {rank, signals} from './_features.mjs';
 import {entryTable} from './_entries.mjs';
+import {FIT_PLACES, withFitOrder, withLimit} from './_fit-order.mjs';
 import {orderMatches} from './_order.mjs';
 import {routeProbs} from './_query-words.mjs';
 import {namesWhole, rankLexical} from './_lexical.mjs';
@@ -94,13 +95,22 @@ export function rankWith(request, catalog, weights) {
   );
   const route = routeProbs(catalog.data.router, query);
   const rows = signals(table, query, lexical.data.results, route);
-  return orderMatches(
-    table,
-    rank(table, rows, weights),
-    lexical,
+  const limit = options.limit ?? 20;
+  // The fit pass reads the first FIT_PLACES results at every limit, so a
+  // smaller limit shows the top of that order.
+  const ordered = withFitOrder(
+    orderMatches(
+      table,
+      rank(table, rows, weights),
+      lexical,
+      query,
+      Math.max(limit, FIT_PLACES),
+    ),
+    catalog.all,
     query,
-    options.limit ?? 20,
+    () => catalog.data.picker,
   );
+  return withLimit(ordered, limit);
 }
 
 /** @type {import('./tree.mjs').SearchKit} */

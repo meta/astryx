@@ -1,9 +1,19 @@
-Results for "close" (20 of 44)
+Results for "close" (20 of 49)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/AlertDialog
 command:     pnpm exec astryx component AlertDialog
+name:        DrawerHeader
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Drawer
+command:     pnpm exec astryx component DrawerHeader
+name:        BottomSheet
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/BottomSheet
+command:     pnpm exec astryx component BottomSheet
 name:        BottomSheetSwitcher
 domain:      component
 package:     @astryxdesign/core
@@ -19,11 +29,6 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/Drawer
 command:     pnpm exec astryx component Drawer
-name:        DrawerHeader
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/Drawer
-command:     pnpm exec astryx component DrawerHeader
 name:        DropdownMenuSubMenu
 domain:      component
 package:     @astryxdesign/core
@@ -44,6 +49,11 @@ domain:      hook
 package:     @astryxdesign/core
 import:      @astryxdesign/core/hooks
 command:     pnpm exec astryx hook useImperativeDialog
+name:        useKeyboardHint
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/hooks
+command:     pnpm exec astryx hook useKeyboardHint
 name:        useListFocus
 domain:      hook
 package:     @astryxdesign/core
@@ -95,14 +105,3 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs migration/component-migration move-the-app-frame-first
 parent:      pnpm exec astryx docs migration/component-migration --index
-name:        styling/styling-advanced
-section:     compound-components
-domain:      doc
-package:     @astryxdesign/cli
-command:     pnpm exec astryx docs styling/styling-advanced compound-components
-parent:      pnpm exec astryx docs styling/styling-advanced --index
-name:        ComplexSelector
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/ComplexSelector
-command:     pnpm exec astryx component ComplexSelector

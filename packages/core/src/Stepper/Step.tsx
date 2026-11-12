@@ -38,7 +38,7 @@
  * - /packages/cli/assets/templates/blocks/components/Step/ (showcase blocks)
  */
 
-import {useLayoutEffect, type ReactNode} from 'react';
+import {useId, useLayoutEffect, type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 
@@ -63,10 +63,16 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {BaseProps} from '../BaseProps';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
 import {useStepperInternalContext} from './StepperContext';
 import {stepMarker} from './stepper.stylex';
 import type {StepStatus} from './StepStatus';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Stepper/Step.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Built-in indicator presets. Anything other than these strings passed to
@@ -1012,7 +1018,7 @@ export function Step({
   ...rest
 }: StepProps) {
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ctx = useStepperInternalContext();
   const {
     activeStep,
@@ -1072,7 +1078,12 @@ export function Step({
   // A compact horizontal stepper moves navigation to the named controls in its
   // summary row. Its track — including the on-track indicators — stays purely
   // presentational so it does not expose a second, denser set of click targets.
-  const isClickable = !isDisabled && onStepClick != null && !isCompact;
+  const hasButton = onStepClick != null && !isCompact;
+  // A disabled step keeps its button, focusable and aria-disabled, so it
+  // keeps its tab stop, is announced as unavailable, and keeps focus when it
+  // becomes disabled while focused (`spec:AST-085` FR1, FR4, FR5); only
+  // activation is withheld.
+  const isClickable = hasButton && !isDisabled;
 
   const handleClick = () => {
     if (isClickable && onStepClick) {
@@ -1179,6 +1190,7 @@ export function Step({
             themeProps('step-indicator', {
               progress,
               status: status ?? undefined,
+              disabled: isDisabled ? 'disabled' : null,
             }),
             stylex.props(styles.numberBadge, numberColorStyle),
           )}>
@@ -1253,6 +1265,7 @@ export function Step({
             themeProps('step-indicator', {
               progress,
               status: status ?? undefined,
+              disabled: isDisabled ? 'disabled' : null,
             }),
             stylex.props(styles.icon, iconColorStyle),
           )}>
@@ -1304,14 +1317,11 @@ export function Step({
         : undefined;
 
   // Both text parts carry {progress, status}, the phase vocabulary of
-  // `step-indicator` above. The label additionally owns Stepper's disabled
-  // paint, so it alone carries disabled below.
+  // `step-indicator` above. The indicator and the label each own disabled
+  // paint, so each carries disabled; the description does not.
   const labelThemeProps = themeProps('step-label', {
     progress,
     status: status ?? undefined,
-    // The label owns Stepper's disabled paint (`styles.labelDisabled` above),
-    // so it owns the selector too. The description does not change under
-    // disabled and deliberately keeps the smaller {progress, status} surface.
     disabled: isDisabled ? 'disabled' : null,
   });
   const descriptionThemeProps = themeProps('step-description', {
@@ -1349,8 +1359,13 @@ export function Step({
     </div>
   );
 
+  // A clickable step's name is its number, label and status word; the
+  // description describes it, so a disabled step's reason reaches assistive
+  // technology too (spec:AST-085 FR5).
+  const descriptionID = useId();
   const descriptionNode = isRenderable(description) ? (
     <div
+      id={descriptionID}
       {...stylex.props(
         hasIndicator
           ? styles.descriptionRowWithIndicator
@@ -1382,7 +1397,8 @@ export function Step({
     </div>
   ) : null;
 
-  // Theme data attributes reflect progress + optional semantic status.
+  // The step paints nothing of its own when disabled, so it carries no
+  // `disabled` selector.
   const stepThemeProps = themeProps('step', {
     progress,
     status: status ?? undefined,
@@ -1507,6 +1523,7 @@ export function Step({
 
     const otDescriptionNode = isRenderable(description) ? (
       <span
+        id={descriptionID}
         {...mergeProps(
           descriptionThemeProps,
           stylex.props(styles.description),
@@ -1607,14 +1624,19 @@ export function Step({
             className,
             style,
           )}
-          aria-current={isActive ? 'step' : undefined}
           data-testid={dataTestId}
-          {...rest}>
-          {isClickable ? (
+          {...rest}
+          // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
+          aria-current={isActive ? 'step' : undefined}>
+          {hasButton ? (
             <button
               type="button"
               onClick={handleClick}
               aria-label={stepAriaLabel}
+              aria-describedby={
+                isRenderable(description) ? descriptionID : undefined
+              }
+              aria-disabled={isDisabled || undefined}
               {...pressable}
               {...stylex.props(
                 styles.otInteractive,
@@ -1699,14 +1721,19 @@ export function Step({
           className,
           style,
         )}
-        aria-current={isActive ? 'step' : undefined}
         data-testid={dataTestId}
-        {...rest}>
-        {isClickable ? (
+        {...rest}
+        // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
+        aria-current={isActive ? 'step' : undefined}>
+        {hasButton ? (
           <button
             type="button"
             onClick={handleClick}
             aria-label={stepAriaLabel}
+            aria-describedby={
+              isRenderable(description) ? descriptionID : undefined
+            }
+            aria-disabled={isDisabled || undefined}
             {...pressable}
             {...stylex.props(
               styles.otInteractive,
@@ -1744,9 +1771,10 @@ export function Step({
           className,
           style,
         )}
-        aria-current={isActive ? 'step' : undefined}
         data-testid={dataTestId}
-        {...rest}>
+        {...rest}
+        // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
+        aria-current={isActive ? 'step' : undefined}>
         {/* 4px progress bar */}
         <div
           {...mergeProps(
@@ -1762,11 +1790,15 @@ export function Step({
         />
         {/* Body: button wraps only label area, children render outside */}
         <div {...stylex.props(styles.verticalBody)}>
-          {isClickable ? (
+          {hasButton ? (
             <button
               type="button"
               onClick={handleClick}
               aria-label={stepAriaLabel}
+              aria-describedby={
+                isRenderable(description) ? descriptionID : undefined
+              }
+              aria-disabled={isDisabled || undefined}
               {...pressable}
               {...stylex.props(
                 styles.buttonReset,
@@ -1808,9 +1840,10 @@ export function Step({
         className,
         style,
       )}
-      aria-current={isActive ? 'step' : undefined}
       data-testid={dataTestId}
-      {...rest}>
+      {...rest}
+      // Keep this after `{...rest}` so a caller's `aria-current` cannot replace it.
+      aria-current={isActive ? 'step' : undefined}>
       {/* 4px progress bar segment for this step */}
       <div
         {...mergeProps(
@@ -1830,11 +1863,15 @@ export function Step({
           under the track instead. */}
       {isCompact ? (
         compactNameNode
-      ) : isClickable ? (
+      ) : hasButton ? (
         <button
           type="button"
           onClick={handleClick}
           aria-label={stepAriaLabel}
+          aria-describedby={
+            isRenderable(description) ? descriptionID : undefined
+          }
+          aria-disabled={isDisabled || undefined}
           {...stylex.props(
             styles.buttonReset,
             interactionOverlayStyles.backgroundColor,

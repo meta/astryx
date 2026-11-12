@@ -3,6 +3,8 @@
 import {describe, it, expect, afterEach} from 'vitest';
 import {spawn} from 'node:child_process';
 import * as fs from 'node:fs';
+import fsMutable from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -280,6 +282,32 @@ describe.skipIf(process.platform === 'win32')(
       expect(isReleaseInstall(['C:\\npm\\npm.cmd', ...INSTALL], '9.9.9')).toBe(
         true,
       );
+      // The Node runNpm starts npm with, whatever its file is named, as a
+      // distribution or a toolchain names it.
+      for (const node of [
+        '/opt/toolchain/bin/node-linux-x64',
+        '/usr/bin/nodejs',
+        'C:\\tools\\node-win-x64.exe',
+      ]) {
+        expect(
+          isReleaseInstall(
+            [node, '/x/npm/bin/npm-cli.js', ...INSTALL],
+            '9.9.9',
+            {
+              node,
+            },
+          ),
+          node,
+        ).toBe(true);
+      }
+      // Another program running npm-cli.js is not a Node by name.
+      expect(
+        isReleaseInstall(
+          ['/usr/local/bin/nodemon', '/x/npm/bin/npm-cli.js', ...INSTALL],
+          '9.9.9',
+          {node: '/usr/bin/node'},
+        ),
+      ).toBe(false);
       for (const argv of [
         ['/opt/my-npm-tool', ...INSTALL],
         ['python3', '-c', 'sleep', '/home/me/notes/npm-debug.log', ...INSTALL],
@@ -416,6 +444,26 @@ describe.skipIf(process.platform === 'win32')(
       expect(alive(npm)).toBe(true);
       expect(
         endRecordedInstall(lockFor(npm, at), {factsOf: factsOf(installArgv)}),
+      ).toBe('ended');
+      expect(await until(() => !alive(npm))).toBe(true);
+    });
+
+    it('ends the install of a lock moved aside when its version is passed', async () => {
+      const at = Date.now() - 1000;
+      const npm = startGroup(process.execPath, ['-e', SLEEP]);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const lock = lockFor(npm, at);
+      const aside = `${lock}.stale-1-abcdef`;
+      fs.renameSync(lock, aside);
+      const facts = () => ({
+        argv: ['/usr/bin/node', '/x/npm/bin/npm-cli.js', ...INSTALL],
+        startedAt: at + 500,
+      });
+      // The moved folder's name holds no version.
+      expect(endRecordedInstall(aside, {factsOf: facts})).toBe('left');
+      expect(alive(npm)).toBe(true);
+      expect(
+        endRecordedInstall(aside, {factsOf: facts, version: '9.9.9'}),
       ).toBe('ended');
       expect(await until(() => !alive(npm))).toBe(true);
     });
@@ -603,6 +651,121 @@ describe('resolvePublishedVersion', () => {
 });
 
 describe('tryLock', () => {
+  /**
+   * Run `fn` with fs.renameSync replaced by `rename`, which gets the real one.
+   * @param {(real: typeof fs.renameSync, from: string, to: string) => void} rename
+   * @param {() => void} fn
+   */
+  const withRename = (rename, fn) => {
+    const real = fsMutable.renameSync;
+    fsMutable.renameSync = (from, to) => rename(real, String(from), String(to));
+    syncBuiltinESMExports();
+    try {
+      fn();
+    } finally {
+      fsMutable.renameSync = real;
+      syncBuiltinESMExports();
+    }
+  };
+
+  it('puts back a new lock made between the judgement and the rename, before it has a record', () => {
+    const dir = path.join(tempDir('lock'), '.lock-fresh');
+    // An old lock with no record: stale once it is past the unowned bound.
+    fs.mkdirSync(dir, {recursive: true});
+    const old = new Date(Date.now() - 31 * 60_000);
+    fs.utimesSync(dir, old, old);
+    let first = true;
+    withRename(
+      (real, from, to) => {
+        if (first && from === dir) {
+          first = false;
+          // Another run removed the stale lock and made its own, and has
+          // not written its record yet.
+          fs.rmSync(dir, {recursive: true});
+          fs.mkdirSync(dir);
+          fs.writeFileSync(path.join(dir, 'mine'), '');
+        }
+        real(from, to);
+      },
+      () => expect(tryLock(dir)).toBe(false),
+    );
+    expect(fs.existsSync(path.join(dir, 'mine'))).toBe(true);
+  });
+
+  it('holds nothing and removes nothing when the put-back finds the name taken', () => {
+    const root = tempDir('lock');
+    const dir = path.join(root, '.lock-third');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'owner.json'),
+      JSON.stringify({pid: 999999, host: os.hostname(), at: 1}),
+    );
+    const old = new Date(Date.now() - 31 * 60_000);
+    fs.utimesSync(dir, old, old);
+    let calls = 0;
+    withRename(
+      (real, from, to) => {
+        calls++;
+        if (calls === 1) {
+          // A second run takes the lock just before this one moves it.
+          fs.writeFileSync(
+            path.join(dir, 'owner.json'),
+            JSON.stringify({pid: process.pid, host: 'second', at: Date.now()}),
+          );
+        } else if (calls === 2) {
+          // A third run takes the free name before the put-back.
+          fs.mkdirSync(dir);
+          fs.writeFileSync(path.join(dir, 'owner.json'), '{"host":"third"}');
+        }
+        real(from, to);
+      },
+      () => expect(tryLock(dir)).toBe(false),
+    );
+    // The third run's lock stands, and the second run's lock stays aside
+    // for it.
+    expect(fs.readFileSync(path.join(dir, 'owner.json'), 'utf8')).toContain(
+      'third',
+    );
+    const aside = fs.readdirSync(root).filter(n => n.includes('.stale-'));
+    expect(aside).toHaveLength(1);
+    expect(
+      fs.readFileSync(path.join(root, aside[0], 'owner.json'), 'utf8'),
+    ).toContain('second');
+  });
+
+  it('puts back a lock another run took between the stale judgement and the rename', () => {
+    const dir = path.join(tempDir('lock'), '.lock-race');
+    fs.mkdirSync(dir, {recursive: true});
+    const owner = path.join(dir, 'owner.json');
+    fs.writeFileSync(
+      owner,
+      JSON.stringify({pid: 999999, host: os.hostname(), at: 1}),
+    );
+    const old = new Date(Date.now() - 31 * 60_000);
+    fs.utimesSync(dir, old, old);
+    // Another run takes the lock just as this one moves it aside.
+    const rename = fsMutable.renameSync;
+    let taken = false;
+    fsMutable.renameSync = (from, to) => {
+      if (!taken && from === dir) {
+        taken = true;
+        fs.writeFileSync(
+          owner,
+          JSON.stringify({pid: process.pid, host: 'other', at: Date.now()}),
+        );
+      }
+      return rename(from, to);
+    };
+    syncBuiltinESMExports();
+    try {
+      expect(tryLock(dir)).toBe(false);
+    } finally {
+      fsMutable.renameSync = rename;
+      syncBuiltinESMExports();
+    }
+    expect(JSON.parse(fs.readFileSync(owner, 'utf8')).host).toBe('other');
+  });
+
   it('takes a free lock once, keeps a live holder, and reclaims a stale one', () => {
     const dir = path.join(tempDir('lock'), '.lock-x');
     expect(tryLock(dir)).toBe(true);
@@ -812,6 +975,36 @@ const alive = pid => {
   }
 };
 
+/**
+ * Whether `pid` no longer runs: gone, or killed and not yet reaped. A killed
+ * process stays a zombie until its new parent reaps it, which a loaded
+ * machine can hold off for seconds, and it no longer runs once it is one.
+ * Where there is no /proc (macOS), only a reaped process reads as ended.
+ * @param {number} pid
+ */
+const ended = pid => {
+  if (!fs.existsSync('/proc/self/stat')) return !alive(pid);
+  try {
+    // The state is the first field after the command name's parenthesis.
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf-8');
+    const state = stat.slice(stat.lastIndexOf(')') + 2)[0];
+    return state === 'Z' || state === 'X';
+  } catch {
+    return true;
+  }
+};
+
+/**
+ * Polls until `done` holds. Only the test's own time limit bounds it: it
+ * waits for an event the code under test produces, not for a clock.
+ * @param {() => boolean} done
+ */
+const eventually = async done => {
+  while (!done()) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+};
+
 /** @param {() => boolean} done @param {number} ms */
 const waitFor = async (done, ms) => {
   const end = Date.now() + ms;
@@ -839,9 +1032,10 @@ describe('runNpm time limit', () => {
     });
     expect(/** @type {any} */ (result.error)?.code).toBe('ETIMEDOUT');
     const pid = Number(fs.readFileSync(pidFile, 'utf-8'));
-    // The guard sends SIGKILL and exits at once; the killed process can still
-    // exist for a moment (the signal in flight, or awaiting reaping).
-    expect(await waitFor(() => !alive(pid), 5_000)).toBe(true);
+    // The guard sent npm's group SIGKILL before it exited, so npm stops
+    // running: the signal can still be in flight, and its new parent reaps
+    // it when it gets to it, which a loaded machine can hold off for seconds.
+    await eventually(() => ended(pid));
   });
 });
 
@@ -860,9 +1054,13 @@ describe('no install outlives its run', () => {
     const npmPid = Number(fs.readFileSync(pidFile, 'utf-8'));
     expect(alive(npmPid)).toBe(true);
     cli.kill('SIGKILL');
-    expect(await waitFor(() => !alive(npmPid), 5_000)).toBe(true);
-    // A later takeover finds no id that could now name another process.
-    expect(await waitFor(() => !fs.existsSync(record), 5_000)).toBe(true);
+    // The guard ends npm's group, then removes the record: the removal is the
+    // guard's own sign that it acted, however late its next check runs on a
+    // loaded machine. A later takeover then finds no id that could now name
+    // another process.
+    await eventually(() => !fs.existsSync(record));
+    // npm no longer runs: gone, or killed and not yet reaped.
+    await eventually(() => ended(npmPid));
   }, 30_000);
 
   it('ends npm, which ignores Ctrl-C, when the run gets Ctrl-C', async () => {
@@ -880,7 +1078,9 @@ describe('no install outlives its run', () => {
     const npmPid = Number(fs.readFileSync(pidFile, 'utf-8'));
     const exited = new Promise(resolve => cli.on('exit', resolve));
     process.kill(-(/** @type {number} */ (cli.pid)), 'SIGINT');
-    expect(await waitFor(() => !alive(npmPid), 5_000)).toBe(true);
+    // The guard ends npm's group on Ctrl-C: npm stops running, however late
+    // its new parent reaps it.
+    await eventually(() => ended(npmPid));
     await exited;
   }, 30_000);
 

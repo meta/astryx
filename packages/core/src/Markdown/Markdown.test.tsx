@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Markdown.test.tsx
+ * @input Markdown renderer, supported blocks and source-line plugin
+ * @output Semantic, flat-task identity and nested flow-task regressions
+ * @position Core Markdown unit tests
+ */
+
 import {
   describe,
   it,
@@ -13,6 +20,7 @@ import {render, screen, fireEvent} from '@testing-library/react';
 import type {ComponentProps, ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Markdown} from './Markdown';
+import {markdownSourceLinesPlugin} from './plugins';
 import type {
   MarkdownComponents,
   MarkdownInlinePlugin,
@@ -531,6 +539,48 @@ describe('Markdown', () => {
     expect(checkboxes).toHaveLength(2);
     expect((checkboxes[0] as HTMLInputElement).checked).toBe(true);
     expect((checkboxes[1] as HTMLInputElement).checked).toBe(false);
+    // Preserve the released flat pure-task grouping/naming path.
+    expect(document.querySelector('.astryx-checkbox-list')).not.toBeNull();
+    expect(screen.getByRole('group')).toHaveAttribute('aria-labelledby');
+  });
+
+  it('keeps nested pure-task rows on the static marker path with source lines', () => {
+    render(
+      <Markdown plugins={[markdownSourceLinesPlugin]}>
+        {
+          '- [ ] Outer task\n  - [x] Inner task\n\n    388. Counter\n    389. Sibling'
+        }
+      </Markdown>,
+    );
+    expect(document.querySelector('.astryx-checkbox-list')).toBeNull();
+    const checkboxes = screen.getAllByRole<HTMLInputElement>('checkbox');
+    expect(checkboxes.map(input => input.checked)).toEqual([false, true]);
+    for (const input of checkboxes) {
+      expect(input).toHaveAttribute('aria-readonly', 'true');
+    }
+    expect(
+      Array.from(document.querySelectorAll('li'), item =>
+        item.getAttribute('data-source-line'),
+      ),
+    ).toEqual(['1', '2', '4', '5']);
+  });
+
+  it('uses the static task marker path for lists nested through a blockquote', () => {
+    render(
+      <Markdown>
+        {'- [ ] Outer task\n\n  > 388. Quoted counter\n  > 389. Quoted sibling'}
+      </Markdown>,
+    );
+    expect(document.querySelector('.astryx-checkbox-list')).toBeNull();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+    expect(screen.getByRole('checkbox')).toHaveAttribute(
+      'aria-readonly',
+      'true',
+    );
+    expect(document.querySelector('blockquote ol')).toHaveAttribute(
+      'start',
+      '388',
+    );
   });
 
   it('keeps each task item checked or open in a list that mixes task and plain items (FR23)', () => {
@@ -925,14 +975,15 @@ describe('Markdown', () => {
   });
 
   describe('link destinations follow the shared navigation rule', () => {
-    // The same matrix Core's link plumbing and imperative navigation apply
-    // (utils/safeUrl.ts): only executable document schemes are blocked.
+    // The matrix Core's link plumbing and imperative navigation apply
+    // (utils/safeUrl.ts), plus every data: URL, which the parser rejects.
     const blocked = [
       'javascript:alert(1)',
       'JaVaScRiPt:alert(1)',
       'vbscript:MsgBox(1)',
       'data:text/html,<script>alert(1)</script>',
       'java\nscript:alert(1)',
+      'data:image/png;base64,iVBORw0KGgo=',
     ];
     const accepted = [
       'https://example.com',
@@ -941,7 +992,6 @@ describe('Markdown', () => {
       '//example.com/x',
       'mailto:a@example.com',
       'tel:+15555550100',
-      'data:image/png;base64,iVBORw0KGgo=',
     ];
 
     it.each(blocked)('renders %s as text, not a link', destination => {
@@ -961,7 +1011,7 @@ describe('Markdown', () => {
       expect(link?.getAttribute('href')).toBe(destination);
     });
 
-    it('a data:image link is navigation and is accepted, while a data:image image stays rejected by the resource policy', () => {
+    it('renders a data:image link and a data:image image as text', () => {
       const {container} = render(
         <Markdown>
           {
@@ -969,10 +1019,9 @@ describe('Markdown', () => {
           }
         </Markdown>,
       );
-      expect(container.querySelector('a')?.getAttribute('href')).toBe(
-        'data:image/png;base64,iVBORw0KGgo=',
-      );
+      expect(container.querySelector('a')).toBeNull();
       expect(container.querySelector('img')).toBeNull();
+      expect(container.textContent).toContain('view');
     });
   });
 
@@ -1329,5 +1378,57 @@ describe('inlinePlugins', () => {
       expect(container.querySelector('a')).toBeNull();
       expect(container.querySelector('pre')).not.toBeNull();
     });
+  });
+});
+
+describe('Markdown contentWidth', () => {
+  function maxWidthStyles(container: HTMLElement): string[] {
+    return Array.from(container.querySelectorAll('*'))
+      .map(el => el.getAttribute('style') ?? '')
+      .filter(style => style.includes('--x-maxWidth'));
+  }
+
+  it('caps default prose at the 680px measure', () => {
+    const {container} = render(
+      <Markdown>{'Hello world paragraph.\n\n```\ncode\n```'}</Markdown>,
+    );
+    expect(
+      maxWidthStyles(container).some(style =>
+        style.includes('--x-maxWidth: 680px'),
+      ),
+    ).toBe(true);
+    // A code block spans the column, with the prose measure as its floor.
+    expect(container.querySelector('pre')?.getAttribute('style')).toContain(
+      '--x-minWidth: min(680px, 100%)',
+    );
+  });
+
+  it('lets prose span the column with contentWidth="100%"', () => {
+    const {container} = render(
+      <Markdown contentWidth="100%">{'Hello world paragraph.'}</Markdown>,
+    );
+    const proseStyles = maxWidthStyles(container);
+    expect(proseStyles.length).toBeGreaterThan(0);
+    for (const style of proseStyles) {
+      expect(style).toContain('--x-maxWidth: 100%');
+    }
+  });
+
+  it('keeps an explicit numeric contentWidth in pixels', () => {
+    const {container} = render(
+      <Markdown contentWidth={640}>{'Hello world paragraph.'}</Markdown>,
+    );
+    const proseStyles = maxWidthStyles(container);
+    expect(proseStyles.length).toBeGreaterThan(0);
+    for (const style of proseStyles) {
+      expect(style).toContain('--x-maxWidth: 640px');
+    }
+  });
+
+  it('still drops the prose cap entirely for contentWidth={0}', () => {
+    const {container} = render(
+      <Markdown contentWidth={0}>{'Hello world paragraph.'}</Markdown>,
+    );
+    expect(maxWidthStyles(container)).toEqual([]);
   });
 });

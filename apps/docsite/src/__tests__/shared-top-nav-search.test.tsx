@@ -4,9 +4,15 @@
 
 import type {ReactNode} from 'react';
 import {useLayoutEffect, useRef} from 'react';
-import {render, screen, waitFor} from '@testing-library/react';
+import {cleanup, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {SEARCH_WARMUP_URL, resetSearchWarmup} from '../lib/searchWarmup';
+
+const fetchSpy = vi.fn((_url: string, _init?: RequestInit) =>
+  Promise.resolve(new Response(null, {status: 204})),
+);
+vi.stubGlobal('fetch', fetchSpy);
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/templates',
@@ -43,16 +49,25 @@ vi.mock('@astryxdesign/core/Button', () => ({
   Button: ({
     label,
     onClick,
+    onPointerEnter,
+    onFocus,
     href,
   }: {
     label: string;
     onClick?: () => void;
+    onPointerEnter?: () => void;
+    onFocus?: () => void;
     href?: string;
   }) =>
     href ? (
       <a href={href}>{label}</a>
     ) : (
-      <button onClick={onClick}>{label}</button>
+      <button
+        onClick={onClick}
+        onPointerEnter={onPointerEnter}
+        onFocus={onFocus}>
+        {label}
+      </button>
     ),
 }));
 
@@ -112,7 +127,37 @@ vi.mock('../components/SearchPalette', () => ({
 
 import {SharedTopNav} from '../components/SharedTopNav';
 
+const warmups = () =>
+  fetchSpy.mock.calls.filter(([url]) => url === SEARCH_WARMUP_URL);
+
 describe('SharedTopNav search lifecycle', () => {
+  beforeEach(() => {
+    fetchSpy.mockClear();
+    resetSearchWarmup();
+  });
+  afterEach(cleanup);
+
+  it('starts the search server before the first keystroke, once', async () => {
+    const user = userEvent.setup();
+    render(<SharedTopNav />);
+    const trigger = screen.getByRole('button', {name: 'Search'});
+
+    await user.hover(trigger);
+    expect(warmups()).toHaveLength(1);
+    expect(warmups()[0][1]).toEqual({cache: 'no-store'});
+
+    // Hovering again, focusing and opening do not send it again.
+    await user.unhover(trigger);
+    await user.hover(trigger);
+    await user.click(trigger);
+    expect(warmups()).toHaveLength(1);
+  });
+
+  it('starts the search server once the page is idle, with no interaction', async () => {
+    render(<SharedTopNav />);
+    await waitFor(() => expect(warmups()).toHaveLength(1), {timeout: 3_000});
+  });
+
   it('keeps Search mounted through close so focus returns to its trigger', async () => {
     const user = userEvent.setup();
     render(<SharedTopNav />);

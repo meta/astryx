@@ -30,5 +30,44 @@
   "DropdownMenuDivider": {"readySelector": "[role=\"menu\"]"},
   "DropdownMenuGroup": {"readySelector": "[role=\"menu\"]"},
   "DropdownMenuItem": {"readySelector": "[role=\"menu\"]"},
-  "DropdownMenuSubMenu": {"evidence": "dropdown-menu-submenu-audit-evidence"}
+  "DropdownMenuSubMenu": {"evidence": "dropdown-menu-submenu-audit-evidence"},
+  "HoverCard": {
+    "stories": ["core-hovercard--open-states"],
+    "readySelector": "[role=\"dialog\"]"
+  },
+  "InputGroupText": {"components": ["InputGroupText", "InputGroup"]},
+  "LayoutFooter": {
+    "components": ["Layout"],
+    "stories": [
+      "core-layout--footer-states",
+      "core-layout--basic-card",
+      "core-layout--with-sidebar",
+      "core-layout--no-dividers",
+      "core-layout--full-bleed-content"
+    ]
+  },
+  "LayoutHeader": {
+    "components": ["Layout"],
+    "stories": [
+      "core-layout--header-states",
+      "core-layout--basic-card",
+      "core-layout--with-sidebar",
+      "core-layout--no-dividers",
+      "core-layout--full-bleed-content"
+    ]
+  },
+  "LayoutPanel": {
+    "components": ["Layout"],
+    "stories": [
+      "core-layout--panel-states",
+      "core-layout--with-sidebar",
+      "core-layout--dual-panels",
+      "core-layout--content-width-with-start-panel"
+    ]
+  },
+  "Lightbox": {
+    "stories": ["core-lightbox--open-viewer"],
+    "readySelector": "dialog[open]"
+  },
+  "ListItem": {"components": ["List", "ListItem"]}
 }

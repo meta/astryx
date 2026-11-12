@@ -27,13 +27,26 @@ export interface ParsedTime {
 /**
  * Validates and creates an ISOTimeString from a string.
  * Returns null if the string is not a valid time format.
+ *
+ * Every field must be digits only. parseISOTime reads each field with
+ * parseInt, which stops at the first non-digit, so on its own it would turn
+ * "2:30 PM" into 02:30 (12 hours off) and "14:30abc" into 14:30. Surrounding
+ * whitespace and fractional seconds ("14:30:15.250", as a native time input
+ * gives) are accepted; the fraction is dropped.
  */
 export function createISOTimeString(value: string): ISOTimeString | null {
-  const parsed = parseISOTime(value);
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!/^\d{1,2}:\d{1,2}(?::\d{1,2}(?:\.\d+)?)?$/.test(trimmed)) {
+    return null;
+  }
+  const parsed = parseISOTime(trimmed);
   if (!parsed) {
     return null;
   }
-  return formatISOTime(parsed, value.split(':').length === 3);
+  return formatISOTime(parsed, trimmed.split(':').length === 3);
 }
 
 /**
@@ -341,7 +354,8 @@ export function isTimeInRange(
 }
 
 /**
- * Clamps a time to a min/max range.
+ * Clamps a time to a min/max range. Without seconds, a bound that falls
+ * between whole minutes gives the nearest whole minute inside the range.
  */
 export function clampTime(
   time: ISOTimeString,
@@ -357,17 +371,53 @@ export function clampTime(
   if (min && compareTime(time, min) < 0) {
     const parsedMin = parseISOTime(min);
     if (parsedMin) {
-      return formatISOTime(parsedMin, includeSeconds);
+      return formatISOTime(
+        onWholeMinute(parsedMin, 1, includeSeconds, max),
+        includeSeconds,
+      );
     }
   }
   if (max && compareTime(time, max) > 0) {
     const parsedMax = parseISOTime(max);
     if (parsedMax) {
-      return formatISOTime(parsedMax, includeSeconds);
+      return formatISOTime(
+        onWholeMinute(parsedMax, -1, includeSeconds, min),
+        includeSeconds,
+      );
     }
   }
 
   return time;
+}
+
+/**
+ * A bound as a time without seconds reaches it: the next whole minute up from
+ * a minimum, or the whole minute down from a maximum. With no whole minute
+ * before the other bound, the bound stays as it is.
+ */
+function onWholeMinute(
+  bound: ParsedTime,
+  direction: 1 | -1,
+  includeSeconds: boolean,
+  other: ISOTimeString | undefined,
+): ParsedTime {
+  if (includeSeconds || bound.second === 0) {
+    return bound;
+  }
+  const minutes = bound.hour * 60 + bound.minute + (direction === 1 ? 1 : 0);
+  if (minutes > 23 * 60 + 59) {
+    return bound;
+  }
+  const rounded = {
+    hour: Math.floor(minutes / 60),
+    minute: minutes % 60,
+    second: 0,
+  };
+  const order = compareTime(formatISOTime(rounded, true), other);
+  if (other && (direction === 1 ? order > 0 : order < 0)) {
+    return bound;
+  }
+  return rounded;
 }
 
 /**
