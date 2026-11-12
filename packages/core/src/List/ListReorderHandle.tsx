@@ -6,13 +6,13 @@
  * @file ListReorderHandle.tsx
  * @input The List's reorder session (List/listReorderEngine.tsx, through
  *   ListContext's `reorder`), the translator and theme tokens
- * @output `ListReorderHandle`, `ListReorderRowName` and `reorderRowStyle`.
- *   The handle ends a reorderable List row. A finger held still on it drags
- *   it, and so does a pen where the primary pointer is coarse. A mouse, or a
- *   pen where it is fine, drags it at once. It is also a toggle
- *   (`aria-pressed`): a click, Space or Enter turns its row's reorder mode on
- *   and off. The row name serves a row without one, and the style a row that
- *   has one
+ * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle` and
+ *   `UNREAD_HANDLE_NAME`. The handle ends a reorderable List row. A finger
+ *   held still on it drags it, and so does a pen where the primary pointer is
+ *   coarse. A mouse, or a pen where it is fine, drags it at once. It is also a
+ *   toggle (`aria-pressed`): a click, Space or Enter turns its row's reorder
+ *   mode on and off. The row name serves a row without one, and the style a
+ *   row that has one
  * @position Part of the reorder machinery that createReorderable carries.
  *   ListItem renders it, from the List's context, at the end of each row
  *   that can move
@@ -290,8 +290,8 @@ export function ListReorderHandle({
   }, [controller, callerLabel, text, labelID, byLabel, named]);
   const shown = useSyncExternalStore(
     controller?.subscribeHandleNames ?? subscribeNothing,
-    () => controller?.handleNameOf(ref.current) ?? UNREAD_NAME,
-    () => UNREAD_NAME,
+    () => controller?.handleNameOf(ref.current) ?? UNREAD_HANDLE_NAME,
+    () => UNREAD_HANDLE_NAME,
   );
   const isPressed = useSyncExternalStore(
     controller?.subscribeMode ?? subscribeNothing,
@@ -395,7 +395,12 @@ ListReorderHandle.displayName = 'ListReorderHandle';
 
 const subscribeNothing = () => () => {};
 
-const UNREAD_NAME: ListReorderHandleName = {
+/**
+ * A handle's name before the session reads it: its server snapshot, and the
+ * session's answer for a handle it has not read. One object keeps the
+ * snapshot through hydration and the first read.
+ */
+export const UNREAD_HANDLE_NAME: ListReorderHandleName = {
   position: null,
   labelNamesRow: null,
 };

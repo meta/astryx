@@ -133,6 +133,7 @@ import {
   INSERTION_LINE_THICKNESS,
   ListReorderHandle,
   ListReorderRowName,
+  UNREAD_HANDLE_NAME,
   reorderListStyle,
   reorderRowStyle,
 } from './ListReorderHandle';
@@ -260,11 +261,6 @@ export interface ListReorderHandleName {
   readonly position: number | null;
   readonly labelNamesRow: boolean | null;
 }
-
-const UNREAD_NAME: ListReorderHandleName = {
-  position: null,
-  labelNamesRow: null,
-};
 
 /**
  * The list's rows: its element children. A removed row put back for its exit
@@ -876,7 +872,8 @@ export class ListReorderController implements ListReorderSession {
   /** `handle`'s place and label naming, as the list last showed them. */
   handleNameOf(handle: Element | null): ListReorderHandleName {
     return (
-      (handle == null ? null : this.handleNames.get(handle)) ?? UNREAD_NAME
+      (handle == null ? null : this.handleNames.get(handle)) ??
+      UNREAD_HANDLE_NAME
     );
   }
 

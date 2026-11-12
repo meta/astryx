@@ -3,17 +3,19 @@
 /**
  * @file ListReorderNames.test.tsx
  * @input List with `reorderable` (createReorderable), ListItem `itemKey`,
- *   Testing Library
+ *   Testing Library, and server markup that hydrates
  * @output jsdom proofs that a reorder handle's name follows its row when the
  *   handle does not render again. A nameless row's place follows a row above
  *   it that goes, and a reorder, also after the list's numbering turns on. A
  *   label names the handle while it shows text. A handle named some other way
- *   renders once per mount.
+ *   renders once per mount, and once when it hydrates.
  * @position Tests for List/ListReorderHandle.tsx
  */
 
 import {act, render, screen, waitFor} from '@testing-library/react';
 import {memo, useState} from 'react';
+import {hydrateRoot, type Root} from 'react-dom/client';
+import {renderToString} from 'react-dom/server';
 import {describe, expect, it, vi} from 'vitest';
 import {List} from '../List';
 import {ListItem} from '../ListItem';
@@ -189,5 +191,34 @@ describe('List reorder handle names', () => {
     ).toBeInTheDocument();
     await act(async () => {});
     expect(verbReads).toBe(3);
+  });
+
+  it("renders a hydrated handle its row's aria-label names once, though the server snapshot comes before the session's read", async () => {
+    const error = vi.spyOn(console, 'error');
+    const reorderable = createReorderable({onReorder: () => {}});
+    const tree = (
+      <InternationalizationContext value={COUNTING_ENGLISH}>
+        <List reorderable={reorderable}>
+          <ListItem itemKey="inbox" aria-label="Inbox" label="Inbox" />
+          <ListItem itemKey="sent" aria-label="Sent" label="Sent" />
+        </List>
+      </InternationalizationContext>
+    );
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(tree);
+    document.body.append(container);
+    verbReads = 0;
+    let root: Root | null = null;
+    await act(async () => {
+      root = hydrateRoot(container, tree);
+    });
+    // A server snapshot that equals the session's unread name keeps the
+    // hydrated handle as it is, and so does the session's first read.
+    await act(async () => {});
+    expect(verbReads).toBe(2);
+    expect(error).not.toHaveBeenCalled();
+    act(() => root?.unmount());
+    container.remove();
+    error.mockRestore();
   });
 });
