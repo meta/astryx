@@ -63,7 +63,7 @@ export const CHECKS = {
   g: 'Records: a changed record needs a spec owner to approve its spec content',
   h: `Size (guideline): prefer under about ${SIZE_GUIDELINE.toLocaleString('en-US')} authored lines; a reviewer may suggest a split, but size alone is never a finding`,
   i: 'Shared owners: a concern Core owns in a shared module is called through that module',
-  j: 'Effects: a new Effect names the system it syncs and does more than copy into a ref; no DOM node in state',
+  j: 'Effects: interaction logic lives in callbacks, and no Effect reacts to interaction state. A new Effect names the system it syncs. A latest prop or callback is kept only with useCommittedRef or useCommittedRefInto (packages/core/src/hooks/useCommittedRef.ts), and render and useMemo never read that ref. No Effect only copies a value into a ref or into state, no ref is written during render except by lazy initialization, and no DOM node is in state',
   k: 'Release notes and records: a Changeset names each package that ships a change, its category fits, and no gap row stays for a claim the change builds',
   l: 'Mergeable: the change merges into the base without conflicts',
 };

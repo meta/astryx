@@ -151,10 +151,10 @@ describe('sharedOwnerFindings', () => {
 describe('effectFindings', () => {
   const file = 'packages/core/src/Tooltip/useTooltip.ts';
 
-  function findingsFor(source) {
+  function findingsFor(source, at = file) {
     const sourceLines = source.split('\n');
-    return effectFindings(addedLinesOf(file, sourceLines), name =>
-      name === file ? source : null,
+    return effectFindings(addedLinesOf(at, sourceLines), name =>
+      name === at ? source : null,
     ).map(f => [f.line, f.rule, ...(f.advisory ? ['advisory'] : [])]);
   }
 
@@ -191,7 +191,8 @@ describe('effectFindings', () => {
     ).toEqual([]);
   });
 
-  it('accepts a one-line layout or insertion Effect that keeps a latest ref, with a note', () => {
+  it('flags an Effect of any kind that only copies a value into a ref', () => {
+    const copy = 'The Effect only copies a value into a ref';
     expect(
       findingsFor(
         [
@@ -199,61 +200,80 @@ describe('effectFindings', () => {
           'useIsomorphicLayoutEffect(() => {',
           '  onPanRef.current = onPan;',
           '});',
-          '',
           'useInsertionEffect(() => {',
           '  // Keeps the committed getter for the key handlers.',
           '  getPartsRef.current = props.getParts;',
           '});',
-        ].join('\n'),
-      ),
-    ).toEqual([]);
-  });
-
-  it('flags a latest-ref Effect with no note', () => {
-    expect(
-      findingsFor(
-        ['useLayoutEffect(() => {', '  onPanRef.current = onPan;', '});'].join(
-          '\n',
-        ),
-      ),
-    ).toEqual([
-      [1, 'The latest-ref Effect has no note that names what it syncs'],
-    ]);
-  });
-
-  it('flags a ref copy in a passive Effect', () => {
-    expect(
-      findingsFor(
-        [
           '// Keeps the latest handler.',
           'useEffect(() => {',
           '  onChangeRef.current = onChange;',
           '});',
         ].join('\n'),
       ),
-    ).toEqual([[2, 'The Effect only copies a value into a ref, after paint']]);
+    ).toEqual([
+      [2, copy],
+      [5, copy],
+      [10, copy],
+    ]);
   });
 
-  it('flags a layout Effect that copies more than one value or holds logic', () => {
-    const notOneLine =
-      'The Effect copies into a ref and is not a one-line latest-ref Effect';
+  it('points a ref copy at the shared committed-ref hooks', () => {
+    const [finding] = effectFindings(
+      addedLinesOf(file, [
+        'useLayoutEffect(() => {',
+        '  onPanRef.current = onPan;',
+        '});',
+      ]),
+      () =>
+        ['useLayoutEffect(() => {', '  onPanRef.current = onPan;', '});'].join(
+          '\n',
+        ),
+    );
+    expect(finding.fix).toContain('useCommittedRef');
+    expect(finding.fix).toContain('useCommittedRefInto');
+    expect(finding.fix).toContain('packages/core/src/hooks/useCommittedRef.ts');
+  });
+
+  it("accepts the committed-ref hook's own insertion Effect", () => {
     expect(
       findingsFor(
         [
-          '// Keeps the latest callbacks.',
-          'useLayoutEffect(() => {',
-          '  onPanRef.current = onPan;',
-          '  onEndRef.current = onEnd;',
-          '});',
-          '// Keeps the latest callback.',
-          'useLayoutEffect(() => {',
-          '  onPanRef.current = isDisabled ? noop : onPan;',
-          '});',
+          '  // Stores values only. Refs to DOM nodes are not attached yet when this runs.',
+          '  useInsertionEffect(() => {',
+          '    ref.current = value;',
+          '  });',
+        ].join('\n'),
+        'packages/core/src/hooks/useCommittedRef.ts',
+      ),
+    ).toEqual([]);
+  });
+
+  it('flags a committed ref read during render or in useMemo', () => {
+    expect(
+      findingsFor(
+        [
+          'export function Panel({onPan, label}: Props) {',
+          '  const onPanRef = useCommittedRef(onPan);',
+          '  const labelRef = useRef(label);',
+          '  useCommittedRefInto(labelRef, label);',
+          '  const text = labelRef.current;',
+          '  const trimmed = useMemo(() => labelRef.current.trim(), []);',
+          '  const upper = useMemo(() => {',
+          '    return labelRef.current.toUpperCase();',
+          '  }, []);',
+          '  const onClick = () => onPanRef.current(labelRef.current);',
+          '  useEffect(() => {',
+          '    // Subscribes to the window pan stream.',
+          '    return listen(() => onPanRef.current());',
+          '  }, [onPanRef]);',
+          '  return null;',
+          '}',
         ].join('\n'),
       ),
     ).toEqual([
-      [2, notOneLine],
-      [7, notOneLine],
+      [5, '`labelRef.current` is read during render'],
+      [6, '`labelRef.current` is read during render'],
+      [8, '`labelRef.current` is read during render'],
     ]);
   });
 
@@ -284,7 +304,7 @@ describe('effectFindings', () => {
     ).toEqual([[2, 'The Effect only copies a value into state']]);
   });
 
-  it('reports a ref write in a component or hook body as an advisory', () => {
+  it('flags a ref write in a component or hook body', () => {
     expect(
       findingsFor(
         [
@@ -314,12 +334,12 @@ describe('effectFindings', () => {
         ].join('\n'),
       ),
     ).toEqual([
-      [2, '`labelRef.current` is written during render', 'advisory'],
-      [7, '`previousRef.current` is written during render', 'advisory'],
-      [12, '`cacheRef.current` is written during render', 'advisory'],
-      [17, '`rendersRef.current` is written during render', 'advisory'],
-      [18, '`passesRef.current` is written during render', 'advisory'],
-      [20, '`seedRef.current` is written during render', 'advisory'],
+      [2, '`labelRef.current` is written during render'],
+      [7, '`previousRef.current` is written during render'],
+      [12, '`cacheRef.current` is written during render'],
+      [17, '`rendersRef.current` is written during render'],
+      [18, '`passesRef.current` is written during render'],
+      [20, '`seedRef.current` is written during render'],
     ]);
   });
 
@@ -341,9 +361,7 @@ describe('effectFindings', () => {
           '}',
         ].join('\n'),
       ),
-    ).toEqual([
-      [10, '`otherRef.current` is written during render', 'advisory'],
-    ]);
+    ).toEqual([[10, '`otherRef.current` is written during render']]);
   });
 
   it('accepts a ref write in a handler, a callback ref, or outside a component', () => {

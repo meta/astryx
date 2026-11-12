@@ -136,8 +136,8 @@ export function sharedOwnerFindings(addedLines) {
 
 const EFFECT =
   /\b(?:React\.)?use(?:Isomorphic)?(?:Layout|Insertion)?Effect\s*\(/;
-const COMMIT_EFFECT =
-  /\b(?:React\.)?use(?:Isomorphic)?(?:Layout|Insertion)Effect\s*\(/;
+const COMMITTED_REF_MODULE = 'packages/core/src/hooks/useCommittedRef.ts';
+const COMMITTED_REF_HOOKS = `\`useCommittedRef\` or \`useCommittedRefInto\` (\`${COMMITTED_REF_MODULE}\`)`;
 const DOM_STATE =
   /\buseState\s*<[^>]*(?<![\w$.])(?:(?:HTML|SVG)\w*Element|Element|Node|NodeList|HTMLCollection)\b/;
 
@@ -201,18 +201,6 @@ export function copiesIntoRef(body) {
   );
 }
 
-/**
- * True when the body is one statement that sets a ref's `current` to the name
- * of a prop or a callback, such as `onPanRef.current = onPan`.
- */
-export function keepsLatestRef(body) {
-  const statements = statementsOf(body);
-  return (
-    statements.length === 1 &&
-    /^[\w$.]+\.current\s*=\s*[\w$]+(?:\.[\w$]+)*$/.test(statements[0])
-  );
-}
-
 /** True when every statement of the body sets state to a named value. */
 export function copiesIntoState(body) {
   const statements = statementsOf(body);
@@ -236,6 +224,10 @@ const REF_WRITES = [
 const CONTROL = /^(?:if|else|for|while|do|switch|try|catch|finally|with)\b/;
 const RUNS_IN_RENDER =
   /\buse(?:Memo|State|Reducer)\s*(?:<[^>]*>)?\s*\((?:[^()]*,)?\s*(?:\([^()]*\)|[\w$]+)?\s*(?::[^=]+)?=>\s*$/;
+// An expression-bodied `useMemo`, `useState` or `useReducer` callback that is
+// still open at the end of the text.
+const RENDER_EXPRESSION =
+  /\buse(?:Memo|State|Reducer)\s*(?:<[^>]*>)?\s*\((?:[^()]*,)?\s*(?:\([^()]*\)|[\w$]+)?\s*(?::[^=]+)?=>(?:(?!=>|\bfunction\b)[\s\S])*$/;
 
 function functionName(header) {
   return (
@@ -284,21 +276,15 @@ function guardsLazyInit(text, ref) {
 }
 
 /**
- * The lines of `source` that write a ref's `current` during render: directly
+ * The `uses` (index to ref name) of `source` that run during render: directly
  * in the body of a component or a hook (a function named `Name` or `useName`),
- * or in an inline `useMemo`, `useState` or `useReducer` callback. A write in an
- * Effect, a handler or another nested function, and lazy initialization
- * (`if (ref.current == null) ref.current = …`), are not render writes. The scan
- * reads text. It recognizes strings, comments and template literals, and no
- * other syntax.
+ * or in an inline `useMemo`, `useState` or `useReducer` callback. A use in an
+ * Effect, a handler or another nested function does not run during render.
+ * With `lazyCounts`, lazy initialization (`if (ref.current == null) …`) does
+ * not count either. The scan reads text. It recognizes strings, comments and
+ * template literals, and no other syntax.
  */
-export function renderRefWrites(source) {
-  const writes = new Map();
-  for (const pattern of REF_WRITES) {
-    for (const match of source.matchAll(pattern)) {
-      writes.set(match.index, match[1]);
-    }
-  }
+function renderUses(source, uses, {lazyCounts}) {
   const found = [];
   const blocks = [];
   const modes = ['code'];
@@ -356,8 +342,8 @@ export function renderRefWrites(source) {
       statementStart = block?.inParentheses ? block.statementStart : i + 1;
     } else if (char === ';') {
       statementStart = i + 1;
-    } else if (writes.has(i)) {
-      const ref = writes.get(i);
+    } else if (uses.has(i)) {
+      const ref = uses.get(i);
       const prefix = source.slice(statementStart, i);
       const owner = blocks.findLast(
         block => block.kind === 'render' || block.kind === 'callback',
@@ -365,13 +351,15 @@ export function renderRefWrites(source) {
       const guarded = blocks
         .slice(blocks.lastIndexOf(owner) + 1)
         .some(block => guardsLazyInit(block.header ?? '', ref));
-      const inExpressionCallback = /=>|\bfunction\b/.test(prefix);
+      const inExpressionCallback =
+        /=>|\bfunction\b/.test(prefix) && !RENDER_EXPRESSION.test(prefix);
       const lazy =
-        guarded ||
-        guardsLazyInit(prefix, ref) ||
-        new RegExp(
-          `${escapeRegExp(ref)}\\.current\\s*(?:\\|\\||\\?\\?)\\s*\\(?\\s*$`,
-        ).test(prefix);
+        lazyCounts &&
+        (guarded ||
+          guardsLazyInit(prefix, ref) ||
+          new RegExp(
+            `${escapeRegExp(ref)}\\.current\\s*(?:\\|\\||\\?\\?)\\s*\\(?\\s*$`,
+          ).test(prefix));
       if (owner?.kind === 'render' && !inExpressionCallback && !lazy) {
         found.push({line: source.slice(0, i).split('\n').length, ref});
       }
@@ -380,39 +368,73 @@ export function renderRefWrites(source) {
   return found;
 }
 
+/**
+ * The lines of `source` that write a ref's `current` during render: directly
+ * in the body of a component or a hook (a function named `Name` or `useName`),
+ * or in an inline `useMemo`, `useState` or `useReducer` callback. A write in an
+ * Effect, a handler or another nested function, and lazy initialization
+ * (`if (ref.current == null) ref.current = …`), are not render writes. The scan
+ * reads text. It recognizes strings, comments and template literals, and no
+ * other syntax.
+ */
+export function renderRefWrites(source) {
+  const writes = new Map();
+  for (const pattern of REF_WRITES) {
+    for (const match of source.matchAll(pattern)) {
+      writes.set(match.index, match[1]);
+    }
+  }
+  return renderUses(source, writes, {lazyCounts: true});
+}
+
+const COMMITTED_REF_NAMES = [
+  /\b(?:const|let|var)\s+([\w$]+)\s*(?::[^=]+)?=\s*useCommittedRef\s*[<(]/g,
+  /\buseCommittedRefInto\s*(?:<[^>]*>)?\s*\(\s*([\w$]+)\s*,/g,
+];
+
+/**
+ * The lines of `source` that read the `current` of a committed ref (one that
+ * `useCommittedRef` returns or `useCommittedRefInto` writes) during render or
+ * in an inline `useMemo`, `useState` or `useReducer` callback.
+ */
+export function renderCommittedRefReads(source) {
+  const names = new Set();
+  for (const pattern of COMMITTED_REF_NAMES) {
+    for (const match of source.matchAll(pattern)) names.add(match[1]);
+  }
+  const reads = new Map();
+  for (const name of names) {
+    const read = new RegExp(
+      String.raw`(?<![\w$.])${escapeRegExp(name)}\.current\b(?!\s*(?:(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=(?![=>])|\+\+|--))`,
+      'g',
+    );
+    for (const match of source.matchAll(read)) reads.set(match.index, name);
+  }
+  return renderUses(source, reads, {lazyCounts: false});
+}
+
 /** Item j. `readHead(file)` returns the file at the head, or null. */
 export function effectFindings(addedLines, readHead) {
   const findings = [];
   const sources = new Map();
-  const renderWrites = new Map();
-  const add = (file, line, rule, fix, advisory = false) =>
-    findings.push({
-      item: 'j',
-      file,
-      line,
-      rule,
-      fix,
-      ...(advisory && {advisory}),
-    });
+  const renderUsesByFile = new Map();
+  const add = (file, line, rule, fix) =>
+    findings.push({item: 'j', file, line, rule, fix});
   const linesOf = file => {
     if (!sources.has(file)) sources.set(file, readHead(file));
     return sources.get(file)?.split('\n') ?? null;
   };
-  const renderWritesOf = file => {
-    if (!renderWrites.has(file)) {
+  const byLine = uses => new Map(uses.map(use => [use.line, use.ref]));
+  const renderUsesOf = file => {
+    if (!renderUsesByFile.has(file)) {
       const source = sources.get(file) ?? readHead(file);
       sources.set(file, source);
-      renderWrites.set(
-        file,
-        new Map(
-          (source == null ? [] : renderRefWrites(source)).map(write => [
-            write.line,
-            write.ref,
-          ]),
-        ),
-      );
+      renderUsesByFile.set(file, {
+        writes: byLine(source == null ? [] : renderRefWrites(source)),
+        reads: byLine(source == null ? [] : renderCommittedRefReads(source)),
+      });
     }
-    return renderWrites.get(file);
+    return renderUsesByFile.get(file);
   };
   for (const {file, line, text} of addedLines) {
     if (!file.startsWith('packages/') || COMMENT.test(text)) continue;
@@ -424,15 +446,24 @@ export function effectFindings(addedLines, readHead) {
         `Own the node through a ref, or keep only the minimal key that render needs (${RUNTIME} INV1).`,
       );
     }
-    if (/\.current\b/.test(text) && renderWritesOf(file).has(line)) {
-      add(
-        file,
-        line,
-        `\`${renderWritesOf(file).get(line)}.current\` is written during render`,
-        'React can discard a render, and the ref then keeps a value that never committed. Write the ref in the handler that changes it, or keep the latest prop or callback in a one-line layout or insertion Effect with a note. Only lazy initialization (`if (ref.current == null) ref.current = …`) stays in render.',
-        // Advisory until a current record states this rule.
-        true,
-      );
+    if (/\.current\b/.test(text)) {
+      const {writes, reads} = renderUsesOf(file);
+      if (writes.has(line)) {
+        add(
+          file,
+          line,
+          `\`${writes.get(line)}.current\` is written during render`,
+          `React can discard a render, and the ref then keeps a value that never committed. Write the ref in the handler that changes it, or keep the latest prop or callback with ${COMMITTED_REF_HOOKS}. Only lazy initialization (\`if (ref.current == null) ref.current = …\`) stays in render (${RUNTIME} INV17).`,
+        );
+      }
+      if (reads.has(line)) {
+        add(
+          file,
+          line,
+          `\`${reads.get(line)}.current\` is read during render`,
+          `A committed ref holds the last committed value, one render behind. Read the value itself during render and in \`useMemo\`; read the ref only in event and gesture callbacks (${RUNTIME} INV3).`,
+        );
+      }
     }
     if (!EFFECT.test(text)) continue;
     const lines = linesOf(file);
@@ -440,26 +471,12 @@ export function effectFindings(addedLines, readHead) {
     const body = effectBody(lines, line - 1);
     const hasNote = hasEffectNote(lines, line - 1, body);
     if (body != null && copiesIntoRef(body)) {
-      if (!COMMIT_EFFECT.test(text)) {
+      if (file !== COMMITTED_REF_MODULE) {
         add(
           file,
           line,
-          'The Effect only copies a value into a ref, after paint',
-          `When handlers read the ref, keep it in a one-line layout or insertion Effect with a note that names what it syncs. Otherwise read the value where it is used (${RUNTIME} INV3).`,
-        );
-      } else if (!keepsLatestRef(body)) {
-        add(
-          file,
-          line,
-          'The Effect copies into a ref and is not a one-line latest-ref Effect',
-          'Give each ref its own layout or insertion Effect whose body is one assignment of a prop or callback, with a note that names what it syncs. Move any logic into the callback that reads the ref.',
-        );
-      } else if (!hasNote) {
-        add(
-          file,
-          line,
-          'The latest-ref Effect has no note that names what it syncs',
-          'Add a short comment above it that names the prop or callback and the handlers that read the ref.',
+          'The Effect only copies a value into a ref',
+          `Keep a latest prop or callback with ${COMMITTED_REF_HOOKS}, not a per-site Effect. Otherwise read the value where it is used (${RUNTIME} INV3).`,
         );
       }
     } else if (body != null && copiesIntoState(body)) {
