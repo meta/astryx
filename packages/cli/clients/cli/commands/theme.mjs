@@ -1114,10 +1114,12 @@ function registerThemeCommands(theme, program, docs, words) {
         const log = logger.log;
         const warn = logger.warn;
         if (deferred) {
-          logger.log = (/** @type {string} */ message) =>
+          logger.log = (/** @type {string | undefined} */ message) => {
             lines.push(() => log.call(logger, message));
-          logger.warn = (/** @type {string} */ message) =>
+          };
+          logger.warn = (/** @type {string | undefined} */ message) => {
             lines.push(() => warn.call(logger, message));
+          };
         }
         try {
           const buildOptions = {
