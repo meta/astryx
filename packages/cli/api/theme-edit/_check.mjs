@@ -85,6 +85,7 @@ import {
   radiusTokenOf,
   focusStateOf,
   valueProblem,
+  partComponentDocs,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
@@ -1045,16 +1046,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     // The part's component, or the one named like the part (tab is Tab,
     // under TabList), takes a disabled prop.
     const disables = (/** @type {string} */ t) => {
-      const comps = /** @type {Record<string, any>} */ (
-        ctx.project.components ?? {}
-      );
-      const pascal = t.replace(/(^|-)([a-z0-9])/g, (_, __, c) =>
-        c.toUpperCase(),
-      );
       // Or its built module sets aria-disabled (a tab takes it through its
       // other props): what Core renders, read from Core itself.
-      const marks = (/** @type {string} */ n) => {
-        const at = comps[n]?.importPath?.split('/').pop();
+      const marks = (/** @type {string} */ n, /** @type {any} */ doc) => {
+        const at = doc?.importPath?.split('/').pop();
         const file =
           at && ctx.project.coreDir
             ? path.join(ctx.project.coreDir, 'dist', at, `${n}.js`)
@@ -1067,26 +1062,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           return false;
         }
       };
-      return [ctx.project.target.get(t)?.component, pascal].some(
-        n =>
-          n != null &&
-          (Object.keys(comps[n]?.props ?? {}).some(p => /disabled/i.test(p)) ||
-            marks(n)),
+      return partComponentDocs(ctx, t).some(
+        ({name, doc}) =>
+          Object.keys(doc.props ?? {}).some(p => /disabled/i.test(p)) ||
+          marks(name, doc),
       );
     };
     // A part whose component takes children holds content that can take
     // focus, so focus-within applies there (a dialog, a section, a field).
-    const holdsContent = (/** @type {string} */ t) => {
-      const comps = /** @type {Record<string, any>} */ (
-        ctx.project.components ?? {}
+    const holdsContent = (/** @type {string} */ t) =>
+      partComponentDocs(ctx, t).some(
+        ({doc}) => 'children' in (doc.props ?? {}),
       );
-      const pascal = t.replace(/(^|-)([a-z0-9])/g, (_, __, c) =>
-        c.toUpperCase(),
-      );
-      return [ctx.project.target.get(t)?.component, pascal].some(
-        n => n != null && 'children' in (comps[n]?.props ?? {}),
-      );
-    };
     // A part Core never styles in focus is not what takes focus (the
     // focusable element is inside it, or beside it).
     const focusable = (/** @type {string} */ t) =>

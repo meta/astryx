@@ -2333,6 +2333,29 @@ export function stateKey(state, wrapsControl = false) {
 }
 
 /**
+ * The component docs of a part: its own component's, and the one named like
+ * the part (tab is Tab, under TabList), each with its name, for the ones the
+ * project has.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {Array<{name: string, doc: any}>}
+ */
+export function partComponentDocs(ctx, part) {
+  const comps = /** @type {Record<string, any>} */ (
+    ctx.project.components ?? {}
+  );
+  const pascal = part.replace(/(^|-)([a-z0-9])/g, (_, __, c) =>
+    c.toUpperCase(),
+  );
+  return [ctx.project.target.get(part)?.component, pascal]
+    .filter(n => n != null && comps[n])
+    .map(n => ({
+      name: /** @type {string} */ (n),
+      doc: comps[/** @type {string} */ (n)],
+    }));
+}
+
+/**
  * Whether a part's styled element wraps one control: its component (or the
  * one named like the part) is a form control (Core's own category) that
  * takes a disabled prop. An action part that holds children (a button
@@ -2341,17 +2364,8 @@ export function stateKey(state, wrapsControl = false) {
  * @param {string} target
  */
 export function wrapsOneControl(ctx, target) {
-  const comps = /** @type {Record<string, any>} */ (
-    ctx.project.components ?? {}
-  );
-  const pascal = target.replace(/(^|-)([a-z0-9])/g, (_, __, c) =>
-    c.toUpperCase(),
-  );
-  const docs = [ctx.project.target.get(target)?.component, pascal]
-    .map(n => (n ? comps[n] : null))
-    .filter(Boolean);
-  return docs.some(
-    d =>
+  return partComponentDocs(ctx, target).some(
+    ({doc: d}) =>
       /form/i.test(String(d.category ?? '')) &&
       Object.keys(d.props ?? {}).some(p => /disabled/i.test(p)),
   );
