@@ -296,8 +296,11 @@ export function CommentActions({
     <CommentIcon name="copyLink" />
   );
 
-  // A failed write shows for as long as a copied one, and is an error, so it
-  // goes to the assertive region.
+  // Lab reads Core's public hooks only (architecture:knowledge-contracts
+  // DEC-19), and the public useClipboard has no failure state, so the failed
+  // state, its reset and its announcement live here. They move to Core's shared
+  // hook if Comments graduates to Core. A failed write shows for as long as a
+  // copied one, and is an error, so it goes to the assertive region.
   const copyCommentLink = async () => {
     const isWritten = await copyToClipboard(
       new URL(href, window.location.href).href,

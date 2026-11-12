@@ -413,6 +413,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       hide: hideFromTouch,
     },
     handleReleaseInLayer,
+    true,
   );
 
   const isHeldOpen = useCallback(() => {

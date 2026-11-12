@@ -10,9 +10,16 @@
  */
 
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
+import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
 
 /** The command prefix every suggested command starts with. */
 export const P = 'astryx experimental theme editor';
+
+/**
+ * Parts that take their color from a color prop, whose rule Core writes
+ * after part styles: a color set on them never shows.
+ */
+export const COLOR_PROP_PARTS = ['text', 'heading', 'link'];
 
 /** The lookup command: what a part reads, a setting, a question, a picture. */
 export const HOW = `${P} how`;
@@ -99,6 +106,9 @@ export const TEXT_SIZE = [
   ['larger', 16],
 ];
 
+/** The type roles a font may be set for alone (`font <x> --on <role>`). */
+export const FONT_ROLES = ['body', 'heading', 'code'];
+
 /**
  * Font presets: the family, then its fallbacks.
  * @type {Record<string, [string, string]>}
@@ -116,163 +126,150 @@ export const FONTS = {
   rounded: ['Nunito', '"Varela Round", system-ui, sans-serif'],
   comic: ['Comic Sans MS', '"Comic Neue", cursive'],
 };
-/**
- * Family names that need no font file: CSS generic families and fonts the
- * usual desktop systems ship. Lowercase.
- */
-export const SYSTEM_FAMILIES = new Set([
-  'serif',
-  'sans-serif',
-  'monospace',
-  'cursive',
-  'fantasy',
-  'math',
-  'emoji',
-  'fangsong',
-  'system-ui',
-  'ui-serif',
-  'ui-sans-serif',
-  'ui-monospace',
-  'ui-rounded',
-  '-apple-system',
-  'blinkmacsystemfont',
-  'arial',
-  'arial black',
-  'helvetica',
-  'helvetica neue',
-  'segoe ui',
-  'tahoma',
-  'verdana',
-  'trebuchet ms',
-  'georgia',
-  'times',
-  'times new roman',
-  'palatino',
-  'garamond',
-  'courier',
-  'courier new',
-  'consolas',
-  'menlo',
-  'monaco',
-  'sf mono',
-  'sf pro',
-  'sf pro text',
-  'sf pro display',
-  'ubuntu',
-  'cantarell',
-  'noto sans',
-  'liberation sans',
-  'dejavu sans',
-  'comic sans ms',
-  'impact',
-]);
-
-/** CSS-wide keywords: never a family, and invalid inside a list. */
-export const CSS_WIDE_KEYWORDS = [
+/** The CSS-wide keywords: valid in any declaration, never a value of their own. */
+export const CSS_WIDE = [
   'inherit',
   'initial',
   'unset',
   'revert',
   'revert-layer',
-  'default',
 ];
 
-/** Presets every desktop system already has, so no font file is needed. */
-export const SYSTEM_FONTS = [
-  'system',
-  'tahoma',
-  'verdana',
-  'segoe',
-  'helvetica',
-  'georgia',
-  'serif',
-  'mono',
-  'courier',
-];
+/** CSS-wide keywords, and `default`, which font-family reserves: never a family, and invalid inside a list. */
+export const CSS_WIDE_KEYWORDS = [...CSS_WIDE, 'default'];
 
 /**
- * Open fonts with a package that loads them: preset -> family, fallbacks,
- * and the package. When the package is installed, previews show the font;
- * the app loads it by importing the package once.
- * @type {Record<string, {family: string, fallbacks: string, pkg: string}>}
+ * Whether a family needs no font file somewhere: a CSS generic family, or a
+ * family on the theme build's own list of system fonts (the one list; the
+ * build's font warning reads it).
+ * @param {string} family without quotes
  */
-export const OPEN_FONTS = {
-  inter: {
-    family: 'Inter',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/inter',
-  },
-  roboto: {
-    family: 'Roboto',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/roboto',
-  },
-  poppins: {
-    family: 'Poppins',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/poppins',
-  },
-  figtree: {
-    family: 'Figtree',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/figtree',
-  },
-  'dm-sans': {
-    family: 'DM Sans',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/dm-sans',
-  },
-  manrope: {
-    family: 'Manrope',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/manrope',
-  },
-  'space-grotesk': {
-    family: 'Space Grotesk',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/space-grotesk',
-  },
-  'ibm-plex-sans': {
-    family: 'IBM Plex Sans',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/ibm-plex-sans',
-  },
-  'ibm-plex-mono': {
-    family: 'IBM Plex Mono',
-    fallbacks: 'ui-monospace, monospace',
-    pkg: '@fontsource/ibm-plex-mono',
-  },
-  'jetbrains-mono': {
-    family: 'JetBrains Mono',
-    fallbacks: 'ui-monospace, monospace',
-    pkg: '@fontsource/jetbrains-mono',
-  },
-  nunito: {
-    family: 'Nunito',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/nunito',
-  },
-  'source-serif': {
-    family: 'Source Serif 4',
-    fallbacks: 'Georgia, serif',
-    pkg: '@fontsource/source-serif-4',
-  },
-  'mona-sans': {
-    family: 'Mona Sans',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/mona-sans',
-  },
-  geist: {
-    family: 'Geist Sans',
-    fallbacks: 'system-ui, sans-serif',
-    pkg: '@fontsource/geist-sans',
-  },
-  'geist-mono': {
-    family: 'Geist Mono',
-    fallbacks: 'ui-monospace, monospace',
-    pkg: '@fontsource/geist-mono',
-  },
+export const isSystemFamily = family =>
+  family.trim() !== '' &&
+  collectUnloadedFonts({
+    tokens: {'--font-family-body': JSON.stringify(family.trim())},
+  }).length === 0;
+
+/**
+ * The families on that list that only one system ships, with that system:
+ * fallback stacks name them on purpose, but as a theme's own font they do
+ * not load everywhere.
+ */
+const ONE_SYSTEM_FAMILIES = new Map(
+  Object.entries({
+    macOS: [
+      '-apple-system',
+      'blinkmacsystemfont',
+      'helvetica neue',
+      'sf mono',
+      'sf pro',
+      'sf pro text',
+      'sf pro display',
+      'monaco',
+      'menlo',
+      'palatino',
+      'lucida grande',
+      'gill sans',
+      'snell roundhand',
+    ],
+    Windows: [
+      'segoe ui',
+      'segoe ui emoji',
+      'segoe ui symbol',
+      'consolas',
+      'cambria',
+      'calibri',
+      'lucida console',
+      'brush script mt',
+      'old english text mt',
+    ],
+    'Android and ChromeOS': ['roboto'],
+    Linux: [
+      'liberation mono',
+      'liberation sans',
+      'liberation serif',
+      'dejavu sans',
+      'dejavu sans mono',
+    ],
+  }).flatMap(([system, names]) => names.map(n => [n, system])),
+);
+
+/** @param {string} family */
+const familyKey = family => family.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
+ * The one system that ships a family on the theme build's list, or null for
+ * a family every desktop has (or none does).
+ * @param {string} family without quotes
+ */
+export const oneSystemOf = family =>
+  isSystemFamily(family)
+    ? (ONE_SYSTEM_FAMILIES.get(familyKey(family)) ?? null)
+    : null;
+
+/**
+ * Whether a family loads with no font file on every usual desktop: a CSS
+ * generic, or a system family macOS and Windows both ship.
+ * @param {string} family without quotes
+ */
+export const isDesktopFamily = family =>
+  isSystemFamily(family) && !ONE_SYSTEM_FAMILIES.has(familyKey(family));
+
+/**
+ * Presets that show a font every desktop has, so no font file is needed:
+ * the family itself, or (for one that ships on one system, such as Segoe
+ * UI) the first fallback.
+ */
+export const SYSTEM_FONTS = Object.keys(FONTS).filter(k =>
+  [FONTS[k][0], FONTS[k][1].split(',')[0].replace(/["']/g, '')].some(
+    isDesktopFamily,
+  ),
+);
+
+/**
+ * Open fonts with a package that loads them: preset -> family. The package
+ * is `@fontsource/<preset>` and the fallbacks follow the kind of font
+ * (`-mono`, serif, sans), except where OPEN_FONT_PACKAGES says otherwise.
+ * When the package is installed, previews show the font; the app loads it
+ * by importing the package once.
+ */
+const OPEN_FONT_FAMILIES = {
+  inter: 'Inter',
+  roboto: 'Roboto',
+  poppins: 'Poppins',
+  figtree: 'Figtree',
+  'dm-sans': 'DM Sans',
+  manrope: 'Manrope',
+  'space-grotesk': 'Space Grotesk',
+  'ibm-plex-sans': 'IBM Plex Sans',
+  'ibm-plex-mono': 'IBM Plex Mono',
+  'jetbrains-mono': 'JetBrains Mono',
+  nunito: 'Nunito',
+  'source-serif': 'Source Serif 4',
+  'mona-sans': 'Mona Sans',
+  geist: 'Geist Sans',
+  'geist-mono': 'Geist Mono',
 };
+/** Presets whose package is not named after them. */
+const OPEN_FONT_PACKAGES = /** @type {Record<string, string>} */ ({
+  'source-serif': 'source-serif-4',
+  geist: 'geist-sans',
+});
+/** @type {Record<string, {family: string, fallbacks: string, pkg: string}>} */
+export const OPEN_FONTS = Object.fromEntries(
+  Object.entries(OPEN_FONT_FAMILIES).map(([key, family]) => [
+    key,
+    {
+      family,
+      fallbacks: key.endsWith('-mono')
+        ? 'ui-monospace, monospace'
+        : /serif/i.test(family)
+          ? 'Georgia, serif'
+          : 'system-ui, sans-serif',
+      pkg: `@fontsource/${OPEN_FONT_PACKAGES[key] ?? key}`,
+    },
+  ]),
+);
 
 /**
  * Brand fonts no package loads, and the closest open font, for the warning
@@ -382,7 +379,7 @@ export const DIALS = {
       CORNERS.map(
         ([n, v]) => `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
       ).join(', ') +
-      ", or a size like 6px. Whole theme: sets the 4 corner tokens in fixed ratios. With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.",
+      ", or a size like 6px. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.",
     values: 'square|small|medium|large|round|pill|more|less|<size like 6px>',
     examples: [
       'set my corners pill',
