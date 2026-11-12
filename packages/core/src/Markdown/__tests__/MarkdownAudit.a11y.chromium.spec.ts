@@ -214,9 +214,14 @@ async function blockDirections(page: Page) {
       };
     };
     return Array.from(
-      root.querySelectorAll('h1, h2, h3, p, li, blockquote, td, th'),
+      root.querySelectorAll(
+        'h1, h2, h3, [role="paragraph"], li, blockquote, td, th',
+      ),
     ).map(el => ({
-      tag: el.tagName.toLowerCase(),
+      tag:
+        el.getAttribute('role') === 'paragraph'
+          ? 'p'
+          : el.tagName.toLowerCase(),
       text: (el.textContent ?? '').trim().slice(0, 24),
       dir: el.closest('[dir]')?.getAttribute('dir') ?? null,
       direction: getComputedStyle(el).direction,
@@ -276,7 +281,7 @@ async function contrastPairs(page: Page) {
       ['link', 'a'],
       ['strikethrough', 'del, s'],
       ['inline code', 'li code'],
-      ['blockquote text', '.astryx-markdown-blockquote p'],
+      ['blockquote text', '.astryx-markdown-blockquote [role="paragraph"]'],
       ['table header', 'th'],
       ['table cell', 'td'],
       ['list item', '.astryx-markdown-list li'],
@@ -315,6 +320,8 @@ async function contrastPairs(page: Page) {
   });
 }
 
+const CONTRAST_PART_COUNT = 9;
+
 const HEBREW = /[\u0590-\u05FF]/;
 
 const cases: AuditCase[] = [];
@@ -351,6 +358,10 @@ for (const mode of ['light', 'dark'] as const) {
       );
       defaultGaps[mode] = shape.paragraphMargin;
       const contrast = await contrastPairs(page);
+      check(
+        contrast.length === CONTRAST_PART_COUNT,
+        `measured ${contrast.map(pair => pair.part).join(', ')}`,
+      );
       for (const pair of contrast) {
         check(
           pair.unreadable.length === 0,
@@ -738,9 +749,15 @@ function checkMixedDirection(
   check: Check,
 ) {
   const prose = blocks.filter(block =>
-    ['h2', 'p', 'li', 'td', 'th'].includes(block.tag),
+    ['h2', 'p', 'blockquote', 'li', 'td', 'th'].includes(block.tag),
   );
-  check(prose.length >= 6, `${prose.length} prose blocks`);
+  const paragraphs = prose.filter(block => block.tag === 'p').length;
+  check(paragraphs >= 3, `${paragraphs} paragraphs`);
+  check(
+    prose.some(block => block.tag === 'blockquote'),
+    'no blockquote measured',
+  );
+  check(prose.length >= 9, `${prose.length} prose blocks`);
   for (const block of prose) {
     const ownDirection = HEBREW.test(block.text) ? 'rtl' : 'ltr';
     check(
