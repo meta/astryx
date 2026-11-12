@@ -7,6 +7,7 @@
  */
 
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
+import {splitTopLevelSpaces} from './generateThemeRules';
 import {describe, it, expect, vi} from 'vitest';
 import {
   defineTheme,
@@ -1183,6 +1184,72 @@ describe('derived var expansion', () => {
     expect(rule).toBeDefined();
     // Container expansion emits --astryx-card-padding token
     expect(rule).toContain('--astryx-card-padding: 20px');
+  });
+
+  it.each([
+    [
+      'padding',
+      'clamp(8px, 2vw, 16px)',
+      ['--astryx-card-padding: clamp(8px, 2vw, 16px);'],
+    ],
+    [
+      'padding',
+      'calc(1px + 2px) min(4px, 1vw)',
+      [
+        '--astryx-card-padding-block-start: calc(1px + 2px);',
+        '--astryx-card-padding-block-end: calc(1px + 2px);',
+        '--astryx-card-padding-inline: min(4px, 1vw);',
+      ],
+    ],
+    [
+      'paddingBlock',
+      'var(--x, 1px 2px)',
+      [
+        '--astryx-card-padding-block-start: var(--x, 1px 2px);',
+        '--astryx-card-padding-block-end: var(--x, 1px 2px);',
+      ],
+    ],
+    [
+      'paddingInline',
+      'calc(1px + 2px) 4px',
+      [
+        '--astryx-card-padding-inline-start: calc(1px + 2px);',
+        '--astryx-card-padding-inline-end: 4px;',
+      ],
+    ],
+  ])(
+    'keeps each %s component whole when it holds spaces: %s',
+    (prop, value, declarations) => {
+      const theme = defineTheme({
+        name: 'test-padding-functions',
+        components: {card: {base: {[prop]: value}}},
+      });
+      const rule = generateThemeRules(theme).find(r =>
+        r.includes('.astryx-card'),
+      );
+      for (const declaration of declarations) {
+        expect(rule).toContain(declaration);
+      }
+    },
+  );
+
+  it('splits a value on top-level spaces only', () => {
+    expect(splitTopLevelSpaces('  clamp(8px, 2vw, 16px)  ')).toEqual([
+      'clamp(8px, 2vw, 16px)',
+    ]);
+    expect(splitTopLevelSpaces('calc(1px + (2px * 3)) 4px')).toEqual([
+      'calc(1px + (2px * 3))',
+      '4px',
+    ]);
+    expect(splitTopLevelSpaces(`var(--a, "x y") 1px`)).toEqual([
+      'var(--a, "x y")',
+      '1px',
+    ]);
+    expect(splitTopLevelSpaces('8px  12px\t16px')).toEqual([
+      '8px',
+      '12px',
+      '16px',
+    ]);
   });
 
   it('handles variant-specific derived vars', () => {
