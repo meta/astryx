@@ -77,6 +77,54 @@ export const isMain = run =>
     run.path,
   );
 
+// The commit status a capacity tool sets on a pull request's head when it
+// grants that pull request a CI run, and how long before the run it may be set.
+export const GRANT_CONTEXT = 'ci-slot';
+export const GRANT_FRESH_MS = 30 * 60_000;
+// GitHub's clocks for a status and a run can differ by a few seconds.
+const GRANT_SKEW_MS = 60_000;
+
+/**
+ * Whether a pull-request run was started through a capacity tool's grant, so
+ * it starts without waiting for room (spec:AST-030 FR16): its first attempt,
+ * from a branch in this repository, whose head carries a `ci-slot` success
+ * status that an engineering owner set at most thirty minutes before the run
+ * began. A fork cannot set a status here, and a re-run or an older grant waits.
+ * @param {object} options
+ * @param {object} options.pr the event's pull request
+ * @param {string} options.repo `owner/name`
+ * @param {number} options.attempt the run's attempt
+ * @param {number} options.runCreated when the run began, ms since the epoch
+ * @param {object[]} options.statuses the head commit's statuses, newest first
+ * @param {string} options.granters the engineering owners, as `vars.ENGOWNERS`
+ * @returns {{granted: boolean, why: string}}
+ */
+export function slotGrant({pr, repo, attempt, runCreated, statuses, granters}) {
+  if (pr?.head?.repo?.full_name !== repo)
+    return {granted: false, why: "a fork's run waits"};
+  if (attempt !== 1) return {granted: false, why: 'a re-run waits'};
+  const status = statuses.find(each => each.context === GRANT_CONTEXT);
+  if (status == null) return {granted: false, why: 'no ci-slot grant'};
+  if (status.state !== 'success')
+    return {granted: false, why: `the ci-slot status is ${status.state}`};
+  const owners = (granters.match(/@?[A-Za-z0-9-]+/g) ?? []).map(owner =>
+    owner.replace(/^@/, '').toLowerCase(),
+  );
+  const by = (status.creator?.login ?? '').toLowerCase();
+  if (!owners.includes(by))
+    return {
+      granted: false,
+      why: `the ci-slot status is not an engineering owner's (${by || 'unknown'})`,
+    };
+  const age = runCreated - Date.parse(status.created_at ?? '');
+  if (!(age >= -GRANT_SKEW_MS && age <= GRANT_FRESH_MS))
+    return {
+      granted: false,
+      why: 'the ci-slot grant is not from just before this run',
+    };
+  return {granted: true, why: `granted by ${by}`};
+}
+
 /**
  * When a run's wait began and, once admitted, ended: its first wait step's
  * start and its last wait step's end.
