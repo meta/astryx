@@ -639,14 +639,18 @@ test('the wheels keep fading in every frame through a blocked main thread', asyn
   }
   const cast = await startScreencast(page);
   await page.waitForTimeout(300);
-  await driver.tap(titleAt);
-  // The page blocks itself once the fade has run 32 ms: started, and on
-  // screen. This guards the compositor path once a fade is on screen, which
-  // a CSS fade passes too; the next case is what the animator changes.
-  const busy = await blockMainThread(page, 600, {
+  // The fade lasts 225 ms, less than a busy machine's round trip from the
+  // test. So the page arms the block before the tap, and blocks itself once
+  // the fade has run 32 ms: started, and on screen. The block then covers the
+  // fade however late the test reads it. This guards the compositor path once
+  // a fade is on screen, which a CSS fade passes too; the next case is what
+  // the animator changes.
+  const blocking = blockMainThread(page, 600, {
     during: wheels,
     minProgressMs: 32,
   });
+  await driver.tap(titleAt);
+  const busy = await blocking;
   await page.waitForTimeout(600);
   const shades = await chipShades(page, await cast.stop(), rect);
   const before = shades[0]?.green;
