@@ -3950,6 +3950,69 @@ describe('how writes only for a direct ask', () => {
     });
 });
 
+describe('how reads muted, "less X" and sarcasm', () => {
+  it('muted, pastel and subdued lower vibrancy; less muted raises it', async () => {
+    await themeEditNew('vc', {cwd, like: 'neutral'});
+    await themeEditSet('vc', 'accent', '#0d9488', {cwd});
+    const top = async (/** @type {string} */ q) =>
+      bare(
+        (await themeEditHow(q, {cwd, theme: 'vc'})).data.results[0]
+          .commands[0] ?? '',
+      );
+    expect(await top('make the colors more muted')).toBe(
+      'set vc vibrancy less',
+    );
+    expect(await top('more pastel')).toBe('set vc vibrancy less');
+    expect(await top('subdued colors')).toBe('set vc vibrancy less');
+    expect(await top('less muted colors')).toBe('set vc vibrancy more');
+    // A token name is never read as a word.
+    expect(await top('card background var(--color-background-muted)')).toBe(
+      "set vc background 'var(--color-background-muted)' --on card",
+    );
+  }, 120_000);
+
+  it('"less X" is one rung back on the same aspect', async () => {
+    await themeEditNew('hb', {cwd, like: 'neutral'});
+    await themeEditSet('hb', 'headings', 'bold', {cwd});
+    const top = async (/** @type {string} */ q) =>
+      bare(
+        (await themeEditHow(q, {cwd, theme: 'hb'})).data.results[0]
+          .commands[0] ?? '',
+      );
+    expect(await top('headings less light')).toBe('set hb headings heavy');
+    expect(await top('headings less thin')).toBe('set hb headings heavy');
+    expect(await top('headings less heavy')).toBe('set hb headings semibold');
+    const text = (
+      await themeEditHow('make the headings bolder', {cwd, theme: 'q'})
+    ).data.results[0].text;
+    expect(text).not.toMatch(/-size/);
+  }, 120_000);
+
+  for (const [
+    question,
+    want,
+  ] of /** @type {Array<[string, RegExp | null]>} */ ([
+    ['great, even more shadows, just what I wanted', null],
+    ['oh sure, let us make every corner a circle', null],
+    ['buttons as round as a bowling ball, nice', null],
+    ['the tooltips are too dark, I hate it', /brightness\(1\.15\)/],
+    [
+      'quit with the big gaps in the sidebar',
+      /^set q spacing less --on side-nav$/,
+    ],
+  ]))
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      const changes = (data.results ?? []).filter((/** @type {any} */ r) =>
+        r.commands.some((/** @type {string} */ c) =>
+          / editor (set|undo) /.test(c),
+        ),
+      );
+      if (want === null) expect(changes).toEqual([]);
+      else expect(bare(changes[0].commands[0])).toMatch(want);
+    });
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;

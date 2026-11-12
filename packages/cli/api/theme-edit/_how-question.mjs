@@ -1531,7 +1531,11 @@ export function draftAnswer(ctx, env, question) {
     !isAsk(x);
   const gated = segments.filter(blocked);
   // A condition holds back the whole question: the ask depends on it.
+  // Sarcasm makes every clause unsure, not only the one with the marker.
+  const SARCASM =
+    /^\s*(yeah|oh sure|sure|great|wow)\b|\bjust what i wanted\b|,\s*nice[.!]*\s*$|\bis a great\b/i;
   const gateAll =
+    SARCASM.test(question) ||
     (gated.length > 0 && gated.length === segments.length) ||
     segments.some(x => CONDITION.test(x.replace(/^[^:]*:\s*/, '')));
   if (gated.length && !gateAll) {
@@ -1571,6 +1575,36 @@ export function draftAnswer(ctx, env, question) {
   const quoted = /** @type {string[]} */ ([]);
   let q = question
     .normalize('NFKC')
+    // "more muted", "pastel", "duller", "subdued": less vivid colors (free
+    // words only: never inside a token name like --color-background-muted).
+    .replace(
+      /(?<![-\w])less (?:muted|pastel|dull|subdued)(?![-\w])/gi,
+      'more saturated',
+    )
+    .replace(
+      /(?<![-\w])(?:more )?(?:muted|pastel|duller|subdued|desaturated)(?![-\w])/gi,
+      'less saturated',
+    )
+    // "less light", "less heavy", "less tight", "less thin": one step back on
+    // the same aspect.
+    .replace(
+      /\bless (?:light|thin|skinny)\b(?= (?:headings?|titles?|text|fonts?|weight)|\s*$)/gi,
+      'bolder',
+    )
+    .replace(
+      /\b(headings?|titles?|text|fonts?) (?:a bit |slightly )?less (?:light|thin)\b/gi,
+      '$1 bolder',
+    )
+    .replace(/\bless heavy\b/gi, 'less bold')
+    .replace(/\bless tight\b/gi, 'wider letter spacing')
+    // "too dark" asks for lighter, "too light" for darker.
+    .replace(/\btoo dark\b(?! mode)/gi, 'lighter')
+    .replace(/\btoo light(?: gray| grey)?\b(?! mode)/gi, 'darker')
+    // "no big gaps": less room.
+    .replace(
+      /\bno (?:big|large|huge) (?:gaps|spaces|spacing)\b/gi,
+      'less spacing',
+    )
     // "too airy", "headings too thin", "not bright enough": the other way.
     .replace(
       /\btoo (airy|spacious|roomy|loose|spread out)\b/gi,
@@ -5285,7 +5319,18 @@ export function draftAnswer(ctx, env, question) {
       })[a] ?? a;
     if (!C.MAP[one(on)] || !Object.hasOwn(GROUPS, group)) return '';
     // Reads that always apply first; partReads sorts them so.
+    // Only the reads of the property the aspect is about (a weight question
+    // never lists the size tokens).
+    const prop = /** @type {Record<string, RegExp>} */ ({
+      weight: /^font-weight$/,
+      family: /^font-family$/,
+      fontsize: /^font-size$/,
+      tracking: /^letter-spacing$/,
+      case: /^text-transform$/,
+      italic: /^font-style$/,
+    })[a];
     const toks = C.partReads(one(on), group)
+      .filter(r => !prop || r.props.some(x => prop.test(x)))
       .map(r => r.token)
       .slice(0, 4);
     return toks.length ? `; ${one(on)} reads ${toks.join(', ')} for it` : '';
