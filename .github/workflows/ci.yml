@@ -1091,8 +1091,11 @@ jobs:
       # so many open pull requests cannot flood the organization's shared
       # runner pool; the legs still all run, in two waves.
       max-parallel: 2
+      # Five legs keep each leg near nine minutes of the fifteen-minute
+      # limit; at four, a leg reached about thirteen and a half minutes of
+      # tests and hit the limit (scripts/vitest-node-durations.json).
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
