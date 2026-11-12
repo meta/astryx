@@ -874,6 +874,49 @@ test("a pinch on a zoomable gallery's caption still zooms the page", async ({
   expect((await g.photo()).scale).toBe(1);
 });
 
+test("a pinch on a gallery's open caption still zooms the page", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'native pinch-zoom from scripted touches is Chromium-only',
+  );
+  const g = await openGallery(page, {
+    story: 'core-lightbox--gallery-with-captions',
+    trigger: 'Open gallery with captions',
+  });
+  const more = g.dialog.getByRole('button', {name: 'more'});
+  const m = await more.boundingBox();
+  if (m == null) {
+    throw new Error('no more button');
+  }
+  await g.driver.tap({x: m.x + m.width / 2, y: m.y + m.height / 2});
+  const less = g.dialog.getByRole('button', {name: 'less'});
+  await expect(less).toHaveAttribute('aria-expanded', 'true');
+  // The open caption's text, the scroll container over the photo.
+  const text = page
+    .locator(`[id="${await less.getAttribute('aria-controls')}"]`)
+    .locator('.astryx-text')
+    .first();
+  const r = await text.boundingBox();
+  if (r == null) {
+    throw new Error('no caption text');
+  }
+  await g.driver.play(
+    pinch({
+      center: {x: r.x + r.width / 2, y: r.y + r.height / 2},
+      fromDistance: 30,
+      toDistance: 200,
+      durationMs: 400,
+    }),
+  );
+  await expect
+    .poll(async () => page.evaluate(() => window.visualViewport?.scale ?? 1))
+    .toBeGreaterThan(1.5);
+  expect((await g.photo()).scale).toBe(1);
+});
+
 test('a swipe that starts on a caption pages', async ({page}) => {
   const g = await openGallery(page, {
     story: 'core-lightbox--gallery-with-captions',
