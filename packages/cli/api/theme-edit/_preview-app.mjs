@@ -190,9 +190,11 @@ function coreStylesheetMissing(cwd, at) {
 }
 
 /**
- * The `basePath` next.config sets, read as text (best effort), or '' when
- * it sets none: every URL of the app starts with it.
+ * The `basePath` next.config sets, read as text with comments left out
+ * (best effort): '' when it sets none, null when it sets one from code (an
+ * env variable). Every URL of the app starts with it.
  * @param {string} cwd
+ * @returns {string | null}
  */
 function nextBasePath(cwd) {
   for (const name of [
@@ -202,9 +204,15 @@ function nextBasePath(cwd) {
     'next.config.cjs',
   ]) {
     try {
-      const text = fs.readFileSync(path.join(cwd, name), 'utf8');
-      const m = /basePath\s*:\s*['"`](\/[^'"`]*)['"`]/.exec(text);
-      return m ? m[1].replace(/\/+$/, '') : '';
+      // Comments say nothing about the config.
+      const text = fs
+        .readFileSync(path.join(cwd, name), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|[^:'"`\w])\/\/.*$/gm, '$1');
+      if (!/\bbasePath\s*:/.test(text)) return '';
+      const m = /\bbasePath\s*:\s*['"](\/[^'"]*)['"]/.exec(text);
+      // A basePath from code (an env variable) is unknown here.
+      return m ? m[1].replace(/\/+$/, '') : null;
     } catch {
       continue;
     }
@@ -321,8 +329,8 @@ function pageExtensions(cwd) {
   return null;
 }
 
-/** A catch-all route folder: `[...slug]`, or `[[...slug]]`, which also serves the folder's own URL. */
-const CATCH_ALL = /^\[\[?\.\.\.[^\]]+\]\]?$/;
+/** An optional catch-all route folder, `[[...slug]]`: it also serves its parent folder's URL (a required `[...slug]` does not). */
+const CATCH_ALL = /^\[\[\.\.\.[^\]]+\]\]$/;
 
 /** A file Next serves a URL from: a page or a route handler. */
 const ROUTE_FILE = /^(page\.(tsx|ts|jsx|js|mdx)|route\.(tsx|ts|jsx|js))$/;
@@ -402,15 +410,21 @@ function sameUrlPage(cwd, app, dir) {
 function nestedRootLayouts(app) {
   const LAYOUT = /^layout\.(tsx|ts|jsx|js)$/;
   if (fs.readdirSync(app).some(f => LAYOUT.test(f))) return [];
-  return fs
-    .readdirSync(app, {withFileTypes: true})
-    .filter(
-      e =>
-        e.isDirectory() &&
-        fs.readdirSync(path.join(app, e.name)).some(f => LAYOUT.test(f)),
-    )
-    .map(e => path.join(app, e.name))
-    .sort();
+  /** @type {string[]} */
+  const out = [];
+  /** A folder with a layout counts; a route group without one is looked into. @param {string} dir @param {boolean} top */
+  const look = (dir, top) => {
+    for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
+      if (!e.isDirectory()) continue;
+      const sub = path.join(dir, e.name);
+      const group = /^\(.+\)$/.test(e.name);
+      if (!top && !group) continue;
+      if (fs.readdirSync(sub).some(f => LAYOUT.test(f))) out.push(sub);
+      else if (group) look(sub, false);
+    }
+  };
+  look(app, true);
+  return out.sort();
 }
 
 /**
@@ -2348,7 +2362,8 @@ function openLine(cwd, at) {
           : encodeURIComponent(seg),
       )
       .join('/');
-    return `open ${nextBasePath(cwd)}/${url} in the running app${params.length ? `, with a value for ${params.join(', ')}` : ''}`;
+    const base = nextBasePath(cwd);
+    return `open ${base ?? ''}/${url} in the running app${params.length ? `, with a value for ${params.join(', ')}` : ''}${base == null ? ', after the basePath next.config sets from code (it goes in front)' : ''}`;
   }
   const routes = ['app', path.join('src', 'app')].filter(r =>
     fs.existsSync(path.join(cwd, r)),

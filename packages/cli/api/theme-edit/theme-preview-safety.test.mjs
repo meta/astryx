@@ -1627,7 +1627,6 @@ describe('final pass 5', () => {
   it('refuses a folder with a catch-all route in it or at its URL', async () => {
     for (const [file, where] of [
       ['src/app/cx/[[...x]]/page.tsx', 'src/app/cx'],
-      ['src/app/cy/[...slug]/page.tsx', 'src/app/cy'],
       ['src/app/(g)/cz/[[...x]]/page.tsx', 'src/app/cz'],
     ]) {
       write(file, 'export default 1;\n');
@@ -1672,6 +1671,56 @@ describe('final pass 5', () => {
       fs.rmSync(outside, {recursive: true, force: true});
     }
   });
+
+  it('lets a required catch-all route live in the preview folder: it never serves the folder URL', async () => {
+    write('src/app/cy/[...slug]/page.tsx', 'export default 1;\n');
+    try {
+      const r = await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/cy'});
+      expect(r.data.folder).toBe('src/app/cy');
+    } finally {
+      rm('src/app/cy');
+    }
+  }, 120_000);
+
+  it('finds a root layout in nested route groups', async () => {
+    fs.rmSync(path.join(cwd, 'src/app/layout.tsx'), {force: true});
+    write(
+      'src/app/(a)/(b)/layout.tsx',
+      'export default function L({children}: any) { return children; }\n',
+    );
+    const r = await themeEditPreviewAdd(undefined, {
+      cwd,
+      path: 'src/app/(a)/(b)/nested',
+    });
+    expect(r.data.folder).toBe('src/app/(a)/(b)/nested');
+    rm('src/app/(a)');
+  }, 120_000);
+
+  it('reads basePath without comments, and says when code sets it', async () => {
+    write('next.config.mjs', "export default {\n  // basePath: '/old',\n};\n");
+    try {
+      const plain = await themeEditPreviewAdd(undefined, {
+        cwd,
+        path: 'src/app/b1',
+      });
+      expect(plain.data.open).toContain('open /b1 in the running app');
+      write(
+        'next.config.mjs',
+        'export default {basePath: process.env.BASE_PATH};\n',
+      );
+      const env = await themeEditPreviewAdd(undefined, {
+        cwd,
+        path: 'src/app/b2',
+      });
+      expect(env.data.open).toContain(
+        'open /b2 in the running app, after the basePath next.config sets from code',
+      );
+    } finally {
+      rm('next.config.mjs');
+      rm('src/app/b1');
+      rm('src/app/b2');
+    }
+  }, 120_000);
 
   it('puts basePath in front of the URL to open', async () => {
     write('next.config.mjs', "export default {basePath: '/docs'};\n");
