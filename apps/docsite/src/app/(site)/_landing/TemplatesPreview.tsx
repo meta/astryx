@@ -127,8 +127,9 @@ const styles = stylex.create({
     backgroundColor: 'var(--color-background-surface)',
   },
   // The template at its desktop render width, scaled down to the tile width.
-  // Its height fills the crop window at that scale. A length divided by a
-  // length gives the unitless number that scale() requires.
+  // Its height fills the crop window at that scale. tan(atan2(a, b)) divides
+  // two lengths, which calc() cannot do in every browser yet. The fixed scale
+  // is for a browser without it.
   scaler: {
     position: 'absolute',
     top: 0,
@@ -137,7 +138,10 @@ const styles = stylex.create({
     height: (RENDER_WIDTH * TILE_RATIO_HEIGHT) / TILE_RATIO_WIDTH,
     overflow: 'hidden',
     transformOrigin: 'top left',
-    transform: `scale(calc(100cqw / ${RENDER_WIDTH}px))`,
+    transform: stylex.firstThatWorks(
+      `scale(tan(atan2(100cqw, ${RENDER_WIDTH}px)))`,
+      'scale(0.25)',
+    ),
   },
   // Hidden on a wide card (small screens): with 7 templates the dissolved
   // 3-column grid would leave a lone 7th tile (3 + 3 + 1), so one tile drops out
