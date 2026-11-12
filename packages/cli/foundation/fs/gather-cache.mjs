@@ -36,6 +36,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {CLI_ROOT} from './paths.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
+import {jitiCacheDir} from './jiti-cache.mjs';
 import {
   fileStamp,
   recordReads,
@@ -115,7 +116,7 @@ export function gatherCacheOutcome() {
  */
 function inJitiCache(file) {
   const env = process.env.JITI_FS_CACHE;
-  const roots = [path.join(os.tmpdir(), 'jiti')];
+  const roots = [path.join(os.tmpdir(), 'jiti'), jitiCacheDir()];
   if (env && env !== 'false' && env !== 'true' && env !== '0' && env !== '1') {
     roots.push(path.resolve(env));
   }
