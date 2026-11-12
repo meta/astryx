@@ -43,7 +43,7 @@ import type {
   ToastDismissReason,
   ToastContentRenderFn,
 } from './types';
-import {themeProps} from '../utils/themeProps';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {useToastBannerSwipe} from './useToastBannerSwipe';
@@ -248,6 +248,7 @@ export function ToastSurface({
   hasEntryStarted = false,
   onRetract,
   onRetractEnd,
+  ...rest
 }: ToastSurfaceProps) {
   const t = useComponentTranslator();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -431,7 +432,7 @@ export function ToastSurface({
   const handleRetract = useCallback(() => {
     onRetractRef.current?.();
   }, [onRetractRef]);
-  const {retract, rest} = useToastBannerSwipe({
+  const {retract, rest: restCard} = useToastBannerSwipe({
     rootRef,
     isNotification,
     direction: gestureDirection,
@@ -481,7 +482,7 @@ export function ToastSurface({
           // not leaving.
           if (rootRef.current?.isConnected === true && !isExitingRef.current) {
             isDismissingRef.current = false;
-            rest();
+            restCard();
           }
         });
       });
@@ -515,6 +516,7 @@ export function ToastSurface({
 
   return (
     <div
+      {...pickDataAttributes(rest)}
       ref={rootRef}
       role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
       aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}

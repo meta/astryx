@@ -77,6 +77,16 @@ function touchEnd(target: EventTarget, cancelable = true): Event {
   return event;
 }
 
+/** A cancelable `touchend` whose one changed touch has `identifier`. */
+function touchEndOf(target: EventTarget, identifier: number): Event {
+  const event = new Event('touchend', {bubbles: true, cancelable: true});
+  Object.defineProperty(event, 'changedTouches', {
+    value: [{identifier, target}],
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
 function button(): HTMLButtonElement {
   const element = document.createElement('button');
   document.body.append(element);
@@ -285,6 +295,22 @@ describe('clickGuard', () => {
     // The next touch's touchend, and a click with no press behind it, are the page's.
     expect(touchEnd(target).defaultPrevented).toBe(false);
     expect(click(target).defaultPrevented).toBe(false);
+  });
+
+  it("armed with the lifted touch's identifier, leaves another touch's touchend alone and stays armed for its own", () => {
+    const target = button();
+    armClickGuard(document, {cancelsTouchEnd: true, touchIdentifier: 7});
+    expect(touchEndOf(target, 99).defaultPrevented).toBe(false);
+    expect(isClickGuardArmed(document)).toBe(true);
+    expect(touchEndOf(target, 7).defaultPrevented).toBe(true);
+    expect(isClickGuardArmed(document)).toBe(false);
+  });
+
+  it('armed with an identifier, takes a touchend without changedTouches as that touch’s own', () => {
+    const target = button();
+    armClickGuard(document, {cancelsTouchEnd: true, touchIdentifier: 7});
+    expect(touchEnd(target).defaultPrevented).toBe(true);
+    expect(isClickGuardArmed(document)).toBe(false);
   });
 
   it('leaves an uncancelable touchend alone, and stays armed for a click that may follow it', () => {

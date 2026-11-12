@@ -1,5 +1,76 @@
 # @xds/core
 
+# 0.7.15
+
+#### New Features
+
+- DateInput, DateTimeInput: `onEntryErrorChange` reports why the field rejects typed text, so an app can word its own message. It receives a `DateInputEntryError` (exported from both components) with a `kind` that does not depend on the locale (`unreadable`, `incomplete`, `nonexistent`, `outOfRange` for a date before `min` or after `max`, or `unavailable` for a day that `dateConstraints` rules out), the typed `text`, and, for `outOfRange` and `unavailable`, the Gregorian ISO `date`. It runs each time the rejection changes, including when a new `min`, `max`, `dateConstraints`, or `value`, a calendar pick, disabling the field, or Enter or blur changes it, and with `null` when the rejection ends, or when the typed field leaves while its rejection stands, as when a presentation or pointer change shows the native or touch picker. With the callback, an `error` `status` that has a message is the message the field shows and announces, and the field's own message applies only without one; a `warning` or `success` status never replaces a rejection. When a rejection starts while that error message stays the same, the field announces the message once more for it. Without the callback, nothing else changes. For every DateTimeInput, while a native date control replaces the typed date field, kept typed text and its rejection wait for the typed field, so the field shows the caller's `status` meanwhile. The native and touch pickers take no typed text, so the callback never reports a rejection there. Fixes #10366. (#11311)
+- SegmentedControl: under a finger, pressing the selected segment lifts its surface as UIKit's does, and it settles back when the finger lets go. A pen lifts it the same way on a touch device. With a mouse on a desktop, or with Reduce Motion, nothing lifts. (#9724)
+- Where the primary pointer is fine, a mouse press on a CheckboxInput or a RadioList option paints at once on `pointerdown` and fades on release, as a finger's press does, instead of the browser's `:active`. A right click, or a press on a link or a button inside a RadioList option, does not paint the option. Other controls keep `:active` for a mouse. (#8696)
+
+#### Fixes
+
+- Calendar, DateRangeInput: a two-month calendar whose `max` falls in the month it would open on now opens with that month in the second pane. Before, with `max` set to today, or with a selected value starting in `max`'s month, it opened on that month and the next one, and every day of the next month was disabled while the previous month stayed hidden. The first pane still never goes before `min`'s month, an explicit `focusDate` is shown as given, and a one-month calendar is unchanged. (#11202)
+- Calendar: with `hasWeekNumbers`, each row shows the ISO 8601 week number of its Thursday, the ISO week that holds most of its days. Before, most rows that start on Sunday or Saturday showed the previous ISO week, so the first two rows of a month could show the same number. Rows that start on Monday are unchanged. (#11271)
+- DateInput, DateTimeInput: a typed date that the calendar does not have, such as February 30, shows "Enter a real date". The message names the calendar, as in "Enter a real date (Persian Calendar)", only when the field's calendar differs from the `InternationalizationProvider` calendar. A day that `dateConstraints` rules out shows "Enter an available date". (#11309)
+- DateInput keeps its typed field's and native field's bookkeeping in state. A render React discards, as a suspended transition does, no longer drops typed text, clears a refused date, or reports the same date twice. (#10877)
+- DateTimeInput keeps its native pickers' last value and commit epoch in state. A render React discards, as a suspended transition does, no longer drops a time chosen before the date, clears a refused date or time, or lets the same native edit commit twice. (#10861)
+- Drawer keeps the side it exits to in state. A render React discards, as a suspended transition does, no longer changes the edge a closing drawer slides out to. (#10859)
+- useLinkify and RichTextEditorAutoLinkPlugin: email detection now takes linear time. A long word with no email in it, such as a pasted hash or base64 string, no longer freezes the page for seconds. Valid email addresses link as before, with three exceptions. In the rich-text editor, an address directly after a period no longer links, and a quoted local part ends at the next quote. In useLinkify, a fragment glued to the end of an earlier address no longer links on its own. (#11306)
+- Dialog, CommandPalette, BottomSheet, Lightbox, Drawer, MobileNav, Popover: a Tab pressed with Ctrl or Meta on the first or last control of a modal no longer moves focus to the other end, and the modal no longer cancels the press. A page or a host app that handles Ctrl+Tab or Meta+Tab itself, for example to switch its own tabs, now gets the press on every control, as it already did between the first and the last. Alt+Tab still wraps, because Safari moves focus to each item on Option+Tab. (#11247)
+- Gestures in a same-origin iframe or a Picture-in-Picture window now time touches on that window's own clock. Before, a short tap there could start a long press, because the page's clock reads ahead of the window's. (#11155)
+- `Item`'s swipe actions: under `reveal`, a fling opens the row at its actions; under either model a fling never fires an entry. On a side with two or more entries, only a drag that starts on the open row fires the outermost entry. The panel shows no entry's colour behind another. The entries fill it, and the entry that fires covers it until the row comes back or holds out. No API changes. (#11054)
+- Keep disabled Item actions focusable (#11169)
+- After the window loses focus during a finger's press, lifting that finger no longer acts on any menu (DropdownMenu, MoreMenu, ContextMenu, Selector, and menus built on the public `useMenuPress`), and a tap on a menu's trigger still opens it. Under a finger, a row lit by a press that is cancelled (a scroll, a second finger, the window losing focus) now clears, as on iOS. It clears in DropdownMenu and its sub-menus under any `presentation`, MoreMenu, ContextMenu, Selector's list and the bottom sheet's action list, and in a menu built on the public `useMenuPress` whose root can take focus. A mouse keeps its highlight. (#8508)
+- The menu press model behind DropdownMenu, ContextMenu and their submenus syncs its option, step and trigger-context refs at commit. A press after a render React discards, as a suspended transition does, now uses the committed options. (#10901)
+- The mobile keyboard hook syncs its enabled, expanded and open flags at commit. After a render React discards, as a suspended transition does, a dismissal and the keyboard's listeners follow the committed options. (#10914)
+- Outline's scroll spy reads its items, its `onActiveIdChange` and its active item as committed. A render React discards, as a suspended transition does, no longer changes which item a scroll marks or which callback a landed navigation calls. (#10802)
+- Carousel paging: a row that resizes while it settles no longer stops at once or runs back to an earlier page. The settle plays on at its speed, to the last page when it was heading there, and otherwise to the page nearest where it was heading. It ends on that page with no step when it goes back to native scrolling. A resize that leaves the row past its new last page, or that gives the row its first width, still lands it at once on the page it was heading for. (#10592)
+- ResizeHandle reads its region, direction and disabled state as committed. A render React discards, as a suspended transition does, no longer makes a key press resize another region or refuse an enabled handle. (#10803)
+- In a swizzled AppShell, the first Tab into the main region now stops on the region, as in the package's AppShell, when its first link or button sits inside a package scroll region that does not overflow (ScrollableArea, Table, CodeBlock, Tokenizer, BottomSheet), and the reverse. Arrow and Page keys are unchanged. No API changes. (#11225)
+- A disabled `Step` now reflects `disabled` on the `step-indicator` theming target, beside `step-label`, so a theme can restyle a disabled step's indicator. In a compact horizontal `Stepper` with on-track indicators, where a disabled step's label is not shown, the indicator is the only target a theme can reach. The `step` and `step-description` targets do not gain the selector. (#8997) (#9192)
+- `useStreamingText` keeps where its reveal restarts in state. A render React discards, as a suspended transition does, no longer restarts a streaming reveal from the start or jumps it to the end. (#10862)
+- Table keeps one array for each list of columns, and for each list of plugins, compared by identity. A render React throws away, as a suspended transition does, can no longer replace the array the table last displayed. The next committed render reuses the array, so rows skip rendering when the columns and plugins match the committed ones. `useBaseTablePlugins` also keeps its array when the base plugins come in a new array of the same plugins. A column plugin with its own render-time cache, such as the tree plugin, still re-renders every row. (#10940)
+- `useTableSortableState` sorts only when its data, sort or locale changes. It re-sorted every row on every render of its owner. (#10942)
+- Table sorting with `useTableSortableState` calls the latest `onSortChange`. Before, a sort header kept the handler from the last time the sort changed, so a parent that passed a new handler without a sort change had its old handler called, and that handler saw out-of-date state. (#11349)
+- Text and Heading: on Android, the first tap on a button or link inside truncated text opens the truncation tooltip, as on iOS. The tap focused the element first, and that focus took the tap; now only a keyboard focus counts. Tooltip: a tap on a text field inside a tooltip's trigger focuses the field and no longer opens or closes the tooltip. This includes a text field inside truncated text. (#11213)
+- A Timestamp hover card's copy button now shows when the clipboard write fails, as CodeBlock's copy button does: the icon becomes a cross for 1.5 seconds, and the button is named, tooltipped and announces "Failed to copy value to clipboard." It used to do nothing. A theme that maps the `timestamp-copy` slot keeps its rest glyph during a failure (`copied` is false). The error itself is not shown. (#10434)
+- ToastViewport syncs its committed list at commit. A toast that only a render React discards showed, such as a suspended transition, reports no `onHide` when a repeat replaces it and the same handler then dismisses it. (#10902)
+- Tokenizer's sheet numbers its searches and its opens in state. A render React discards, as a suspended transition does, no longer makes a reopen announce a search that never ran. (#10886)
+- In Tokenizer's inline field on a touch screen (a tablet, or `presentation="popover"` on a phone), removing a token with a finger no longer raises the touch keyboard. A tap on a token's own remove button (Token's ×) used to move focus to the field's input inside the tap, which makes iOS and Android show their keyboard; when the input was not focused before the tap (the keyboard was down), focus now stays where it was, unless the tapped × or another control in its token held focus, when focus moves to the input as before. A tap made while typing, a pen's tap, a mouse click, a key press on the remove button, and a remove control drawn by a custom `renderToken` still put focus in the input. PowerSearch's filter tokens, which render Token, get the same fix. (#8160)
+
+#### Documentation
+
+- Hook docs for `useThemeName`, so `astryx hook useThemeName` and `astryx search` return it, and a `useThemeName — Active theme` example block: the name of the theme wrapped around the caller. (#11235)
+- List's anatomy now names its optional header and drops a description part that List does not render. The `ref` docs now say that the ref reaches the list element, with or without a header. (#11277)
+- `DefinedTheme.__componentIcons` is now documented public API; its presence and shape follow the compatibility policy. (#11192)
+
+#### Other Changes
+
+- Internal: Core's internal touch entry re-exports UIKit's timing table and the motion engine's AnimateOptions and MotionHandle types for Lab's SearchField. Apps import nothing new. (#10956)
+- Internal: the close button name of Lab's SearchField joins Core's message catalog. Apps import nothing new. (#10956)
+- Internal: Core adds two internal hooks that keep a ref at the latest committed prop or callback for event and gesture callbacks, and an internal entry through which Lab reaches them. Outline's scroll spy, ResizeHandle and resizing logic, menu press handling, the mobile keyboard hook, and ToastViewport use them. Apps import nothing new. (#11352)
+- Internal: one shared context request from a long press, a right click, or Shift+F10 and the context-menu key, reporting which input made it, one per gesture. A held finger's hold loses to a claim another gesture already made on that finger, and a control that keeps its press for a hold-repeat owns only its hold, so its right click and Shift+F10 still reach the request. A held pen's own context menu event is refused like a held finger's. The hold is UIKit's long press and requests as it begins. Not exported from the package entry point. (#8670)
+- Internal: Core's internal layer hook drops a dismissal-check field that no component reads. The layer still refuses to reopen during the press that closed it. Apps see no change. (#11332)
+- Internal: Markdown records its streaming fade-in refs as an exception to the runtime's ref rule, with tests that pin why it is harmless. (#10939)
+- Internal: the rule that ends a container's press for a press on a nested control is named for every pointer it covers, and its comments and records say what it does. No change to any component's behavior or API. (#11304)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @aashish254
+- @ChenyangLi4288
+- @cixzhang
+- @duytbp
+- @Geervan
+- @nynexman4464
+- @popsiclelmlm
+- @Varshavia
+- @vjeux
+
+---
+
 # 0.7.14
 
 #### New Features
