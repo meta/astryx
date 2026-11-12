@@ -289,16 +289,23 @@ another implementation helper.
   once the entry is complete and a text rejection at commit, show every
   rejection in a standalone field as a visible message with the invalid state
   and one announcement, and keep rejected typed text at commit; a native control
-  restores its committed value at blur and keeps the rejection's message. What a form posts does not change (`spec:AST-118` FR4). A `warning`
-  or `success` caller status, or an `error` status without a message, never
-  hides a rejection's message. A caller `error` status with a message shows in
-  place of it on NumberInput and TimeInput, and on DateInput only with
-  `onEntryErrorChange`; NumberInput and TimeInput report each rejection through
-  `onEntryErrorChange`. A typed number is complete only at commit, so
-  NumberInput reveals its rejections at Enter or blur and nothing while the
-  person types. `spec:AST-118` owns the rule, including when each kind of entry
-  is complete. FileInput's rejections are of picked files, which it drops from
-  its value, and stay outside this rule.
+  restores its committed value at blur and keeps the rejection's message. What a
+  form posts does not change (`spec:AST-118` FR4). A `warning` or `success`
+  caller status, or an `error` status without a message, never hides a
+  rejection's message. A caller `error` status with a message shows in place of
+  it on every member (`spec:AST-120` FR5); NumberInput and TimeInput report each
+  rejection through `onEntryErrorChange`. A typed number is complete only at
+  commit, so NumberInput reveals its rejections at Enter or blur and nothing
+  while the person types. `spec:AST-118` owns the rule, including when each kind
+  of entry is complete. FileInput's rejections are of picked files, which it
+  drops from its value, and stay outside this rule.
+- **FR16 — A rejected entry stops a native form submission.** While DateInput,
+  DateTimeInput, TimeInput, or NumberInput holds an entry it rejects, its
+  control fails constraint validation, so a submit button, Enter, or
+  `requestSubmit()` does not submit the form, and focus moves to the first such
+  field with no browser bubble. A form with `noValidate`, a submitter with
+  `formNoValidate`, and `form.submit()` still submit. `spec:AST-120` owns the
+  rule.
 
 ## Allowed component variation
 
@@ -449,6 +456,10 @@ DEC-6 does not require unrelated components to add a new floor.
   native date or time rejection shows no message. Inside an InputGroup, a
   member's own rejection shows no visible message. `spec:AST-118` lists each
   gap.
+- **Rejected-entry submission (FR16):** no member's control fails constraint
+  validation, so a native submission runs while a member holds a rejected
+  entry, and DateInput shows its own message over a caller `error` status
+  without `onEntryErrorChange`. `spec:AST-120` lists each gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
   individual state behavior, but do not yet provide the complete real-browser
   inline-size/end-overlap matrix below. This current record names those
@@ -476,6 +487,7 @@ The exhaustive coverage obligation follows the membership and adoption tables.
 | FR13     | TBD (gap): the per-field keyboard focus tests and simulator evidence `spec:AST-099` FR9 names                                                                                                                                                                                                                            | each member FR13 covers, in the page, a sheet, a docked bar Core moves, a floating bar, and a bar with its own `translate`        | A focused field left under the keyboard in a scroller (including one inside a fixed container FR9 leaves to the app), a Core host, or a docked bar Core moves, or a public prop for the behavior; a field with no scroller between it and a floating, own-`translate`, or full-viewport host is the app's to position and is not a failure |
 | FR14     | TBD (gap): the entry error behavior suites `spec:AST-117` names                                                                                                                                                                                                                                                          | DateInput, DateTimeInput, TimeInput, and NumberInput under each value, standalone and in a FormLayout                             | A signal appears before commit under `'blur-or-enter'`, `'complete'` differs from the shipped behavior, or a form default outranks a field's own prop                                                                                                                                                                                      |
 | FR15     | TBD (gap): the completeness, commit, and message suites `spec:AST-118` names                                                                                                                                                                                                                                             | DateInput, DateTimeInput, TimeInput, and NumberInput, typed and native, standalone and grouped                                    | An unfinished entry is flagged, a commit drops rejected text, a rejection shows no message, or its signals part                                                                                                                                                                                                                            |
+| FR16     | TBD (gap): the form-submission suites `spec:AST-120` names                                                                                                                                                                                                                                                               | Each member with a rejected entry; submit button, Enter, `requestSubmit()`; `noValidate`; `form.submit()`                         | A submission while a rejected entry stays, a browser bubble, or focus left elsewhere                                                                                                                                                                                                                                                       |
 
 ## Decision links
 

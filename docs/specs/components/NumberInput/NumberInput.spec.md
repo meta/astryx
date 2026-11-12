@@ -35,7 +35,14 @@ architecture:
   ]
 contributing: []
 system_specs:
-  [spec:AST-085, spec:AST-086, spec:AST-102, spec:AST-117, spec:AST-118]
+  [
+    spec:AST-085,
+    spec:AST-086,
+    spec:AST-102,
+    spec:AST-117,
+    spec:AST-118,
+    spec:AST-120,
+  ]
 ---
 
 # NumberInput component contract
@@ -73,7 +80,9 @@ Consumer usage lives in `NumberInput.doc.mjs`.
   an unfinished draft shows no rejection, a draft that does not parse stays on
   blur while a form still posts the committed number (FR6), and a rejection
   shows a message (FR15, FR16): an accessibility behavior fix that ships in a
-  patch (`spec:AST-017` FR53, `spec:AST-118`); `onEntryErrorChange` is additive
+  patch (`spec:AST-017` FR53, `spec:AST-118`); `onEntryErrorChange` is additive;
+  a rejected draft stops a native form submission (FR17, `spec:AST-120`): a
+  breaking change that ships in a minor (`spec:AST-017` FR1, FR31)
 - Controlled/uncontrolled behavior: controlled only; `value` (`number`, `null`,
   or `undefined`) is the committed value, and NumberInput keeps only an
   uncommitted text draft of its own
@@ -143,6 +152,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR14 | Its own rejections follow `entryErrorBehavior` (`spec:AST-117` FR1, FR2). A typed number is complete only at commit, so under either value the field marks and announces no rejection while the person types, and Enter or blur reveals the draft's current rejection, its signals together and announced once, as FR15 states (`spec:AST-117` FR3, FR4); a number that FR3 clamps reveals no rejection. A revealed rejection clears as soon as the draft is valid or empty (`spec:AST-117` FR5). Implementation gap: the field has no `entryErrorBehavior` and always behaves as `'complete'`.                                                                                                                                                                                                                                                                                                                                                                   | `spec:AST-117` FR1–FR6; proposal                                       |
 | FR15 | Its own rejections follow `spec:AST-118`. A typed number is complete only at commit, so while the person types it marks, shows, and announces nothing, whatever the draft (`spec:AST-118` FR1–FR3). At Enter or blur, a draft that does not parse, a fraction when integer-only, or any number when `min` is above `max` stays with its rejection, and after blur a form posts the committed value (FR6; `spec:AST-118` FR4); a number outside an ordinary range clamps and commits (FR3). Standalone, a rejection shows the invalid-number message as the error status unless FR16 shows a caller's, sets `aria-invalid`, colors the text secondary, and announces once; in an InputGroup it sets `aria-invalid` and the alert announces it. It clears when the draft is valid or empty (`spec:AST-118` FR5, FR6). Implementation gap: every invalid draft, `-` included, is marked and announced per keystroke with no message; blur reverts an unparsable one. | `spec:AST-118` FR1–FR6; proposal                                       |
 | FR16 | A caller `error` status with a message always shows in place of the field's message; an `error` status without one, or a `warning` or `success` status, never replaces a rejection's message. While the caller's error shows, `aria-invalid` stays set, and the alert announces the rejection's message once, or with the callback the caller's (`spec:AST-118` FR7). `onEntryErrorChange` receives a `NumberInputEntryError` when the revealed rejection changes, and `null` when it ends: `kind` is `unreadable`, `fractional`, or `outOfRange`; `text` is the typed text; `value` is its number, for `fractional` and `outOfRange`. Typing, Enter, blur, a new `value`, `min`, `max`, or `isIntegerOnly`, and disabling each report a change; an unchanged rejection never reports again; unmounting with one standing reports `null` (`spec:AST-118` FR8). Implementation gap: no callback; any `status` hides a rejection; the alert speaks per keystroke.   | `spec:AST-118` FR7, FR8; proposal                                      |
+| FR17 | Native form submission follows `spec:AST-120`. While the field reveals a rejection and keeps its draft (FR15), its input fails constraint validation with the shown message, so a submit button, Enter, `requestSubmit()`, or `reportValidity()` does not submit the form and `onSubmit` does not run; a submission first commits a draft that is not committed, as blur does (FR3). When the field is the form's first invalid control, focus moves to it with no browser bubble; inside an InputGroup the alert announces the message once. A form with `noValidate`, a submitter with `formNoValidate`, and `form.submit()` still submit, and post as FR6 states (`spec:AST-120` FR1–FR4). Implementation gap: the input never fails constraint validation, so a native submission runs while a rejected draft stays.                                                                                                                                          | `spec:AST-120` FR1–FR4; proposal                                       |
 
 ### Allowed variation
 
@@ -222,6 +232,7 @@ anatomy-theming map.
 - `spec:AST-117` owns entry error behavior; FR14 projects its FR1–FR6.
 - `spec:AST-118` owns rejected-entry feedback; FR15 and FR16 project its
   FR1–FR8 and NumberInput's point of completion.
+- `spec:AST-120` owns rejected-entry submission; FR17 projects its FR1–FR4.
 - `architecture:internationalization` owns locale resolution the parser uses.
 - `component:TextInput` is the reference for the shared text-field behavior
   FR12 names.
@@ -246,6 +257,7 @@ anatomy-theming map.
 | FR14, AR2                | TBD (gap): `NumberInput.test.tsx` entry error behavior suites                                                                             | `-`; `1a`; `150` in 10–100; each value; Enter and blur                                 | A signal before commit under `'blur-or-enter'`, a lone signal, an unannounced revert, or a change under `'complete'` fails. | `audit:NumberInput/behavior`      |
 | FR15, AR2                | TBD (gap): `NumberInput.test.tsx` rejected-entry suites                                                                                   | `-`; `1a`; integer-only `1.5`; `150` with `max={100}`; inverted range; typing; commit  | A mark or alert while typing, a missed rejection at commit, a dropped draft, or a lone signal fails.                        | `audit:NumberInput/behavior`      |
 | FR16                     | TBD (gap): `NumberInput.test.tsx` `onEntryErrorChange` and caller-status suites                                                           | Each kind; no, `error`, `warning`, `success` status; callback or none; unmount         | A missing or repeated report, a wrong `kind` or `value`, or the wrong message over a caller status fails.                   | `audit:NumberInput/behavior`      |
+| FR17                     | TBD (gap): `NumberInput.test.tsx` form-submission suites                                                                                  | Submit, Enter, `requestSubmit()`; an uncommitted draft; `noValidate`; `form.submit()`  | A submission while a rejected draft stays, a stopped valid one, a browser bubble, or focus left elsewhere fails.            | `audit:NumberInput/behavior`      |
 
 ## Current-state impact
 
@@ -269,6 +281,9 @@ anatomy-theming map.
   FR1–FR5). A caller `warning` or `success` status stays shown over a
   rejection, and the field has no `onEntryErrorChange` (`spec:AST-118` FR7,
   FR8).
+- **Rejected-entry submission (FR17).** The input never fails constraint
+  validation, so a native submission runs while a rejected draft stays
+  (`spec:AST-120` FR1–FR3).
 - **Stepper icon key.** The steppers resolve their icon through the
   `numberInput:stepperDown` extension key rather than the component-slot model,
   the known deviation `architecture:icon-resolution-and-component-slots` names;
