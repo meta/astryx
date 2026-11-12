@@ -69,6 +69,7 @@
     "/pages/topnav-menu/",
     "/pages/y2k-palette/",
     "/templates/",
+    "/templates/ActivationHookUsage/",
     "/templates/AlertDialogAsyncAction/",
     "/templates/AlertDialogDeleteConfirmation/",
     "/templates/AnimatorPlayingCards/",
