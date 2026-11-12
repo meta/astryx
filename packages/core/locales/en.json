@@ -1217,7 +1217,7 @@
   },
   "@astryx.dateInput.invalidDate": {
     "defaultMessage": "Invalid date",
-    "description": "Screen-reader-only live-region alert in DateInput / DateTimeInput when the typed text cannot be read as a date. Text the field cannot finish, such as a one-digit year, stays on Enter or blur and shows this message as the field status."
+    "description": "Error in DateInput / DateTimeInput, shown below the field and announced, when Enter or blur keeps typed text that cannot be read as a date. Text the field cannot finish, such as a one-digit year, shows it too."
   },
   "@astryx.dateInput.nonexistentDate": {
     "defaultMessage": "{named, select, yes {Enter a real date ({calendar})} other {Enter a real date}}",
