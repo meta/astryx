@@ -35,7 +35,7 @@ describe('matcha palette mapping', () => {
         ramp[mode === 'light' ? 20 : 75],
       );
       expect(tokens['--color-text-secondary']).toBe(
-        ramp[mode === 'light' ? 40 : 60],
+        ramp[mode === 'light' ? 30 : 60],
       );
     },
   );

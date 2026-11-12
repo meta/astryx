@@ -251,11 +251,12 @@ export function TopNavMegaMenuItem({
   // =========================================================================
   // Default mode — desktop popover item with large icon + description
   // =========================================================================
-  const Element = href ? LinkComponent : 'div';
+  const Element = href ? LinkComponent : onClick ? 'button' : 'div';
   return (
     <Element
       {...restProps}
       ref={ref}
+      type={Element === 'button' ? 'button' : undefined}
       href={href}
       {...pressable}
       onClick={onClick}

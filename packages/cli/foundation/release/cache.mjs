@@ -654,7 +654,7 @@ const UNOWNED_LOCK_MS = 10_000;
  * @param {number} pid
  * @returns {boolean}
  */
-function isAlive(pid) {
+export function isAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
@@ -692,6 +692,18 @@ function lockIsStale(lockDir, now) {
 }
 
 /**
+ * The text of a lock's owner record, or '' when it has none.
+ * @param {string} lockDir
+ */
+function ownerText(lockDir) {
+  try {
+    return fs.readFileSync(path.join(lockDir, 'owner.json'), 'utf-8');
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Take a lock folder, or return false when another live run holds it. A lock
  * whose holder has gone, such as a run stopped with Ctrl-C or killed, is taken
  * over at once, and one from another computer once its holder has stopped
@@ -708,10 +720,12 @@ export function tryLock(lockDir, {now = Date.now()} = {}) {
     if (/** @type {NodeJS.ErrnoException} */ (error).code !== 'EEXIST') {
       throw error;
     }
-    if (!lockIsStale(lockDir, now)) return false;
-    // The run that held it is gone; end the install it left running, if any,
-    // before starting another.
-    endRecordedInstall(lockDir, {now});
+    // The lock judged stale, read before the judgement: the folder moved
+    // aside must be that same folder (by its identity on disk, not only its
+    // record, which a new lock lacks for a moment), or another run took the
+    // lock in between.
+    const judged = lockIdentity(lockDir);
+    if (!judged || !lockIsStale(lockDir, now)) return false;
     const aside = `${lockDir}.stale-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
     try {
       fs.renameSync(lockDir, aside);
@@ -719,6 +733,24 @@ export function tryLock(lockDir, {now = Date.now()} = {}) {
       // Another run took it over first.
       return false;
     }
+    if (lockIdentity(aside) !== judged) {
+      // A live lock taken after the judgement: put it back, and wait. When
+      // its place is taken again, it stays aside for its run: this run
+      // holds nothing and removes nothing.
+      try {
+        fs.renameSync(aside, lockDir);
+      } catch {
+        // Left for its run.
+      }
+      return false;
+    }
+    // The run that held it is gone; end the install it left running, if
+    // any, before starting another. The moved folder's name holds no
+    // version, so it is passed.
+    endRecordedInstall(aside, {
+      now,
+      version: /^\.lock-(.+)$/u.exec(path.basename(lockDir))?.[1],
+    });
     fs.rmSync(aside, {recursive: true, force: true});
     try {
       fs.mkdirSync(lockDir);
@@ -735,6 +767,22 @@ export function tryLock(lockDir, {now = Date.now()} = {}) {
     // Without a record the lock still expires on its own.
   }
   return true;
+}
+
+/**
+ * Which lock folder this is: its device, inode and creation time, and its
+ * owner record. A rename keeps them all; a lock made again in its place
+ * differs, even before it has a record. Null when there is no folder.
+ * @param {string} lockDir
+ * @returns {string | null}
+ */
+function lockIdentity(lockDir) {
+  try {
+    const st = fs.statSync(lockDir, {bigint: true});
+    return `${st.dev}:${st.ino}:${st.birthtimeNs}:${ownerText(lockDir)}`;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -866,13 +914,15 @@ export function isReleaseInstall(
  * since a recorded process id can name an unrelated process once the install
  * ended.
  * @param {string} lockDir a `.lock-<version>` folder
- * @param {{now?: number, procRoot?: string, factsOf?: (pid: number) => {argv: string[] | null, startedAt: number | null}}} [options]
+ * @param {{now?: number, procRoot?: string, factsOf?: (pid: number) => {argv: string[] | null, startedAt: number | null}, version?: string}} [options]
+ *   `version` names the release when the folder's name does not (a lock
+ *   moved aside).
  *   the clock, the process table's folder, and the fact reader, for tests
  * @returns {'ended' | 'left'} whether a process group was ended
  */
 export function endRecordedInstall(
   lockDir,
-  {now = Date.now(), procRoot = '/proc', factsOf} = {},
+  {now = Date.now(), procRoot = '/proc', factsOf, version: named} = {},
 ) {
   let pid;
   try {
@@ -881,7 +931,7 @@ export function endRecordedInstall(
     return 'left';
   }
   if (!Number.isInteger(pid) || pid <= 1 || !isAlive(pid)) return 'left';
-  const version = /^\.lock-(.+)$/u.exec(path.basename(lockDir))?.[1];
+  const version = named ?? /^\.lock-(.+)$/u.exec(path.basename(lockDir))?.[1];
   if (!version) return 'left';
   const owner = readJson(path.join(lockDir, 'owner.json'));
   const at = typeof owner?.at === 'number' ? owner.at : null;
@@ -1055,8 +1105,7 @@ function ensureLocked(
     for (const entry of safeList(root)) {
       if (
         entry.startsWith(`.tmp-${version}-`) ||
-        entry.startsWith(`${version}.removing-`) ||
-        entry.startsWith(`.lock-${version}.stale-`)
+        entry.startsWith(`${version}.removing-`)
       ) {
         fs.rmSync(path.join(root, entry), {recursive: true, force: true});
       }
