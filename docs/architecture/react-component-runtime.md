@@ -402,6 +402,13 @@ those contracts.
   latest-value ref during render, such as ChatComposerInput, Slider, and
   `useTooltip`, move onto `useCommittedRef`. About 18 render-time reads of a
   previous value are a separate INV17 gap and are not latest-value refs.
+  Exception: Toast's earlier-sibling `ToastRefSync` stays. `toast()` checks
+  whether a namesake is in the committed list so its dismissal still reports
+  `onHide` (`component:Toast` FR3), and a child can call it from a layout-effect
+  cleanup in the commit that shows the toast. React runs that cleanup before the
+  viewport's own insertion Effect, so `useCommittedRef` there would read the
+  previous list; guard tests cover both stale reads. Implementation gap:
+  `ToastRefSync` is not on main yet.
 - **INV18 — Layout is read as little as possible.** Placement uses CSS
   (anchor positioning, container queries, logical properties) instead of
   measuring in JS, as `architecture:component-style-authoring` INV2 prefers. A
