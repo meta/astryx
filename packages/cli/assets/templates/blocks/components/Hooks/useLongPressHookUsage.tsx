@@ -24,6 +24,7 @@ const MENU_ESTIMATED_HEIGHT = 140;
 
 export default function UseLongPressHookUsage() {
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const actionsButtonRef = useRef<HTMLButtonElement>(null);
   const [menu, setMenu] = useState<MenuPosition | null>(null);
   const [isPinned, setIsPinned] = useState(false);
   const [lastAction, setLastAction] = useState(
@@ -59,8 +60,18 @@ export default function UseLongPressHookUsage() {
     },
   });
 
+  const closeMenu = () => {
+    setMenu(null);
+    actionsButtonRef.current?.focus();
+  };
+
   const handleContextMenu = (e: MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
+    // Chromium emits a synthetic contextmenu event with pointerType 'touch'
+    // after a long press; keep the original 'long press' trigger source.
+    if ((e.nativeEvent as PointerEvent).pointerType === 'touch') {
+      return;
+    }
     openMenuAt({x: e.clientX, y: e.clientY}, 'right-click');
   };
 
@@ -74,7 +85,7 @@ export default function UseLongPressHookUsage() {
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Escape' && menu) {
-      setMenu(null);
+      closeMenu();
     }
   };
 
@@ -91,7 +102,7 @@ export default function UseLongPressHookUsage() {
     } else {
       setLastAction(`Copied link via ${menu.source} (${menu.x}, ${menu.y}).`);
     }
-    setMenu(null);
+    closeMenu();
   };
 
   return (
@@ -114,6 +125,7 @@ export default function UseLongPressHookUsage() {
                 {isPinned && <Badge variant="success" label="Pinned" />}
               </HStack>
               <Button
+                ref={actionsButtonRef}
                 label="Actions"
                 variant="secondary"
                 aria-expanded={menu !== null}
@@ -129,7 +141,7 @@ export default function UseLongPressHookUsage() {
 
         {menu && (
           <div
-            role="menu"
+            role="group"
             aria-label="Document actions"
             style={{
               position: 'absolute',
@@ -152,11 +164,7 @@ export default function UseLongPressHookUsage() {
                   variant="ghost"
                   onClick={() => runAction('pin')}
                 />
-                <Button
-                  label="Dismiss"
-                  variant="ghost"
-                  onClick={() => setMenu(null)}
-                />
+                <Button label="Dismiss" variant="ghost" onClick={closeMenu} />
               </VStack>
             </Card>
           </div>

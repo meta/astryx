@@ -69,23 +69,42 @@ describe('useLongPressHookUsage example', () => {
     renderExample();
     const surface = getSurface();
 
-    expect(container.querySelector('[role="menu"]')).toBeNull();
+    expect(container.querySelector('[role="group"]')).toBeNull();
 
     dispatchTouch(surface, 'touchstart', [{clientX: 120, clientY: 64}]);
     act(() => {
       vi.advanceTimersByTime(499);
     });
-    expect(container.querySelector('[role="menu"]')).toBeNull();
+    expect(container.querySelector('[role="group"]')).toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(1);
     });
 
-    const menu = container.querySelector<HTMLElement>('[role="menu"]');
+    const menu = container.querySelector<HTMLElement>('[role="group"]');
     expect(menu).not.toBeNull();
+    expect(menu?.getAttribute('aria-label')).toBe('Document actions');
     expect(menu?.textContent).toContain('Opened by long press at (120, 64)');
     expect(menu?.style.left).toBe('120px');
     expect(menu?.style.top).toBe('64px');
+
+    // Chromium fires a synthetic contextmenu with pointerType 'touch' after long press.
+    const syntheticTouchContext = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 120,
+      clientY: 64,
+    });
+    Object.defineProperty(syntheticTouchContext, 'pointerType', {
+      value: 'touch',
+    });
+    act(() => {
+      surface.dispatchEvent(syntheticTouchContext);
+    });
+    expect(syntheticTouchContext.defaultPrevented).toBe(true);
+    expect(
+      container.querySelector<HTMLElement>('[role="group"]')?.textContent,
+    ).toContain('Opened by long press at (120, 64)');
   });
 
   it('cancels the pending long press on early lift or movement beyond 10px', () => {
@@ -101,7 +120,7 @@ describe('useLongPressHookUsage example', () => {
     act(() => {
       vi.advanceTimersByTime(500);
     });
-    expect(container.querySelector('[role="menu"]')).toBeNull();
+    expect(container.querySelector('[role="group"]')).toBeNull();
 
     // Moving further than 10px treats the gesture as a scroll/drag and cancels.
     dispatchTouch(surface, 'touchstart', [{clientX: 40, clientY: 50}]);
@@ -109,7 +128,7 @@ describe('useLongPressHookUsage example', () => {
     act(() => {
       vi.advanceTimersByTime(500);
     });
-    expect(container.querySelector('[role="menu"]')).toBeNull();
+    expect(container.querySelector('[role="group"]')).toBeNull();
   });
 
   it('opens at pointer coordinates on contextmenu and triggers actions via menu buttons', () => {
@@ -127,7 +146,7 @@ describe('useLongPressHookUsage example', () => {
     });
 
     expect(contextEvent.defaultPrevented).toBe(true);
-    const menu = container.querySelector<HTMLElement>('[role="menu"]');
+    const menu = container.querySelector<HTMLElement>('[role="group"]');
     expect(menu?.textContent).toContain('Opened by right-click at (88, 36)');
 
     const pinButton = Array.from(
@@ -138,17 +157,20 @@ describe('useLongPressHookUsage example', () => {
       pinButton?.click();
     });
 
-    expect(container.querySelector('[role="menu"]')).toBeNull();
+    expect(container.querySelector('[role="group"]')).toBeNull();
     expect(container.textContent).toContain('Pinned');
     expect(container.textContent).toContain('Pinned via right-click (88, 36).');
   });
 
-  it('provides an explicit Actions button fallback for click and keyboard users', () => {
+  it('provides an explicit Actions button fallback and returns focus when closed', () => {
     renderExample();
 
-    const actionsButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('button'),
-    ).find(button => button.textContent === 'Actions');
+    const findButton = (label: string) =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+        button => button.textContent === label,
+      );
+
+    const actionsButton = findButton('Actions');
     expect(actionsButton).toBeDefined();
     expect(actionsButton?.getAttribute('aria-expanded')).toBe('false');
 
@@ -157,18 +179,45 @@ describe('useLongPressHookUsage example', () => {
     });
 
     expect(actionsButton?.getAttribute('aria-expanded')).toBe('true');
-    const menu = container.querySelector<HTMLElement>('[role="menu"]');
+    const menu = container.querySelector<HTMLElement>('[role="group"]');
     expect(menu).not.toBeNull();
     expect(menu?.textContent).toContain('Opened by button');
 
-    const copyButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('button'),
-    ).find(button => button.textContent === 'Copy link');
+    const copyButton = findButton('Copy link');
+    copyButton?.focus();
     act(() => {
       copyButton?.click();
     });
 
-    expect(container.querySelector('[role="menu"]')).toBeNull();
+    expect(container.querySelector('[role="group"]')).toBeNull();
     expect(container.textContent).toContain('Copied link via button');
+    expect(document.activeElement).toBe(actionsButton);
+
+    // Reopen and close with Escape; focus should return to Actions button.
+    act(() => {
+      actionsButton?.click();
+    });
+    const dismissButton = findButton('Dismiss');
+    expect(dismissButton).toBeDefined();
+    dismissButton?.focus();
+    act(() => {
+      dismissButton?.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}),
+      );
+    });
+    expect(container.querySelector('[role="group"]')).toBeNull();
+    expect(document.activeElement).toBe(actionsButton);
+
+    // Reopen and close with Dismiss button; focus should return to Actions button.
+    act(() => {
+      actionsButton?.click();
+    });
+    const secondDismissButton = findButton('Dismiss');
+    secondDismissButton?.focus();
+    act(() => {
+      secondDismissButton?.click();
+    });
+    expect(container.querySelector('[role="group"]')).toBeNull();
+    expect(document.activeElement).toBe(actionsButton);
   });
 });
