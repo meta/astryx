@@ -16,7 +16,9 @@
  *   (foundation/config/project.mjs) for its integration issues: each
  *   integration's contribution-check results and the whole list (with the
  *   template and component replacement passes), which `component`,
- *   `template`, `theme`, `discover` and `search` report. Gathers are kept only once the folder exists: the first such run
+ *   `template`, `theme`, `discover` and `search` report, and by `doctor`
+ *   (api/doctor/_adapter.mjs) for its file-only docs checks, in a run that
+ *   records modules and variables to its end. Gathers are kept only once the folder exists: the first such run
  *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
@@ -94,13 +96,16 @@ const UNSET = null;
  * their states, modules it loaded with theirs, and environment variables with
  * their values. Files and folders are recorded for the whole run; modules and
  * variables only while the run is armed: from its start to the end of its
- * first gather, and during each later gather. Null outside a recorded run.
+ * first gather, and during each later gather, or, in a run armed throughout
+ * (`doctor`), to its end. Null outside a recorded run.
  * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean} | null}
  */
 let run = null;
 
 /**
- * The running recorded run's reads and variables, for tests: null outside one.
+ * The running recorded run's reads and variables, or null outside one: for
+ * tests, and for a caller that keeps a value only in a recorded run (doctor's
+ * kept checks).
  * @returns {{reads: Map<string, string>, env: Map<string, string | null>} | null}
  */
 export function recordedRun() {
