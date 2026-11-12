@@ -20,7 +20,7 @@
 import {useCallback, useEffect, useRef} from 'react';
 import type {FocusEvent, ReactNode, RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {useCommittedRef} from '../hooks/useCommittedRef';
+import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
@@ -267,11 +267,12 @@ export function ToastSurface({
   // would restart — and un-pause — this toast's timer on unrelated renders.
   const onDismissRef = useRef(onDismiss);
   onDismissRef.current = onDismiss;
-  // Every dismissal from the toast itself goes through here (assigned below
-  // once the retract exists); the timer reads it through the ref.
-  const requestDismissRef = useRef((reason: ToastDismissReason) => {
-    onDismissRef.current(reason);
-  });
+  // Every dismissal from the toast itself goes through here. The function
+  // needs the retract, so it is stored below, and the callbacks above read
+  // it when they run.
+  const requestDismissRef = useRef<(reason: ToastDismissReason) => void>(
+    () => {},
+  );
 
   const startTimer = useCallback(() => {
     if (!isAutoHide || pauseSourcesRef.current.size > 0) {
@@ -448,7 +449,7 @@ export function ToastSurface({
   const isDismissingRef = useRef(false);
   const isExitingRef = useCommittedRef(isExiting);
   const onRetractEndRef = useCommittedRef(onRetractEnd);
-  requestDismissRef.current = (reason: ToastDismissReason) => {
+  const requestDismiss = (reason: ToastDismissReason) => {
     if (!isNotification) {
       onDismissRef.current(reason);
       return;
@@ -486,6 +487,7 @@ export function ToastSurface({
       });
     });
   };
+  useCommittedRefInto(requestDismissRef, requestDismiss);
   // A dismissal from outside (the viewport, an app's `dismiss()`) reaches
   // this surface only as `isExiting`, with no event of its own here. This
   // effect keeps the card's compositor animation in step with it by starting

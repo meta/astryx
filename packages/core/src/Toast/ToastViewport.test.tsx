@@ -32,7 +32,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import React, {useRef} from 'react';
+import React, {useLayoutEffect, useRef} from 'react';
 import {createPortal} from 'react-dom';
 import {readFileSync} from 'node:fs';
 import {type AnnounceFn, __resetLiveRegionsForTest} from '../hooks/useAnnounce';
@@ -3797,6 +3797,35 @@ describe('toast announcements via singleton live regions', () => {
 });
 
 describe('toast timer lifecycle (#3589)', () => {
+  it('dismisses through the close button clicked from a layout effect in its first commit', () => {
+    // The dismissal is stored before any layout effect of the toast's first
+    // commit, so a click from one already dismisses the toast.
+    function ClosesOnMount() {
+      const ref = useRef<HTMLSpanElement>(null);
+      useLayoutEffect(() => {
+        const card = ref.current?.closest('[data-type]');
+        if (card instanceof HTMLElement) {
+          within(card)
+            .getByRole('button', {name: 'Dismiss notification'})
+            .click();
+        }
+      }, []);
+      return <span ref={ref}>Closes on mount</span>;
+    }
+    const onHide = vi.fn();
+    renderViewport(
+      <ShowToastButton
+        options={{body: <ClosesOnMount />, isAutoHide: false, onHide}}
+        triggerLabel="Show"
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+    expect(onHide).toHaveBeenCalledTimes(1);
+    expect(onHide).toHaveBeenCalledWith('manual');
+  });
+
   it('fires onHide exactly once when dismissed twice during the exit window', () => {
     const onHide = vi.fn();
     renderViewport(
