@@ -398,6 +398,10 @@ test('a finger that shifts slightly just before 735 ms gets the menu 50 ms later
     (run.decided as number) - moment,
     'the menu waited for moves still coming late',
   ).toBeGreaterThanOrEqual(LATE_MOVE_GAP_MS - 1);
+  expect(
+    (run.decided as number) - moment,
+    'the menu waited no longer than the press allows',
+  ).toBeLessThan(LATE_MOVE_GAP_MS + 20);
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
