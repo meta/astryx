@@ -366,6 +366,8 @@ export function useTableSortable<
 >(config: UseTableSortableConfig<TSortKey>): TablePlugin<T> {
   const t = useComponentTranslator();
   const configRef = useRef(config);
+  // Written during render on purpose, an accepted exception to the ref rule:
+  // the plugin object stays stable, so a config change re-renders no row.
   configRef.current = config;
 
   return useMemo(

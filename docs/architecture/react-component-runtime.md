@@ -17,6 +17,7 @@ verified_by:
   ]
 deciding_specs:
   [
+    component:Table/DEC-6,
     spec:AST-086/DEC-2,
     spec:AST-099/DEC-1,
     spec:AST-099/DEC-5,
@@ -115,7 +116,10 @@ those contracts.
   initial state and repair it in a follow-up Effect. State stores information that
   cannot be derived during render or directly from the current interaction. DOM
   nodes and whole DOM collections MUST NOT be stored in React state; store only the
-  minimal rendering key or own the node through a ref.
+  minimal rendering key or own the node through a ref. Table's sort state is an
+  exception (`component:Table/DEC-6`): a new comparator applies on the next data,
+  sort or locale change, so row order can come from an earlier render's
+  comparator.
 - **INV2 — Discrete intent stays discrete.** Work caused by one user or imperative
   action MUST NOT be deferred to an Effect when the originating handler can perform
   it, including calling a consumer callback such as `onChange`, `onOpenChange`, or
@@ -143,7 +147,13 @@ those contracts.
   `useGestureRecognizer`, ComplexSelector, and Lab's NavigationStack.
 - **INV4 — Mutable refs do not become hidden rendered state.** Refs MAY hold general
   non-rendering mutable data. A ref mutation MUST NOT be the sole source for a value
-  later read to produce React-rendered output. A callback ref MAY synchronously
+  later read to produce React-rendered output.
+  The owner's decision of 2026-11-09 (`component:Table/DEC-6`) makes an
+  exception for Table's plugin hooks: they MAY keep their latest config in refs
+  written during render. A new config object with the same values re-renders no
+  row. A changed value reaches a memoized row only when that row renders for
+  another reason.
+  A callback ref MAY synchronously
   update an owned DOM node when that DOM update is itself the observable operation
   and attach, detach, replacement, and consumer override behavior preserve the
   current contract. Ref-backed coordination MUST preserve the current component,
@@ -555,6 +565,8 @@ contracts.
 
 ## Deciding specs
 
+- `component:Table/DEC-6` — Table's plugin hooks may keep their latest config
+  in refs written during render (INV4).
 - `spec:AST-086/DEC-2` — own-content announcements behave the same in every
   component that announces its own rendered content (INV10).
 - `spec:AST-099/DEC-1` — one keyboard height for every component, kept

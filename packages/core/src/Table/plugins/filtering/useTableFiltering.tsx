@@ -1164,6 +1164,8 @@ export function useTableFiltering<T extends Record<string, unknown>>(
   config: UseTableFilteringConfig,
 ): TablePlugin<T> {
   const configRef = useRef(config);
+  // Written during render on purpose, an accepted exception to the ref rule:
+  // the plugin object stays stable, so a config change re-renders no row.
   configRef.current = config;
 
   const storeRef = useRef<FilterStore | null>(null);

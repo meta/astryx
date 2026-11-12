@@ -527,6 +527,8 @@ export function useTableTreeData<T extends Record<string, unknown>>(
   config: UseTableTreeDataConfig<T>,
 ): TablePlugin<T> {
   const configRef = useRef(config);
+  // Written during render on purpose, an accepted exception to the ref rule:
+  // the plugin object stays stable, so a config change re-renders no row.
   configRef.current = config;
 
   const storeRef = useRef<TreeStore<T> | null>(null);

@@ -349,6 +349,26 @@ describe('useTableSortableState', () => {
       expect(screen.getByRole('button', {name: 'Bump 1'})).toBeInTheDocument();
       expect(comparisons).toBe(0);
     });
+
+    it('keeps the sort config when its parent re-renders with an inline onSortChange', () => {
+      const configs: unknown[] = [];
+      const sort = [{sortKey: 'name', direction: 'ascending' as const}];
+      function Probe({onSortChange}: {onSortChange: () => void}) {
+        const {sortConfig} = useTableSortableState<Employee>({
+          data: employees,
+          sort,
+          onSortChange,
+        });
+        configs.push(sortConfig);
+        return null;
+      }
+      const {rerender} = render(<Probe onSortChange={() => {}} />);
+
+      rerender(<Probe onSortChange={() => {}} />);
+
+      expect(configs).toHaveLength(2);
+      expect(configs[1]).toBe(configs[0]);
+    });
   });
 
   describe('controlled mode', () => {

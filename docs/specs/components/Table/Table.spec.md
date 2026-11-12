@@ -22,6 +22,12 @@ verified_by:
     packages/core/src/Table/plugins/rowIndex/useTableRowIndex.test.tsx,
     packages/core/src/Table/plugins/selection/useTableSelection.test.tsx,
     packages/core/src/Table/plugins/sortable/useTableSortable.test.tsx,
+    packages/core/src/Table/plugins/sortable/useTableSortableState.test.tsx,
+    packages/core/src/Table/plugins/filtering/useTableFiltering.test.tsx,
+    packages/core/src/Table/plugins/pagination/useTablePagination-perf.test.tsx,
+    packages/core/src/Table/plugins/selection/useTableSelection-perf.test.tsx,
+    packages/core/src/Table/plugins/tree/useTableTreeData-perf.test.tsx,
+    packages/core/src/Table/plugins/stickyColumns/useTableStickyColumns.test.tsx,
     packages/core/src/Table/plugins/sortable/__tests__/useTableSortable.a11y.test.tsx,
     packages/core/src/Table/plugins/rowExpansion/useTableRowExpansion.test.tsx,
     packages/core/src/Table/plugins/rowExpansion/useTableRowExpansion.glide.test.tsx,
@@ -51,6 +57,7 @@ architecture:
     architecture:interaction-modality,
     architecture:public-component-api,
     architecture:icon-resolution-and-component-slots,
+    architecture:react-component-runtime,
   ]
 contributing: []
 system_specs: [spec:AST-025]
@@ -544,6 +551,26 @@ The same coordinated row-paint path preserves selection and activation in either
 update order.
 
 Rejected: wrapper-only slicing, caller-spread data/offset bundles or a parallel Table/scroll renderer.
+
+### DEC-6 - Plugin hooks keep their latest config in refs written during render
+
+**Reference:** `component:Table/DEC-6`
+**Decider:** `cixzhang`, `2026-11-09`
+
+Table's plugin hooks keep their latest config in refs written during render.
+These are the filtering, pagination, selection, sortable and tree data configs,
+the sticky columns' resolved keys, and the sort state's comparators and change
+callback. `architecture:react-component-runtime` INV4 records this
+exception, and INV1 records the comparators' part.
+
+The refs keep each plugin object, the sorted data and the sort config stable.
+A new config object with the same values re-renders no row. A changed value
+reaches a memoized row only when that row renders for another reason. Changed
+sticky keys pin the header cells, and body cells follow as their rows render. A
+new comparator applies on the next data, sort or locale change.
+
+Rejected: moving the config into state or memo dependencies, which re-creates
+the plugin object and re-renders every row on each change.
 
 ## Open questions
 
