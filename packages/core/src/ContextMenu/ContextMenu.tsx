@@ -177,8 +177,7 @@ const styles = stylex.create({
     transitionTimingFunction: easeVars['--ease-standard'],
     userSelect: 'none',
     WebkitTouchCallout: 'none',
-    // A touch open focuses the menu itself, so no row is lit until the finger
-    // moves onto one, as with DropdownMenu's held finger. The menu is an
+    // A touch open focuses the menu itself, so no row is lit. The menu is an
     // internal focus target, not a control, so it shows no browser ring.
     // Keyboard focus moves to an item instead.
     outline: 'none',

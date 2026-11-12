@@ -355,7 +355,7 @@ describe('ContextMenuPressRecognizer', () => {
     expect(states).toEqual(['failed@90', 'possible@90']);
   });
 
-  it('keeps the press while it fails, so the feedback knows which one ended', () => {
+  it('keeps the press while it fails, so a transition listener can tell which one ended', () => {
     const {harness, press} = setup();
     let pressAtFailure: unknown = 'unset';
     press.addTransitionListener((recognizer, _from, to) => {
