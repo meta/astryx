@@ -171,6 +171,11 @@ describe('see-through colors', () => {
 });
 
 describe('color-mix() sides', () => {
+  it('reads no color from a share outside 0-100%, which CSS refuses', () => {
+    expect(parseColor('color-mix(in srgb, red 150%, blue)')).toBeNull();
+    expect(parseColor('color-mix(in srgb, red -10%, blue)')).toBeNull();
+    expect(parseColor('color-mix(in srgb, red 100%, blue)')).not.toBeNull();
+  });
   it('takes a share after or before a color that holds percentages itself', () => {
     expect(
       hex(

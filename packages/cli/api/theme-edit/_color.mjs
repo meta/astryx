@@ -524,11 +524,20 @@ export function mixSide(side) {
   const words = splitTop(side.trim(), ' ');
   const share = (/** @type {string | undefined} */ w) =>
     w != null && /^-?\d*\.?\d+%$/.test(w) ? Number.parseFloat(w) : null;
+  // A share outside 0-100% is invalid CSS: the side then names no color,
+  // so the mix is refused rather than extrapolated.
   if (words.length < 2) return {color: side.trim(), pct: null};
+  const inRange = (/** @type {number} */ p) => p >= 0 && p <= 100;
   const last = share(words.at(-1));
-  if (last != null) return {color: words.slice(0, -1).join(' '), pct: last};
+  if (last != null)
+    return inRange(last)
+      ? {color: words.slice(0, -1).join(' '), pct: last}
+      : {color: '', pct: null};
   const first = share(words[0]);
-  if (first != null) return {color: words.slice(1).join(' '), pct: first};
+  if (first != null)
+    return inRange(first)
+      ? {color: words.slice(1).join(' '), pct: first}
+      : {color: '', pct: null};
   return {color: side.trim(), pct: null};
 }
 
