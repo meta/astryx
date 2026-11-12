@@ -2193,6 +2193,27 @@ describe('TreeList', () => {
       expect(declarationsOf(chevron)).toContain('scaleX(-1)');
     });
 
+    it('puts a custom glyph and a leaf icon in the Chevron box, clipped to it, at 1em', () => {
+      render(
+        <TreeList
+          items={nestedItems}
+          renderExpandIcon={({hasChildren}) => <Icon icon={GlyphStub} />}
+        />,
+      );
+      const toggle = screen.getByRole('button', {name: 'Toggle children'});
+      const leafBox = rowOf('Sibling').querySelector(
+        'span[aria-hidden="true"][inert]',
+      )!;
+      for (const box of [toggle.firstElementChild!, leafBox]) {
+        const css = declarationsOf(box).replace(/\s+/g, '');
+        expect(css).toContain('overflow:hidden');
+        expect(css).toMatch(/width:var\(--spacing-4/);
+        expect(css).toMatch(/font-size:var\(--spacing-4/);
+        // An unsized Icon renders inside the box, so the box bounds it.
+        expect(box.querySelector('svg')).not.toBeNull();
+      }
+    });
+
     it('renders exactly as without the prop when the render prop returns undefined', () => {
       const {container: unset} = render(<TreeList items={nestedItems} />);
       const {container: kept} = render(

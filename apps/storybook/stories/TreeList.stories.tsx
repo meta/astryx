@@ -169,11 +169,33 @@ export const WithIcons: Story = {
 export const CustomExpandIcons: Story = {
   args: {
     items: fileTreeItems,
+    // Drawn at 1em, the glyphs fill the indicator column at every text size.
     renderExpandIcon: ({isExpanded, hasChildren}) =>
       hasChildren ? (
-        <Icon icon={isExpanded ? FolderOpenIcon : FolderIcon} size="sm" />
+        isExpanded ? (
+          <FolderOpenIcon width="1em" height="1em" />
+        ) : (
+          <FolderIcon width="1em" height="1em" />
+        )
       ) : (
-        <Icon icon={DocumentIcon} size="sm" />
+        <DocumentIcon width="1em" height="1em" />
+      ),
+  },
+};
+
+/**
+ * Browser fixture: unsized Icons (Icon's default size is larger than the
+ * column) as custom indicators, to prove the column never widens.
+ */
+export const CustomExpandIconUnsized: Story = {
+  tags: ['!autodocs'],
+  args: {
+    items: fileTreeItems,
+    renderExpandIcon: ({isExpanded, hasChildren}) =>
+      hasChildren ? (
+        <Icon icon={isExpanded ? FolderOpenIcon : FolderIcon} />
+      ) : (
+        <Icon icon={DocumentIcon} />
       ),
   },
 };

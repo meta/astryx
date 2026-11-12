@@ -258,13 +258,18 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-inner'],
   },
   // A caller's glyph inside the toggle, centred in the chevron column.
+  // A caller's glyph inside the toggle: the Chevron's box. Artwork drawn at
+  // `1em` fills it at every text size, and a larger node is clipped, so the
+  // column never widens.
   customGlyph: {
+    flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     width: spacingVars['--spacing-4'],
     height: spacingVars['--spacing-4'],
     fontSize: spacingVars['--spacing-4'],
+    overflow: 'hidden',
   },
   // A leaf's indicator slot (a file icon from `renderExpandIcon`): the toggle's
   // box, so leaves line up with parents, without its button behavior.
@@ -277,6 +282,7 @@ const styles = stylex.create({
     height: spacingVars['--spacing-4'],
     fontSize: spacingVars['--spacing-4'],
     color: colorVars['--color-icon-secondary'],
+    overflow: 'hidden',
   },
   chevronSvg: {
     display: 'flex',
