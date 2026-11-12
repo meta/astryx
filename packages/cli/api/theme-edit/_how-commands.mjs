@@ -8,20 +8,20 @@
  * @position api/theme-edit — imported by _how.mjs and _how-question.mjs
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {checkSetting} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
 import {
   compileTheme,
+  editedThemes,
   keyOf,
   loadTheme,
   readHistory,
   themeFiles,
 } from './_settings.mjs';
 import {LIKE, P} from './_tables.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** The theme name commands use when the app has no theme yet. */
 export const EXAMPLE_THEME = 'my-theme';
@@ -54,34 +54,6 @@ export const EXAMPLE_THEME = 'my-theme';
  */
 
 /**
- * The themes the editor made in the app, the one an editor command changed
- * last first.
- * @param {string} cwd
- * @returns {string[]}
- */
-function editorThemes(cwd) {
-  const root = path.join(cwd, 'themes');
-  if (!fs.existsSync(root)) return [];
-  return (
-    fs
-      .readdirSync(root)
-      .filter(d => fs.existsSync(themeFiles(cwd, d).settings))
-      // The undo history is written only by an editor command, so its time is
-      // the last change made here; a checkout or touch of the settings file
-      // does not move it.
-      .map(d => {
-        const f = themeFiles(cwd, d);
-        const t =
-          [f.history, f.settingsTs, f.settings].find(x => fs.existsSync(x)) ??
-          f.settings;
-        return {d, t: fs.statSync(t).mtimeMs};
-      })
-      .sort((a, b) => b.t - a.t || a.d.localeCompare(b.d))
-      .map(x => x.d)
-  );
-}
-
-/**
  * The theme an answer's commands are for: the one named, the only one, or
  * the one changed last; with none, a theme the answer first makes.
  * @param {import('./_settings.mjs').Ctx} ctx
@@ -90,7 +62,7 @@ function editorThemes(cwd) {
  * @returns {Promise<HowTheme>}
  */
 export async function howTheme(ctx, cwd, name) {
-  const themes = editorThemes(cwd);
+  const themes = editedThemes(cwd, 'changed');
   /** @type {import('./_settings.mjs').ThemeData | null} */
   let data = null;
   let slug = name ?? themes[0] ?? EXAMPLE_THEME;
@@ -246,17 +218,6 @@ function apply(ctx, slug, d, st) {
 }
 
 /**
- * One word of a command as a shell takes it: plain when it is only safe
- * characters, otherwise in double quotes with the characters a shell
- * expands escaped.
- * @param {string} v
- */
-export function shellWord(v) {
-  if (/^[A-Za-z0-9_.,:%+\-/=@]+$/.test(v)) return v;
-  return `"${v.replace(/["\\$`]/g, c => `\\${c}`)}"`;
-}
-
-/**
  * A step as the command a person runs.
  * @param {Step} st
  * @param {string} slug
@@ -266,8 +227,8 @@ export function render(st, slug) {
     P,
     st.verb,
     slug,
-    shellWord(st.thing),
-    ...(st.value != null ? [shellWord(st.value)] : []),
+    quoteCommandArgument(st.thing),
+    ...(st.value != null ? [quoteCommandArgument(st.value)] : []),
     ...(st.on ? ['--on', st.on] : []),
     ...(st.when ? ['--when', st.when] : []),
     ...(st.state ? ['--state', st.state] : []),

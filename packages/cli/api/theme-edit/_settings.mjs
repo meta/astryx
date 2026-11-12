@@ -12,6 +12,7 @@
 
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
@@ -43,13 +44,15 @@ import {
   compositeOver,
   isColorValue,
   isSafeValue,
-  isSize,
   parseColor,
   ratio,
 } from './_color.mjs';
 import {
   PALETTE_DIALS,
   assertNoPlaceholder,
+  LIFT_PARTS,
+  modesOf,
+  paletteFiles,
   paletteImport,
   paletteMapping,
   syncPalette,
@@ -58,6 +61,7 @@ import {
 } from './_palette.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {baseResolved, baseThemeFile} from './_project.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /**
  * One setting the CLI owns.
@@ -85,7 +89,10 @@ import {baseResolved, baseThemeFile} from './_project.mjs';
  * @property {string} [palette] - The hash of the palette.config.json the editor last wrote.
  */
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>}}} Ctx */
+/** What lifted secondary text sits on: the contrast check measures it there. */
+const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
+
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -106,9 +113,6 @@ export const kebab = s =>
  */
 export const camel = s =>
   s.replace(/-+([a-z0-9])?/g, (_, c) => (c ? c.toUpperCase() : ''));
-/** Quote a value for a suggested command. @param {unknown} v */
-export const q = v =>
-  /[\s"#(]/.test(String(v)) ? `"${String(v).replace(/"/g, '\\"')}"` : String(v);
 
 /**
  * The files of one theme, absolute.
@@ -131,6 +135,36 @@ export function themeFiles(cwd, slug) {
     previewPng: path.join(dir, 'preview.png'),
     sheetPng: path.join(dir, 'sheet.png'),
   };
+}
+
+/**
+ * The themes the editor made in the app (a settings file of its own), by
+ * name, or with `changed` the one an editor command changed last first: the
+ * undo history is written only by an editor command, so its time is the
+ * last change made there.
+ * @param {string} cwd
+ * @param {'name' | 'changed'} [order]
+ * @returns {string[]}
+ */
+export function editedThemes(cwd, order = 'name') {
+  const root = path.join(cwd, 'themes');
+  if (!fs.existsSync(root)) return [];
+  const names = fs
+    .readdirSync(root)
+    .filter(d => fs.existsSync(themeFiles(cwd, d).settings))
+    .sort();
+  if (order === 'name') return names;
+  const when = (/** @type {string} */ d) => {
+    const f = themeFiles(cwd, d);
+    const t =
+      [f.history, f.settingsTs, f.settings].find(x => fs.existsSync(x)) ??
+      f.settings;
+    return fs.statSync(t).mtimeMs;
+  };
+  return names
+    .map(d => ({d, t: when(d)}))
+    .sort((a, b) => b.t - a.t || a.d.localeCompare(b.d))
+    .map(x => x.d);
 }
 
 /** A path as the person sees it: relative to cwd. @param {string} cwd @param {string} f */
@@ -195,11 +229,16 @@ export function refuse(code, message, extra = {}) {
  * The settings of a theme, or a refusal naming the command that makes it.
  * @param {string} cwd
  * @param {string} slug
- * @param {string} [skip] the thing a command changes or removes: its value
- *   is not checked, so a value made under looser rules can be fixed
+ * @param {string | Partial<Setting>} [skip] the thing (or the one setting)
+ *   a command changes or removes: its value is not checked, so a value made
+ *   under looser rules can be fixed
  * @returns {ThemeData}
  */
-export function loadTheme(cwd, slug, skip = '') {
+export function loadTheme(
+  cwd,
+  slug,
+  skip = /** @type {string | Partial<Setting>} */ (''),
+) {
   if (!slugOk(slug)) {
     // A path or a capital letter typed for a theme that exists names it.
     const plain = String(slug ?? '')
@@ -231,6 +270,29 @@ export function loadTheme(cwd, slug, skip = '') {
       .replace(/^.*themes[\\/]/, '')
       .replace(/[\\/].*$/, '');
     const same = have.includes(plain) ? plain : null;
+    // A theme written by hand, ejected or built in: not one the editor
+    // made, and `new` with its name would be refused.
+    const other = [
+      [f.dir, `themes/${slug}`],
+      [path.join(cwd, 'src', 'themes', slug), `src/themes/${slug}`],
+    ].find(([d]) => fs.existsSync(d));
+    // A `new` that was stopped part way left its marker: `new` finishes it.
+    if (!same && fs.existsSync(path.join(f.dir, '.astryx-new.json')))
+      refuse(
+        ERROR_CODES.ERR_UNKNOWN_THEME,
+        `themes/${slug} was left by a \`new\` that was stopped part way, so it has no settings yet. Run new again to finish it.`,
+        {run: [`${P} new ${slug}`]},
+      );
+    if (!same && (other || LIKE.includes(slug)))
+      refuse(
+        ERROR_CODES.ERR_UNKNOWN_THEME,
+        `${other ? `${other[1]} is a theme the editor did not make (written by hand, or ejected)` : `${slug} is a built-in theme`}, so the editor does not change it. Make an editor theme with its own name instead${LIKE.includes(slug) ? `, on top of ${slug}` : ''}.`,
+        {
+          run: [
+            `${P} new my-${slug}${LIKE.includes(slug) ? ` --like ${slug}` : ''}`,
+          ],
+        },
+      );
     refuse(
       ERROR_CODES.ERR_UNKNOWN_THEME,
       `There is no theme "${slug}" made by this command (no themes/${slug}/${slug}.settings.json).`,
@@ -264,7 +326,45 @@ export function loadTheme(cwd, slug, skip = '') {
   }
   const problem = settingsProblem(data, skip);
   // A value made under looser rules is not damage: the command that
-  // changes or removes that setting still works.
+  // changes or removes that setting still works, with the other bad ones
+  // left out of the build, so each listed fix runs on its own.
+  const all = problem ? badSettings(data) : [];
+  if (
+    problem &&
+    skip &&
+    all.some(s => skips(s, skip)) &&
+    !settingsProblem({
+      ...data,
+      settings: data.settings.filter(
+        (/** @type {any} */ s) => !all.includes(s),
+      ),
+    })
+  )
+    return data;
+  if (
+    problem &&
+    all.length &&
+    !settingsProblem({
+      ...data,
+      settings: data.settings.filter(
+        (/** @type {any} */ s) => !all.includes(s),
+      ),
+    }) &&
+    all.length > 1
+  )
+    throw new AstryxError(
+      `themes/${slug}/${slug}.settings.json holds ${all.length} settings the editor no longer accepts: ${all
+        .slice(0, 6)
+        .map(s => valueProblem(s))
+        .join(
+          '; ',
+        )}${all.length > 6 ? `; and ${all.length - 6} more` : ''}. Remove or change each; nothing else needs to change. Nothing was changed.`,
+      all.slice(0, 6).map(s => ({
+        name: `${P} undo ${slug} ${undoArgs(s)}`,
+        reason: 'do this instead',
+      })),
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
   const bad = problem ? badSetting(data) : null;
   if (problem && bad && settingsProblem(data, bad.thing) !== problem) {
     // A value it takes, for a dial; a color for a color token.
@@ -280,7 +380,7 @@ export function loadTheme(cwd, slug, skip = '') {
         ...(example
           ? [
               {
-                name: `${P} set ${slug} ${undoArgs(bad).replace(bad.thing, `${bad.thing} ${q(example)}`)}`,
+                name: `${P} set ${slug} ${undoArgs(bad).replace(bad.thing, `${bad.thing} ${quoteCommandArgument(example)}`)}`,
                 reason: 'or give it a value it takes',
               },
             ]
@@ -289,10 +389,18 @@ export function loadTheme(cwd, slug, skip = '') {
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
+  // A bad mode or base is fixed by setting it.
+  const fieldFix = /^(it has no mode|mode ")/.test(problem ?? '')
+    ? `${P} set ${slug} mode both`
+    : /^base "/.test(problem ?? '')
+      ? `${P} set ${slug} base none`
+      : null;
   if (problem)
     throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json: ${problem}. Fix it by hand${recover.text}. Nothing was changed.`,
-      recover.run,
+      `themes/${slug}/${slug}.settings.json: ${problem}. ${fieldFix ? 'Set it again' : `Fix it by hand${recover.text}`}. Nothing was changed.`,
+      fieldFix
+        ? [{name: fieldFix, reason: 'do this instead'}, ...recover.run]
+        : recover.run,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   return data;
@@ -303,37 +411,75 @@ export function loadTheme(cwd, slug, skip = '') {
  * the same rules `set` checks it by (without the installed Core), so a value
  * edited by hand never reaches the build.
  * @param {any} data
- * @param {string} [skip] a thing whose value is not checked (the one a
+ * @param {string | Partial<Setting>} [skip] a thing or setting whose value is not checked (the one a
  *   command is about to change or remove)
  * @returns {string | null}
  */
-export function settingsProblem(data, skip = '') {
+export function settingsProblem(
+  data,
+  skip = /** @type {string | Partial<Setting>} */ (''),
+) {
   if (!data || typeof data !== 'object' || Array.isArray(data))
     return 'the file is not a settings object';
-  if (!['both', 'light-only', 'dark-only'].includes(data.mode))
-    return `mode "${data.mode}" is not both, light-only or dark-only`;
-  if (data.like != null && !LIKE.includes(data.like))
+  // `set <theme> mode` and `set <theme> base` fix their own field.
+  const fixing = typeof skip === 'string' ? skip : skip?.thing;
+  const field = fixing === 'mode' || fixing === 'base';
+  if (!field && !['both', 'light-only', 'dark-only'].includes(data.mode))
+    return data.mode == null
+      ? 'it has no mode'
+      : `mode "${data.mode}" is not both, light-only or dark-only`;
+  if (!field && data.like != null && !LIKE.includes(data.like))
     return `base "${data.like}" is not a built-in theme (${LIKE.join(', ')})`;
   if (!Array.isArray(data.settings)) return 'settings is not a list';
   const keys = new Set();
   for (const s of data.settings) {
-    if (!s || typeof s.thing !== 'string' || typeof s.value !== 'string')
+    // A value or scope that is not text is a bad setting `undo` removes;
+    // a setting with no name is damage.
+    if (!s || typeof s.thing !== 'string' || !('value' in s))
       return 'a setting has no thing or value';
     if (!['dial', 'token', 'property'].includes(s.source))
       return `${s.thing} has no source (dial, token or property)`;
-    for (const k of ['on', 'when', 'state'])
-      if (s[k] != null && typeof s[k] !== 'string')
-        return `${s.thing} has a ${k} that is not a word`;
     if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
       return `${s.thing} has mode "${s.mode}"`;
     const key = keyOf(s);
     if (keys.has(key)) return `${describe(s)} is listed twice`;
     keys.add(key);
-    if (s.thing === skip) continue;
+    if (skips(s, skip)) continue;
     const problem = valueProblem(s);
     if (problem) return problem;
   }
   return null;
+}
+
+/**
+ * Whether a setting is the one a command changes or removes: by thing, or
+ * by the whole identity (part, variant, state, mode) when one is given.
+ * @param {any} s
+ * @param {string | Partial<Setting> | undefined} skip
+ */
+function skips(s, skip) {
+  if (!skip) return false;
+  if (typeof skip === 'string') return s.thing === skip;
+  return (
+    s.thing === skip.thing &&
+    (s.on ?? '') === (skip.on ?? '') &&
+    (s.when ?? '') === (skip.when ?? '') &&
+    (s.state ?? '') === (skip.state ?? '') &&
+    (s.mode ?? '') === (skip.mode ?? '')
+  );
+}
+
+/**
+ * Every setting whose only problem is its value or scope, each with the
+ * command that removes it.
+ * @param {any} data
+ * @returns {Setting[]}
+ */
+export function badSettings(data) {
+  return (Array.isArray(data?.settings) ? data.settings : []).filter(
+    (/** @type {any} */ s) =>
+      s && typeof s.thing === 'string' && valueProblem(s),
+  );
 }
 
 /**
@@ -342,11 +488,11 @@ export function settingsProblem(data, skip = '') {
  */
 export function undoArgs(x) {
   return [
-    x.thing,
-    ...(x.on ? [`--on ${x.on}`] : []),
-    ...(x.when ? [`--when ${x.when}`] : []),
-    ...(x.state ? [`--state ${x.state}`] : []),
-    ...(x.mode ? [`--mode ${x.mode}`] : []),
+    quoteCommandArgument(String(x.thing)),
+    ...(x.on ? [`--on ${quoteCommandArgument(String(x.on))}`] : []),
+    ...(x.when ? [`--when ${quoteCommandArgument(String(x.when))}`] : []),
+    ...(x.state ? [`--state ${quoteCommandArgument(String(x.state))}`] : []),
+    ...(x.mode ? [`--mode ${quoteCommandArgument(String(x.mode))}`] : []),
     ...(x.only ? ['--only'] : []),
   ].join(' ');
 }
@@ -383,9 +529,22 @@ export function withoutBadValues(data) {
  * @returns {string | null}
  */
 function valueProblem(s) {
+  if (typeof s.value !== 'string')
+    return `${s.thing} has a value that is not text (${JSON.stringify(s.value)})`;
+  for (const k of ['on', 'when', 'state', 'mode'])
+    if (s[k] != null && typeof s[k] !== 'string')
+      return `${s.thing} has a ${k} that is not text`;
+  const scope = scopeProblem(s);
+  if (scope) return scope;
   {
     const bad = `${s.thing} "${s.value}"`;
-    if (!isSafeValue(s.value)) return `${bad} cannot be a CSS value`;
+    // A font family name may hold an apostrophe (O'Reilly Sans): Core
+    // quotes the family itself.
+    const checked =
+      s.source === 'dial' && s.thing === 'font'
+        ? s.value.replace(/'/g, '')
+        : s.value;
+    if (!isSafeValue(checked)) return `${bad} cannot be a CSS value`;
     if (s.source === 'token') {
       if (s.mode && !isColorToken(s.thing))
         return `${s.thing} is set for ${s.mode} only, but only colors differ by mode`;
@@ -398,7 +557,7 @@ function valueProblem(s) {
     const words = d.values.split('|').filter(w => !w.startsWith('<'));
     const ok =
       s.thing === 'corners'
-        ? words.includes(s.value) || isSize(s.value, '--radius')
+        ? words.includes(s.value) || /^\d+(\.\d+)?px$/.test(s.value)
         : s.thing === 'text-size'
           ? words.includes(s.value) ||
             (/^\d+(\.\d+)?$/.test(s.value) &&
@@ -412,8 +571,26 @@ function valueProblem(s) {
                 ? s.value.trim() !== ''
                 : words.includes(s.value);
     if (!ok || s.value === 'more' || s.value === 'less')
-      return `${bad} is not a value ${s.thing} takes (${d.values})`;
+      return `${bad} is not a value ${s.thing} takes (${d.values.replace('|more|less', '')})`;
   }
+  return null;
+}
+
+/**
+ * What is wrong with where a setting applies, or null: names only, as
+ * `set` takes them.
+ * @param {any} s
+ * @returns {string | null}
+ */
+function scopeProblem(s) {
+  if (s.on != null && !/^[a-z][a-z0-9-]*$/.test(s.on))
+    return `${s.thing} is set on "${s.on}", which is not a part or group name`;
+  if (s.state != null && !/^[a-z][a-z-]*$/.test(s.state))
+    return `${s.thing} has state "${s.state}", which is not a state name`;
+  if (s.when != null && !/^[\w-]+:[\w.-]+$/.test(s.when))
+    return `${s.thing} has --when "${s.when}", which is not prop:value`;
+  if ((s.when != null || s.state != null) && s.on == null)
+    return `${s.thing} has a variant or state but no part`;
   return null;
 }
 
@@ -455,13 +632,20 @@ export function partsOf(ctx, s) {
   return [s.on];
 }
 
-/** @param {ThemeData} d @returns {Array<'light' | 'dark'>} */
-export const modesOf = d =>
-  d.mode === 'light-only'
-    ? ['light']
-    : d.mode === 'dark-only'
-      ? ['dark']
-      : ['light', 'dark'];
+export {modesOf};
+
+/**
+ * A length in pixels: px as given, rem and em at 16px; null for anything
+ * else (a percentage, calc(), a word).
+ * @param {string} v
+ * @returns {number | null}
+ */
+export function lengthPx(v) {
+  const m = /^\s*(-?\d+(?:\.\d+)?|-?\.\d+)\s*(px|rem|em)?\s*$/i.exec(String(v));
+  if (!m) return null;
+  const n = Number(m[1]);
+  return (m[2] ?? 'px').toLowerCase() === 'px' ? n : n * 16;
+}
 
 /** @param {string} v */
 export const cornerPx = v =>
@@ -476,7 +660,6 @@ export const textPx = v => TEXT_SIZE.find(([n]) => n === v)?.[1] ?? Number(v);
  * @returns {{family: string, fallbacks: string, pkg: string | null}}
  */
 export function fontOf(value) {
-  // Core quotes the family itself, so it is stored without quotes.
   const unquote = (/** @type {string} */ x) => x.replace(/^["']|["']$/g, '');
   if (FONTS[value])
     return {
@@ -497,27 +680,40 @@ export function fontOf(value) {
   const without = (family, list) =>
     list
       .filter(x => unquote(x).toLowerCase() !== family.toLowerCase())
+      .map(x => cssFamily(unquote(x), true))
       .join(', ');
-  if (v.includes(',')) {
-    const parts = v
-      .split(',')
-      .map(x => x.trim())
-      .filter(Boolean);
-    const family = unquote(parts[0]);
-    return {
-      family,
-      fallbacks:
-        parts.length > 1
-          ? without(family, parts.slice(1))
-          : without(family, ['system-ui', 'sans-serif']),
-      pkg: pkgOf(parts[0]),
-    };
-  }
+  const parts = v
+    .split(',')
+    .map(x => x.trim())
+    .filter(Boolean);
+  const family = unquote(parts[0] ?? v);
   return {
-    family: unquote(v),
-    fallbacks: without(unquote(v), ['system-ui', 'sans-serif']),
-    pkg: pkgOf(v),
+    family: cssFamily(family),
+    fallbacks:
+      parts.length > 1
+        ? without(family, parts.slice(1))
+        : without(family, ['system-ui', 'sans-serif']),
+    pkg: pkgOf(family),
   };
+}
+
+/**
+ * A font family name as CSS reads it. A name that is a sequence of CSS
+ * identifiers stays bare; any other is quoted, or the browser drops the
+ * whole font (`3Dumb`, `My/Font`, `a.b`). Core quotes a family that has
+ * a space itself, so such a name is quoted here only as a fallback
+ * (`spaced`), where Core writes the list as given.
+ * @param {string} name without quotes
+ * @param {boolean} [spaced]
+ */
+export function cssFamily(name, spaced = false) {
+  const words = name.trim().split(/\s+/);
+  const ident = (/** @type {string} */ w) =>
+    /^-?(?:[A-Za-z_]|[\u0080-\uffff])(?:[\w-]|[\u0080-\uffff])*$/.test(w) &&
+    !w.startsWith('--');
+  if (words.every(ident)) return name.trim();
+  if (words.length > 1 && !spaced && !/["\\]/.test(name)) return name.trim();
+  return `"${name.trim().replace(/["\\]/g, '\\$&')}"`;
 }
 
 /**
@@ -527,8 +723,9 @@ export function fontOf(value) {
  * @param {string} target
  * @param {string} prop camelCase or kebab-case
  * @param {string | undefined} when
+ * @param {string} [state] a state (hover): that state's own value
  */
-function partDefault(ctx, target, prop, when) {
+function partDefault(ctx, target, prop, when, state) {
   const k = kebab(prop);
   const g = ctx.C.groupOfProp(k === 'background' ? 'background-color' : k);
   const want = (/** @type {import('./_compiler.mjs').Read} */ x) =>
@@ -537,6 +734,15 @@ function partDefault(ctx, target, prop, when) {
     );
   const reads = g ? ctx.C.partReads(target, g).filter(want) : [];
   const wv = when ? when.replace(':', '=') : null;
+  // With a state, that state's own value (for the variant, if named);
+  // when the state does not change this property, the plain value is what
+  // shows in that state too.
+  if (state) {
+    const sr = reads.find(x =>
+      x.when.some(w => w.includes(`:${state}`) && (!wv || w.includes(wv))),
+    );
+    if (sr) return `var(${sr.token})`;
+  }
   const r =
     (wv && reads.find(x => x.when.some(w => w === wv))) ||
     reads.find(x => x.when.includes('')) ||
@@ -553,6 +759,8 @@ function partDefault(ctx, target, prop, when) {
  * @returns {any}
  */
 export function compileTheme(ctx, data, base) {
+  // A setting the editor no longer accepts never reaches the build.
+  data = {...data, settings: data.settings.filter(s => !valueProblem(s))};
   const TOKENS = ctx.project.core.tokenDefaults;
   // The base theme's type scale, read back from its sizes: base text, and
   // the ratio (2xl is three steps above base).
@@ -613,7 +821,18 @@ export function compileTheme(ctx, data, base) {
     const b = block(s, target);
     if (s.mode && !modeOnly) {
       const prev = b[prop];
-      const other = prev ?? partDefault(ctx, target, prop, s.when) ?? v;
+      // The other mode keeps exactly what it had: the value set for it, the
+      // part's own, else what the property shows unset (light-dark() takes
+      // colors only, so never inherit).
+      const other =
+        prev ??
+        baseComponent(base, ctx, target, prop, s) ??
+        partDefault(ctx, target, prop, s.when, s.state) ??
+        (s.state
+          ? baseComponent(base, ctx, target, prop, {...s, state: undefined})
+          : null) ??
+        partDefault(ctx, target, prop, s.when) ??
+        (/^background/.test(kebab(prop)) ? 'transparent' : 'currentcolor');
       const split = (/** @type {string} */ x, /** @type {1 | 2} */ side) =>
         x.replace(/^light-dark\((.*),\s*(.*)\)$/, `$${side}`);
       b[prop] =
@@ -626,6 +845,30 @@ export function compileTheme(ctx, data, base) {
   const pal = paletteMapping(ctx.project.cwd, data.name, data, base, TOKENS);
   for (const [k, v] of Object.entries(pal?.tokens ?? {}))
     putTok(k, [v.light.color, v.dark.color]);
+  // Secondary text lifted on the parts the official neutral theme lifts it
+  // on, each for what it sits on. It is written into the very block the
+  // base theme lifts it in, so it replaces the base's lift. A setting of it
+  // on the part (no --when or --state) wins there, per mode, so a numbered
+  // citation shows what `--on citation` set.
+  for (const [target, key, ground] of pal?.lift ? LIFT_PARTS : []) {
+    const lift = pal?.lift?.[ground];
+    if (!lift || !ctx.project.target.has(target)) continue;
+    /** @type {Partial<Record<'light' | 'dark', {color: string}>>} */
+    const value = {...lift};
+    for (const x of data.settings)
+      if (
+        x.source === 'token' &&
+        x.thing === '--color-text-secondary' &&
+        x.on &&
+        !x.when &&
+        !x.state &&
+        partsOf(ctx, x).includes(target)
+      )
+        for (const m of /** @type {const} */ (['light', 'dark']))
+          if (!x.mode || x.mode === m) value[m] = {color: x.value};
+    ((theme.components[target] ??= {})[key] ??= {})['--color-text-secondary'] =
+      liftValue(value, modeOnly);
+  }
   // `headings` owns heading weight and tracking whatever the order: `type`
   // sets them only where no `headings` setting does.
   const headingsAxis = (/** @type {'weight' | 'tracking'} */ axis) =>
@@ -652,28 +895,34 @@ export function compileTheme(ctx, data, base) {
     const parts = partsOf(ctx, s);
     if (s.source === 'dial') {
       if (s.thing === 'corners') {
-        const px = cornerPx(s.value);
-        const val = (/** @type {number} */ x) =>
-          px >= 9999 ? '9999px' : `${x}px`;
+        // Past 1000px a radius is fully round: the pill tokens apply.
+        const px = cornerPx(s.value) >= 1000 ? 9999 : cornerPx(s.value);
+        const pill = px >= 9999;
+        const rung = CORNERS.some(([n]) => n === s.value);
+        /** @param {string} token */
+        const derived = token => `${radiusAt(base, s.value, token)}px`;
         if (parts.length)
-          for (const t of parts)
-            putComp({...s, mode: undefined}, t, 'borderRadius', val(px));
-        else {
-          putTok('--radius-element', val(px));
-          // A checkbox stays a rounded square next to a round radio.
-          putTok(
+          for (const t of parts) {
+            // A rung on a part gives what the whole-theme rung gives the
+            // radius token the part reads; an exact size is as given.
+            const token = /^var\((--radius-[\w-]+)\)$/.exec(
+              partDefault(ctx, t, 'borderRadius', s.when) ?? '',
+            )?.[1];
+            putComp(
+              {...s, mode: undefined},
+              t,
+              'borderRadius',
+              rung || pill ? derived(token ?? '--radius-element') : `${px}px`,
+            );
+          }
+        else
+          for (const token of [
+            '--radius-element',
             '--radius-inner',
-            px >= 9999 ? '6px' : val(Math.round(px * 0.6)),
-          );
-          putTok(
             '--radius-container',
-            px >= 9999 ? '24px' : `${Math.round(px * 1.25)}px`,
-          );
-          putTok(
             '--radius-page',
-            px >= 9999 ? '32px' : `${Math.round(px * 2.5)}px`,
-          );
-        }
+          ])
+            putTok(token, derived(token));
       } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
         // The palette mapping above sets these tokens.
       } else if (s.thing === 'font') {
@@ -759,8 +1008,10 @@ export function compileTheme(ctx, data, base) {
           let nv = null;
           if (/^--spacing-/.test(k) && /rem$/.test(v))
             nv = `${Number((parseFloat(v) * f).toFixed(3))}rem`;
+          // A control never gets smaller than 24px, the smallest target a
+          // pointer can use comfortably.
           if (/^--size-element-/.test(k) && /px$/.test(v))
-            nv = `${Math.round(parseFloat(v) * f)}px`;
+            nv = `${Math.max(Math.min(24, parseFloat(v)), Math.round(parseFloat(v) * f))}px`;
           if (nv === null) continue;
           if (parts.length) for (const t of parts) block(s, t)[k] = nv;
           else putTok(k, nv);
@@ -773,6 +1024,15 @@ export function compileTheme(ctx, data, base) {
       for (const t of parts) putComp(s, t, camel(s.thing), s.value);
     }
   }
+  // A one-mode theme looks the same whatever the system asks for: every
+  // color the theme does not set takes its mode's value from the base (or
+  // Core) on both sides.
+  if (modeOnly)
+    for (const k of Object.keys(/** @type {Record<string, string>} */ (TOKENS)))
+      if (MODAL.has(ctx.C.typeOf(k)) && !tok[k]) {
+        const v = base[modeOnly]?.[k];
+        if (v && !/var\(/.test(v)) putTok(k, v);
+      }
   // A scale steeper than the standard one enlarges the headings; the steps
   // below the base text size keep the standard ratio, so small text stays
   // readable. An exact token setting still wins.
@@ -885,6 +1145,26 @@ export function maskedSettings(data) {
         s,
         `saved for ${s.mode} mode, which a ${data.mode} theme does not have, so it does not apply`,
       );
+  // A part setting that a later setting on a group holding that part
+  // covers: the later one is written after it, so it wins.
+  data.settings.forEach((s, i) => {
+    if (s.source !== 'dial' || !s.on || FAMILIES[s.on]) return;
+    const later = data.settings
+      .slice(i + 1)
+      .find(
+        x =>
+          x.thing === s.thing &&
+          x.on &&
+          (FAMILIES[x.on] ?? []).includes(/** @type {string} */ (s.on)) &&
+          (x.when ?? '') === (s.when ?? '') &&
+          (x.state ?? '') === (s.state ?? ''),
+      );
+    if (later)
+      out.set(
+        s,
+        `${describe(later)} comes later and covers ${s.on}, so ${s.on} shows ${later.value}; set ${s.on} again to make it win`,
+      );
+  });
   for (const s of data.settings) {
     if (s.thing !== 'type' || !axes.size) continue;
     const T = TYPE_STYLES[s.value];
@@ -923,13 +1203,32 @@ export function findOverrides(cssText, theme) {
       `\\.astryx-${target.replace(/-/g, '\\-')}\\[data-([a-z-]+)="([^"]+)"\\]\\s*\\{([^}]*)\\}`,
       'g',
     );
+    // A shorthand and its longhands are one property: the last one set
+    // (background after background-color) is the one in effect.
+    // border-radius, border-collapse and border-spacing are not part of
+    // border.
+    const NOT_LONGHAND =
+      /^border-(radius|collapse|spacing)|^border-[a-z]+-radius$/;
+    /** @param {string} a @param {string} b */
+    const sameProperty = (a, b) => {
+      const [x, y] = [kebab(a), kebab(b)];
+      if (NOT_LONGHAND.test(x) || NOT_LONGHAND.test(y)) return x === y;
+      return x.startsWith(`${y}-`) || y.startsWith(`${x}-`) || x === y;
+    };
+    const last = props.filter(
+      (p, i) => !props.slice(i + 1).some(later => sameProperty(later, p)),
+    );
     for (const m of cssText.matchAll(re)) {
-      for (const prop of props) {
+      for (const prop of last) {
         // A prop named for the property itself (weight for font-weight,
         // color for color) is the author's own choice: it keeps winning.
         const css = kebab(prop);
         if (css === m[1] || css.endsWith(`-${m[1]}`)) continue;
-        if (new RegExp(`(^|[;\\s])${kebab(prop)}\\s*:`).test(m[3]))
+        // The override may set the property or one of its longhands.
+        const declared = [...m[3].matchAll(/(?:^|[;\s])([a-z-]+)\s*:/g)].map(
+          d => d[1],
+        );
+        if (declared.some(d => sameProperty(d, css)))
           extra.push({
             target,
             key: `${m[1]}:${m[2]}`,
@@ -943,6 +1242,17 @@ export function findOverrides(cssText, theme) {
 }
 
 /**
+ * The CSS value of lifted secondary text: one color in a one-mode theme,
+ * else light-dark().
+ * @param {Partial<Record<'light' | 'dark', {color: string}>>} lift
+ * @param {'light' | 'dark' | null} only
+ */
+const liftValue = (lift, only) =>
+  only
+    ? String(lift[only]?.color)
+    : `light-dark(${lift.light?.color}, ${lift.dark?.color})`;
+
+/**
  * The generated theme source. A token the palette mapping set, and no exact
  * token setting replaced, reads its palette stop from the generated palette
  * module, so a regenerated palette moves the theme with it.
@@ -951,7 +1261,7 @@ export function findOverrides(cssText, theme) {
  * @param {any} theme
  * @param {import('./_palette.mjs').PaletteMapping | null} pal
  */
-function settingsSource(slug, data, theme, pal) {
+function settingsSource(slug, data, theme, pal, cwd = '') {
   const like = data.like;
   const REF = '@@palette:';
   /** @param {string} family @param {'light' | 'dark'} m @param {import('./_palette.mjs').StopRef} r */
@@ -984,18 +1294,64 @@ function settingsSource(slug, data, theme, pal) {
       ];
     }
   }
+  // A lifted part reads the neutral color's stops too.
+  if (pal?.lift && out.components) {
+    out.components = {...out.components};
+    for (const [target, key, ground] of LIFT_PARTS) {
+      const lift = pal.lift[ground];
+      if (!lift) continue;
+      const literal = liftValue(lift, only);
+      /** A shade of the neutral palette as a reference; a color as it is. @param {'light' | 'dark'} m */
+      const one = m => {
+        const r = /** @type {any} */ (lift[m]);
+        return r.family === 'literal' ? r.color : refOf('neutral', m, r);
+      };
+      const refs = only
+        ? one(only)
+        : `light-dark(${one('light')}, ${one('dark')})`;
+      const block = out.components[target]?.[key];
+      if (block?.['--color-text-secondary'] !== literal) continue;
+      out.components[target] = {
+        ...out.components[target],
+        [key]: {...block, '--color-text-secondary': refs},
+      };
+    }
+  }
   let usesPalette = false;
-  const body = JSON.stringify(out, null, 2).replace(
-    /"@@palette:(?:(black|white)|([a-z][a-z0-9-]*)\.(light|dark)\.(\d+(?:\.\d+)?)(?:\+([0-9a-f]{2}))?)"/g,
-    (_, end, family, m, stop, alpha) => {
-      usesPalette = true;
-      if (end) return `palette.${end}`;
-      return `palette${/^[a-z]\w*$/.test(family) ? `.${family}` : `[${JSON.stringify(family)}]`}.${m}[${stop}]${alpha ? ` + '${alpha}'` : ''}`;
-    },
-  );
+  const body = JSON.stringify(out, null, 2)
+    .replace(
+      /"@@palette:(?:(black|white)|([a-z][a-z0-9-]*)\.(light|dark)\.(\d+(?:\.\d+)?)(?:\+([0-9a-f]{2}))?)"/g,
+      (_, end, family, m, stop, alpha) => {
+        usesPalette = true;
+        if (end) return `palette.${end}`;
+        return `palette${/^[a-z]\w*$/.test(family) ? `.${family}` : `[${JSON.stringify(family)}]`}.${m}[${stop}]${alpha ? ` + '${alpha}'` : ''}`;
+      },
+    )
+    .replace(
+      // A stop inside a longer value (light-dark()) becomes a template.
+      /"([^"\n]*@@palette:[^"\n]*)"/g,
+      (_, inner) => {
+        usesPalette = true;
+        return `\`${inner.replace(
+          /@@palette:([a-z][a-z0-9-]*)\.(light|dark)\.(\d+(?:\.\d+)?)/g,
+          (
+            /** @type {string} */ __,
+            /** @type {string} */ family,
+            /** @type {string} */ m,
+            /** @type {string} */ stop,
+          ) =>
+            `\${palette${/^[a-z]\w*$/.test(family) ? `.${family}` : `[${JSON.stringify(family)}]`}.${m}[${stop}]}`,
+        )}\``;
+      },
+    );
   return [
     `// Generated by \`${P}\` from ${slug}.settings.json on every change: do not edit.`,
     `// Built from settings ${settingsStamp(data)}.`,
+    ...(like && cwd
+      ? [
+          `// Built on @astryxdesign/theme-${like} ${baseVersionOf(cwd, like) ?? 'unknown'}.`,
+        ]
+      : []),
     `// Change it with \`${P} set ${slug} ...\`; your own changes go in ${slug}.theme.ts.`,
     "import {defineTheme} from '@astryxdesign/core/theme';",
     ...(like
@@ -1034,6 +1390,52 @@ function themeModuleSource(slug) {
   ].join('\n');
 }
 
+/** The theme source as the editor first writes it. @param {string} slug */
+export const themeSource = slug => themeModuleSource(slug);
+
+/**
+ * Why `<slug>.theme.ts` cannot carry the settings, or null: it must import
+ * `./<slug>.settings`, extend `<camel>Settings` and keep the name, or no
+ * setting takes effect.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+export function themeSourceProblem(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  if (!fs.existsSync(f.ts)) return null;
+  const code = fs
+    .readFileSync(f.ts, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '');
+  const settings = `${camel(slug)}Settings`;
+  if (
+    !new RegExp(`from\\s+['"]\\./${slug}\\.settings(\\.[jt]s)?['"]`).test(code)
+  )
+    return `${slug}.theme.ts does not import ./${slug}.settings`;
+  if (!new RegExp(`extends\\s*:\\s*${settings}\\b`).test(code))
+    return `${slug}.theme.ts no longer extends ${settings}`;
+  if (!new RegExp(`name\\s*:\\s*(['"\`])${slug}\\1`).test(code))
+    return `${slug}.theme.ts no longer names the theme '${slug}'`;
+  return null;
+}
+
+/**
+ * Refuse a build whose theme source cannot carry the settings, naming the
+ * lines that put it back.
+ * @param {string} cwd
+ * @param {string} slug
+ */
+export function refuseThemeSource(cwd, slug) {
+  const why = themeSourceProblem(cwd, slug);
+  if (why)
+    throw new AstryxError(
+      `${why}, so settings cannot take effect. Put back the import of ${camel(slug)}Settings from './${slug}.settings', extends: ${camel(slug)}Settings and name: '${slug}' in themes/${slug}/${slug}.theme.ts (your own changes stay below them). Nothing was changed.`,
+      [{name: `${P} show ${slug}`, reason: 'see the theme as it is'}],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+}
+
 /**
  * Generate the theme source, build it with the theme build, then repeat any
  * part setting a more specific rule would beat and build again.
@@ -1045,6 +1447,7 @@ function themeModuleSource(slug) {
 export async function buildTheme(ctx, slug, data) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
+  refuseThemeSource(cwd, slug);
   if (data.like) baseThemeFile(ctx.project, data.like);
   const base = await baseResolved(ctx.project, data.like);
   const theme = compileTheme(ctx, data, base);
@@ -1063,9 +1466,28 @@ export async function buildTheme(ctx, slug, data) {
   let notes = [];
   await step(() => {
     notes = syncPalette(cwd, slug, data, base);
-    writeAtomic(f.settingsTs, settingsSource(slug, data, theme, pal));
+    writeAtomic(f.settingsTs, settingsSource(slug, data, theme, pal, cwd));
     syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
     if (!fs.existsSync(f.ts)) writeAtomic(f.ts, themeModuleSource(slug));
+  });
+  // Files an earlier build wrote that this one may not: the variants types
+  // of an older base, and section sheets of an older look.
+  await step(() => {
+    for (const file of [
+      path.join(f.dir, `${slug}.variants.d.ts`),
+      ...(fs.existsSync(f.dir)
+        ? fs
+            .readdirSync(f.dir)
+            // Section sheets, and every picture: all show the look before
+            // this build. The full sheet and the preview page are written
+            // again by the commands that make them.
+            .filter(n =>
+              /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?\.png)$/.test(n),
+            )
+            .map(n => path.join(f.dir, n))
+        : []),
+    ])
+      fs.rmSync(file, {force: true});
   });
   let receipt = await step(() => runBuild(ctx, slug));
   const found = findOverrides(fs.readFileSync(f.css, 'utf8'), theme).filter(
@@ -1080,7 +1502,7 @@ export async function buildTheme(ctx, slug, data) {
       lifted.push(`${x.target} ${x.key} ${kebab(x.prop)}`);
     }
     await step(() => {
-      writeAtomic(f.settingsTs, settingsSource(slug, data, theme, pal));
+      writeAtomic(f.settingsTs, settingsSource(slug, data, theme, pal, cwd));
       syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
     });
     receipt = await step(() => runBuild(ctx, slug));
@@ -1105,9 +1527,12 @@ async function runBuild(ctx, slug) {
   const silent = logger.silent;
   logger.setSilent(true);
   try {
+    // No --out: the theme's name is its slug, so the build writes
+    // <slug>.css beside the source, and the generated headers read as a
+    // plain `compile themes/<slug>/<slug>.theme.ts` writes them.
     const {receipt} = await themeBuildForReport(
       shown(cwd, f.ts),
-      {out: shown(cwd, f.css)},
+      {},
       {cwd},
       {compact: true},
     );
@@ -1164,10 +1589,22 @@ export async function resolvedTokens(ctx, slug) {
     v => v && typeof v === 'object' && typeof v.name === 'string',
   );
   const {core} = ctx.project;
-  return {
+  const out = {
     light: core.resolveThemeTokens(t, {mode: 'light'}),
     dark: core.resolveThemeTokens(t, {mode: 'dark'}),
   };
+  // The tokens each part sets for itself (the official themes lift
+  // secondary text on some parts), for the contrast check; kept out of the
+  // modes so nothing that lists the resolved tokens sees it.
+  /** @type {Record<string, Record<string, string>>} */
+  const parts = {};
+  for (const [target, blocks] of Object.entries(t?.components ?? {}))
+    for (const block of Object.values(/** @type {any} */ (blocks) ?? {}))
+      for (const [k, v] of Object.entries(/** @type {any} */ (block) ?? {}))
+        if (k.startsWith('--') && typeof v === 'string')
+          (parts[target] ??= {})[k] = v;
+  Object.defineProperty(out, 'parts', {value: parts, enumerable: false});
+  return out;
 }
 
 /**
@@ -1181,8 +1618,8 @@ export async function resolvedTokens(ctx, slug) {
  */
 export async function contrastProblems(ctx, data, res) {
   const base = await baseResolved(ctx.project, data.like);
-  /** @param {PaintSide} side @param {'fg' | 'bg'} which @param {string} m */
-  const override = (side, which, m) => {
+  /** @param {PaintSide} side @param {'fg' | 'bg'} which @param {string} m @param {string} [when] */
+  const override = (side, which, m, when) => {
     if (!side.target) return null;
     const props =
       which === 'fg' ? ['color'] : ['background', 'background-color'];
@@ -1191,7 +1628,7 @@ export async function contrastProblems(ctx, data, res) {
       .find(
         x =>
           partsOf(ctx, x).includes(/** @type {string} */ (side.target)) &&
-          !x.when &&
+          (!x.when || x.when === when) &&
           !x.state &&
           (!x.mode || x.mode === m) &&
           ((x.source === 'property' && props.includes(x.thing)) ||
@@ -1199,11 +1636,56 @@ export async function contrastProblems(ctx, data, res) {
       );
     return hit?.value ?? null;
   };
+  /**
+   * Text on a lifted background (the accent tint, the neutral track) as
+   * the part sets it for itself: the official themes lift secondary text
+   * there, and so does a generated theme.
+   * @param {TextPair} p @param {string} m
+   */
+  const onTint = (p, m) => {
+    const tok = p.fg.tokens[0];
+    if (!tok || !LIFT_GROUND_TOKENS.has(String(p.bg.tokens[0]))) return null;
+    const own = /** @type {any} */ (res).parts?.[p.fg.target ?? p.text]?.[tok];
+    if (typeof own !== 'string') return null;
+    const split = /^light-dark\((.*),\s*([^,]*)\)$/.exec(own.trim());
+    const v = split ? split[m === 'dark' ? 2 : 1].trim() : own;
+    const ref = /^var\((--[\w-]+)\)$/.exec(v);
+    return ref ? res[/** @type {'light' | 'dark'} */ (m)][ref[1]] : v;
+  };
+  /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
+  const ofBase = (p, side, m) => {
+    const target = p[side].target;
+    if (!target) return null;
+    const own =
+      baseComponent(
+        base,
+        ctx,
+        target,
+        side === 'fg' ? 'color' : 'backgroundColor',
+        {
+          when: /** @type {any} */ (p).when,
+        },
+      ) ??
+      (side === 'bg'
+        ? baseComponent(base, ctx, target, 'background', {
+            when: /** @type {any} */ (p).when,
+          })
+        : null);
+    if (!own) return null;
+    const ref = /^var\((--[\w-]+)\)$/.exec(own.trim());
+    return ref
+      ? (res[/** @type {'light' | 'dark'} */ (m)][ref[1]] ?? null)
+      : own;
+  };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const value = (p, side, m) => {
     const s = p[side];
     return (
-      override(s, side, m) ??
+      override(s, side, m, /** @type {any} */ (p).when) ??
+      // The base theme's own part style (neutral's destructive button),
+      // which Core's reads do not know.
+      ofBase(p, side, m) ??
+      (side === 'fg' ? onTint(p, m) : null) ??
       (s.tokens.length
         ? res[/** @type {'light' | 'dark'} */ (m)][s.tokens[0]]
         : s.raw)
@@ -1211,11 +1693,50 @@ export async function contrastProblems(ctx, data, res) {
   };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const baseValue = (p, side, m) => {
+    // Lifted text on the tint is held to 4.5:1, never excused by an
+    // unlifted base pair.
+    if (onTint(p, m) != null) return null;
     const s = p[side];
     return s.tokens.length
       ? base[/** @type {'light' | 'dark'} */ (m)][s.tokens[0]]
       : s.raw;
   };
+  // The census renders each part once, with its default props: text on a
+  // part whose variants each have their own colors (a destructive button)
+  // is measured per variant too, from what each variant reads.
+  /** @type {TextPair[]} */
+  const variantPairs = [];
+  for (const p of /** @type {any} */ (ctx).parts.pairs) {
+    const t = p.fg.target;
+    if (!t || t !== p.bg.target) continue;
+    const fgReads = ctx.C.partReads(t, 'text');
+    const bgReads = ctx.C.partReads(t, 'background');
+    const variants = [
+      ...new Set(
+        bgReads
+          .flatMap(r => r.when)
+          .map(w => /^variant=([\w-]+)$/.exec(w)?.[1])
+          .filter(Boolean),
+      ),
+    ];
+    for (const v of /** @type {string[]} */ (variants)) {
+      const bgTok = bgReads.find(r => r.when.includes(`variant=${v}`))?.token;
+      const fgTok =
+        fgReads.find(r => r.when.includes(`variant=${v}`))?.token ??
+        p.fg.tokens[0];
+      if (!bgTok || !fgTok) continue;
+      if (bgTok === p.bg.tokens[0] && fgTok === p.fg.tokens[0]) continue;
+      variantPairs.push(
+        /** @type {any} */ ({
+          ...p,
+          text: `${p.text} (variant ${v})`,
+          when: `variant:${v}`,
+          fg: {...p.fg, tokens: [fgTok]},
+          bg: {...p.bg, tokens: [bgTok]},
+        }),
+      );
+    }
+  }
   const {problems, more, unchecked} = ctx.C.contrast(
     value,
     baseValue,
@@ -1228,6 +1749,7 @@ export async function contrastProblems(ctx, data, res) {
       page: m =>
         res[/** @type {'light' | 'dark'} */ (m)]['--color-background-body'],
     },
+    variantPairs,
   );
   return [
     ...problems.map(
@@ -1242,7 +1764,8 @@ export async function contrastProblems(ctx, data, res) {
       const scoped = data.settings.filter(
         x =>
           (x.on &&
-            (x.when || x.state) &&
+            // A variant's own colors are measured with the variant pairs.
+            (x.state || (x.when && !/^variant:/.test(x.when))) &&
             (/^(color|background|background-color)$/.test(x.thing) ||
               /^--color-/.test(x.thing))) ||
           // The button style recolors the primary button only.
@@ -1290,20 +1813,119 @@ function parseSettings(text) {
 function hashDir(dir) {
   /** @type {Map<string, string>} */
   const out = new Map();
-  if (!fs.lstatSync(dir, {throwIfNoEntry: false})?.isDirectory()) return out;
-  /** @param {string} d */
-  const walk = d => {
-    for (const e of fs.readdirSync(d, {withFileTypes: true})) {
-      const p = path.join(d, e.name);
-      if (e.isDirectory()) walk(p);
-      else if (e.isFile())
-        out.set(
-          p,
-          createHash('sha256').update(fs.readFileSync(p)).digest('hex'),
-        );
-    }
+  for (const p of ownFiles(dir))
+    out.set(p, createHash('sha256').update(fs.readFileSync(p)).digest('hex'));
+  return out;
+}
+
+/**
+ * The value the base theme itself gives a part's property where a setting
+ * applies (its variant and state), as the build keys part styles; null
+ * when the base theme leaves it to Core.
+ * @param {{light: Record<string, string>, components?: Record<string, any>}} base
+ * @param {Ctx} ctx
+ * @param {string} target
+ * @param {string} prop camelCase
+ * @param {{when?: string, state?: string}} s
+ * @returns {string | null}
+ */
+export function baseComponent(base, ctx, target, prop, s) {
+  const t = base.components?.[target];
+  if (!t) return null;
+  let b = t[s.when ?? 'base'];
+  if (s.state) {
+    const states = ctx.project.target.get(target)?.states ?? [];
+    b = states.includes(s.state)
+      ? t[s.when == null ? s.state : `${s.when}+${s.state}`]
+      : b?.[`:${s.state}`];
+  }
+  const v = b?.[prop];
+  return typeof v === 'string' ? v : null;
+}
+
+/**
+ * The radius, in px, the build writes for a radius token at a corners value
+ * (a rung, or a size). The derived radii keep the base theme's own
+ * proportions to the element radius (matcha's page is 3.5 times it), so a
+ * bigger element radius never makes them smaller; a checkbox stays a
+ * rounded square at pill, and a container or page at pill is half again as
+ * round as at `round` (a fully round card is a capsule). Past 1000px a
+ * radius is fully round.
+ * @param {{light: Record<string, string>}} base the base theme's tokens
+ * @param {string} value
+ * @param {string} token
+ * @returns {number}
+ */
+export function radiusAt(base, value, token) {
+  const px = cornerPx(value) >= 1000 ? 9999 : cornerPx(value);
+  const pill = px >= 9999;
+  const el = lengthPx(base.light['--radius-element'] ?? '');
+  /** @param {string} t @param {number} fallback */
+  const ratio = (t, fallback) => {
+    const v = lengthPx(base.light[t] ?? '');
+    return el && v != null ? v / el : fallback;
   };
-  walk(dir);
+  const roundPx = CORNERS.find(([n]) => n === 'round')?.[1] ?? 16;
+  if (token === '--radius-inner')
+    return pill ? 6 : Math.round(px * Math.min(1, ratio(token, 0.6)));
+  if (token === '--radius-container')
+    return Math.round(
+      pill
+        ? Math.max(24, 1.5 * roundPx * ratio(token, 1.25))
+        : px * ratio(token, 1.25),
+    );
+  if (token === '--radius-page')
+    return Math.round(
+      pill
+        ? Math.max(32, 1.5 * roundPx * ratio(token, 2.5))
+        : px * ratio(token, 2.5),
+    );
+  return pill ? 9999 : px;
+}
+
+/**
+ * The files the editor writes for a theme, after `<slug>.`: the only ones a
+ * change reads, hashes or puts back, and the only ones a stopped `new`
+ * leaves (a designer's `<slug>.design.psd` beside them is never touched).
+ */
+export const EDITOR_SUFFIXES = [
+  'settings.ts',
+  'settings.json',
+  'css',
+  'css.d.ts',
+  'js',
+  'd.ts',
+  'variants.d.ts',
+  'history.json',
+];
+
+/**
+ * The files in a theme folder that the editor writes, by name: the
+ * theme's generated files, its settings, history and pages, and its color
+ * files. Anything else there (notes, a designer's source file, the
+ * person's own tokens) is never read, hashed or put back.
+ * `<slug>.theme.ts` is the person's file: it is listed only while it does
+ * not exist yet, so the run that creates it can take it back.
+ * @param {string} dir
+ * @returns {string[]}
+ */
+function ownFiles(dir) {
+  if (!fs.lstatSync(dir, {throwIfNoEntry: false})?.isDirectory()) return [];
+  const slug = path.basename(dir);
+  const mine = (/** @type {string} */ n) =>
+    EDITOR_SUFFIXES.some(x => n === `${slug}.${x}`) ||
+    /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config(\.damaged(-\d+)?)?\.json)$/.test(
+      n,
+    );
+  /** @type {string[]} */
+  const out = [];
+  for (const e of fs.readdirSync(dir, {withFileTypes: true}))
+    if (e.isFile() && mine(e.name)) out.push(path.join(dir, e.name));
+  const tokens = path.join(dir, 'tokens');
+  if (fs.lstatSync(tokens, {throwIfNoEntry: false})?.isDirectory())
+    for (const e of fs.readdirSync(tokens, {withFileTypes: true}))
+      if (e.isFile() && e.name.startsWith(`${slug}.palette`))
+        out.push(path.join(tokens, e.name));
   return out;
 }
 
@@ -1319,10 +1941,18 @@ function hashDir(dir) {
  */
 async function track(dir, wrote, fn) {
   const before = hashDir(dir);
+  const theme = path.join(dir, `${path.basename(dir)}.theme.ts`);
+  const themeWasThere = fs.existsSync(theme);
   try {
     return await fn();
   } finally {
     const after = hashDir(dir);
+    // The theme source this run made is its own to take back.
+    if (!themeWasThere && fs.existsSync(theme))
+      after.set(
+        theme,
+        createHash('sha256').update(fs.readFileSync(theme)).digest('hex'),
+      );
     for (const [p, h] of after) if (before.get(p) !== h) wrote.set(p, h);
     for (const p of before.keys()) if (!after.has(p)) wrote.set(p, null);
   }
@@ -1396,7 +2026,7 @@ export function refuseLinks(cwd, slug) {
         `${path.relative(cwd, p) || p} is a link; the editor writes a theme's own files only, never through a link. Replace the link with a copy of what it points to. Nothing was changed.`,
         [
           {
-            name: `cp -rL ${q(path.relative(cwd, p))} ${q(`${path.relative(cwd, p)}.copy`)}`,
+            name: `cp -rL ${quoteCommandArgument(path.relative(cwd, p))} ${quoteCommandArgument(`${path.relative(cwd, p)}.copy`)}`,
             reason: 'copy what it points to, then put the copy in its place',
           },
         ],
@@ -1459,8 +2089,16 @@ export function buildCurrent(cwd, slug, data) {
  */
 export function staleBuild(cwd, slug, data) {
   const f = themeFiles(cwd, slug);
-  const missing = [f.js, f.css, f.settingsTs].find(p => !fs.existsSync(p));
-  if (missing) return `${path.basename(missing)} was missing`;
+  // The generated colors are part of the build when a color dial is set.
+  const colors = data.settings.some(
+    s => s.source === 'dial' && PALETTE_DIALS.includes(s.thing),
+  )
+    ? [path.join(cwd, paletteFiles(slug).palette)]
+    : [];
+  const missing = [f.js, f.css, f.settingsTs, ...colors].find(
+    p => !fs.existsSync(p),
+  );
+  if (missing) return `${path.relative(f.dir, missing)} was missing`;
   const ts = fs.readFileSync(f.settingsTs, 'utf8');
   const stamp =
     /\/\/ Built from settings ([0-9a-f]{16}) \(CLI ([^)]+)\)\./.exec(ts);
@@ -1468,13 +2106,46 @@ export function staleBuild(cwd, slug, data) {
   if (stamp && stamp[1] === hash && stamp[2] !== cliVersion())
     return `it was built by CLI ${stamp[2]}, and this is ${cliVersion()}`;
   if (!stamp || stamp[1] !== hash)
-    return `${slug}.settings.json changed after the build (edited by hand, or by another tool)`;
+    return `${slug}.settings.json does not match the build (a command stopped part way, a hand edit, or another tool)`;
+  // A base theme updated since the build changes what the theme builds on.
+  if (data.like) {
+    const built = new RegExp(
+      `// Built on @astryxdesign/theme-${data.like} ([^.\\s]+(?:\\.[^.\\s]+)*)\\.`,
+    ).exec(ts)?.[1];
+    const now = baseVersionOf(cwd, data.like);
+    if (built && now && built !== now)
+      return `@astryxdesign/theme-${data.like} is ${now} now, and the build was made on ${built}`;
+  }
   if (
     !ts.trimEnd().endsWith('});') ||
     fs.statSync(f.css).mtimeMs < fs.statSync(f.settingsTs).mtimeMs - 1000
   )
     return 'the last build did not finish (a command stopped while building)';
   return null;
+}
+
+/**
+ * The installed version of a base theme package, or null.
+ * @param {string} cwd
+ * @param {string} like
+ */
+function baseVersionOf(cwd, like) {
+  const pkg = `@astryxdesign/theme-${like}`;
+  try {
+    // The package exports no package.json: find it above its built module.
+    let dir = path.dirname(
+      createRequire(path.join(cwd, 'package.json')).resolve(`${pkg}/built`),
+    );
+    for (let i = 0; i < 6; i++, dir = path.dirname(dir)) {
+      const file = path.join(dir, 'package.json');
+      if (!fs.existsSync(file)) continue;
+      const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (json.name === pkg) return String(json.version ?? '') || null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /** @param {string} dir */
@@ -1549,6 +2220,7 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   refuseLinks(cwd, slug);
+  refuseThemeSource(cwd, slug);
   const snapBefore = fs.existsSync(f.settings)
     ? fs.readFileSync(f.settings, 'utf8')
     : null;
@@ -1583,7 +2255,14 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
     };
   const resBefore =
     snapBefore && fs.existsSync(f.js)
-      ? await resolvedTokens(ctx, slug).catch(() => null)
+      ? await resolvedTokens(ctx, slug).catch(() => {
+          // The last build is damaged: the change still stands, and the
+          // result says why it lists no token changes.
+          notes.push(
+            `the last build (${path.basename(f.js)}) could not be read, so the token changes are not listed; the theme is built again`,
+          );
+          return null;
+        })
       : null;
   const before = parseSettings(snapBefore);
   const liftedBefore = new Set(before?.lifted ?? []);
@@ -1602,8 +2281,12 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
     built = await buildTheme(ctx, slug, data);
     data.lifted = built.lifted;
     // The undo step and the settings are part of the change: written whole,
-    // inside the rollback, the history before the settings.
+    // inside the rollback, the settings first. A command stopped between
+    // the two leaves the change saved with the history one step short (or,
+    // for an undo, a top step equal to the settings, which undo skips),
+    // never a step that undoes nothing or a lost step.
     await track(f.dir, wrote, () => {
+      writeAtomic(f.settings, `${JSON.stringify(data, null, 2)}\n`);
       if (historyAfter)
         writeAtomic(
           f.history,
@@ -1614,7 +2297,6 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
           f.history,
           JSON.stringify([...past, snapBefore].slice(-HISTORY_STEPS)),
         );
-      writeAtomic(f.settings, `${JSON.stringify(data, null, 2)}\n`);
     });
   } catch (e) {
     const {failed, skipped} = restoreWritten(was, wrote);
@@ -1639,7 +2321,8 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
       e instanceof AstryxError &&
       (e.code === ERROR_CODES.ERR_UNKNOWN_THEME ||
         e.code === ERROR_CODES.ERR_THEME_INVALID ||
-        e.code === ERROR_CODES.ERR_PALETTE_GENERATION)
+        e.code === ERROR_CODES.ERR_PALETTE_GENERATION ||
+        e.code === ERROR_CODES.ERR_WRITE_FAILED)
     )
       throw e;
     const why = (e instanceof Error ? e.message : String(e))
@@ -1676,7 +2359,12 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
     if (resBefore) {
       for (const m of modes) {
         for (const k of Object.keys(res[m])) {
-          if (resBefore[m][k] === res[m][k]) continue;
+          // A change of letter case alone (#FFFFFF, #ffffff) is no change.
+          if (
+            String(resBefore[m][k]).toLowerCase() ===
+            String(res[m][k]).toLowerCase()
+          )
+            continue;
           const modal = MODAL.has(ctx.C.typeOf(k));
           if (!modal && m === 'dark' && modes.length > 1) continue;
           changed.push(
@@ -1686,6 +2374,9 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
       }
     }
     problems = await contrastProblems(ctx, data, res);
+    // What cannot be measured is a note, not a problem.
+    notes.push(...problems.filter(x => x.startsWith('not checked')));
+    problems = problems.filter(x => !x.startsWith('not checked'));
   } catch (e) {
     ctx.unchecked ??= `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
