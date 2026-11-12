@@ -12,6 +12,7 @@
  * same transaction. Side-effect-free outside of {@link applyWrites}.
  */
 
+import {stillHolds} from '../../foundation/release/folder-lock.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -131,7 +132,10 @@ export function packageJsonFilesUpdate(
     }
   }
 
-  if ((pkg.exports !== undefined || createExports) && publicExports.length > 0) {
+  if (
+    (pkg.exports !== undefined || createExports) &&
+    publicExports.length > 0
+  ) {
     const authored = pkg.exports;
     /** @type {Record<string, unknown>} */
     let exportsMap;
@@ -373,6 +377,10 @@ export function applyWrites(plans) {
       staged.push({...plan, temporary, original, mode});
     }
 
+    // Under a folder lock (the theme editor's), a run that lost the lock
+    // while it was stopped publishes nothing. Outside a lock this does
+    // nothing.
+    stillHolds();
     for (const plan of staged) {
       if (plan.original == null) {
         publishNewFile(plan.temporary, plan.path);
@@ -483,7 +491,7 @@ export async function loadCurrentManifest(manifestFile, manifestExists) {
  * @param {string} manifestPath
  * @param {string[]} files
  * @param {boolean} dryRun
- * @returns {{type: 'integration.add', data: Omit<import('./integration-authoring.type.mjs').IntegrationAddData, 'kind'> & {kind: K, icons?: number, refreshed?: boolean, renamed?: Array<{from: string, to: string}>, mapped?: Array<{definition: string, icon: string}>, suggestions?: Array<{definition: string, icon: string, word: string}>, notes?: string[]}}}
+ * @returns {{type: 'integration.add', data: Omit<import('./integration-authoring.type.mjs').IntegrationAddData, 'kind'> & {kind: K, icons?: number, refreshed?: boolean, updated?: boolean, renamed?: Array<{from: string, to: string}>, moved?: Array<{id: string, from: string, to: string}>, licenseNoticeMissing?: {library: string, path: string}, mapped?: Array<{definition: string, icon: string}>, suggestions?: Array<{definition: string, icon: string, word: string}>, notes?: string[], moduleUpdate?: {previous: string, module: string}}}}
  */
 export function receipt(kind, name, root, manifestPath, files, dryRun) {
   return {

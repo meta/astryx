@@ -8,7 +8,7 @@
  * @position Table integration proof; jsdom keeps invalid strings, so validity is checked here
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {resolveTableMinWidth} from '../columnUtils';
 
 // Consumer values a caller can pass as `style.minWidth`, including the

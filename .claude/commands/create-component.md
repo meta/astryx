@@ -10,9 +10,9 @@ $ARGUMENTS
 
 Follow the full component lifecycle documented on the Astryx wiki:
 
-- **Lifecycle Overview**: https://github.com/facebook/astryx/wiki/Component-Lifecycle
-- **Specification Protocol**: https://github.com/facebook/astryx/wiki/Component-Specification-Protocol
-- **Build Protocol**: https://github.com/facebook/astryx/wiki/Component-Build-Protocol
+- **Lifecycle Overview**: https://github.com/meta/astryx/wiki/Component-Lifecycle
+- **Specification Protocol**: https://github.com/meta/astryx/wiki/Component-Specification-Protocol
+- **Build Protocol**: https://github.com/meta/astryx/wiki/Component-Build-Protocol
 
 ### Quick reference
 
@@ -33,8 +33,8 @@ Follow the full component lifecycle documented on the Astryx wiki:
 
 ### Key conventions
 
-- **API Conventions**: https://github.com/facebook/astryx/wiki/API-Conventions
-- **Theming**: Use `stableClassName()` (or the `themeProps()` helper) for theme targets — see https://github.com/facebook/astryx/wiki/Theming-Infrastructure
+- **API Conventions**: https://github.com/meta/astryx/wiki/API-Conventions
+- **Theming**: Use `stableClassName()` (or the `themeProps()` helper) for theme targets — see https://github.com/meta/astryx/wiki/Theming-Infrastructure
 - **Compose, don't rebuild** — use existing Astryx components (Field, Icon, etc.)
 - **displayName** — always set it
 - **:hover guards** — all `:hover` in `@media (hover: hover)`

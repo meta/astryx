@@ -227,7 +227,7 @@ export function DiscoverShowcase() {
             + empty alt keep this pure decoration out of the a11y tree; it
             animates from a clumped to a spread pose on scroll into view. */}
         <img
-          src="/discover-card-1.png"
+          src="/landing/discover-card-1.webp"
           alt=""
           aria-hidden="true"
           {...stylex.props(
@@ -236,7 +236,7 @@ export function DiscoverShowcase() {
           )}
         />
         <img
-          src="/discover-card-3.png"
+          src="/landing/discover-card-3.webp"
           alt=""
           aria-hidden="true"
           {...stylex.props(
@@ -245,7 +245,7 @@ export function DiscoverShowcase() {
           )}
         />
         <img
-          src="/discover-card-2.png"
+          src="/landing/discover-card-2.webp"
           alt=""
           aria-hidden="true"
           {...stylex.props(
@@ -254,7 +254,7 @@ export function DiscoverShowcase() {
           )}
         />
         <img
-          src="/discover-card-4.png"
+          src="/landing/discover-card-4.webp"
           alt=""
           aria-hidden="true"
           {...stylex.props(

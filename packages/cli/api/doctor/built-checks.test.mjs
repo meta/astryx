@@ -24,9 +24,13 @@ function write(files) {
   }
 }
 
-/** @param {string} target @param {string[]} [packages] */
-function check(target, packages = []) {
-  const [usage, purity] = checkBuilt(target, {cwd: dir, packages});
+/**
+ * @param {string} target
+ * @param {string[]} [packages]
+ * @param {{fileLimit?: number}} [options]
+ */
+function check(target, packages = [], options = {}) {
+  const [usage, purity] = checkBuilt(target, {cwd: dir, packages, ...options});
   return {usage, purity};
 }
 
@@ -290,15 +294,16 @@ describe('--built edge cases', () => {
   });
 
   it('warns, not fails, when the file limit ends the read before any Astryx', () => {
-    for (let i = 0; i < 20_001; i++) {
-      const file = path.join(dir, 'a', String(i % 50), `${i}.txt`);
-      fs.mkdirSync(path.dirname(file), {recursive: true});
-      fs.writeFileSync(file, '');
+    // One more file than a read of 50 takes, spread over 5 folders. The
+    // default limit reads the same way, so a small one keeps the folder small.
+    for (let i = 0; i < 51; i++) {
+      write({[`a/${i % 5}/${i}.txt`]: ''});
     }
-    const {usage} = check('.');
+    const {usage} = check('.', [], {fileLimit: 50});
     expect(usage.status).toBe('warn');
     expect(usage.message).toContain('went unread');
-  }, 60_000);
+    expect(usage.message).toContain('the first 50 files');
+  });
 
   it('finds a root-relative asset from the build root for a page in a subfolder', () => {
     write({

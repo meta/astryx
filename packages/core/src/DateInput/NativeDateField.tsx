@@ -36,6 +36,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useCalendarConstraints} from '../Calendar';
 import type {DateInputProps} from './DateInput';
 import {hasEditableDateSegments} from './nativeDateSegments';
@@ -52,7 +53,7 @@ import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {useInputGroup} from '../InputGroup';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
@@ -81,20 +82,15 @@ import {
   type ISODateString,
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateInput/NativeDateField.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
-  // Same as DateInput's: no hover ring while disabled or busy, and the
-  // focus ring while the field's input holds focus.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(input:focus)': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(input:focus)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   wrapper: {
     gap: spacingVars['--spacing-2'],
   },
@@ -308,7 +304,7 @@ export function NativeDateField({
     onBlur: onBlurProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -382,13 +378,18 @@ export function NativeDateField({
   // probe touches the DOM, and unfocused the answer changes nothing.
   const [isSegmentEditable, setIsSegmentEditable] = useState(false);
   // The raw value the control last reported and we acted on, so the same edit
-  // arriving through both commit paths only fires one change.
-  const lastCommitRef = useRef<string | null>(null);
+  // arriving through both commit paths only fires one change. Each entry
+  // belongs to the commit epoch it was made in.
+  const lastCommitRef = useRef<{text: string; epoch: number} | null>(null);
 
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
-    lastCommitRef.current = null;
+  // The value as last rendered, and an epoch that a value change moves on,
+  // retiring the last commit. Both are state: refs written here would keep a
+  // value from a render React discards.
+  const [prevValue, setPrevValue] = useState(value);
+  const [commitEpoch, setCommitEpoch] = useState(0);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setCommitEpoch(epoch => epoch + 1);
     if (rejectedValue !== null) {
       setRejectedValue(null);
     }
@@ -441,10 +442,15 @@ export function NativeDateField({
       }
       // The same edit can arrive twice — React's synthetic change and the
       // native listener below both report it — so act on a raw value once.
-      if (lastCommitRef.current === newValue) {
+      const last = lastCommitRef.current;
+      if (
+        last !== null &&
+        last.epoch === commitEpoch &&
+        last.text === newValue
+      ) {
         return;
       }
-      lastCommitRef.current = newValue;
+      lastCommitRef.current = {text: newValue, epoch: commitEpoch};
 
       if (!newValue) {
         setRejectedValue(null);
@@ -473,7 +479,15 @@ export function NativeDateField({
         fireChange(parsedISO);
       }
     },
-    [value, fireChange, isDateDisabled, isEffectivelyDisabled, isBusy, locale],
+    [
+      value,
+      commitEpoch,
+      fireChange,
+      isDateDisabled,
+      isEffectivelyDisabled,
+      isBusy,
+      locale,
+    ],
   );
 
   const handleChange = useCallback(
@@ -597,13 +611,14 @@ export function NativeDateField({
         }),
         stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           sizeStyles[size],
           styles.wrapper,
           // Disabled paint belongs to the disabled state only; a busy field
           // keeps its ordinary paint and shows the Spinner (spec:AST-085
           // FR6, family:buttons FR4).
           isDisabled && inputWrapperStyles.disabled,
-          isEffectivelyDisabled && styles.disabledFocusRing,
+          isEffectivelyDisabled && inputDisabledFocusStyles.inputFocusRing,
           status && inputStatusBorderStyles[status.type],
           status &&
             !isEffectivelyDisabled &&

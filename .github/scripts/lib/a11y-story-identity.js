@@ -19,6 +19,7 @@ const A11Y_STORY_OWNER_PREFIXES = Object.freeze([
   ['a11y-chatsendbutton-audit--', 'core/ChatSendButton'],
   ['a11y-chatsystemmessage-audit--', 'core/ChatSystemMessage'],
   ['a11y-button-pattern--button-', 'core/Button'],
+  ['a11y-link-pattern--provider-router', 'core/LinkProvider'],
   ['a11y-checkbox-pattern--list-item-', 'core/CheckboxListItem'],
   ['a11y-checkbox-pattern--menu-item-', 'core/DropdownMenuCheckboxItem'],
   ['a11y-checkbox-pattern--card-', 'core/SelectableCard'],
@@ -39,25 +40,9 @@ const LEGACY_BASELINE_STORY_MIGRATIONS = Object.freeze({
     owner: 'core/ClickableCard',
     legacyStoryKeys: Object.freeze(['ClickableCard::Disabled']),
   }),
-  'a11y-checkbox-pattern--list-item-group-disabled-with-message': Object.freeze({
-    owner: 'core/CheckboxListItem',
-    legacyStoryKeys: Object.freeze(['CheckboxList::Disabled With Message']),
-  }),
   'a11y-checkbox-pattern--card-disabled': Object.freeze({
     owner: 'core/SelectableCard',
     legacyStoryKeys: Object.freeze(['SelectableCard::Disabled']),
-  }),
-  'a11y-radio-group-pattern--radio-list-group-disabled-with-message': Object.freeze({
-    owner: 'core/RadioList',
-    legacyStoryKeys: Object.freeze(['RadioList::Disabled With Message']),
-  }),
-  'a11y-radio-group-pattern--radio-list-option-group-disabled': Object.freeze({
-    owner: 'core/RadioListItem',
-    legacyStoryKeys: Object.freeze(['RadioList::Disabled']),
-  }),
-  'a11y-radio-group-pattern--radio-list-option-disabled-with-message': Object.freeze({
-    owner: 'core/RadioListItem',
-    legacyStoryKeys: Object.freeze(['RadioList::Disabled With Message']),
   }),
   'a11y-progressbar--progress-bar-disabled': Object.freeze({
     owner: 'core/ProgressBar',

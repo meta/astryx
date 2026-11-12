@@ -1,4 +1,4 @@
-Results for "experimental" (3)
+Results for "experimental" (4)
 name:        authoring/field-reference
 section:     config
 domain:      doc
@@ -17,3 +17,9 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs authoring/field-reference template-doc
 parent:      pnpm exec astryx docs authoring/field-reference --index
+name:        styling/tokens-and-setup
+section:     nextjs-webpack
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs styling/tokens-and-setup nextjs-webpack
+parent:      pnpm exec astryx docs styling/tokens-and-setup --index

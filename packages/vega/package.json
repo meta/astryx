@@ -5,14 +5,14 @@
   "description": "Astryx Vega wrapper — chart and data visualization components. Published to npm only under the @canary dist-tag for early testing; never released as a stable (latest) version.",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/vega"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -54,16 +54,17 @@
     "react": ">=19.2.0",
     "react-dom": ">=19.2.0",
     "vega": ">=6.0.0",
-    "vega-lite": ">=6.0.0"
+    "vega-lite": ">=6.0.0",
+    "vega-util": ">=2.0.0"
   },
   "devDependencies": {
     "@astryxdesign/cli": "workspace:*",
     "@testing-library/react": "catalog:",
-    "@types/react": "^19.2.17",
+    "@types/react": "^19.3.0",
     "tsup": "^8.3.0",
     "typescript": "^6.0.3",
-    "vega": "^6.2.0",
-    "vega-lite": "^6.4.3",
+    "vega": "^6.4.0",
+    "vega-lite": "^6.5.0",
     "vega-util": "^2.1.1"
   }
 }

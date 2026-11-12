@@ -1,5 +1,111 @@
 # @astryxdesign/build
 
+# 0.7.14
+
+---
+
+# 0.7.13
+
+#### Fixes
+
+- dependency floors move to current releases: the build package needs autoprefixer 10.6.2, browserslist 4.29.5 and lightningcss 1.33.0; the CLI needs ignore 7.0.14, jscodeshift 17.4.0, linkedom 0.18.15, zod 4.6.7 and @stylexjs/babel-plugin 0.19.1; each theme needs lucide-react 1.66.0. Peer ranges do not change. (#10709)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.12
+
+#### Fixes
+
+- A swizzled copy can now compile as Astryx source in the Babel, PostCSS, and Vite integrations. Every module under a folder that holds an `astryx-swizzle.json` marker gets the library class prefix and lands in `@layer astryx-base`, below `astryx-theme`, so a theme's component overrides reach it. `astryx swizzle` does not write the marker yet: add the file to the swizzle output folder. Under webpack, `withAstryx()` rebuilds a cached copy when its marker appears or disappears. Turbopack builds do not read the marker yet. No API changes. (#10334)
+- `astryx swizzle` writes an `astryx-swizzle.json` marker into an output folder it owns (one the copy creates, an empty one, or one it marked before), naming each package the folder's copies came from and its version. `@astryxdesign/build`'s Babel, PostCSS and Vite integrations, and `withAstryx()` under webpack, compile the copies under that folder below `astryx-theme`, so a theme's component overrides reach a swizzled component as they reach the package component. For a folder that already holds other files it writes no marker and says what it found and how to add the marker by hand; the `swizzle.copy` receipt reports this in a new optional `marker` field. Under Turbopack and with the stock StyleX plugins, a copy's styles still land above the theme. The marker is not listed among the copy's files. (#10483)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.11
+
+---
+
+# 0.7.10
+
+---
+
+# 0.7.9
+
+---
+
+# 0.7.8
+
+---
+
+# 0.7.7
+
+#### New Features
+
+- `withAstryx()` builds Astryx from source under Turbopack instead of refusing to. It points each package's documented entry points at their source (Core, Lab, Charts and Rich Text), compiles that source with the settings the prebuilt stylesheets use, and keeps the app's own Turbopack rules off it. The new PostCSS plugin `@astryxdesign/build/next/postcss` replaces an `@astryx;` rule with each source-built package's prebuilt stylesheet, compiled from that source: the same rules and selectors, in the same order, inside `@layer astryx-base`. To set it up, list `@astryxdesign/build/next/postcss` in the app's PostCSS config and put one `@astryx;` rule in the app's global stylesheet (option `cwd`, the app root, defaults to the working directory). Under Turbopack, the webpack setup's `@astryxdesign/build/postcss` refuses to run beside `withAstryx()`, since its rules never match the classes Turbopack renders. In this source build, an installed Astryx package with a malformed `package.json` fails the build instead of being left out. The webpack setup is unchanged: it builds Core and Lab from source, and Rich Text and Charts keep their prebuilt stylesheets there.
+
+#### Other Changes
+
+- The prebuilt stylesheet build and the Turbopack source build share one module walk, compile and layer block, so a source build prints the prebuilt rules by construction. Every prebuilt stylesheet keeps its bytes.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @vjeux
+
+---
+
+# 0.7.6
+
+#### New Features
+
+- A production build with `astryxStylex` warns when its stylesheet reads a StyleX-generated custom property that nothing declares, naming the variable and the rule that reads it. It checks the class-name prefixes the build uses, `stylexOverrides.classNamePrefix` included, and never reports a custom property an app declares in its own CSS. (#8075)
+
+#### Fixes
+
+- `astryxStylex` resolves `defineConsts` values read from another file. With the `{stylexOptions}` form (the one Storybook uses), a file that read only constants from a `.stylex.ts` module lost that import once StyleX compiled it, so the constants never reached the CSS: a constant used as a media-query key failed the build ("Invalid empty selector") and one used as a value shipped as a custom property nothing declares. In either form, a constant defined on the other side of the layer split, or in an Astryx package (compiled with the library class-name prefix) and read from an app file (compiled with its own), stayed unresolved. (#8075)
+- Published packages no longer include repository test and benchmark files, reducing install size without changing exports. (#9153)
+
+#### Documentation
+
+- The Next.js setup in the README says that its Babel config turns off SWC, which `next/font` needs, so a fresh `create-next-app` layout must drop its `next/font` import before the webpack source build will compile. (#9439)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @parinith-web
+- @vjeux
+
+---
+
+# 0.7.5
+
+#### Documentation
+
+- Package links now point to the project's GitHub home, `meta/astryx`.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
 # 0.7.4
 
 ---

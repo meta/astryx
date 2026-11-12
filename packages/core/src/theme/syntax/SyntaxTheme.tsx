@@ -8,10 +8,10 @@
  * @output SyntaxTheme provider, useSyntaxTheme hook
  * @position Provider component; wraps code surfaces to apply syntax coloring
  *
- * @see https://github.com/facebook/astryx/issues/1148
+ * @see https://github.com/meta/astryx/issues/1148
  */
 
-import React, {createContext, use, useMemo} from 'react';
+import React, {use, useMemo} from 'react';
 import {
   syntaxThemeStyle,
   resolveSyntaxTokenForMode,
@@ -22,6 +22,7 @@ import {
 import {useMediaQuery} from '../../hooks/useMediaQuery';
 import {useTheme} from '../useTheme';
 import {formatColor, parseColor} from '../../utils/color';
+import {createSharedContext} from '../../utils/sharedContext';
 
 // =============================================================================
 // Context
@@ -32,7 +33,11 @@ interface SyntaxThemeContextValue {
   theme: SyntaxThemeDefinition;
 }
 
-const SyntaxThemeContext = createContext<SyntaxThemeContextValue | null>(null);
+const SyntaxThemeContext = createSharedContext<SyntaxThemeContextValue | null>(
+  'SyntaxThemeContext',
+  1,
+  null,
+);
 SyntaxThemeContext.displayName = 'SyntaxThemeContext';
 
 // =============================================================================

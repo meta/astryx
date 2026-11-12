@@ -4,7 +4,8 @@
  * @file storybook.ts
  * @input Uses node:http, node:fs, node:path
  * @output `serveStorybook` — a read-only static server over a built Storybook,
- *   for the Chromium lane to drive stories from.
+ *   for the Chromium lane to drive stories from — and `serveStatic`, the same
+ *   server over any built site (the Sandbox, for the perf scenes).
  * @position Binding infrastructure for the Playwright specs. Not part of the
  *   contract: it decides nothing about accessibility, it just puts checked-in
  *   stories in front of a real browser.
@@ -33,12 +34,13 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
 };
 
 export interface StaticServer {
-  /** Origin to fetch stories from, e.g. `http://127.0.0.1:53312`. */
+  /** Origin to fetch from, e.g. `http://127.0.0.1:53312`. */
   readonly origin: string;
   close(): Promise<void>;
 }
@@ -46,23 +48,50 @@ export interface StaticServer {
 export async function serveStorybook(
   directory = DEFAULT_STORYBOOK_DIR,
 ): Promise<StaticServer> {
-  const root = path.resolve(directory);
-  if (!fs.existsSync(path.join(root, 'iframe.html'))) {
-    throw new Error(
+  return serveStatic(directory, {
+    sentinel: 'iframe.html',
+    missing: root =>
       `No built Storybook at ${root}. Run \`pnpm storybook:build\` first, or point ASTRYX_STORYBOOK_DIR at a build.`,
-    );
+  });
+}
+
+export interface ServeStaticOptions {
+  /** A file the build always has; its absence means there is no build. */
+  readonly sentinel: string;
+  /** The error message when the sentinel is missing. */
+  readonly missing: (root: string) => string;
+}
+
+/**
+ * Serves a built site read-only on a free local port. A directory serves its
+ * `index.html`, so trailing-slash routes resolve as a static host serves them.
+ */
+export async function serveStatic(
+  directory: string,
+  {sentinel, missing}: ServeStaticOptions,
+): Promise<StaticServer> {
+  const root = path.resolve(directory);
+  if (!fs.existsSync(path.join(root, sentinel))) {
+    throw new Error(missing(root));
   }
 
   const server = http.createServer((request, response) => {
     const requested = (request.url ?? '/').split('?')[0] ?? '/';
-    const resolved = path.resolve(
+    let resolved = path.resolve(
       root,
       `.${requested === '/' ? '/index.html' : requested}`,
     );
-    // Never serve outside the built Storybook, whatever the URL asks for.
+    // Never serve outside the build, whatever the URL asks for.
     // The separator matters: a bare prefix test would also admit a sibling
     // directory whose name merely starts with the root's.
     const inside = resolved === root || resolved.startsWith(root + path.sep);
+    if (
+      inside &&
+      fs.existsSync(resolved) &&
+      fs.statSync(resolved).isDirectory()
+    ) {
+      resolved = path.join(resolved, 'index.html');
+    }
     if (!inside || !fs.existsSync(resolved)) {
       response.writeHead(404).end('not found');
       return;
@@ -79,7 +108,7 @@ export async function serveStorybook(
   });
   const address = server.address();
   if (address == null || typeof address === 'string') {
-    throw new Error('the Storybook server did not report a port');
+    throw new Error('the static server did not report a port');
   }
 
   return {

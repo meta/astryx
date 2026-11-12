@@ -21,7 +21,7 @@
  *   (TallContent, TallContentReplacedTrigger).
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -167,13 +167,20 @@ async function openReplacedTrigger(page: Page): Promise<number> {
   await expect(first).toBeVisible();
   await expect(page.getByRole('tooltip')).toBeVisible();
   await page.waitForTimeout(200);
-  // It opened above the first trigger, on its standard list.
+  // It opened above the first trigger, where its own position puts it.
   expect(
     await page.evaluate(sel => {
-      const el = document.querySelector(sel);
-      return el?.hasAttribute('data-astryx-clears-anchor');
+      const tip = (
+        document.querySelector(sel) as HTMLElement
+      ).getBoundingClientRect();
+      const trigger = (
+        Array.from(document.querySelectorAll('button')).find(
+          button => button.textContent === 'Trigger 1',
+        ) as HTMLElement
+      ).getBoundingClientRect();
+      return tip.bottom <= trigger.top;
     }, TOOLTIP),
-  ).toBe(false);
+  ).toBe(true);
   await page.getByRole('button', {name: 'Replace the trigger'}).click();
   const second = page.getByRole('button', {name: 'Trigger 2'});
   await expect(second).toBeVisible();
@@ -288,8 +295,7 @@ function expectReadableOnRoomierSide(frames: Frame[], viewportHeight: number) {
 
 /**
  * Focus the trigger of a 60-line tooltip on a phone, with the trigger's centre
- * at `triggerY`, and wait until the tooltip has switched to its anchor-clear
- * list.
+ * at `triggerY`, and wait until the tooltip sits clear of it.
  */
 async function focusTallTriggerOnPhone(page: Page, triggerY: number) {
   await page.setViewportSize({width: 390, height: 700});
@@ -309,14 +315,7 @@ async function focusTallTriggerOnPhone(page: Page, triggerY: number) {
   );
   await trigger.focus();
   await expect(page.getByRole('tooltip')).toBeVisible();
-  await page.waitForTimeout(200);
-  expect(
-    await page.evaluate(
-      sel =>
-        document.querySelector(sel)?.hasAttribute('data-astryx-clears-anchor'),
-      TOOLTIP,
-    ),
-  ).toBe(true);
+  await expectPlacedClear(page);
 }
 
 test('a switched tooltip whose trigger moves toward the far edge moves to the roomier side, readable', async ({
@@ -350,12 +349,13 @@ test('a switched tooltip whose trigger moves the other way moves to the roomier 
   expectReadableOnRoomierSide(frames, 700);
 });
 
-test('a tooltip that switches lists after it has painted is placed afresh, not left on its old option', async ({
+test('a tooltip whose option runs out of room in a scroll is placed afresh once the scroll stops, not left on its old option', async ({
   page,
 }) => {
   // A held-open short tooltip paints above its trigger, then grows to 368px
-  // and its trigger moves up: the old option leaves the box past the top of
-  // the viewport, so the tooltip switches lists while it is showing.
+  // and a scroll carries its trigger up: the old option leaves the box past
+  // the top of the viewport. During the scroll the browser keeps that option;
+  // once the scroll stops, the tooltip is placed afresh, clear and in view.
   await page.setViewportSize({width: 1280, height: 720});
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-tooltip--tall-content&viewMode=story&args=content:A+short+tooltip;isOpen:!true`,
@@ -376,15 +376,8 @@ test('a tooltip that switches lists after it has painted is placed afresh, not l
     }
   }, TOOLTIP);
   await page.waitForTimeout(200);
-  const frames = await moveAndSampleFrames(page, TRIGGER, {
-    position: 'relative',
-    insetBlockStart: '-310px',
-  });
-  expectClearFromSecondFrame(frames);
-  for (const {tooltip} of frames.slice(1)) {
-    expect(tooltip.top).toBeGreaterThanOrEqual(0);
-    expect(tooltip.bottom).toBeLessThanOrEqual(720);
-  }
+  await page.evaluate(() => window.scrollBy(0, 310));
+  await expectPlacedClear(page);
 });
 
 /**
@@ -411,14 +404,58 @@ async function openHeldTooltip(
     },
     [TRIGGER, triggerY],
   );
-  await page.waitForTimeout(300);
 }
 
-async function hasSwitched(page: Page): Promise<boolean | undefined> {
+/**
+ * Wait until the tooltip sits clear of its trigger and inside the viewport on
+ * the block axis. A re-pick after a scroll waits for the first frame painted
+ * after the scroll stops, which a loaded machine makes later.
+ */
+async function expectPlacedClear(page: Page) {
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        ([tip, sel]) => {
+          const l = (
+            document.querySelector(tip) as HTMLElement
+          ).getBoundingClientRect();
+          const a = (
+            document.querySelector(sel) as HTMLElement
+          ).getBoundingClientRect();
+          const covers =
+            l.left < a.right &&
+            a.left < l.right &&
+            l.top < a.bottom &&
+            a.top < l.bottom;
+          const inView =
+            l.top >= -1 &&
+            l.bottom <= document.documentElement.clientHeight + 1;
+          return !covers && inView;
+        },
+        [TOOLTIP, TRIGGER],
+      ),
+    )
+    .toBe(true);
+}
+
+/**
+ * Whether the tooltip sits beside its trigger on the inline axis: level with
+ * it, and clear of it to its inline start or end.
+ */
+async function sitsBesideTrigger(page: Page): Promise<boolean> {
   return page.evaluate(
-    sel =>
-      document.querySelector(sel)?.hasAttribute('data-astryx-clears-anchor'),
-    TOOLTIP,
+    ([tip, sel]) => {
+      const l = (
+        document.querySelector(tip) as HTMLElement
+      ).getBoundingClientRect();
+      const a = (
+        document.querySelector(sel) as HTMLElement
+      ).getBoundingClientRect();
+      const level = l.top < a.bottom && a.top < l.bottom;
+      const clear = l.right <= a.left || l.left >= a.right;
+      return level && clear;
+    },
+    [TOOLTIP, TRIGGER],
   );
 }
 
@@ -441,14 +478,14 @@ test('a scroll never switches a tooltip that fits, so it still flips below when 
   await button.focus();
   await expect(page.getByRole('tooltip')).toBeVisible();
   await page.waitForTimeout(200);
-  const atOpen = await hasSwitched(page);
+  const atOpen = await sitsBesideTrigger(page);
   // Small scroll steps, each one painted, with the tooltip open throughout.
   for (let i = 0; i < 10; i++) {
     await page.evaluate(() => window.scrollBy(0, 6));
     await page.waitForTimeout(40);
   }
   await page.waitForTimeout(200);
-  expect(await hasSwitched(page)).toBe(atOpen);
+  expect(await sitsBesideTrigger(page)).toBe(atOpen);
   // Grown past the room above, it stays clear of its trigger and in view.
   await page.evaluate(sel => {
     const content = document.querySelector(sel)?.firstElementChild;
@@ -469,7 +506,7 @@ test('a scroll never switches a tooltip that fits, so it still flips below when 
   expect(atOpen).toBe(false);
   expect(tooltip.top).toBeGreaterThanOrEqual(trigger.bottom);
   expect(tooltip.left).toBeLessThan(trigger.right);
-  expect(await hasSwitched(page)).toBe(false);
+  expect(await sitsBesideTrigger(page)).toBe(false);
 });
 
 test('a scroll that moves a tall tooltip’s trigger never leaves the tooltip over it past the first painted frame, and it ends on the roomier side', async ({
@@ -479,7 +516,7 @@ test('a scroll that moves a tall tooltip’s trigger never leaves the tooltip ov
   // phone; the page scrolls in steps that carry the trigger down the screen,
   // past the middle, until the room above is the larger.
   await openHeldTooltip(page, {width: 390, height: 700}, '', 150);
-  expect(await hasSwitched(page)).toBe(true);
+  await expectPlacedClear(page);
   for (let step = 0; step < 4; step++) {
     const frames = await page.evaluate(
       async ({sel, tip}) => {
@@ -532,7 +569,7 @@ test('a smooth scroll that carries a tall tooltip’s trigger leaves it clear an
   // many frames; the observer must follow every frame of it, not only the
   // first, and stay armed for the next move.
   await openHeldTooltip(page, {width: 390, height: 700}, '', 150);
-  expect(await hasSwitched(page)).toBe(true);
+  await expectPlacedClear(page);
   const settle = async () =>
     page.evaluate(async () => {
       const frame = async () =>
@@ -641,7 +678,7 @@ test('a trigger that a scrolled container hides for several seconds is followed 
   // that settle before the case starts.
   await scrollTriggerTo(150);
   await page.waitForTimeout(1500);
-  expect(await hasSwitched(page)).toBe(true);
+  await expectPlacedClear(page);
 
   await scrollTriggerTo(-150);
   await page.waitForTimeout(3500);
@@ -663,9 +700,9 @@ test('placing a shown tooltip afresh never replays its entry animation', async (
   browserName,
 }) => {
   // Motion allowed: the entry fade plays once, at open. A keyboard-focused
-  // short tooltip grows, then its trigger moves up so the old option leaves
-  // it past the top of the viewport: it switches lists after it has painted,
-  // and that re-placement must not fade it in again.
+  // short tooltip grows, then a scroll carries its trigger up so its option
+  // leaves it past the top of the viewport. Once the scroll stops it is
+  // placed afresh, and that re-placement must not fade it in again.
   await page.setViewportSize({width: 1280, height: 720});
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-tooltip--tall-content&viewMode=story&args=content:A+short+tooltip`,
@@ -693,8 +730,19 @@ test('placing a shown tooltip afresh never replays its entry animation', async (
     async ({sel, tip}) => {
       const trigger = document.querySelector(sel) as HTMLElement;
       const tooltip = document.querySelector(tip) as HTMLElement;
-      trigger.style.position = 'relative';
-      trigger.style.insetBlockStart = '-310px';
+      let placed = false;
+      // Placing afresh takes the layer out of rendering for one read.
+      const watch = new MutationObserver(records => {
+        placed ||= records.some(record =>
+          record.oldValue?.includes('display: none'),
+        );
+      });
+      watch.observe(tooltip, {
+        attributes: true,
+        attributeFilter: ['style'],
+        attributeOldValue: true,
+      });
+      window.scrollBy(0, trigger.getBoundingClientRect().top - 340);
       const out: number[] = [];
       for (let i = 0; i < 12; i++) {
         await new Promise<void>(resolve => {
@@ -706,18 +754,16 @@ test('placing a shown tooltip afresh never replays its entry animation', async (
         });
         out.push(Number(getComputedStyle(tooltip).opacity));
       }
-      return {
-        out,
-        switched: tooltip.hasAttribute('data-astryx-clears-anchor'),
-      };
+      watch.disconnect();
+      return {out, placed};
     },
     {sel: TRIGGER, tip: TOOLTIP},
   );
   if (browserName === 'chromium') {
-    // Chromium keeps the tooltip on its old option until the runtime
-    // switches and re-places it; WebKit re-runs the standard list itself when
-    // the trigger moves, so there it never fails and is never re-placed.
-    expect(opacities.switched).toBe(true);
+    // During a scroll, Chromium keeps the tooltip on its old option, so the
+    // runtime places it afresh once the scroll stops. WebKit can choose again
+    // itself, so there it may never need to be placed afresh.
+    expect(opacities.placed).toBe(true);
   }
   for (const [i, opacity] of opacities.out.entries()) {
     expect(opacity, `painted frame ${i + 1}`).toBe(1);
@@ -748,12 +794,13 @@ const STATE_ROWS: Record<
   timeline: {
     set: 'a.timeline = new ScrollTimeline({source: document.documentElement})',
   },
+  // The tooltip is a scroll container, so these follow the page by name.
   rangeStart: {
-    css: 'animation-timeline:scroll(nearest block);animation-range:entry 10% exit 80%',
+    css: 'animation-timeline:scroll(root block);animation-range:entry 10% exit 80%',
     set: "a.rangeStart = 'cover 20%'",
   },
   rangeEnd: {
-    css: 'animation-timeline:scroll(nearest block);animation-range:entry 10% exit 80%',
+    css: 'animation-timeline:scroll(root block);animation-range:entry 10% exit 80%',
     set: "a.rangeEnd = 'cover 70%'",
   },
   effect: {
@@ -781,7 +828,8 @@ const STATE_ROWS: Record<
     set: "a.effect.setKeyframes([{translate: '0px'}, {translate: '50px'}])",
   },
   paused: {set: 'a.pause()'},
-  reversed: {set: 'a.reverse()'},
+  // Reversed 9 s into its 10 s, it runs back for 9 s, longer than the test.
+  reversed: {set: 'a.currentTime = 9000; a.reverse()'},
   finished: {css: 'animation-duration:1ms;animation-fill-mode:forwards'},
   persisted: {set: 'a.persist()'},
   // Shapes.
@@ -916,7 +964,15 @@ test('placing a shown tooltip afresh keeps every animation in its content in its
       document.querySelector('[data-row="running"]') as Element
     ).getAnimations()[0];
   });
-  await page.waitForTimeout(100);
+  // Every row's animation has started: one the sets just made or re-timed
+  // (the scripted animation, the transition) is pending, its time held,
+  // until a frame starts it.
+  await page.evaluate(async () => {
+    const rows = Array.from(document.querySelectorAll('[data-row]'));
+    await Promise.all(
+      rows.flatMap(row => row.getAnimations()).map(async a => a.ready),
+    );
+  });
   const read = async () =>
     page.evaluate(names => {
       const handler = (window as unknown as {__handler: unknown}).__handler;
@@ -1013,20 +1069,18 @@ test('placing a shown tooltip afresh keeps every animation in its content in its
       };
     }, Object.keys(STATE_ROWS));
   const before = await read();
-  await page.evaluate(sel => {
-    const el = document.querySelector(sel) as HTMLElement;
-    el.style.position = 'relative';
-    el.style.insetBlockStart = '-310px';
-  }, TRIGGER);
+  // A scroll carries the trigger up, so the tooltip is placed afresh once the
+  // scroll stops.
+  await page.evaluate(() => window.scrollBy(0, 310));
   await page.waitForTimeout(450);
   if (browserName === 'chromium') {
-    expect(await hasSwitched(page)).toBe(true);
+    await expectPlacedClear(page);
   }
   const after = await read();
   // In Chromium the browser recreated the content's CSS animations: this is
-  // the path that has to put them back. (WebKit re-runs the standard list
-  // itself when the trigger moves, so there the tooltip is never re-placed;
-  // every row must hold either way.)
+  // the path that has to put them back. (WebKit can choose again itself, so
+  // there the tooltip may never be placed afresh; every row must hold either
+  // way.)
   if (browserName === 'chromium') {
     expect(after.recreated).toBe(true);
   }

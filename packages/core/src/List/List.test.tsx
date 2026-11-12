@@ -9,13 +9,53 @@
  * SYNC: When modified, update this header
  */
 
+import {createRef, useRef} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi} from 'vitest';
-import {cleanup, render, screen, waitFor} from '@testing-library/react';
+import {cleanup, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {rulesDeclaredFor} from '../__tests__/pressState';
+import {swipeLayerLoaded} from '../Item/__tests__/swipeLayerLoaded';
+
+/**
+ * The element's injected rules split by the touch gate: inside
+ * `@media (pointer: coarse)` (TOUCH_QUERY, utils/touchQueries.ts), or
+ * not.
+ */
+function touchGatedRules(el: Element): {touch: string[]; other: string[]} {
+  const classes = el.className
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(name => `.${name}`);
+  const out = {touch: [] as string[], other: [] as string[]};
+  const visit = (rules: CSSRuleList, touch: boolean) => {
+    for (const rule of Array.from(rules)) {
+      if (rule instanceof CSSStyleRule) {
+        if (classes.some(cls => rule.selectorText.startsWith(cls))) {
+          (touch ? out.touch : out.other).push(
+            `${rule.selectorText} {${rule.style.cssText}}`,
+          );
+        }
+        continue;
+      }
+      const nested = (rule as CSSGroupingRule).cssRules;
+      if (nested == null) {
+        continue;
+      }
+      const condition = (rule as CSSConditionRule).conditionText ?? '';
+      visit(nested, touch || condition.includes('pointer: coarse'));
+    }
+  };
+  for (const sheet of Array.from(document.styleSheets)) {
+    visit(sheet.cssRules, false);
+  }
+  return out;
+}
 import {List} from './List';
 import {ListItem} from './ListItem';
 import {ListMarkerScope} from './ListContext';
+import {HIT_INSET_PROPERTIES} from '../utils/hitArea';
+import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
 
 describe('List', () => {
   it('forwards ListItem align to its Item row unchanged', () => {
@@ -489,6 +529,69 @@ describe('List', () => {
   });
 
   // ===========================================================================
+  // Touch hit area
+  // ===========================================================================
+
+  /** The rules among `rules` whose selector reaches the row's `::after`. */
+  const afterRules = (rules: string[]): string[] =>
+    rules.filter(rule => rule.slice(0, rule.indexOf('{')).includes('::after'));
+
+  it('gives an interactive, enabled row an invisible hit layer under a finger only', () => {
+    render(
+      <List>
+        <ListItem label="Pressable" onClick={() => {}} />
+        <ListItem label="Link" href="#settings" />
+        <ListItem label="Read-only" />
+        <ListItem label="Disabled" onClick={() => {}} isDisabled />
+      </List>,
+    );
+    const row = (text: string) => screen.getByText(text).closest('li')!;
+    for (const text of ['Pressable', 'Link']) {
+      const {touch, other} = touchGatedRules(row(text));
+      const layer = afterRules(touch).join('\n');
+      // Positioned past the row by the measured insets, clipped to the band
+      // outside the row's own box, and painting nothing.
+      expect(layer).toContain('position: absolute');
+      expect(layer).toMatch(/clip-path: polygon\(evenodd/);
+      // One inset per side, in physical order: top, right, bottom, left.
+      const offset = (side: keyof typeof HIT_INSET_PROPERTIES) =>
+        `calc\\(\\(var\\(${HIT_INSET_PROPERTIES[side]}, ?0px\\) \\+ var\\(--_hit-border-${side}, ?0px\\)\\) \\* -1\\)`;
+      expect(layer).toMatch(
+        new RegExp(
+          `inset: ${offset('top')} ${offset('right')} ${offset('bottom')} ${offset('left')}`,
+        ),
+      );
+      // Above the rows after it, so a later row does not hit-test over the
+      // band; painting nothing.
+      expect(layer).toMatch(/z-index: 1/);
+      expect(layer).not.toMatch(
+        /[{;]\s*(?:background|border|box-shadow|outline)[\w-]*\s*:/,
+      );
+      // The row itself takes no z-index: it stays no stacking context.
+      expect(
+        touch.filter(
+          rule =>
+            !rule.slice(0, rule.indexOf('{')).includes('::') &&
+            rule.includes('z-index'),
+        ),
+      ).toEqual([]);
+      // At rest the row's stacking stays as it was: a rule that isolates the
+      // row is keyed on a press.
+      for (const rule of touch.filter(r => r.includes('isolation'))) {
+        expect(rule.slice(0, rule.indexOf('{'))).toContain(
+          '[data-astryx-press',
+        );
+      }
+      // With a mouse: no pseudo-element.
+      expect(afterRules(other)).toEqual([]);
+    }
+    // A row with nothing to press offers no target.
+    for (const text of ['Read-only', 'Disabled']) {
+      expect(afterRules(touchGatedRules(row(text)).touch)).toEqual([]);
+    }
+  });
+
+  // ===========================================================================
   // Interactive items — onClick (invisible button pattern)
   // ===========================================================================
 
@@ -643,14 +746,15 @@ describe('List', () => {
     expect(item).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('disables the invisible button when isDisabled', () => {
+  it('keeps the disabled action button focusable', () => {
     const {container} = render(
       <List>
         <ListItem label="Disabled" onClick={() => {}} isDisabled />
       </List>,
     );
     const button = container.querySelector('button');
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toBeDisabled();
   });
 
   it('does not fire onClick when disabled item is clicked', async () => {
@@ -906,6 +1010,84 @@ describe('List', () => {
     expect(list.getAttribute('aria-labelledby')).not.toBe('elsewhere');
   });
 
+  it('forwards ref to the list element, with or without a header', () => {
+    for (const header of [undefined, 'Steps']) {
+      for (const listStyle of ['none', 'decimal'] as const) {
+        const ref = createRef<HTMLUListElement | HTMLOListElement>();
+        const {container} = render(
+          <List ref={ref} header={header} listStyle={listStyle}>
+            <ListItem label="First" />
+          </List>,
+        );
+        expect(ref.current).toBe(
+          container.querySelector(listStyle === 'decimal' ? 'ol' : 'ul'),
+        );
+        cleanup();
+      }
+    }
+  });
+
+  it('merges className and style onto the list element beside its target, with or without a header', () => {
+    for (const header of [undefined, 'Steps']) {
+      const {container} = render(
+        <List header={header} className="consumer" style={{maxWidth: 320}}>
+          <ListItem label="First" />
+        </List>,
+      );
+      const list = container.querySelector('ul')!;
+      expect(list).toHaveClass('astryx-list', 'consumer');
+      expect(list.style.maxWidth).toBe('320px');
+      cleanup();
+    }
+  });
+
+  it('keeps its own counter start beside a consumer style', () => {
+    const {container} = render(
+      <List listStyle="decimal" start={3} style={{maxWidth: 320}}>
+        <ListItem label="Third" />
+      </List>,
+    );
+    const list = container.querySelector('ol')!;
+    expect(list.style.maxWidth).toBe('320px');
+    expect(list.getAttribute('style')).toContain('astryx-list 2');
+  });
+
+  it('marks the corner reader where a bleeding list meets its container: the list, or its root under a header', () => {
+    // A rounded container gives its corner only to a direct child that
+    // carries the marker.
+    const marked = (container: HTMLElement) => [
+      ...container.querySelectorAll('[data-container-corner]'),
+    ];
+    const {container: bare} = render(
+      <List edge="bleed">
+        <ListItem label="First" />
+      </List>,
+    );
+    expect(marked(bare)).toEqual([bare.querySelector('ul')]);
+    cleanup();
+
+    const {container: titled} = render(
+      <List edge="bleed" header="Steps">
+        <ListItem label="First" />
+      </List>,
+    );
+    expect(marked(titled)).toEqual([titled.firstElementChild]);
+    expect(titled.firstElementChild).toContainElement(
+      titled.querySelector('ul'),
+    );
+    cleanup();
+
+    for (const edge of ['padded', 'flush', 'outset'] as const) {
+      const {container} = render(
+        <List edge={edge} header="Steps">
+          <ListItem label="First" />
+        </List>,
+      );
+      expect(marked(container)).toEqual([]);
+      cleanup();
+    }
+  });
+
   it('accepts number as description (ReactNode)', () => {
     render(
       <List>
@@ -1012,6 +1194,69 @@ describe('List', () => {
   });
 });
 
+/** A row whose press goes to a control inside it (`interactiveRef`), with swipe actions. */
+function DelegateSwipeRow() {
+  const ref = useRef<HTMLButtonElement>(null);
+  return (
+    <ListItem
+      label="Delegate"
+      interactiveRef={ref}
+      endContent={
+        <button ref={ref} type="button">
+          Open
+        </button>
+      }
+      swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+    />
+  );
+}
+
+describe('ListItem passthrough', () => {
+  const callerStyles = stylex.create({
+    uncounted: {counterIncrement: 'none'},
+  });
+
+  it('forwards ref to its <li>, in a List and outside one', () => {
+    for (const inList of [true, false]) {
+      const ref = createRef<HTMLLIElement>();
+      const row = <ListItem ref={ref} label="Row" onClick={() => {}} />;
+      const {container} = render(inList ? <List>{row}</List> : row);
+      expect(ref.current).toBe(container.querySelector('li'));
+      cleanup();
+    }
+  });
+
+  it('merges className and style onto the row beside its list-item and item targets', () => {
+    const {container} = render(
+      <List>
+        <ListItem label="Row" className="consumer" style={{maxWidth: 320}} />
+      </List>,
+    );
+    const row = container.querySelector('li')!;
+    expect(row).toHaveClass('astryx-list-item', 'astryx-item', 'consumer');
+    expect(row.style.maxWidth).toBe('320px');
+  });
+
+  it("applies xstyle after the row's own styles, so a caller's value for the same property wins", () => {
+    const {container} = render(
+      <List listStyle="disc">
+        <ListItem label="First" xstyle={callerStyles.uncounted} />
+        <ListItem label="Second" />
+      </List>,
+    );
+    const counters = (row: Element) =>
+      rulesDeclaredFor(row)
+        .map(rule => rule.replace(/\s+/g, ''))
+        .filter(rule => rule.includes('counter-increment:'));
+    const [first, second] = [...container.querySelectorAll('li')];
+    expect(counters(first).length).toBeGreaterThan(0);
+    expect(counters(first).every(rule => rule.includes(':none'))).toBe(true);
+    expect(counters(second).some(rule => rule.includes('astryx-list'))).toBe(
+      true,
+    );
+  });
+});
+
 describe('List and swipe actions', () => {
   it('clips the rows in the inline axis with clip, never hidden, so a row dragged aside paints no further than the list', () => {
     render(
@@ -1024,6 +1269,118 @@ describe('List and swipe actions', () => {
     // the same axis in horizontal writing modes.
     expect(rules.some(r => /overflow-(inline|x): clip/.test(r))).toBe(true);
     expect(rules.some(r => /overflow[-a-z]*: hidden/.test(r))).toBe(false);
+  });
+
+  it('under a finger, isolates its rows, so what rises inside the list stays below a sticky header; with a mouse it keeps its stacking', () => {
+    render(
+      <List>
+        <ListItem label="A" onClick={() => {}} />
+      </List>,
+    );
+    const {touch, other} = touchGatedRules(screen.getByRole('list'));
+    // Under a finger the list is the isolation boundary for its rows'
+    // z-index. So a page-level sticky header at z-index 1 stays above every
+    // part of the list.
+    expect(touch.join('\n')).toMatch(/isolation: isolate/);
+    // With a mouse nothing rises, so the list is no stacking context.
+    expect(other.filter(rule => rule.includes('isolation'))).toEqual([]);
+  });
+
+  it('isolates for every pointer under an animatedLayout handle, since a sliding row rides above its neighbors with a mouse too', () => {
+    function Animated() {
+      const containerRef = useRef<HTMLDivElement | null>(null);
+      const animatedLayout = useAnimatedLayout({containerRef});
+      return (
+        <div ref={containerRef}>
+          <List animatedLayout={animatedLayout}>
+            <ListItem label="A" itemKey="a" onClick={() => {}} />
+          </List>
+        </div>
+      );
+    }
+    render(<Animated />);
+    const {other} = touchGatedRules(screen.getByRole('list'));
+    expect(other.join('\n')).toMatch(/isolation: isolate/);
+  });
+
+  it('under a finger, raises a swipeable interactive row above the rows after it: it is a stacking context, so its touch band’s own z-index orders only inside it', () => {
+    render(
+      <List>
+        <ListItem
+          label="Swipeable"
+          onClick={() => {}}
+          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+        />
+        <ListItem label="Pressable" onClick={() => {}} />
+        <ListItem
+          label="Static"
+          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+        />
+        <ListItem
+          label="Empty sides"
+          onClick={() => {}}
+          swipeActions={{leading: [], trailing: []}}
+        />
+        <DelegateSwipeRow />
+      </List>,
+    );
+    const row = (text: string) => screen.getByText(text).closest('li')!;
+    const rowZ = (el: Element) => {
+      const {touch, other} = touchGatedRules(el);
+      const own = (rules: string[]) =>
+        rules.filter(
+          rule =>
+            !rule.slice(0, rule.indexOf('{')).includes('::') &&
+            rule.includes('z-index:'),
+        );
+      return {touch: own(touch), other: own(other)};
+    };
+    const swipeable = rowZ(row('Swipeable'));
+    expect(swipeable.touch.join('\n')).toMatch(/z-index: 1/);
+    // With a mouse there is no band: the row's only z-index is an update's
+    // travelling raise, while it slides across other rows.
+    for (const rule of swipeable.other) {
+      expect(rule.slice(0, rule.indexOf('{'))).toContain(
+        '[data-astryx-travelling]',
+      );
+    }
+    // A row that is no stacking context needs no raise (its band's own
+    // z-index orders it), and a swipeable row with no band gets none.
+    expect(rowZ(row('Pressable')).touch).toEqual([]);
+    expect(rowZ(row('Static')).touch).toEqual([]);
+    // Item serves no swipe actions on a row with no entry on either side. Nor
+    // does it on a row whose press goes to a control inside it. Neither row is
+    // a stacking context, so neither is raised.
+    expect(rowZ(row('Empty sides')).touch).toEqual([]);
+    expect(rowZ(row('Delegate')).touch).toEqual([]);
+  });
+
+  it('raises nothing in a ListItem outside a List, where nothing isolates it: its touch band and a swipeable row take no z-index', () => {
+    render(
+      <ul>
+        <ListItem
+          label="Outside"
+          onClick={() => {}}
+          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+        />
+      </ul>,
+    );
+    const {touch} = touchGatedRules(screen.getByText('Outside').closest('li')!);
+    // It keeps its touch target, the band past its box.
+    expect(
+      touch
+        .filter(rule => rule.slice(0, rule.indexOf('{')).includes('::after'))
+        .join('\n'),
+    ).toContain('position: absolute');
+    // But nothing it draws rises: not the band, not the row. A rule keyed on
+    // a press is left out, since it orders layers only inside the pressed row.
+    expect(
+      touch.filter(
+        rule =>
+          rule.includes('z-index') &&
+          !rule.slice(0, rule.indexOf('{')).includes('[data-astryx-press'),
+      ),
+    ).toEqual([]);
   });
 
   it('passes swipeActions and swipeBehavior through to the row unchanged', async () => {
@@ -1041,11 +1398,9 @@ describe('List and swipe actions', () => {
     expect(row.tagName).toBe('LI');
     expect(row.parentElement).toBe(screen.getByRole('list'));
     // The panel arrives with the lazily loaded swipe layer.
-    const panel = await waitFor(() => {
-      const found = row.querySelector('[data-swipe-panel="trailing"]');
-      expect(found).not.toBeNull();
-      return found;
-    });
+    await swipeLayerLoaded(row);
+    const panel = row.querySelector('[data-swipe-panel="trailing"]');
+    expect(panel).not.toBeNull();
     // Commit: presentational.
     expect(panel).toHaveAttribute('aria-hidden', 'true');
   });
