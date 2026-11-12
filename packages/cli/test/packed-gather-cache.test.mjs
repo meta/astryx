@@ -546,6 +546,17 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(run(QUERIES[0], {tmp: pnp, env: asPnp})).toEqual(fresh);
     expect(entries(pnp).size).toBe(0);
     expect(derivedEntries(pnp)).toEqual([]);
+    // Nor does it read one a plain run kept: an entry whose value is altered,
+    // so a read would show, gives the fresh answer under Plug'n'Play.
+    const kept = keptTmp('pnp-read');
+    run(QUERIES[0], {tmp: kept});
+    const [name] = [...entries(kept).keys()];
+    const file = path.join(kept, CACHE_NAME, name);
+    const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+    entry.value.all = [];
+    fs.writeFileSync(file, JSON.stringify(entry));
+    expect(run(QUERIES[0], {tmp: kept}).stdout).not.toBe(fresh.stdout);
+    expect(run(QUERIES[0], {tmp: kept, env: asPnp})).toEqual(fresh);
   }, 120_000);
 
   it("is not used when another entry is copied over this one's name", () => {

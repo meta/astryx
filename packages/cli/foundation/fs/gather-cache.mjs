@@ -456,12 +456,19 @@ function staleReason(stamps, env) {
  */
 export async function persistedGather(key, load, codec, keep = () => true) {
   const id = withoutRecording(buildId);
-  const dir = id == null ? null : withoutRecording(gatherCacheDir);
+  // A run under Yarn Plug'n'Play's loader neither keeps nor reads catalogs:
+  // its modules resolve through PnP, which a catalog's stamps do not follow.
+  const dir =
+    id == null || runsUnderPnp() ? null : withoutRecording(gatherCacheDir);
   if (id == null || dir == null) {
     lastOutcome = {
       hit: false,
       reason:
-        id == null ? 'this CLI has no build id' : 'no usable cache folder',
+        id == null
+          ? 'this CLI has no build id'
+          : runsUnderPnp()
+            ? "a run under Yarn Plug'n'Play's loader"
+            : 'no usable cache folder',
     };
     try {
       return await load();
