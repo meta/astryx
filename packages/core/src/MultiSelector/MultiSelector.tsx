@@ -32,7 +32,7 @@ import React, {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
-import {useTooltip, useTooltipInternal} from '../Tooltip/useTooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import type {IconName} from '../Icon';
 import {
@@ -1255,7 +1255,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     focusTrigger: 'always',
     isEnabled: showsDisabledMessage,
   });
-  const statusTooltip = useTooltip({
+  const statusTooltip = useTooltipInternal({
+    isStatus: true,
     placement: 'above',
     isEnabled: effectiveStatusVariant === 'tooltip' && !!status?.message,
   });

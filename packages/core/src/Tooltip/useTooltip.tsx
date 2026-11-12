@@ -26,6 +26,7 @@ import {
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
+  addOwnControlTrigger,
   isCoveredByTooltipReason,
   setTooltipReason,
   watchTooltipReason,
@@ -444,11 +445,14 @@ export function useTooltipInternal(
   }, [isCoveredNow, hideLayer]);
 
   const [isHeldState, setIsHeldState] = useState(false);
-  const setHeld = useCallback((next: boolean) => {
-    isHeldRef.current = next;
-    syncCoverage();
-    setIsHeldState(next);
-  }, []);
+  const setHeld = useCallback(
+    (next: boolean) => {
+      isHeldRef.current = next;
+      syncCoverage();
+      setIsHeldState(next);
+    },
+    [syncCoverage],
+  );
 
   // Whether the current hold began during a press on the trigger. Such a
   // hold ends with the press when the press ends off the trigger, as no click
@@ -785,6 +789,7 @@ export function useTooltipInternal(
     answerTap,
     isReason,
     syncCoverage,
+    hasOwnControl,
   });
   handlersRef.current = {
     handleMouseEnter,
@@ -804,6 +809,7 @@ export function useTooltipInternal(
     answerTap,
     isReason,
     syncCoverage,
+    hasOwnControl,
   };
 
   // Removes the attached trigger's listeners (the trigger ref callback's
@@ -863,6 +869,9 @@ export function useTooltipInternal(
     const stopWatchingReasons = latest().isReason
       ? null
       : watchTooltipReason(() => latest().syncCoverage());
+    const forgetOwnControl = latest().hasOwnControl
+      ? addOwnControlTrigger(el)
+      : null;
     latest().syncCoverage();
 
     // A trigger that attaches again after its wiring was removed
@@ -928,6 +937,7 @@ export function useTooltipInternal(
         setTooltipReason(el, false);
       }
       stopWatchingReasons?.();
+      forgetOwnControl?.();
       if (triggerRef.current === el) {
         triggerRef.current = null;
       }

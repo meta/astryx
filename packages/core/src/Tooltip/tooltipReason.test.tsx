@@ -411,4 +411,26 @@ describe('a disabled reason is the only tooltip its control shows', () => {
     await hoverAndWait(screen.getByRole('button', {name: 'Other'}));
     expect(shownTooltips()).toContain(LABEL);
   });
+
+  it('a Tooltip around a field with labelTooltip, disabled with a reason, shows only the reason', async () => {
+    vi.useFakeTimers();
+    const LABEL = 'Your display name';
+    render(
+      <Tooltip content={LABEL}>
+        <TextInput
+          label="Name"
+          labelTooltip="Shown on your profile"
+          value=""
+          onChange={() => {}}
+          isDisabled
+          disabledMessage={REASON}
+        />
+      </Tooltip>,
+    );
+    await act(async () => {});
+    const input = screen.getByRole('textbox', {name: 'Name'});
+    await hoverAndWait(input);
+    expect(shownTooltips()).toContain(REASON);
+    expect(shownTooltips()).not.toContain(LABEL);
+  });
 });

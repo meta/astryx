@@ -34,7 +34,7 @@ import React, {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
-import {useTooltip, useTooltipInternal} from '../Tooltip/useTooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
 import type {IndicatorPosition} from '../Indicator';
@@ -1297,7 +1297,8 @@ export function Selector<T extends SelectorOptionType>(
     focusTrigger: 'always',
     isEnabled: showsDisabledMessage,
   });
-  const statusTooltip = useTooltip({
+  const statusTooltip = useTooltipInternal({
+    isStatus: true,
     placement: 'above',
     isEnabled: effectiveStatusVariant === 'tooltip' && !!status?.message,
   });
