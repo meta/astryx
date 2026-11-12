@@ -418,12 +418,22 @@ function checkPlacement(cwd, dir, where, retry) {
       },
     );
   const exts = pageExtensions(cwd);
-  if (exts && !exts.includes('tsx'))
+  if (exts && !exts.includes('tsx')) {
+    let free = 'theme-app';
+    for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
+      free = `theme-app-${n}`;
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `next.config sets pageExtensions to ${exts.join(', ')}, so Next does not serve page.tsx, the route file the preview writes.`,
-      {fix: 'add "tsx" to pageExtensions to use the preview in this app'},
+      {
+        fix: 'add "tsx" to pageExtensions to use the preview in this app',
+        run: [
+          `${retry(shown(cwd, dir))}  # once "tsx" is in pageExtensions`,
+          `${PREVIEW} app ${free}  # or a new app of its own, with the preview`,
+        ],
+      },
     );
+  }
   if (rootLayouts.length && !rootLayout)
     refuse(
       E.ERR_INVALID_ARGUMENT,

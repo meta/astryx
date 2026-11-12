@@ -1004,6 +1004,11 @@ describe('pass 3', () => {
     try {
       const ext = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
       expect(ext.message).toContain('pageExtensions');
+      // The way on: this app once "tsx" is in pageExtensions, or a new app.
+      expect(ext.run).toEqual([
+        'astryx experimental theme preview add --path src/app/theme-preview',
+        'astryx experimental theme preview app theme-app',
+      ]);
     } finally {
       rm('next.config.mjs');
     }
