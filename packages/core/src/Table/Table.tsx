@@ -293,7 +293,7 @@ function TableScrollWrapper({
   if (hasBlockViewport) {
     viewportProps.style = {...viewportProps.style, overscrollBehaviorY: 'auto'};
   }
-  if (tableName?.hasStickyHeader) {
+  if (tableName?.hasStickyHeader && !hasBlockViewport) {
     // The table owns inline overflow, but the caller owns block scrolling for
     // sticky headers. `clip` keeps a horizontally overflowing table from
     // becoming the header's vertical sticky containing block.
