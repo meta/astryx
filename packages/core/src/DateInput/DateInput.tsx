@@ -75,7 +75,11 @@ import {getInputARIA, isImeKeyEvent} from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
-import {type DateInputEntryError, useTypedDateField} from './useTypedDate';
+import {
+  type DateInputEntryError,
+  type EntryErrorBehavior,
+  useTypedDateField,
+} from './useTypedDate';
 import type {TimestampFormat} from '../Timestamp';
 import {
   resolvePickerPresentation,
@@ -194,6 +198,7 @@ export type {
   InputStatusType as DateInputStatusType,
 } from '../Field';
 export type {DateInputEntryError} from './useTypedDate';
+export type {EntryErrorBehavior} from './useTypedDate';
 import {mergeProps, isFocusDetached} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
@@ -343,6 +348,14 @@ export interface DateInputProps extends Omit<
    * a rejection.
    */
   status?: InputStatus;
+
+  /**
+   * Controls when the field reveals its own typed-entry rejection.
+   * `'complete'` preserves the field's immediate complete-date behavior;
+   * `'blur-or-enter'` holds every rejection signal until Enter or blur.
+   * @default 'complete'
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
 
   /**
    * Called each time the field's rejection of typed text changes, with `null`
@@ -591,6 +604,7 @@ function PointerDateField({
   size: sizeProp,
   status,
   onEntryErrorChange,
+  entryErrorBehavior = 'complete',
   statusVariant = 'attached',
   labelTooltip,
   hasClear = false,
@@ -723,6 +737,7 @@ function PointerDateField({
     onTypedDate: navigateToTypedDate,
     isDisabled: isEffectivelyDisabled,
     status,
+    entryErrorBehavior,
     isStatusAnnounced: !inputGroup,
     onEntryErrorChange,
     hasPlaceholder: placeholderFromProps != null,
@@ -1165,6 +1180,7 @@ export function DateInput(props: DateInputProps) {
     presentation: _presentation,
     nativePicker: _nativePicker,
     calendar: _calendar,
+    entryErrorBehavior,
     // Only the pointer field takes typed text.
     onEntryErrorChange,
     ...rest
@@ -1188,6 +1204,7 @@ export function DateInput(props: DateInputProps) {
           {...rest}
           calendar={calendar}
           isDisabled={isDisabled}
+          entryErrorBehavior={entryErrorBehavior}
           onEntryErrorChange={onEntryErrorChange}
         />
       );

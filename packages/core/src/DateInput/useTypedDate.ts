@@ -51,6 +51,9 @@ registerEnglishFallback(english);
 /** A rejected typed date, by the message it announces. */
 export type TypedDateError = 'unreadable' | 'nonexistent' | 'outOfRange';
 
+/** Controls when a field reveals its own rejected-entry signals. */
+export type EntryErrorBehavior = 'complete' | 'blur-or-enter';
+
 /**
  * Why a date field rejects the text that a person typed. The field reports it
  * through `onEntryErrorChange`, so the app can word its own message.
@@ -135,8 +138,12 @@ export interface TypedDate {
 export function typedDateError(
   result: CalendarDateParseResult | null,
   isCommitted: boolean,
+  entryErrorBehavior: EntryErrorBehavior = 'complete',
 ): TypedDateError | null {
   if (result == null) {
+    return null;
+  }
+  if (entryErrorBehavior === 'blur-or-enter' && !isCommitted) {
     return null;
   }
   if (
@@ -147,7 +154,7 @@ export function typedDateError(
   }
   if (
     (result.kind === 'nonexistent' || result.kind === 'outOfRange') &&
-    isCommitted
+    (result.isComplete || isCommitted)
   ) {
     return result.kind;
   }
@@ -158,11 +165,12 @@ export function typedDateError(
 function dateEntryError(
   result: CalendarDateParseResult | null,
   isCommitted: boolean,
+  entryErrorBehavior: EntryErrorBehavior,
   text: string,
   min: ISODateString | undefined,
   max: ISODateString | undefined,
 ): DateInputEntryError | null {
-  const error = typedDateError(result, isCommitted);
+  const error = typedDateError(result, isCommitted, entryErrorBehavior);
   if (error == null || result == null) {
     return null;
   }
@@ -316,6 +324,8 @@ export function useTypedDate({
 }
 
 export interface UseTypedDateFieldOptions extends UseTypedDateOptions {
+  /** When the field reveals its own typed-entry rejection. */
+  entryErrorBehavior?: EntryErrorBehavior;
   /** The committed date. */
   value: ISODateString | undefined;
   /** The date the field shows, which leads `value` while a commit is in flight. */
@@ -384,6 +394,7 @@ export function useTypedDateField({
   isStatusAnnounced,
   onEntryErrorChange,
   hasPlaceholder,
+  entryErrorBehavior = 'complete',
   ...options
 }: UseTypedDateFieldOptions): TypedDateField {
   const typedDate = useTypedDate(options);
@@ -412,7 +423,7 @@ export function useTypedDateField({
   // shows again once the field is editable.
   const typedError = isDisabled
     ? null
-    : typedDateError(typedResult, isRejectionCommitted);
+    : typedDateError(typedResult, isRejectionCommitted, entryErrorBehavior);
   const errorMessage =
     typedError != null && typedResult != null
       ? typedDate.errorMessage(typedResult)
@@ -431,6 +442,7 @@ export function useTypedDateField({
     : dateEntryError(
         typedResult,
         isRejectionCommitted,
+        entryErrorBehavior,
         pendingInput ?? '',
         options.min,
         options.max,
@@ -620,6 +632,7 @@ export function useTypedDateField({
         dateEntryError(
           text.trim() ? result : null,
           false,
+          entryErrorBehavior,
           text,
           options.min,
           options.max,
@@ -636,6 +649,7 @@ export function useTypedDateField({
       isDisabled,
       typedDate,
       reportEntryError,
+      entryErrorBehavior,
       options.min,
       options.max,
       report,
@@ -654,6 +668,26 @@ export function useTypedDateField({
     }
     const result = typedDate.parse(pendingInput);
     if (
+      result.kind === 'unreadable' &&
+      entryErrorBehavior === 'blur-or-enter'
+    ) {
+      // Keep a rejection that was held while typing long enough to explain it
+      // at the commit that reveals it. The shipped complete behavior continues
+      // to drop unreadable text after announcing it while typing.
+      setIsRejectionCommitted(true);
+      reportEntryError(
+        dateEntryError(
+          result,
+          true,
+          entryErrorBehavior,
+          pendingInput,
+          options.min,
+          options.max,
+        ),
+      );
+      return;
+    }
+    if (
       result.kind === 'incomplete' ||
       result.kind === 'nonexistent' ||
       result.kind === 'outOfRange'
@@ -662,7 +696,14 @@ export function useTypedDateField({
       // the date.
       setIsRejectionCommitted(true);
       reportEntryError(
-        dateEntryError(result, true, pendingInput, options.min, options.max),
+        dateEntryError(
+          result,
+          true,
+          entryErrorBehavior,
+          pendingInput,
+          options.min,
+          options.max,
+        ),
       );
       return;
     }
@@ -678,6 +719,7 @@ export function useTypedDateField({
     onClear,
     typedDate,
     reportEntryError,
+    entryErrorBehavior,
     options.min,
     options.max,
     report,

@@ -89,6 +89,7 @@ describe('DateTimeInput typed date entry with a calendar', () => {
     const {input, onChange, container} = renderField('en', {
       calendar: 'japanese',
       min: '2019-05-01T00:00' as ISODateTimeString,
+      entryErrorBehavior: 'blur-or-enter',
     });
     fireEvent.change(input, {target: {value: 'April 30, 31 Heisei'}});
     expect(onChange).not.toHaveBeenCalled();

@@ -90,6 +90,7 @@ import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
 import {
   type DateInputEntryError,
+  type EntryErrorBehavior,
   useTypedDateField,
 } from '../DateInput/useTypedDate';
 
@@ -130,6 +131,7 @@ import english from '../i18n/generated-english/DateTimeInput/DateTimeInput.gener
 
 registerEnglishFallback(english);
 export type {DateInputEntryError} from '../DateInput/useTypedDate';
+export type {EntryErrorBehavior} from '../DateInput/useTypedDate';
 export type ISODateTimeString = string & {
   readonly __brand: 'ISODateTimeString';
 };
@@ -512,6 +514,14 @@ export interface DateTimeInputProps extends Omit<
   status?: InputStatus;
 
   /**
+   * Controls when the date segment reveals its own typed-entry rejection.
+   * `'complete'` preserves the field's immediate complete-date behavior;
+   * `'blur-or-enter'` holds every rejection signal until Enter or blur.
+   * @default 'complete'
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
+
+  /**
    * Called each time the date segment's rejection of typed text changes, with
    * `null` when the rejection ends. `kind` is `'unreadable'`, `'incomplete'`,
    * `'nonexistent'` (a date the calendar does not have), `'outOfRange'`
@@ -692,6 +702,7 @@ function PointerDateTimeField({
   size: sizeProp,
   status,
   onEntryErrorChange,
+  entryErrorBehavior = 'complete',
   labelTooltip,
   numberOfMonths = 1,
   weekStartsOn,
@@ -1067,6 +1078,7 @@ function PointerDateTimeField({
     // rejection wait for the typed field.
     isDisabled: isEffectivelyDisabled || usesNativePicker,
     status,
+    entryErrorBehavior,
     isStatusAnnounced: true,
     onEntryErrorChange,
     hasPlaceholder: placeholderFromProps != null,
@@ -2124,6 +2136,7 @@ export function DateTimeInput(props: DateTimeInputProps) {
   const {
     presentation: _presentation,
     nativePicker: _nativePicker,
+    entryErrorBehavior: _entryErrorBehavior,
     ...surfaceProps
   } = props;
   // Every surface gets the resolved hour format, so typed text, the native
@@ -2132,6 +2145,7 @@ export function DateTimeInput(props: DateTimeInputProps) {
     ...surfaceProps,
     calendar,
     hourFormat: resolveHourFormat(locale, props.hourFormat),
+    entryErrorBehavior: props.entryErrorBehavior,
   };
   if (effective === 'native') {
     return (
@@ -2151,7 +2165,11 @@ export function DateTimeInput(props: DateTimeInputProps) {
       return <PointerDateTimeField {...rest} nativeMode="adaptive" />;
     case 'sheet': {
       // The sheet takes no typed text.
-      const {onEntryErrorChange: _onEntryErrorChange, ...sheetProps} = rest;
+      const {
+        onEntryErrorChange: _onEntryErrorChange,
+        entryErrorBehavior: _entryErrorBehavior,
+        ...sheetProps
+      } = rest;
       // Month indexes depend on the calendar. A new calendar remounts the sheet.
       return <TouchDateTimeField key={calendar} {...sheetProps} />;
     }

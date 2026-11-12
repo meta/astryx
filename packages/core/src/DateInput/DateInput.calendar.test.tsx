@@ -108,6 +108,7 @@ describe('DateInput typed entry with a calendar', () => {
   it('reads Japanese era dates and rejects a year outside its era', () => {
     const {input, onChange, container} = renderField('en', {
       calendar: 'japanese',
+      entryErrorBehavior: 'blur-or-enter',
     });
     fireEvent.change(input, {target: {value: 'May 1, 1 Reiwa'}});
     expect(onChange).toHaveBeenCalledExactlyOnceWith('2019-05-01');
@@ -124,6 +125,7 @@ describe('DateInput typed entry with a calendar', () => {
     const {input, onChange, container} = renderField('en', {
       calendar: 'persian',
       value: '2026-11-02',
+      entryErrorBehavior: 'blur-or-enter',
       status: {type: 'warning', message: 'Check the date'},
     });
     fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
@@ -140,6 +142,7 @@ describe('DateInput typed entry with a calendar', () => {
       calendar: 'buddhist',
       min: '2026-01-01',
       max: '2026-12-31',
+      entryErrorBehavior: 'blur-or-enter',
     });
     // A Gregorian year typed into a Buddhist field is Buddhist year 2026.
     fireEvent.change(input, {target: {value: '11/2/2026'}});
@@ -154,6 +157,32 @@ describe('DateInput typed entry with a calendar', () => {
     );
     fireEvent.change(input, {target: {value: '11/2/2569'}});
     expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-11-02');
+  });
+
+  it('keeps complete-date rejection immediate by default', () => {
+    const {input, container} = renderField('en', {
+      calendar: 'buddhist',
+      min: '2026-01-01',
+      max: '2026-12-31',
+    });
+    fireEvent.change(input, {target: {value: '11/2/2026'}});
+    expectShown(
+      input,
+      container,
+      'Enter a date from January 1, 2569 BE to December 31, 2569 BE',
+    );
+  });
+
+  it('holds unreadable rejection until Enter in deferred mode', () => {
+    const {input, container} = renderField('en', {
+      entryErrorBehavior: 'blur-or-enter',
+    });
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
+
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expectShown(input, container, 'Invalid date');
   });
 
   it('announces a different message for each kind of rejection', () => {
@@ -398,7 +427,9 @@ describe('DateInput onChange while typing a Gregorian date', () => {
   ])(
     'still rejects a Gregorian date that does not exist in either order (%s %s)',
     (locale, text) => {
-      const {input, onChange, container} = renderField(locale);
+      const {input, onChange, container} = renderField(locale, {
+        entryErrorBehavior: 'blur-or-enter',
+      });
       fireEvent.change(input, {target: {value: text}});
       expect(input).not.toHaveAttribute('aria-invalid');
       expect(within(container).getByRole('alert')).toHaveTextContent('');
@@ -415,7 +446,11 @@ describe('DateInput onChange while typing a Gregorian date', () => {
     const onChange = vi.fn();
     const {container} = render(
       <InternationalizationProvider locale="en" calendar="persian">
-        <DateInput label="Date" onChange={onChange} />
+        <DateInput
+          label="Date"
+          onChange={onChange}
+          entryErrorBehavior="blur-or-enter"
+        />
       </InternationalizationProvider>,
     );
     const input = screen.getByRole('combobox');
@@ -429,6 +464,7 @@ describe('DateInput onChange while typing a Gregorian date', () => {
 
   it('asks for an available date when a date constraint rules the day out', () => {
     const {input, onChange, container} = renderField('en-US', {
+      entryErrorBehavior: 'blur-or-enter',
       // 2026-03-15 is a Sunday.
       dateConstraints: [date => date.getDay() !== 0 && date.getDay() !== 6],
     });

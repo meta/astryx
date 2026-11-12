@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] DateInput and DateTimeInput now defer nonexistent and out-of-range date errors until Enter or blur, so a person can finish correcting typed text first.
+[fix] DateInput and DateTimeInput support opt-in `entryErrorBehavior="blur-or-enter"`, holding typed date rejection signals until Enter or blur while preserving the existing `complete` default.
 
 @bezabyte

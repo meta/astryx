@@ -183,6 +183,13 @@ export const docs = {
         "Called each time the date segment's rejection of typed text changes, and with null when the rejection ends. kind is 'unreadable', 'incomplete' (part of a date that Enter or blur cannot finish), 'nonexistent' (a date the calendar does not have), 'outOfRange' (before the date of min or after the date of max), or 'unavailable' (a day dateConstraints rules out); text is the typed text; date is the Gregorian ISO date the text names, for 'outOfRange' and 'unavailable'. It also runs when a new min, max, dateConstraints, or value, a calendar pick, disabling the field, or Enter or blur changes the rejection, and never twice for the same rejection; it reports null when the typed field leaves while its rejection stands, as when a presentation or pointer change shows the native or touch picker. With it, an error status with a message replaces the field's own message, and a rejection that starts under an unchanged error message announces that message once. The native and touch pickers take no typed text, so it never reports a rejection there.",
     },
     {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "When the date segment reveals its own typed-entry rejection. 'complete' preserves the shipped timing; 'blur-or-enter' holds every rejection signal until Enter or blur.",
+      default: "'complete'",
+    },
+    {
       name: 'labelTooltip',
       type: 'string',
       description:
@@ -589,6 +596,13 @@ export const docsZh = {
         "每当日期部分对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。kind 为 'unreadable'、'incomplete'（按 Enter 或失焦也无法补全的部分日期）、'nonexistent'（该日历中不存在的日期）、'outOfRange'（早于 min 的日期或晚于 max 的日期）或 'unavailable'（被 dateConstraints 排除的日期）；text 为输入的文本；date 为文本所指的公历 ISO 日期，用于 'outOfRange' 和 'unavailable'。新的 min、max、dateConstraints 或 value、在日历中选择日期、禁用字段，或按 Enter、失焦改变拒绝时也会调用；同一拒绝不会重复调用；拒绝仍存在时若输入字段被替换（例如展示方式或指针类型改变而显示原生或触控选择器），会传入 null。传入此回调后，带消息的 error 状态会替代字段自身的错误消息；若拒绝开始时该错误消息未变，字段会再播报一次该消息。原生和触控选择器不接受输入文本，因此不会报告拒绝。",
     },
     {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "设置日期部分何时显示输入文本的拒绝。'complete' 保持已发布的时机；'blur-or-enter' 会将所有拒绝信号延迟到按 Enter 或失焦。",
+      default: "'complete'",
+    },
+    {
       name: 'labelTooltip',
       type: 'string',
       description: '通过标签末尾的信息图标显示的提示文本。',
@@ -754,6 +768,8 @@ export const docsDense = {
       'error/warning/success status w/ message; a rejected date or kept unfinished text shows its own error instead (unreadable text is only announced), unless onEntryErrorChange is set and status is an error w/ message',
     onEntryErrorChange:
       "(error|null) on each typed-rejection change: kind 'unreadable'|'incomplete'|'nonexistent'|'outOfRange' (min/max)|'unavailable' (dateConstraints), text, date (Gregorian ISO, outOfRange/unavailable); also on new min/max/dateConstraints/value, calendar pick, disable, Enter/blur; never twice for one rejection; null when the typed field leaves mid-rejection (presentation/pointer switch); with it an error status w/ message replaces the field's own message, re-announced once if unchanged when a rejection starts; never a rejection on native/touch pickers",
+    entryErrorBehavior:
+      "When typed date rejection shows: 'complete' (default shipped timing) or 'blur-or-enter' (hold every rejection signal until Enter/blur)",
     labelTooltip: 'tooltip text via info icon at label end',
     numberOfMonths:
       'Astryx pointer-calendar months shown simultaneously; ignored by native date controls and the mobile touch sheet',
