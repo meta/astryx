@@ -1163,7 +1163,7 @@ function DropdownMenuPopover({
   useCommittedRefInto(presentSurfaceRef, () => {
     const surface = popover.contentRef.current;
     // A finger's or a pen's open grows the menu. Under Reduce Motion the
-    // layer's own entrance plays, with no travel.
+    // layer's own entrance plays.
     surfaceMotion.present(
       surface,
       buttonRef.current,
@@ -1235,6 +1235,9 @@ function DropdownMenuPopover({
       pendingControlledOpenRef.current = false;
       if (!popover.isOpen) {
         shouldFocusOnOpenRef.current = !isMountedOpenRef.current;
+        // A trigger's open has already shown the menu, so this show is an
+        // open from code, with no accepted press.
+        touchOpenRef.current = null;
         popover.show();
       }
     } else {

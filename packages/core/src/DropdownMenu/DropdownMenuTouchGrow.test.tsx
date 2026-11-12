@@ -357,6 +357,39 @@ describe('DropdownMenu touch grow', () => {
     expect(motion.enter).not.toHaveBeenCalled();
   });
 
+  it("after a refused reopen, an open from code before any other press plays the layer's own entrance", async () => {
+    const onOpenChange = vi.fn();
+    const menu = (isMenuOpen: boolean) => (
+      <ScrollView>
+        <DropdownMenu
+          button={{label: 'Actions'}}
+          items={ITEMS}
+          isMenuOpen={isMenuOpen}
+          onOpenChange={onOpenChange}
+        />
+      </ScrollView>
+    );
+    const {rerender} = render(menu(true));
+    await settle();
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    const layer = screen
+      .getByRole('menu', {hidden: true})
+      .closest<HTMLElement>('[popover]');
+    fireEvent.pointerDown(trigger, touch);
+    fireEvent.pointerUp(trigger, touch);
+    act(() => {
+      layer?.hidePopover();
+    });
+    rerender(menu(false));
+    fireEvent.click(trigger, {detail: 1});
+    await settle();
+    // Still the tap's gesture: the app opens the menu from code.
+    rerender(menu(true));
+    await settle();
+    expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
+    expect(motion.enter).not.toHaveBeenCalled();
+  });
+
   it("a finger's press on an aria-disabled trigger leaves the next open from code with the layer's own entrance", async () => {
     const menu = (isMenuOpen: boolean) => (
       <DropdownMenu
