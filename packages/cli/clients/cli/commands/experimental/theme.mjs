@@ -1095,7 +1095,15 @@ export function registerExperimentalTheme(group, program) {
             themeEditPreviewList({cwd: process.cwd(), path: o.path}),
           r =>
             r.data.folder
-              ? project(/** @type {any} */ (r.data))
+              ? project(
+                  /** @type {any} */ ({
+                    ...r.data,
+                    // A page whose file is gone says so in words.
+                    pages: r.data.pages.map(({missing, ...p}) =>
+                      missing ? {...p, file: 'missing'} : p,
+                    ),
+                  }),
+                )
               : [
                   ...project(/** @type {any} */ (r.data)),
                   `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,

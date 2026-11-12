@@ -37,6 +37,7 @@ import {
   windowsReserved,
 } from './_settings.mjs';
 import {
+  baseFontsCss,
   colorsPageSource,
   componentsPageSource,
   overviewPageSource,
@@ -605,6 +606,9 @@ function sameCaseSibling(dir) {
   return null;
 }
 
+/** An intercepting route folder: `(.)x`, `(..)x`, `(..)(..)x`, `(...)x`. */
+const INTERCEPT = /^\((\.{1,3})\)/;
+
 /**
  * Why Next does not serve a folder inside the routes folder at its own
  * URL, or null: a `_private` folder is never routed, an `@slot` folder is a
@@ -616,7 +620,9 @@ function unroutedSegment(app, dir) {
   const seg = path
     .relative(app, dir)
     .split(path.sep)
-    .find(x => /^[_@[]/.test(x));
+    .find(x => /^[_@[]/.test(x) || INTERCEPT.test(x));
+  if (seg && INTERCEPT.test(seg))
+    return `Next reads the folder ${seg} as an intercepting route ((.), (..) and (...) folders show another route's page), not a URL of its own, and a page there breaks the app`;
   return seg
     ? `Next does not serve the folder ${seg} at a URL of its own (_private folders are never routed, @slot and [param] folders are not plain URL segments)`
     : null;
@@ -3830,7 +3836,11 @@ export async function themeEditPreviewApp(dir, options = {}) {
     routeTheme = {
       name: slug,
       module: fromRoute(to.js),
-      css: [fromRoute(to.css), ...fonts.map(x => `${x.pkg}/index.css`)],
+      css: [
+        fromRoute(to.css),
+        ...baseFontsCss(ctx, theme),
+        ...fonts.map(x => `${x.pkg}/index.css`),
+      ],
       mode: themeImports(ctx, slug, theme, path.join(cwd, routeDir)).mode,
     };
     // The app's theme folder sits where this project's does, so the Colors

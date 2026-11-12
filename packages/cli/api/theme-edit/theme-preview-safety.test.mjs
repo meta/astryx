@@ -2354,4 +2354,36 @@ describe('final pass 5', () => {
       rm('src/app/p');
     }
   }, 120_000);
+
+  it('refuses an intercepting route folder, and lists a missing page in words in text', async () => {
+    for (const where of [
+      'src/app/(.)tp',
+      'src/app/(..)up',
+      'src/app/(...)tp',
+      'src/app/x/(..)(..)tp',
+    ]) {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: where}),
+      );
+      expect(r.code, where).toBe('ERR_INVALID_ARGUMENT');
+      expect(r.message, where).toContain('as an intercepting route');
+      expect(exists(where), where).toBe(false);
+    }
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/lm',
+    });
+    try {
+      rm('src/app/lm/_pages/components.tsx');
+      const text = await runCli(
+        ['experimental', 'theme', 'preview', 'list', '--path', 'src/app/lm'],
+        {cwd},
+      );
+      expect(text.stdout).toMatch(/components\s+Components - missing/);
+      expect(text.stdout).not.toContain('- true');
+    } finally {
+      rm('src/app/lm');
+    }
+  }, 120_000);
 });

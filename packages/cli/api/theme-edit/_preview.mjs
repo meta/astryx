@@ -217,6 +217,26 @@ function templateFiles(imports) {
 }
 
 /**
+ * The fonts stylesheet of the theme a theme is built on, when its package
+ * ships one (`@astryxdesign/theme-neutral/fonts.css` loads Figtree): naming
+ * a family does not load it, and the base theme's families apply until the
+ * theme sets its own.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function baseFontsCss(ctx, data) {
+  if (!data.like) return [];
+  const sheet = `@astryxdesign/theme-${data.like}/fonts.css`;
+  try {
+    ctx.project.req.resolve(sheet);
+    return [sheet];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * How a generated page imports the theme: its built module, its stylesheet,
  * and the stylesheets of open fonts the project has installed.
  * @param {import('./_settings.mjs').Ctx} ctx
@@ -237,7 +257,7 @@ export function themeImports(ctx, slug, data, fromDir) {
     .map(x => `${x.pkg}/index.css`);
   return {
     module: rel(f.js),
-    css: [rel(f.css), ...fonts],
+    css: [rel(f.css), ...baseFontsCss(ctx, data), ...fonts],
     mode: /** @type {'system' | 'light' | 'dark'} */ (
       modes.length > 1 ? 'system' : modes[0]
     ),

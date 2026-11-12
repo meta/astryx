@@ -620,6 +620,10 @@ describe('preview app', () => {
     const pkg = JSON.parse(read('fresh/package.json'));
     expect(pkg.dependencies['@astryxdesign/core']).toBe(version);
     expect(pkg.dependencies['@astryxdesign/theme-neutral']).toBe(version);
+    // The base theme's fonts load, so the Overview shows the family it names.
+    expect(read('fresh/src/app/globals.css')).toContain(
+      '@import "@astryxdesign/theme-neutral/fonts.css";',
+    );
     for (const f of [
       'next.config.mjs',
       'tsconfig.json',
