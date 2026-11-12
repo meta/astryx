@@ -1441,6 +1441,51 @@ describe('DateTimeInput', () => {
       expect(timeInput).not.toHaveAttribute('name');
     });
 
+    it('shows the time message while unreadable date text is still typed, and the date message once blur shows it', () => {
+      const {container} = render(field());
+      const dateInput = screen.getByRole('combobox');
+      const timeInput = screen.getByLabelText('Meeting time');
+      fireEvent.change(dateInput, {target: {value: 'tomorrowish'}});
+      fireEvent.change(timeInput, {target: {value: '25:99'}});
+      fireEvent.blur(timeInput);
+      expect(statusText(container)).toBe('Invalid time');
+      expect(timeAlert(container)).toHaveTextContent('');
+      fireEvent.blur(dateInput);
+      expect(statusText(container)).not.toBe('Invalid time');
+      expect(statusText(container)).not.toBeNull();
+      expect(timeInput).toHaveAttribute('aria-invalid', 'true');
+      expect(timeAlert(container)).toHaveTextContent('Invalid time');
+    });
+
+    it('shows the native date message when both native controls hold a rejection', () => {
+      const max = '2026-12-31T17:00' as ISODateTimeString;
+      const {container} = render(
+        field({
+          presentation: 'native',
+          min: undefined,
+          max,
+          value: '2026-12-31T10:00' as ISODateTimeString,
+        }),
+      );
+      const [nativeDate] =
+        container.querySelectorAll<HTMLInputElement>('input[type="date"]');
+      const nativeTime =
+        container.querySelector<HTMLInputElement>('input[type="time"]');
+      if (nativeDate == null || nativeTime == null) {
+        throw new Error('no native controls');
+      }
+      fireEvent.change(nativeTime, {target: {value: '18:00'}});
+      expect(statusText(container)).toBe('Invalid time');
+      fireEvent.focus(nativeDate);
+      fireEvent.change(nativeDate, {target: {value: '2027-01-05'}});
+      fireEvent.blur(nativeDate);
+      expect(statusText(container)).toBe(
+        'Enter a date on or before December 31, 2026',
+      );
+      expect(nativeTime).toHaveAttribute('aria-invalid', 'true');
+      expect(timeAlert(container)).toHaveTextContent('Invalid time');
+    });
+
     it('restores the native time at blur and keeps its rejection shown', () => {
       const {container} = render(field({presentation: 'native'}));
       const nativeTime =

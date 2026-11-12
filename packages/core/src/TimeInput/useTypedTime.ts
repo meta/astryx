@@ -180,6 +180,15 @@ export function useTypedTime({
       drop();
     }
   }
+  // A rejection belongs to the surface that showed it. A switch between the
+  // typed field and a native control ends it.
+  const [hadTypedField, setHadTypedField] = useState(hasTypedField);
+  if (hasTypedField !== hadTypedField) {
+    setHadTypedField(hasTypedField);
+    if (isSurfaceRejected) {
+      setSurfaceRejected(false);
+    }
+  }
   if (!hasTypedField && pendingInput !== null) {
     drop();
   }

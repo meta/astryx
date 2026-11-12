@@ -410,6 +410,58 @@ describe('TimeInput native rejected entries', () => {
     expect(statusText(container)).toBeNull();
   });
 
+  it.each([
+    ['hasSeconds', {hasSeconds: true}, '9:00:00 AM'],
+    ['a non-1 increment', {increment: 5}, '9:00 AM'],
+  ] as const)(
+    'ends a native rejection when %s brings back the typed field',
+    (_label, change, shown) => {
+      stubPointer(true);
+      const field = (props = {}) =>
+        nativeField({presentation: 'adaptive-native', ...props});
+      const {container, rerender} = render(field());
+      fireEvent.change(getNativeTimeInput(), {target: {value: '18:00'}});
+      expect(statusText(container)).toBe('Invalid time');
+      rerender(field(change));
+      const input = screen.getByRole('textbox', {name: 'Start time'});
+      expect(input).toHaveValue(shown);
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(statusText(container)).toBeNull();
+      expect(fieldAlert(container)).toHaveTextContent('');
+    },
+  );
+
+  it('ends a native rejection when a pointer change brings back the typed field', () => {
+    let isCoarse = true;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      get matches() {
+        return /pointer:\s*coarse/.test(query)
+          ? isCoarse
+          : /pointer:\s*fine/.test(query)
+            ? !isCoarse
+            : HOVER_CAPABLE.test(query);
+      },
+      media: query,
+      onchange: null,
+      addListener: (listener: () => void) => listeners.add(listener),
+      removeListener: (listener: () => void) => listeners.delete(listener),
+      addEventListener: (_type: string, listener: () => void) =>
+        listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) =>
+        listeners.delete(listener),
+      dispatchEvent: () => false,
+    }));
+    const {container} = render(nativeField({presentation: 'adaptive-native'}));
+    fireEvent.change(getNativeTimeInput(), {target: {value: '18:00'}});
+    expect(statusText(container)).toBe('Invalid time');
+    isCoarse = false;
+    act(() => listeners.forEach(listener => listener()));
+    const input = screen.getByRole('textbox', {name: 'Start time'});
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+  });
+
   it('inside an InputGroup, announces the rejection through the alert', () => {
     const {container} = render(
       <InputGroup label="Schedule">

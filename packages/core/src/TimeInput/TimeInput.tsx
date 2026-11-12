@@ -651,7 +651,6 @@ function TimeField({
     return placeholder;
   }, [isFocused, displayValue, hourFormat, placeholder, t]);
 
-  // Typing commits a draft that names a new accepted time.
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const time = typedTime.handleChange(e.target.value);
     if (time != null) {
