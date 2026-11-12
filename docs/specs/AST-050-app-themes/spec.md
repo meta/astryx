@@ -106,8 +106,10 @@ described.
 - **FR4 — The set and the default are managed by command.**
   `theme remove <slug>` removes a theme from the app, and `theme use <slug>`
   makes an added theme the default. Removing the default theme MUST fail and
-  name `theme use`; `theme use` on a theme that is not added MUST fail and name
-  the import command. Each command regenerates the module (FR2).
+  name `theme use` with another added theme, or `theme list` when it is the
+  only one; `theme use` or `theme remove` on a theme that is not added MUST
+  fail and name the import command when a theme with that slug is available,
+  or `theme list` when none is. Each command regenerates the module (FR2).
 - **FR5 — One receipt describes the app's themes.** The importing `theme add`,
   `theme remove`, and `theme use` MUST return the `theme.app` response: every
   added theme with its slug, owner, and the module and stylesheet it imports;
@@ -133,6 +135,10 @@ described.
   folder with a package.json), the default target is the project's local
   themes root, a relative `[path]` is read from the working folder and MUST
   stay inside the project, and `outputDir` is relative to the working folder.
+  `theme template [path]` leaves an existing file as it is without
+  `--overwrite`. Its receipt then says whether `--overwrite` would replace that
+  file (`overwritable`), and when it would not, it names a free path for the
+  template (`alternative`).
 - **FR7 — A package exposes each theme to import.** A package makes a theme
   importable by exporting its built module at `./themes/<slug>` and its
   stylesheet at `./themes/<slug>.css`. A package that owns exactly one theme MAY
@@ -165,7 +171,14 @@ described.
   writes beside its source, and its font stylesheet, when it has one, is
   `<slug>.fonts.css` beside them. `theme build` refuses an input before it
   loads it when the input is one of its own outputs, naming the source that
-  output was built from, or when the input is not a theme module. An import MUST fail and name the build command
+  output was built from, or when the input is not a theme module. Each output's
+  header names its source from the project root of the outputs, so a build
+  from any folder writes the same outputs. At a path `--out` names, it
+  replaces its own earlier outputs. It replaces the output of another theme
+  source that still exists and warns, naming both sources. It warns when that
+  path does not end in `.css`, and the import it prints names the file as
+  written. An
+  import MUST fail and name the build command
   when the built module or stylesheet is missing. When a local theme and a
   package theme share a slug, an import adds the local theme unless `--package`
   names the package, and `theme list` shows both with their owners. The copying
@@ -187,7 +200,9 @@ described.
   3. project source imports the theme module (a warning when this cannot be
      shown);
   4. no built theme module is imported without its stylesheet;
-  5. every added local theme is built, and its outputs match its source;
+  5. every added local theme is built, and its outputs match its source; a
+     package a local theme imports and the project lacks fails this check,
+     named with the command that installs it;
   6. no added theme sets a private `--_*` variable directly
      (`architecture:theme-compilation` INV6);
   7. every added theme's `@astryxdesign/core` peer range accepts the installed

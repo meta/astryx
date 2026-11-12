@@ -381,9 +381,9 @@ const features: Record<string, Feature> = {
     description:
       'Production-ready templates for common pages, just plug in your content.',
     href: '/templates',
-    // Live scaled-down renders of real page templates instead of the baked
-    // /feature-templates.png, so they re-theme for dark mode and stay in sync
-    // with the actual templates.
+    // Scaled-down static pages that the build renders from the real page
+    // templates, so they re-theme for dark mode and stay in sync with the
+    // templates.
     preview: <TemplatesPreview />,
   },
   cli: {

@@ -107,6 +107,9 @@ afterAll(() => {
   if (work && !runFolder()) fs.rmSync(work, {recursive: true, force: true});
 });
 
+/** This file's own user config folder (settings and state), in its work folder. */
+const userConfig = () => path.join(work, 'config');
+
 /**
  * Run the packed CLI with `tmp` as the system temp folder.
  * @param {string[]} args
@@ -137,6 +140,10 @@ function run(args, {tmp, cwd = project, env = {}}) {
         NODE_DISABLE_COMPILE_CACHE: '1',
         // The kept catalogs live in the user's cache folder.
         XDG_CACHE_HOME: tmp,
+        // A gather reads the user's settings and state files: they are this
+        // file's own, never the run's shared folder, where every other
+        // test's CLI run records its notices (a kept catalog would miss).
+        XDG_CONFIG_HOME: userConfig(),
         ...env,
       },
     },
@@ -173,6 +180,7 @@ function runAsync(args, {tmp, cwd = project, env = {}}) {
           NO_UPDATE_NOTIFIER: '1',
           NODE_DISABLE_COMPILE_CACHE: '1',
           XDG_CACHE_HOME: tmp,
+          XDG_CONFIG_HOME: userConfig(),
           ...env,
         },
       },
@@ -485,7 +493,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     try {
       // The integration's manifest in TypeScript, importing a helper: jiti
       // compiles both on the first load and writes them to its cache in the
-      // temp folder.
+      // per-user cache folder, beside the catalogs.
       fs.rmSync(path.join(other.widgets, 'astryx.integration.mjs'));
       fs.writeFileSync(
         path.join(other.widgets, 'helper.ts'),
@@ -506,7 +514,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
           before.get(name)?.ino === after.get(name)?.ino ? 'hit' : 'miss',
         );
       }
-      expect(fs.existsSync(path.join(tmp, 'jiti'))).toBe(true);
+      expect(fs.readdirSync(path.join(tmp, 'astryx', 'jiti')).length).toBe(2);
       expect(outcomes).toEqual(['miss', 'hit', 'hit']);
     } finally {
       fs.rmSync(other.dir, {recursive: true, force: true});
@@ -635,6 +643,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
           ...process.env,
           TMPDIR: tmp,
           XDG_CACHE_HOME: tmp,
+          XDG_CONFIG_HOME: userConfig(),
           NO_UPDATE_NOTIFIER: '1',
           NODE_DISABLE_COMPILE_CACHE: '1',
         },
@@ -872,6 +881,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
           ...process.env,
           TMPDIR: notAFolder,
           XDG_CACHE_HOME: notAFolder,
+          XDG_CONFIG_HOME: userConfig(),
           NO_UPDATE_NOTIFIER: '1',
           NODE_DISABLE_COMPILE_CACHE: '1',
         },
