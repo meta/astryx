@@ -858,8 +858,11 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
   const {C} = ctx;
   const readers = C.anyReader(key);
   const type = C.typeOf(key);
+  // The theme's own value (its settings applied), else the base theme's.
   const now =
-    env.base.light[key] ?? String(ctx.project.core.tokenDefaults[key]);
+    env.own?.light[key] ??
+    env.base.light[key] ??
+    String(ctx.project.core.tokenDefaults[key]);
   const value = exampleForToken(type, key, now);
   const {commands, refused} = value
     ? checked(env, [
@@ -1159,7 +1162,7 @@ function wholeThemeTokens(ctx, env, aspect) {
   /** @type {string[]} */
   let commands = [];
   for (const tok of toks) {
-    const now = env.base.light[tok] ?? '';
+    const now = env.own?.light[tok] ?? env.base.light[tok] ?? '';
     if (parseFloat(now) >= 999) continue;
     const value = exampleForToken(C.typeOf(tok), tok, now);
     if (!value) continue;

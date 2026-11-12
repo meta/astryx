@@ -3734,6 +3734,38 @@ describe('how answers final-10 questions', () => {
   });
 });
 
+describe('how works changes by an amount out from the theme itself', () => {
+  it('colors, sizes and a part radius move from what the theme sets', async () => {
+    await themeEditNew('own', {cwd, like: 'neutral'});
+    await themeEditSet('own', '--color-background-body', '#000000', {cwd});
+    await themeEditSet('own', 'font-size', '18px', {cwd, on: 'button'});
+    await themeEditSet('own', 'border-radius', '20px', {cwd, on: 'card'});
+    const ask = async (/** @type {string} */ q) =>
+      (await themeEditHow(q, {cwd, theme: 'own'})).data.results ?? [];
+    const darker = await ask('make the page background a bit darker');
+    expect(darker[0].commands).toEqual([]);
+    expect(darker[0].text).toMatch(/already as dark as it goes \(#000000\)/);
+    const lighter = await ask('make the page background a bit lighter');
+    const light = lighter[0].commands
+      .map(bare)
+      .find((/** @type {string} */ x) => /--mode light/.test(x));
+    expect(light).toMatch(
+      /--color-background-body '#(?!000000)[0-9a-f]{6}' --mode light/,
+    );
+    const bigger = await ask('button text bigger');
+    const px = Number(
+      /font-size (\d+(?:\.\d+)?)px --on button/.exec(
+        bare(bigger[0].commands[0]),
+      )?.[1],
+    );
+    expect(px).toBeGreaterThan(18);
+    const sharper = await ask('card corners 2px sharper');
+    expect(bare(sharper[0].commands[0])).toBe(
+      'set own border-radius 18px --on card',
+    );
+  }, 120_000);
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;

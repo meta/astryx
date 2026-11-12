@@ -2338,6 +2338,23 @@ export function draftAnswer(ctx, env, question) {
     env.own?.[mode]?.[token] ??
     env.base[mode]?.[token] ??
     String(TOKENS[token] ?? '');
+  /**
+   * What the theme itself sets for a CSS property on a part (its plain
+   * setting: no variant, state or mode), so a change by an amount starts
+   * from the theme, not from Core.
+   * @param {string} on @param {string} prop
+   */
+  const partValue = (on, prop) =>
+    [...env.data.settings]
+      .reverse()
+      .find(
+        st =>
+          st.thing === prop &&
+          st.on === on &&
+          !st.when &&
+          !st.state &&
+          !st.mode,
+      )?.value ?? null;
   /** The member a group's checks read. @param {string} on */
   const one = on => (FAMILIES[on] ? FAMILIES[on][0] : on);
   /**
@@ -2739,6 +2756,18 @@ export function draftAnswer(ctx, env, question) {
       if (cornerAsk && c.parts.length) {
         const on = c.parts[0].on;
         const read = C.partReads(one(on), 'corners')[0];
+        // A radius the theme set on the part in px moves from that value.
+        const ownRadius = partValue(on, 'border-radius');
+        if (ownRadius && /^\d*\.?\d+px$/.test(ownRadius)) {
+          const next = Math.max(0, parseFloat(ownRadius) + (down ? -n : n));
+          const d = {
+            text: `${on}'s corners ${down ? 'down' : 'up'} by ${n}px: from ${ownRadius} to ${next}px`,
+            options: [[set('border-radius', `${next}px`, {on})]],
+          };
+          push(d);
+          recordTop(c, d.options[0] ?? []);
+          continue;
+        }
         if (read) {
           const d = {
             text: `${on}'s corners ${down ? 'down' : 'up'} by ${n}px: ${read.token} ${down ? '-' : '+'} ${n}px`,
@@ -4008,12 +4037,16 @@ export function draftAnswer(ctx, env, question) {
                 r.props.includes('font-size'),
               )?.token ??
               Object.keys(C.MAP[one(on)]?.own?.['font-size']?.tokens ?? {})[0]);
-        // A part with no size token of its own starts from the body size.
-        const now = sizeTok
-          ? current(sizeTok)
-          : on !== 'heading' && '--text-body-size' in TOKENS
-            ? current('--text-body-size')
-            : null;
+        // The theme's own size on the part first; a part with no size token
+        // of its own starts from the body size.
+        const own = on ? partValue(on, 'font-size') : null;
+        const now = own
+          ? own
+          : sizeTok
+            ? current(sizeTok)
+            : on !== 'heading' && '--text-body-size' in TOKENS
+              ? current('--text-body-size')
+              : null;
         const value = px ?? (now ? scaled(now, factor) : null);
         if (!value) return null;
         return {
@@ -4485,7 +4518,11 @@ export function draftAnswer(ctx, env, question) {
                 options: [steps],
                 sequence: steps.length > 1,
               }
-            : null;
+            : {
+                // The theme's own page is already at the end of the range.
+                text: `the page background of ${env.slug} is already ${lighter ? 'as light' : 'as dark'} as it goes (${current('--color-background-body')}), so nothing changes`,
+                options: [],
+              };
         }
         if (c.decl.background || c.decl['background-color'])
           return {
