@@ -64,14 +64,15 @@ const filesUnder = dir =>
  * compiler options against Core's types.
  * @param {string} dir
  * @param {boolean} [all] also the .ts files, outside node_modules
+ * @param {Record<string, unknown>} [extra] more compiler options
  * @returns {string[]}
  */
-function typeErrors(dir, all = false) {
+function typeErrors(dir, all = false, extra = {}) {
   const config = JSON.parse(
     fs.readFileSync(path.join(CLI, 'assets/preview-app/tsconfig.json'), 'utf8'),
   );
   const {options} = ts.convertCompilerOptionsFromJson(
-    {...config.compilerOptions, incremental: false, plugins: []},
+    {...config.compilerOptions, ...extra, incremental: false, plugins: []},
     cwd,
   );
   const files = [
@@ -168,6 +169,14 @@ describe('preview add', () => {
     for (const f of ['_pages/overview.tsx', '_pages/components.tsx'])
       expect(read(`src/app/theme-preview/${f}`)).not.toMatch(/__element|<XDS/);
     expect(typeErrors(dir)).toEqual([]);
+    // Strict flags common in Next apps (create-t3-app, @tsconfig/strictest).
+    expect(
+      typeErrors(dir, false, {
+        noUncheckedIndexedAccess: true,
+        noImplicitOverride: true,
+        noUnusedLocals: true,
+      }),
+    ).toEqual([]);
   }, 120_000);
 
   it('adds a Colors page once the theme has generated colors, and keeps it in step', async () => {
@@ -182,8 +191,18 @@ describe('preview add', () => {
       'import {palette} from "../../../../themes/brand/tokens/brand.palette";',
     );
     expect(source).toContain('"--color-accent"');
+    // The seed reads as it is stored, never capitalized with the color name.
+    expect(source).toContain("textTransform: 'none'");
     expect(read('src/app/theme-preview/page.tsx')).toContain('label: "Colors"');
     expect(typeErrors(dir)).toEqual([]);
+    // Strict flags common in Next apps (create-t3-app, @tsconfig/strictest).
+    expect(
+      typeErrors(dir, false, {
+        noUncheckedIndexedAccess: true,
+        noImplicitOverride: true,
+        noUnusedLocals: true,
+      }),
+    ).toEqual([]);
     // A later change rewrites the tokens that use each shade.
     await themeEditSet('brand', 'neutral', '#64748b', {cwd});
     expect(read(page)).toContain('"--color-background-surface"');
@@ -533,7 +552,7 @@ describe('preview remove', () => {
     expect((await themeEditPreviewList({cwd})).data.folder).toBe(null);
   }, 120_000);
 
-  it('refuses a theme-preview.json path that leads outside the route folder, deleting nothing', async () => {
+  it('drops a theme-preview.json path that leads outside the route folder, deleting nothing there', async () => {
     const dir = path.join(cwd, 'src/app/escape');
     fs.mkdirSync(path.join(dir, 'pages'), {recursive: true});
     fs.writeFileSync(path.join(cwd, 'keep-me.txt'), 'keep\n');
@@ -547,10 +566,13 @@ describe('preview remove', () => {
         files: ['page.tsx', '../../../keep-me.txt', 'theme-preview.json'],
       }),
     );
-    const r = await refusal(() =>
-      themeEditPreviewRemove(undefined, {cwd, path: 'src/app/escape'}),
+    const r = await themeEditPreviewRemove(undefined, {
+      cwd,
+      path: 'src/app/escape',
+    });
+    expect(r.data.notes.join(' ')).toContain(
+      'dropped "../../../keep-me.txt" from theme-preview.json',
     );
-    expect(r.code).toBe('ERR_PATH_TRAVERSAL');
     expect(read('keep-me.txt')).toBe('keep\n');
     expect(fs.existsSync(path.join(dir, 'page.tsx'))).toBe(true);
     fs.rmSync(dir, {recursive: true, force: true});
@@ -598,6 +620,10 @@ describe('preview app', () => {
     const pkg = JSON.parse(read('fresh/package.json'));
     expect(pkg.dependencies['@astryxdesign/core']).toBe(version);
     expect(pkg.dependencies['@astryxdesign/theme-neutral']).toBe(version);
+    // The base theme's fonts load, so the Overview shows the family it names.
+    expect(read('fresh/src/app/globals.css')).toContain(
+      '@import "@astryxdesign/theme-neutral/fonts.css";',
+    );
     for (const f of [
       'next.config.mjs',
       'tsconfig.json',
@@ -625,6 +651,11 @@ describe('preview app', () => {
     fs.writeFileSync(
       path.join(cwd, 'themes/brand/logo.png'),
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0x00, 0xfe]),
+    );
+    // A temp file a stopped command left in the theme folder stays behind.
+    fs.writeFileSync(
+      path.join(cwd, 'themes/brand/.brand.css.astryx-999999-abc123.tmp'),
+      'half\n',
     );
     const r = await themeEditPreviewApp('themed', {cwd, theme: 'brand'});
     expect(read('themed/themes/brand/tokens/brand.palette.ts')).toBe(
@@ -671,6 +702,20 @@ describe('preview app', () => {
     );
     expect(data.theme).toBe('brand');
     await themeEditUndo('brand', {cwd, thing: 'accent'});
+    expect(
+      fs.existsSync(
+        path.join(
+          cwd,
+          'themed/themes/brand/.brand.css.astryx-999999-abc123.tmp',
+        ),
+      ),
+    ).toBe(false);
+    fs.rmSync(
+      path.join(cwd, 'themes/brand/.brand.css.astryx-999999-abc123.tmp'),
+      {
+        force: true,
+      },
+    );
   }, 120_000);
 
   it('refuses no folder, a folder that is not empty, and one outside the current folder', async () => {
