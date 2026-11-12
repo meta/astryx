@@ -877,7 +877,8 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   browser's own menu closed. A hold loses to a claim another recognizer made
   first. The headless context menu (`spec:AST-107` FR8) makes its request
   through it, and ContextMenu through that menu (`component:ContextMenu`
-  FR10). One module keeps these rules the same in every menu. The
+  FR10). FR10's implementation gap records that ContextMenu times its touch
+  model's hold itself. One module keeps these rules the same in every menu. The
   press model has a fine-pointer profile with no delay (FR11); and with a
   mouse, a trackpad, or a pen where the primary pointer is fine a reorder
   starts on a drag from its handle without a hold, while a pen where the
