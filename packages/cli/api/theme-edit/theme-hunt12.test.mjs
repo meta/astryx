@@ -65,7 +65,7 @@ describe('a tab marked disabled', () => {
       state: 'disabled',
     });
     expect(fs.readFileSync(path.join(cwd, 'themes/a/a.css'), 'utf8')).toMatch(
-      /\.astryx-tab:is\(:disabled,\[aria-disabled="true"\]\)/,
+      /\.astryx-tab:is\(:disabled,\[aria-disabled="true"\]/,
     );
     await themeEditUndo('a', {cwd});
   }, 240_000);

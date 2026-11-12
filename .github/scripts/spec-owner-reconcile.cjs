@@ -26,6 +26,7 @@ const {
 const {
   REVIEW_GATE_CONTEXT,
   SPEC_MIRROR_PREFIX,
+  SPEC_RECONCILING_PREFIX,
   SPEC_TOO_LARGE_TEXT,
   SPEC_WAITING_TEXT,
   composeReviewGate,
@@ -88,6 +89,139 @@ function isSpecPath(filePath) {
 
 function isSettled(pr) {
   return Boolean(pr.merged_at) || pr.state === 'closed';
+}
+
+const SECTION_HEADING = /^#{1,6}\s+(.+?)\s*$/;
+const REQUIREMENT_ITEM = /^\s*[-*]\s+\*\*([A-Z]+-?\d+[a-z]?)\b/;
+const MAX_SECTIONS_SHOWN = 8;
+// Above this many line pairs, every differing line counts as changed.
+const MAX_DIFF_CELLS = 4_000_000;
+
+/** A text's lines; a final newline ends the last line and adds no line. */
+function textLines(text) {
+  if (text == null || text === '') return [];
+  const lines = text.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
+
+/** Each line's section: the requirement item or heading it falls under. */
+function sectionOfEachLine(lines) {
+  let section = lines[0] === '---' ? 'front matter' : null;
+  return lines.map((line, index) => {
+    if (section === 'front matter' && index > 0 && line === '---') {
+      section = null;
+      return 'front matter';
+    }
+    if (section !== 'front matter') {
+      const item = line.match(REQUIREMENT_ITEM);
+      const heading = line.match(SECTION_HEADING);
+      if (item) section = item[1];
+      else if (heading) section = heading[1];
+    }
+    return section;
+  });
+}
+
+/** The removed and added line indexes, in document order. */
+function lineEdits(before, after) {
+  let start = 0;
+  while (
+    start < before.length &&
+    start < after.length &&
+    before[start] === after[start]
+  ) {
+    start += 1;
+  }
+  let endBefore = before.length;
+  let endAfter = after.length;
+  while (
+    endBefore > start &&
+    endAfter > start &&
+    before[endBefore - 1] === after[endAfter - 1]
+  ) {
+    endBefore -= 1;
+    endAfter -= 1;
+  }
+  const rows = endBefore - start;
+  const columns = endAfter - start;
+  const edits = [];
+  if ((rows + 1) * (columns + 1) > MAX_DIFF_CELLS) {
+    for (let i = start; i < endBefore; i++) edits.push({removed: i});
+    for (let j = start; j < endAfter; j++) edits.push({added: j});
+    return edits;
+  }
+  // Longest common subsequence lengths of each pair of suffixes.
+  const width = columns + 1;
+  const common = new Uint32Array((rows + 1) * width);
+  for (let i = rows - 1; i >= 0; i--) {
+    for (let j = columns - 1; j >= 0; j--) {
+      common[i * width + j] =
+        before[start + i] === after[start + j]
+          ? common[(i + 1) * width + j + 1] + 1
+          : Math.max(common[(i + 1) * width + j], common[i * width + j + 1]);
+    }
+  }
+  let i = 0;
+  let j = 0;
+  while (i < rows || j < columns) {
+    if (i < rows && j < columns && before[start + i] === after[start + j]) {
+      i += 1;
+      j += 1;
+    } else if (
+      j >= columns ||
+      (i < rows && common[(i + 1) * width + j] >= common[i * width + j + 1])
+    ) {
+      edits.push({removed: start + i});
+      i += 1;
+    } else {
+      edits.push({added: start + j});
+      j += 1;
+    }
+  }
+  return edits;
+}
+
+/**
+ * One line that says which records and sections changed between two
+ * versions of the spec paths: each record id, its changed sections, and the
+ * added and removed line counts. Each entry is `{path, before, after}`; a
+ * missing side is null.
+ */
+function summarizeSpecTextChange(changes) {
+  let added = 0;
+  let removed = 0;
+  const parts = [];
+  for (const {path: filePath, before, after} of changes) {
+    if (before === after) continue;
+    const isText = filePath.endsWith('.md');
+    const text = (isText ? (after ?? before) : null) ?? '';
+    const name = text.match(/^id:\s*(.+)$/m)?.[1]?.trim() ?? filePath;
+    if (!isText) {
+      parts.push(name);
+      continue;
+    }
+    const beforeLines = textLines(before);
+    const afterLines = textLines(after);
+    const beforeSections = sectionOfEachLine(beforeLines);
+    const afterSections = sectionOfEachLine(afterLines);
+    const sections = new Set();
+    for (const edit of lineEdits(beforeLines, afterLines)) {
+      if ('added' in edit) {
+        added += 1;
+        sections.add(afterSections[edit.added]);
+      } else {
+        removed += 1;
+        sections.add(beforeSections[edit.removed]);
+      }
+    }
+    const named = [...sections].filter(Boolean);
+    const shown = named.slice(0, MAX_SECTIONS_SHOWN).join(', ');
+    const more = named.length > MAX_SECTIONS_SHOWN ? ', …' : '';
+    parts.push(shown ? `${name} ${shown}${more}` : name);
+  }
+  if (parts.length === 0) return null;
+  return `${parts.join('; ')} (+${added} −${removed} lines)`;
 }
 
 async function reconcileWithinBudget({
@@ -407,20 +541,25 @@ async function reconcileWithinBudget({
     }
   }
 
-  /** Details notes: the newest approval of other content; a revocation. */
+  /**
+   * Details notes: the newest approval of other content; a revocation; the
+   * older commit an approving owner named, when no approval names the head.
+   */
   function ownerActNotes({
     reviews: ownerReviews,
     comments: allComments,
     owners: eligible,
+    approvers,
     approvesCurrentContent,
+    headSha,
   }) {
-    const stale = ownerReviews
-      .filter(
-        review =>
-          review.state === 'APPROVED' &&
-          !approvesCurrentContent(review.commit_id),
-      )
-      .map(review => review.submitted_at);
+    const approvals = ownerReviews
+      .filter(review => review.state === 'APPROVED')
+      .map(review => ({
+        owner: review.user?.login?.toLowerCase() ?? '',
+        sha: review.commit_id,
+        at: review.submitted_at,
+      }));
     // Comments arrive oldest first, so the last act per owner wins.
     const lastAct = new Map();
     for (const comment of allComments) {
@@ -428,8 +567,8 @@ async function reconcileWithinBudget({
       const target =
         eligible.has(login) && parseOwnerCommandTarget(comment.body);
       if (!target) continue;
-      if (target.approved && !approvesCurrentContent(target.sha)) {
-        stale.push(comment.created_at);
+      if (target.approved) {
+        approvals.push({owner: login, sha: target.sha, at: comment.created_at});
       }
       lastAct.set(login, {owner: login, ...target, at: comment.created_at});
     }
@@ -437,9 +576,25 @@ async function reconcileWithinBudget({
       [...lastAct.values()]
         .filter(act => !act.approved)
         .sort((x, y) => Date.parse(y.at) - Date.parse(x.at))[0] ?? null;
+    const newest = acts =>
+      acts
+        .filter(act => act.at)
+        .sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0))
+        .at(-1) ?? null;
+    const stale = newest(
+      approvals.filter(act => !approvesCurrentContent(act.sha)),
+    );
+    const carried = approvals.filter(
+      act => approvers.includes(act.owner) && approvesCurrentContent(act.sha),
+    );
+    const namesHead = carried.some(
+      act => act.sha?.toLowerCase() === headSha.toLowerCase(),
+    );
     return {
-      staleApprovalAt: stale.filter(Boolean).sort().at(-1) ?? null,
+      staleApprovalAt: stale?.at ?? null,
+      staleApprovalSha: stale?.sha ?? null,
       revokedBy,
+      carriedFrom: namesHead ? null : (newest(carried)?.sha ?? null),
     };
   }
 
@@ -452,6 +607,7 @@ async function reconcileWithinBudget({
     records: changedRecords,
     currentContent,
     notes,
+    specChange,
     commandProblem,
   }) {
     if (typeof core.summary?.addRaw !== 'function') return;
@@ -476,7 +632,16 @@ async function reconcileWithinBudget({
       return `| \`${id}\` | ${title} | ${change} | ${groupFor(record)} |`;
     });
     // `<sha>` in the status text is literal, not markup.
-    const lines = [`### ${statusText.replace(/</g, '&lt;')}`, ''];
+    const statusLine = statusText.replace(/</g, '&lt;');
+    const lines =
+      isApproved && approvalRequired && notes.carriedFrom
+        ? [
+            `### Approval carried from ${notes.carriedFrom.slice(0, 7)}; no action needed.`,
+            '',
+            statusLine,
+            '',
+          ]
+        : [`### ${statusLine}`, ''];
     if (!isApproved && notes.revokedBy) {
       lines.push(
         `Approval revoked by @${notes.revokedBy.owner} at ${notes.revokedBy.at}.`,
@@ -487,6 +652,12 @@ async function reconcileWithinBudget({
         `Spec changed after approval at ${notes.staleApprovalAt}; approve the current head again.`,
         '',
       );
+      if (specChange) {
+        lines.push(
+          `Spec text changed since ${notes.staleApprovalSha.slice(0, 7)}: ${specChange}.`,
+          '',
+        );
+      }
     }
     if (commandProblem) {
       lines.push(`Your owner command decided nothing: ${commandProblem}.`, '');
@@ -498,6 +669,8 @@ async function reconcileWithinBudget({
         '```',
         `/approve-spec ${headSha}`,
         '```',
+        '',
+        'Owners: approve once, after the last spec-text change.',
         '',
       );
     }
@@ -521,8 +694,17 @@ async function reconcileWithinBudget({
     }
   }
 
-  /** Compose the review gate; with no code half yet, review-signal does. */
-  async function publishReviewGate(headSha, spec) {
+  /**
+   * Compose the review gate; with no code half yet, review-signal does.
+   * `spec` is the spec half, or a function that reads it from the live
+   * statuses. With `onlyOverSuccess`, it writes only to take back a success;
+   * once it has written, it composes again like any other write.
+   */
+  async function publishReviewGate(
+    headSha,
+    spec,
+    {onlyOverSuccess = false} = {},
+  ) {
     // If another job writes between this read and write, compose again, so a
     // withdrawn code review is never overwritten with success.
     const written = new Set();
@@ -536,21 +718,25 @@ async function reconcileWithinBudget({
       const basis = othersNewest(live);
       const code = readCodeGate(live.filter(status => !written.has(status.id)));
       if (!code) return;
+      const specHalf = typeof spec === 'function' ? spec(live) : spec;
       const gate = composeReviewGate({
         codeGated: code.gated,
         codeDescription: code.description,
-        spec,
+        spec: specHalf,
       });
       // The details link names the spec decision run: a newer one on yield,
       // whether the gate it restores waits or succeeds.
-      const targetUrl = gate.target_url ?? spec?.url ?? runUrl;
+      const targetUrl = gate.target_url ?? specHalf?.url ?? runUrl;
       const current = live.find(
         status => status.context === REVIEW_GATE_CONTEXT,
       );
       if (
-        current?.state === gate.state &&
-        current?.description === gate.description &&
-        current?.target_url === targetUrl
+        (onlyOverSuccess &&
+          written.size === 0 &&
+          current?.state !== 'success') ||
+        (current?.state === gate.state &&
+          current?.description === gate.description &&
+          current?.target_url === targetUrl)
       ) {
         return;
       }
@@ -758,13 +944,22 @@ async function reconcileWithinBudget({
     sha: initialHead,
     context: GATE_STATUS_CONTEXT,
     state: 'pending',
-    description: `Reconciling exact head ${initialHead.slice(0, 7)}.`,
+    description: `${SPEC_RECONCILING_PREFIX}${initialHead.slice(0, 7)}.`,
   });
   // The spec half is unknown until this run decides it, so the review gate
   // waits meanwhile: a run that fails part-way (after a /revoke-spec, say)
   // leaves it pending, never an earlier success. Written before the yield
   // check, like the mirror, so a newer run's decision is restored over it.
-  await publishReviewGate(initialHead, readSpecGate([]));
+  // A gate that already waits keeps its text until this run decides, and an
+  // approval this head already has shows as carried while the run checks.
+  await publishReviewGate(
+    initialHead,
+    live => {
+      const spec = readSpecGate(live);
+      return spec.satisfied ? readSpecGate([]) : spec;
+    },
+    {onlyOverSuccess: true},
+  );
   if (await restoreNewerStatus(initialHead)) return;
   // From here a run can reach the request budget. It then says so on both
   // statuses, so an owner's command never reads as taken, and leaves the
@@ -928,6 +1123,8 @@ async function reconcileWithinBudget({
     return blobs;
   }
   const headBlobs = specBlobs(snapshot.files);
+  // The paths whose text each compared commit read, to say what changed.
+  const comparedPaths = new Map();
   // An approved commit's spec paths join the head's, so dropping an approved
   // change no longer matches. A failed comparison matches nothing.
   async function specChangesAt(sha) {
@@ -958,6 +1155,7 @@ async function reconcileWithinBudget({
         return headBlob === undefined || headBlob !== atSha.blobs.get(filePath);
       });
       if (unsettled.length === 0) return true;
+      comparedPaths.set(sha.toLowerCase(), unsettled);
       const [atHead, atShaContent] = await Promise.all([
         fingerprintAt(initialHead, unsettled),
         fingerprintAt(sha, unsettled),
@@ -970,6 +1168,36 @@ async function reconcileWithinBudget({
     }
   }
   const currentContent = await fingerprintAt(initialHead, specPaths);
+  /**
+   * What changed since an approved commit. It uses only text the comparison
+   * already read, so it makes no request; with any text missing it says
+   * nothing.
+   */
+  async function describeSpecChange(sha) {
+    const paths = comparedPaths.get(sha.toLowerCase());
+    const cached = (ref, filePath) =>
+      textCache.get(`${ref.toLowerCase()}\0${filePath}`);
+    if (
+      !paths ||
+      paths.some(
+        filePath => !cached(sha, filePath) || !cached(initialHead, filePath),
+      )
+    ) {
+      return null;
+    }
+    try {
+      const changes = await Promise.all(
+        paths.map(async filePath => ({
+          path: filePath,
+          before: await cached(sha, filePath),
+          after: await cached(initialHead, filePath),
+        })),
+      );
+      return summarizeSpecTextChange(changes);
+    } catch {
+      return null;
+    }
+  }
   // Only commits an eligible owner named, by review or command, are read.
   const authorLogin = pr.user.login.toLowerCase();
   const ownerReviews = reviews.filter(review => {
@@ -1035,6 +1263,14 @@ async function reconcileWithinBudget({
       : ownerApprovalRequired
         ? approvedDescription(approvingOwners)
         : 'Draft-only knowledge change; owner approval is not required.';
+  const notes = ownerActNotes({
+    reviews: ownerReviews,
+    comments,
+    owners: allOwners,
+    approvers: approvingOwners,
+    approvesCurrentContent,
+    headSha: initialHead,
+  });
   await writeDetails({
     statusText,
     headSha: initialHead,
@@ -1042,12 +1278,11 @@ async function reconcileWithinBudget({
     approved,
     records,
     currentContent,
-    notes: ownerActNotes({
-      reviews: ownerReviews,
-      comments,
-      owners: allOwners,
-      approvesCurrentContent,
-    }),
+    notes,
+    specChange:
+      !approved && notes.staleApprovalSha
+        ? await describeSpecChange(notes.staleApprovalSha)
+        : null,
     commandProblem,
   });
 
@@ -1082,4 +1317,8 @@ async function reconcileWithinBudget({
   await setFinalStatus(initialHead, 'success', successDescription);
 }
 
-module.exports = {isCommandComment, reconcileSpecOwnerGate};
+module.exports = {
+  isCommandComment,
+  reconcileSpecOwnerGate,
+  summarizeSpecTextChange,
+};
