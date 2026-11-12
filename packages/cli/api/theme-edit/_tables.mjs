@@ -116,6 +116,67 @@ export const FONTS = {
   rounded: ['Nunito', '"Varela Round", system-ui, sans-serif'],
   comic: ['Comic Sans MS', '"Comic Neue", cursive'],
 };
+/**
+ * Family names that need no font file: CSS generic families and fonts the
+ * usual desktop systems ship. Lowercase.
+ */
+export const SYSTEM_FAMILIES = new Set([
+  'serif',
+  'sans-serif',
+  'monospace',
+  'cursive',
+  'fantasy',
+  'math',
+  'emoji',
+  'fangsong',
+  'system-ui',
+  'ui-serif',
+  'ui-sans-serif',
+  'ui-monospace',
+  'ui-rounded',
+  '-apple-system',
+  'blinkmacsystemfont',
+  'arial',
+  'arial black',
+  'helvetica',
+  'helvetica neue',
+  'segoe ui',
+  'tahoma',
+  'verdana',
+  'trebuchet ms',
+  'georgia',
+  'times',
+  'times new roman',
+  'palatino',
+  'garamond',
+  'courier',
+  'courier new',
+  'consolas',
+  'menlo',
+  'monaco',
+  'sf mono',
+  'sf pro',
+  'sf pro text',
+  'sf pro display',
+  'ubuntu',
+  'cantarell',
+  'noto sans',
+  'liberation sans',
+  'dejavu sans',
+  'comic sans ms',
+  'impact',
+]);
+
+/** CSS-wide keywords: never a family, and invalid inside a list. */
+export const CSS_WIDE_KEYWORDS = [
+  'inherit',
+  'initial',
+  'unset',
+  'revert',
+  'revert-layer',
+  'default',
+];
+
 /** Presets every desktop system already has, so no font file is needed. */
 export const SYSTEM_FONTS = [
   'system',

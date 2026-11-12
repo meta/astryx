@@ -470,10 +470,6 @@ export interface FixedLayerReturn {
   render: (children: ReactNode, props: FixedRenderProps) => ReactNode;
 }
 
-interface InternalLayerFields {
-  wasJustDismissed: () => boolean;
-}
-
 /** Context-mode members a core component may use through `useLayerInternal`. */
 interface InternalContextLayerFields {
   /**
@@ -536,9 +532,7 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
 }
 
 type InternalContextLayerReturn = ContextLayerReturn &
-  InternalLayerFields &
   InternalContextLayerFields;
-type InternalFixedLayerReturn = FixedLayerReturn & InternalLayerFields;
 
 function toCssLength(value: number | string): string {
   return typeof value === 'number' ? `${value}px` : value;
@@ -1226,8 +1220,8 @@ function getGutterStyles(
 }
 
 /**
- * Internal props for controls that sit beside an open layer. This stays out of
- * the public useLayer/usePopover return types until the input family adopts it.
+ * Internal props for controls that sit beside an open layer. They are not part
+ * of the public useLayer or usePopover return types.
  */
 export function useKeepLayerOpenProps(
   id: string,
@@ -1286,7 +1280,7 @@ export function useKeepLayerOpenProps(
  */
 function useLayerImplementation(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): InternalContextLayerReturn | InternalFixedLayerReturn {
+): InternalContextLayerReturn | FixedLayerReturn {
   const {mode, onShow, onHide, lightDismiss = false} = options;
   const lazyMount = mode === 'context' ? (options.lazyMount ?? false) : false;
   const keepsMountAfterShow =
@@ -1400,8 +1394,7 @@ function useLayerImplementation(
   );
 
   // The gesture during which the browser last closed this layer on its own.
-  // Read through wasJustDismissed by triggers deciding whether a click is
-  // theirs to act on.
+  // openNow reads it so that the same press cannot reopen the layer.
   const dismissedByGestureRef = useRef<number | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
 
@@ -2531,7 +2524,6 @@ function useLayerImplementation(
       show,
       hide,
       isOpen,
-      wasJustDismissed,
       prepare,
       releasePrepared,
       id,
@@ -2543,24 +2535,22 @@ function useLayerImplementation(
       show,
       hide,
       isOpen,
-      wasJustDismissed,
       prepare,
       releasePrepared,
       id,
       renderContext,
     ],
   );
-  const fixedResult = useMemo<InternalFixedLayerReturn>(
+  const fixedResult = useMemo<FixedLayerReturn>(
     () => ({
       ref: undefined,
       show,
       hide,
       isOpen,
-      wasJustDismissed,
       id,
       render: renderFixed,
     }),
-    [show, hide, isOpen, wasJustDismissed, id, renderFixed],
+    [show, hide, isOpen, id, renderFixed],
   );
 
   return mode === 'context' ? contextResult : fixedResult;
@@ -2574,13 +2564,10 @@ export function useLayer(
   const internalLayer = useLayerImplementation(options);
   return useMemo(() => {
     const {
-      wasJustDismissed: _,
       prepare: _prepare,
       releasePrepared: _releasePrepared,
       ...layer
-    } = internalLayer as (
-      InternalContextLayerReturn | InternalFixedLayerReturn
-    ) &
+    } = internalLayer as (InternalContextLayerReturn | FixedLayerReturn) &
       Partial<InternalContextLayerFields>;
     return layer;
   }, [internalLayer]);
@@ -2593,11 +2580,9 @@ export function useLayer(
 export function useLayerInternal(
   options: InternalContextLayerOptions,
 ): InternalContextLayerReturn;
-export function useLayerInternal(
-  options: FixedLayerOptions,
-): InternalFixedLayerReturn;
+export function useLayerInternal(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayerInternal(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): InternalContextLayerReturn | InternalFixedLayerReturn {
+): InternalContextLayerReturn | FixedLayerReturn {
   return useLayerImplementation(options);
 }

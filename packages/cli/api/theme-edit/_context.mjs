@@ -13,7 +13,13 @@ import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
-import {CLOSEST_OPEN_FONT, OPEN_FONTS, P, SYSTEM_FONTS} from './_tables.mjs';
+import {
+  CLOSEST_OPEN_FONT,
+  OPEN_FONTS,
+  P,
+  SYSTEM_FAMILIES,
+  SYSTEM_FONTS,
+} from './_tables.mjs';
 import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
@@ -72,11 +78,14 @@ export async function context(cwd) {
   let parts;
   /** @type {string | null} */
   let unchecked = null;
+  /** @type {string | null} the render error's code */
+  let uncheckedCode = null;
   try {
     parts = await partData(project);
   } catch (e) {
     if (!isRenderFailure(e)) throw e;
     unchecked = renderCause(project, /** @type {Error} */ (e).message);
+    uncheckedCode = /** @type {any} */ (e).code ?? null;
     parts = {
       version: 0,
       coreKey: project.coreKey,
@@ -86,7 +95,13 @@ export async function context(cwd) {
       items: 0,
     };
   }
-  return {project, C: makeCompiler(project, parts), parts, unchecked};
+  return {
+    project,
+    C: makeCompiler(project, parts),
+    parts,
+    unchecked,
+    uncheckedCode,
+  };
 }
 
 /** @param {unknown} e */
@@ -185,6 +200,9 @@ export function fontNotes(ctx, data) {
     if (
       s.thing !== 'font' ||
       SYSTEM_FONTS.includes(s.value) ||
+      SYSTEM_FAMILIES.has(
+        fontOf(s.value).family.replace(/["']/g, '').toLowerCase(),
+      ) ||
       OPEN_FONTS[s.value] ||
       fontOf(s.value).pkg ||
       s.value === 'rounded' ||
@@ -194,7 +212,7 @@ export function fontNotes(ctx, data) {
     const family = fontOf(s.value).family.replace(/["']/g, '').toLowerCase();
     const near = CLOSEST_OPEN_FONT[family];
     notes.push(
-      `"${fontOf(s.value).family.replace(/["']/g, '')}" is not a system font and no package loads it: the app must load it, or it falls back.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
+      `"${fontOf(s.value).family.replace(/^["']|["']$/g, '')}" is not a system font and no package loads it: the app must load it, or it falls back.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
     );
   }
   return notes;
@@ -218,13 +236,31 @@ export function styledChanges(before, after) {
     ])) {
       const x = a[target]?.[key] ?? {};
       const y = b[target]?.[key] ?? {};
+      /** @param {string} p */
+      const cssName = p =>
+        p.startsWith('--')
+          ? p
+          : p.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
       for (const prop of new Set([...Object.keys(x), ...Object.keys(y)])) {
         if (JSON.stringify(x[prop]) === JSON.stringify(y[prop])) continue;
-        const name = prop.startsWith('--')
-          ? prop
-          : prop.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+        const where = `${target}${key === 'base' ? '' : ` ${key}`}`;
+        // A state block (`:hover`) lists each property it changes.
+        if (
+          prop.startsWith(':') &&
+          ((y[prop] && typeof y[prop] === 'object') ||
+            (x[prop] && typeof x[prop] === 'object'))
+        ) {
+          const xs = x[prop] ?? {};
+          const ys = y[prop] ?? {};
+          for (const p of new Set([...Object.keys(xs), ...Object.keys(ys)]))
+            if (JSON.stringify(xs[p]) !== JSON.stringify(ys[p]))
+              out.push(
+                `${where} ${prop}: ${cssName(p)} ${ys[p] === undefined ? '(removed)' : String(ys[p])}`,
+              );
+          continue;
+        }
         out.push(
-          `${target}${key === 'base' ? '' : ` ${key}`}: ${name} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
+          `${where}: ${cssName(prop)} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
         );
       }
     }
@@ -274,9 +310,12 @@ export async function previewAfter(ctx, slug, data, png) {
     preview = await renderPreview(ctx, slug, data);
   } catch (e) {
     // The change is already saved: any failure here leaves it unchecked.
+    const code = /** @type {any} */ (e)?.code;
     cause ??= isRenderFailure(e)
       ? renderCause(ctx.project, /** @type {Error} */ (e).message)
-      : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
+      : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
+        ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
+        : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
   const shots =
