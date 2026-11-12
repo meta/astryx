@@ -220,12 +220,17 @@ export async function themeEditNew(name, options = {}) {
   ) => `${P} new ${newName}${newFlags(likeValue, settings, png)}`;
   if (!slugOk(name)) {
     const fixed = slugFor(name);
-    // The name as typed may be a theme that exists in another case.
-    const exists = fs.existsSync(themeFiles(cwd, fixed).settings);
+    // Only a name typed in another case is the theme here already.
+    const sameName = String(name ?? '').toLowerCase() === fixed;
+    const exists = sameName && fs.existsSync(themeFiles(cwd, fixed).settings);
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.`,
-      {run: exists ? [`${P} show ${fixed}`] : [again(fixed)]},
+      {
+        run: exists
+          ? [`${P} show ${fixed}`]
+          : [again(usableNewName(cwd, fixed))],
+      },
     );
   }
   // A built-in theme's name would collide with the theme of that name the
@@ -275,7 +280,14 @@ export async function themeEditNew(name, options = {}) {
   const damaged = fs.existsSync(f.settings) && !readableJson(f.settings);
   if (fs.existsSync(f.settings) && !damaged)
     refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.`, {
-      run: [`${P} show ${name}`, `${P} set ${name} base neutral`],
+      // What the command asked for, on the theme that exists or as a new one.
+      run: [
+        `${P} show ${name}`,
+        ...(likeFixed && LIKE.includes(likeFixed)
+          ? [`${P} set ${name} base ${likeFixed}`]
+          : []),
+        again(freeThemeName(cwd, name)),
+      ],
     });
   // A `new` stopped part way (killed, out of memory) leaves its own marker
   // beside the files it wrote: only such a folder is cleared, and only
@@ -736,6 +748,20 @@ function refuseStoredTokens(ctx, slug, data, skip) {
 }
 
 /**
+ * A name `new` takes, for a suggestion: `name` itself when it is valid, not a
+ * built-in theme and its folder is free; `my-<name>` for a built-in theme's
+ * name; else the first free numbered name.
+ * @param {string} cwd
+ * @param {string} name
+ */
+function usableNewName(cwd, name) {
+  const base = LIKE.includes(name) ? `my-${name}` : name;
+  return slugOk(base) && !fs.existsSync(themeFiles(cwd, base).dir)
+    ? base
+    : freeThemeName(cwd, base);
+}
+
+/**
  * A theme name near `name` that is valid and whose folder is free: `name-2`,
  * `name-3`, …, shortened to fit the name's length limit.
  * @param {string} cwd
@@ -1030,6 +1056,8 @@ async function change(sub, slug, thing, value, options) {
       );
     }
     data.settings.splice(prevIdx, 1);
+    // A setting listed twice by hand goes in full.
+    data.settings = data.settings.filter(x => keyOf(x) !== k);
     // Vibrancy needs a color: undoing the last one takes it along, so the
     // theme never holds a state `set` refuses.
     if (
@@ -1064,6 +1092,13 @@ async function change(sub, slug, thing, value, options) {
     // A changed setting goes last, so it wins over what came before it.
     if (prev) data.settings.splice(prevIdx, 1);
     data.settings.push(s);
+  }
+  // A setting listed twice by hand keeps only the entry this command left.
+  if (sub === 'set') {
+    const last = data.settings.map(x => keyOf(x)).lastIndexOf(k);
+    data.settings = data.settings.filter(
+      (x, i) => keyOf(x) !== k || i === last,
+    );
   }
   // A setting for both modes replaces the ones made for one mode, which it
   // would otherwise sit under.
@@ -1240,8 +1275,12 @@ async function change(sub, slug, thing, value, options) {
     ...(sub === 'set' &&
     !exactOver &&
     !roleOver.length &&
-    // With the last build unreadable, nothing was compared.
-    !r.notes.some(n => n.includes('could not be read')) &&
+    // With the last build unreadable or missing, nothing was compared.
+    !r.notes.some(
+      n =>
+        n.includes('could not be read') ||
+        n.includes('there was no last build'),
+    ) &&
     !r.unchanged &&
     !r.changed.length &&
     !styled.length &&

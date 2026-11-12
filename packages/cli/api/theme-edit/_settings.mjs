@@ -489,15 +489,59 @@ export function loadTheme(
     : /^base "/.test(problem ?? '')
       ? `${P} set ${slug} base none`
       : null;
+  // A setting listed twice: setting it to one of its values, or undoing
+  // it, keeps one entry or none.
+  const twice = problem?.includes(' is listed twice (')
+    ? duplicated(data)
+    : null;
   if (problem)
     throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json: ${problem}. ${fieldFix ? 'Set it again' : `Fix it by hand${recover.text}`}. Nothing was changed.`,
+      `themes/${slug}/${slug}.settings.json: ${problem}. ${fieldFix ? 'Set it again' : twice ? `Set it to one of its values or undo it, or fix it by hand${recover.text}` : `Fix it by hand${recover.text}`}. Nothing was changed.`,
       fieldFix
         ? [{name: fieldFix, reason: 'do this instead'}, ...recover.run]
-        : recover.run,
+        : twice
+          ? [
+              ...twice.values
+                .filter(
+                  v =>
+                    typeof v === 'string' &&
+                    !valueProblem({...twice.setting, value: v}),
+                )
+                .slice(0, 2)
+                .map(v => ({
+                  name: `${P} set ${slug} ${undoArgs(twice.setting).replace(twice.setting.thing, `${twice.setting.thing} ${quoteCommandArgument(String(v))}`)}`,
+                  reason: `keep ${v}`,
+                })),
+              {
+                name: `${P} undo ${slug} ${undoArgs(twice.setting)}`,
+                reason: 'remove both',
+              },
+              ...recover.run,
+            ]
+          : recover.run,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   return data;
+}
+
+/**
+ * The first setting listed more than once, with every value it is listed
+ * with, in order.
+ * @param {any} data
+ * @returns {{setting: any, values: unknown[]} | null}
+ */
+function duplicated(data) {
+  /** @type {Map<string, any[]>} */
+  const byKey = new Map();
+  for (const s of data.settings ?? []) {
+    if (!s || typeof s.thing !== 'string') continue;
+    const key = keyOf(s);
+    byKey.set(key, [...(byKey.get(key) ?? []), s]);
+  }
+  for (const list of byKey.values())
+    if (list.length > 1)
+      return {setting: list[0], values: [...new Set(list.map(x => x.value))]};
+  return null;
 }
 
 /**
@@ -525,7 +569,8 @@ export function settingsProblem(
   if (!field && data.like != null && !LIKE.includes(data.like))
     return `base "${data.like}" is not a built-in theme (${LIKE.join(', ')})`;
   if (!Array.isArray(data.settings)) return 'settings is not a list';
-  const keys = new Set();
+  /** @type {Map<string, any>} */
+  const keys = new Map();
   for (const s of data.settings) {
     // A value or scope that is not text is a bad setting `undo` removes;
     // a setting with no name is damage.
@@ -536,8 +581,11 @@ export function settingsProblem(
     if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
       return `${s.thing} has mode "${s.mode}"`;
     const key = keyOf(s);
-    if (keys.has(key)) return `${describe(s)} is listed twice`;
-    keys.add(key);
+    // The command that changes or removes a setting listed twice keeps one
+    // value, or none, so it fixes the list.
+    if (keys.has(key) && !skips(s, skip))
+      return `${describe({...s, value: '?'}).replace(' = ?', '')} is listed twice (${JSON.stringify(keys.get(key).value)}, ${JSON.stringify(s.value)})`;
+    keys.set(key, s);
     if (skips(s, skip)) continue;
     const problem = valueProblem(s);
     if (problem) return problem;
@@ -2939,6 +2987,11 @@ export async function commitTheme(
       notes,
       unchanged: true,
     };
+  // With no last build (deleted, never committed), nothing is compared.
+  if (snapBefore && !fs.existsSync(f.js))
+    notes.push(
+      `there was no last build (${path.basename(f.js)} is missing), so the token changes are not listed; the theme is built again`,
+    );
   const resBefore =
     snapBefore && fs.existsSync(f.js)
       ? await resolvedTokens(ctx, slug).catch(() => {
