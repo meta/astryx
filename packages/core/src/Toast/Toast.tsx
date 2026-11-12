@@ -4,15 +4,9 @@
 
 /**
  * @file Toast.tsx
- * @input Uses React timers, touch/pen gesture events, the touch presentation
- *   (utils/touchPresentation), Toast options, Button/Icon, MediaTheme, tokens,
- *   and placement motion inherited from ToastViewport
- * @output Exports the rendered Toast surface and its pause/swipe/dismiss
- *   behavior. Under a finger (a coarse primary pointer) the swipe follows
- *   notification banners (useToastBannerSwipe). Every
- *   dismissal there first retracts the card past its edge, as the banner
- *   leaves: a swipe, the close button, the timeout or an app's dismiss. With
- *   a fine pointer the swipe is useToastGesture's and the exit Toast's fade
+ * @input Uses React timers, touch/pen gesture events, Toast options, Button/Icon,
+ *   MediaTheme, tokens, and placement motion inherited from ToastViewport
+ * @output Exports the rendered Toast surface and its pause/swipe/dismiss behavior
  * @position Core implementation; rendered by ToastViewport and documented by Toast.doc.mjs
  *
  * SYNC: When Toast layout, timer pause, media theme, or dismissal behavior changes,
@@ -96,8 +90,9 @@ const styles = stylex.create({
     lineHeight: typeScaleDefaults['--text-body-leading'],
     transform:
       'translateY(var(--_toast-swipe-y, 0px)) scale(var(--_toast-swipe-scale, 1))',
-    // Under reduced motion, a touch screen cross-fades the toast in place
-    // (opacity only). Any other pointer changes it at once.
+    // Under reduced motion, under a finger (a coarse primary pointer) the
+    // toast cross-fades in place (opacity only). Any other pointer changes it
+    // at once.
     transitionProperty: {
       default: 'opacity, transform',
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
@@ -435,8 +430,6 @@ export function ToastSurface({
   const handleRetract = useCallback(() => {
     onRetractRef.current?.();
   }, []);
-  // Toast's touch layer (its own module, one import site): the banner swipe
-  // and the retract, live only under a finger.
   const {retract, rest} = useToastBannerSwipe({
     rootRef,
     isNotification,

@@ -3,14 +3,10 @@
 /**
  * @file toast.ts
  * @input Nothing; data only
- * @output Exports `toast`: how a Toast's card follows a swipe toward its edge
- *   under a finger (a coarse primary pointer). It also says when a release
- *   lets the card go, and how the card leaves. Each value is the iOS 26.2
- *   notification banner's, from 60 fps recordings (method B in
- *   MEASUREMENTS.md), with its `@source`
- * @position The Toast domain of the UIKit constants table (motion/uikit).
- *   Its values are internal constants that no theme sets. The settle plays
- *   `springs.settle`
+ * @output Exports `toast`: the iOS 26.2 notification banner's follow,
+ *   release and exit values for a Toast under a finger. Each has its
+ *   `@source` (method B in MEASUREMENTS.md)
+ * @position The Toast domain of the UIKit constants table (motion/uikit)
  *
  * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md and
  *   /packages/core/src/Toast/useToastBannerSwipe.ts.

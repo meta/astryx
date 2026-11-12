@@ -4,19 +4,16 @@
 
 /**
  * @file useToastBannerSwipe.ts
- * @input The Toast card's root ref, its edge, its timer hooks, its dismissal
- *   callback and its interactive-descendant check
- * @output Under a finger, the swipe that follows iOS's notification banner
- *   (motion/uikit/toast) and `retract`, the exit every dismissal plays there.
- *   A finger catches the card mid-motion. Also the swipe's math:
- *   `followOffset`, `isDismissRelease`, `retractTarget` and `retractCurve`
- * @position Toast's touch layer, imported only by Toast.tsx. It is live under
- *   a coarse primary pointer. With a fine pointer it is inert, and
- *   useToastGesture runs
+ * @input The Toast card's root ref, edge, timer hooks and dismissal callback
+ * @output Under a finger, the banner swipe (motion/uikit/toast), the catch,
+ *   and `retract`, the exit every dismissal plays; also `followOffset`,
+ *   `isDismissRelease`, `retractTarget` and `retractCurve`
+ * @position Toast's touch layer, used only by Toast.tsx; inert with a fine
+ *   pointer
  *
- * SYNC: When modified, update Toast.doc.mjs, toastSwipe.test.ts, the finger
- *   tests in ToastViewport.test.tsx and
- *   __tests__/ToastCatch.interaction.browser.spec.ts.
+ * SYNC: When modified, update Toast.doc.mjs, toastSwipe.test.ts,
+ *   ToastViewport.test.tsx, __tests__/ToastCatch.interaction.browser.spec.ts
+ *   and __tests__/ToastSwipeScroll.interaction.browser.spec.ts.
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
@@ -32,6 +29,7 @@ import {
 import {cubicBezier, type BezierPoints} from '../motion/bezier';
 import {SETTLE_SPRING} from '../motion/uikit/springs';
 import {toast} from '../motion/uikit/toast';
+import {lockSelection} from '../utils/selectionLock';
 import type {ToastGestureDirection} from './useToastGesture';
 
 interface SwipeSession {
@@ -40,6 +38,12 @@ interface SwipeSession {
   offset: number;
   /** Where the finger caught the card, px from rest toward the edge. */
   caughtAt: number;
+  /**
+   * Ends the session's hold on text selection. A finger that caught the card
+   * holds it from touch-down, any other once the swipe claims the touch. A
+   * still hold on a resting card selects text as usual.
+   */
+  releaseSelection: (() => void) | null;
 }
 
 /** A retract in flight: where the card ends, and what its callers wait on. */
@@ -186,6 +190,16 @@ function panDirection(direction: ToastGestureDirection): 'down' | 'up' {
   return direction === 1 ? 'down' : 'up';
 }
 
+/**
+ * Turns the card's stylesheet transitions off. They run its entrance. Once the
+ * touch layer moves the card, they would replay its fades: WebKit restarts the
+ * opacity transition when a Reduce Motion dip hands the opacity back. Under a
+ * finger nothing else transitions the card.
+ */
+function stillTransitions(root: HTMLElement): void {
+  root.style.setProperty('transition-property', 'none');
+}
+
 export function useToastBannerSwipe(
   options: UseToastBannerSwipeOptions,
 ): ToastBannerSwipeHandle {
@@ -216,6 +230,8 @@ export function useToastBannerSwipe(
     root?.style.setProperty('will-change', 'translate');
     return () => {
       root?.style.removeProperty('will-change');
+      // With a fine pointer the stylesheet's transitions run the card again.
+      root?.style.removeProperty('transition-property');
     };
   }, [isNotification, rootRef]);
 
@@ -242,9 +258,11 @@ export function useToastBannerSwipe(
             return false;
           }
           if (sessionRef.current == null) {
+            stillTransitions(root);
             const isLeaving = exitRef.current != null;
             const animator = cardAnimator();
             let caughtAt = 0;
+            let releaseSelection: (() => void) | null = null;
             if (
               animator != null &&
               (isLeaving || settlingRef.current != null)
@@ -253,6 +271,10 @@ export function useToastBannerSwipe(
               caughtAt = animator.get('y') * current.direction;
               animator.stop();
               settlingRef.current = null;
+              releaseSelection = lockSelection(
+                [root],
+                touch.target as EventTarget | null,
+              );
             }
             // Touch-down: hold the auto-hide timer while the finger is on
             // the card. A leaving card's toast is already dismissed.
@@ -261,7 +283,12 @@ export function useToastBannerSwipe(
             if (pausedTimer) {
               current.pauseTimer();
             }
-            sessionRef.current = {pausedTimer, offset: caughtAt, caughtAt};
+            sessionRef.current = {
+              pausedTimer,
+              offset: caughtAt,
+              caughtAt,
+              releaseSelection,
+            };
           }
           return true;
         },
@@ -333,6 +360,10 @@ export function useToastBannerSwipe(
         // included: the card's dead zone is measured from where it landed.
         const fingerTravel = recognizer.totalTranslation().y * direction;
         if (to === 'began' || to === 'changed') {
+          const root = rootRef.current;
+          if (session.releaseSelection == null && root != null) {
+            session.releaseSelection = lockSelection([root], null);
+          }
           session.offset = session.caughtAt + followOffset(fingerTravel);
           cardAnimator()?.set({y: session.offset * direction});
           return;
@@ -340,6 +371,7 @@ export function useToastBannerSwipe(
         if (to !== 'ended' && to !== 'cancelled' && to !== 'failed') {
           return;
         }
+        session.releaseSelection?.();
         sessionRef.current = null;
         const fingerVelocity = recognizer.velocity().y * direction;
         if (exitRef.current != null) {
@@ -390,7 +422,7 @@ export function useToastBannerSwipe(
           resumeTimer();
         }
       }),
-    [cardAnimator, pan, playExit],
+    [cardAnimator, pan, playExit, rootRef],
   );
 
   // Everything before the first await runs in the call, so the retract starts
@@ -411,6 +443,7 @@ export function useToastBannerSwipe(
     if (root == null || box == null || view == null) {
       return;
     }
+    stillTransitions(root);
     settlingRef.current = null;
     const to = retractTarget(
       box,

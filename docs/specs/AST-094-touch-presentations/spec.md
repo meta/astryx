@@ -377,11 +377,11 @@ a measured, sourced difference exists.
   | Gesture                           | Springs: a tap, key or program turn plays `springs.settle` from rest; the flick coast keeps UIKit's measured deceleration; the slow-release snap stays as recorded                                              | the DateInput and TimeInput wheels                                                                                                         |
   | Tap                               | Curve tokens                                                                                                                                                                                                    | Accordion, Disclosure, Collapsible, DropdownMenu, Popover, Tooltip, HoverCard, Dialog, AlertDialog, Tabs, Checkbox, press feedback         |
   | Gesture-capable                   | Springs under a touch presentation: the thumb drags, so every tap, click, key or value change settles on the same spring; without a touch presentation they keep the theme's curve (owner decision, 2026-11-04) | Switch, SegmentedControl                                                                                                                   |
-  | Open (as its record states today) | Theme timing for a tap dismiss; a spring from the release for a swipe                                                                                                                                           | Toast                                                                                                                                      |
+  | Exception, under a finger (Toast) | Under a finger every exit, a tap dismiss included, plays the notification banner's measured slide; a fine pointer keeps the theme's fade (`component:Toast` DEC-2)                                              | Toast                                                                                                                                      |
 
-  Toast keeps the motion its record states today: theme timing for a tap
-  dismiss, and a spring from the release for a swipe (`component:Toast` FR5).
-  Which main interaction classifies it is open.
+  Toast is the exception: under a finger every exit plays the notification
+  banner's measured slide, a tap dismiss included, and a fine pointer keeps
+  the theme's fade (`component:Toast` DEC-2).
 
   | Spring roles                                                                                                                                                                                                        | Timing tier                                     |
   | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
@@ -708,8 +708,12 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   velocity, and its commit point is halfway from its lowest detent to closed. A
   release past its measured flick speed lands on the first position at or past
   its projection, at least its next one. So a short fast flick at its lowest
-  detent closes it (`component:BottomSheet` FR19). A row swipe keeps
-  `spec:AST-057`'s own release rule.
+  detent closes it (`component:BottomSheet` FR19). A Toast's touch release
+  takes the notification banner's measured values, the UIKit table's Toast
+  domain. Its projection is 0, and its commit point is 15.7 px out. A release
+  past its measured flick speed, 105 px/s toward the edge from at or past
+  rest, commits (`component:Toast` FR4). A row swipe keeps `spec:AST-057`'s
+  own release rule.
 - **FR37 — Moving back cancels.** A release whose velocity points back
   toward the start MUST cancel, whatever the travel so far.
 - **FR38 — The settle continues the pointer.** The commit or the spring-back

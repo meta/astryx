@@ -6,7 +6,10 @@
  * @output Proves that a finger catches the card while it springs back and
  *   while it leaves. The card stays where the finger caught it, then follows
  *   the finger. A card caught on its way out, or dismissed while a finger
- *   drags it, leaves once the finger lifts
+ *   drags it, leaves once the finger lifts. Under reduced motion a spring-back
+ *   fades the card once. A finger that drags or catches the card starts no
+ *   text selection, while a still hold on a resting card can. A catch whose
+ *   lift the page never hears ends at the next touch
  * @position Toast's interaction proofs that its motion is interruptible
  */
 
@@ -384,5 +387,280 @@ test('a dismissal while a finger drags the card lets the card leave once the fin
     {t: +(frames[frames.length - 1].t + FRAME_MS).toFixed(3), fingers: []},
   ]);
   // Its toast is dismissed, so the card leaves once the finger lifts.
+  await expect(page.locator('.astryx-toast')).toHaveCount(0, {timeout: 3000});
+});
+
+test('under reduced motion, a drag that turns back fades the card back to rest once', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const card = await showToast(page);
+  const box = await card.boundingBox();
+  if (box == null) {
+    throw new Error('no toast');
+  }
+  const driver = await touchDriver(page);
+  // The card's opacity on every frame.
+  await page.evaluate(() => {
+    const recorder = window as unknown as {__opacity: number[]};
+    recorder.__opacity = [];
+    const tick = () => {
+      const element = document.querySelector('.astryx-toast');
+      if (element != null) {
+        recorder.__opacity.push(
+          Number.parseFloat(getComputedStyle(element).opacity),
+        );
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  // The finger drags the bottom toast 20 px toward its edge, then 115 px back
+  // past where it started. It rests and lifts, and the card springs back.
+  const start = {
+    x: Math.round(box.x + box.width * 0.3),
+    y: Math.round(box.y + box.height / 2),
+  };
+  const out = {x: start.x, y: start.y + 20};
+  const away = {x: start.x, y: start.y - 115};
+  const frames: TouchFrame[] = [
+    {t: 0, fingers: [{id: 0, ...start}]},
+    ...move(0, start, out, 0, 100),
+    ...move(0, out, away, 100, 300),
+    ...hold(0, away, 400 + FRAME_MS, 60),
+  ];
+  await driver.play([
+    ...frames,
+    {t: +(frames[frames.length - 1].t + FRAME_MS).toFixed(3), fingers: []},
+  ]);
+  await page.waitForTimeout(1000);
+  const opacity = await page.evaluate(
+    () => (window as unknown as {__opacity: number[]}).__opacity,
+  );
+  // One fade: the card dips below full opacity once, then stays there.
+  let fades = 0;
+  let isLow = false;
+  for (const value of opacity) {
+    if (value < 0.95 && !isLow) {
+      fades += 1;
+    }
+    isLow = value < 0.95;
+  }
+  expect(fades, 'the spring-back fades once').toBe(1);
+  expect(opacity[opacity.length - 1]).toBe(1);
+});
+
+test('a finger that drags or catches the card starts no text selection; a still hold on a resting card still can', async ({
+  page,
+}) => {
+  const card = await showToast(page);
+  const box = await card.boundingBox();
+  if (box == null) {
+    throw new Error('no toast');
+  }
+  const driver = await touchDriver(page);
+  await recordCard(page);
+  // Each probe asks the card's text for a selection, as a long press does,
+  // and records whether the card refused it.
+  await page.evaluate(() => {
+    const recorder = window as unknown as {__refused: Record<string, boolean>};
+    recorder.__refused = {};
+    const probe = (label: string) => {
+      const element = document.querySelector('.astryx-toast');
+      if (element == null) {
+        return;
+      }
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      let text = walker.nextNode();
+      while (text != null && (text.textContent ?? '').trim() === '') {
+        text = walker.nextNode();
+      }
+      const event = new Event('selectstart', {bubbles: true, cancelable: true});
+      (text?.parentElement ?? element).dispatchEvent(event);
+      recorder.__refused[label] = event.defaultPrevented;
+    };
+    let touches = 0;
+    let moves = 0;
+    const options = {capture: true, passive: true};
+    window.addEventListener(
+      'touchstart',
+      () => {
+        touches += 1;
+        moves = 0;
+        const touch = touches;
+        setTimeout(() => probe(`hold ${touch}`), 100);
+      },
+      options,
+    );
+    window.addEventListener(
+      'touchmove',
+      () => {
+        moves += 1;
+        if (moves === 8) {
+          probe(`drag ${touches}`);
+        }
+      },
+      options,
+    );
+    window.addEventListener(
+      'touchend',
+      () => {
+        const touch = touches;
+        setTimeout(() => probe(`after ${touch}`), 30);
+      },
+      options,
+    );
+  });
+  const start = {
+    x: Math.round(box.x + box.width / 2),
+    y: Math.round(box.y + box.height / 2),
+  };
+  // First a still hold on the resting card.
+  await driver.play([
+    ...hold(0, start, 0, 300),
+    {t: 300 + FRAME_MS, fingers: []},
+  ]);
+  // Then a drag: 20 px toward the edge, so the swipe claims the touch, then
+  // 140 px back. The card stretches and springs back at the lift.
+  const begun = {x: start.x, y: start.y + 20};
+  const stretched = {x: start.x, y: start.y - 120};
+  const drag: TouchFrame[] = [
+    {t: 0, fingers: [{id: 1, ...start}]},
+    ...move(1, start, begun, 0, 60),
+    ...move(1, begun, stretched, 60, 220),
+    ...hold(1, stretched, 280 + FRAME_MS, 60),
+  ];
+  await driver.play([
+    ...drag,
+    {t: +(drag[drag.length - 1].t + FRAME_MS).toFixed(3), fingers: []},
+  ]);
+  // Then a finger catches the springing card and holds it.
+  const stretchedY = Math.min(
+    ...between(
+      (await readRecord(page)).__frames,
+      Number.NEGATIVE_INFINITY,
+      Number.POSITIVE_INFINITY,
+    ),
+  );
+  const catchAt = await waitForMotion(page, stretchedY, 0, 5);
+  await driver.play([
+    ...hold(2, catchAt, 0, 300),
+    {t: 300 + FRAME_MS, fingers: []},
+  ]);
+  await page.waitForTimeout(100);
+  const refused = await page.evaluate(
+    () => (window as unknown as {__refused: Record<string, boolean>}).__refused,
+  );
+  expect(refused['hold 1'], 'a still hold on a resting card can select').toBe(
+    false,
+  );
+  expect(refused['drag 2'], 'a drag starts no selection').toBe(true);
+  expect(refused['after 2'], 'the lift lets selection start again').toBe(false);
+  expect(
+    refused['hold 3'],
+    'a finger that catches the card starts no selection',
+  ).toBe(true);
+  expect(refused['after 3'], 'the lift lets selection start again').toBe(false);
+});
+
+test('a card caught by a finger whose lift the page never hears leaves after a tap on its close button', async ({
+  page,
+}) => {
+  // The page never hears the second finger lift: its touchend and pointerup
+  // stop at the window before the app's own listeners, added first.
+  await page.addInitScript(() => {
+    let touches = 0;
+    let second: number | null = null;
+    window.addEventListener(
+      'touchstart',
+      event => {
+        for (const touch of Array.from(event.changedTouches)) {
+          touches += 1;
+          if (touches === 2) {
+            second = touch.identifier;
+          }
+        }
+      },
+      {capture: true},
+    );
+    window.addEventListener(
+      'touchend',
+      event => {
+        if (
+          Array.from(event.changedTouches).some(
+            touch => touch.identifier === second,
+          )
+        ) {
+          event.stopImmediatePropagation();
+        }
+      },
+      {capture: true},
+    );
+    let pointers = 0;
+    let secondPointer: number | null = null;
+    window.addEventListener(
+      'pointerdown',
+      event => {
+        pointers += 1;
+        if (pointers === 2) {
+          secondPointer = event.pointerId;
+        }
+      },
+      {capture: true},
+    );
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      window.addEventListener(
+        type,
+        event => {
+          if ((event as PointerEvent).pointerId === secondPointer) {
+            event.stopImmediatePropagation();
+          }
+        },
+        {capture: true},
+      );
+    }
+  });
+  const card = await showToast(page);
+  const box = await card.boundingBox();
+  if (box == null) {
+    throw new Error('no toast');
+  }
+  const driver = await touchDriver(page);
+  // A flick toward the bottom edge dismisses the toast, and a second finger
+  // catches the leaving card.
+  const start = {
+    x: Math.round(box.x + box.width * 0.3),
+    y: Math.round(box.y + box.height / 2),
+  };
+  const flicked = {x: start.x, y: start.y + 40};
+  const flick: TouchFrame[] = [
+    {t: 0, fingers: [{id: 0, ...start}]},
+    ...move(0, start, flicked, 0, 50),
+  ];
+  await driver.play([
+    ...flick,
+    {t: +(flick[flick.length - 1].t + FRAME_MS).toFixed(3), fingers: []},
+  ]);
+  const caught = {x: start.x, y: start.y + 8};
+  await driver.play([
+    ...hold(1, caught, 0, 150),
+    {t: 150 + FRAME_MS, fingers: []},
+  ]);
+  await page.waitForTimeout(300);
+  await expect(card, 'the card stays caught').toBeVisible();
+  // The tap on its close button tells the page that finger is gone.
+  const close = page.getByRole('button', {name: 'Dismiss notification'});
+  const closeBox = await close.boundingBox();
+  if (closeBox == null) {
+    throw new Error('no close button');
+  }
+  const tap = {
+    x: Math.round(closeBox.x + closeBox.width / 2),
+    y: Math.round(closeBox.y + closeBox.height / 2),
+  };
+  await driver.play([
+    {t: 0, fingers: [{id: 2, ...tap}]},
+    {t: 60, fingers: []},
+  ]);
   await expect(page.locator('.astryx-toast')).toHaveCount(0, {timeout: 3000});
 });
