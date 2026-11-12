@@ -1387,6 +1387,15 @@ function useLayerImplementation(
   // The trigger the layer was open for when the browser closed it. Only a
   // show from that trigger is the dismissing press reopening it.
   const dismissedTriggerRef = useRef<HTMLElement | null>(null);
+  // A hide the browser has started on its own (light dismiss, popover="auto"
+  // stack eviction, an Escape its close watcher answers), from `beforetoggle`
+  // until its `toggle`, with the trigger the layer was open for. `moved` is
+  // set when a show from another trigger reopens the layer during that hide.
+  const browserHideRef = useRef<{
+    popover: HTMLElement;
+    trigger: HTMLElement | null;
+    moved: boolean;
+  } | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
 
   // Stops the watch for pans outside the open layer (`watchesOutsidePans`).
@@ -1563,6 +1572,21 @@ function useLayerImplementation(
       dismissedTriggerRef.current === triggerRef.current
     ) {
       return;
+    }
+    // A show from another trigger while the browser closes the layer for its
+    // old trigger: the layer moves to the new trigger. It opens there now, and
+    // the old trigger's close is not reported.
+    const browserHide = browserHideRef.current;
+    if (
+      browserHide != null &&
+      isOpenRef.current &&
+      browserHide.popover === popoverRef.current &&
+      browserHide.trigger !== triggerRef.current
+    ) {
+      browserHide.moved = true;
+      openedPopoverRef.current = null;
+      isOpenRef.current = false;
+      stopOutsidePanWatch();
     }
     // A context popover left over until React commits a previous hide must not
     // be reopened. The synchronous mount ref is the source of truth.
@@ -2027,28 +2051,6 @@ function useLayerImplementation(
   // hide starts; the ledger counts the hide from there until the element's
   // own `toggle`, independent of this hook's bindings, which a render inside
   // the hide can replace.
-  // The popover whose close the browser started and this hook recorded at
-  // `beforetoggle`. Its `toggle` then only releases the anchor name.
-  const browserClosingRef = useRef<HTMLElement | null>(null);
-
-  // A close the browser starts itself (light dismiss, popover="auto" stack
-  // eviction, an Escape its close watcher answers) is recorded as it starts.
-  // A show later in the same gesture is then a new open, which the ledger
-  // replays once the hide ends, so a press on another trigger of the layer
-  // opens it there.
-  const recordBrowserClose = useCallback(
-    (el: HTMLElement) => {
-      openedPopoverRef.current = null;
-      isOpenRef.current = false;
-      browserClosingRef.current = el;
-      stopOutsidePanWatch();
-      rememberDismissal(el.ownerDocument);
-      setIsOpen(false);
-      onHide?.();
-    },
-    [onHide, rememberDismissal, stopOutsidePanWatch],
-  );
-
   const handleBeforeToggle = useCallback(
     (e: Event) => {
       const toggleEvent = e as ToggleEvent;
@@ -2059,7 +2061,11 @@ function useLayerImplementation(
       if (isOpenRef.current) {
         observeBrowserHide(el);
         onCloseStartRef.current?.();
-        recordBrowserClose(el);
+        browserHideRef.current = {
+          popover: el,
+          trigger: triggerRef.current,
+          moved: false,
+        };
         // The browser's own close releases the name from its toggle event.
         return;
       }
@@ -2077,29 +2083,22 @@ function useLayerImplementation(
         removeAnchorName(trigger, anchorId);
       }
     },
-    [anchorId, recordBrowserClose],
+    [anchorId],
   );
 
   const handleToggle = useCallback(
     (e: Event) => {
       const toggleEvent = e as ToggleEvent;
-      const el = e.currentTarget as HTMLElement | null;
-      if (toggleEvent.newState !== 'closed') {
-        return;
-      }
-      if (el != null && browserClosingRef.current === el) {
-        // Recorded at `beforetoggle`. The layer stays mounted until its hide
-        // ends here. A layer reopened since then keeps its mount and anchor
-        // name.
-        browserClosingRef.current = null;
-        releaseAnchor(el);
-        if (!isOpenRef.current) {
-          clearContextMount();
+      const browserHide = browserHideRef.current;
+      if (browserHide != null && browserHide.popover === e.currentTarget) {
+        browserHideRef.current = null;
+        // The layer moved to another trigger during the hide: it is open, and
+        // the old trigger's close is not reported.
+        if (browserHide.moved) {
+          return;
         }
-        return;
       }
-      // An engine without `beforetoggle` reports the browser's close here.
-      if (isOpenRef.current) {
+      if (toggleEvent.newState === 'closed' && isOpenRef.current) {
         openedPopoverRef.current = null;
         isOpenRef.current = false;
         stopOutsidePanWatch();

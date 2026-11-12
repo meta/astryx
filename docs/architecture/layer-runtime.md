@@ -306,13 +306,11 @@ accepted support contract and documentation change are owned by `spec:AST-003`.
 ### Current Popover lifecycle and light dismissal
 
 Public `useLayer` defaults to `popover="manual"`; Popover-family APIs normally
-select `popover="auto"`. A close the browser starts itself (light dismiss,
-`popover="auto"` stack eviction, an Escape its close watcher answers) is recorded
-at its `beforetoggle`: `isOpen` turns false, `onHide` and controlled-state
-synchronization run, and the dismissal is remembered, while the surface may
-still be painting its close. The anchor name is released at the close's
-`toggle` unless the layer has opened again. An engine without `beforetoggle`
-reports the close at `toggle`.
+select `popover="auto"`. Browser-initiated closes are observed through the queued
+`toggle` event. The browser may already have hidden the surface before `isOpen`,
+`onHide`, or controlled-state synchronization catches up. A show from another
+trigger while such a close is in flight moves the layer to that trigger; that
+close is not reported.
 
 `gestureCounter` identifies the physical pointer or keyboard gesture in flight.
 `useLayer` records the gesture and the trigger associated with a browser close,
@@ -538,9 +536,9 @@ layers use Layer rendering without joining Escape/platform dismissal.
   browser close do not double-fire state or `onHide` updates.
 - **INV7 — Existing native-light-dismiss guards identify gestures.** The press
   that closes a layer cannot reopen it from the trigger it was open for; a press
-  on another trigger of the same layer may show it, anchored to that trigger. A
-  close the browser starts is recorded as it starts, so a show in the same
-  gesture from another trigger opens after it; menu-hover also
+  on another trigger of the same layer may show it, anchored to that trigger: a
+  show in the same gesture from another trigger moves the layer to that trigger;
+  menu-hover also
   suppresses exposure-induced hover. A one-finger touch that starts outside an
   open light-dismiss popover and travels the shared pan distance is a gesture,
   not an outside press, even when the browser reads it as a tap; a tap outside
