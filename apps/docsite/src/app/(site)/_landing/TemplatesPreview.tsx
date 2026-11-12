@@ -1,35 +1,32 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Shows a decorative grid of page-template previews on a feature card.
- * @input Uses the tile rows and the static preview pages that scripts/generate-landing-template-previews.mjs renders at build time.
- * @output Renders each preview page in a lazy-loaded frame, scaled to its tile. A visitor's own color mode reaches the page in the frame's URL.
- * @position Landing and community feature cards.
+ * @file Homepage card of scaled-down page templates.
+ * @input The tile rows and the template markup that the build renders
+ *   (FrozenPreview).
+ * @output A decorative tile grid with no client JavaScript.
+ * @position Server component. The homepage and the community page pass it to
+ *   their client cards as a prop.
  */
 
-'use client';
-
 import * as stylex from '@stylexjs/stylex';
-import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {
   spacingVars,
   radiusVars,
   shadowVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {useThemeMode} from '../../providers';
+import {FrozenPreview} from './FrozenPreview';
 import templateRows from './landingTemplateRows.json';
-import {previewColorModeFragment} from './templatePreviewColorMode';
 
 // A representative set of the real page templates (storefront, IDE, payment,
 // login, settings, AI chat, product detail). Grouped into rows; the middle row
 // holds three so the centered (login) template sits in the middle.
 //
 // A live render of seven templates costs seconds of main-thread work on a
-// slow device. The card is decorative, so each tile shows a static page that
-// the build renders from the same template: markup and styles, no script.
-const TEMPLATE_ROWS: string[][] = templateRows;
-
-const PREVIEW_DIRECTORY = '/landing/template-previews';
+// slow device. The card is decorative, so the build renders each template
+// once to static markup (scripts/generate-landing-template-previews.mjs).
+// CSS scales it, and CSS variables re-theme it for dark mode.
+const TEMPLATE_ROWS: ReadonlyArray<ReadonlyArray<string>> = templateRows;
 
 // On small screens the rows flow into a single 3-column grid; 7 templates would
 // leave a lone 7th tile, so this one is dropped there to keep a clean 3 + 3.
@@ -42,8 +39,8 @@ const RENDER_WIDTH = 1100;
 // Uniform tile aspect ratio so every block is the same height (and, in a 2-col
 // grid, the same width). Slightly taller than 16/10 to show a bit more of each
 // page.
-const TILE_RATIO = '16/11.5';
-const RENDER_HEIGHT = (RENDER_WIDTH * 11.5) / 16;
+const TILE_RATIO_WIDTH = 16;
+const TILE_RATIO_HEIGHT = 11.5;
 
 // The bento column is narrow even on wide screens (3-column desktop grid), so
 // the 50%-wider, staggered, bleeding 2-per-row layout only makes sense there.
@@ -60,7 +57,7 @@ const styles = stylex.create({
     containerType: 'inline-size',
     containerName: 'templatesPreview',
     width: '100%',
-    // Decorative — never interactive.
+    // Decorative: never interactive (the container is also inert).
     pointerEvents: 'none',
   },
   // Narrow card: a flex-column stack of 2-per-row groups (each row offset/bled).
@@ -117,20 +114,29 @@ const styles = stylex.create({
     backgroundColor: 'var(--color-background-surface)',
     boxShadow: shadowVars['--shadow-med'],
   },
-  // The size container that the frame's scale reads.
-  frameBox: {
-    containerType: 'inline-size',
-    aspectRatio: TILE_RATIO,
-    overflow: 'hidden',
-  },
-  // The frame lays its page out at the render width, then shrinks to the
-  // tile. tan(atan2(a, b)) divides two lengths, which calc() cannot do in
-  // every browser yet. The fixed scale is for a browser without it.
+  // Crop window of one tile. It is a size container, so the scale below can
+  // use its width (100cqw).
   frame: {
-    display: 'block',
-    width: `${RENDER_WIDTH}px`,
-    height: `${RENDER_HEIGHT}px`,
-    borderWidth: 0,
+    position: 'relative',
+    width: '100%',
+    aspectRatio: `${TILE_RATIO_WIDTH} / ${TILE_RATIO_HEIGHT}`,
+    overflow: 'hidden',
+    containerType: 'inline-size',
+    // Templates render transparent (content only, no AppShell), so the tile
+    // supplies the page background.
+    backgroundColor: 'var(--color-background-surface)',
+  },
+  // The template at its desktop render width, scaled down to the tile width.
+  // Its height fills the crop window at that scale. tan(atan2(a, b)) divides
+  // two lengths, which calc() cannot do in every browser yet. The fixed scale
+  // is for a browser without it.
+  scaler: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: RENDER_WIDTH,
+    height: (RENDER_WIDTH * TILE_RATIO_HEIGHT) / TILE_RATIO_WIDTH,
+    overflow: 'hidden',
     transformOrigin: 'top left',
     transform: stylex.firstThatWorks(
       `scale(tan(atan2(100cqw, ${RENDER_WIDTH}px)))`,
@@ -157,12 +163,8 @@ export function TemplatesPreview({
    */
   maxRows?: number;
 }) {
-  const {themeMode} = useThemeMode();
   const rows =
     maxRows != null ? TEMPLATE_ROWS.slice(0, maxRows) : TEMPLATE_ROWS;
-  const osPrefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-  const colorMode = previewColorModeFragment(themeMode, osPrefersDark);
-
   return (
     <div {...stylex.props(styles.container)} inert>
       <div {...stylex.props(styles.root)}>
@@ -180,19 +182,11 @@ export function TemplatesPreview({
                   styles.tile,
                   slug === HIDE_ON_SMALL && styles.hideOnWide,
                 )}>
-                <div {...stylex.props(styles.frameBox)}>
-                  <iframe
-                    // A new URL in a loaded frame adds a browser history
-                    // entry, so Back would step through the tiles. A new
-                    // frame for the new color mode adds none.
-                    key={colorMode}
-                    src={`${PREVIEW_DIRECTORY}/${slug}.html${colorMode}`}
-                    title={`${slug} template preview`}
-                    loading="lazy"
-                    // The page has no script, and the card does not read it.
-                    sandbox=""
-                    tabIndex={-1}
-                    {...stylex.props(styles.frame)}
+                <div {...stylex.props(styles.frame)} inert>
+                  <FrozenPreview
+                    id={slug}
+                    fillHeight
+                    {...stylex.props(styles.scaler)}
                   />
                 </div>
               </div>
