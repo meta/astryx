@@ -72,6 +72,7 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   useAnnounce,
@@ -2539,12 +2540,7 @@ function ListReorderModeHint({
   const layer = useLayer({mode: 'context'});
   // The latest layer handle, for the effect below, which re-runs only when
   // the mode's row changes.
-  const layerRef = useRef(layer);
-  // Syncs the hint effect's layer handle with the committed one, before that
-  // effect reads it.
-  useIsomorphicLayoutEffect(() => {
-    layerRef.current = layer;
-  });
+  const layerRef = useCommittedRef(layer);
   const hintRef = useRef<HTMLElement | null>(null);
   // External system: the hint's popover in the top layer (useLayer),
   // anchored to the handle of the row in reorder mode. Shown while that row
