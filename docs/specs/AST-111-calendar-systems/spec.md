@@ -98,9 +98,9 @@ server code stay calendar-neutral.
 </InternationalizationProvider>;
 
 {
-  /* a -u-ca- keyword in the locale does not select the calendar */
+  /* with no calendar prop, an explicit -u-ca- keyword selects the calendar */
 }
-<InternationalizationProvider locale="th-TH-u-ca-buddhist" calendar="buddhist">
+<InternationalizationProvider locale="th-TH-u-ca-buddhist">
   …
 </InternationalizationProvider>;
 ```
@@ -133,9 +133,11 @@ optional `calendar` argument that defaults to `gregory` (FR18). The public
   calendar goes by its CLDR name (DEC-8).
 - **FR2 — The application selects the calendar.** A date component uses, in
   order: its own `calendar` prop; the `calendar` prop of its
-  `InternationalizationProvider`; otherwise `gregory`. A locale never selects
-  the calendar: neither its default calendar nor a `-u-ca-` keyword in it
-  applies. The calendar is independent of language, numbering, and direction:
+  `InternationalizationProvider`; an explicit `-u-ca-` keyword in the
+  provider's `locale`; otherwise `gregory`. A locale's default calendar never
+  applies. The keyword `islamic` resolves to `islamic-tbla`, as ECMA-402
+  resolves it, and any other keyword outside FR1 resolves as FR1 says. The
+  calendar is independent of language, numbering, and direction:
   `locale="en" calendar="persian"` shows Persian dates in English, and
   `locale="fa-IR"` with no calendar shows Gregorian dates in Persian.
 - **FR3 — Values stay Gregorian ISO.** The calendar never changes what a
@@ -365,10 +367,10 @@ These requirements apply to the text fields of `DateInput` and
   under a calendar other than `gregory` or `iso8601`, an explicit
   `presentation="native"` resolves to the Astryx surface for the pointer,
   because no native date picker shows the application's calendar (FR15, DEC-7).
-- A provider locale with a `-u-ca-` keyword keeps the Gregorian dates that the
-  latest stable release shows (FR2). Honoring the keyword would change output
-  with no code change, which `spec:AST-017` FR1 classes as breaking, so it waits
-  for a minor release (DEC-2).
+- A provider locale with an explicit `-u-ca-` keyword shows that calendar when
+  no `calendar` prop is set (FR2). This changes output with no code change,
+  which `spec:AST-017` FR1 classes as breaking, so it ships in a minor release;
+  `calendar="gregory"` keeps Gregorian dates (DEC-2).
 - Gregorian behavior that changes, with its `spec:AST-017` class:
   - `component:Calendar` AR1 already steps a Gregorian year with Shift+PageUp
     and Shift+PageDown, clamping a missing day to the month's last day. FR7
@@ -458,12 +460,11 @@ nested provider replaces its parent's context.
 Rejected: following the locale's default calendar, because it silently changes
 every screen in a locale whose default calendar is not Gregorian.
 
-A `-u-ca-` keyword in the locale does not select the calendar either. A locale
-such as `th-TH-u-ca-buddhist` shows Gregorian dates on the latest stable
-release, so honoring the keyword would change an application's output with no
-code change, which `spec:AST-017` FR1 classes as breaking. The keyword can
-become a selector in a minor release, with `calendar="gregory"` as the
-restoring prop.
+An explicit `-u-ca-` keyword in the locale selects the calendar when no
+`calendar` prop is set, because the application wrote it, unlike the locale's
+default calendar. Honoring it changes the output of an application whose locale
+carries one, which `spec:AST-017` FR1 classes as breaking, so it ships in a
+minor release, and `calendar="gregory"` restores Gregorian dates.
 
 Rejected: honoring the keyword in a patch as the application's explicit
 request, because `spec:AST-017` FR6 does not let an approval reclassify a
