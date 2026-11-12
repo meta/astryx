@@ -36,6 +36,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {CLI_ROOT} from './paths.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
+import {jitiCacheDir} from './jiti-cache.mjs';
 import {
   fileStamp,
   recordReads,
@@ -114,12 +115,28 @@ export function gatherCacheOutcome() {
  * @returns {boolean}
  */
 function inJitiCache(file) {
+  jitiRoots ??= jitiCacheRoots();
+  return jitiRoots.some(
+    root => file === root || file.startsWith(root + path.sep),
+  );
+}
+
+/** jiti's cache folders, worked out once per process (inJitiCache). */
+/** @type {string[] | undefined} */
+let jitiRoots;
+
+/**
+ * Where jiti may keep transpiled code: the system temp folder's `jiti`, the
+ * per-user folder (jiti-cache.mjs), and a set JITI_FS_CACHE.
+ * @returns {string[]}
+ */
+function jitiCacheRoots() {
   const env = process.env.JITI_FS_CACHE;
-  const roots = [path.join(os.tmpdir(), 'jiti')];
+  const roots = [path.join(os.tmpdir(), 'jiti'), jitiCacheDir()];
   if (env && env !== 'false' && env !== 'true' && env !== '0' && env !== '1') {
     roots.push(path.resolve(env));
   }
-  return roots.some(root => file === root || file.startsWith(root + path.sep));
+  return roots;
 }
 
 /**
@@ -184,7 +201,7 @@ export async function recordRunFor(argv, fn) {
   if (
     !command ||
     !KEPT_COMMANDS.has(command) ||
-    process.versions.pnp ||
+    runsUnderPnp() ||
     currentUid() == null ||
     withoutRecording(buildId) == null
   ) {
@@ -354,7 +371,8 @@ function noteLookups(specifier, parentURL, reads) {
  */
 function lookupStamp(folder) {
   try {
-    return `dir:${fs.statSync(folder).ino}`;
+    const stat = fs.statSync(folder, {throwIfNoEntry: false});
+    return stat ? `dir:${stat.ino}` : '-';
   } catch {
     return '-';
   }
@@ -392,19 +410,28 @@ function namesOf(env) {
  */
 function entryFile(dir, key, id) {
   const hash = createHash('sha256')
-    .update(
-      JSON.stringify([
-        FORMAT,
-        id,
-        process.version,
-        process.platform,
-        process.arch,
-        ...key,
-      ]),
-    )
+    .update(entryKey(key, id))
     .digest('hex')
     .slice(0, 40);
   return path.join(dir, `gather-${hash}.json`);
+}
+
+/**
+ * Everything an entry is for, as text: stored in the entry and compared on
+ * every read, so an entry copied under another entry's name is not used.
+ * @param {unknown[]} key
+ * @param {string} id
+ * @returns {string}
+ */
+function entryKey(key, id) {
+  return JSON.stringify([
+    FORMAT,
+    id,
+    process.version,
+    process.platform,
+    process.arch,
+    ...key,
+  ]);
 }
 
 /**
@@ -447,12 +474,19 @@ function staleReason(stamps, env) {
  */
 export async function persistedGather(key, load, codec, keep = () => true) {
   const id = withoutRecording(buildId);
-  const dir = id == null ? null : withoutRecording(gatherCacheDir);
+  // A run under Yarn Plug'n'Play's loader neither keeps nor reads catalogs:
+  // its modules resolve through PnP, which a catalog's stamps do not follow.
+  const dir =
+    id == null || runsUnderPnp() ? null : withoutRecording(gatherCacheDir);
   if (id == null || dir == null) {
     lastOutcome = {
       hit: false,
       reason:
-        id == null ? 'this CLI has no build id' : 'no usable cache folder',
+        id == null
+          ? 'this CLI has no build id'
+          : runsUnderPnp()
+            ? "a run under Yarn Plug'n'Play's loader"
+            : 'no usable cache folder',
     };
     try {
       return await load();
@@ -468,6 +502,8 @@ export async function persistedGather(key, load, codec, keep = () => true) {
     );
     if (stored?.format !== FORMAT) {
       reason = 'another format';
+    } else if (stored.key !== entryKey(key, id)) {
+      reason = 'an entry for other inputs';
     } else {
       const stale = staleReason(stored.stamps, stored.env);
       if (stale == null) {
@@ -496,7 +532,7 @@ export async function persistedGather(key, load, codec, keep = () => true) {
   try {
     const value = await load();
     if (run && armed && keep(value)) {
-      withoutRecording(() => store(dir, file, value, codec));
+      withoutRecording(() => store(dir, file, entryKey(key, id), value, codec));
     }
     return value;
   } finally {
@@ -555,16 +591,18 @@ export function persistedDerived(key, compute, codec, inputs = []) {
   const id = withoutRecording(buildId);
   const dir = id == null ? null : withoutRecording(gatherCacheDir);
   if (id == null || dir == null) return compute();
-  const file = entryFile(
-    dir,
-    ['derived', ...key, codeStamp(gatherCode, inputs)],
-    id,
-  );
+  const derivedKey = ['derived', ...key, codeStamp(gatherCode, inputs)];
+  const file = entryFile(dir, derivedKey, id);
+  const entry = entryKey(derivedKey, id);
   try {
     const stored = JSON.parse(
       withoutRecording(() => fs.readFileSync(file, 'utf-8')),
     );
-    if (stored?.format === FORMAT && stored.derived === true) {
+    if (
+      stored?.format === FORMAT &&
+      stored.derived === true &&
+      stored.key === entry
+    ) {
       const value = codec.decode(stored.value);
       try {
         const now = new Date();
@@ -584,6 +622,7 @@ export function persistedDerived(key, compute, codec, inputs = []) {
       const text = JSON.stringify({
         format: FORMAT,
         derived: true,
+        key: entry,
         value: encoded,
       });
       if (!isDeepStrictEqual(JSON.parse(text).value, encoded)) return;
@@ -604,10 +643,11 @@ export function persistedDerived(key, compute, codec, inputs = []) {
  * @template T, E
  * @param {string} dir
  * @param {string} file
+ * @param {string} entry - The entry's key (entryKey).
  * @param {T} value
  * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
  */
-function store(dir, file, value, codec) {
+function store(dir, file, entry, value, codec) {
   if (!run) return;
   try {
     const encoded = codec.encode(value);
@@ -615,6 +655,7 @@ function store(dir, file, value, codec) {
     gatherCode = cliStates(stamps);
     const text = JSON.stringify({
       format: FORMAT,
+      key: entry,
       stamps,
       env: [...run.env],
       value: encoded,
@@ -661,9 +702,21 @@ function evict(dir) {
 }
 
 /**
+ * Whether this run is under Yarn Plug'n'Play's loader (`yarn astryx` in a PnP
+ * project): Node's module hooks hand PnP's resolver options it refuses, so
+ * such a run keeps and uses no catalogs. The plain `astryx` command in the
+ * same project keeps them.
+ * @returns {boolean}
+ */
+export function runsUnderPnp() {
+  return Boolean(process.versions.pnp);
+}
+
+/**
  * The cache folder and how much it holds, for `doctor`: null when the CLI
  * keeps no gathers (a checkout) or has no usable folder.
- * @returns {{dir: string, bytes: number, entries: number} | null}
+ * @returns {{dir: string, bytes: number, entries: number, pnp: boolean} | null}
+ *   `pnp`: whether this run is under Yarn Plug'n'Play's loader (runsUnderPnp)
  */
 export function gatherCacheSummary() {
   if (buildId() == null) return null;
@@ -684,5 +737,5 @@ export function gatherCacheSummary() {
   } catch {
     return null;
   }
-  return {dir, bytes, entries};
+  return {dir, bytes, entries, pnp: runsUnderPnp()};
 }

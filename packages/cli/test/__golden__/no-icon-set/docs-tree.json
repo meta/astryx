@@ -633,6 +633,7 @@
     "sections": [
       "pick-a-check",
       "run-every-check-in-ci",
+      "get-ready-to-list",
       "what-integration-verify-does"
     ],
     "mentions": []

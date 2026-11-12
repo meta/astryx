@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/cli",
-  "version": "0.7.14",
+  "version": "0.7.15",
   "displayName": "CLI",
   "description": "Scaffold projects, browse templates, generate themes, and get agent-ready docs from the command line.",
   "author": "Meta Open Source",
@@ -131,6 +131,7 @@
     "@stylexjs/babel-plugin": "catalog:",
     "ast-types": "0.16.3",
     "commander": "^12.1.0",
+    "css-tree": "3.2.1",
     "ignore": "^7.0.14",
     "jiti": "^2.7.0",
     "jscodeshift": "^17.4.0",

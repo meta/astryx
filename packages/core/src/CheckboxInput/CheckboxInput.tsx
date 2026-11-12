@@ -62,6 +62,7 @@ import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
+import {indicatorPressPaintStyles} from '../privateAttributes/press.stylex';
 import {registerBoxHold} from '../utils/boxHold';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {
@@ -76,19 +77,6 @@ registerEnglishFallback(english);
 // none of its code.
 registerBoxHold();
 
-/** Written by the press controller while the row is pressed. */
-const PRESSED_ON = '[data-astryx-press="on"]';
-/** Written by the press controller for the press's release. */
-const PRESSED_FADING = '[data-astryx-press="fading"]';
-/** The row is pressed, and the press controller does not paint the press. */
-const ACTIVE_UNPAINTED = `:active:not(${PRESSED_ON},${PRESSED_FADING})`;
-
-// The touch press's paint, declared by the shared overlay styles on the
-// element the controller writes to (`pressedAlpha`) at the press's strength,
-// 1 while on and 1 → 0 over the release, and inherited resolved by the layer
-// that paints it. See interactionOverlay.stylex.ts.
-const pressedOverlayImage = 'var(--_press-paint-image)';
-
 const styles = stylex.create({
   container: {
     display: 'flex',
@@ -101,27 +89,6 @@ const styles = stylex.create({
   // Under a coarse pointer the row contains its hit band.
   hitAreaHost: {
     position: {default: null, '@media (pointer: coarse)': 'relative'},
-  },
-  // An indicator in another package may not name this row's private press
-  // attribute. So the row hands its touch press image down to an indicator
-  // that paints its own press, but only in its own press states. A pressed
-  // outer row hands down nothing, as for the built-in box. The
-  // property has no default: a layered stylesheet ranks a default above the
-  // arms. Only this row declares it. A menu item paints its own press, so a
-  // mapped indicator there paints none.
-  indicatorPressImage: {
-    '--_indicator-press-image': {
-      default: null,
-      [PRESSED_ON]: 'var(--_press-paint-image)',
-      [PRESSED_FADING]: 'var(--_press-paint-image)',
-    },
-    // While the controller paints the press, the indicator's `:active` fill
-    // stays off, so a mouse's press paints once.
-    '--_indicator-active-press': {
-      default: null,
-      [PRESSED_ON]: 'transparent',
-      [PRESSED_FADING]: 'transparent',
-    },
   },
   // Under a row that owns the press (CheckboxRowPressContext), this row is
   // never pressed. So it hands down that row's press paint, which the
@@ -143,12 +110,12 @@ const styles = stylex.create({
   // replacement keeps the pressed feedback. An indicator with
   // `indicatorPressScope` paints its own press from what the row hands down,
   // so this layer stays off over it. The press controller writes the press
-  // attribute on the row for every pointer: a finger, a mouse and a pen. This
-  // layer reads it off the scope marker, as the hover tint does. `:active`
-  // paints only a press the controller does not paint, and under a coarse
-  // pointer it is dropped. Under a row that owns the press
-  // (CheckboxRowPressContext), the row's own checkbox paints that row's press
-  // paint instead (indicatorRowPressOverlay).
+  // attribute on the row for every pointer: a finger, a mouse and a pen. The
+  // layer's paint (`indicatorPressPaintStyles`) reads it off the scope marker,
+  // as the hover tint does. `:active` paints only a press the controller does
+  // not paint, and under a coarse pointer it is dropped. Under a row that owns
+  // the press (CheckboxRowPressContext), the row's own checkbox paints that
+  // row's press paint instead (indicatorRowPressOverlay).
   indicatorPressOverlay: {
     '::after': {
       // `when.descendant` takes a pseudo-class; `:is(*)` matches any marked
@@ -161,24 +128,6 @@ const styles = stylex.create({
       inset: 0,
       borderRadius: radiusVars['--radius-inner'],
       pointerEvents: 'none',
-      backgroundColor: {
-        default: 'transparent',
-        [stylex.when.ancestor(ACTIVE_UNPAINTED, indicatorScope)]: {
-          default: colorVars['--color-overlay-pressed'],
-          '@media (pointer: coarse)': 'transparent',
-        },
-      },
-      // The controller's press paints as an image layer over the colour. An
-      // image change is discrete, so no transition can delay the onset. Only
-      // the strength moves: the row's `pressedAlpha` arms set it to 1 while
-      // on, and 1 → 0 over the release. This holds for every pointer, because
-      // the controller writes the attribute only for a press it paints.
-      backgroundImage: {
-        default: null,
-        [stylex.when.ancestor(PRESSED_ON, indicatorScope)]: pressedOverlayImage,
-        [stylex.when.ancestor(PRESSED_FADING, indicatorScope)]:
-          pressedOverlayImage,
-      },
     },
   },
   // The row's own checkbox when its row owns the press
@@ -565,10 +514,13 @@ export function CheckboxInput({
           // Hover and focus reach the checkbox visual through this ancestor
           // marker rather than props, so the whole row drives it.
           !isDisabled && indicatorScope,
+          // An indicator in another package may not name the private press
+          // attribute. So the row hands its press image down to an indicator
+          // that paints its own press (`indicatorPressPaintStyles.handDown`).
           !isDisabled &&
             (isRowPressSurface
               ? styles.indicatorRowPressImage
-              : styles.indicatorPressImage),
+              : indicatorPressPaintStyles.handDown),
           // The touch press's strength and release live on the row the
           // controller writes to; the layer over the checkbox box inherits
           // and paints it. Under a row that owns the press, the box inherits
@@ -584,7 +536,15 @@ export function CheckboxInput({
             styles.checkboxWrapper,
             wrapperSizeStyles[size],
             !isDisabled && styles.indicatorPressOverlay,
-            !isDisabled && isRowPressSurface && styles.indicatorRowPressOverlay,
+            // Under a row that owns the press, the row's own overlay paints
+            // instead of the owner's press paint.
+            !isDisabled &&
+              (isRowPressSurface
+                ? styles.indicatorRowPressOverlay
+                : [
+                    indicatorPressPaintStyles.activeFill,
+                    indicatorPressPaintStyles.image,
+                  ]),
           )}
           {...focusProps}>
           <input
