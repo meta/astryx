@@ -1740,6 +1740,27 @@ describe('HoverCard', () => {
       });
     });
 
+    it('opens on a tap on a text field inside its trigger when touchTrigger is "tap"', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <HoverCard
+          content={<span>Card content</span>}
+          onOpenChange={onOpenChange}
+          touchTrigger="tap"
+          delay={0}>
+          <span>
+            Name <input aria-label="Name" />
+          </span>
+        </HoverCard>,
+      );
+
+      tap(screen.getByRole('textbox', {name: 'Name'}));
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
     it('survives a tap on its own content', async () => {
       const onOpenChange = vi.fn();
       render(
@@ -1929,6 +1950,41 @@ describe('HoverCard', () => {
       // Reaching for the keyboard ends the touch interaction: the same trigger,
       // focused by Tab, still opens.
       fireEvent.keyDown(document, {key: 'Tab'});
+      fireEvent.focusIn(trigger);
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('ignores focus returned after typing in a field, but not after Escape', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <HoverCard
+            content={<span>Card content</span>}
+            onOpenChange={onOpenChange}
+            delay={0}>
+            <button type="button">Rename</button>
+          </HoverCard>
+          <input type="text" aria-label="File name" />
+        </>,
+      );
+
+      const trigger = screen.getByRole('button', {name: 'Rename'});
+      const field = screen.getByLabelText('File name');
+      tap(trigger);
+      fireEvent.pointerDown(field, {pointerType: 'touch'});
+      // An on-screen keyboard sends a key press for each typed character.
+      // That is text entry, so the touch interaction goes on.
+      for (const key of ['-', 'v', '2', 'Enter']) {
+        fireEvent.keyDown(field, {key});
+      }
+      fireEvent.focusIn(trigger);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalledWith(true);
+
+      fireEvent.keyDown(field, {key: 'Escape'});
       fireEvent.focusIn(trigger);
 
       await waitFor(() => {

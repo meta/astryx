@@ -32,6 +32,7 @@ import {
   type RefObject,
 } from 'react';
 import {flushSync} from 'react-dom';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -901,8 +902,7 @@ export function Slider({ref, ...props}: SliderProps) {
     return currentValues.map(currentValue => clamp(currentValue, min, max));
   }, [value, min, max]);
 
-  const valuesRef = useRef(values);
-  valuesRef.current = values;
+  const valuesRef = useCommittedRef(values);
 
   const getValueFromPosition = useCallback(
     (clientX: number, clientY: number): number => {
@@ -1018,8 +1018,7 @@ export function Slider({ref, ...props}: SliderProps) {
     ],
   );
 
-  const onChangeEndRef = useRef(onChangeEnd);
-  onChangeEndRef.current = onChangeEnd;
+  const onChangeEndRef = useCommittedRef(onChangeEnd);
 
   const fireChangeEnd = useCallback(
     (newValues?: number[]) => {
@@ -1033,7 +1032,7 @@ export function Slider({ref, ...props}: SliderProps) {
         (cb as SliderSingleProps['onChangeEnd'])?.(currentValues[0]);
       }
     },
-    [isRange],
+    [isRange, onChangeEndRef, valuesRef],
   );
 
   // Pointer handlers
@@ -1248,7 +1247,7 @@ export function Slider({ref, ...props}: SliderProps) {
       }
       updateValue(draggingThumbRef.current, newVal);
     },
-    [isDisabled, getValueFromPosition, updateValue],
+    [isDisabled, getValueFromPosition, updateValue, valuesRef],
   );
 
   const handlePointerUp = useCallback(
@@ -1257,8 +1256,7 @@ export function Slider({ref, ...props}: SliderProps) {
   );
 
   // The touch presentation's value model (useSliderTouch reads it fresh).
-  const updateValueRef = useRef(updateValue);
-  updateValueRef.current = updateValue;
+  const updateValueRef = useCommittedRef(updateValue);
   const touchModel: SliderTouchModel = {
     min,
     max,

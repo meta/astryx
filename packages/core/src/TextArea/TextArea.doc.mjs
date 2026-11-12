@@ -185,6 +185,12 @@ export const docs = {
         'Maximum number of characters allowed, counted as user-perceived characters: an emoji or flag sequence counts as one. When set, a character counter (current/max) is displayed inside the input container, anchored to the bottom-right beneath the text. Does not enforce the limit natively; when exceeded the counter turns red and shows a warning icon (a non-color cue), and screen-reader users hear the remaining/over-limit count announced. Consumers validating the limit should count with characterCount (exported from the package) so enforcement matches the displayed count.',
     },
     {
+      name: 'htmlMaxLength',
+      type: 'number',
+      description:
+        'The native `maxlength` attribute: the browser stops typing past this many UTF-16 code units (an emoji can take two or more). It is separate from `maxLength`, the soft counter of user-perceived characters: it works without the counter, and it neither shows nor changes the counter. It can stop typing before the counter reaches its limit. TextArea adds no truncation or validation of its own, so a longer controlled value stays as set. The attribute is in the server-rendered HTML, so it applies before hydration. Validate on the server too: the browser limit does not bind requests that skip the UI.',
+    },
+    {
       name: 'status',
       type: "{ type: 'warning' | 'error' | 'success'; message?: string }",
       description:
@@ -498,6 +504,12 @@ export const docsZh = {
       type: 'number',
       description:
         '允许的最大字符数。设置后，在文本域下方显示字符计数器（当前/最大）。不原生强制限制：超出时计数器显示错误样式。',
+    },
+    {
+      name: 'htmlMaxLength',
+      type: 'number',
+      description:
+        '原生 `maxlength` 属性：输入达到该数量的 UTF-16 码元后，浏览器不再接受输入（一个 emoji 可能占两个或更多）。它独立于 `maxLength`（按用户感知字符计数的软计数器）：无需计数器即可使用，也不会显示或改变计数器。它可能在计数器到达上限之前就阻止输入。组件本身不截断、不校验，因此更长的受控值保持原样。该属性会出现在服务端渲染的 HTML 中，因此在水合之前即已生效。请同时在服务端校验：浏览器限制无法约束绕过界面的请求。',
     },
     {
       name: 'status',

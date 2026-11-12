@@ -36,7 +36,7 @@ export const doc = {
     Smartphone: 'mobile',
     Tag: 'tag',
     User: 'user',
-    Wallet: 'money',
+    Wallet: 'wallet',
     X: 'close',
   },
 };

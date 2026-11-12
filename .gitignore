@@ -61,6 +61,7 @@ internal/vibe-tests/.fixture-runs/
 tmp-swizzle-*-test/
 packages/cli/.tmp-component-icons-*/
 packages/themes/*/.tmp-media-lowered-*/
+packages/themes/*/.tmp-media-accent-*/
 apps/sandbox/.next/
 apps/sandbox/out/
 apps/sandbox/next-env.d.ts
