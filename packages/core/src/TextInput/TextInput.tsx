@@ -574,7 +574,11 @@ export function TextInput({
           undefined
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={status?.type === 'error' ? 'true' : undefined}
+        aria-invalid={
+          (status?.type ?? inputGroup?.statusType) === 'error'
+            ? 'true'
+            : undefined
+        }
         aria-busy={isBusy || undefined}
         aria-labelledby={inputLabelledBy}
         {...stylex.props(styles.input, isDisabled && styles.inputDisabled)}

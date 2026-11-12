@@ -1247,7 +1247,9 @@ export function NumberInput({
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={
-          status?.type === 'error' || !isInputValid ? 'true' : undefined
+          (status?.type ?? inputGroup?.statusType) === 'error' || !isInputValid
+            ? 'true'
+            : undefined
         }
         aria-labelledby={inputLabelledBy}
         {...stylex.props(

@@ -298,6 +298,163 @@ describe('InputGroup', () => {
     expect(container.querySelectorAll('.astryx-field')).toHaveLength(1);
   });
 
+  it('marks each grouped input aria-invalid for a group error status', () => {
+    const onChange = () => {};
+    render(
+      <>
+        <InputGroup
+          label="Group"
+          status={{type: 'error', message: 'Fix the group'}}>
+          <TextInput label="Text" value="" onChange={onChange} />
+        </InputGroup>
+        <InputGroup
+          label="Group"
+          status={{type: 'error', message: 'Fix the group'}}>
+          <NumberInput label="Amount" value={null} onChange={onChange} />
+        </InputGroup>
+        <InputGroup
+          label="Group"
+          status={{type: 'error', message: 'Fix the group'}}>
+          <Selector label="Single fruit" options={['Apple', 'Banana']} />
+        </InputGroup>
+        <InputGroup
+          label="Group"
+          status={{type: 'error', message: 'Fix the group'}}>
+          <MultiSelector
+            label="Multiple fruits"
+            options={['Apple', 'Banana']}
+            value={[]}
+            onChange={onChange}
+          />
+        </InputGroup>
+        <InputGroup
+          label="Group"
+          status={{type: 'error', message: 'Fix the group'}}>
+          <DateInput label="Date" presentation="popover" onChange={onChange} />
+        </InputGroup>
+        <InputGroup
+          label="Group"
+          status={{type: 'error', message: 'Fix the group'}}>
+          <TimeInput
+            label="Time"
+            presentation="text-input"
+            onChange={onChange}
+          />
+        </InputGroup>
+        <InputGroup
+          label="Group"
+          status={{type: 'error', message: 'Fix the group'}}>
+          <Typeahead
+            label="Fruit"
+            value={null}
+            searchSource={fruitSource}
+            onChange={onChange}
+          />
+        </InputGroup>
+        <InputGroup
+          label="Group"
+          status={{type: 'error', message: 'Fix the group'}}>
+          <Tokenizer
+            label="People"
+            value={[]}
+            searchSource={fruitSource}
+            onChange={onChange}
+          />
+        </InputGroup>
+      </>,
+    );
+
+    for (const name of [
+      'Group Text',
+      'Group Amount',
+      'Group Single fruit',
+      'Group Multiple fruits',
+      'Group Date',
+      'Group Time',
+      'Group Fruit',
+      'Group People',
+    ]) {
+      expect(screen.getByLabelText(name)).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+    }
+  });
+
+  it('does not mark grouped inputs invalid for a warning or success status', () => {
+    const onChange = () => {};
+    const {unmount} = render(
+      <InputGroup
+        label="Group"
+        status={{type: 'warning', message: 'Check the value'}}>
+        <TextInput label="Text" value="" onChange={onChange} />
+      </InputGroup>,
+    );
+    expect(screen.getByLabelText('Group Text')).not.toHaveAttribute(
+      'aria-invalid',
+    );
+    unmount();
+
+    render(
+      <InputGroup
+        label="Group"
+        status={{type: 'success', message: 'Looks good'}}>
+        <TextInput label="Text" value="" onChange={onChange} />
+      </InputGroup>,
+    );
+    expect(screen.getByLabelText('Group Text')).not.toHaveAttribute(
+      'aria-invalid',
+    );
+  });
+
+  it('lets a member status override the group status for aria-invalid', () => {
+    const onChange = () => {};
+    const {unmount} = render(
+      <InputGroup
+        label="Group"
+        status={{type: 'error', message: 'Fix the group'}}>
+        <TextInput
+          label="Text"
+          value=""
+          onChange={onChange}
+          status={{type: 'warning', message: 'Check the value'}}
+        />
+      </InputGroup>,
+    );
+    expect(screen.getByLabelText('Group Text')).not.toHaveAttribute(
+      'aria-invalid',
+    );
+    unmount();
+
+    render(
+      <InputGroup
+        label="Group"
+        status={{type: 'error', message: 'Fix the group'}}>
+        <TextInput
+          label="Text"
+          value=""
+          onChange={onChange}
+          status={{type: 'error', message: 'Fix the text'}}
+        />
+      </InputGroup>,
+    );
+    expect(screen.getByLabelText('Group Text')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+  });
+
+  it('does not mark grouped inputs invalid without a group status', () => {
+    render(
+      <InputGroup label="Group">
+        <TextInput label="Text" value="" onChange={() => {}} />
+      </InputGroup>,
+    );
+    expect(screen.getByLabelText('Group Text')).not.toHaveAttribute(
+      'aria-invalid',
+    );
+  });
+
   it('keeps grouped DateInput calendar button and popover semantics', () => {
     render(
       <InputGroup label="Deadline">

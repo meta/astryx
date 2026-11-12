@@ -78,7 +78,7 @@ export const docs = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        'Validation status. Its message shows below the group. The group border does not change; a theme can style the row from `data-status`.',
+        'Validation status. Its message shows below the group. The group border does not change; a theme can style the row from `data-status`. An error status marks each member input `aria-invalid`, unless the member has a status of its own.',
     },
     {
       name: 'labelTooltip',

@@ -813,7 +813,8 @@ export function Typeahead<T extends SearchableItem>({
                   // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
                   // aria-required / aria-invalid still applies.
                   aria-invalid={
-                    status?.type === 'error' || rest['aria-invalid']
+                    (status?.type ?? inputGroup?.statusType) === 'error' ||
+                    rest['aria-invalid']
                   }
                   onChangeQuery={onChangeQuery}
                   onOpenChange={handleOpenChange}

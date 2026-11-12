@@ -1435,7 +1435,7 @@ describe('DateInput', () => {
         'aria-describedby',
         group.getAttribute('aria-describedby'),
       );
-      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
       expect(screen.getByText('Date is required')).toBeInTheDocument();
     });
 
