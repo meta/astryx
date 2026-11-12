@@ -32,7 +32,7 @@ import type {BaseProps} from '../BaseProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon, type IconSize} from '../Icon/Icon';
 import {stopInReactTree} from '../Layer/layerClickBoundary';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -150,7 +150,11 @@ export function InfoTip({
     setIsShown(false);
     setIsPinned(false);
   }, []);
-  const tooltip = useTooltip({onShow: handleShow, onHide: handleHide});
+  const tooltip = useTooltipInternal({
+    onShow: handleShow,
+    onHide: handleHide,
+    hasOwnControl: true,
+  });
   const mergedRef = useMergedRefs(ref, hitAreaRef, tooltip.ref);
 
   // A primary mouse or pen press on a preview calls show() first. The hook's

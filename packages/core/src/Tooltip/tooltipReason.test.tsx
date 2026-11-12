@@ -24,6 +24,7 @@ import {Avatar} from '../Avatar/Avatar';
 import {Icon} from '../Icon/Icon';
 import {TextInput} from '../TextInput/TextInput';
 import {ComplexSelector} from '../ComplexSelector/ComplexSelector';
+import {Switch} from '../Switch/Switch';
 
 const originalMatches = HTMLElement.prototype.matches;
 const openPopovers = new WeakSet<HTMLElement>();
@@ -76,6 +77,17 @@ function ReasonContainer({
       {children}
       {reason.renderTooltip(REASON)}
     </div>
+  );
+}
+
+/** A label tooltip its caller holds open with `isOpen`. */
+function ControlledLabel({label, onHide}: {label: string; onHide: () => void}) {
+  const tooltip = useTooltip({isOpen: true, onHide});
+  return (
+    <button type="button" ref={tooltip.ref}>
+      Status
+      {tooltip.renderTooltip(label)}
+    </button>
   );
 }
 
@@ -253,18 +265,9 @@ describe('a disabled reason is the only tooltip its control shows', () => {
     vi.useFakeTimers();
     const LABEL = 'Saved a minute ago';
     const onHide = vi.fn();
-    function ControlledLabel() {
-      const label = useTooltip({isOpen: true, onHide});
-      return (
-        <button type="button" ref={label.ref}>
-          Status
-          {label.renderTooltip(LABEL)}
-        </button>
-      );
-    }
     const {rerender} = render(
       <ReasonContainer isOn>
-        <ControlledLabel />
+        <ControlledLabel label={LABEL} onHide={onHide} />
       </ReasonContainer>,
     );
     await act(async () => {
@@ -278,7 +281,7 @@ describe('a disabled reason is the only tooltip its control shows', () => {
 
     rerender(
       <ReasonContainer isOn={false}>
-        <ControlledLabel />
+        <ControlledLabel label={LABEL} onHide={onHide} />
       </ReasonContainer>,
     );
     await act(async () => {
@@ -293,4 +296,68 @@ describe('a disabled reason is the only tooltip its control shows', () => {
   it.todo(
     "drops a memoized child's label description when a reason turns on later without re-rendering the child",
   );
+
+  it("keeps a field's own status message under its disabled reason", async () => {
+    render(
+      <TextInput
+        label="Name"
+        value="ada"
+        onChange={() => {}}
+        isDisabled
+        disabledMessage={REASON}
+        status={{type: 'error', message: 'Name is taken'}}
+        statusVariant="tooltip"
+      />,
+    );
+    await act(async () => {});
+    expect(
+      screen.getByRole('textbox', {name: 'Name'}),
+    ).toHaveAccessibleDescription(expect.stringContaining('Name is taken'));
+  });
+
+  it("shows a Switch's help InfoTip on a press, under the Switch's disabled reason", async () => {
+    vi.useFakeTimers();
+    const HELP = 'Sends a daily summary';
+    const {container} = render(
+      <Switch
+        label="Digest"
+        value={false}
+        onChange={() => {}}
+        isDisabled
+        disabledMessage={REASON}
+        labelTooltip={HELP}
+      />,
+    );
+    await act(async () => {});
+    const help = container.querySelector<HTMLElement>('button[aria-expanded]');
+    expect(help).not.toBeNull();
+    fireEvent.click(help as HTMLElement);
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(help).toHaveAttribute('aria-expanded', 'true');
+    expect(shownTooltips()).toContain(HELP);
+  });
+
+  it('a Tooltip around a region that holds a field disabled with a reason still opens on another control', async () => {
+    vi.useFakeTimers();
+    const LABEL = 'Region help';
+    render(
+      <Tooltip content={LABEL}>
+        <div>
+          <TextInput
+            label="Name"
+            value=""
+            onChange={() => {}}
+            isDisabled
+            disabledMessage={REASON}
+          />
+          <button type="button">Other</button>
+        </div>
+      </Tooltip>,
+    );
+    await act(async () => {});
+    await hoverAndWait(screen.getByRole('button', {name: 'Other'}));
+    expect(shownTooltips()).toContain(LABEL);
+  });
 });

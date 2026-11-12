@@ -675,7 +675,6 @@ export function NumberInput({
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
   const fieldProps = withholdCallerHandlers(rest, isDisabled);
   const disabledMessageTooltip = useTooltipInternal({
-    // A disabled reason: while it shows, the control shows no other tooltip.
     isReason: true,
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from

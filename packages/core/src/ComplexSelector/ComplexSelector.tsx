@@ -636,7 +636,6 @@ export function ComplexSelector<Value>({
   // status info-tip in the box opens only its own message.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltipInternal({
-    // A disabled reason: while it shows, the control shows no other tooltip.
     isReason: true,
     placement: 'above',
     isEnabled: showsDisabledMessage,

@@ -860,7 +860,6 @@ export function Slider({ref, ...props}: SliderProps) {
   // aria-disabled while pointer/keyboard handlers early-return on isDisabled.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltipInternal({
-    // A disabled reason: while it shows, the control shows no other tooltip.
     isReason: true,
     placement: 'above',
     // The track container is not naturally focusable; focusin bubbles up from

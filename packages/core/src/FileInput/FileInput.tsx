@@ -543,7 +543,6 @@ export function FileInput({
   // in the handlers.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltipInternal({
-    // A disabled reason: while it shows, the control shows no other tooltip.
     isReason: true,
     placement: 'above',
     focusTrigger: 'always',

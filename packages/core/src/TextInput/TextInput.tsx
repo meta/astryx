@@ -401,7 +401,6 @@ export function TextInput({
   // and value mutation is blocked by the isDisabled guard in handleChange.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltipInternal({
-    // A disabled reason: while it shows, the control shows no other tooltip.
     isReason: true,
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from

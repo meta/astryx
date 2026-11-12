@@ -519,7 +519,6 @@ export function TouchDateTimeField({
 
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltipInternal({
-    // A disabled reason: while it shows, the control shows no other tooltip.
     isReason: true,
     placement: 'above',
     focusTrigger: 'always',

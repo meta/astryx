@@ -290,10 +290,21 @@ export interface InternalTooltipOptions extends TooltipOptions {
   /**
    * The tooltip gives a reason for the state of the control it covers, such
    * as why it is disabled. While it is enabled, it marks its trigger, and
-   * every other tooltip on that control or inside it renders no text: it
-   * neither shows nor adds to the control's accessible description.
+   * every other tooltip on that control, inside it, or on the wrapper of its
+   * field renders no layer: it neither shows nor adds to the control's
+   * accessible description.
    */
   isReason?: boolean;
+  /**
+   * The tooltip shows its field's own status message. A reason never covers
+   * it, because the field must show its status.
+   */
+  isStatus?: boolean;
+  /**
+   * The tooltip's trigger is its own control, such as InfoTip's button. A
+   * reason never covers it.
+   */
+  hasOwnControl?: boolean;
 }
 
 /**
@@ -315,6 +326,8 @@ export function useTooltipInternal(
     onShow,
     onHide,
     isReason = false,
+    isStatus = false,
+    hasOwnControl = false,
   } = options;
 
   // A tooltip stays open while its trigger is hovered, so it must never settle
@@ -350,16 +363,26 @@ export function useTooltipInternal(
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  // The app's show() holds the tooltip open until hide(), Escape, a press or
+  // scroll outside, or focus leaving the trigger and the tooltip. A held
+  // tooltip is a press on its own trigger, so a reason does not cover it.
+  const isHeldRef = useRef(false);
   const isCoveredNow = useCallback(() => {
     const trigger = triggerRef.current;
-    return !isReason && trigger != null && isCoveredByTooltipReason(trigger);
-  }, [isReason]);
+    return (
+      !isReason &&
+      !isStatus &&
+      !hasOwnControl &&
+      !isHeldRef.current &&
+      trigger != null &&
+      isCoveredByTooltipReason(trigger)
+    );
+  }, [isReason, isStatus, hasOwnControl]);
+  // The after-render sync below records a covered tooltip's state.
   const showLayer = useCallback(() => {
-    if (isCoveredNow()) {
-      setIsCovered(true);
-      return;
+    if (!isCoveredNow()) {
+      showLayerNow();
     }
-    showLayerNow();
   }, [isCoveredNow, showLayerNow]);
   // Set only by a Core component that mounts the tooltip on interaction.
   const presentInterest = use(TooltipPresentInterestContext);
@@ -403,9 +426,6 @@ export function useTooltipInternal(
   const latestRef = useRef({isOpen, isLayerOpen, onShow, onHide});
   latestRef.current = {isOpen, isLayerOpen, onShow, onHide};
 
-  // The app's show() holds the tooltip open until hide(), Escape, a press or
-  // scroll outside, or focus leaving the trigger and the tooltip.
-  const isHeldRef = useRef(false);
   const [isHeldState, setIsHeldState] = useState(false);
   const setHeld = useCallback((next: boolean) => {
     isHeldRef.current = next;
@@ -929,6 +949,7 @@ export function useTooltipInternal(
   // the DOM after each render. State changes only when coverage changes. An
   // uncontrolled open tooltip that a reason now covers closes; a controlled
   // one keeps the caller's `isOpen` and renders no layer until the reason ends.
+  // eslint-disable-next-line @eslint-react/exhaustive-deps -- runs after every render, because the reason mark lives only in the DOM
   useEffect(() => {
     const next = isCoveredNow();
     if (next === isCoveredRef.current) {
