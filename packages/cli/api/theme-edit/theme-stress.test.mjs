@@ -12,7 +12,7 @@ import {execFile} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {promisify} from 'node:util';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -30,6 +30,15 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** The packages the template pages import, so ranked pages can be added. */
 const APP_PACKAGES = {
@@ -505,7 +514,9 @@ describe('round 4', () => {
     await themeEditSet('s', 'corners', 'large', {cwd, on: 'containers'});
     const show = await themeEditShow('s', {cwd});
     expect(show.data.partValues[0]).toMatch(
-      /^corners = large on containers -> border-radius 12px on card, .*\(whole theme: --radius-container \d+px\)$/,
+      // What the build writes on a container (large, by the container
+      // radius), not the element's 12px.
+      /^corners = large on containers -> border-radius \d+px.*card.*\(whole theme: --radius-container \d+px\)$/,
     );
     const r = await themeEditUndo('s', {
       cwd,
@@ -710,20 +721,33 @@ describe('review fixes', () => {
     }
   }, 240_000);
 
-  it('lets two commands run at once, and a saved change never exits 1', async () => {
-    await themeEditNew('cc', {cwd, like: 'neutral'});
-    const [a, b] = await Promise.all([
-      cli(['experimental', 'theme', 'editor', 'show', 's']),
-      cli(['experimental', 'theme', 'editor', 'set', 'cc', 'corners', 'small']),
-    ]);
-    expect([a.code, b.code]).toEqual([0, 0]);
-    expect(
-      fs
-        .readdirSync(path.join(cwd, 'themes'))
-        .filter(f => f.startsWith('.astryx-render')),
-    ).toEqual([]);
-    fs.rmSync(path.join(cwd, 'themes/cc'), {recursive: true, force: true});
-  }, 240_000);
+  it(
+    'lets two commands run at once, and a saved change never exits 1',
+    () =>
+      withRealRenders(async () => {
+        await themeEditNew('cc', {cwd, like: 'neutral'});
+        const [a, b] = await Promise.all([
+          cli(['experimental', 'theme', 'editor', 'show', 's']),
+          cli([
+            'experimental',
+            'theme',
+            'editor',
+            'set',
+            'cc',
+            'corners',
+            'small',
+          ]),
+        ]);
+        expect([a.code, b.code]).toEqual([0, 0]);
+        expect(
+          fs
+            .readdirSync(path.join(cwd, 'themes'))
+            .filter(f => f.startsWith('.astryx-render')),
+        ).toEqual([]);
+        fs.rmSync(path.join(cwd, 'themes/cc'), {recursive: true, force: true});
+      }),
+    240_000,
+  );
 
   it("a one-mode theme leaves the other mode's settings out and names them", async () => {
     await themeEditNew('om', {

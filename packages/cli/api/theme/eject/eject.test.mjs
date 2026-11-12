@@ -225,4 +225,72 @@ describe('themeEject (api/theme/eject)', () => {
       message: expect.not.stringMatching(/EEXIST|ENOTDIR/),
     });
   });
+
+  it('forks into the project root from a subfolder, and reports the path from the working folder', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+
+    const result = await themeEject('neutral', {cwd: sub});
+
+    expect(result.data.outputDir).toBe(path.join('..', 'themes', 'neutral'));
+    expect(
+      fs.existsSync(path.join(tmpDir, 'src/themes/neutral/neutralTheme.ts')),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(sub, 'src'))).toBe(false);
+  });
+
+  it('reads a relative path from the working folder and keeps it inside the project', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+
+    const result = await themeEject('neutral', {
+      cwd: sub,
+      targetPath: '../../custom/n',
+    });
+    expect(result.data.outputDir).toBe(path.join('..', '..', 'custom', 'n'));
+    expect(fs.existsSync(path.join(tmpDir, 'custom/n/neutralTheme.ts'))).toBe(
+      true,
+    );
+
+    await expect(
+      themeEject('neutral', {cwd: sub, targetPath: '../../../outside'}),
+    ).rejects.toMatchObject({
+      code: 'ERR_PATH_TRAVERSAL',
+      message: expect.stringContaining('"../../../outside"'),
+    });
+  });
+
+  it('names another target, not the same command, when the default folder from a subfolder is taken', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+    await themeEject('neutral', {cwd: tmpDir});
+
+    let error;
+    try {
+      await themeEject('butter', {
+        cwd: sub,
+        targetPath: '../themes/neutral',
+        overwrite: true,
+      });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
+    expect(error.suggestions?.[0]?.name).toMatch(/ theme eject butter$/);
+
+    const dir = path.join(tmpDir, 'src', 'themes', 'butter');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, 'butter.settings.json'), '{}\n');
+    let atDefault;
+    try {
+      await themeEject('butter', {cwd: sub, overwrite: true});
+    } catch (caught) {
+      atDefault = caught;
+    }
+    expect(atDefault).toMatchObject({code: 'ERR_FILE_EXISTS'});
+    expect(atDefault.suggestions).toBeUndefined();
+  });
 });

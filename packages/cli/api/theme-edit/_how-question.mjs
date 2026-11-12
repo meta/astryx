@@ -819,7 +819,7 @@ function clausesOf(q) {
       ' ',
     );
     const neg =
-      /\b(no|not|nothing|none of|don'?t|do not|never|without|remove|removing|get rid of|lose|drop|ditch|nix|scrap|kill|none|shouldn'?t|should not|mustn'?t|turn off|turn (the|it|them) off|switch off|stop|unbold\w*|unround\w*|disable|(?:revert|undo|take back) (?:the|those|that|these|my|our|all))\b/.test(
+      /\b(no|not|nothing|none of|don'?t|do not|never|without|remove|removing|get rid of|lose|drop|ditch|nix|scrap|kill|none|shouldn'?t|should not|mustn'?t|turn off|turn (the|it|them) off|switch off|stop|unbold\w*|unround\w*|disable|(?:revert|undo|take back) (?:the|those|that|these|my|our|all)|(?:shadows?|borders?|underlines?|outlines?|gradients?|uppercase|caps) (?:off|out|gone))\b/.test(
         negText
           .replace(/\bdisabled\b/g, ' ')
           // "not round enough" asks for more; "not so much" for less.
@@ -957,9 +957,11 @@ export function draftAnswer(ctx, env, question) {
     // the next.
     .replace(/^[ \t]*(?:[-*\u2022\u25e6]|\d+[.)])[ \t]+/gm, '')
     .replace(/\s*[\r\n]+\s*/g, ' ; ')
-    // "1) square corners 2) no shadows": a marker inside a line is a break,
-    // never a value.
-    .replace(/(^|\s)\d{1,2}[.)](?=\s)/g, ' ; ')
+    // "1) square corners 2) no shadows": a marker is a break, never a
+    // value. "N)" is a marker anywhere; "N." only at the start or after a
+    // break, so "radius 8. Shadows off." keeps its 8.
+    .replace(/(^|\s)\d{1,2}\)(?=\s)/g, ' ; ')
+    .replace(/(^|;)\s*\d{1,2}\.(?=\s)/g, ' ; ')
     // "primary=#7c3aed radius=10": each key=value pair is its own ask.
     .replace(/\s+(?=[a-z][\w-]*\s*=\s*\S)/gi, ' ; ')
     .replace(/\p{Cc}/gu, ' ')
