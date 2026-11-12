@@ -24,7 +24,7 @@ export const doc = {
       flag: '--out <file>',
       param: 'options.out',
       description:
-        'Where to write: an .html file, or with --reverse a page module (default: page.tsx gives page.html beside it; with --reverse, page.html comes back into a new folder page-restored/)',
+        "Where to write: an .html file, or with --reverse a page module (default: page.tsx gives page.html beside it; with --reverse, page.html comes back into a new folder page-restored/)",
     },
     {
       flag: '--reverse',
@@ -40,19 +40,12 @@ export const doc = {
     {
       flag: '--overwrite',
       param: 'options.overwrite',
-      description:
-        'With --reverse, replace the page module if it already exists (never a protected file; the files it imports always go into a new folder)',
+      description: 'With --reverse, replace the page module if it already exists (never a protected file; the files it imports always go into a new folder)',
     },
   ],
   examples: [
-    {
-      label: 'Render a page',
-      cli: 'astryx experimental render src/app/page.tsx --out page.html',
-    },
-    {
-      label: 'Give it back',
-      cli: 'astryx experimental render --reverse page.html --out page.tsx',
-    },
+    {label: 'Render a page', cli: 'astryx experimental render src/app/page.tsx --out page.html'},
+    {label: 'Give it back', cli: 'astryx experimental render --reverse page.html --out page.tsx'},
     {label: 'As JSON', cli: 'astryx --json experimental render page.tsx'},
   ],
   outsideProject: 'same',

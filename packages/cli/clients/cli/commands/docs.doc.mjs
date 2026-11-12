@@ -35,8 +35,7 @@ export const doc = {
     {
       flag: '--index',
       param: 'options.index',
-      description:
-        "List the topic's sections and their keys, even for a topic with one section",
+      description: "List the topic's sections and their keys, even for a topic with one section",
     },
     {
       flag: '--full',

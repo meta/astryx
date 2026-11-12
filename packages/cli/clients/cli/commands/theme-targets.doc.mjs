@@ -28,10 +28,7 @@ export const doc = {
     {label: 'The whole themeable surface', cli: 'astryx theme targets'},
     {label: "One component's targets", cli: 'astryx theme targets Switch'},
     {label: 'Search keys', cli: 'astryx theme targets thumb'},
-    {
-      label: 'For a lint or an audit script',
-      cli: 'astryx --json theme targets',
-    },
+    {label: 'For a lint or an audit script', cli: 'astryx --json theme targets'},
   ],
   outsideProject: 'same',
   exitCodes: [

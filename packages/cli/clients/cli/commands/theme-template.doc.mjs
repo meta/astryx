@@ -34,10 +34,7 @@ export const doc = {
   ],
   examples: [
     {label: 'Write it at the project root', cli: 'astryx theme template'},
-    {
-      label: 'Somewhere else',
-      cli: 'astryx theme template src/themes/starter.ts',
-    },
+    {label: 'Somewhere else', cli: 'astryx theme template src/themes/starter.ts'},
   ],
   outsideProject: 'same',
   exitCodes: [
