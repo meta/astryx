@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useCallback, useState, type ReactNode} from 'react';
+import {useCallback, useEffect, useState, type ReactNode} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {REFRESH_REVEAL_VAR, useRefreshControl} from '@astryxdesign/lab';
 import {Button} from '@astryxdesign/core/Button';
@@ -163,19 +163,31 @@ function useInbox(refreshMs: number) {
 /**
  * A list in the app's own scroll container. Pull it down past the top on a
  * touch screen, or with a trackpad's two-finger scroll. Past the trigger, the
- * refresh starts with the finger down.
+ * refresh starts with the finger down. The page can dispatch
+ * `refreshcontrol-story-unmount` on `window` to unmount the list, so a test
+ * can unmount it in the middle of a change.
  */
 export const InAScrollContainer: Story = {
   render: function InAScrollContainerStory({refreshMs, rows}) {
     const {count, onRefresh} = useInbox(refreshMs);
+    const [isMounted, setIsMounted] = useState(true);
+    useEffect(() => {
+      // Effect: subscribes to the page's window event that unmounts the list.
+      const unmount = () => setIsMounted(false);
+      window.addEventListener('refreshcontrol-story-unmount', unmount);
+      return () =>
+        window.removeEventListener('refreshcontrol-story-unmount', unmount);
+    }, []);
     return (
       <div style={{height: '100dvh'}}>
-        <PullToRefresh
-          onRefresh={onRefresh}
-          count={count}
-          text={`Updated ${count} times`}>
-          <Messages rows={rows} count={count} />
-        </PullToRefresh>
+        {isMounted && (
+          <PullToRefresh
+            onRefresh={onRefresh}
+            count={count}
+            text={`Updated ${count} times`}>
+            <Messages rows={rows} count={count} />
+          </PullToRefresh>
+        )}
       </div>
     );
   },

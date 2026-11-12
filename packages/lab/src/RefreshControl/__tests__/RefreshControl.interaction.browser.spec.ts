@@ -1451,6 +1451,111 @@ test('under Reduce Motion a pull during a refresh that returns to the inset lays
   ).toBe(false);
 });
 
+test('under Reduce Motion an unmount during the end’s cross-fade takes its copy along and scrolls nothing after', async ({
+  page,
+}) => {
+  // The end of a refresh scrolled 30 px into the inset cross-fades, and takes
+  // the scroll back once the cross-fade ends. The list unmounts 60 ms into the
+  // cross-fade: its copy is gone before the next frame, and no finish runs.
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await primaryPointer(page, 'coarse');
+  const {driver, content, start} = await openRefresh(page, undefined, {
+    refreshMs: '-1',
+  });
+  await driver.play(slowPull(start, 300, 200));
+  await waitForContentRest(content);
+  expect(await shownPull(content)).toBeCloseTo(HEIGHT, 1);
+  const scroller = page.locator('[data-refresh-scroller]').first();
+  await scroller.evaluate(el => {
+    el.scrollTop = 30;
+  });
+  await expect.poll(() => scroller.evaluate(el => el.scrollTop)).toBe(30);
+  // 60 ms into the copy's fade, unmounts the list. Notes whether a copy is
+  // still in the page at the first frame after the list is gone, and every
+  // scroll write after it is gone.
+  await page.evaluate(() => {
+    const record = window as unknown as {
+      __unmount: {
+        scheduled: boolean;
+        copyLeft: boolean | null;
+        scrollWrites: number;
+      };
+    };
+    const state = {
+      scheduled: false,
+      isListGone: false,
+      copyLeft: null as boolean | null,
+      scrollWrites: 0,
+    };
+    record.__unmount = state;
+    const scroll = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      'scrollTop',
+    );
+    Object.defineProperty(Element.prototype, 'scrollTop', {
+      configurable: true,
+      get(this: Element) {
+        return scroll?.get?.call(this);
+      },
+      set(this: Element, value: number) {
+        if (state.isListGone) {
+          state.scrollWrites += 1;
+        }
+        scroll?.set?.call(this, value);
+      },
+    });
+    new MutationObserver(() => {
+      if (
+        state.scheduled &&
+        !state.isListGone &&
+        document.querySelector('[data-refresh-content]:not([inert])') == null
+      ) {
+        state.isListGone = true;
+        requestAnimationFrame(() => {
+          state.copyLeft =
+            document.querySelector('[data-refresh-content][inert]') != null;
+        });
+      }
+    }).observe(document.body, {childList: true, subtree: true});
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      if (
+        !state.scheduled &&
+        this.hasAttribute('data-refresh-content') &&
+        this.hasAttribute('inert')
+      ) {
+        state.scheduled = true;
+        setTimeout(() => {
+          window.dispatchEvent(new Event('refreshcontrol-story-unmount'));
+        }, 60);
+      }
+      return animate.apply(this, args);
+    };
+  });
+  const unmount = () =>
+    page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __unmount: {copyLeft: boolean | null; scrollWrites: number};
+          }
+        ).__unmount,
+    );
+  await endRefresh(page);
+  await expect
+    .poll(async () => (await unmount()).copyLeft, {timeout: 8000})
+    .not.toBeNull();
+  // Past the cross-fade's 200 ms.
+  await page.waitForTimeout(400);
+  const after = await unmount();
+  expect(after.copyLeft, 'the copy outlived the list').toBe(false);
+  expect(await page.locator('[data-refresh-content][inert]').count()).toBe(0);
+  expect(after.scrollWrites, 'a finish ran after the list unmounted').toBe(0);
+});
+
 test('under Reduce Motion a release cross-fades onto the inset: opacity only, within 200 ms', async ({
   page,
 }) => {

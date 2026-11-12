@@ -133,6 +133,14 @@ function scrollContainersOf(start: HTMLElement): HTMLElement[] {
  */
 const AT_TARGET_PX = 0.05;
 
+/** Ends the cross-fade in flight, if any: its copy goes, and its finish never runs. */
+function cancelCrossFade(crossFade: {
+  current: ReducedMotionCrossFade | null;
+}): void {
+  crossFade.current?.cancel();
+  crossFade.current = null;
+}
+
 function overflows(element: HTMLElement): boolean {
   return element.scrollHeight > element.clientHeight;
 }
@@ -271,8 +279,7 @@ export function useRefreshTouchController({
   // A cross-fade in flight. Stopping it lands the list where it was heading.
   const crossFade = useRef<ReducedMotionCrossFade | null>(null);
   const stopPlacing = useCallback(() => {
-    crossFade.current?.cancel();
-    crossFade.current = null;
+    cancelCrossFade(crossFade);
     content.animator.stop(['y']);
     indicator.animator.stop(['y']);
   }, [content.animator, indicator.animator]);
@@ -717,11 +724,14 @@ export function useRefreshTouchController({
       });
     });
   }, [endTick]);
+  // Effect: at unmount, cancels the end's frame and a cross-fade in flight,
+  // so no copy and no deferred finish outlive the controller.
   useEffect(
     () => () => {
       if (endFrame.current != null) {
         cancelAnimationFrame(endFrame.current);
       }
+      cancelCrossFade(crossFade);
     },
     [],
   );
@@ -900,6 +910,15 @@ export function useRefreshTouchController({
 
   const contentRef = useCallback(
     (element: HTMLElement | null) => {
+      if (element == null) {
+        // The list left the page. React attaches an element that takes its
+        // place in the same commit, so a cross-fade ends only if none did.
+        queueMicrotask(() => {
+          if (contentElement.current == null) {
+            cancelCrossFade(crossFade);
+          }
+        });
+      }
       contentElement.current = element;
       content.ref(element);
       setUpEdge.current?.();
