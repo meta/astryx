@@ -2455,4 +2455,108 @@ describe('final pass 5', () => {
       rm('themes/fz');
     }
   }, 240_000);
+
+  it("takes build's ranked page for a short description, and a template's id or name exactly", async () => {
+    for (const [words, page] of [
+      ['checkout', 'checkout-wizard'],
+      ['a hero section', 'centered-hero'],
+      ['checkout flow', 'checkout-wizard'],
+      ['login-sso', 'login-sso'],
+      ['Checkout Form', 'payment-form'],
+    ]) {
+      const where = `src/app/r-${page}`;
+      try {
+        const r = await themeEditPreviewAdd(words, {cwd, path: where});
+        expect(r.data.added, words).toContain(page);
+      } finally {
+        rm(where);
+      }
+    }
+  }, 240_000);
+
+  it("finds Core's stylesheet through the root layout's imports, and names a font package the app lacks", async () => {
+    const layout = read('src/app/layout.tsx');
+    write('styles/globals.css', "@import '@astryxdesign/core/astryx.css';\n");
+    write(
+      'src/app/layout.tsx',
+      "import '../../styles/globals.css';\nexport default function RootLayout({children}) { return children; }\n",
+    );
+    await themeEditNew('fi', {cwd, like: 'neutral'});
+    try {
+      await themeEditSet('fi', 'font', 'Inter', {cwd});
+      const r = await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'fi',
+        path: 'src/app/fi',
+      });
+      const notes = r.data.notes.join(' ');
+      expect(notes).not.toContain("does not import Core's stylesheet");
+      if (
+        !exists('node_modules/@fontsource/inter') &&
+        !exists('../node_modules/@fontsource/inter')
+      )
+        expect(notes).toContain(
+          'Inter is not installed, so the preview shows the next font in the stack',
+        );
+      expect(read('src/app/fi/_pages/overview.tsx')).toContain(
+        '(not installed here)',
+      );
+    } finally {
+      write('src/app/layout.tsx', layout);
+      rm('styles');
+      rm('src/app/fi');
+      rm('themes/fi');
+    }
+  }, 180_000);
+
+  it("refuses an app frame's exact name clearly, and calls an exact page the one named", async () => {
+    for (const words of ['blank', 'shell-top-nav']) {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(words, {cwd, path: 'src/app/v5'}),
+      );
+      expect(r.code, words).toBe('ERR_INVALID_ARGUMENT');
+      expect(r.message, words).toContain('is an app frame, not a page');
+      expect(r.run[0], words).toContain(`--template ${words}`);
+    }
+    try {
+      const r = await themeEditPreviewAdd('login-sso', {
+        cwd,
+        path: 'src/app/v1',
+      });
+      expect(r.data.added).toEqual(['login-sso']);
+      expect(JSON.stringify(r.data.matched)).not.toContain(
+        'not exactly the one described',
+      );
+    } finally {
+      rm('src/app/v1');
+    }
+  }, 120_000);
+
+  it("finds Core's stylesheet through a route-group root layout and a tsconfig alias", async () => {
+    const layout = read('src/app/layout.tsx');
+    rm('src/app/layout.tsx');
+    write('lib/sheet.css', "@import '@astryxdesign/core/astryx.css';\n");
+    write(
+      'tsconfig.json',
+      '{"compilerOptions": {"paths": {"~/*": ["./*"]}}}\n',
+    );
+    write(
+      'src/app/(site)/layout.tsx',
+      "import '~/lib/sheet.css';\nexport default function L({children}) { return children; }\n",
+    );
+    try {
+      const r = await themeEditPreviewAdd(undefined, {
+        cwd,
+        path: 'src/app/(site)/v3',
+      });
+      expect(r.data.notes.join(' ')).not.toContain(
+        "does not import Core's stylesheet",
+      );
+    } finally {
+      rm('src/app/(site)');
+      rm('lib');
+      rm('tsconfig.json');
+      write('src/app/layout.tsx', layout);
+    }
+  }, 120_000);
 });

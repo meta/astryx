@@ -119,11 +119,37 @@ afterAll(() => {
 });
 
 describe('preview add', () => {
-  it('refuses with no routes folder, naming --path and preview app', async () => {
+  it('refuses with no routes folder, naming the Next apps below and preview app', async () => {
     const r = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
     expect(r.code).toBe('ERR_NOT_FOUND');
-    expect(r.run.join(' ')).toContain('add --path app/theme-preview');
+    expect(r.run.join(' ')).not.toContain('--path app/theme-preview');
     expect(r.run.join(' ')).toContain('preview app theme-app');
+    // A routes folder made by --path has no root layout: refused, unwritten.
+    const made = await refusal(() =>
+      themeEditPreviewAdd(undefined, {cwd, path: 'app/theme-preview'}),
+    );
+    expect(made.message).toContain('has no root layout');
+    expect(fs.existsSync(path.join(cwd, 'app'))).toBe(false);
+    // A workspace root names the Next app below it, with a --path into it.
+    const web = path.join(cwd, 'apps/web');
+    fs.mkdirSync(path.join(web, 'src/app'), {recursive: true});
+    fs.writeFileSync(
+      path.join(web, 'package.json'),
+      '{"name": "web", "dependencies": {"next": "*"}}\n',
+    );
+    fs.writeFileSync(
+      path.join(web, 'src/app/layout.tsx'),
+      'export default 1;\n',
+    );
+    try {
+      const ws = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
+      expect(ws.message).toContain('the Next app below is apps/web/');
+      expect(ws.run[0]).toBe(
+        'astryx experimental theme preview add --path apps/web/src/app/theme-preview',
+      );
+    } finally {
+      fs.rmSync(path.join(cwd, 'apps'), {recursive: true, force: true});
+    }
   });
 
   it('writes the route, the default pages and the data file in the app routes folder', async () => {
