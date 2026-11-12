@@ -87,6 +87,16 @@ export function recordedRun() {
 let lastOutcome = null;
 
 /**
+ * The states of the CLI's own files that the run's kept gather depends on:
+ * those it was stored with and that a hit has just found unchanged, or those
+ * a fresh gather was stored with. A derived value keys on them, so an edit to
+ * the CLI's code in an installed copy, which misses the gather, misses the
+ * derived value too. Null before any kept gather in the run.
+ * @type {[string, string][] | null}
+ */
+let gatherCode = null;
+
+/**
  * The outcome of the last kept gather in this process: whether it was a hit,
  * and why it missed. Null when no kept gather ran.
  * @returns {{hit: boolean, reason: string} | null}
@@ -463,6 +473,7 @@ export async function persistedGather(key, load, codec, keep = () => true) {
       if (stale == null) {
         const value = codec.decode(stored.value);
         recordStates(stored.stamps);
+        gatherCode = cliStates(stored.stamps);
         run?.disarm();
         lastOutcome = {hit: true, reason: 'unchanged'};
         try {
@@ -494,6 +505,100 @@ export async function persistedGather(key, load, codec, keep = () => true) {
 }
 
 /**
+ * The CLI's own files among a gather's stamps: the modules it loaded and the
+ * files it read under the CLI's folder.
+ * @param {[string, string][]} stamps
+ * @returns {[string, string][]}
+ */
+function cliStates(stamps) {
+  const root = CLI_ROOT + path.sep;
+  return stamps.filter(([file]) => file.startsWith(root));
+}
+
+/**
+ * The state of the code a derived value depends on: the CLI's own files the
+ * kept gather depends on (gatherCode), and each of `inputs` by its stamp now,
+ * in one digest.
+ * @param {[string, string][]} code
+ * @param {string[]} inputs
+ * @returns {string}
+ */
+function codeStamp(code, inputs) {
+  const states = [...code];
+  for (const file of inputs) {
+    states.push([file, withoutRecording(() => fileStamp(file))]);
+  }
+  states.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return createHash('sha256').update(JSON.stringify(states)).digest('hex');
+}
+
+/**
+ * A value derived from what a kept gather holds, kept beside the gather: it
+ * is a function of `key`, of the CLI's code and of `inputs` (with this CLI
+ * build), so a stored value is used as it is. The code is the CLI's own files
+ * the run's kept gather depends on (each by its stamp, so an edit misses the
+ * gather and the value alike), with `inputs`: the files the computation reads
+ * that the gather may not have, such as its own module and its weights. An
+ * edit to any of them in an installed copy, where the build id stays the
+ * same, is a new key. Kept only after a kept gather in the run (a search or
+ * build of an installed CLI whose cache folder exists); anywhere else, or on
+ * any read or write error, `compute` runs as before.
+ * @template T, E
+ * @param {unknown[]} key - Everything the value is computed from.
+ * @param {() => T} compute
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
+ * @param {string[]} [inputs] - Files the computation reads, by path.
+ * @returns {T}
+ */
+export function persistedDerived(key, compute, codec, inputs = []) {
+  if (!run || gatherCode == null) return compute();
+  const id = withoutRecording(buildId);
+  const dir = id == null ? null : withoutRecording(gatherCacheDir);
+  if (id == null || dir == null) return compute();
+  const file = entryFile(
+    dir,
+    ['derived', ...key, codeStamp(gatherCode, inputs)],
+    id,
+  );
+  try {
+    const stored = JSON.parse(
+      withoutRecording(() => fs.readFileSync(file, 'utf-8')),
+    );
+    if (stored?.format === FORMAT && stored.derived === true) {
+      const value = codec.decode(stored.value);
+      try {
+        const now = new Date();
+        withoutRecording(() => fs.utimesSync(file, now, now));
+      } catch {
+        // An entry that cannot be touched is evicted sooner; nothing more.
+      }
+      return value;
+    }
+  } catch {
+    // No usable entry: computed below.
+  }
+  const value = compute();
+  withoutRecording(() => {
+    try {
+      const encoded = codec.encode(value);
+      const text = JSON.stringify({
+        format: FORMAT,
+        derived: true,
+        value: encoded,
+      });
+      if (!isDeepStrictEqual(JSON.parse(text).value, encoded)) return;
+      const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+      fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
+      fs.renameSync(temp, file);
+      evict(dir);
+    } catch {
+      // A value that cannot be stored is computed again next time.
+    }
+  });
+  return value;
+}
+
+/**
  * Store a fresh gather with what the run read, unless its plain form does not
  * read back as the same value. Silent on any failure.
  * @template T, E
@@ -506,9 +611,11 @@ function store(dir, file, value, codec) {
   if (!run) return;
   try {
     const encoded = codec.encode(value);
+    const stamps = [...run.reads].filter(([file]) => !inJitiCache(file));
+    gatherCode = cliStates(stamps);
     const text = JSON.stringify({
       format: FORMAT,
-      stamps: [...run.reads].filter(([file]) => !inJitiCache(file)),
+      stamps,
       env: [...run.env],
       value: encoded,
     });
