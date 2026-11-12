@@ -22,7 +22,7 @@ const ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 /**
  * @typedef {object} EvalTask
  * @property {string} id
- * @property {string} source Prompt id in test-sets/default.json it adapts
+ * @property {string} source Prompt id in test-sets/default.json it adapts, or `new` for an original task
  * @property {string} title
  * @property {string} prompt
  * @property {string} probePath
