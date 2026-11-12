@@ -235,7 +235,7 @@ function TableScrollWrapper({
       ? undefined
       : (tableName?.label ?? t('@astryx.table.label'));
   const runtime = use(TableRuntimeContext);
-  const hasBlockViewport = runtime?.viewportHeight != null;
+  const hasBlockViewport = runtime?.isBlockViewport === true;
   const {getViewportProps, getContentProps, state} = useScrollableArea({
     axis: hasBlockViewport ? 'both' : 'inline',
     keyboardAccess: {owner: 'content'},
