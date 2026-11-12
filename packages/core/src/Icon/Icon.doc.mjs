@@ -73,7 +73,7 @@ export const docs = {
       name: 'icon',
       type: 'IconName | NamespacedIconName | ComponentType<SVGProps>',
       description:
-        'Semantic icon name or SVG component. Valid semantic names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. A namespaced key such as `richtext:bold` names a glyph that one component or library registers, and a theme can replace it by key; a namespaced key that nothing registers renders nothing. For any icon not in this list, pass an SVG component directly (e.g. import from lucide-react or @heroicons/react). Note: this prop is called `icon`, not `name`.',
+        'Semantic icon name or SVG component. Valid semantic names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone, drag. A namespaced key such as `richtext:bold` names a glyph that one component or library registers, and a theme can replace it by key; a namespaced key that nothing registers renders nothing. For any icon not in this list, pass an SVG component directly (e.g. import from lucide-react or @heroicons/react). Note: this prop is called `icon`, not `name`.',
       required: true,
     },
     {
@@ -228,7 +228,7 @@ export const docsZh = {
       name: 'icon',
       type: 'IconName | NamespacedIconName | ComponentType<SVGProps>',
       description:
-        '语义图标名称或 SVG 组件。有效语义名称：close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone。命名空间键（如 `richtext:bold`）指向某个组件或库注册的图标，主题可以按键替换它；没有注册的命名空间键不渲染任何内容。列表之外的图标请直接传入 SVG 组件。',
+        '语义图标名称或 SVG 组件。有效语义名称：close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone, drag。命名空间键（如 `richtext:bold`）指向某个组件或库注册的图标，主题可以按键替换它；没有注册的命名空间键不渲染任何内容。列表之外的图标请直接传入 SVG 组件。',
       required: true,
     },
     {
@@ -427,7 +427,7 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    icon: 'Semantic icon name or SVG component. Valid names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. A namespaced key (`richtext:bold`) names a glyph a component or library registers; an unregistered one renders nothing. For others, pass an SVG component.',
+    icon: 'Semantic icon name or SVG component. Valid names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone, drag. A namespaced key (`richtext:bold`) names a glyph a component or library registers; an unregistered one renders nothing. For others, pass an SVG component.',
     color:
       'Color variant mapped to Astryx icon color tokens; inherit = surrounding text color. Web also accepts the non-semantic palette: blue, red, green, gray, cyan, teal, yellow, orange, pink, purple.',
     size: "xsm/sm/md/lg = 12/16/20/24px at a 16px root, scale w/ root font size; theme sets a size's glyph dimension via width + height (px or rem) on components.icon['size:sm'] etc. Explicit Icon size; otherwise nearest owning-component default, then 'md' when no contextual default exists",

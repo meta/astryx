@@ -80,7 +80,8 @@ export type IconName =
   | 'checkDouble'
   | 'wrench'
   | 'stop'
-  | 'microphone';
+  | 'microphone'
+  | 'drag';
 
 /**
  * A namespaced extension key, `'<namespace>:<name>'`.
