@@ -3,10 +3,11 @@
 /**
  * @file useCommittedRef.test.tsx
  * @input React, react-dom, React Testing Library, useCommittedRef
- * @output Proves the ref keeps the committed value when React drops a render,
- *   that every layout Effect in the same commit reads the new value, that a
- *   listener installed once reads a changed callback, and that server
- *   rendering gives no warning
+ * @output Proves, for both call shapes, that the ref keeps the committed value
+ *   when React drops a render, that every layout Effect in the same commit
+ *   reads the new value, and that server rendering gives no warning; and that
+ *   a listener installed once, an Effect cleanup, and a callback declared
+ *   before the value read the latest committed value
  * @position Unit tests for the internal useCommittedRef hook
  */
 
@@ -18,28 +19,42 @@ import {
   use,
   useEffect,
   useLayoutEffect,
+  useRef,
   useState,
 } from 'react';
 import {renderToString} from 'react-dom/server';
 import {fireEvent, render} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {useCommittedRef} from './useCommittedRef';
+import {useCommittedRef, useCommittedRefInto} from './useCommittedRef';
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** The two call shapes, each as a hook that returns the ref. */
+function useIntoShape<T>(value: T): {readonly current: T} {
+  const ref = useRef(value);
+  useCommittedRefInto(ref, value);
+  return ref;
+}
+const SHAPES = [
+  ['useCommittedRef', useCommittedRef],
+  ['useCommittedRefInto', useIntoShape],
+] as const;
+
 /** A promise that never settles, so a render that reads it never commits. */
 const never = new Promise<string>(() => {});
 
-function renderSuspendingHolder() {
+function renderSuspendingHolder(
+  useShape: (value: string) => {readonly current: string},
+) {
   const seen: {ref: {readonly current: string} | null} = {ref: null};
   let setValue: (value: string) => void = () => {};
   function Child({value}: {value: string}) {
     return <span>{value === 'B' ? use(never) : value}</span>;
   }
   function Holder({value}: {value: string}) {
-    seen.ref = useCommittedRef(value);
+    seen.ref = useShape(value);
     return <Child value={value} />;
   }
   function App() {
@@ -59,9 +74,9 @@ function renderSuspendingHolder() {
   return {view, seen, setValue: (value: string) => setValue(value)};
 }
 
-describe('useCommittedRef', () => {
+describe.each(SHAPES)('%s', (_name, useShape) => {
   it('keeps the committed value when a transition suspends and React drops the render', async () => {
-    const {view, seen, setValue} = renderSuspendingHolder();
+    const {view, seen, setValue} = renderSuspendingHolder(useShape);
 
     await act(async () => {
       startTransition(() => setValue('B'));
@@ -72,7 +87,7 @@ describe('useCommittedRef', () => {
   });
 
   it('keeps the committed value when an urgent update suspends in a shown boundary', async () => {
-    const {view, seen, setValue} = renderSuspendingHolder();
+    const {view, seen, setValue} = renderSuspendingHolder(useShape);
 
     await act(async () => {
       setValue('B');
@@ -93,7 +108,7 @@ describe('useCommittedRef', () => {
       return null;
     }
     function Holder({value}: {value: string}) {
-      shared.ref = useCommittedRef(value);
+      shared.ref = useShape(value);
       return <Reader name="child" />;
     }
     function Parent() {
@@ -124,6 +139,25 @@ describe('useCommittedRef', () => {
     });
   });
 
+  it('renders on the server without a warning and keeps the initial value', () => {
+    const consoleError = vi.spyOn(console, 'error');
+    const consoleWarn = vi.spyOn(console, 'warn');
+    let seen: {readonly current: string} | null = null;
+    function Holder() {
+      seen = useShape('initial');
+      return <span>ok</span>;
+    }
+
+    const html = renderToString(<Holder />);
+
+    expect(html).toContain('ok');
+    expect(seen).toEqual({current: 'initial'});
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
+  });
+});
+
+describe('useCommittedRef', () => {
   it('lets a listener installed once call a changed callback', () => {
     let installs = 0;
     function Listener({
@@ -188,21 +222,30 @@ describe('useCommittedRef', () => {
 
     expect(refs[0]).toBe(refs[refs.length - 1]);
   });
+});
 
-  it('renders on the server without a warning and keeps the initial value', () => {
-    const consoleError = vi.spyOn(console, 'error');
-    const consoleWarn = vi.spyOn(console, 'warn');
-    let seen: {readonly current: string} | null = null;
-    function Holder() {
-      seen = useCommittedRef('initial');
-      return <span>ok</span>;
+describe('useCommittedRefInto', () => {
+  it('lets a callback declared before the value read the latest committed value', () => {
+    const read = vi.fn();
+    function Holder({label}: {label: string}) {
+      const labelRef = useRef(label);
+      // Declared before the value it reads, as in a forward closure.
+      const announce = () => {
+        read(labelRef.current);
+      };
+      const upper = label.toUpperCase();
+      useCommittedRefInto(labelRef, upper);
+      return (
+        <button type="button" onClick={announce}>
+          Announce
+        </button>
+      );
     }
+    const {getByRole, rerender} = render(<Holder label="first" />);
+    rerender(<Holder label="second" />);
 
-    const html = renderToString(<Holder />);
+    fireEvent.click(getByRole('button', {name: 'Announce'}));
 
-    expect(html).toContain('ok');
-    expect(seen).toEqual({current: 'initial'});
-    expect(consoleError).not.toHaveBeenCalled();
-    expect(consoleWarn).not.toHaveBeenCalled();
+    expect(read).toHaveBeenCalledWith('SECOND');
   });
 });
