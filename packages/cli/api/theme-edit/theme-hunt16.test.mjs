@@ -191,8 +191,10 @@ describe('corrected new commands keep every option', () => {
         '--mode',
         'dark-only',
       ],
-      // The nearest base is guessed only among installed ones (none here).
-      / new y (?!.*--like)/,
+      // The nearest base is guessed only among installed ones: with
+      // theme-neutral resolvable it is `--like neutral`, else no --like.
+      // Any invocation prefix (npx, pnpm dlx).
+      / new y (--like neutral )?--accent red --mode dark-only$/,
     ],
     [
       ['new', 'z', '--accent', '#ggg', '--mode', 'light-only', '--png'],

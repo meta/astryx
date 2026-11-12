@@ -28,10 +28,10 @@
  * Version of the JSON envelope contract. Bump on breaking shape changes so
  * consumers can negotiate. Exposed on every envelope as `apiVersion`.
  */
-import * as fs from 'node:fs';
 import {ERROR_CODES, isErrorCode} from './error-codes.mjs';
 import {recordEnvelope, setOutcome} from '../debug/index.mjs';
 import {answeredBy} from '../release/run-context.mjs';
+import * as fs from 'node:fs';
 
 export const API_VERSION = 1;
 
@@ -143,23 +143,15 @@ export function jsonOut(response) {
  */
 export function toErrorEnvelope(err, suggestions, code, receipt) {
   const message =
-    err instanceof Error
-      ? err.message
-      : typeof err === 'string'
-        ? err
-        : String(err);
+    err instanceof Error ? err.message : typeof err === 'string' ? err : String(err);
   const carried =
     err && typeof err === 'object' ? /** @type {any} */ (err).code : undefined;
-  const resolvedCode =
-    [code, carried].find(isErrorCode) ?? ERROR_CODES.ERR_UNKNOWN;
+  const resolvedCode = [code, carried].find(isErrorCode) ?? ERROR_CODES.ERR_UNKNOWN;
   /** @type {any} */
   const env = {apiVersion: API_VERSION, error: message, code: resolvedCode};
-  if (Array.isArray(suggestions) && suggestions.length)
-    env.suggestions = suggestions;
+  if (Array.isArray(suggestions) && suggestions.length) env.suggestions = suggestions;
   const carriedReceipt =
-    err && typeof err === 'object'
-      ? /** @type {any} */ (err).receipt
-      : undefined;
+    err && typeof err === 'object' ? /** @type {any} */ (err).receipt : undefined;
   const resolvedReceipt = receipt ?? carriedReceipt;
   if (resolvedReceipt && typeof resolvedReceipt === 'object') {
     env.receipt = resolvedReceipt;

@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditShow} from './theme-edit.mjs';
 import {themeTemplate} from '../theme/template/template.mjs';
+import {editorThemeTemplate} from './_adapter.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -160,21 +161,19 @@ describe('token values that are not text', () => {
 
 describe('the experimental template in an editor theme folder', () => {
   it('names a free path for an editor file, and refreshes its own template', () => {
-    const skip = themeTemplate({
+    const skip = editorThemeTemplate({
       cwd,
       targetPath: 'themes/g/g.theme.ts',
-      __editorFilesOnly: true,
     });
     expect(skip.data).toMatchObject({
       written: false,
       alternative: 'themes/g/theme.template.ts',
     });
     expect(() =>
-      themeTemplate({
+      editorThemeTemplate({
         cwd,
         targetPath: 'themes/g/g.theme.ts',
         overwrite: true,
-        __editorFilesOnly: true,
       }),
     ).toThrow(/belongs to a theme the theme editor made/);
 
@@ -186,11 +185,10 @@ describe('the experimental template in an editor theme folder', () => {
       for (const targetPath of ['themes/g/G.theme.ts', 'themes/G/g.theme.ts'])
         expect(
           () =>
-            themeTemplate({
+            editorThemeTemplate({
               cwd,
               targetPath,
               overwrite: true,
-              __editorFilesOnly: true,
             }),
           targetPath,
         ).toThrow(/belongs to a theme the theme editor made/);
@@ -202,11 +200,10 @@ describe('the experimental template in an editor theme folder', () => {
     themeTemplate({cwd, targetPath: 'themes/g/theme.template.ts'});
     fs.appendFileSync(path.join(dir(), 'theme.template.ts'), '// mine\n');
     expect(
-      themeTemplate({
+      editorThemeTemplate({
         cwd,
         targetPath: 'themes/g/theme.template.ts',
         overwrite: true,
-        __editorFilesOnly: true,
       }).data.written,
     ).toBe(true);
     // The stable command keeps its guard for every file there.

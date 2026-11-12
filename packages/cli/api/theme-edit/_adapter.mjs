@@ -31,6 +31,7 @@
  * @position api/theme-edit — adapter for api/theme-edit/theme-edit.mjs
  */
 
+import {writeThemeTemplate} from '../theme/template/template.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -838,4 +839,14 @@ export async function editorThemeHold(files, {cwd}) {
     });
   }
   return releaseAll;
+}
+
+/**
+ * `theme template` for the experimental command: in a folder the theme
+ * editor made, only the editor's own files are protected.
+ * @param {{targetPath?: string, overwrite?: boolean, cwd?: string}} options
+ * @returns {import('../theme/theme.type.mjs').ThemeTemplateResponse}
+ */
+export function editorThemeTemplate(options) {
+  return writeThemeTemplate(options, true);
 }

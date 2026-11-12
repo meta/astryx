@@ -79,17 +79,30 @@ function isReplaceableThemeFile(file) {
  * Refuses to overwrite without `overwrite`: an edited copy is the consumer's
  * work, and this command is safe to re-run (init calls it on every setup).
  *
- * @param {{targetPath?: string, overwrite?: boolean, cwd?: string, __editorFilesOnly?: boolean}} [options]
- *   `__editorFilesOnly` (the experimental command): in a folder the theme
- *   editor made, only the editor's own files are protected.
+ * @param {{targetPath?: string, overwrite?: boolean, cwd?: string}} [options]
  * @returns {import('../theme.type.mjs').ThemeTemplateResponse}
  */
 export function themeTemplate(options = {}) {
+  return writeThemeTemplate(options, false);
+}
+
+/**
+ * The template write behind `themeTemplate`, with the experimental editor's
+ * one difference: with `editorFilesOnly`, in a folder the theme editor made
+ * only the editor's own files (`<folder>.*`) are protected, so an earlier
+ * template there is the person's. Internal: the experimental `template`
+ * command reaches it through `editorThemeTemplate` (api/theme-edit), and it
+ * is not part of the public API.
+ * @internal
+ * @param {{targetPath?: string, overwrite?: boolean, cwd?: string}} options
+ * @param {boolean} editorFilesOnly
+ * @returns {import('../theme.type.mjs').ThemeTemplateResponse}
+ */
+export function writeThemeTemplate(options, editorFilesOnly) {
   const {
     targetPath = THEME_TEMPLATE_DEFAULT_PATH,
     overwrite = false,
     cwd = process.cwd(),
-    __editorFilesOnly: editorFilesOnly = false,
   } = options;
 
   const suggested = path.posix.join(
@@ -187,7 +200,7 @@ export function themeTemplate(options = {}) {
     : path.dirname(resolved);
   const record = fs.existsSync(resolved) ? editorThemeRecord(realDir) : null;
   // The editor's own files are `<folder>.*` beside its settings; with
-  // __editorFilesOnly any other file there (an earlier template) is the
+  // editorFilesOnly any other file there (an earlier template) is the
   // person's.
   // On a case-insensitive disk `T.theme.ts` is `t.theme.ts`: names are
   // compared in any case, and an existing file by what it is on disk.
