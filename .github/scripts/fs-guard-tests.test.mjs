@@ -522,6 +522,46 @@ describe('a test the --changed run already ran runs once', () => {
     ]);
   });
 
+  it('the lister puts the reached tests first and lists each test once', () => {
+    const repoRoot = path.resolve(import.meta.dirname, '../..');
+    const script = path.join(repoRoot, '.github/scripts/fs-guard-tests.mjs');
+    const lines = text => text.split('\n').filter(Boolean);
+    const guards = lines(
+      execFileSync(process.execPath, [script, '--changed', 'HEAD'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }),
+    );
+    expect(guards.length).toBeGreaterThan(1);
+    // One test the change reaches that no guard list names, and one guard
+    // that the reached list names too.
+    const reachedOnly = 'scripts/a-reached-test.test.mjs';
+    const both = guards[0];
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reached-'));
+    try {
+      const list = path.join(dir, 'reached.json');
+      fs.writeFileSync(
+        list,
+        JSON.stringify(
+          [reachedOnly, both].map(file => ({
+            file: path.join(repoRoot, file),
+            projectName: 'node',
+          })),
+        ),
+      );
+      const tests = lines(
+        execFileSync(
+          process.execPath,
+          [script, '--changed', 'HEAD', '--reached', list],
+          {cwd: repoRoot, encoding: 'utf8'},
+        ),
+      );
+      expect(tests).toEqual([reachedOnly, both, ...guards.slice(1)]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
   it('the lister drops a guard the changed run listed, and keeps the rest', () => {
     const repoRoot = path.resolve(import.meta.dirname, '../..');
     const script = path.join(repoRoot, '.github/scripts/fs-guard-tests.mjs');
