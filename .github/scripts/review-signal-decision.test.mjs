@@ -14,6 +14,10 @@ const {
   readCodeGate,
   readSpecGate,
   resolveReviewApprovals,
+  TRAINER_WAITING_TEXT,
+  needsTrainerPass,
+  trainerPassed,
+  OWNER_CLEARED_TEXT,
 } = require('./review-signal-decision.cjs');
 
 const head1 = '1111111111111111111111111111111111111111';
@@ -391,5 +395,68 @@ describe('the review gate text for the spec half', () => {
         readCodeGate([trusted('review-required', `${codeWait}${suffix}`)]),
       ).toEqual({gated: true, description: codeWait});
     }
+  });
+});
+
+describe("a trainer pass for the review app's own pull requests", () => {
+  const HEAD = 'a'.repeat(40);
+  const review = (login, state, commitId = HEAD) => ({
+    user: {login, type: 'User'},
+    state,
+    commit_id: commitId,
+  });
+
+  it('applies only to a pull request the review app opened', () => {
+    expect(
+      needsTrainerPass({
+        author: 'Review-App[bot]',
+        reviewApp: 'review-app[bot]',
+      }),
+    ).toBe(true);
+    expect(
+      needsTrainerPass({
+        author: 'dependabot[bot]',
+        reviewApp: 'review-app[bot]',
+      }),
+    ).toBe(false);
+    expect(
+      needsTrainerPass({author: 'contributor', reviewApp: 'review-app[bot]'}),
+    ).toBe(false);
+    expect(needsTrainerPass({author: 'review-app[bot]', reviewApp: ''})).toBe(
+      false,
+    );
+  });
+
+  it("passes on an engineering owner's latest approval of the exact head only", () => {
+    const engOwners = ['engineer'];
+    const passed = reviews =>
+      trainerPassed({reviews, headSha: HEAD, engOwners});
+    expect(passed([])).toBe(false);
+    expect(passed([review('engineer', 'APPROVED')])).toBe(true);
+    expect(passed([review('engineer', 'APPROVED', 'b'.repeat(40))])).toBe(
+      false,
+    );
+    expect(passed([review('someone', 'APPROVED')])).toBe(false);
+    expect(
+      passed([
+        review('engineer', 'APPROVED'),
+        review('engineer', 'CHANGES_REQUESTED'),
+      ]),
+    ).toBe(false);
+  });
+
+  it('clears with the text review-clear owns, so review-clear re-gates a withdrawn trainer pass', () => {
+    const clear = readFileSync(
+      fileURLToPath(new URL('../workflows/review-clear.yml', import.meta.url)),
+      'utf8',
+    );
+    expect(clear).toContain(`const OWNER_CLEARED = '${OWNER_CLEARED_TEXT}';`);
+  });
+
+  it('waits with a code-review description that review-clear owns', () => {
+    expect(TRAINER_WAITING_TEXT.startsWith('Waiting on code review:')).toBe(
+      true,
+    );
+    expect(TRAINER_WAITING_TEXT.length).toBeLessThanOrEqual(140);
   });
 });

@@ -18,6 +18,7 @@
 
 import {getCliInvocation} from '../../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
+import {levenshteinDistance} from '../../../../foundation/text/levenshtein.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
 import {
@@ -29,6 +30,7 @@ import {
   text,
 } from '../../formatters/index.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
+import {AstryxError} from '../../../../api/error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {
   themeEditHow,
@@ -41,6 +43,12 @@ import {
   themeEditShow,
   themeEditUndo,
 } from '../../../../api/theme-edit/theme-edit.mjs';
+import {
+  builtInThemes,
+  editorCompileProblem,
+  editorThemeHold,
+  editorThemeRefusal,
+} from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
 import {doc as editorDoc} from '../experimental-theme-editor.doc.mjs';
@@ -71,6 +79,7 @@ import {doc as previewAppFn} from '../../../../api/theme-edit/themeEditPreviewAp
 import {doc as previewListFn} from '../../../../api/theme-edit/themeEditPreviewList.doc.mjs';
 import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs';
 import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
+import {quoteCommandArgument} from '../../../../foundation/env/package-manager.mjs';
 
 const PREFIX = 'astryx experimental theme';
 const EDITOR = `${PREFIX} editor`;
@@ -81,8 +90,15 @@ const HOW = `${EDITOR} ${howDoc.name.split(' ').pop()}`;
  * Commands in a line, with the run prefix this project uses.
  * @param {string} line
  */
-const cmd = line =>
-  line.split(PREFIX).join(`${getCliInvocation()} experimental theme`);
+const cmd = line => {
+  const stem = `${getCliInvocation()} experimental theme`;
+  // A line that already starts its commands this way (how's answers do,
+  // in JSON too) keeps them.
+  return line
+    .split(stem)
+    .map(part => part.split(PREFIX).join(stem))
+    .join(stem);
+};
 
 /**
  * Print blocks, a blank line between them, with this project's run prefix
@@ -239,6 +255,18 @@ function notCheckedLine(result) {
 }
 
 /**
+ * Text with C0 control characters and DEL shown as escapes (\u001b), so
+ * text a person typed cannot move the cursor or recolor the terminal.
+ * @param {string} text
+ */
+const escapeControls = text =>
+  String(text).replace(
+    // eslint-disable-next-line no-control-regex
+    /[\u0000-\u0008\u000b-\u001f\u007f]/g,
+    c => `\\u${`000${c.charCodeAt(0).toString(16)}`.slice(-4)}`,
+  );
+
+/**
  * Run one API call: errors become the CLI error envelope, results go to
  * JSON or to `render`.
  * @template T
@@ -257,8 +285,14 @@ async function run(program, call, render, answer) {
     const err = /** @type {import('../../../../api/error.mjs').AstryxError} */ (
       e
     );
-    return cliError(err.message, {
-      suggestions: err.suggestions,
+    // Suggested commands start the way this project runs the CLI, in JSON
+    // as in text. Echoed user text never drives the terminal: control
+    // characters print as escapes.
+    return cliError(escapeControls(err.message), {
+      suggestions: err.suggestions?.map(x => ({
+        ...x,
+        name: escapeControls(cmd(x.name)),
+      })),
       code: err.code ?? ERROR_CODES.ERR_UNKNOWN,
     });
   }
@@ -269,7 +303,20 @@ async function run(program, call, render, answer) {
     jsonOut(/** @type {any} */ (result));
     return answered;
   }
-  print([...notCheckedLine(result), ...render(result)]);
+  // --detail compact|brief (and --dense) print a change's status line
+  // alone; an answer (how, show, list) is the answer, and prints whole.
+  const o = program.opts();
+  const change = ['themeEdit.set', 'themeEdit.undo', 'themeEdit.new'].includes(
+    /** @type {any} */ (result)?.type,
+  );
+  const short =
+    change &&
+    (o.detail === 'compact' ||
+      o.detail === 'brief' ||
+      o.dense ||
+      o.lang === 'dense');
+  const lines = [...notCheckedLine(result), ...render(result)];
+  print(short ? lines.slice(0, notCheckedLine(result).length + 1) : lines);
   return answered;
 }
 
@@ -299,16 +346,45 @@ const changeOptions = o => ({
  * The dial settings `new` takes as flags, by dial name: every option of its
  * CommandDoc that `set` would take as a dial.
  * @param {any} o
- * @returns {Record<string, string>}
+ * @returns {Record<string, string | string[]>}
  */
 function newSettings(o) {
-  /** @type {Record<string, string>} */
+  /** @type {Record<string, string | string[]>} */
   const out = {};
   for (const opt of newDoc.options ?? []) {
     if (opt.param !== 'options.settings') continue;
     const name = opt.flag.split(' ')[0].slice(2);
     const value = o[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
-    if (value != null) out[name] = String(value);
+    if (value == null) continue;
+    // A flag given twice: headings takes one value per axis (a weight and a
+    // tracking); any other flag given two different values is refused.
+    const all = flagValues(name);
+    if (name === 'headings' && all.length > 1) out[name] = all;
+    else if (new Set(all).size > 1)
+      throw new AstryxError(
+        `--${name} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
+        [],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    else out[name] = String(value);
+  }
+  return out;
+}
+
+/**
+ * Every value one flag was given on the command line, in order.
+ * @param {string} name
+ * @returns {string[]}
+ */
+function flagValues(name) {
+  const argv = process.argv;
+  /** @type {string[]} */
+  const out = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--') break;
+    if (argv[i] === `--${name}` && i + 1 < argv.length) out.push(argv[++i]);
+    else if (argv[i].startsWith(`--${name}=`))
+      out.push(argv[i].slice(name.length + 3));
   }
   return out;
 }
@@ -366,13 +442,86 @@ function showBlocks(d) {
  * @param {any} d
  */
 function lookupBlocks(d) {
-  if (d.kind === 'question' && !d.results.length)
-    return [
-      `No match for "${d.subject}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold).`,
-      ...project(d),
-      `Tip: ${HOW} --list parts`,
-    ];
-  return project(d);
+  // Echoed user text never drives the terminal: control characters print
+  // as escapes.
+  const safe = (/** @type {unknown} */ v) =>
+    typeof v === 'string'
+      ? v.replace(
+          /\p{Cc}/gu,
+          c => `\\x${(c.charCodeAt(0) + 0x100).toString(16).slice(1)}`,
+        )
+      : v;
+  /** @type {Record<string, unknown>} */
+  const shown = {};
+  for (const [k, v] of Object.entries(d)) shown[k] = safe(v);
+  const {
+    hint,
+    run: next,
+    results,
+    examples,
+    refused,
+    points,
+    items,
+    ...rest
+  } = /** @type {any} */ (shown);
+  // Commands print one to a line and are never wrapped, so a line pasted
+  // into a shell runs exactly one whole command; a sequence is one line.
+  /** @param {string[]} cmds @param {boolean} [sequence] */
+  const commandLines = (cmds, sequence) =>
+    sequence && cmds.length > 1
+      ? [cmds.join(' && '), 'sequence: run as one line, in this order']
+      : cmds;
+  /** @param {Array<{command: string, why: string}>} refusedList */
+  const refusedLines = refusedList =>
+    refusedList.flatMap(r => [`x ${r.command}`, `  not run: ${r.why}`]);
+  /** @type {Array<string | import('../../formatters/index.mjs').Block>} */
+  const blocks = [...(hint ? [String(hint)] : []), ...project(rest)];
+  if (Array.isArray(results) && results.length)
+    blocks.push(
+      section('results:'),
+      list(
+        results.map((/** @type {any} */ r) => [
+          String(r.text),
+          ...commandLines(r.commands ?? [], r.sequence),
+          ...refusedLines(r.refused ?? []),
+        ]),
+      ),
+    );
+  if (Array.isArray(examples) && examples.length)
+    blocks.push(section('examples:'), list(commandLines(examples)));
+  if (Array.isArray(refused) && refused.length)
+    blocks.push(
+      section('refused:'),
+      list(refused.map((/** @type {any} */ r) => refusedLines([r]))),
+    );
+  if (Array.isArray(points) && points.length)
+    blocks.push(
+      section('points:'),
+      records(
+        points.map((/** @type {any} */ x) => ({
+          at: x.at,
+          color: x.color,
+          alpha: x.alpha,
+        })),
+      ),
+    );
+  if (Array.isArray(items) && items.length) {
+    if (items.some((/** @type {any} */ x) => Array.isArray(x.examples)))
+      blocks.push(
+        section('items:'),
+        list(
+          items.map((/** @type {any} */ x) => [
+            `${x.name}  ${x.values}`,
+            `help: ${x.help}`,
+            ...commandLines(x.examples),
+          ]),
+        ),
+      );
+    else blocks.push(...project({items}).slice(1));
+  }
+  if (Array.isArray(next) && next.length)
+    blocks.push(`Tip: ${next.map(String).join(', or ')}`);
+  return blocks;
 }
 
 /**
@@ -384,17 +533,53 @@ function lookupBlocks(d) {
  * @returns {ReturnType<typeof cliError> | null}
  */
 function strayOption(command, rest) {
+  // A scope flag given twice would keep only the last one without a word.
+  for (const flag of ['on', 'when', 'state', 'mode']) {
+    const all = flagValues(flag);
+    if (new Set(all).size > 1)
+      return cliError(
+        `--${flag} was given twice (${all.join(', ')}); give it once.`,
+        {
+          suggestions: [
+            {
+              name: cmd(`${EDITOR} ${command} --help`),
+              reason: 'every option it takes',
+            },
+          ],
+          code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+        },
+      );
+  }
   const word = rest.find(w => typeof w === 'string' && w.startsWith('--'));
   if (word == null) return null;
   return cliError(
     `unknown option '${word}': only the thing a change names may start with -- (a design token such as --color-accent).`,
     {
       suggestions: [
-        {name: `${EDITOR} ${command} --help`, reason: 'every option it takes'},
+        {
+          name: cmd(`${EDITOR} ${command} --help`),
+          reason: 'every option it takes',
+        },
       ],
       code: ERROR_CODES.ERR_INVALID_OPTION,
     },
   );
+}
+
+/**
+ * A refusal for words after what a command takes, which would otherwise be
+ * dropped without a word; null when there are none.
+ * @param {string} command
+ * @param {string[]} extra
+ */
+function extraWords(command, extra) {
+  if (!extra.length) return null;
+  return cliError(`${command} does not take "${extra.join(' ')}".`, {
+    suggestions: [
+      {name: cmd(`${EDITOR} ${command} --help`), reason: 'what it takes'},
+    ],
+    code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+  });
 }
 
 /**
@@ -413,9 +598,28 @@ function explained(c, doc, {tokens = false} = {}) {
   return c;
 }
 
+/** Old and sibling names, and where each now is. */
+const MOVED = /** @type {Record<string, Record<string, string>>} */ ({
+  theme: {
+    build: 'compile',
+    set: 'editor set',
+    undo: 'editor undo',
+    show: 'editor show',
+    new: 'editor new',
+    how: 'editor how',
+    explain: 'editor how',
+    reset: 'editor undo',
+    palette: 'editor set',
+    help: '--help',
+  },
+  editor: {explain: 'how', reset: 'undo', help: '--help', palette: 'set'},
+  preview: {help: '--help'},
+});
+
 /**
- * A command group: bare, it prints its help; with an unknown word, the
- * unknown-subcommand error with every subcommand as a suggestion.
+ * A command group: bare, it prints its help (in JSON too, as the root
+ * does); with an unknown word, the unknown-subcommand error, leading with
+ * where a moved name now is, then the nearest subcommands.
  * @param {import('commander').Command} parent
  * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
  * @returns {import('commander').Command}
@@ -428,17 +632,54 @@ function defineGroup(parent, doc) {
       /** @type {import('commander').Command} */ c,
     ) => {
       const extras = c?.args ?? [];
+      const words = [];
+      for (let x = cmd; x && x.parent; x = x.parent) words.unshift(x.name());
+      const here = `${getCliInvocation()} ${words.join(' ')}`;
       if (extras.length > 0) {
+        const word = String(extras[0]).toLowerCase();
+        const group = doc.name.split(' ').at(-1) ?? '';
+        const moved =
+          MOVED[group]?.[word] ??
+          // `preview <theme>`: the pages for a theme.
+          (group === 'preview' && /^[a-z][a-z0-9-]*$/.test(word)
+            ? `add --theme ${word}`
+            : null);
+        const ranked = (cmd.commands ?? [])
+          .map(command => command.name())
+          .sort(
+            (a, b) =>
+              levenshteinDistance(word, a) - levenshteinDistance(word, b),
+          );
         return cliError(
-          `unknown subcommand '${doc.name} ${String(extras[0])}'`,
+          `unknown subcommand '${doc.name} ${String(extras[0])}'${moved ? `; it is ${here} ${moved}` : ''}`,
           {
-            suggestions: (cmd.commands ?? []).map(command => ({
-              name: command.name(),
-              reason: 'available subcommand',
-            })),
+            suggestions: [
+              ...(moved
+                ? [{name: `${here} ${moved}`, reason: 'do this instead'}]
+                : []),
+              ...ranked.map(name => ({
+                name: `${here} ${name}`,
+                reason: 'available subcommand',
+              })),
+            ],
             code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
           },
         );
+      }
+      if (c?.optsWithGlobals?.().json) {
+        jsonOut(
+          /** @type {any} */ ({
+            type: 'help',
+            data: {
+              command: words.join(' '),
+              commands: (cmd.commands ?? []).map(command => ({
+                name: command.name(),
+                summary: command.summary() || command.description(),
+              })),
+            },
+          }),
+        );
+        return NO_RESULT_SET;
       }
       cmd.help();
       return NO_RESULT_SET;
@@ -469,16 +710,48 @@ export function registerExperimentalTheme(group, program) {
   explained(
     defineCommand(editor, newDoc, {
       fn: newFn,
-      action: (/** @type {string} */ name, /** @type {any} */ o) =>
+      action: (
+        /** @type {string} */ name,
+        /** @type {any} */ o,
+        /** @type {any} */ cmd,
+      ) =>
         run(
           program,
-          () =>
-            themeEditNew(name, {
+          () => {
+            // A word after the name is never dropped without a word.
+            const extra = (cmd?.args ?? []).slice(1);
+            if (extra.length)
+              throw new AstryxError(
+                `new takes one theme name; "${extra.join(' ')}" is extra. For a base theme, use --like. Nothing was changed.`,
+                // A built-in theme after the name is the base; other words
+                // were most likely part of the name.
+                builtInThemes().includes(extra[0])
+                  ? [
+                      {
+                        name: `${EDITOR} new ${name} --like ${extra[0]}`,
+                        reason: 'do this instead',
+                      },
+                    ]
+                  : [
+                      {
+                        name: `${EDITOR} new ${quoteCommandArgument(
+                          [name, ...extra]
+                            .join('-')
+                            .toLowerCase()
+                            .replace(/[^a-z0-9-]+/g, '-'),
+                        )}`,
+                        reason: 'do this instead',
+                      },
+                    ],
+                ERROR_CODES.ERR_INVALID_ARGUMENT,
+              );
+            return themeEditNew(name, {
               cwd: process.cwd(),
               like: o.like,
               png: o.png ?? false,
               settings: newSettings(o),
-            }),
+            });
+          },
           r => [
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
             ...project(/** @type {any} */ (r.data)),
@@ -512,7 +785,28 @@ export function registerExperimentalTheme(group, program) {
   explained(
     defineCommand(editor, showDoc, {
       fn: showFn,
-      action: (/** @type {string} */ name, /** @type {any} */ o) =>
+      action: (
+        /** @type {string} */ name,
+        /** @type {any} */ o,
+        /** @type {any} */ c,
+      ) =>
+        extraWords('show', (c?.args ?? []).slice(1)) ??
+        // The sheet is limited to one section (the docs say so): a second
+        // --section is refused, never kept over the first in silence.
+        (new Set(flagValues('section')).size > 1
+          ? cliError(
+              `--section limits the sheet to one section, and was given ${flagValues('section').length} (${flagValues('section').join(', ')}); give one, or none for the whole sheet.`,
+              {
+                suggestions: [
+                  {
+                    name: `${EDITOR} show ${name} --section ${flagValues('section')[0]}`,
+                    reason: 'do this instead',
+                  },
+                ],
+                code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+              },
+            )
+          : null) ??
         run(
           program,
           () =>
@@ -538,6 +832,7 @@ export function registerExperimentalTheme(group, program) {
         /** @type {import('commander').Command} */ c,
       ) =>
         strayOption('undo', [which, ...(c?.args ?? []).slice(3)]) ??
+        extraWords('undo', (c?.args ?? []).slice(3)) ??
         run(
           program,
           () =>
@@ -579,7 +874,7 @@ export function registerExperimentalTheme(group, program) {
               cwd: process.cwd(),
               theme: o.theme,
               template: o.template,
-              top: o.top == null ? undefined : Number(o.top),
+              top: o.top,
               path: o.path,
             }),
           r => {
@@ -630,9 +925,28 @@ export function registerExperimentalTheme(group, program) {
             ...project(/** @type {any} */ (r.data)),
           ],
         ),
-    }),
+    }).allowExcessArguments(false),
     previewAppDoc,
   );
+  {
+    // A folder name that starts with "-" reads as an option: say how to
+    // pass it.
+    const app = /** @type {any} */ (
+      preview.commands.find(
+        (/** @type {any} */ x) =>
+          x.name() === previewAppDoc.name.split(' ').pop(),
+      )
+    );
+    const unknown = app?.unknownOption?.bind(app);
+    if (app && unknown)
+      app.unknownOption = (/** @type {string} */ flag) =>
+        /^-[^-]/.test(flag) && flag.length > 2
+          ? app.error(
+              `error: unknown option '${flag}'. A folder name that starts with "-" goes after --: ${PREFIX} preview app -- ${flag}`,
+              {code: 'commander.unknownOption'},
+            )
+          : unknown(flag);
+  }
 
   explained(
     defineCommand(preview, previewListDoc, {
@@ -646,7 +960,7 @@ export function registerExperimentalTheme(group, program) {
               ? project(/** @type {any} */ (r.data))
               : [
                   ...project(/** @type {any} */ (r.data)),
-                  `Tip: ${PREFIX} preview add`,
+                  `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
                 ],
           r =>
             resultSet({
@@ -655,7 +969,7 @@ export function registerExperimentalTheme(group, program) {
               empty: r.data.pages.length === 0,
             }),
         ),
-    }),
+    }).allowExcessArguments(false),
     previewListDoc,
   );
 
@@ -674,7 +988,7 @@ export function registerExperimentalTheme(group, program) {
             ...project(/** @type {any} */ (r.data)),
           ],
         ),
-    }),
+    }).allowExcessArguments(false),
     previewRemoveDoc,
   );
 
@@ -690,7 +1004,7 @@ export function registerExperimentalTheme(group, program) {
           if (program.opts().json) c?.outputHelp();
           else
             print([
-              `Usage: ${HOW} [<part|setting|"question"|picture.png>] [--at x,y] [--list dials|tokens|parts|groups|properties [filter]]`,
+              `Usage: ${HOW} [<part|setting|"question"|picture.png>] [--theme <name>] [--at x,y] [--list dials|tokens|parts|groups|properties [filter]]`,
               '',
               'Examples:',
               ...(howDoc.examples ?? []).flatMap(e => [
@@ -700,30 +1014,79 @@ export function registerExperimentalTheme(group, program) {
             ]);
           return NO_RESULT_SET;
         }
-        const stray = strayOption('how', words.slice(1));
+        // `--list=tokens` and a second --list are mistakes of form.
+        /** @type {string[]} */
+        const raw = /** @type {any} */ (program).rawArgs ?? process.argv;
+        const listFlags = raw.filter(
+          w => w === '--list' || w.startsWith('--list='),
+        );
+        const themeFlags = raw.filter(
+          w => w === '--theme' || w.startsWith('--theme='),
+        );
+        if (themeFlags.length > 1)
+          return cliError('--theme is given twice; give it once.', {
+            suggestions: [{name: `${HOW} --help`, reason: 'give --theme once'}],
+            code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+          });
+        if (listFlags.length > 1)
+          return cliError('--list is given twice; give it once.', {
+            suggestions: [
+              {
+                name: `${HOW} --list tokens accent`,
+                reason: 'one list, then the filter',
+              },
+            ],
+            code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+          });
+        let list = o.list;
+        let rest = [...words];
+        const eq = rest.find(w => w.startsWith('--list='));
+        if (eq) {
+          list = true;
+          rest = [eq.slice('--list='.length), ...rest.filter(w => w !== eq)];
+        }
+        if (list) {
+          // The kind is the first word that names one ("accent --list
+          // tokens" too); the other words filter, and may start with --.
+          const kinds =
+            /^(dials?|tokens?|parts?|groups?|propert(y|ies)|kinds?)$/i;
+          const at = rest.findIndex(w => kinds.test(w));
+          const kind = at >= 0 ? rest[at] : (rest[0] ?? '');
+          const filter = (
+            at >= 0 ? rest.filter((_, i) => i !== at) : rest.slice(1)
+          )
+            .filter(w => w !== '--')
+            .join(' ');
+          return run(
+            program,
+            () =>
+              themeEditHow(filter, {
+                cwd: process.cwd(),
+                list: kind,
+                at: o.at ?? [],
+                theme: o.theme,
+              }),
+            r => lookupBlocks(/** @type {any} */ (r.data)),
+            r => {
+              const n = /** @type {any} */ (r.data).items.length;
+              return resultSet({count: n, resultKind: 'mixed', empty: n === 0});
+            },
+          );
+        }
+        // The API decides what the words are (a picture and a count, or a
+        // question); a picture is told by its extension here only to keep
+        // option words after it for the count.
+        const picture = /\.png$/i.test(rest[0] ?? '');
+        const stray = picture ? null : strayOption('how', rest.slice(1));
         if (stray) return stray;
-        // A number after a picture is how many colors to list.
-        const count =
-          words.length === 2 &&
-          /\.png$/i.test(words[0]) &&
-          /^\d+$/.test(words[1])
-            ? Number(words[1])
-            : undefined;
-        // --list is a switch, as everywhere in the CLI: the first word is
-        // what to list, and the rest filters it.
-        const subject = o.list
-          ? words.slice(1).join(' ')
-          : count == null
-            ? words.join(' ')
-            : words[0];
         return run(
           program,
           () =>
-            themeEditHow(subject, {
+            themeEditHow(rest.join(' '), {
               cwd: process.cwd(),
-              list: o.list ? (words[0] ?? '') : undefined,
               at: o.at ?? [],
-              count,
+              words: rest,
+              theme: o.theme,
             }),
           r => lookupBlocks(/** @type {any} */ (r.data)),
           r => {
@@ -756,6 +1119,12 @@ export function registerExperimentalTheme(group, program) {
       template: templateDoc,
       targets: targetsDoc,
     },
-    {group: 'experimental theme', build: 'compile'},
+    {
+      group: 'experimental theme',
+      build: 'compile',
+      explain: editorThemeRefusal,
+      preflight: editorCompileProblem,
+      hold: editorThemeHold,
+    },
   );
 }
