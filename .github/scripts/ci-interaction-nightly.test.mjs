@@ -75,7 +75,7 @@ describe("main's nightly full interaction run in ci.yml", () => {
       'interaction-full',
     );
     expect(ci['run-name']).toBe(
-      "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && format('WebKit weekly of {0}', github.sha) || '' }}",
+      "${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && format('Interaction proofs of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && format('WebKit weekly of {0}', github.sha) || github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && inputs.evidence && format('Release evidence of {0}', github.sha) || '' }}",
     );
   });
 

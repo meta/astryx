@@ -470,10 +470,6 @@ export interface FixedLayerReturn {
   render: (children: ReactNode, props: FixedRenderProps) => ReactNode;
 }
 
-interface InternalLayerFields {
-  wasJustDismissed: () => boolean;
-}
-
 /**
  * Context-mode options a core component may pass through `useLayerInternal`;
  * not part of the public `useLayer` options.
@@ -502,6 +498,13 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   onCloseStart?: () => void;
   /**
+   * Watches the open layer for touches outside it that pan; returns the
+   * function that stops watching. A light-dismiss layer is given one by its
+   * owner (usePopover's `watchOutsidePans`). An anchored menu, which closes
+   * as such a pan begins, is given none.
+   */
+  watchesOutsidePans?: (layer: HTMLElement) => () => void;
+  /**
    * The component writes the entrance's side itself, after the commit that
    * moves the layer (a Selector's list over its selected option). The runtime
    * then skips its own read as the layer shows, so a show reads the layer
@@ -510,9 +513,6 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   writesEntranceSide?: boolean;
 }
-
-type InternalContextLayerReturn = ContextLayerReturn & InternalLayerFields;
-type InternalFixedLayerReturn = FixedLayerReturn & InternalLayerFields;
 
 function toCssLength(value: number | string): string {
   return typeof value === 'number' ? `${value}px` : value;
@@ -1200,8 +1200,8 @@ function getGutterStyles(
 }
 
 /**
- * Internal props for controls that sit beside an open layer. This stays out of
- * the public useLayer/usePopover return types until the input family adopts it.
+ * Internal props for controls that sit beside an open layer. They are not part
+ * of the public useLayer or usePopover return types.
  */
 export function useKeepLayerOpenProps(
   id: string,
@@ -1260,7 +1260,7 @@ export function useKeepLayerOpenProps(
  */
 function useLayerImplementation(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): InternalContextLayerReturn | InternalFixedLayerReturn {
+): ContextLayerReturn | FixedLayerReturn {
   const {mode, onShow, onHide, lightDismiss = false} = options;
   const lazyMount = mode === 'context' ? (options.lazyMount ?? false) : false;
   const keepsMountAfterShow =
@@ -1269,6 +1269,8 @@ function useLayerImplementation(
       : false;
   const keepsAnchorClear =
     mode === 'context' ? (options.keepsAnchorClear ?? false) : false;
+  const watchesOutsidePans =
+    mode === 'context' ? options.watchesOutsidePans : undefined;
   const writesEntranceSide =
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
   const onCloseStartRef = useRef<(() => void) | undefined>(undefined);
@@ -1372,10 +1374,16 @@ function useLayerImplementation(
   );
 
   // The gesture during which the browser last closed this layer on its own.
-  // Read through wasJustDismissed by triggers deciding whether a click is
-  // theirs to act on.
+  // openNow reads it so that the same press cannot reopen the layer.
   const dismissedByGestureRef = useRef<number | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
+
+  // Stops the watch for pans outside the open layer (`watchesOutsidePans`).
+  const stopOutsidePanWatchRef = useRef<(() => void) | null>(null);
+  const stopOutsidePanWatch = useCallback(() => {
+    stopOutsidePanWatchRef.current?.();
+    stopOutsidePanWatchRef.current = null;
+  }, []);
 
   const wasJustDismissed = useCallback(() => {
     const gesture = currentGesture();
@@ -1603,6 +1611,10 @@ function useLayerImplementation(
       closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
       if (lightDismiss) {
         claimContextMenuPress(popover);
+        if (watchesOutsidePans != null) {
+          stopOutsidePanWatch();
+          stopOutsidePanWatchRef.current = watchesOutsidePans(popover);
+        }
       }
       const anchorBoxes = keepsAnchorClear
         ? keepAnchorClear(popover, triggerRef.current)
@@ -1620,6 +1632,8 @@ function useLayerImplementation(
     keepsAnchorClear,
     writesEntranceSide,
     lightDismiss,
+    watchesOutsidePans,
+    stopOutsidePanWatch,
     requestContextMount,
     applyDeferredWritingContext,
     showPopoverElement,
@@ -1788,6 +1802,7 @@ function useLayerImplementation(
       // dismissals from ours.
       openedPopoverRef.current = null;
       isOpenRef.current = false;
+      stopOutsidePanWatch();
       // See finding infra-4 note in `show`: mirror the same guard on hide so
       // unsupported browsers degrade gracefully instead of throwing.
       if (el) {
@@ -1808,7 +1823,13 @@ function useLayerImplementation(
     }
     releaseAnchor(popoverRef.current);
     clearContextMount();
-  }, [onHide, clearContextMount, releaseAnchor, cancelPendingAnchorWait]);
+  }, [
+    onHide,
+    clearContextMount,
+    releaseAnchor,
+    cancelPendingAnchorWait,
+    stopOutsidePanWatch,
+  ]);
 
   // A deferred show() replays through a ref so the queued closure reaches the
   // current callback rather than the one captured when it was queued.
@@ -1959,15 +1980,17 @@ function useLayerImplementation(
   }, []);
 
   // Syncs the document's capture-phase gesture tracking with this mount.
-  // Unmount forgets the layer's dismissal and releases a pending anchor wait.
+  // Unmount forgets the layer's dismissal, releases a pending anchor wait and
+  // stops the outside-pan watch.
   useEffect(() => {
     // Install capture-phase gesture tracking before the first interaction.
     currentGesture();
     return () => {
       forgetDismissalRef.current?.();
       pendingAnchorWaitRef.current?.();
+      stopOutsidePanWatch();
     };
-  }, []);
+  }, [stopOutsidePanWatch]);
 
   // Reconcile browser-initiated closes (light-dismiss, popover="auto" stack
   // eviction). These are the only cases where the DOM mutates without going
@@ -2023,6 +2046,7 @@ function useLayerImplementation(
       if (toggleEvent.newState === 'closed' && isOpenRef.current) {
         openedPopoverRef.current = null;
         isOpenRef.current = false;
+        stopOutsidePanWatch();
         rememberDismissal(
           (e.currentTarget as HTMLElement | null)?.ownerDocument ?? document,
         );
@@ -2032,7 +2056,13 @@ function useLayerImplementation(
         clearContextMount();
       }
     },
-    [onHide, clearContextMount, rememberDismissal, releaseAnchor],
+    [
+      onHide,
+      clearContextMount,
+      rememberDismissal,
+      releaseAnchor,
+      stopOutsidePanWatch,
+    ],
   );
 
   // Ref callback for popover element — sets up the `toggle` listener.
@@ -2442,39 +2472,28 @@ function useLayerImplementation(
     [popoverRefCallback, id, lightDismiss],
   );
 
-  const contextResult = useMemo<InternalContextLayerReturn>(
+  const contextResult = useMemo<ContextLayerReturn>(
     () => ({
       ref: contextRef,
       anchorId,
       show,
       hide,
       isOpen,
-      wasJustDismissed,
       id,
       render: renderContext,
     }),
-    [
-      contextRef,
-      anchorId,
-      show,
-      hide,
-      isOpen,
-      wasJustDismissed,
-      id,
-      renderContext,
-    ],
+    [contextRef, anchorId, show, hide, isOpen, id, renderContext],
   );
-  const fixedResult = useMemo<InternalFixedLayerReturn>(
+  const fixedResult = useMemo<FixedLayerReturn>(
     () => ({
       ref: undefined,
       show,
       hide,
       isOpen,
-      wasJustDismissed,
       id,
       render: renderFixed,
     }),
-    [show, hide, isOpen, wasJustDismissed, id, renderFixed],
+    [show, hide, isOpen, id, renderFixed],
   );
 
   return mode === 'context' ? contextResult : fixedResult;
@@ -2485,11 +2504,7 @@ export function useLayer(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayer(
   options: ContextLayerOptions | FixedLayerOptions,
 ): ContextLayerReturn | FixedLayerReturn {
-  const internalLayer = useLayerImplementation(options);
-  return useMemo(() => {
-    const {wasJustDismissed: _, ...layer} = internalLayer;
-    return layer;
-  }, [internalLayer]);
+  return useLayerImplementation(options);
 }
 
 /**
@@ -2498,12 +2513,10 @@ export function useLayer(
  */
 export function useLayerInternal(
   options: InternalContextLayerOptions,
-): InternalContextLayerReturn;
-export function useLayerInternal(
-  options: FixedLayerOptions,
-): InternalFixedLayerReturn;
+): ContextLayerReturn;
+export function useLayerInternal(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayerInternal(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): InternalContextLayerReturn | InternalFixedLayerReturn {
+): ContextLayerReturn | FixedLayerReturn {
   return useLayerImplementation(options);
 }

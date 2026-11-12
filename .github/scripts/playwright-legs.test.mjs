@@ -25,9 +25,17 @@ import {
   recordLog,
   selectProofs,
   testsReader,
+  storyScopeFor,
 } from './playwright-legs.mjs';
 import {matrixFor} from './ci-matrix.mjs';
-import {importerGraph, proofImporters} from './a11y-pr-contracts.mjs';
+
+import {
+  componentFolderOf,
+  importerGraph,
+  proofImporters,
+  storyComponentFolders,
+  storyMeta,
+} from './a11y-pr-contracts.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -43,6 +51,269 @@ const durations = JSON.parse(
   ),
 );
 const step = (job, name) => job.steps.find(each => each.name === name);
+
+describe('plan', () => {
+  /**
+   * Runs `plan` with a stand-in pnpm that answers `playwright test --list` as
+   * Playwright does when no spec file matches: exit 1, unless the listing
+   * passes `--pass-with-no-tests`, which writes an empty report instead.
+   */
+  function planWithNothingListed(filters) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'legs-plan-'));
+    const bin = path.join(dir, 'bin');
+    fs.mkdirSync(bin);
+    fs.writeFileSync(
+      path.join(bin, 'pnpm'),
+      [
+        '#!/bin/sh',
+        'case " $* " in',
+        '  *" --pass-with-no-tests "*) echo \'{"suites":[]}\' > "$PLAYWRIGHT_JSON_OUTPUT_FILE" ;;',
+        '  *) echo "Error: No tests found" >&2; exit 1 ;;',
+        'esac',
+        '',
+      ].join('\n'),
+      {mode: 0o755},
+    );
+    const result = spawnSync(
+      'node',
+      [
+        path.join(root, '.github/scripts/playwright-legs.mjs'),
+        'plan',
+        '--key',
+        'interaction',
+        '--config',
+        'playwright.interaction.config.ts',
+        '--leg',
+        '1',
+        '--of',
+        '1',
+        '--out',
+        path.join(dir, 'plan.json'),
+        ...(filters.length > 0 ? ['--', ...filters] : []),
+      ],
+      {
+        cwd: root,
+        env: {...process.env, PATH: `${bin}:${process.env.PATH}`},
+        encoding: 'utf8',
+      },
+    );
+    fs.rmSync(dir, {recursive: true, force: true});
+    return result;
+  }
+
+  it('tells the author to update a branch whose head lacks every selected spec', () => {
+    const result = planWithNothingListed([
+      'packages/core/src/Added/__tests__/Added.interaction.spec.ts',
+    ]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'they were added on main after the branch point. Update the branch to run them.',
+    );
+  });
+
+  it('still fails a suite that lists no spec files at all', () => {
+    const result = planWithNothingListed([]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      'Playwright listed no interaction spec files',
+    );
+  });
+});
+
+describe('storyComponentFolders', () => {
+  const listed = execFileSync('git', ['-C', root, 'ls-files'], {
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter(Boolean);
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+
+  const scratch = files => {
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'story-folders-'));
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
+      fs.writeFileSync(path.join(tree, file), text);
+    }
+    const story = storyComponentFolders(
+      'apps/storybook/stories/X.stories.tsx',
+      {
+        listed: Object.keys(files),
+        read: file => fs.readFileSync(path.join(tree, file), 'utf8'),
+      },
+    );
+    fs.rmSync(tree, {recursive: true, force: true});
+    return story;
+  };
+  const MENU = {'packages/core/src/Menu/Menu.tsx': 'export const Menu = 1;\n'};
+
+  it('maps each branch of a story import: a component, an unknown root name, a name another package holds, a whole package, a shared subpath', () => {
+    const component = scratch({
+      ...MENU,
+      'apps/storybook/stories/X.stories.tsx':
+        "import {Menu} from '@astryxdesign/core/Menu';\n",
+    });
+    expect(component).toEqual({
+      folders: ['packages/core/src/Menu/'],
+      unresolved: [],
+    });
+    const unknown = scratch({
+      ...MENU,
+      'apps/storybook/stories/X.stories.tsx':
+        "import {useThing} from '@astryxdesign/core';\n",
+    });
+    expect(unknown.unresolved).toHaveLength(1);
+    const whole = scratch({
+      ...MENU,
+      'apps/storybook/stories/X.stories.tsx':
+        "import * as core from '@astryxdesign/core';\n",
+    });
+    expect(whole.unresolved).toHaveLength(1);
+    const otherPackage = scratch({
+      'packages/lab/src/Chart/ChartLegend.tsx':
+        'export const ChartLegend = 1;\n',
+      'apps/storybook/stories/X.stories.tsx':
+        "import {ChartLegend} from '@astryxdesign/charts';\n",
+    });
+    expect(otherPackage.unresolved).toHaveLength(1);
+    const shared = scratch({
+      ...MENU,
+      'packages/core/src/hooks/index.ts': 'export const useAnnounce = 1;\n',
+      'apps/storybook/stories/X.stories.tsx':
+        "import {useAnnounce} from '@astryxdesign/core/hooks';\nimport {Menu} from '@astryxdesign/core/Menu';\n",
+    });
+    expect(shared).toEqual({
+      folders: ['packages/core/src/Menu/'],
+      unresolved: [],
+    });
+  });
+
+  it("reads a story's id from its default-export meta, inline or declared, never a data row's title", () => {
+    expect(
+      storyMeta(
+        "const meta: Meta = {title: 'Lab/3DChart/PopArt'};\nexport default meta;\n",
+      ),
+    ).toEqual({title: 'Lab/3DChart/PopArt', id: null});
+    expect(
+      storyMeta(
+        "const rows = [{title: 'Dune'}];\nconst meta = {\n  title: 'Core/PowerSearchWithTable',\n  id: 'core-pst',\n};\nexport default meta;\n",
+      ),
+    ).toEqual({title: 'Core/PowerSearchWithTable', id: 'core-pst'});
+    expect(
+      storyMeta("export default {title: 'Core/Menu', args: {title: 'x'}};\n"),
+    ).toEqual({title: 'Core/Menu', id: null});
+  });
+
+  const scoped = files => {
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'story-scope-'));
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
+      fs.writeFileSync(path.join(tree, file), text);
+    }
+    const scope = storyScopeFor({
+      listed: Object.keys(files),
+      read: file => fs.readFileSync(path.join(tree, file), 'utf8'),
+    })('apps/storybook/stories/X.stories.tsx');
+    fs.rmSync(tree, {recursive: true, force: true});
+    return scope;
+  };
+  const SPEC = 'packages/core/src/Menu/__tests__/A.interaction.browser.spec.ts';
+
+  it('runs the full suite when a spec opens a story id no story file makes, as after a renamed title', () => {
+    expect(
+      scoped({
+        'packages/core/src/Menu/Menu.tsx': 'export const Menu = 1;\n',
+        [SPEC]: "await page.goto('/iframe.html?id=core-menu--default');\n",
+        'apps/storybook/stories/X.stories.tsx':
+          "import {Menu} from '@astryxdesign/core/Menu';\nexport default {title: 'Core/Menu Renamed'};\n",
+      }),
+    ).toBe(null);
+  });
+
+  it('runs the full suite for a story with no id, or a whole-prefix template that could name it', () => {
+    const menu = {
+      'packages/core/src/Menu/Menu.tsx': 'export const Menu = 1;\n',
+      [SPEC]: "await page.goto('/iframe.html?id=lab-chat-x--default');\n",
+    };
+    const story = meta =>
+      `import {Menu} from '@astryxdesign/core/Menu';\n${meta}\n`;
+    expect(
+      scoped({
+        ...menu,
+        'apps/storybook/stories/X.stories.tsx': story(
+          "export default {title: 'Lab/Chat X'};",
+        ),
+      }),
+    ).toEqual({folders: ['core/Menu'], specs: [SPEC]});
+    expect(
+      scoped({
+        ...menu,
+        'apps/storybook/stories/X.stories.tsx': story('export default {};'),
+      }),
+    ).toBe(null);
+    expect(
+      scoped({
+        ...menu,
+        [SPEC]:
+          'await page.goto(`/iframe.html?id=lab-chat-${name}--default`);\n',
+        'apps/storybook/stories/X.stories.tsx': story(
+          "export default {title: 'Lab/Chat X'};",
+        ),
+      }),
+    ).toBe(null);
+  });
+
+  it('maps the ChatVirtualizer story to Chat, through its name from the Lab package root', () => {
+    const story = storyComponentFolders(
+      'apps/storybook/stories/ChatVirtualizer.stories.tsx',
+      {listed, read},
+    );
+    expect(story.unresolved).toEqual([]);
+    expect(story.folders).toContain('packages/lab/src/Chat/');
+  });
+
+  it("selects Chat's interaction specs, not the full suite, for a ChatVirtualizer story change", () => {
+    const changed = ['apps/storybook/stories/ChatVirtualizer.stories.tsx'];
+    const plan = chromiumSelection({
+      listed,
+      changed,
+      scope: /^(packages\/|apps\/storybook\/|internal\/)/,
+      fullSuite: false,
+      importers: new Map(),
+      proofs: new Map(),
+      selection: JSON.parse(read('.github/interaction-selection.json')),
+      primitives: JSON.parse(read('.github/a11y-shared-primitives.json'))
+        .primitives,
+      storyScope: storyScopeFor({listed, read}),
+    });
+    expect(plan.full).toBe(false);
+    expect(plan.stories).toContain('lab/Chat');
+    expect(
+      plan.specs.some(spec =>
+        spec.startsWith('packages/lab/src/Chat/__tests__/ChatVirtualizer'),
+      ),
+    ).toBe(true);
+  });
+
+  it('selects the specs in other folders that open a changed story by id', () => {
+    const scope = storyScopeFor({listed, read})(
+      'apps/storybook/stories/TextInput.stories.tsx',
+    );
+    expect(scope.folders).toContain('core/TextInput');
+    expect(scope.specs).toContain(
+      'packages/core/src/Field/__tests__/TextFieldFocusTiming.interaction.browser.spec.ts',
+    );
+  });
+
+  it('runs the full suite for a removed story, or a name its package does not hold', () => {
+    const scope = storyScopeFor({listed, read});
+    expect(scope('apps/storybook/stories/Removed.stories.tsx')).toBe(null);
+    // ChartLegend comes from the Charts root, which holds no such folder;
+    // Lab's Chart folder must not answer for it.
+    expect(scope('apps/storybook/stories/charts/Legend.stories.tsx')).toBe(
+      null,
+    );
+  });
+});
 
 describe('nearCeilingMessage', () => {
   const limits = {setupSeconds: 90, maxSeconds: 600, maxLegs: 6};
@@ -371,6 +642,7 @@ describe('the interaction leg count job in ci.yml', () => {
     expect(counter.outputs).toEqual({
       chromium: '${{ steps.matrix.outputs.chromium }}',
       webkit: '${{ steps.matrix.outputs.webkit }}',
+      chromium_specs: '${{ steps.select-chromium.outputs.specs }}',
     });
   });
 
@@ -400,12 +672,15 @@ describe('the interaction leg count job in ci.yml', () => {
       expect(mine.if).toBe(`steps.scope-${lane.key}.outputs.applies == 'true'`);
       // A failed count falls back to ten legs that each decide for themselves.
       expect(mine['continue-on-error']).toBe(true);
+      // Each leg reads the Chromium selection from this job's output.
       expect(mine.env ?? {}).toEqual(
         JSON.parse(
-          JSON.stringify(theirs.env ?? {}).replaceAll(
-            'steps.scope.',
-            `steps.scope-${lane.key}.`,
-          ),
+          JSON.stringify(theirs.env ?? {})
+            .replaceAll('steps.scope.', `steps.scope-${lane.key}.`)
+            .replaceAll(
+              'needs.interaction-legs.outputs.chromium_specs',
+              'steps.select-chromium.outputs.specs',
+            ),
         ),
       );
       expect(mine.run).toBe(theirs.run.replaceAll('${{ matrix.leg }}', '1'));
@@ -1352,7 +1627,7 @@ describe('what a Chromium run covers for a pull request', () => {
       "import {Menu} from '@astryxdesign/core/Menu/Menu';\nexport function Tour() {}\n",
     'packages/lab/src/Tour/__tests__/Tour.interaction.browser.spec.ts': '',
     'apps/storybook/stories/Menu.stories.tsx':
-      "import {Menu} from '@astryxdesign/core/Menu/Menu';\n",
+      "import {Menu} from '@astryxdesign/core/Menu/Menu';\nexport default {title: 'Core/Menu'};\n",
   };
   const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'chromium-selection-'));
   for (const [file, text] of Object.entries(files)) {
@@ -1412,7 +1687,36 @@ describe('what a Chromium run covers for a pull request', () => {
     });
   });
 
-  it('runs the full suite for a changed story, which maps to no component', () => {
+  const storyScope = storyScopeFor({
+    listed,
+    read: each => fs.readFileSync(path.join(tree, each), 'utf8'),
+  });
+
+  it('runs the specs of the component folders a changed story imports', () => {
+    expect(
+      select(['apps/storybook/stories/Menu.stories.tsx'], {storyScope}),
+    ).toEqual({
+      full: false,
+      specs: [spec('Menu')],
+      touched: [],
+      dependents: [],
+      stories: ['core/Menu'],
+    });
+  });
+
+  it('runs the full suite for a story whose imports do not resolve', () => {
+    expect(
+      select(['apps/storybook/stories/Menu.stories.tsx'], {
+        storyScope: () => null,
+      }),
+    ).toMatchObject({
+      full: true,
+      reason:
+        'apps/storybook/stories/Menu.stories.tsx is a story whose components could not be resolved',
+    });
+  });
+
+  it('runs the full suite for a changed story when no story resolver is given', () => {
     expect(select(['apps/storybook/stories/Menu.stories.tsx'])).toMatchObject({
       full: true,
       reason: 'apps/storybook/stories/Menu.stories.tsx maps to no component',
@@ -1537,10 +1841,14 @@ describe('what a Chromium run covers for a pull request', () => {
   });
 });
 
-describe('the Chromium selection in ci.yml, in shadow', () => {
+describe('the Chromium selection in ci.yml', () => {
   const counter = ci.jobs['interaction-legs'];
-  const select = step(counter, 'Select the Chromium proofs, in shadow');
+  const proofs = ci.jobs['pr-interaction'];
+  const select = step(counter, 'Select the Chromium proofs');
   const scope = counter.steps.find(each => each.id === 'scope-chromium');
+  const count = step(counter, 'Count the Chromium legs');
+  const legsStep = step(proofs, "Count this run's legs");
+  const planStep = step(proofs, "Plan this leg's interaction proofs");
 
   it('runs on a pull request in scope, never on a Lab-only change, and never fails the job', () => {
     expect(select.if).toBe(
@@ -1568,20 +1876,89 @@ describe('the Chromium selection in ci.yml, in shadow', () => {
     expect(select.run).toContain(
       '--every-spec "${WEBKIT_RELEASE_CHECK:-false}"',
     );
+    expect(select.run).toContain(
+      'specs=${r.full ? "full" : JSON.stringify(r.specs)}',
+    );
   });
 
-  it('keeps the selection as an artifact, and still runs every Chromium spec', () => {
+  it('is decided before the leg count, and every leg reads the same selection', () => {
+    const ids = counter.steps.map(each => each.id ?? each.name);
+    expect(ids.indexOf('select-chromium')).toBeLessThan(
+      ids.indexOf('count-chromium'),
+    );
+    expect(counter.outputs.chromium_specs).toBe(
+      '${{ steps.select-chromium.outputs.specs }}',
+    );
+    expect(count.env.CHROMIUM_SPECS).toBe(
+      '${{ steps.select-chromium.outputs.specs }}',
+    );
+    for (const each of [legsStep, planStep])
+      expect(each.env.CHROMIUM_SPECS).toBe(
+        '${{ needs.interaction-legs.outputs.chromium_specs }}',
+      );
+    // The WebKit lane keeps its own selection.
+    expect(JSON.stringify(ci.jobs['pr-interaction-webkit'])).not.toContain(
+      'CHROMIUM_SPECS',
+    );
+  });
+
+  it('keeps the selection as an artifact for the escape log', () => {
     const keep = step(counter, 'Keep the Chromium selection');
     expect(keep.if).toBe("steps.select-chromium.outcome == 'success'");
     expect(keep.with.name).toBe(
       'interaction-selection-${{ github.run_attempt }}',
     );
-    for (const run of [
-      step(counter, 'Count the Chromium legs').run,
-      step(ci.jobs['pr-interaction'], "Count this run's legs").run,
-      step(ci.jobs['pr-interaction'], "Plan this leg's interaction proofs").run,
-    ])
-      expect(run).not.toContain('chromium-selection');
+  });
+
+  /** Runs a step's filter block in bash and reports what it planned. */
+  function filters(run, env) {
+    const start = run.indexOf('FILTERS=()');
+    const end = run.indexOf('\nfi\n', start) + '\nfi'.length;
+    const out = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'filters-')),
+      'out',
+    );
+    fs.writeFileSync(out, '');
+    const result = spawnSync(
+      'bash',
+      ['-c', `${run.slice(start, end)}\nprintf '%s\\n' "\${FILTERS[@]}"`],
+      {
+        env: {...process.env, GITHUB_OUTPUT: out, LAB_SPECS: '', ...env},
+        encoding: 'utf8',
+      },
+    );
+    return {
+      status: result.status,
+      filters: result.stdout
+        .split('\n')
+        .filter(
+          line => line && !line.startsWith('No ') && !line.startsWith('::'),
+        ),
+      output: fs.readFileSync(out, 'utf8'),
+    };
+  }
+
+  it('plans the selected specs, one skip leg for none, and every spec for `full` or no selection', () => {
+    for (const run of [count.run, legsStep.run, planStep.run]) {
+      expect(
+        filters(run, {
+          CHROMIUM_SPECS: JSON.stringify(['a.spec.ts', 'b.spec.ts']),
+        }).filters,
+      ).toEqual(['--', 'a.spec.ts', 'b.spec.ts']);
+      expect(filters(run, {CHROMIUM_SPECS: '[]'})).toMatchObject({
+        status: 0,
+        filters: [],
+        output: 'count=0\nruns=false\nleg=1\n',
+      });
+      expect(filters(run, {CHROMIUM_SPECS: 'full'}).filters).toEqual([]);
+      expect(filters(run, {CHROMIUM_SPECS: ''}).filters).toEqual([]);
+      // A selection that does not parse runs every spec, never none.
+      expect(filters(run, {CHROMIUM_SPECS: '["a.spec.ts"'})).toMatchObject({
+        status: 0,
+        filters: [],
+        output: '',
+      });
+    }
   });
 });
 
@@ -1627,5 +2004,77 @@ describe('checkoutReader', () => {
     expect([...proofs.get('packages/core/src/Sheet/ease.test.ts')]).toEqual([
       'packages/core/src/Sheet/__tests__/Sheet.interaction.browser.spec.ts',
     ]);
+  });
+});
+
+describe("the Chromium selection on this repository's own proofs", () => {
+  const listed = execFileSync('git', ['-C', root, 'ls-files'], {
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter(Boolean);
+  const scope = new RegExp(
+    ci.jobs['interaction-legs'].steps.find(
+      each => each.id === 'select-chromium',
+    ).env.SCOPE_PATHS,
+  );
+  const readJson = file =>
+    JSON.parse(fs.readFileSync(path.join(root, file), 'utf8'));
+  const options = {
+    listed,
+    scope,
+    fullSuite: false,
+    importers: importerGraph(root),
+    proofs: proofImporters({root, listed, isProof: isProofPage}),
+    selection: readJson('.github/interaction-selection.json'),
+    primitives: readJson('.github/a11y-shared-primitives.json').primitives,
+  };
+
+  /** Each interaction proof in another folder that a component record names. */
+  function recordNamedProofs() {
+    const named = [];
+    for (const record of listed.filter(file =>
+      /^docs\/specs\/components\/[^/]+\/[^/]+\.spec\.md$/.test(file),
+    )) {
+      const folder = listed
+        .map(file => /^packages\/[^/]+\/src\/[^/]+\//.exec(file)?.[0])
+        .find(prefix => prefix?.endsWith(`/${record.split('/')[3]}/`));
+      if (folder == null) continue;
+      const front = fs.readFileSync(path.join(root, record), 'utf8');
+      const verified = /^verified_by:\s*\[([^\]]*)\]/m.exec(front)?.[1] ?? '';
+      for (const spec of verified.split(',').map(each => each.trim()))
+        if (isInteractionSpec(spec) && !spec.startsWith(folder))
+          named.push({folder, spec});
+    }
+    return named;
+  }
+
+  // Proofs a record's requirements name in its text, not in `verified_by`.
+  const TEXT_NAMED = [
+    {
+      folder: 'packages/core/src/Collapsible/',
+      spec: 'packages/core/src/motion/__tests__/animatedLayoutAdopters.interaction.browser.spec.ts',
+    },
+    {
+      folder: 'packages/core/src/TreeList/',
+      spec: 'packages/core/src/motion/__tests__/animatedLayoutAdopters.interaction.browser.spec.ts',
+    },
+    {
+      folder: 'packages/core/src/Layout/',
+      spec: 'packages/core/src/Resizable/__tests__/paneSlide.interaction.browser.spec.ts',
+    },
+  ];
+
+  it('runs every record-named proof in another folder when its component changes', () => {
+    const named = [...recordNamedProofs(), ...TEXT_NAMED];
+    expect(named.length).toBeGreaterThanOrEqual(9);
+    for (const {folder, spec} of named) {
+      const source = listed.find(
+        file => file.startsWith(folder) && /\/[A-Z][^/.]*\.tsx$/.test(file),
+      );
+      const picked = chromiumSelection({...options, changed: [source]});
+      expect(picked.full, source).toBe(false);
+      expect(picked.specs, `${source} → ${spec}`).toContain(spec);
+    }
   });
 });
