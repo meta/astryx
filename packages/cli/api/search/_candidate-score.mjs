@@ -95,6 +95,65 @@ function headOfLetters(t, name) {
 const FAMILY_MEMBERS = 3;
 
 /**
+ * The pattern that finds any form of a term as a whole word in prose, with
+ * any common suffix, built once per term: a search tests it against every
+ * candidate's description.
+ * @type {Map<string, RegExp>}
+ */
+const mentionPatterns = new Map();
+
+/**
+ * How many terms' patterns are kept before the cache starts over. A compiled
+ * pattern is several kilobytes and a long-running caller sees ever new
+ * terms, so this cache stays small; one search uses a handful of terms.
+ */
+const MENTION_LIMIT = 1_000;
+
+/**
+ * @param {string} term
+ * @param {ReturnType<typeof termWords>} t - the term's words
+ * @returns {RegExp}
+ */
+function mentionPattern(term, t) {
+  let re = mentionPatterns.get(term);
+  if (!re) {
+    if (mentionPatterns.size >= MENTION_LIMIT) mentionPatterns.clear();
+    // Any form of the term, with any common suffix: `spacing` finds
+    // "space" and "spaces", `tables` finds "table".
+    const roots = [...new Set([stem(term), ...t.forms])]
+      .filter(f => f.length >= 3)
+      .map(f => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    re = new RegExp(`\\b(?:${roots.join('|')})(s|es|ing|ed|ies)?\\b`);
+    mentionPatterns.set(term, re);
+  }
+  return re;
+}
+
+/**
+ * Each prose text lowercased once per process: a search reads every
+ * candidate's description for every term.
+ * @type {Map<string, string>}
+ */
+const lowered = new Map();
+
+/** How many texts are kept lowercased before the cache starts over. */
+const CACHE_LIMIT = 100_000;
+
+/**
+ * @param {string} text
+ * @returns {string}
+ */
+function lower(text) {
+  let out = lowered.get(text);
+  if (out === undefined) {
+    if (lowered.size >= CACHE_LIMIT) lowered.clear();
+    out = text.toLowerCase();
+    lowered.set(text, out);
+  }
+  return out;
+}
+
+/**
  * A derived name's score for a term: 60 for the same word, 40 for a word the
  * term starts, else 0.
  * @param {import('./_words.mjs').TermWords} t - The lowercased search term.
@@ -308,18 +367,13 @@ export function scoreCandidate(
   // Match the term's stem as a whole word, tolerating plural/gerund suffixes
   // so "chart" matches "charts" and "filter" matches "filtering".
   if (term.length >= 3) {
-    // Any form of the term, with any common suffix: `spacing` finds
-    // "space" and "spaces", `tables` finds "table".
-    const roots = [...new Set([stem(term), ...t.forms])]
-      .filter(f => f.length >= 3)
-      .map(f => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const re = new RegExp(`\\b(?:${roots.join('|')})(s|es|ing|ed|ies)?\\b`);
-    if (description && re.test(description.toLowerCase())) {
+    const re = mentionPattern(term, t);
+    if (description && re.test(lower(description))) {
       consider(50, `description mentions "${term}"`);
     } else {
       let matchedProse = false;
       for (const blob of prose) {
-        if (blob && re.test(String(blob).toLowerCase())) {
+        if (blob && re.test(lower(String(blob)))) {
           consider(50, `docs mention "${term}"`);
           matchedProse = true;
           break;
@@ -330,7 +384,7 @@ export function scoreCandidate(
       // summary. Only consulted when nothing stronger matched.
       if (!matchedProse) {
         for (const blob of guidance) {
-          if (blob && re.test(String(blob).toLowerCase())) {
+          if (blob && re.test(lower(String(blob)))) {
             consider(45, `guidance mentions "${term}"`);
             break;
           }

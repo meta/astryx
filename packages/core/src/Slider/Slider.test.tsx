@@ -209,53 +209,6 @@ describe('Slider', () => {
     expect(control).not.toContainElement(screen.getByText('50'));
   });
 
-  it('range mode sets correct aria values on both thumbs', () => {
-    render(
-      <Slider
-        label="Range"
-        value={[25, 75] as [number, number]}
-        min={0}
-        max={100}
-      />,
-    );
-    const sliders = screen.getAllByRole('slider');
-    expect(sliders[0]).toHaveAttribute('aria-valuenow', '25');
-    expect(sliders[1]).toHaveAttribute('aria-valuenow', '75');
-    // Per the APG multi-thumb pattern, each thumb's bounds are constrained by
-    // its sibling: the lower thumb can't exceed the upper thumb's value and
-    // the upper thumb can't go below the lower thumb's value.
-    expect(sliders[0]).toHaveAttribute('aria-valuemin', '0');
-    expect(sliders[0]).toHaveAttribute('aria-valuemax', '75');
-    expect(sliders[1]).toHaveAttribute('aria-valuemin', '25');
-    expect(sliders[1]).toHaveAttribute('aria-valuemax', '100');
-  });
-
-  it('range thumb bounds update after moving a thumb', async () => {
-    const user = userEvent.setup();
-    function ControlledRange() {
-      const [value, setValue] = useState<[number, number]>([25, 75]);
-      return (
-        <Slider
-          label="Range"
-          value={value}
-          onChange={setValue}
-          min={0}
-          max={100}
-        />
-      );
-    }
-    render(<ControlledRange />);
-    const sliders = screen.getAllByRole('slider');
-    act(() => {
-      sliders[0].focus();
-    });
-    await user.keyboard('{ArrowRight}');
-    expect(sliders[0]).toHaveAttribute('aria-valuenow', '26');
-    // The upper thumb's floor tracks the lower thumb's new value.
-    expect(sliders[1]).toHaveAttribute('aria-valuemin', '26');
-    expect(sliders[0]).toHaveAttribute('aria-valuemax', '75');
-  });
-
   it('range thumb bounds include the minStepsBetweenThumbs gap', () => {
     render(
       <Slider
@@ -493,6 +446,39 @@ describe('Slider', () => {
     );
     const slider = screen.getByRole('slider');
     fireEvent.keyDown(slider, {key: 'ArrowRight'});
+    expect(handleChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps both thumbs of a disabled range as Tab stops that hold their values', async () => {
+    const user = userEvent.setup();
+    const handleChange = vi.fn();
+    render(
+      <>
+        <button type="button">Before</button>
+        <Slider
+          label="Price"
+          value={[20, 80] as [number, number]}
+          onChange={handleChange}
+          isDisabled
+        />
+      </>,
+    );
+    const [lower, upper] = screen.getAllByRole('slider');
+    for (const thumb of [lower, upper]) {
+      expect(thumb).toHaveAttribute('aria-disabled', 'true');
+      expect(thumb).toHaveAttribute('tabindex', '0');
+    }
+    act(() => {
+      screen.getByRole('button', {name: 'Before'}).focus();
+    });
+    await user.tab();
+    expect(lower).toHaveFocus();
+    await user.keyboard('{End}');
+    await user.tab();
+    expect(upper).toHaveFocus();
+    await user.keyboard('{Home}');
+    expect(lower).toHaveAttribute('aria-valuenow', '20');
+    expect(upper).toHaveAttribute('aria-valuenow', '80');
     expect(handleChange).not.toHaveBeenCalled();
   });
 

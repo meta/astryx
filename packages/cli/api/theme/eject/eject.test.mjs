@@ -157,4 +157,140 @@ describe('themeEject (api/theme/eject)', () => {
     const r = await themeEject('neutral', {cwd: tmpDir, targetPath: 'mydir'});
     expect(r.data.outputDir).toBe('mydir');
   });
+
+  it('refuses a folder the theme editor made, even with overwrite', async () => {
+    const dir = path.join(tmpDir, 'themes', 't');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, 't.settings.json'), '{}\n');
+    fs.writeFileSync(path.join(dir, 'palette.config.json'), '{"mine":true}\n');
+
+    await expect(
+      themeEject('neutral', {
+        cwd: tmpDir,
+        targetPath: 'themes/t',
+        overwrite: true,
+      }),
+    ).rejects.toMatchObject({code: 'ERR_FILE_EXISTS'});
+    expect(
+      fs.readFileSync(path.join(dir, 'palette.config.json'), 'utf-8'),
+    ).toBe('{"mine":true}\n');
+  });
+
+  it('refuses to mix two forks in one folder, even with overwrite', async () => {
+    await themeEject('neutral', {cwd: tmpDir});
+    const dir = path.join(tmpDir, 'src', 'themes', 'neutral');
+    const icons = fs.readFileSync(path.join(dir, 'icons.tsx'), 'utf-8');
+
+    await expect(
+      themeEject('butter', {
+        cwd: tmpDir,
+        targetPath: 'src/themes/neutral',
+        overwrite: true,
+      }),
+    ).rejects.toMatchObject({code: 'ERR_FILE_EXISTS'});
+    expect(fs.readFileSync(path.join(dir, 'icons.tsx'), 'utf-8')).toBe(icons);
+    expect(fs.existsSync(path.join(dir, 'butterTheme.ts'))).toBe(false);
+  });
+
+  it('still re-forks the same theme with overwrite', async () => {
+    await themeEject('neutral', {cwd: tmpDir});
+    const result = await themeEject('neutral', {cwd: tmpDir, overwrite: true});
+    expect(result.data.slug).toBe('neutral');
+  });
+
+  it('names the packages the fork imports that the app lacks, with an install command', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '*'}}),
+    );
+    const result = await themeEject('neutral', {cwd: tmpDir});
+    expect(result.data.missingPackages).toEqual(['lucide-react']);
+    expect(result.data.installCommand).toMatch(/^npm install lucide-react/);
+
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: 'app', dependencies: {'lucide-react': '*'}}),
+    );
+    const again = await themeEject('neutral', {cwd: tmpDir, overwrite: true});
+    expect(again.data.missingPackages).toEqual([]);
+    expect(again.data.installCommand).toBeNull();
+  });
+
+  it('reports a file in the way of the fork folder with a registered code', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{}\n');
+    await expect(
+      themeEject('neutral', {cwd: tmpDir, targetPath: 'package.json'}),
+    ).rejects.toMatchObject({
+      code: 'ERR_WRITE_FAILED',
+      message: expect.not.stringMatching(/EEXIST|ENOTDIR/),
+    });
+  });
+
+  it('forks into the project root from a subfolder, and reports the path from the working folder', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+
+    const result = await themeEject('neutral', {cwd: sub});
+
+    expect(result.data.outputDir).toBe(path.join('..', 'themes', 'neutral'));
+    expect(
+      fs.existsSync(path.join(tmpDir, 'src/themes/neutral/neutralTheme.ts')),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(sub, 'src'))).toBe(false);
+  });
+
+  it('reads a relative path from the working folder and keeps it inside the project', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+
+    const result = await themeEject('neutral', {
+      cwd: sub,
+      targetPath: '../../custom/n',
+    });
+    expect(result.data.outputDir).toBe(path.join('..', '..', 'custom', 'n'));
+    expect(fs.existsSync(path.join(tmpDir, 'custom/n/neutralTheme.ts'))).toBe(
+      true,
+    );
+
+    await expect(
+      themeEject('neutral', {cwd: sub, targetPath: '../../../outside'}),
+    ).rejects.toMatchObject({
+      code: 'ERR_PATH_TRAVERSAL',
+      message: expect.stringContaining('"../../../outside"'),
+    });
+  });
+
+  it('names another target, not the same command, when the default folder from a subfolder is taken', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const sub = path.join(tmpDir, 'src', 'app');
+    fs.mkdirSync(sub, {recursive: true});
+    await themeEject('neutral', {cwd: tmpDir});
+
+    let error;
+    try {
+      await themeEject('butter', {
+        cwd: sub,
+        targetPath: '../themes/neutral',
+        overwrite: true,
+      });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
+    expect(error.suggestions?.[0]?.name).toMatch(/ theme eject butter$/);
+
+    const dir = path.join(tmpDir, 'src', 'themes', 'butter');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, 'butter.settings.json'), '{}\n');
+    let atDefault;
+    try {
+      await themeEject('butter', {cwd: sub, overwrite: true});
+    } catch (caught) {
+      atDefault = caught;
+    }
+    expect(atDefault).toMatchObject({code: 'ERR_FILE_EXISTS'});
+    expect(atDefault.suggestions).toBeUndefined();
+  });
 });

@@ -86,6 +86,38 @@ function relatedFor(
   );
 }
 
+/**
+ * A segment's press keeps choosing along the control, however far it drifts.
+ * So its pointer abort is a return to the current choice. The press slides off
+ * the control in that segment's column and lifts there.
+ */
+async function abortSegmentPress(page: Page, subject: Locator): Promise<void> {
+  const group = subject.locator('xpath=ancestor::*[@role="radiogroup"][1]');
+  const pressed = await subject.boundingBox();
+  const track = await group.boundingBox();
+  const current = await group
+    .getByRole('radio', {checked: true, includeHidden: true})
+    .first()
+    .boundingBox();
+  if (pressed == null || track == null || current == null) {
+    throw new Error(
+      'no segment, control or current choice to abort a press over',
+    );
+  }
+  const viewport = page.viewportSize();
+  const below = Math.min(
+    track.y + track.height + 200,
+    (viewport?.height ?? track.y + track.height + 201) - 1,
+  );
+  await page.mouse.move(
+    pressed.x + pressed.width / 2,
+    pressed.y + pressed.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(current.x + current.width / 2, below, {steps: 12});
+  await page.mouse.up();
+}
+
 async function mountState(
   page: Page,
   state: RadioGroupBindingRow,
@@ -123,6 +155,13 @@ async function runState(
         visibleLabel: state.facts.visibleLabel ? undefined : null,
         related: relatedFor(page, state),
       });
+      if (state.binding === 'SegmentedControlItem') {
+        return {
+          ...harness,
+          abortedPress: async () =>
+            abortSegmentPress(page, subjectFor(page, state)),
+        };
+      }
       if ((state as RadioGroupBindingState).opensMenu !== true) {
         return harness;
       }

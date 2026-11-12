@@ -62,6 +62,7 @@ import {
   writeDefinitionFile,
   writeIconSetData,
   refuseOutsideProject,
+  templateMeaningsOf,
 } from '../_adapter.mjs';
 import {passed, refuseIgnoredPairs} from '../_options.mjs';
 import {logger} from '../../logger.mjs';
@@ -147,10 +148,19 @@ export async function iconAdd(exportName, options) {
       );
     }
   }
+  // An export name cannot start with a digit, and an id the author gives has
+  // no library prefix to keep.
+  if (givenId != null && /^[0-9]/u.test(givenId)) {
+    throw new AstryxError(
+      `The icon id "${givenId}" starts with a digit, and an export name cannot. Pass --id with an id that starts with a letter.`,
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
   if (all) {
     return authoring(() => addVariantForAll({cwd, from, selector, variant}));
   }
-  return authoring(async () => {
+  const result = await authoring(async () => {
     if (
       typeof exportName !== 'string' ||
       !/^[$A-Z_a-z][$\w]*$/u.test(exportName)
@@ -386,6 +396,8 @@ export async function iconAdd(exportName, options) {
       map,
       icons,
     };
+    const dataChanged =
+      JSON.stringify(next) !== JSON.stringify(set.data) || where.moduleRenamed;
     /** @type {string[]} */
     const files = [];
     // Every write happens inside this try, so any failure undoes the ones
@@ -413,7 +425,7 @@ export async function iconAdd(exportName, options) {
             .join('/'),
         );
       }
-      if (JSON.stringify(next) !== JSON.stringify(set.data)) {
+      if (dataChanged) {
         writeIconSetData(set, next, {
           extraDefinitions: created ? [created.name] : [],
         });
@@ -433,10 +445,12 @@ export async function iconAdd(exportName, options) {
       }
       throw error;
     }
-    const changed =
+    // A renamed package's new name alone is not an added icon.
+    const added =
       JSON.stringify(next) !== JSON.stringify(set.data) ||
       created != null ||
       generatedChanged;
+    const changed = dataChanged || added;
     // A ./ file publishes only when package.json `files` lists it; the
     // author adds it (architecture:cli-surface INV16).
     const note =
@@ -457,10 +471,17 @@ export async function iconAdd(exportName, options) {
         ...(created ? {newDefinition: created.name} : {}),
         files,
         changed,
+        added,
+        ...(where.moduleUpdate ? {moduleUpdate: where.moduleUpdate} : {}),
         ...(note ? {note} : {}),
       },
     };
   });
+  if (result.type !== 'icon.add') return result;
+  const templateMeanings = await templateMeaningsOf(cwd, result.data.set);
+  return templateMeanings
+    ? {...result, data: {...result.data, templateMeanings}}
+    : result;
 }
 
 /**
@@ -638,8 +659,27 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   );
   // Only icons from the same package as the variant module can have a
   // variant there: an icon from your own `./` file, or from another library,
-  // is left as it is and never listed as missing.
+  // is left as it is and never listed as missing. Some libraries ship each
+  // look as its own package (Font Awesome's solid and regular packages): an
+  // icon from another package meets its variant only under the same export
+  // name and of the same kind, a component or data for the adapter. Once
+  // one icon of a package meets its twin, that package is a look package of
+  // the variant module, so its other icons are listed as missing.
   const variantPackage = iconModulePackage(source.module);
+  /** @param {{module: string, source: string, adapt: boolean}} origin */
+  const otherPackageTwin = origin => {
+    if (origin.module.startsWith('.')) return false;
+    const twin = byLibraryExport.get(origin.source);
+    return twin != null && twin.adapt === origin.adapt;
+  };
+  const lookPackages = new Set(
+    set.data.icons.flatMap(icon => {
+      const origin = origins.get(icon.export);
+      return origin && otherPackageTwin(origin)
+        ? [iconModulePackage(origin.module)]
+        : [];
+    }),
+  );
   const generated = generatedModulePath(set, packageDir);
   /** @type {import('../../../foundation/discovery/icon-set-writer.mjs').GeneratedIcon[]} */
   const toWrite = [];
@@ -653,7 +693,11 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   const own = [];
   const icons = set.data.icons.map(icon => {
     const origin = origins.get(icon.export);
-    if (origin && iconModulePackage(origin.module) !== variantPackage) {
+    if (
+      origin &&
+      iconModulePackage(origin.module) !== variantPackage &&
+      !lookPackages.has(iconModulePackage(origin.module))
+    ) {
       return icon;
     }
     const librarySource =
@@ -742,7 +786,8 @@ async function addVariantForAll({cwd, from, selector, variant}) {
   const files = [];
   const written = writeGeneratedIcons(packageDir, generated, next, toWrite);
   files.push(...written.files);
-  const dataChanged = JSON.stringify(next) !== JSON.stringify(set.data);
+  const dataChanged =
+    JSON.stringify(next) !== JSON.stringify(set.data) || where.moduleRenamed;
   if (dataChanged) {
     try {
       writeIconSetData(set, next);
@@ -766,6 +811,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       missing,
       files,
       changed: dataChanged || written.changed,
+      ...(where.moduleUpdate ? {moduleUpdate: where.moduleUpdate} : {}),
     },
   };
 }

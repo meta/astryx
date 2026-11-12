@@ -236,20 +236,26 @@ export function CommentComposerBase({
         : [...hostTriggers, agentCommandTrigger],
     [agentCommandTrigger, hostTriggers],
   );
+  // The host owns these props, so no handler here sees each change. Each ref
+  // is written at commit: a render React discards must not leave its value.
   const latestValueRef = useRef(value);
+  // Syncs the handlers' draft with the committed `value`.
+  useLayoutEffect(() => {
+    latestValueRef.current = value;
+  });
   const isMountedRef = useRef(true);
   const actionPendingRef = useRef(false);
   // The latest callback, read when reporting. An inline callback is new on
   // every render; depending on it would re-run the unmount cleanup below on
   // each render and leave the composer busy after its upload ends.
   const onActionPendingChangeRef = useRef(onActionPendingChange);
-  const isSubmittingRef = useRef(isSubmitting);
-  // Syncs the handlers' refs with the committed props. The host owns these
-  // props, so no handler here sees each change. A render React discards, as
-  // a suspended transition does, must not leave its values.
+  // Syncs the reporting callback with the committed prop.
   useLayoutEffect(() => {
-    latestValueRef.current = value;
     onActionPendingChangeRef.current = onActionPendingChange;
+  });
+  const isSubmittingRef = useRef(isSubmitting);
+  // Syncs the busy guard with the committed `isSubmitting`.
+  useLayoutEffect(() => {
     isSubmittingRef.current = isSubmitting;
   });
   const imageInputRef = useRef<HTMLInputElement>(null);

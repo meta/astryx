@@ -117,3 +117,6 @@ export {touchHitAreaStyles} from './touchHitArea.stylex';
 // Lab's TabBar tracks its press with the shared action-group tracker.
 export {useActionGroupTracking} from '../hooks/useActionGroupTracking';
 export type {ActionGroupTrackingOptions} from '../hooks/useActionGroupTracking';
+
+// Lab's TabBar finds a panel's scroll area with Core's scroll test.
+export {measureLogicalScrollAxis} from '../hooks/scrollGeometry';
