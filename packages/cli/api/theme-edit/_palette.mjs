@@ -1123,6 +1123,16 @@ function planPalette(cwd, slug, data, base) {
       families.push(family);
     }
   if (!families.length) return null;
+  // The editor's colors stand in the order of their settings, wherever they
+  // sit among a config's own families, so a step back writes the same file.
+  const slots = families
+    .map((f, i) => (PALETTE_DIALS.includes(f?.id) ? i : -1))
+    .filter(i => i >= 0);
+  const inOrder = fams
+    .map(x => families.find(f => f?.id === x.id))
+    .filter(Boolean);
+  if (inOrder.length === slots.length)
+    slots.forEach((i, k) => (families[i] = inOrder[k]));
   config.families = families;
   const dead = deadKeys(config);
   if (dead.length)

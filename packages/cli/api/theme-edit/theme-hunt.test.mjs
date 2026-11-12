@@ -258,7 +258,8 @@ describe('exact tokens', () => {
     for (const [token, value] of [
       ['--radius-element', '2ch'],
       ['--radius-element', 'clamp(4px, 1vw, 12px)'],
-      ['--text-body-leading', 'normal'],
+      // A line-height token takes a number: Core multiplies it in calc().
+      ['--text-body-leading', '1.5'],
       ['--color-syntax-keyword', 'red'],
       ['--text-display-1-size', '80px'],
       ['--color-icon-pink', 'red'],

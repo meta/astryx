@@ -9,7 +9,15 @@
  */
 
 import {CSS_WIDE} from './_tables.mjs';
-import {MATH_FUNCTION, matchType} from './_css.mjs';
+import {
+  MATH_FUNCTION,
+  cssNumber,
+  keywordsOf,
+  matchType,
+  splitTop,
+} from './_css.mjs';
+
+export {splitTop};
 import {luminance, oklabToLinearRgb} from '../theme/palette/generate/color.mjs';
 
 /** @typedef {[number, number, number]} Rgb */
@@ -490,30 +498,6 @@ function linearToOklab([r, g, b]) {
 }
 
 /**
- * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
- * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
- * @param {string} v
- * @param {',' | ' '} sep
- * @returns {string[]}
- */
-export function splitTop(v, sep) {
-  /** @type {string[]} */
-  const out = [];
-  let depth = 0;
-  let cur = '';
-  for (const c of v) {
-    if (c === '(') depth++;
-    if (c === ')') depth--;
-    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
-      if (cur.trim() || sep === ',') out.push(cur);
-      cur = '';
-    } else cur += c;
-  }
-  if (cur.trim() || sep === ',') out.push(cur);
-  return out.filter(x => sep === ',' || x.trim());
-}
-
-/**
  * One side of a color-mix(): the color, and the share written before or
  * after it at the top level (null when none). A percentage inside the
  * color (`hsl(0 100% 50%) 30%`) is the color's own.
@@ -522,22 +506,19 @@ export function splitTop(v, sep) {
  */
 export function mixSide(side) {
   const words = splitTop(side.trim(), ' ');
-  const share = (/** @type {string | undefined} */ w) =>
-    w != null && /^-?\d*\.?\d+%$/.test(w) ? Number.parseFloat(w) : null;
-  // A share outside 0-100% is invalid CSS: the side then names no color,
-  // so the mix is refused rather than extrapolated.
+  // Any CSS percentage: an exponent or a sign (5e1%, +50%), or math that
+  // gives one percentage (calc(50%)).
+  const share = (/** @type {string | undefined} */ w) => {
+    if (w == null) return null;
+    const plain = /^calc\(\s*(.*?)\s*\)$/i.exec(w)?.[1] ?? w;
+    const n = cssNumber(plain);
+    return n?.unit === '%' ? n.value : null;
+  };
   if (words.length < 2) return {color: side.trim(), pct: null};
-  const inRange = (/** @type {number} */ p) => p >= 0 && p <= 100;
   const last = share(words.at(-1));
-  if (last != null)
-    return inRange(last)
-      ? {color: words.slice(0, -1).join(' '), pct: last}
-      : {color: '', pct: null};
+  if (last != null) return {color: words.slice(0, -1).join(' '), pct: last};
   const first = share(words[0]);
-  if (first != null)
-    return inRange(first)
-      ? {color: words.slice(1).join(' '), pct: first}
-      : {color: '', pct: null};
+  if (first != null) return {color: words.slice(1).join(' '), pct: first};
   return {color: side.trim(), pct: null};
 }
 
@@ -548,9 +529,11 @@ export function mixSide(side) {
  * color with no fixed value, a space this reader does not mix in, or
  * shares that add up to 0.
  * @param {string} inner the arguments
+ * @param {boolean} [approx] mix a space this reader does not mix in as
+ *   OKLab, for a suggestion only
  * @returns {{rgb: Rgb, alpha: number} | null}
  */
-function mixColor(inner) {
+function mixColor(inner, approx = false) {
   const args = splitTop(inner, ',').map(x => x.trim());
   if (args.length !== 3) return null;
   const sp =
@@ -558,12 +541,15 @@ function mixColor(inner) {
       args[0],
     );
   const space = sp?.[1].toLowerCase() ?? '';
-  if (!MIX_SPACES.includes(space)) return null;
+  if (!MIX_SPACES.includes(space) && !approx) return null;
   const hueWay = (sp?.[2] ?? 'shorter').toLowerCase();
+  const mixIn = MIX_SPACES.includes(space) ? space : 'oklab';
   const sides = args.slice(1).map(a => {
     const {color, pct} = mixSide(a);
     return {read: readColor(color), pct};
   });
+  // A share is 0% to 100%; past that the mix is no color at all.
+  if (sides.some(x => x.pct != null && (x.pct < 0 || x.pct > 100))) return null;
   if (sides.some(x => !x.read)) return null;
   let [p1, p2] = sides.map(x => x.pct);
   if (p1 == null && p2 == null) [p1, p2] = [50, 50];
@@ -578,10 +564,10 @@ function mixColor(inner) {
   );
   /** @param {Rgb} rgb @returns {number[]} */
   const into = rgb => {
-    if (space === 'srgb') return rgb.map(c => c / 255);
+    if (mixIn === 'srgb') return rgb.map(c => c / 255);
     const lin = rgb.map(toLinear);
-    if (space === 'srgb-linear') return lin;
-    if (space === 'xyz' || space === 'xyz-d65')
+    if (mixIn === 'srgb-linear') return lin;
+    if (mixIn === 'xyz' || mixIn === 'xyz-d65')
       return [
         0.41239079926595934 * lin[0] +
           0.357584339383878 * lin[1] +
@@ -594,7 +580,7 @@ function mixColor(inner) {
           0.9505321522496607 * lin[2],
       ];
     const lab = linearToOklab(lin);
-    if (space === 'oklab') return lab;
+    if (mixIn === 'oklab') return lab;
     const c = Math.hypot(lab[1], lab[2]);
     return [
       lab[0],
@@ -604,12 +590,12 @@ function mixColor(inner) {
   };
   /** @param {number[]} v @returns {Rgb} */
   const back = v => {
-    if (space === 'srgb')
+    if (mixIn === 'srgb')
       return /** @type {Rgb} */ (v.map(c => clamp(c, 0, 1) * 255));
-    if (space === 'srgb-linear') return fromLinear(v);
-    if (space === 'xyz' || space === 'xyz-d65')
+    if (mixIn === 'srgb-linear') return fromLinear(v);
+    if (mixIn === 'xyz' || mixIn === 'xyz-d65')
       return colorSpaceToRgb('xyz-d65', v);
-    if (space === 'oklab') return oklabToRgb(v[0], v[1], v[2]);
+    if (mixIn === 'oklab') return oklabToRgb(v[0], v[1], v[2]);
     const h = (v[2] * Math.PI) / 180;
     return oklabToRgb(v[0], v[1] * Math.cos(h), v[1] * Math.sin(h));
   };
@@ -618,7 +604,7 @@ function mixColor(inner) {
   // Premultiplied by alpha, as CSS mixes; a missing hue takes the other's.
   const alpha = a.alpha * w1 + b.alpha * w2;
   const out = x.map((_, i) => {
-    if (space === 'oklch' && i === 2) {
+    if (mixIn === 'oklch' && i === 2) {
       let h1 = Number.isNaN(x[2]) ? y[2] : x[2];
       let h2 = Number.isNaN(y[2]) ? x[2] : y[2];
       if (Number.isNaN(h1)) return 0;
@@ -635,6 +621,19 @@ function mixColor(inner) {
   });
   return {rgb: back(out), alpha: alpha * Math.min(1, total / 100)};
 }
+
+/** The channel keywords of each relative color function, in order. */
+const RELATIVE_CHANNELS = /** @type {Record<string, string>} */ ({
+  rgb: 'r g b',
+  rgba: 'r g b',
+  hsl: 'h s l',
+  hsla: 'h s l',
+  hwb: 'h w b',
+  lab: 'l a b',
+  lch: 'l c h',
+  oklab: 'l a b',
+  oklch: 'l c h',
+});
 
 /**
  * A fixed CSS color read as CSS Color 4 reads it: hues wrap, saturation,
@@ -660,6 +659,34 @@ function readColor(s) {
   if (named) return readColor(named);
   const fn = /^([a-z-]+)\((.*)\)$/i.exec(s);
   if (fn && fn[1].toLowerCase() === 'color-mix') return mixColor(fn[2]);
+  if (fn) {
+    const name = fn[1].toLowerCase();
+    // The same color in both modes is that color.
+    if (name === 'light-dark') {
+      const halves = splitTop(fn[2], ',').map(x => x.trim());
+      const [a, b] = halves.map(x => readColor(x));
+      return halves.length === 2 &&
+        a &&
+        b &&
+        hex(a.rgb) === hex(b.rgb) &&
+        a.alpha === b.alpha
+        ? a
+        : null;
+    }
+    // A relative color that keeps every channel as it is (rgb(from red r g
+    // b)) is its origin color.
+    const rel =
+      /^from\s+(.+?)\s+([a-z]+)\s+([a-z]+)\s+([a-z]+)(?:\s*\/\s*([a-z]+))?$/i.exec(
+        fn[2].trim(),
+      );
+    const keep = RELATIVE_CHANNELS[name];
+    if (rel && keep) {
+      const kept =
+        [rel[2], rel[3], rel[4]].map(x => x.toLowerCase()).join(' ') === keep &&
+        (rel[5] == null || rel[5].toLowerCase() === 'alpha');
+      return kept ? readColor(rel[1]) : null;
+    }
+  }
   if (!fn || !FIXED.test(fn[1])) return null;
   const name = fn[1].toLowerCase();
   if (name === 'color') {
@@ -800,11 +827,51 @@ export function colorProblem(value) {
     return {kind: 'malformed', message: 'is not a valid CSS color'};
   // A mix this reader cannot work out (another space, a color with no
   // fixed value) says so, rather than calling the mix unfixed.
-  if (fn && fn[1].toLowerCase() === 'color-mix' && !/var\(|env\(/i.test(fn[2]))
+  if (
+    fn &&
+    fn[1].toLowerCase() === 'color-mix' &&
+    !/var\(|env\(/i.test(fn[2])
+  ) {
+    // The shares, beside each color (a color's own percentages aside).
+    const [space, ...sides] = splitTop(fn[2], ',').map(x => x.trim());
+    const parts = sides.map(mixSide);
+    if (parts.some(x => x.pct != null && (x.pct < 0 || x.pct > 100)))
+      return {
+        kind: 'malformed',
+        message:
+          'has a color-mix() share outside 0% to 100%, which CSS does not take',
+        ...(() => {
+          const near = mixColor(
+            [
+              space,
+              ...parts.map(x =>
+                x.pct == null
+                  ? x.color
+                  : `${x.color} ${Math.max(0, Math.min(100, x.pct))}%`,
+              ),
+            ].join(', '),
+          );
+          return near ? {opaque: hex(near.rgb)} : {};
+        })(),
+      };
+    const near = mixColor(fn[2], true);
     return {
       kind: 'unfixed',
-      message: `is a color-mix() this editor cannot work out (it mixes in ${MIX_SPACES.join(', ')}, from colors with fixed values); give the mixed color itself`,
+      message: `is a color-mix() this editor does not work out (it mixes in ${MIX_SPACES.join(', ')}, from colors with fixed values)${near ? `; mixed in oklab it is about ${hex(near.rgb)}` : ''}: give the mixed color itself`,
+      ...(near ? {opaque: hex(near.rgb)} : {}),
     };
+  }
+  // A relative color that changes its channels is not worked out here.
+  const rel =
+    fn && /^from\s+(.+?)\s+\S+\s+\S+\s+\S+(\s*\/.*)?$/i.exec(fn[2].trim());
+  if (rel && !/var\(|env\(/i.test(fn?.[2] ?? '')) {
+    const origin = readColor(rel[1]);
+    return {
+      kind: 'unfixed',
+      message: `is a relative color that changes its channels, which this editor does not work out${origin ? ` (it starts from ${hex(origin.rgb)})` : ''}: give the color itself`,
+      ...(origin ? {opaque: hex(origin.rgb)} : {}),
+    };
+  }
   if (isColorValue(s))
     return {
       kind: 'unfixed',
@@ -900,20 +967,24 @@ export const isSize = (v, name = '') => {
 export const isNumber = (v, name = '') => {
   const s = String(v).trim();
   if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
+  const n = cssNumber(s);
+  // A weight: a font-weight keyword, or a number from 1 to 1000.
   if (/weight/.test(name))
     return (
-      /^(normal|bold|bolder|lighter)$/.test(s) ||
-      (/^\d+(\.\d+)?$/.test(s) && Number(s) >= 1 && Number(s) <= 1000) ||
+      keywordsOf('font-weight').includes(s.toLowerCase()) ||
+      (n?.unit === '' && n.value >= 1 && n.value <= 1000) ||
       (MATH_FUNCTION.test(s) && matchType('number', s) != null)
     );
   if (/leading|line-height/.test(name))
     return (
       s === 'normal' ||
-      (/^\d*\.?\d+(px|rem|em|%)?$/.test(s) && Number.parseFloat(s) >= 0) ||
+      (n != null &&
+        ['', 'px', 'rem', 'em', '%'].includes(n.unit) &&
+        n.value >= 0) ||
       (MATH_FUNCTION.test(s) && matchType('length-percentage', s) != null) ||
       (MATH_FUNCTION.test(s) && matchType('number', s) != null)
     );
-  return /^-?\d*\.?\d+$/.test(s);
+  return n?.unit === '';
 };
 
 /**
