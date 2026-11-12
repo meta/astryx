@@ -4,12 +4,12 @@
  * @file toast.ts
  * @input Nothing; data only
  * @output Exports `toast`: how a Toast's card follows a swipe toward its edge
- *   under a finger, on every touch device. It also holds the values a release
+ *   under a finger (a coarse primary pointer). It also holds the values a release
  *   decides by: settle back or leave. With a fine pointer Toast runs its own
  *   swipe
  * @position The Toast domain of the UIKit constants table (motion/uikit)
  *
- * These values apply on every touch device, iOS and Android alike. iOS has no
+ * The same values apply under any coarse primary pointer. iOS has no
  * toast control. The reference is the system notification banner. SpringBoard
  * draws it out of process, so nothing can read its animations. The values
  * come from 60 fps recordings of HID-driven drags on the iOS 26.2 simulator.

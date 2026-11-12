@@ -8,8 +8,8 @@
  *   (utils/touchPresentation), Toast options, Button/Icon, MediaTheme, tokens,
  *   and placement motion inherited from ToastViewport
  * @output Exports the rendered Toast surface and its pause/swipe/dismiss
- *   behavior. Under a finger (a coarse primary pointer, on every touch device)
- *   the swipe follows notification banners (useToastBannerSwipe). Every
+ *   behavior. Under a finger (a coarse primary pointer) the swipe follows
+ *   notification banners (useToastBannerSwipe). Every
  *   dismissal there first retracts the card past its edge, as the banner
  *   leaves: a swipe, the close button, the timeout or an app's dismiss. With
  *   a fine pointer the swipe is useToastGesture's and the exit Toast's fade
@@ -441,7 +441,6 @@ export function ToastSurface({
     rootRef,
     isNotification,
     direction: gestureDirection,
-    enabled: !isExiting,
     canPauseTimer: isAutoHide,
     isTimerPaused: isGesturePausing,
     pauseTimer: pauseForGesture,
