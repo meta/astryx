@@ -26,6 +26,12 @@ export interface LayerSideCase {
   /** Where the layer meets its trigger, in px from the layer's top-left. */
   readonly origin: {readonly x: number; readonly y: number};
   /**
+   * The room between the layer and its trigger on the step's axis, in px.
+   * The pointer entrance's step stops there, so a layer flush against or
+   * over its trigger takes no step.
+   */
+  readonly gap: number;
+  /**
    * The axis along which Popover's touch growth lengthens. `null` for a
    * layer over its trigger's center: it has no side, so it only scales.
    */
@@ -49,6 +55,7 @@ export const LAYER_SIDE_CASES: ReadonlyArray<LayerSideCase> = [
     trigger,
     step: {x: 0, y: -1},
     origin: {x: 100, y: 0},
+    gap: 4,
     touchAxis: 'y',
   },
   {
@@ -57,6 +64,7 @@ export const LAYER_SIDE_CASES: ReadonlyArray<LayerSideCase> = [
     trigger,
     step: {x: 0, y: 1},
     origin: {x: 50, y: 150},
+    gap: 4,
     touchAxis: 'y',
   },
   {
@@ -65,6 +73,7 @@ export const LAYER_SIDE_CASES: ReadonlyArray<LayerSideCase> = [
     trigger,
     step: {x: -1, y: 0},
     origin: {x: 0, y: 16},
+    gap: 0,
     touchAxis: 'x',
   },
   {
@@ -73,6 +82,7 @@ export const LAYER_SIDE_CASES: ReadonlyArray<LayerSideCase> = [
     trigger,
     step: {x: 1, y: 0},
     origin: {x: 160, y: 116},
+    gap: 4,
     touchAxis: 'x',
   },
   {
@@ -81,6 +91,7 @@ export const LAYER_SIDE_CASES: ReadonlyArray<LayerSideCase> = [
     trigger,
     step: {x: 0, y: -1},
     origin: {x: 0, y: 0},
+    gap: 4,
     touchAxis: 'y',
   },
   {
@@ -89,6 +100,7 @@ export const LAYER_SIDE_CASES: ReadonlyArray<LayerSideCase> = [
     trigger,
     step: {x: 0, y: -1},
     origin: {x: 200, y: 0},
+    gap: 4,
     touchAxis: 'y',
   },
   {
@@ -97,6 +109,7 @@ export const LAYER_SIDE_CASES: ReadonlyArray<LayerSideCase> = [
     trigger,
     step: {x: 0, y: 0},
     origin: {x: 75, y: 30},
+    gap: 0,
     touchAxis: null,
   },
   {
@@ -105,6 +118,7 @@ export const LAYER_SIDE_CASES: ReadonlyArray<LayerSideCase> = [
     trigger,
     step: {x: 0, y: 0},
     origin: {x: 50, y: 116},
+    gap: 0,
     touchAxis: null,
   },
 ];

@@ -393,8 +393,16 @@ export function useTypedDateField({
   const [isRejectionCommitted, setIsRejectionCommitted] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   // The date that typing last reported, so one typing session reports each
-  // date once.
-  const lastFiredRef = useRef<ISODateString | undefined>(undefined);
+  // date once. Only the handlers write it. A value from outside and a
+  // re-enable retire it by moving `firedEpoch` on, during render, so no
+  // render React discards can retire it.
+  const [lastFired, setLastFired] = useState<{
+    date: ISODateString | undefined;
+    epoch: number;
+  }>({date: undefined, epoch: 0});
+  const [firedEpoch, setFiredEpoch] = useState(0);
+  const lastFiredDate =
+    lastFired.epoch === firedEpoch ? lastFired.date : undefined;
 
   const typedResult =
     pendingInput !== null && pendingInput.trim()
@@ -525,7 +533,9 @@ export function useTypedDateField({
     }
     if (!isSameEntryError(entryError, reportedEntryErrorRef.current)) {
       reportedEntryErrorRef.current = entryError;
-      onEntryErrorChange(entryError);
+      // Called through the ref: the set-state-in-effect rule takes a call to a
+      // hook parameter for the whole hook's body.
+      latestEntryErrorCallbackRef.current?.(entryError);
     }
     if (!isSameEntryError(entryError, heardEntryError)) {
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- shows the field's own message once the caller has the rejection
@@ -552,13 +562,14 @@ export function useTypedDateField({
     reportEntryError(null);
   }, [reportEntryError]);
 
-  // A value from outside drops typed text. Computed during render, so it
-  // takes no extra render.
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
-    if (value !== lastFiredRef.current) {
-      lastFiredRef.current = undefined;
+  // A value from outside drops typed text. Adjusted during render, so it
+  // takes no extra commit; state, so a render React discards takes its
+  // adjustment with it.
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    if (value !== lastFiredDate) {
+      setFiredEpoch(epoch => epoch + 1);
       if (pendingInput !== null) {
         setPendingInput(null);
         setIsRejectionCommitted(false);
@@ -569,16 +580,16 @@ export function useTypedDateField({
   // Typing already reported this date through `onChange`. Once the field is
   // editable, it shows its value. A retyped date then reports again. A focused
   // field keeps the text until Enter or blur, which end the typing session.
-  const wasDisabledRef = useRef(isDisabled);
-  if (isDisabled !== wasDisabledRef.current) {
-    wasDisabledRef.current = isDisabled;
+  const [wasDisabled, setWasDisabled] = useState(isDisabled);
+  if (isDisabled !== wasDisabled) {
+    setWasDisabled(isDisabled);
     if (
       !isDisabled &&
       !isFocused &&
       typedResult?.kind === 'value' &&
-      plainDateToISO(typedResult.date) === lastFiredRef.current
+      plainDateToISO(typedResult.date) === lastFiredDate
     ) {
-      lastFiredRef.current = undefined;
+      setFiredEpoch(epoch => epoch + 1);
       setPendingInput(null);
       setIsRejectionCommitted(false);
     }
@@ -586,14 +597,14 @@ export function useTypedDateField({
 
   const report = useCallback(
     (date: ISODateString) => {
-      if (date === value || date === lastFiredRef.current) {
+      if (date === value || date === lastFiredDate) {
         return false;
       }
-      lastFiredRef.current = date;
+      setLastFired({date, epoch: firedEpoch});
       onChange(date);
       return true;
     },
-    [value, onChange],
+    [value, lastFiredDate, firedEpoch, onChange],
   );
 
   const handleChange = useCallback(
@@ -659,7 +670,7 @@ export function useTypedDateField({
       report(plainDateToISO(result.date));
     }
     // A new typing session reports a retyped date again.
-    lastFiredRef.current = undefined;
+    setLastFired({date: undefined, epoch: firedEpoch});
     reset();
   }, [
     pendingInput,
@@ -671,6 +682,7 @@ export function useTypedDateField({
     options.max,
     report,
     reset,
+    firedEpoch,
   ]);
 
   const handleFocus = useCallback(() => {
