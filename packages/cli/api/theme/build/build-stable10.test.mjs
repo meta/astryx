@@ -116,22 +116,40 @@ describe('F7-N4: a theme the editor made, built plainly', () => {
 });
 
 describe('a theme file that is a link', () => {
-  it('is refused with the real path, never a require stack', async () => {
+  /**
+   * A link at the app root to real/l.mjs, which imports `spec`.
+   * @param {string} spec
+   */
+  const linked = spec => {
     const real = path.join(tmpDir, 'real');
-    fs.mkdirSync(real);
+    fs.mkdirSync(real, {recursive: true});
     fs.writeFileSync(
       path.join(real, 'l.mjs'),
-      "import {c} from './tokens.mjs';\nexport default { name: 'l', tokens: { '--color-bg': c } };\n",
-    );
-    fs.writeFileSync(
-      path.join(real, 'tokens.mjs'),
-      "export const c = '#000';\n",
+      `import {c} from '${spec}';\nexport default { name: 'l', tokens: { '--color-bg': c } };\n`,
     );
     fs.symlinkSync(path.join(real, 'l.mjs'), path.join(tmpDir, 'l.mjs'));
+    return real;
+  };
+
+  it('that does not load is refused with the real path, never a require stack', async () => {
+    // The import exists beside neither the link nor the file it points to,
+    // so it fails under any loader.
+    linked('./nowhere.mjs');
     const {err} = await captured(() => themeBuild('l.mjs', {}, {cwd: tmpDir}));
     expect(err?.code).toBe('ERR_THEME_LOAD');
     expect(err.message).toContain('l.mjs is a link to real/l.mjs');
     expect(err.message).not.toContain('Require stack');
     expect(err.suggestions[0].name).toMatch(/ theme build real\/l\.mjs$/);
+  });
+
+  it('whose import resolves from either folder builds', async () => {
+    const real = linked('./tokens.mjs');
+    for (const dir of [tmpDir, real])
+      fs.writeFileSync(
+        path.join(dir, 'tokens.mjs'),
+        "export const c = '#000';\n",
+      );
+    const {err} = await captured(() => themeBuild('l.mjs', {}, {cwd: tmpDir}));
+    expect(err).toBeUndefined();
   });
 });

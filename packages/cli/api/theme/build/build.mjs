@@ -3774,9 +3774,9 @@ async function themeBuildInternal(
   } catch (e) {
     const err = /** @type {Error} */ (e);
     const shown = path.relative(cwd, filePath) || filePath;
-    // A theme file that is a link: its relative imports are read from the
-    // link's folder, not the folder of the file it points to. Said with the
-    // real path, never with Node's require stack.
+    // A theme file that is a link and does not load: named with the file it
+    // points to (some loaders read its relative imports from the link's
+    // folder, others from the file's own), never with Node's require stack.
     let link = null;
     try {
       if (fs.lstatSync(filePath).isSymbolicLink())
@@ -3790,7 +3790,7 @@ async function themeBuildInternal(
       .join(shown);
     throw new AstryxError(
       link
-        ? `${shown} is a link to ${path.relative(cwd, link) || link}, and the build reads its relative imports from the link's folder (${path.relative(cwd, path.dirname(filePath)) || '.'}), not from ${path.relative(cwd, path.dirname(link)) || '.'}; build the file itself: ${message}`
+        ? `${shown} is a link to ${path.relative(cwd, link) || link}, and it could not be loaded (a relative import may be read from the link's folder or from the file's own, depending on the loader); build the file itself: ${message}`
         : message,
       link
         ? [
