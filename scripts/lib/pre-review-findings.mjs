@@ -2,10 +2,10 @@
 
 /**
  * @file Concrete findings in one change, each at a file and line.
- * @input A unified diff, a reader for the head tree, the Changeset coverage
- *   result, and the pull request description when one is given.
- * @output Findings for checklist items h to l: the item, the file and line,
- *   the rule, and the fix.
+ * @input A unified diff, a reader for the head tree, and the Changeset
+ *   coverage result.
+ * @output Findings for checklist items i to l: the item, the file and line,
+ *   the rule, and the fix. Size advice for item h, which is never a finding.
  * @position Called by `scripts/pre-review.mjs`. SYNC: keep each rule in step
  *   with its item in `docs/contributing/pull-requests.md#pre-review-checklist`.
  */
@@ -16,7 +16,7 @@ import {parseFrontmatter} from '../check-changesets.mjs';
 const require = createRequire(import.meta.url);
 const {parseEntry} = require('../changeset-entry-format.cjs');
 
-export const SIZE_LIMIT = 2000;
+export const SIZE_GUIDELINE = 2000;
 
 const LOCKFILE =
   /(?:^|\/)(?:pnpm-lock\.yaml|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock)$/;
@@ -42,38 +42,10 @@ export function authoredLineCount(
   return total;
 }
 
-export const BATCH_SIZE_LIMIT = 8000;
-const BEHAVIOR_MODULE_DECLARATION =
-  /^[ \t]*(?:[-*][ \t]*)?(?:Behavior module:[ \t]*\S|This behavior-module (?:pull request|PR) (?:adds|changes|builds|extends) \S)/m;
-const BATCH_ROW = /^[ \t]*(?:[-*|][ \t]*)?Batch:[ \t]*\S/m;
-const STACK_LINE = /^[ \t]*(?:[-*|][ \t]*)?Stack:[ \t]*\S/m;
-
-/**
- * Item h. `body` is the pull request description, or null when the report
- * cannot read it.
- */
-export function sizeFindings(authored, body) {
-  if (authored <= SIZE_LIMIT) return [];
-  if (body != null && BEHAVIOR_MODULE_DECLARATION.test(body)) return [];
-  const isBatch = body != null && BATCH_ROW.test(body);
-  if (isBatch && authored <= BATCH_SIZE_LIMIT) return [];
-  const limit = isBatch ? BATCH_SIZE_LIMIT : SIZE_LIMIT;
-  const split = `Split the change into pull requests of at most ${limit} authored lines.`;
-  let fix = split;
-  if (body == null) {
-    fix = `${split} A declared behavior-module pull request, or a \`Batch:\` row up to ${BATCH_SIZE_LIMIT} lines, is exempt; pass --body-file or --pr to read the description.`;
-  } else if (STACK_LINE.test(body)) {
-    fix = `${split} For a stacked pull request, pass --base the branch below it, so the count covers only its own lines.`;
-  }
-  return [
-    {
-      item: 'h',
-      file: null,
-      line: null,
-      rule: `${authored} authored lines, over ${limit}${isBatch ? ' for a batch' : ''}`,
-      fix,
-    },
-  ];
+/** Item h. Advice for a change over the size guideline, or null. */
+export function sizeAdvice(authored) {
+  if (authored <= SIZE_GUIDELINE) return null;
+  return `Over ${SIZE_GUIDELINE.toLocaleString('en-US')} authored lines: consider splitting if a smaller change would review more easily.`;
 }
 
 const DOCUMENT_RECEIVER =

@@ -21,6 +21,7 @@ import {loadComponentDoc} from '../../foundation/discovery/component-loader.mjs'
 import {collectThemingTargets} from '../../foundation/discovery/theming-targets.mjs';
 import {resolveImportPath} from '../../foundation/discovery/component-discovery.mjs';
 import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
+import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
 
 /**
  * @typedef {object} ThemeProject
@@ -42,16 +43,44 @@ import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
  * @property {string} category - The doc's category, such as Action or Overlay.
  * @property {unknown} defaults - Playground defaults, or null.
  * @property {{component: string, props: Record<string, unknown>} | null} wrapper - The parent the playground renders it in, or null.
+ * @property {boolean} opens - An overlay its playground shows in place: the pages render it open.
+ * @property {boolean} overlay - Its playground opens it over the whole page, so a page of components leaves it out.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
- * @property {Record<string, {type: string, required: boolean}>} props - Each prop's declared type and whether it is required.
- * @property {Array<{className: string, values: Record<string, string[]>}>} targets
+ * @property {string[]} keywords - The doc's search keywords.
+ * @property {Record<string, {type: string, required: boolean, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, and the elements the doc suggests for it.
+ * @property {Array<{className: string, states: string[], values: Record<string, string[]>}>} targets
  */
 
 /** @type {Map<string, ThemeProject>} */
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 2;
+const DOCS_VERSION = 5;
+
+/**
+ * The theme editor's cache folder for a project: the `.cache/astryx-theme`
+ * of the node_modules that holds the Core the command reads (the
+ * project's own, or a workspace root's). The locks and the part-data cache
+ * both live here, so one command never finds two answers. Null without
+ * Core.
+ * @param {string} dir
+ * @returns {string | null}
+ */
+export function themeCacheRoot(dir) {
+  const core = findProjectCoreDir(dir);
+  if (!core) return null;
+  // Core read from source (a fork of the design system, packages/core) is
+  // in no node_modules: the cache goes in the project's own node_modules,
+  // never in a source folder.
+  const modules = path.dirname(path.dirname(core));
+  if (
+    path.basename(path.dirname(core)) === '@astryxdesign' &&
+    path.basename(modules) === 'node_modules'
+  )
+    return path.join(modules, '.cache', 'astryx-theme');
+  const own = nodeModulesRoot(dir);
+  return own ? path.join(own, 'node_modules', '.cache', 'astryx-theme') : null;
+}
 
 /**
  * The nearest folder at or above `dir` that holds node_modules.
@@ -76,7 +105,7 @@ export function installLine(cwd, packages) {
 }
 
 /** @param {string} type @returns {string[]} */
-const literals = type =>
+export const literals = type =>
   [...String(type ?? '').matchAll(/'([^']+)'/g)].map(m => m[1]);
 
 /**
@@ -106,33 +135,59 @@ async function readComponents(coreDir) {
         continue;
       }
       if (!doc || typeof doc.name !== 'string') continue;
+      // A doc for several components lists each one's props under its own
+      // entry.
+      const mine = (Array.isArray(doc.components) ? doc.components : []).find(
+        (/** @type {any} */ c) => c?.name === doc.name,
+      );
+      const own = Array.isArray(doc.props) ? doc.props : mine?.props;
+      // Its playground too: the doc's, or its own entry's.
+      const pg = doc.playground ?? mine?.playground;
       /** @type {Record<string, any>} */
       const props = Object.fromEntries(
-        (Array.isArray(doc.props) ? doc.props : []).map(
-          (/** @type {any} */ p) => [p.name, p],
-        ),
+        (Array.isArray(own) ? own : []).map((/** @type {any} */ p) => [
+          p.name,
+          p,
+        ]),
       );
       out[doc.name] = {
         importPath: resolveImportPath(coreDir, doc.name),
         category: typeof doc.category === 'string' ? doc.category : '',
-        defaults: doc.playground?.defaults ?? null,
+        defaults: pg?.defaults ?? null,
         wrapper:
-          typeof doc.playground?.wrapper?.component === 'string'
+          typeof pg?.wrapper?.component === 'string'
             ? {
-                component: doc.playground.wrapper.component,
-                props: doc.playground.wrapper.props ?? {},
+                component: pg.wrapper.component,
+                props: pg.wrapper.props ?? {},
               }
             : null,
+        overlay: pg?.overlay === true,
+        // An overlay with an open state, unless its playground opens it as
+        // a real overlay over the page.
+        opens:
+          doc.category === 'Overlay' &&
+          pg?.overlay !== true &&
+          [doc, ...(Array.isArray(doc.components) ? doc.components : [])].some(
+            (/** @type {any} */ d) =>
+              Array.isArray(d?.props) &&
+              d.props.some((/** @type {any} */ p) => p?.name === 'isOpen'),
+          ),
         subComponentOf:
           typeof doc.subComponentOf === 'string' ? doc.subComponentOf : null,
+        keywords: Array.isArray(doc.keywords) ? doc.keywords.map(String) : [],
         props: Object.fromEntries(
           Object.entries(props).map(([n, p]) => [
             n,
-            {type: String(p.type ?? ''), required: p.required === true},
+            {
+              type: String(p.type ?? ''),
+              required: p.required === true,
+              slots: Array.isArray(p.slotElements) ? p.slotElements : [],
+            },
           ]),
         ),
         targets: (doc.theming?.targets ?? []).map((/** @type {any} */ t) => ({
           className: t.className,
+          states: Array.isArray(t.states) ? t.states.map(String) : [],
           values: Object.fromEntries(
             (t.visualProps ?? []).map((/** @type {string} */ v) => {
               const p = props[v];
@@ -201,13 +256,15 @@ export async function openProject(cwd) {
     // No stylesheet: the part data is empty, and the version alone keys it.
   }
   const coreKey = `${coreVersion}-${fingerprint}`;
-  const root = nodeModulesRoot(key) ?? key;
   const core = await import(pathToFileURL(themeFile).href);
   const cacheDir = path.join(
-    root,
-    'node_modules',
-    '.cache',
-    'astryx-theme',
+    themeCacheRoot(key) ??
+      path.join(
+        nodeModulesRoot(key) ?? key,
+        'node_modules',
+        '.cache',
+        'astryx-theme',
+      ),
     coreKey,
   );
   // Reading every component doc takes a second; it is fixed per Core install.
@@ -287,7 +344,7 @@ export function baseThemeFile(project, like) {
  * Resolved tokens of the base theme in both modes.
  * @param {ThemeProject} project
  * @param {string | undefined} like
- * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>}>}
+ * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>, components: Record<string, any>}>}
  */
 export async function baseResolved(project, like) {
   const {core} = project;
@@ -300,8 +357,12 @@ export async function baseResolved(project, like) {
         v => v && typeof v === 'object' && typeof v.name === 'string',
       );
   }
-  return {
+  const out = {
     light: core.resolveThemeTokens(theme, {mode: 'light'}),
     dark: core.resolveThemeTokens(theme, {mode: 'dark'}),
+    // The base theme's own part styles (neutral's pale destructive button),
+    // which a one-mode setting keeps in the other mode.
+    components: theme.components ?? {},
   };
+  return out;
 }

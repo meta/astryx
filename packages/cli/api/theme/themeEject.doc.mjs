@@ -30,8 +30,8 @@ export const doc = {
       name: 'options.targetPath',
       type: 'string',
       description:
-        'Destination directory for ejected files. Must resolve within cwd.',
-      default: "'src/themes/<slug>'",
+        'Destination directory for ejected files, relative to cwd. Must resolve within the project (the nearest folder above cwd with a package.json).',
+      default: "'src/themes/<slug>' in the project root",
     },
     {
       name: 'options.overwrite',
@@ -43,7 +43,7 @@ export const doc = {
       name: 'options.cwd',
       type: 'string',
       description:
-        'Project directory used for integration discovery and target paths.',
+        'Working directory: integration discovery and the project root start here, a relative targetPath resolves from it, and outputDir is relative to it.',
     },
     {
       name: 'options.package',

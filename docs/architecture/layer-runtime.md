@@ -311,9 +311,9 @@ select `popover="auto"`. Browser-initiated closes are observed through the queue
 `onHide`, or controlled-state synchronization catches up.
 
 `gestureCounter` identifies the physical pointer or keyboard gesture in flight.
-`useLayer` records the gesture associated with a browser close and
-`wasJustDismissed()` prevents that same press from reopening a trigger.
-DropdownMenu and Selector-family trigger paths consume this guard.
+`useLayer` records the gesture associated with a browser close, and its `show()`
+does not reopen the layer during that same gesture, so every trigger path gets
+this guard from `useLayer` (INV7).
 
 `useMenuHover` adds a real native invoker relationship for applicable auto
 popovers. It separately suppresses the synthetic `mouseenter` produced when a
