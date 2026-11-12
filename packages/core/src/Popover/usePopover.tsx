@@ -20,7 +20,6 @@
 import React, {useCallback, useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLayerInternal, type ContextRenderProps} from '../Layer/useLayer';
-import {isReleaseInFlight} from '../Layer/gestureCounter';
 import {watchOutsidePans} from '../Layer/outsidePanClaim';
 import {useFocusTrapInternal} from '../hooks/useFocusTrap';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
@@ -487,8 +486,10 @@ function usePopoverImplementation(
   // Set when the layer reports it has shown, so `show` can tell a popover
   // that opened within the call from one whose content mounts later.
   const hasShownRef = useRef(false);
-  // A show the layer holds for a press's release reports inside that
-  // release's click; initial focus then runs there, still within the click.
+  // Initial focus for the show in progress. It runs when the layer reports
+  // the show: within `show` when the layer opens at once, or inside the
+  // release's click when the layer holds the show for a press's release.
+  // Either way the focus lands within the event that opened the popover.
   const focusOnShowRef = useRef<(() => void) | null>(null);
   const handleLayerShow = useCallback(() => {
     hasShownRef.current = true;
@@ -600,9 +601,6 @@ function usePopoverImplementation(
       const opener = getOpenerRef.current?.() ?? activeElement;
       openerRef.current =
         opener != null && !contentRef.current?.contains(opener) ? opener : null;
-      focusOnShowRef.current = null;
-      const isHeldForRelease =
-        hasLightDismiss && !layer.isOpen && isReleaseInFlight();
       const focusWithinEvent = () => {
         const container = contentRef.current;
         if (
@@ -620,24 +618,15 @@ function usePopoverImplementation(
           hasFocusedInGestureRef.current = true;
         }
       };
-      if (isHeldForRelease) {
-        focusOnShowRef.current = focusWithinEvent;
-      }
-      layer.show();
-      if (isHeldForRelease) {
-        return;
-      }
-      // When the content is already mounted, the layer shows it within this
-      // call, so initial focus lands within the event that opened it: iOS
-      // raises its keyboard only for a focus made while the tap is still
-      // being handled. The frame in the effect above stays for content that
-      // mounts later.
-      // Only a content control already rendered takes focus here; content
+      // iOS raises its keyboard only for a focus made while the tap is still
+      // being handled, so initial focus runs when the layer reports the show.
+      // Only a content control already rendered takes focus there; content
       // that renders on open (and the dialog-surface fallback) waits for the
       // effect's frame.
-      focusWithinEvent();
+      focusOnShowRef.current = focusWithinEvent;
+      layer.show();
     },
-    [layer, hasAutoFocus, hasLightDismiss, contentRef],
+    [layer, hasAutoFocus, contentRef],
   );
 
   // Toggle function. Opening delegates to show so every route inherits the
