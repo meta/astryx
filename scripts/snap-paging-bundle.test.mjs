@@ -33,7 +33,7 @@ const PAGER_CODE = new RegExp(
     'hooks/usePager\\.ts',
     'SnapPaging/SnapPaging\\.ts',
     'gestures/',
-    'motion/(animator|paging|presentation|projection|reducedMotionPlan|resolveMotion|resolveSnapPoint|roleValue|rubberBand|spring|themeTempo)\\.ts',
+    'motion/(animator|paging|presentation|progress|projection|reducedMotionPlan|resolveMotion|resolveSnapPoint|roleValue|rubberBand|spring|themeTempo)\\.ts',
     'motion/uikit/(gestures|paging|scroll)\\.ts',
     'Layer/inputHold\\.ts',
     // primaryClick and isApplePlatform are the press controller's too.

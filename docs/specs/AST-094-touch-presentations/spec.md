@@ -36,6 +36,7 @@ verified_by:
     "packages/core/src/Layer/inputHold.ts",
     "packages/core/src/gestures/tapWobble.ts",
     "packages/core/src/hooks/usePager.ts",
+    "packages/core/src/motion/rectMorph.ts",
     "packages/core/src/motion/uikit/segmented.ts",
     "packages/core/src/motion/uikit/slider.ts"
   ]

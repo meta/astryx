@@ -625,16 +625,21 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV15 — One lift-from-trigger module, opt-in per surface.** Lift-from-trigger presentation lives in one
   internal module separate from the layer runtime: the lift from the trigger,
   using the real trigger or a clone, whichever keeps the motion on the
-  compositor (`spec:AST-094` FR5);
+  compositor (`spec:AST-094` FR5); and
   the grow from the trigger's rectangle through the shared rectangle morph
-  (one Core animation from one rectangle to another); and
-  the exit, played through the runtime's exit copy (INV14). A clone of the
+  (one Core animation from one rectangle to another). A surface beside the
+  lift keeps its own exit. A clone of the
   trigger is the one transient copy `architecture:component-style-authoring`
   INV7 allows: inert, hidden from assistive technology, and removed when the
   lift settles. Surfaces opt in;
   any surface that lifts uses this module and never its own copy, and layers
   that do not lift do not use it. It is internal and unexported
-  (`spec:AST-017` FR21).
+  (`spec:AST-017` FR21). It has four functions. `createLiftFromTrigger` lifts
+  a source, presents a surface beside it, drops and ends.
+  `liftFromTriggerScale` and `liftFromTriggerRect` compute the scale and the
+  rectangle a source lifts to. `surfacePlacement` picks the side of the
+  surface. One module gives each surface that lifts the same lift, tint, input
+  hold and return.
 - **INV17 — A click inside a layer stops at the layer root.** A pointer,
   mouse, touch, or click event that starts inside a layer root (both
   `useLayer` renderers and the Dialog, Drawer, Lightbox, MobileNav,
@@ -720,10 +725,11 @@ govern them. It does not cover the INV7 gaps either.
 INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them. The
 runtime owns the shared exit copy (INV13, `placeLayerExitCopy`) and the shared
 presentation hold (`Layer/presentationHold.ts`), which Popover uses for its
-sheet and anchored presentations; no runtime backdrop tint or lift module
-exists, and Dialog, Drawer, BottomSheet, Lightbox, MobileNav, ToastViewport,
-and Selector each build their own top-layer mounting, exit, backdrop, or
-presentation hold.
+sheet and anchored presentations; no runtime backdrop tint exists, and Dialog,
+Drawer, BottomSheet, Lightbox, MobileNav, ToastViewport, and Selector each
+build their own top-layer mounting, exit, backdrop, or presentation hold.
+ContextMenu and Lightbox do not use the lift-from-trigger module (INV15,
+`packages/core/src/liftFromTrigger/`).
 BottomSheet's own includes its sheet stack's mounting — the re-show that
 keeps a document's sheets in open order, a step dialog's modal present, and
 the non-modal sheet's popover host — alongside its scrim; the ordering rules
