@@ -262,23 +262,41 @@ function typedPlain(v) {
 }
 
 /**
- * A font pasted as a declaration (`font-family: Georgia, serif;`, from
- * devtools or a stylesheet), as the family list it names; a `font:`
- * shorthand gives its family. Null when the value is not a pasted
- * declaration.
+ * A value pasted as a CSS declaration (`color: #e11d48;`, `font-weight: 700
+ * !important`), from devtools or a stylesheet: its property and value, with
+ * the `;` and `!important` gone. Null when the value is not a declaration (a
+ * URL's `https:` is not a property).
  * @param {string} v
- * @returns {string | null}
+ * @returns {{property: string, value: string} | null}
  */
-export function pastedFont(v) {
+export function pastedDeclaration(v) {
   const plain = typedPlain(v);
-  const m = /^(font-family|font)\s*:\s*(.*)$/i.exec(plain);
-  if (!m) return null;
-  const rest = m[2]
+  const m = /^(--[a-z0-9-]+|[a-z][a-z-]*)\s*:\s*(?!\/\/)(.*)$/i.exec(plain);
+  if (!m || /^(https?|data|file|blob)$/i.test(m[1])) return null;
+  const value = m[2]
     .replace(/;+\s*$/, '')
     .replace(/\s*!\s*important\s*$/i, '')
     .replace(/;+\s*$/, '')
     .trim();
-  if (m[1].toLowerCase() === 'font-family') return rest || null;
+  // `font-family: ;` names a property and no value: value is ''.
+  return {property: m[1].toLowerCase(), value};
+}
+
+/**
+ * A font pasted as a declaration (`font-family: Georgia, serif;`, from
+ * devtools or a stylesheet), as the family list it names; a `font:`
+ * shorthand gives its family; '' when it names the property and no value.
+ * Null when the value is not a pasted declaration.
+ * @param {string} v
+ * @returns {string | null}
+ */
+export function pastedFont(v) {
+  const d = pastedDeclaration(v);
+  if (!d || !/^font(-family)?$/.test(d.property)) return null;
+  const rest = d.value;
+  // `font-family: ;` gives no font: '' (the caller refuses it).
+  if (!rest) return '';
+  if (d.property === 'font-family') return rest;
   const parts = fontShorthandParts(rest);
   return parts && typeof parts['font-family'] === 'string'
     ? parts['font-family']
@@ -300,8 +318,8 @@ function valueMeant(type, value) {
   /** @type {string} */
   let p = (
     type === 'font' || type === 'font-family'
-      ? (pastedFont(value) ?? value)
-      : typedPlain(value)
+      ? pastedFont(value) || value
+      : pastedDeclaration(value)?.value || typedPlain(value)
   )
     .replace(/;+\s*$/, '')
     .replace(/\s*!\s*important\s*$/i, '')
@@ -310,6 +328,10 @@ function valueMeant(type, value) {
   const q = /^(["'])(.*)\1$/.exec(p);
   if (q && type !== 'font') p = q[2].trim();
   const out = [p];
+  // A var() of the app's own variable with a fallback: the fallback is the
+  // value meant (`var(--brand, #e11d48)` → #e11d48).
+  const fb = /^var\(\s*--[a-z0-9-]+\s*,\s*(.+)\)$/i.exec(p);
+  if (fb) out.push(fb[1].trim());
   if (type === 'font' || type === 'font-family') {
     // A comma left out between families (`"Open Sans" serif`), read with
     // css-tree.
@@ -694,6 +716,16 @@ function checkTypedValue(
         ],
       },
     );
+  // A font file or a link is no family name: never quoted into one.
+  if (type === 'font') {
+    const file = fontFileReason(pastedFont(value) || value);
+    if (file)
+      refuse(E.ERR_THEME_BAD_VALUE, file, {
+        run: [
+          `${P} set ${slug} ${name} ${quoteCommandArgument(exampleOf(type, name))}`,
+        ],
+      });
+  }
   if (!isSafeValue(value))
     refuse(
       E.ERR_THEME_BAD_VALUE,
@@ -799,6 +831,17 @@ function checkTypedValue(
   }
   if (type === 'color' && !isFixedColor(value)) bad('a color', '#1f2937');
   if (type === 'size' && !isSize(value, name)) {
+    // With nothing to read from the value, the token's own default (a text
+    // size stays readable), never one size for every token.
+    // Followed through the tokens it reads (var(--font-size-base)).
+    let own = String(TOKENS[name] ?? '').trim();
+    for (let hop = 0; hop < 4; hop += 1) {
+      const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(own)?.[1];
+      if (!ref) break;
+      own = String(TOKENS[ref] ?? '').trim();
+    }
+    const sizeExample =
+      own && isSize(own, name) && !/var\(/.test(own) ? own : '6px';
     // The size meant, when one dot or sign is all that is wrong (1.px).
     const meant = value.trim().replace(/(\d)\.(?=[a-z%]|$)/gi, '$1');
     // A bare number is the size in px.
@@ -816,7 +859,7 @@ function checkTypedValue(
         ? meant
         : px && isSize(px, name)
           ? px
-          : (slip ?? '6px'),
+          : (slip ?? sizeExample),
     );
   }
   // A percentage reaches every property that reads the token; one that
@@ -1310,6 +1353,16 @@ export function checkSetting(
       (thing.startsWith('--') && ctx.C.typeOf(thing) === 'font'))
   ) {
     const pasted = pastedFont(value);
+    if (pasted === '')
+      refuse(
+        E.ERR_MISSING_ARGUMENT,
+        `"${value.trim()}" names a font property but gives no font. Give the family after the colon, or alone.`,
+        {
+          run: [
+            `${P} set ${slug} ${thing} ${quoteCommandArgument(thing === 'font' ? 'inter' : 'Inter, sans-serif')}${flags.on ? ` --on ${quoteCommandArgument(flags.on)}` : ''}`,
+          ],
+        },
+      );
     if (pasted) value = pasted;
   }
   if (thing === 'font' && !unset && typeof value === 'string') {
@@ -2518,7 +2571,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         // What the value most likely meant: without quotes, a trailing `;`
         // or `!important`, a bare hex with its #, the opaque color, or the
         // nearest color name.
-        const cleaned = typedPlain(v)
+        const cleaned = (pastedDeclaration(v)?.value || typedPlain(v))
+          .replace(/^var\(\s*--[a-z0-9-]+\s*,\s*(.+)\)$/i, '$1')
           .replace(/^(["'])(.*)\1$/, '$2')
           .replace(/\s*!important\s*$/i, '')
           .replace(/;+\s*$/, '')
@@ -2531,12 +2585,20 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           problem.kind === 'unknown'
             ? nearest(v.toLowerCase(), COLOR_NAMES)
             : [];
+        // light-dark(a, b): the dial takes one color, from which it makes
+        // both modes; the light one is offered.
+        const lightHalf =
+          /^light-dark\(\s*([^,]+?)\s*,/i.exec(cleaned)?.[1] ?? null;
         const better =
           problem.opaque ??
-          (cleaned !== v && !colorProblem(cleaned) ? cleaned : near[0]);
+          (cleaned !== v && !colorProblem(cleaned)
+            ? cleaned
+            : lightHalf && !colorProblem(lightHalf)
+              ? lightHalf
+              : near[0]);
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `"${v}" ${problem.message}.${problem.kind === 'unknown' || problem.kind === 'malformed' ? ' Give a hex, a color name, or an rgb(), hsl(), hwb(), lab(), lch(), oklab(), oklch() or color() color.' : ''}`,
+          `"${v}" ${problem.message}.${problem.kind === 'unknown' || problem.kind === 'malformed' ? ' Give a hex, a color name, or an rgb(), hsl(), hwb(), lab(), lch(), oklab(), oklch() or color() color.' : ''}${better && better === lightHalf ? ` ${thing} takes one color and makes both modes from it; the light one (${better}) is offered. For a dark value of your own, set --color-accent --mode dark after.` : ''}`,
           {
             didYouMean: better ? [better] : near,
             run: [
@@ -2783,6 +2845,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             ],
           },
         );
+      const file = fontFileReason(s.value);
+      if (file)
+        refuse(E.ERR_THEME_BAD_VALUE, file, {
+          run: [`${P} set ${slug} font inter${s.on ? ` --on ${s.on}` : ''}`],
+        });
       if (s.value.split(',').some(f => f.trim().length > 100))
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -2881,6 +2948,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         E.ERR_THEME_PRIVATE_TOKEN,
         `"${thing}" is private to a component; themes cannot set it.`,
         {run: [`${HOW} ${quoteCommandArgument(thing)}`]},
+      );
+    // A token typed with its declaration's colon (`--color-accent:`).
+    const colonless = thing.replace(/\s*:+\s*$/, '');
+    if (!(thing in TOKENS) && colonless !== thing && colonless in TOKENS)
+      refuse(
+        E.ERR_THEME_UNKNOWN_TOKEN,
+        `"${thing}" ends with a colon; the token is ${colonless}.`,
+        {
+          run: [
+            `${P} set ${slug} ${colonless}${v ? ` ${quoteCommandArgument(v.replace(/;+\s*$/, ''))}` : ''}`,
+          ],
+        },
       );
     if (!(thing in TOKENS)) {
       refuse(E.ERR_THEME_UNKNOWN_TOKEN, `"${thing}" is not a design token.`, {
@@ -3561,4 +3640,34 @@ export function unknownVarRef(v, TOKENS, thing) {
       };
   }
   return null;
+}
+
+/**
+ * Why a font value names a font file or a link rather than a family
+ * (`./fonts/My.woff2`, `Inter.ttf`, `https://fonts.googleapis.com/…`,
+ * `url(…)`), or null. A theme names families; a file is loaded with
+ * @font-face or a font package.
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function fontFileReason(value) {
+  const hit = String(value)
+    .split(',')
+    .map(f => f.trim().replace(/^["']|["']$/g, ''))
+    .find(
+      f =>
+        /^url\(/i.test(f) ||
+        /:\/\//.test(f) ||
+        /[\\/]/.test(f) ||
+        /\.(woff2?|ttf|otf|eot)$/i.test(f),
+    );
+  const colon = String(value)
+    .split(',')
+    .map(f => f.trim().replace(/^["']|["']$/g, ''))
+    .find(f => f.includes(':'));
+  if (!hit && colon)
+    return `"${colon}" holds a colon, so it is a pasted declaration or a link, not a font family name. Give the family alone, such as Inter, sans-serif.`;
+  return hit
+    ? `"${hit}" is a font file or a link, not a font family name. A theme names a family (such as Inter); load the file with @font-face in your app's CSS, or install a font package, then set the family it defines.`
+    : null;
 }
