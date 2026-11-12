@@ -6,18 +6,3 @@
 .snapshot > [data-astryx-theme] {
   color-scheme: inherit;
 }
-
-/* Templates use 100dvh, which resolves against the browser viewport. The
-   preview-viewport wrapper (previewSnapshotSources.tsx) fills the preview
-   box and gives the template that height instead, like the live preview
-   surface does. The Theme wrapper has no box, so 100% is the host's height. */
-.fill > [data-astryx-theme] > :global(.preview-viewport) {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-}
-
-.fill > [data-astryx-theme] > :global(.preview-viewport) > :first-child {
-  height: 100% !important;
-  min-height: 100% !important;
-}

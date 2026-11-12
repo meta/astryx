@@ -11,6 +11,7 @@
 
 import type {CSSProperties} from 'react';
 import {PREVIEW_SNAPSHOTS} from '@/generated/previewSnapshots';
+import previewSurface from '../../../components/TemplatePreviewSurface.module.css';
 import styles from './FrozenPreview.module.css';
 
 export function FrozenPreview({
@@ -20,7 +21,8 @@ export function FrozenPreview({
   style,
 }: {
   id: string;
-  /** Stretch the preview's root to the full height of its box. */
+  /** Stretch the preview's root to the full height of its box, as the live
+   *  template preview surface does. */
   fillHeight?: boolean;
   /** Styles for the element that holds the snapshot, so it can be the
    *  caller's own layout box instead of an extra wrapper. */
@@ -35,7 +37,11 @@ export function FrozenPreview({
   }
   return (
     <div
-      className={[styles.snapshot, fillHeight && styles.fill, className]
+      className={[
+        styles.snapshot,
+        fillHeight && previewSurface.snapshotHost,
+        className,
+      ]
         .filter(Boolean)
         .join(' ')}
       style={style}
