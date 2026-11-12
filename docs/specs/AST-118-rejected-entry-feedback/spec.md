@@ -174,9 +174,11 @@ interface TimeInputEntryError {
   `component:DateInput` FR25, `component:DateTimeInput` FR8). In every other
   case the input that carries `name` on the latest stable release keeps it,
   and a form posts what it posts there: the typed text of a
-  `NumberInput` or `TimeInput` draft that Enter submits before blur, and
-  incomplete date text or a date the calendar does not have or that `min`,
-  `max`, or `dateConstraints` rules out. The hidden input carries `name` until
+  `NumberInput` without `formatValue` or a `TimeInput` draft that Enter submits
+  before blur, and incomplete date text or a date the calendar does not have or
+  that `min`, `max`, or `dateConstraints` rules out. A `NumberInput` with
+  `formatValue` posts the committed number from its hidden input in every case,
+  as it does there. The hidden input carries `name` until
   the person edits the kept text, or a new `value` or a pick replaces it; the
   typed input then carries `name` again. Unreadable date text that Enter or blur
   kept is not pending typed text for `component:DateInput` FR16 and
@@ -321,8 +323,8 @@ behavior made for accessibility conformance to FR53.
 - Two submissions post rejected text, as they do on the latest stable release:
   incomplete date text or a date the calendar does not have or that its bounds
   rule out, which `DateInput` and `DateTimeInput` keep after blur, and a
-  `NumberInput` or `TimeInput` draft that Enter submits before blur (FR4,
-  DEC-13).
+  `NumberInput` without `formatValue` or a `TimeInput` draft that Enter submits
+  before blur (FR4, DEC-13).
 - Two screens an app chose change, as part of the same fix:
   - A `NumberInput`, `TimeInput`, or time segment with a caller `warning` or
     `success` status shows the rejection's message in place of that status
