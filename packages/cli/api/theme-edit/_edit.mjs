@@ -10,8 +10,10 @@
  */
 
 import * as fs from 'node:fs';
+import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
+import {vetSuggestions} from './_vet.mjs';
 import {
   AUTO_SPREAD,
   CORNERS,
@@ -26,6 +28,7 @@ import {
   SPACING,
   TYPE_STYLES,
   familyOf,
+  wordTable,
 } from './_tables.mjs';
 import {
   commitTheme,
@@ -44,7 +47,9 @@ import {
   undoArgs,
   withoutBadValues,
   NAME_RULE,
+  HISTORY_STEPS,
   readHistory,
+  refuseUnreadableFiles,
   refuse,
   settingsProblem,
   resolvedTokens,
@@ -55,6 +60,8 @@ import {
   staleBuild,
   EDITOR_SUFFIXES,
   madeByEditor,
+  outputsDrift,
+  kebab,
   camel,
   NEW_MARKER,
   clearNewMarker,
@@ -63,6 +70,8 @@ import {
   slugFor,
   themeSource,
   themeSourceProblem,
+  refuseThemeParse,
+  ownSourceTokens,
 } from './_settings.mjs';
 import {checkSetting, exampleOf, storedProblems} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
@@ -82,6 +91,7 @@ import {refreshPreviewRoute} from './_preview-app.mjs';
 import {baseInstalled, baseResolved, installLine} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
+  renderCause,
   requireProject,
   context,
   pictures,
@@ -89,6 +99,7 @@ import {
   styledChanges,
   previewAfter,
   checkSection,
+  stampSheet,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -184,6 +195,40 @@ function readableJson(file) {
 }
 
 /**
+ * A physical padding side as its logical side (left-to-right), so a later
+ * `padding-inline` replaces an earlier `padding-left` as it does
+ * `padding-inline-start`.
+ * @param {string} prop
+ */
+const logicalSide = prop =>
+  /** @type {Record<string, string>} */ ({
+    'padding-left': 'padding-inline-start',
+    'padding-right': 'padding-inline-end',
+    'padding-top': 'padding-block-start',
+    'padding-bottom': 'padding-block-end',
+  })[prop] ?? prop;
+
+/**
+ * Put back every recorded file: its bytes, or removed when it was not
+ * there; a palette file the build made new in tokens/ goes too.
+ * @param {Map<string, Buffer | null>} kept
+ * @param {string} tokensDir
+ */
+function putBack(kept, tokensDir) {
+  for (const [file, bytes] of kept)
+    if (bytes) writeWhole(file, bytes);
+    else if (!fs.existsSync(file) || fs.lstatSync(file).isFile())
+      fs.rmSync(file, {force: true});
+  if (kept.size && fs.existsSync(tokensDir))
+    for (const n of fs.readdirSync(tokensDir)) {
+      const file = path.join(tokensDir, n);
+      // Only a file the build made new; a folder the user put there stays.
+      if (!kept.has(file) && fs.lstatSync(file).isFile())
+        fs.rmSync(file, {force: true});
+    }
+}
+
+/**
  * Start a theme in themes/<name>/, optionally on a built-in theme, with any
  * dial settings applied in the same build. Each setting is checked as `set`
  * checks it, before anything is written.
@@ -192,6 +237,7 @@ function readableJson(file) {
  * @param {import('./theme-edit.type.mjs').ThemeEditNewOptions} [options]
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditNewResponse>}
  */
+
 export async function themeEditNew(name, options = {}) {
   const {cwd = process.cwd(), png = false, settings = {}} = options;
   // `--like none` builds on no base, as `set <theme> base none` does.
@@ -220,12 +266,17 @@ export async function themeEditNew(name, options = {}) {
   ) => `${P} new ${newName}${newFlags(likeValue, settings, png)}`;
   if (!slugOk(name)) {
     const fixed = slugFor(name);
-    // The name as typed may be a theme that exists in another case.
-    const exists = fs.existsSync(themeFiles(cwd, fixed).settings);
+    // Only a name typed in another case is the theme here already.
+    const sameName = String(name ?? '').toLowerCase() === fixed;
+    const exists = sameName && fs.existsSync(themeFiles(cwd, fixed).settings);
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.`,
-      {run: exists ? [`${P} show ${fixed}`] : [again(fixed)]},
+      {
+        run: exists
+          ? [`${P} show ${fixed}`]
+          : [again(usableNewName(cwd, fixed))],
+      },
     );
   }
   // A built-in theme's name would collide with the theme of that name the
@@ -275,7 +326,14 @@ export async function themeEditNew(name, options = {}) {
   const damaged = fs.existsSync(f.settings) && !readableJson(f.settings);
   if (fs.existsSync(f.settings) && !damaged)
     refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.`, {
-      run: [`${P} show ${name}`, `${P} set ${name} base neutral`],
+      // What the command asked for, on the theme that exists or as a new one.
+      run: [
+        `${P} show ${name}`,
+        ...(likeFixed && LIKE.includes(likeFixed)
+          ? [`${P} set ${name} base ${likeFixed}`]
+          : []),
+        again(freeThemeName(cwd, name)),
+      ],
     });
   // A `new` stopped part way (killed, out of memory) leaves its own marker
   // beside the files it wrote: only such a folder is cleared, and only
@@ -509,7 +567,14 @@ function applyNewSettings(
       try {
         s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
       } catch (e) {
-        throw asNewRefusal(e, slug, settings, likeFlag, png, {thing, index});
+        throw asNewRefusal(
+          vetSuggestions(e, ctx, slug, data),
+          slug,
+          settings,
+          likeFlag,
+          png,
+          {thing, index},
+        );
       }
       if (thing === 'mode')
         data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (
@@ -736,6 +801,20 @@ function refuseStoredTokens(ctx, slug, data, skip) {
 }
 
 /**
+ * A name `new` takes, for a suggestion: `name` itself when it is valid, not a
+ * built-in theme and its folder is free; `my-<name>` for a built-in theme's
+ * name; else the first free numbered name.
+ * @param {string} cwd
+ * @param {string} name
+ */
+function usableNewName(cwd, name) {
+  const base = LIKE.includes(name) ? `my-${name}` : name;
+  return slugOk(base) && !fs.existsSync(themeFiles(cwd, base).dir)
+    ? base
+    : freeThemeName(cwd, base);
+}
+
+/**
  * A theme name near `name` that is valid and whose folder is free: `name-2`,
  * `name-3`, …, shortened to fit the name's length limit.
  * @param {string} cwd
@@ -781,6 +860,54 @@ function extremeSteps(res) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 async function change(sub, slug, thing, value, options) {
+  /** @type {{ctx?: import('./_settings.mjs').Ctx, data?: import('./_settings.mjs').ThemeData}} */
+  const seen = {};
+  try {
+    return await changeOnce(sub, slug, thing, value, options, seen);
+  } catch (e) {
+    // A theme name one letter off an existing theme: the same command with
+    // that name comes first, before making a theme of the typo.
+    if (e instanceof AstryxError && e.code === E.ERR_UNKNOWN_THEME) {
+      const near = (e.suggestions ?? []).find(x => x.reason === 'did you mean');
+      if (near && slugOk(near.name)) {
+        const flags = [
+          ...(options.on ? ['--on', options.on] : []),
+          ...(options.when ? ['--when', options.when] : []),
+          ...(options.state ? ['--state', options.state] : []),
+          ...(options.mode ? ['--mode', options.mode] : []),
+          ...(options.only ? ['--only'] : []),
+        ];
+        const words = [thing, ...(value == null ? [] : [value]), ...flags]
+          .filter(w => w != null && w !== '')
+          .map(w =>
+            String(w).startsWith('--') ? w : quoteCommandArgument(String(w)),
+          );
+        e.suggestions = [
+          {
+            name: `${P} ${sub} ${near.name}${words.length ? ` ${words.join(' ')}` : ''}`,
+            reason: `do this instead: ${near.name} is a theme here`,
+          },
+          ...(e.suggestions ?? []).filter(x => x !== near),
+        ];
+      }
+      throw e;
+    }
+    // Every `set` the refusal suggests is checked as `set` checks it.
+    throw vetSuggestions(e, seen.ctx, slug, seen.data);
+  }
+}
+
+/**
+ * @param {'set' | 'undo'} sub
+ * @param {string} slug
+ * @param {string} thing
+ * @param {string | undefined} value
+ * @param {ChangeOptions} options
+ * @param {{ctx?: import('./_settings.mjs').Ctx, data?: import('./_settings.mjs').ThemeData}} seen
+ *   the context and the theme as loaded, for checking a refusal's suggestions
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
+ */
+async function changeOnce(sub, slug, thing, value, options, seen) {
   const {cwd = process.cwd(), png = false} = options;
   requireProject(cwd);
   // The setting this command changes or removes may be the bad one; any
@@ -834,6 +961,8 @@ async function change(sub, slug, thing, value, options) {
     );
   }
   /** @type {import('./_settings.mjs').Ctx} */ (ctx).base = base;
+  seen.ctx = ctx;
+  seen.data = structuredClone(data);
   /** @type {import('./_settings.mjs').Setting} */
   let s;
   try {
@@ -849,7 +978,9 @@ async function change(sub, slug, thing, value, options) {
               (x.on ?? null) === (flags.on ?? null) &&
               (x.when ?? null) === (flags.when ?? null) &&
               (x.state ?? null) === (flags.state ?? null) &&
-              (x.mode ?? null) === (flags.mode ?? null),
+              (x.mode ?? null) === (flags.mode ?? null) &&
+              // --only names a setting made with it; it is never dropped.
+              Boolean(x.only) === Boolean(flags.only),
           )
         : null;
     if (!stored) {
@@ -860,8 +991,11 @@ async function change(sub, slug, thing, value, options) {
         // Setting names are matched in any case, and a near name of a
         // setting the theme has counts: `undo t Corners`, `undo t corner`.
         const typed = String(thing).toLowerCase();
+        // A token named without its dashes (radius-element) is the token.
+        const dashed = typed.startsWith('--') ? typed : `--${typed}`;
         const named = new Set([
           typed,
+          dashed,
           ...(e.suggestions ?? [])
             .filter(x => x.reason === 'did you mean')
             .map(x => x.name.toLowerCase()),
@@ -881,8 +1015,19 @@ async function change(sub, slug, thing, value, options) {
         // A word that is near a setting name (a typo, another case) is never
         // answered with a bare step back, which would undo another change;
         // any other word (`all`) may mean the last step.
+        // A token or a property named (radius-element, padding) is a named
+        // thing too: never answered with a step back.
+        const namesThing =
+          ctx.C.isToken(dashed) ||
+          data.settings.some(
+            x => x.source === 'property' && x.thing.toLowerCase() === typed,
+          ) ||
+          /^[a-z]+(-[a-z]+)+$|^(padding|margin|color|background|border|gap|width|height|opacity)$/.test(
+            typed,
+          );
         const nearSetting =
-          named.size > 1 ||
+          namesThing ||
+          named.size > (dashed === typed ? 1 : 2) ||
           nearest(typed, [
             ...Object.keys(DIALS),
             ...data.settings.map(x => x.thing.toLowerCase()),
@@ -927,7 +1072,11 @@ async function change(sub, slug, thing, value, options) {
         .trim()
         .toLowerCase()
         .replace(/\s+/g, ' ')
-        .replace(/^["']|["']$/g, '');
+        // Spacing around commas, slashes and parentheses, and the quote
+        // style, are not part of a value.
+        .replace(/\s*([,()/])\s*/g, '$1')
+        .replace(/'/g, '"')
+        .replace(/^"|"$/g, '');
     const half =
       s.thing === 'headings' && ['weight', 'tracking'].includes(norm(value));
     if (
@@ -1012,9 +1161,16 @@ async function change(sub, slug, thing, value, options) {
   if (sub === 'undo') {
     if (!prev) {
       const near = data.settings.filter(x => x.thing === s.thing).map(describe);
+      // headings has two halves: name the one that is set.
+      const otherHalf =
+        s.thing === 'headings'
+          ? data.settings.find(x => x.thing === 'headings' && x.axis !== s.axis)
+          : null;
       refuse(
         E.ERR_THEME_NOT_SET,
-        `The theme does not set ${describe({...s, value: '?'}).replace(' = ?', '')}.`,
+        otherHalf
+          ? `The theme sets only the headings ${otherHalf.axis ?? 'weight'} half (${describe(otherHalf)}), not its ${s.axis ?? 'weight'}; \`${P} undo ${slug} ${undoArgs(otherHalf)}\` removes the one that is set.`
+          : `The theme does not set ${describe({...s, value: '?'}).replace(' = ?', '')}.`,
         {
           also: near.length
             ? [`settings for ${s.thing}: ${near.join('; ')}`]
@@ -1030,6 +1186,8 @@ async function change(sub, slug, thing, value, options) {
       );
     }
     data.settings.splice(prevIdx, 1);
+    // A setting listed twice by hand goes in full.
+    data.settings = data.settings.filter(x => keyOf(x) !== k);
     // Vibrancy needs a color: undoing the last one takes it along, so the
     // theme never holds a state `set` refuses.
     if (
@@ -1065,6 +1223,13 @@ async function change(sub, slug, thing, value, options) {
     if (prev) data.settings.splice(prevIdx, 1);
     data.settings.push(s);
   }
+  // A setting listed twice by hand keeps only the entry this command left.
+  if (sub === 'set') {
+    const last = data.settings.map(x => keyOf(x)).lastIndexOf(k);
+    data.settings = data.settings.filter(
+      (x, i) => keyOf(x) !== k || i === last,
+    );
+  }
   // A setting for both modes replaces the ones made for one mode, which it
   // would otherwise sit under.
   /** @type {import('./_settings.mjs').Setting[]} */
@@ -1082,16 +1247,24 @@ async function change(sub, slug, thing, value, options) {
           x =>
             x !== s &&
             x.source === 'property' &&
-            x.on === s.on &&
+            // On the same part, or on a member of the group it is set on:
+            // the later setting wins, whichever way Core writes it.
+            (x.on === s.on ||
+              (s.on != null &&
+                (FAMILIES[s.on] ?? []).includes(
+                  /** @type {string} */ (x.on),
+                ))) &&
             x.when === s.when &&
             x.state === s.state &&
-            x.thing.startsWith(`${s.thing}-`) &&
-            // Not part of border: its radius, collapse and spacing.
-            !/^border-(radius|collapse|spacing)$|^border-[a-z]+-radius$/.test(
-              x.thing,
-            ),
+            // A longhand the shorthand really sets (MDN's data), never a
+            // property that only shares its name (overflow-wrap).
+            (coversProperty(s.thing, x.thing) ||
+              coversProperty(logicalSide(s.thing), logicalSide(x.thing))),
         )
       : [];
+  // They go, as the note says: Core writes each side to its own variable,
+  // where a later shorthand would not win over them (undo brings them back).
+  data.settings = data.settings.filter(x => !longhands.includes(x));
   // A group setting covers part settings made before it for its members.
   const covers =
     sub === 'set' && s.source === 'dial' && s.on && FAMILIES[s.on]
@@ -1110,37 +1283,16 @@ async function change(sub, slug, thing, value, options) {
   const parts = partsOf(ctx, s);
   // Exact whole-theme tokens that win over what this dial writes: the dial
   // changes them only in a theme without them.
-  /** @param {import('./_settings.mjs').Setting[]} list */
-  const dialsOnly = list => ({
-    ...data,
-    settings: list.filter(x => x.source === 'dial'),
-  });
   /** @type {import('./_settings.mjs').Setting[]} */
   let exactWins = [];
+  /** Tokens this whole-theme dial changes. */
+  let dialTokens = new Set();
   if (sub === 'set' && s.source === 'dial' && !s.on) {
-    const withDial = compileTheme(ctx, dialsOnly(data.settings), base);
-    const without = compileTheme(
-      ctx,
-      dialsOnly(data.settings.filter(x => x !== s)),
-      base,
-    );
-    const differs = (/** @type {unknown} */ a, /** @type {unknown} */ b) =>
-      JSON.stringify(a) !== JSON.stringify(b);
-    const touched = new Set(
-      [
-        ...Object.keys(withDial.tokens ?? {}),
-        ...Object.keys(without.tokens ?? {}),
-      ].filter(k => differs(withDial.tokens?.[k], without.tokens?.[k])),
-    );
-    for (const r of FONT_ROLES)
-      if (differs(withDial.typography?.[r], without.typography?.[r]))
-        touched.add(`--font-family-${r}`);
-    if (differs(withDial.typography?.scale, without.typography?.scale))
-      for (const k of Object.keys(ctx.project.core.tokenDefaults ?? {}))
-        if (/^--font-size-/.test(k)) touched.add(k);
+    const touched = dialTouched(ctx, data, s, base);
     exactWins = data.settings.filter(
       x => x.source === 'token' && !x.on && !x.when && touched.has(x.thing),
     );
+    dialTokens = touched;
   }
   const kept =
     sub === 'set' && s.source === 'dial' && !s.on
@@ -1157,12 +1309,34 @@ async function change(sub, slug, thing, value, options) {
         )
       : [];
   // The exact property a dial on a part competes with there.
-  const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
-    corners: /radius$/,
-    spacing: /^(padding|gap)(-|$)/,
-  });
+  const DIAL_PROPERTY = wordTable(
+    /** @type {Record<string, RegExp>} */ ({
+      corners: /radius$/,
+      spacing: /^(padding|gap)(-|$)/,
+    }),
+  );
+  // A whole-theme look dial (buttons, surfaces) writes part properties
+  // too: an exact property on one of them wins there, read from the build.
+  const looksOver =
+    sub === 'set' && s.source === 'dial' && !DIAL_PROPERTY[s.thing]
+      ? (() => {
+          const writes = dialWrites(ctx, data, s, base);
+          if (!writes.size) return null;
+          return (
+            data.settings.find(
+              x =>
+                x.source === 'property' &&
+                x.on &&
+                !x.when &&
+                !x.state &&
+                partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
+            ) ?? null
+          );
+        })()
+      : null;
   const exactOver =
-    sub === 'set' && s.source === 'dial' && s.on && DIAL_PROPERTY[s.thing]
+    looksOver ??
+    (sub === 'set' && s.source === 'dial' && s.on && DIAL_PROPERTY[s.thing]
       ? (data.settings.find(
           x =>
             x.source === 'property' &&
@@ -1172,7 +1346,7 @@ async function change(sub, slug, thing, value, options) {
             (x.when ?? '') === (s.when ?? '') &&
             (x.state ?? '') === (s.state ?? ''),
         ) ?? null)
-      : null;
+      : null);
   /** @type {string[]} */
   const notes = [
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
@@ -1240,14 +1414,35 @@ async function change(sub, slug, thing, value, options) {
     ...(sub === 'set' &&
     !exactOver &&
     !roleOver.length &&
-    // With the last build unreadable, nothing was compared.
-    !r.notes.some(n => n.includes('could not be read')) &&
+    // With the last build unreadable or missing, nothing was compared.
+    !r.notes.some(
+      n =>
+        n.includes('could not be read') ||
+        n.includes('there was no last build'),
+    ) &&
     !r.unchanged &&
     !r.changed.length &&
     !styled.length &&
     !ctx.unchecked
       ? [
           `this changes nothing you see: the theme already shows ${describe(s)} (it is saved, and stays when the base theme changes)`,
+        ]
+      : []),
+    // A card's content takes one radius from Core, whatever its corners.
+    ...(sub === 'set' &&
+    s.source === 'property' &&
+    s.thing === 'border-radius' &&
+    s.on &&
+    (ctx.derived?.[s.on] ?? []).some(
+      d => d.property === 'borderRadius' && d.vars?.length,
+    ) &&
+    /\s|\//.test(String(s.value).trim())
+      ? [
+          `each corner of ${s.on} takes its own radius; the content that reaches its edges takes one, ${
+            String(s.value)
+              .trim()
+              .split(/[\s/]+/)[0]
+          }, for every corner (Core gives it a single radius)`,
         ]
       : []),
     ...(longhands.length
@@ -1270,6 +1465,15 @@ async function change(sub, slug, thing, value, options) {
         : null
     : null;
   if (s.note) notes.push(s.note);
+  // A token the theme's own source sets itself wins over what this dial
+  // writes, as an exact setting does.
+  const ownWins = ownSourceTokens(cwd, slug).filter(
+    k => dialTokens.has(k) && !exactWins.some(x => x.thing === k),
+  );
+  if (ownWins.length)
+    notes.push(
+      `${slug}.theme.ts sets ${ownWins.slice(0, 4).join(', ')}${ownWins.length > 4 ? ` and ${ownWins.length - 4} more` : ''} itself, and your own source wins over the settings, so ${ownWins.length > 1 ? 'those do' : 'that does'} not change; take ${ownWins.length > 1 ? 'them' : 'it'} out of ${slug}.theme.ts to let ${s.thing} set ${ownWins.length > 1 ? 'them' : 'it'}`,
+    );
   if (PALETTE_DIALS.includes(s.thing) && sub === 'set')
     notes.push(
       ...paletteNotes(
@@ -1477,27 +1681,58 @@ export async function themeEditShow(theme, options = {}) {
   const f = themeFiles(cwd, theme);
   // A build that does not match the settings (a command stopped mid-build,
   // a hand edit, another CLI) is made again from the settings, and said.
-  const stale = staleBuild(cwd, theme, data);
+  // An own source that does not parse is refused before anything is
+  // built, written or removed (the build would fail part way).
+  if (!readOnly) refuseThemeParse(cwd, theme);
   const brokenSource = themeSourceProblem(cwd, theme);
+  // Every output, as `compile --check` reads them: one missing or edited by
+  // hand is built again too.
+  const stale =
+    staleBuild(cwd, theme, data) ||
+    (brokenSource ? null : await outputsDrift(ctx, theme));
+  // Every file the build may rewrite or remove (the settings module, the
+  // built outputs, the variants types, section sheets, pictures), so a
+  // theme source that does not build, or builds a value that is not text,
+  // leaves the folder exactly as it was.
+  // An output that was not there is recorded as absent (null), so putting
+  // the folder back removes what the build made new; the palette files in
+  // tokens/ are recorded the same way.
+  /** @type {Map<string, Buffer | null>} */
+  let kept = new Map();
+  const tokensDir = path.join(f.dir, 'tokens');
   if (stale && !brokenSource && !readOnly) {
-    // Every file the build may rewrite or remove (the settings module, the
-    // variants types, section sheets, pictures), so a theme source that
-    // does not build leaves the folder exactly as it was.
-    const kept = new Map(
+    kept = new Map(
       fs
         .readdirSync(f.dir)
         .filter(
           n =>
             n === path.basename(f.settingsTs) ||
-            n === `${theme}.variants.d.ts` ||
+            (n.startsWith(`${theme}.`) &&
+              /\.(css|js|d\.ts|css\.d\.ts|variants\.d\.ts)$/.test(n)) ||
             /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?\.png)$/.test(n),
         )
         .map(n => [path.join(f.dir, n), fs.readFileSync(path.join(f.dir, n))]),
     );
+    for (const n of [
+      path.basename(f.settingsTs),
+      `${theme}.css`,
+      `${theme}.js`,
+      `${theme}.d.ts`,
+      `${theme}.css.d.ts`,
+      `${theme}.variants.d.ts`,
+    ])
+      if (!kept.has(path.join(f.dir, n))) kept.set(path.join(f.dir, n), null);
+    if (fs.existsSync(tokensDir))
+      for (const n of fs.readdirSync(tokensDir)) {
+        const file = path.join(tokensDir, n);
+        if (fs.statSync(file).isFile()) kept.set(file, fs.readFileSync(file));
+      }
+    const refs = path.join(tokensDir, `${theme}.palette-refs.ts`);
+    if (!kept.has(refs)) kept.set(refs, null);
     try {
       await buildTheme(ctx, theme, data);
     } catch (e) {
-      for (const [file, bytes] of kept) writeWhole(file, bytes);
+      putBack(kept, tokensDir);
       if (e instanceof AstryxError && e.code !== E.ERR_THEME_LOAD) throw e;
       // An own theme source that no longer builds is named, as `set` names
       // it; the old build is never shown as current.
@@ -1521,6 +1756,15 @@ export async function themeEditShow(theme, options = {}) {
   /** @type {string | null} */
   let unreadable = null;
   const res = await resolvedTokens(ctx, theme).catch(async e => {
+    if (
+      e instanceof AstryxError &&
+      e.code === E.ERR_THEME_INVALID &&
+      kept.size
+    ) {
+      // What this show just built goes back with the refusal.
+      putBack(kept, tokensDir);
+      throw e;
+    }
     if (e instanceof AstryxError || readOnly) throw e;
     // The source lines the settings need are missing too: the build cannot
     // be made again until they are back, and show says so (never a run of
@@ -1547,13 +1791,35 @@ export async function themeEditShow(theme, options = {}) {
     await baseResolved(ctx.project, data.like),
     ctx.project.core.tokenDefaults,
   );
+  // A render that fails here (two copies of React, a component that
+  // throws) is refused as the one above: what this show built goes back,
+  // and the result says so.
+  const rendering = async (/** @type {() => Promise<any>} */ run) => {
+    try {
+      return await run();
+    } catch (e) {
+      if (!(e instanceof Error)) throw e;
+      if (e instanceof AstryxError && e.code !== E.ERR_RENDER_FAILED) throw e;
+      putBack(kept, tokensDir);
+      return refuse(
+        E.ERR_RENDER_FAILED,
+        `${theme} cannot be shown: ${renderCause(ctx.project, e.message)} ${[...kept.values()].some(Boolean) ? 'The build this show made again was put back as it was. ' : ''}Nothing was written.`,
+        {run: [`${getCliInvocation(cwd)} doctor`]},
+      );
+    }
+  };
   const preview = noPages
     ? shown(cwd, f.preview)
-    : await renderPreview(ctx, theme, data);
-  const previewStale = noPages ? [] : await keepPreviewRoute(ctx, theme);
+    : await rendering(() => renderPreview(ctx, theme, data));
+  const previewStale = noPages
+    ? []
+    : await rendering(() => keepPreviewRoute(ctx, theme));
   const sheet = noPages
     ? {file: shown(cwd, f.sheet), components: 0, skipped: []}
-    : await renderSheet(ctx, theme, data, {group: section});
+    : await rendering(() => renderSheet(ctx, theme, data, {group: section}));
+  // The full sheet records the build it shows, so a later change tells a
+  // sheet that still matches (after an undo) from one that does not.
+  if (!noPages && !section) stampSheet(f.sheet, theme, cwd);
   const modes = modesOf(data);
   const shots =
     png && !noPages
@@ -1578,10 +1844,32 @@ export async function themeEditShow(theme, options = {}) {
       theme,
       like: data.like ?? null,
       mode: data.mode,
-      settings: data.settings.map(s => {
-        const masked = maskedSettings(data, ctx).get(s);
-        return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
-      }),
+      settings: await (async () => {
+        const looksBase = await baseResolved(ctx.project, data.like).catch(
+          () => null,
+        );
+        return data.settings.map(s => {
+          let masked = maskedSettings(data, ctx).get(s);
+          // A look dial (buttons, surfaces) under an exact property on a
+          // part it writes: named, as corners under border-radius is.
+          if (!masked && looksBase && s.source === 'dial' && !s.on) {
+            const writes = dialWrites(ctx, data, s, looksBase);
+            const exact = writes.size
+              ? data.settings.find(
+                  x =>
+                    x.source === 'property' &&
+                    x.on &&
+                    !x.when &&
+                    !x.state &&
+                    partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
+                )
+              : undefined;
+            if (exact)
+              masked = `${describe(exact)} is an exact property and wins over ${s.thing} on ${exact.on}`;
+          }
+          return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
+        });
+      })(),
       notes: [
         ...(noReact
           ? [
@@ -1592,19 +1880,30 @@ export async function themeEditShow(theme, options = {}) {
           ? [
               `the theme lock could not be taken, so nothing was written: this is the last build as it is${stale ? ` (it does not match the settings: ${stale})` : ''}, and the pages were not made again`,
             ]
-          : stale
+          : stale && !brokenSource
             ? [
                 `the build was not current (${stale}), so it was built again from the settings`,
               ]
-            : []),
+            : stale
+              ? [
+                  `the build is not current (${stale}), and it was not built again: the theme source cannot carry the settings`,
+                ]
+              : []),
         ...(unreadable ? [unreadable] : []),
         ...(brokenSource
           ? [
-              `${brokenSource}, so settings cannot take effect; put back the import, extends and name lines in ${theme}.theme.ts`,
+              `${brokenSource}, so settings cannot take effect; put back the import, extends and name lines in ${theme}.theme.ts${/no longer names the theme/.test(brokenSource) ? ` (a copy of another theme's source still names that theme: change its name to '${theme}')` : ''}`,
             ]
           : []),
         ...checked.filter(x => x.startsWith('not checked')),
         ...fontNotes(ctx, data),
+        ...ownSourceMaskNotes(
+          ctx,
+          cwd,
+          theme,
+          data,
+          await baseResolved(ctx.project, data.like),
+        ),
       ],
       // A size, number or font is the same in both modes: one value.
       resolved: Object.fromEntries(
@@ -1633,6 +1932,39 @@ export async function themeEditShow(theme, options = {}) {
       colorFiles: pal ? colorFiles(theme) : null,
     },
   };
+}
+
+/**
+ * The part properties a dial writes, read from what the build writes with
+ * it and without it (so a dial's outputs are never listed by hand), as
+ * `target\0css-property` keys.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} dial
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @returns {Set<string>}
+ */
+function dialWrites(ctx, data, dial, base) {
+  /** @type {Set<string>} */
+  const out = new Set();
+  const comps = (/** @type {import('./_settings.mjs').Setting[]} */ settings) =>
+    /** @type {Record<string, Record<string, Record<string, unknown>>>} */ (
+      compileTheme(ctx, {...data, settings}, base).components ?? {}
+    );
+  let plain;
+  let withDial;
+  try {
+    plain = comps([]);
+    withDial = comps([dial]);
+  } catch {
+    return out;
+  }
+  for (const [target, keys] of Object.entries(withDial))
+    for (const [key, block] of Object.entries(keys ?? {}))
+      for (const [prop, value] of Object.entries(block ?? {}))
+        if (typeof value === 'string' && plain[target]?.[key]?.[prop] !== value)
+          out.add(`${target}\0${kebab(prop)}`);
+  return out;
 }
 
 /**
@@ -1669,21 +2001,35 @@ function nowApplies(ctx, data, removed, base) {
   // exact property on the part that this dial would have competed with.
   if (removed.on) {
     const fam = familyOf(removed.on);
-    const reaches = [...data.settings]
-      .reverse()
-      .find(
-        x =>
-          x.thing === removed.thing &&
-          x !== removed &&
-          (!x.mode || x.mode === removed.mode) &&
-          ((x.on === removed.on && !x.when && !x.state) ||
-            (fam && x.on === fam && !x.when && !x.state)),
-      );
+    // The part's or its group's setting for the same variant and state
+    // first (a group's hover after the part's hover goes), then a plain one.
+    /** @param {(x: import('./_settings.mjs').Setting) => boolean} scoped */
+    const find = scoped =>
+      [...data.settings]
+        .reverse()
+        .find(
+          x =>
+            x.thing === removed.thing &&
+            x !== removed &&
+            (!x.mode || x.mode === removed.mode) &&
+            (x.on === removed.on || (fam != null && x.on === fam)) &&
+            scoped(x),
+        );
+    const reaches =
+      (removed.when || removed.state
+        ? find(
+            x =>
+              (x.when ?? '') === (removed.when ?? '') &&
+              (x.state ?? '') === (removed.state ?? ''),
+          )
+        : undefined) ?? find(x => !x.when && !x.state);
     if (reaches) return describe(reaches);
-    const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
-      corners: /radius$/,
-      spacing: /^(padding|gap)(-|$)/,
-    });
+    const DIAL_PROPERTY = wordTable(
+      /** @type {Record<string, RegExp>} */ ({
+        corners: /radius$/,
+        spacing: /^(padding|gap)(-|$)/,
+      }),
+    );
     const exact =
       removed.source === 'dial' && DIAL_PROPERTY[removed.thing]
         ? data.settings.find(
@@ -1694,8 +2040,25 @@ function nowApplies(ctx, data, removed, base) {
           )
         : null;
     if (exact) return describe(exact);
-    // A removed exact property leaves the dial that writes it: on the part,
-    // its group, or the whole theme.
+    // A removed exact property leaves the dial whose build writes it there
+    // (buttons, surfaces: read from the build), on the part, its group, or
+    // the whole theme.
+    if (removed.source === 'property') {
+      const targets = partsOf(ctx, removed);
+      const writer = [...data.settings].reverse().find(
+        x =>
+          x.source === 'dial' &&
+          x !== removed &&
+          (!x.on || x.on === removed.on || (fam != null && x.on === fam)) &&
+          (x.when ?? '') === (removed.when ?? '') &&
+          (x.state ?? '') === (removed.state ?? '') &&
+          [...dialWrites(ctx, data, x, base)].some(k => {
+            const [t, prop] = k.split('\0');
+            return targets.includes(t) && prop === removed.thing;
+          }),
+      );
+      if (writer) return describe(writer);
+    }
     if (removed.source === 'property') {
       const dial = Object.entries(DIAL_PROPERTY).find(([, re]) =>
         re.test(removed.thing),
@@ -1749,6 +2112,72 @@ function otherModeNotes(data) {
       .map(describe)
       .join(', ')}${off.length > 4 ? `, and ${off.length - 4} more` : ''}`,
   ];
+}
+
+/**
+ * The tokens a whole-theme dial setting writes: those that differ between
+ * the theme's dials with it and without it (a font role's family, and every
+ * text size when the scale moves).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} s
+ * @param {any} base
+ * @returns {Set<string>}
+ */
+function dialTouched(ctx, data, s, base) {
+  /** @param {import('./_settings.mjs').Setting[]} list */
+  const dialsOnly = list => ({
+    ...data,
+    settings: list.filter(x => x.source === 'dial'),
+  });
+  const withDial = compileTheme(ctx, dialsOnly(data.settings), base);
+  const without = compileTheme(
+    ctx,
+    dialsOnly(data.settings.filter(x => x !== s)),
+    base,
+  );
+  const differs = (/** @type {unknown} */ a, /** @type {unknown} */ b) =>
+    JSON.stringify(a) !== JSON.stringify(b);
+  const touched = new Set(
+    [
+      ...Object.keys(withDial.tokens ?? {}),
+      ...Object.keys(without.tokens ?? {}),
+    ].filter(k => differs(withDial.tokens?.[k], without.tokens?.[k])),
+  );
+  for (const r of FONT_ROLES)
+    if (differs(withDial.typography?.[r], without.typography?.[r]))
+      touched.add(`--font-family-${r}`);
+  if (differs(withDial.typography?.scale, without.typography?.scale))
+    for (const k of Object.keys(ctx.project.core.tokenDefaults ?? {}))
+      if (/^--font-size-/.test(k)) touched.add(k);
+  return touched;
+}
+
+/**
+ * Notes for the tokens the theme's own source sets that a whole-theme dial
+ * also writes: the source wins, so the dial does not change them.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {any} base
+ * @returns {string[]}
+ */
+function ownSourceMaskNotes(ctx, cwd, slug, data, base) {
+  const own = ownSourceTokens(cwd, slug);
+  if (!own.length) return [];
+  /** @type {string[]} */
+  const notes = [];
+  for (const s of data.settings) {
+    if (s.source !== 'dial' || s.on || s.when || s.state) continue;
+    const touched = dialTouched(ctx, data, s, base);
+    const wins = own.filter(k => touched.has(k));
+    if (wins.length)
+      notes.push(
+        `${slug}.theme.ts sets ${wins.slice(0, 4).join(', ')}${wins.length > 4 ? ` and ${wins.length - 4} more` : ''} itself, and your own source wins over the settings, so ${s.thing} = ${s.value} does not change ${wins.length > 1 ? 'them' : 'it'}; take ${wins.length > 1 ? 'them' : 'it'} out of ${slug}.theme.ts to let ${s.thing} set ${wins.length > 1 ? 'them' : 'it'}`,
+      );
+  }
+  return notes;
 }
 
 /**
@@ -1959,7 +2388,16 @@ export async function themeEditUndo(theme, options = {}) {
   if (thing === 'base' || thing === 'mode') {
     requireProject(cwd);
     const now = loadTheme(cwd, theme, thing);
-    const [first] = readHistory(themeFiles(cwd, theme).history).steps;
+    const historyFile = themeFiles(cwd, theme).history;
+    const {steps, dropped} = readHistory(historyFile);
+    const [first] = steps;
+    // `new` writes no history: with none, no change is saved (a new theme,
+    // or a history deleted). An empty one is every step undone, back to how
+    // the theme was made. A full one may have lost its oldest steps.
+    const noHistory = !fs.existsSync(historyFile);
+    const reachesStart =
+      (steps.length > 0 && steps.length < HISTORY_STEPS) ||
+      (!noHistory && steps.length === 0 && dropped === 0);
     /** @type {any} */
     let made = now;
     try {
@@ -1969,10 +2407,24 @@ export async function themeEditUndo(theme, options = {}) {
     }
     const of = (/** @type {any} */ d) =>
       thing === 'base' ? (d?.like ?? 'none') : (d?.mode ?? 'both');
+    // A step in between that had another value: changed and changed back.
+    const changedBack = steps.some(step => {
+      try {
+        return of(JSON.parse(step.replace(/^\uFEFF/, ''))) !== of(now);
+      } catch {
+        return false;
+      }
+    });
     if (of(made) === of(now))
       refuse(
         E.ERR_THEME_NOT_SET,
-        `${thing} was never changed: it is ${of(now)}, as ${theme} was made.`,
+        reachesStart && changedBack
+          ? `${thing} is back at ${of(now)}, the ${thing} ${theme} was made with (it was changed and changed back), so there is nothing to undo for it.`
+          : reachesStart
+            ? `${thing} was never changed: it is ${of(now)}, as ${theme} was made.`
+            : noHistory
+              ? `${thing} is ${of(now)}, and ${theme} has no saved change (it has had none since it was made, or its history was deleted), so there is no earlier ${thing} to go back to.`
+              : `${thing} is ${of(now)}, and ${theme}'s history does not reach back to how it was made, so there is no earlier ${thing} to go back to. Set the ${thing} you want with \`${P} set ${theme} ${thing} …\` instead.`,
         {run: [`${P} show ${theme}`]},
       );
     return change('set', theme, thing, of(made), options);
@@ -2014,6 +2466,9 @@ export async function themeEditUndo(theme, options = {}) {
   // entry replaces it without the current file being read.
   /** @type {import('./_settings.mjs').ThemeData | null} */
   let current = null;
+  // A file in the theme that is a folder or cannot be read is named first;
+  // the damaged-settings path below never sees it.
+  if (slugOk(theme)) refuseUnreadableFiles(cwd, theme);
   try {
     current = loadTheme(cwd, theme);
   } catch (e) {
@@ -2026,7 +2481,7 @@ export async function themeEditUndo(theme, options = {}) {
       E.ERR_THEME_INVALID,
       `${theme}.history.json is damaged, so there is no step to go back to.`,
       {
-        fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
+        fix: `move ${shown(cwd, f.history)} out of the theme folder (it is kept as it is): the next change starts a new history, and your settings stay as they are`,
         run: [`${P} show ${theme}`],
       },
     );
@@ -2102,7 +2557,7 @@ export async function themeEditUndo(theme, options = {}) {
         E.ERR_THEME_INVALID,
         `The settings before the last change, in ${theme}.history.json, are damaged: ${still}.`,
         {
-          fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
+          fix: `move ${shown(cwd, f.history)} out of the theme folder (it is kept as it is): the next change starts a new history, and your settings stay as they are`,
           run: [`${P} show ${theme}`],
         },
       );
