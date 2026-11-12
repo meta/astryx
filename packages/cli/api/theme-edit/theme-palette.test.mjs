@@ -2890,3 +2890,102 @@ describe('parts28', () => {
     }
   });
 });
+
+describe('parts30', () => {
+  it('lets a variant longhand or shorthand win over a lifted base value', async () => {
+    const {findOverrides} = await import('./_settings.mjs');
+    // The lift itself is unchanged: the base value reaches the variant.
+    expect(
+      findOverrides(
+        '.astryx-button[data-variant="destructive"] { border-color: var(--x); }',
+        {components: {button: {base: {border: '2px solid red'}}}},
+      ).map(x => x.prop),
+    ).toEqual(['border']);
+    for (const [base, when, prop, value, want] of [
+      [
+        'border',
+        'variant:destructive',
+        'border-color',
+        'blue',
+        /border-color:\s*blue/,
+      ],
+    ]) {
+      await themeEditSet('p', base, '2px solid red', {cwd, on: 'button'});
+      await themeEditSet('p', prop, value, {cwd, on: 'button', when});
+      const css = read('p.css');
+      const at = css.indexOf('.astryx-button[data-variant="destructive"]');
+      if (at >= 0) {
+        const body = css.slice(at, css.indexOf('}', at));
+        const lifted = body.search(/border:/);
+        const own = body.search(want);
+        if (lifted >= 0) expect(lifted, body).toBeLessThan(own);
+      }
+      await themeEditUndo('p', {cwd, thing: prop, on: 'button', when});
+      await themeEditUndo('p', {cwd, thing: base, on: 'button'});
+    }
+  });
+
+  it('maps card physical sides to Core side variables, and resolves keywords', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding', '8px', {cwd, on: 'card'});
+    const css = read('p.css');
+    const at = css.indexOf('.astryx-card {');
+    const body = css.slice(at, css.indexOf('}', at));
+    expect(body).not.toMatch(/padding-left:/);
+    // The later padding replaced the side, as for any longhand.
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+    await themeEditSet('p', 'padding', 'initial', {cwd, on: 'card'});
+    const css2 = read('p.css');
+    const at2 = css2.indexOf('.astryx-card {');
+    expect(css2.slice(at2, css2.indexOf('}', at2))).toMatch(
+      /--astryx-card-padding[a-z-]*:\s*0/,
+    );
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('p', 'padding', 'inherit', {cwd, on: 'card'}),
+        )
+      ).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+  });
+
+  it('keeps a variant margin side and a variant radius over the lifted base values', async () => {
+    for (const [part, base, baseValue, when, prop, value, own] of [
+      [
+        'button',
+        'margin',
+        '3px',
+        'size:sm',
+        'margin-top',
+        '9px',
+        /margin-top:\s*9px/,
+      ],
+      [
+        'card',
+        'border-radius',
+        '8px',
+        'variant:muted',
+        'border-radius',
+        '1px 20px',
+        /border-top-left-radius:\s*1px|border-radius:\s*1px 20px/,
+      ],
+    ]) {
+      await themeEditSet('p', base, baseValue, {cwd, on: part});
+      await themeEditSet('p', prop, value, {cwd, on: part, when});
+      const css = read('p.css');
+      const [k, wv] = when.split(':');
+      const at = css.indexOf(`.astryx-${part}[data-${k}="${wv}"]`);
+      expect(at, `${part} ${when}`).toBeGreaterThanOrEqual(0);
+      const body = css.slice(at, css.indexOf('}', at));
+      const mine = body.search(own);
+      expect(mine, body).toBeGreaterThanOrEqual(0);
+      const lifted = body.search(
+        new RegExp(`(^|[;{\\s])${base}:\\s*${baseValue}`),
+      );
+      if (lifted >= 0) expect(lifted, body).toBeLessThan(mine);
+      await themeEditUndo('p', {cwd, thing: prop, on: part, when});
+      await themeEditUndo('p', {cwd, thing: base, on: part});
+    }
+  });
+});

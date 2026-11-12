@@ -1253,21 +1253,47 @@ export function compileTheme(ctx, data, base) {
    */
   const containerSides = (target, s) => {
     const prop = kebab(s.thing);
-    if (s.mode || !/^padding(-block|-inline)?$/.test(prop)) return null;
+    if (
+      s.mode ||
+      !/^padding(-block|-inline|-left|-right|-top|-bottom)?$/.test(prop)
+    )
+      return null;
     if (
       !(ctx.derived?.[target] ?? []).some(
         d => d.property === 'padding' && d.expand,
       )
     )
       return null;
-    const w = splitTop(String(s.value).trim(), ' ').map(x => x.trim());
+    const scoped0 = s.when != null || s.state != null;
+    // padding's initial value is 0, and padding does not inherit, so unset
+    // is 0 too: on Core's side variables a keyword means no value at all.
+    const value = /^(initial|unset)$/i.test(String(s.value).trim())
+      ? '0'
+      : String(s.value).trim();
+    // A physical side is its logical side (left-to-right): Core maps only
+    // top and bottom, so a left or right would sit beside its variables and
+    // beat any later padding.
+    const physical = /** @type {Record<string, string>} */ ({
+      'padding-left': 'inline-start',
+      'padding-right': 'inline-end',
+      'padding-top': 'block-start',
+      'padding-bottom': 'block-end',
+    })[prop];
+    if (physical)
+      return {
+        [scoped0
+          ? `--astryx-${target}-padding-${physical}`
+          : camel(`padding-${physical}`)]: value,
+      };
+    const w = splitTop(value, ' ').map(x => x.trim());
     if (!w.length || w.length > (prop === 'padding' ? 4 : 2)) return null;
     const scoped = s.when != null || s.state != null;
     // Only what Core would split wrong is written side by side: math or a
     // function, four values with different left and right sides; and, for
     // a variant or state, any padding once the part sets a side itself.
     const coreSplitsWrong =
-      /\(/.test(String(s.value)) ||
+      value !== String(s.value).trim() ||
+      /\(/.test(value) ||
       (prop === 'padding' && w.length === 4 && w[1] !== w[3]);
     const partSides = data.settings.some(
       x =>
@@ -2302,7 +2328,10 @@ export async function buildTheme(ctx, slug, data) {
   if (found.length) {
     for (const x of found) {
       const t = theme.components[x.target];
-      (t[x.key] ??= {})[x.prop] ??= x.value;
+      // The base value goes before the variant's own declarations, so a
+      // longhand or shorthand the variant sets itself (border-color after
+      // a base border) still wins over it.
+      t[x.key] = {[x.prop]: x.value, ...(t[x.key] ?? {})};
       lifted.push(`${x.target} ${x.key} ${kebab(x.prop)}`);
     }
     await step(() => {
