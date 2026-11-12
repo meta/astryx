@@ -49,7 +49,7 @@ import {
   getCliInvocation,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
-import {DIALS, LIKE, P} from './_tables.mjs';
+import {DIALS, LIKE} from './_tables.mjs';
 import {colorProblem} from './_color.mjs';
 import {SHOWCASE_GROUPS} from './_preview.mjs';
 import {camel, typedThemeName} from './_settings.mjs';
@@ -271,14 +271,19 @@ async function withLock(root, name, fn, bestEffort = false) {
       {
         onBusy: (o, held) => {
           throw new AstryxError(
-            `Another command has been changing ${name.replace(/^theme-/, '')} for 30 seconds${o ? ` (process ${o.pid} on ${o.host}${held != null ? `, holding it ${held} s` : ''})` : ''}. Nothing was changed; run this command again. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
-            // A look that takes no lock: the last build as it is.
+            `Another command has been changing ${name.replace(/^theme-/, '')} for 30 seconds${o ? ` (process ${o.pid} on ${o.host}${held != null ? `, holding it ${held} s` : ''})` : ''}. Nothing was changed; run this command again once the other one ends. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
+            // Every editor command (show too) takes this lock, so none of
+            // them works meanwhile: this same command, once the other ends.
             [
               {
-                name: name.startsWith('theme-')
-                  ? `${P} show ${name.replace(/^theme-/, '')}`
-                  : 'astryx experimental theme preview list',
-                reason: 'see it as it is now',
+                name: runLine(
+                  root,
+                  process.argv
+                    .slice(2)
+                    .map(a => quoteCommandArgument(a))
+                    .join(' '),
+                ),
+                reason: 'run it again once the other command ends',
               },
             ],
             ERROR_CODES.ERR_THEME_BUSY,
@@ -730,6 +735,13 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         /\.theme\.ts (or a module it imports )?changed since the last build$/.test(
           why,
         )
+      )
+        why = null;
+      // A missing built output is one compile writes itself.
+      if (
+        why &&
+        !check &&
+        /^[^/]+\.(css|js|d\.ts|css\.d\.ts) was missing$/.test(why)
       )
         why = null;
       if (why && !check)

@@ -12,6 +12,7 @@
  * @position api/theme-edit — previews and pictures
  */
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -31,6 +32,7 @@ import {
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {camel, fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
+import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {importPathOf, installLine} from './_project.mjs';
 import {COLOR_PROP_PARTS, DIRECT, P} from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
@@ -242,6 +244,70 @@ export function themeImports(ctx, slug, data, fromDir) {
   };
 }
 
+/** The inputs a page was rendered from, recorded at the end of the page. */
+const RENDER_STAMP = /<!-- astryx: render of ([0-9a-f]{24}) -->/;
+
+/**
+ * A key for everything a page render reads: the CLI, Core (its version and
+ * stylesheet), the generated page source, and the theme's built stylesheet
+ * and module. The same key means the same page.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} slug
+ * @param {string} source
+ * @returns {string}
+ */
+function renderKey(project, slug, source) {
+  const f = themeFiles(project.cwd, slug);
+  const h = createHash('sha256')
+    .update(cliVersion())
+    .update('\0')
+    .update(String(project.coreKey ?? ''))
+    .update('\0')
+    .update(source);
+  for (const file of [f.css, f.js]) {
+    h.update('\0');
+    try {
+      h.update(fs.readFileSync(file));
+    } catch {
+      h.update('missing');
+    }
+  }
+  return h.digest('hex').slice(0, 24);
+}
+
+/**
+ * Whether `out` is a page rendered from `key` (a no-op show renders
+ * nothing again).
+ * @param {string} out
+ * @param {string} key
+ */
+function renderedFrom(out, key) {
+  try {
+    const st = fs.lstatSync(out);
+    if (!st.isFile()) return false;
+    const fd = fs.openSync(out, 'r');
+    try {
+      const size = Math.min(st.size, 4096);
+      const buf = Buffer.alloc(size);
+      fs.readSync(fd, buf, 0, size, st.size - size);
+      return RENDER_STAMP.exec(buf.toString('utf8'))?.[1] === key;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The page with its render key recorded at its end (after the closing tag:
+ * a comment before the doctype would put it in quirks mode).
+ * @param {string} html
+ * @param {string} key
+ */
+const withRenderKey = (html, key) =>
+  `${html.replace(RENDER_STAMP, '').trimEnd()}\n<!-- astryx: render of ${key} -->\n`;
+
 /**
  * Render the sample app page with the theme to themes/<slug>/preview.html.
  * @param {import('./_settings.mjs').Ctx} ctx
@@ -263,10 +329,13 @@ export async function renderPreview(ctx, slug, data) {
     layout: 'page',
     title: `${slug}: sample page`,
   });
-  const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
   const out = themeFiles(project.cwd, slug).preview;
+  // Rendered from the same inputs before: the page is as it would be.
+  const key = renderKey(project, slug, source);
+  if (renderedFrom(out, key)) return shown(project.cwd, out);
+  const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
   // Written whole and renamed in, never through a link.
-  writeWhole(out, html);
+  writeWhole(out, withRenderKey(html, key));
   return shown(project.cwd, out);
 }
 
@@ -288,12 +357,6 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     layout: 'sheet',
     title: `${slug}: every component${options.group ? ` (${options.group})` : ''}`,
   });
-  const {html} = await renderGenerated(
-    project,
-    `sheet-${slug}.mjs`,
-    source,
-    templateFiles(imports),
-  );
   // One section goes to its own file, so the full sheet stays whole.
   const full = themeFiles(project.cwd, slug).sheet;
   const out =
@@ -301,9 +364,23 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     (options.group
       ? path.join(path.dirname(full), `sheet-${options.group}.html`)
       : full);
+  const key = renderKey(project, slug, source);
+  const result = {
+    file: shown(project.cwd, out),
+    components: new Set(items.map(i => i.name)).size,
+    skipped,
+  };
+  // Rendered from the same inputs before: the sheet is as it would be.
+  if (renderedFrom(out, key)) return result;
+  const {html} = await renderGenerated(
+    project,
+    `sheet-${slug}.mjs`,
+    source,
+    templateFiles(imports),
+  );
   fs.mkdirSync(path.dirname(out), {recursive: true});
   // Written whole and renamed in, never through a link.
-  writeWhole(out, html);
+  writeWhole(out, withRenderKey(html, key));
   return {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,

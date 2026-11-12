@@ -2158,9 +2158,15 @@ export async function outputsDrift(ctx, slug) {
     return first.reason === 'missing'
       ? `${name} was missing`
       : `${name} differs from what the settings build, after an edit by hand or by another tool`;
-  } catch {
-    // A source that does not build is named by its own check.
-    return null;
+  } catch (e) {
+    // A theme source that does not load is named by its own checks; any
+    // other failure means the outputs could not be compared: built again.
+    const err = /** @type {any} */ (e);
+    if (err instanceof AstryxError && err.code === ERROR_CODES.ERR_THEME_LOAD)
+      return null;
+    return `the outputs could not be checked (${String(err?.message ?? e)
+      .split('\n')[0]
+      .slice(0, 160)})`;
   } finally {
     logger.setSilent(silent);
   }
@@ -3011,15 +3017,11 @@ export function settingsStamp(data) {
  */
 export function staleBuild(cwd, slug, data) {
   const f = themeFiles(cwd, slug);
-  // The generated colors are part of the build when a color dial is set.
-  const colors = data.settings.some(
-    s => s.source === 'dial' && PALETTE_DIALS.includes(s.thing),
-  )
-    ? [path.join(cwd, paletteFiles(slug).palette)]
-    : [];
-  const missing = [f.js, f.css, f.settingsTs, ...colors].find(
-    p => !fs.existsSync(p),
-  );
+  const files = builtFiles(cwd, slug, data);
+  // An output that cannot be read (its permissions, or a folder in its
+  // place) is refused by name: the build cannot replace it either.
+  refuseUnreadable(cwd, files);
+  const missing = files.find(p => !fs.existsSync(p));
   if (missing) return `${path.relative(f.dir, missing)} was missing`;
   const ts = fs.readFileSync(f.settingsTs, 'utf8');
   const stamp =
@@ -3038,6 +3040,11 @@ export function staleBuild(cwd, slug, data) {
     if (built && now && built !== now)
       return `@astryxdesign/theme-${data.like} is ${now} now, and the build was made on ${built}`;
   }
+  // The generated module seals its own text: a hand edit inside it (the
+  // file says not to) is built over from the settings, and said. Checked
+  // after the stamps, whose reasons say more.
+  if (moduleUnedited(ts) === false)
+    return `${slug}.settings.ts was edited by hand, though it is generated from ${slug}.settings.json and says not to edit it`;
   // An own change to <slug>.theme.ts since the build (the file says it
   // wins over the settings) is built in.
   const source = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(ts);
@@ -3078,6 +3085,73 @@ export function staleBuild(cwd, slug, data) {
     return `${slug}.css is not valid CSS (cut short or damaged)`;
   }
   return null;
+}
+
+/**
+ * Every file the editor's build of a theme writes, the one list staleness
+ * reads: the generated settings module, the built stylesheet, module and
+ * their types, and, with a color dial set, the generated color files.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {ThemeData} data
+ * @returns {string[]}
+ */
+export function builtFiles(cwd, slug, data) {
+  const f = themeFiles(cwd, slug);
+  const pal = paletteFiles(slug);
+  const colors = data.settings.some(
+    s => s.source === 'dial' && PALETTE_DIALS.includes(s.thing),
+  )
+    ? [pal.palette, pal.refs, pal.receipt].map(p => path.join(cwd, p))
+    : [];
+  return [
+    f.settingsTs,
+    f.css,
+    f.js,
+    path.join(f.dir, `${slug}.d.ts`),
+    path.join(f.dir, `${slug}.css.d.ts`),
+    ...colors,
+  ];
+}
+
+/**
+ * Refuse, by name, a built file that is there but cannot be read: its
+ * permissions, or a folder where the file goes.
+ * @param {string} cwd
+ * @param {string[]} files
+ */
+function refuseUnreadable(cwd, files) {
+  for (const file of files) {
+    const st = fs.statSync(file, {throwIfNoEntry: false});
+    if (!st) continue;
+    const rel = shown(cwd, file);
+    if (st.isDirectory())
+      throw new AstryxError(
+        `${rel} is a folder where the build writes a file, so the theme cannot be built. Move or rename the folder, then run the command again. Nothing was changed.`,
+        [
+          {
+            name: `ls -la ${quoteCommandArgument(rel)}`,
+            reason: 'see what is there',
+          },
+        ],
+        ERROR_CODES.ERR_FILE_EXISTS,
+      );
+    try {
+      fs.accessSync(file, fs.constants.R_OK | fs.constants.W_OK);
+    } catch (e) {
+      const code = /** @type {any} */ (e)?.code ?? 'EACCES';
+      throw new AstryxError(
+        `${rel} cannot be read or replaced (${code}: its permissions), so the theme cannot be built. Give yourself read and write permission on it (chmod u+rw ${rel}), then run the command again. Nothing was changed.`,
+        [
+          {
+            name: `ls -la ${quoteCommandArgument(rel)}`,
+            reason: 'see its permissions',
+          },
+        ],
+        ERROR_CODES.ERR_WRITE_FAILED,
+      );
+    }
+  }
 }
 
 /**
