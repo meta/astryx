@@ -173,7 +173,10 @@ export function InputClearButton(props: InputClearButtonProps): ReactNode {
   });
 }
 
-/** Internal variant used while popup-aware clear behavior is rolled out. */
+/**
+ * Internal variant for a clear button inside a layer trigger. It takes the
+ * keep-open props, so a press on it does not dismiss the open layer.
+ */
 export function InternalInputClearButton(
   props: InternalInputClearButtonProps,
 ): ReactNode {
