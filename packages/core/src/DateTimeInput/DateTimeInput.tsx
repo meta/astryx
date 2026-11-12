@@ -1972,7 +1972,7 @@ function PointerDateTimeField({
               isBusy={isBusy}
               statusType={timeStatus?.type}
               ariaDescribedBy={ariaDescribedBy}
-              isRejected={typedTime.isSurfaceRejected}
+              isRejected={typedTime.isSurfaceRejectionShown}
               onRejectedChange={typedTime.setSurfaceRejected}
               alertMessage={timeAlertMessage}
             />

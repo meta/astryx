@@ -462,6 +462,30 @@ describe('TimeInput native rejected entries', () => {
     expect(statusText(container)).toBeNull();
   });
 
+  it('hides a native rejection while busy and shows it again once idle, and drops it when the field becomes disabled', () => {
+    const {container, rerender} = render(nativeField());
+    const input = getNativeTimeInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '18:00'}});
+    fireEvent.blur(input);
+    expect(statusText(container)).toBe('Invalid time');
+
+    rerender(nativeField({isLoading: true}));
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+    rerender(nativeField());
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe('Invalid time');
+
+    rerender(nativeField({isDisabled: true}));
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+    rerender(nativeField());
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+    expect(fieldAlert(container)).toHaveTextContent('');
+  });
+
   it('inside an InputGroup, announces the rejection through the alert', () => {
     const {container} = render(
       <InputGroup label="Schedule">

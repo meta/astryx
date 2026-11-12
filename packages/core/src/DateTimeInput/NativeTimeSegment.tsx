@@ -85,7 +85,7 @@ export type NativeTimeSegmentProps = {
   isBusy: boolean;
   statusType?: InputStatusType;
   ariaDescribedBy?: string;
-  /** Whether the control holds an edit outside `min`/`max`. */
+  /** Whether the control shows its rejection of an edit outside `min`/`max`. */
   isRejected: boolean;
   /**
    * Reports an edit outside `min`/`max`, and its end. Blur restores the

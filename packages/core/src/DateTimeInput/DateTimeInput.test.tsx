@@ -1486,6 +1486,33 @@ describe('DateTimeInput', () => {
       expect(timeAlert(container)).toHaveTextContent('Invalid time');
     });
 
+    it.each([
+      ['disabled', {isDisabled: true}],
+      ['busy', {isLoading: true}],
+    ] as const)(
+      'hides a native time rejection while the field is %s, and shows it again once editable',
+      (_label, lock) => {
+        const native = (props = {}) =>
+          field({presentation: 'native', ...props});
+        const {container, rerender} = render(native());
+        const nativeTime =
+          container.querySelector<HTMLInputElement>('input[type="time"]');
+        if (nativeTime == null) {
+          throw new Error('no native time control');
+        }
+        fireEvent.focus(nativeTime);
+        fireEvent.change(nativeTime, {target: {value: '08:00'}});
+        fireEvent.blur(nativeTime);
+        rerender(native(lock));
+        expect(nativeTime).not.toHaveAttribute('aria-invalid');
+        expect(statusText(container)).toBeNull();
+        expect(timeAlert(container)).toHaveTextContent('');
+        rerender(native());
+        expect(nativeTime).toHaveAttribute('aria-invalid', 'true');
+        expect(statusText(container)).toBe('Invalid time');
+      },
+    );
+
     it('restores the native time at blur and keeps its rejection shown', () => {
       const {container} = render(field({presentation: 'native'}));
       const nativeTime =

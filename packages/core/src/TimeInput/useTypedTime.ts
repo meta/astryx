@@ -179,6 +179,9 @@ export function useTypedTime({
     if (isDisabled && pendingInput !== null) {
       drop();
     }
+    if (isDisabled && isSurfaceRejected) {
+      setSurfaceRejected(false);
+    }
   }
   // A rejection belongs to the surface that showed it. A switch between the
   // typed field and a native control ends it.
@@ -212,7 +215,8 @@ export function useTypedTime({
     isLocked || draft.rejection == null
       ? null
       : (freshRejection ?? keptRejection);
-  const isRejected = entryError != null || (!isLocked && isSurfaceRejected);
+  const isSurfaceRejectionShown = !isLocked && isSurfaceRejected;
+  const isRejected = entryError != null || isSurfaceRejectionShown;
 
   // The rejection that the caller last received. Handlers report a rejection
   // that they cause in the same update. A rejection that a prop change causes
@@ -394,7 +398,8 @@ export function useTypedTime({
     pendingInput,
     /** A rejection is revealed: it sets `aria-invalid`. */
     isRejected,
-    isSurfaceRejected,
+    /** A native control's rejection shows: a locked field hides it. */
+    isSurfaceRejectionShown,
     setSurfaceRejected,
     fieldStatus,
     /** The rejection message that no shown status announces. */

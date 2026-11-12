@@ -491,8 +491,8 @@ function TimeField({
     onKeyDown: onKeyDownProp,
     ...restControlProps
   } = rest;
-  // `name` and `form` are no typed props, but a spread of form-library props
-  // passes them, and a form posts what the named input holds.
+  // `name` and `form` are not typed props. Form libraries spread them, and a
+  // form posts the named input.
   const {name, ...controlProps} =
     restControlProps as typeof restControlProps & {
       name?: string;
@@ -849,7 +849,7 @@ function TimeField({
           isBusy={isBusy}
           statusType={fieldStatus?.type}
           ariaDescribedBy={ariaDescribedBy}
-          isRejected={typedTime.isSurfaceRejected}
+          isRejected={typedTime.isSurfaceRejectionShown}
           onRejectedChange={typedTime.setSurfaceRejected}
           alertMessage={typedTime.alertMessage}
           controlProps={{
