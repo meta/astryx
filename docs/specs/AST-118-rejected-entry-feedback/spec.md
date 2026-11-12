@@ -169,7 +169,7 @@ interface TimeInputEntryError {
   carries none: the committed number for `NumberInput` (`component:NumberInput`
   FR6), and the committed value as the field shows it for `TimeInput`,
   `DateInput`, and `DateTimeInput`'s date segment (`component:TimeInput` FR11,
-  `component:DateInput` FR24, `component:DateTimeInput` FR8). In every other
+  `component:DateInput` FR25, `component:DateTimeInput` FR8). In every other
   case the typed input keeps `name`, and a form posts the typed text: a
   `NumberInput` or `TimeInput` draft that Enter submits before blur, and
   incomplete date text or a date the calendar does not have or that `min`,
@@ -340,15 +340,15 @@ behavior made for accessibility conformance to FR53.
 
 ## Current-state impact
 
-- `family:input-fields` adds FR14, a projection of this record.
-- `component:DateInput` FR24, `component:DateTimeInput` FR15,
-  `component:TimeInput` FR13 and FR14, and `component:NumberInput` FR14 and FR15
+- `family:input-fields` adds FR15, a projection of this record.
+- `component:DateInput` FR25, `component:DateTimeInput` FR16,
+  `component:TimeInput` FR14 and FR15, and `component:NumberInput` FR15 and FR16
   project FR1–FR10, and the rows that describe a revert, a keystroke alert, or a
   rejection shown only by color point to them. `component:NumberInput` FR6,
-  `component:TimeInput` FR11, `component:DateInput` FR24, and
+  `component:TimeInput` FR11, `component:DateInput` FR25, and
   `component:DateTimeInput` FR8 post the committed value's text from a hidden
   input after blur keeps a rejected draft, or Enter or blur keeps unreadable
-  date text. `component:DateTimeInput` FR15 shows the date segment's
+  date text. `component:DateTimeInput` FR16 shows the date segment's
   message when both segments hold a rejection. `component:NumberInput` and
   `component:TimeInput` add `onEntryErrorChange` and their entry-error types.
 - The `.doc.mjs` files of the four components describe when a rejection shows,

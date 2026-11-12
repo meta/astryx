@@ -107,6 +107,9 @@ afterAll(() => {
   if (work && !runFolder()) fs.rmSync(work, {recursive: true, force: true});
 });
 
+/** This file's own user config folder (settings and state), in its work folder. */
+const userConfig = () => path.join(work, 'config');
+
 /**
  * Run the packed CLI with `tmp` as the system temp folder.
  * @param {string[]} args
@@ -137,6 +140,10 @@ function run(args, {tmp, cwd = project, env = {}}) {
         NODE_DISABLE_COMPILE_CACHE: '1',
         // The kept catalogs live in the user's cache folder.
         XDG_CACHE_HOME: tmp,
+        // A gather reads the user's settings and state files: they are this
+        // file's own, never the run's shared folder, where every other
+        // test's CLI run records its notices (a kept catalog would miss).
+        XDG_CONFIG_HOME: userConfig(),
         ...env,
       },
     },
@@ -173,6 +180,7 @@ function runAsync(args, {tmp, cwd = project, env = {}}) {
           NO_UPDATE_NOTIFIER: '1',
           NODE_DISABLE_COMPILE_CACHE: '1',
           XDG_CACHE_HOME: tmp,
+          XDG_CONFIG_HOME: userConfig(),
           ...env,
         },
       },
@@ -485,7 +493,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     try {
       // The integration's manifest in TypeScript, importing a helper: jiti
       // compiles both on the first load and writes them to its cache in the
-      // temp folder.
+      // per-user cache folder, beside the catalogs.
       fs.rmSync(path.join(other.widgets, 'astryx.integration.mjs'));
       fs.writeFileSync(
         path.join(other.widgets, 'helper.ts'),
@@ -506,7 +514,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
           before.get(name)?.ino === after.get(name)?.ino ? 'hit' : 'miss',
         );
       }
-      expect(fs.existsSync(path.join(tmp, 'jiti'))).toBe(true);
+      expect(fs.readdirSync(path.join(tmp, 'astryx', 'jiti')).length).toBe(2);
       expect(outcomes).toEqual(['miss', 'hit', 'hit']);
     } finally {
       fs.rmSync(other.dir, {recursive: true, force: true});
@@ -635,6 +643,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
           ...process.env,
           TMPDIR: tmp,
           XDG_CACHE_HOME: tmp,
+          XDG_CONFIG_HOME: userConfig(),
           NO_UPDATE_NOTIFIER: '1',
           NODE_DISABLE_COMPILE_CACHE: '1',
         },
@@ -761,6 +770,89 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       fs.writeFileSync(cardsFile, cardsText);
     }
   }, 180_000);
+  it("keeps build's block catalog beside the search catalog, and reads it back the same", () => {
+    const tmp = keptTmp('blocks');
+    // A request that picks blocks.
+    const ask = ['build', 'a dashboard with a chart and a table'];
+    const fresh = run(ask, {tmp: freshTmp()});
+    expect(run(ask, {tmp})).toEqual(fresh);
+    const dir = path.join(tmp, CACHE_NAME);
+    const blocks = derivedEntries(tmp).filter(
+      name =>
+        'blocks' in
+        JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')).value,
+    );
+    expect(blocks).toHaveLength(1);
+    const {ino} = fs.statSync(path.join(dir, blocks[0]));
+    // Read back, not worked out again: the same file, and the same answer.
+    expect(run(ask, {tmp})).toEqual(fresh);
+    expect(fs.statSync(path.join(dir, blocks[0])).ino).toBe(ino);
+  }, 120_000);
+
+  it("is not used after an edit to the installed CLI's block weights or stopwords", async () => {
+    const tmp = keptTmp('weights-edit');
+    const asks = [
+      ['build', 'a dashboard with a chart and a table'],
+      ['build', 'a settings page with a form'],
+      ['build', 'a kanban board with cards'],
+    ];
+    for (const ask of asks) run(ask, {tmp});
+    const before = asks.map(ask => run(ask, {tmp}).stdout);
+    const file = path.join(
+      packed,
+      'api',
+      'build',
+      'blocks',
+      'blocks.weights.json',
+    );
+    const source = fs.readFileSync(file, 'utf8');
+    const weights = JSON.parse(source);
+    // Every term weighs the same, which moves every block's vector while
+    // the requests keep weighted words.
+    weights.idf = weights.idf.map(() => 1024);
+    try {
+      fs.writeFileSync(file, JSON.stringify(weights));
+      let changed = 0;
+      for (const [i, ask] of asks.entries()) {
+        const [kept, fresh] = await Promise.all([
+          runAsync(ask, {tmp}),
+          runAsync(ask, {tmp: freshTmp()}),
+        ]);
+        expect(kept, ask.join(' ')).toEqual(fresh);
+        if (fresh.stdout !== before[i]) changed++;
+      }
+      expect(changed).toBeGreaterThan(0);
+    } finally {
+      fs.writeFileSync(file, source);
+    }
+    // The stopwords the picker drops, from search's word rules: seeded again
+    // on the restored weights, so only the stopword edit can miss.
+    for (const ask of asks) run(ask, {tmp});
+    const seeded = asks.map(ask => run(ask, {tmp}).stdout);
+    const query = path.join(packed, 'api', 'search', '_query.mjs');
+    const querySource = fs.readFileSync(query, 'utf8');
+    const editedQuery = querySource.replace(
+      'export const STOPWORDS = new Set([',
+      // Words of block docs the requests do not use.
+      "export const STOPWORDS = new Set([\n  'list',\n  'grid',\n  'header',\n  'summary',\n  'metric',\n  'metrics',\n  'stats',\n  'navigation',\n  'sidebar',\n  'row',\n  'rows',\n  'column',\n  'columns',\n  'section',\n  'filter',\n  'filters',\n  'toolbar',\n  'actions',",
+    );
+    expect(editedQuery).not.toBe(querySource);
+    try {
+      fs.writeFileSync(query, editedQuery);
+      let changed = 0;
+      for (const [i, ask] of asks.entries()) {
+        const [kept, fresh] = await Promise.all([
+          runAsync(ask, {tmp}),
+          runAsync(ask, {tmp: freshTmp()}),
+        ]);
+        expect(kept, ask.join(' ')).toEqual(fresh);
+        if (fresh.stdout !== seeded[i]) changed++;
+      }
+      expect(changed).toBeGreaterThan(0);
+    } finally {
+      fs.writeFileSync(query, querySource);
+    }
+  }, 240_000);
 
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
@@ -789,6 +881,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
           ...process.env,
           TMPDIR: notAFolder,
           XDG_CACHE_HOME: notAFolder,
+          XDG_CONFIG_HOME: userConfig(),
           NO_UPDATE_NOTIFIER: '1',
           NODE_DISABLE_COMPILE_CACHE: '1',
         },
