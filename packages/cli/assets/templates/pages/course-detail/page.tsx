@@ -598,7 +598,6 @@ function SyllabusSection() {
     </Section>
   );
 }
-// ─── Instructor ──────────────────────────────────────────────────────────────
 function InstructorSection() {
   return (
     <Section padding={6}>
@@ -606,11 +605,12 @@ function InstructorSection() {
         <SectionHeader title="Your instructor" />
         <Card padding={5}>
           <VStack gap={4}>
-            <HStack gap={4} vAlign="start">
+            <HStack gap={4} vAlign="start" wrap="wrap">
               <Avatar
                 name={INSTRUCTOR.name}
                 src={INSTRUCTOR.portrait}
                 size="xl"
+                tooltip={false}
               />
               <VStack gap={1}>
                 <Text type="large" weight="bold">
@@ -619,9 +619,14 @@ function InstructorSection() {
                 <Text type="body" color="secondary">
                   {INSTRUCTOR.role}
                 </Text>
+                <HStack gap={2} wrap="wrap">
+                  {INSTRUCTOR.credentials.map(credential => (
+                    <Badge key={credential} label={credential} />
+                  ))}
+                </HStack>
               </VStack>
             </HStack>
-            <HStack gap={5} vAlign="center">
+            <HStack gap={5} vAlign="center" wrap="wrap">
               <HStack gap={1} vAlign="center">
                 <Icon icon={UsersIcon} size="sm" />
                 <Text type="body" color="secondary">
@@ -652,7 +657,25 @@ function InstructorSection() {
     </Section>
   );
 }
-// ─── Enroll rail ─────────────────────────────────────────────────────────────
+function CoversSection() {
+  return (
+    <Section padding={6}>
+      <VStack gap={4}>
+        <SectionHeader title="What the price covers" />
+        <Card padding={5}>
+          <VStack gap={3}>
+            {INCLUDES.map(item => (
+              <HStack key={item} gap={2} vAlign="start">
+                <Icon icon={CheckIcon} size="sm" />
+                <Text type="body">{item}</Text>
+              </HStack>
+            ))}
+          </VStack>
+        </Card>
+      </VStack>
+    </Section>
+  );
+}
 function EnrollRail() {
   const [mode, setMode] = useState('self-paced');
   const [pace, setPace] = useState(7);
@@ -725,18 +748,6 @@ function EnrollRail() {
               ))}
             </RadioList>
           )}
-        </VStack>
-        <Divider />
-        <VStack gap={2}>
-          <Text type="label">This course includes</Text>
-          {INCLUDES.map(item => (
-            <HStack key={item} gap={2} vAlign="start">
-              <Icon icon={CheckIcon} size="sm" />
-              <Text type="body" color="secondary">
-                {item}
-              </Text>
-            </HStack>
-          ))}
         </VStack>
       </VStack>
     </Card>
@@ -868,6 +879,7 @@ export default function CourseDetailTemplate() {
                 <AboutSection />
                 <SyllabusSection />
                 <InstructorSection />
+                <CoversSection />
                 <ReviewsSection />
                 <FaqSection />
               </VStack>
