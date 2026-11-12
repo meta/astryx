@@ -3967,6 +3967,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-columns-virtualization-wide-table",
+      "path": "examples/use-table-columns-virtualization/wide-table",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-grouped-rows-collapsible-groups",
       "path": "examples/use-table-grouped-rows/collapsible-groups",
       "aliases": []
@@ -4384,6 +4389,11 @@
     {
       "name": "hook-use-table-column-settings-state",
       "path": "hooks/use-table-column-settings-state",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-columns-virtualization",
+      "path": "hooks/use-table-columns-virtualization",
       "aliases": []
     },
     {

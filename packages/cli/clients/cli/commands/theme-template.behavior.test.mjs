@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {logger} from '../../../api/logger.mjs';
 
 let tmpDir;
 beforeEach(() => {
@@ -189,5 +190,44 @@ describe('astryx theme template outside a project', () => {
   it('warns nothing inside a project', async () => {
     const {stderr} = await runCli(['theme', 'template'], {cwd: tmpDir});
     expect(stderr).not.toMatch(/no package\.json/);
+  });
+});
+
+describe('theme eject into a subfolder of a folder the theme editor made', () => {
+  // The logger is shared across in-process runs; start it silent, as a fresh
+  // CLI process does, so only eject's own setup can make the warning print.
+  beforeEach(() => {
+    logger.setSilent(true);
+  });
+
+  it('writes there as released CLIs did, warning once in text and silent under --json', async () => {
+    const editor = path.join(tmpDir, 'themes', 'g');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(path.join(editor, 'g.settings.json'), '{}\n');
+
+    const text = await runCli(['theme', 'eject', 'neutral', 'themes/g/sub'], {
+      cwd: tmpDir,
+    });
+    expect(text.status).toBe(0);
+    expect(
+      fs.existsSync(path.join(editor, 'sub', 'neutralTheme.doc.mjs')),
+    ).toBe(true);
+    expect(text.stderr.match(/theme editor made/g)).toHaveLength(1);
+    expect(text.stderr).toMatch(
+      /pick a path outside themes\/g, to keep the editor's folder to its own theme/,
+    );
+
+    const json = await runCli(
+      ['--json', 'theme', 'eject', 'neutral', 'themes/g/other'],
+      {cwd: tmpDir},
+    );
+    expect(json.status).toBe(0);
+    expect(
+      fs.existsSync(path.join(editor, 'other', 'neutralTheme.doc.mjs')),
+    ).toBe(true);
+    expect(json.stderr).not.toMatch(/theme editor made/);
+    expect(JSON.parse(json.stdout).data.outputDir).toBe(
+      path.join('themes', 'g', 'other'),
+    );
   });
 });

@@ -7,11 +7,20 @@
  * theme so the fixture stays stable.
  */
 
-import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  onTestFinished,
+} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {themeEject} from './eject.mjs';
+import {logger} from '../../logger.mjs';
 import {themeBuild} from '../build/build.mjs';
 import {
   makeLinkedFixture,
@@ -178,6 +187,48 @@ describe('themeEject (api/theme/eject)', () => {
     expect(
       fs.readFileSync(path.join(dir, 'palette.config.json'), 'utf-8'),
     ).toBe('{"mine":true}\n');
+  });
+
+  it('writes a subfolder of a folder the theme editor made, as released CLIs did, and warns', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const editor = path.join(tmpDir, 'themes', 'g');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(path.join(editor, 'g.settings.json'), '{}\n');
+
+    // The warning goes through the logger, the one path for warnings.
+    /** @type {string[]} */
+    const warnings = [];
+    const warn = vi
+      .spyOn(logger, 'warn')
+      .mockImplementation(message => warnings.push(String(message)));
+    onTestFinished(() => warn.mockRestore());
+    const result = await themeEject('neutral', {
+      cwd: tmpDir,
+      targetPath: 'themes/g/sub',
+    });
+
+    expect(result.data.outputDir).toBe(path.join('themes', 'g', 'sub'));
+    expect(
+      fs.existsSync(path.join(editor, 'sub', 'neutralTheme.doc.mjs')),
+    ).toBe(true);
+    // The receipt is the released one: the warning adds no field.
+    expect(Object.keys(result.data)).not.toContain('editorFolder');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(
+      `${path.join('themes', 'g')} is a folder the theme editor made`,
+    );
+    expect(warnings[0]).toContain('theme eject neutral');
+    expect(warnings[0]).toContain(
+      "to keep the editor's folder to its own theme",
+    );
+
+    // A folder outside any editor folder warns nothing.
+    warnings.length = 0;
+    await themeEject('neutral', {
+      cwd: tmpDir,
+      targetPath: 'themes/plain',
+    });
+    expect(warnings).toEqual([]);
   });
 
   it('refuses to mix two forks in one folder, even with overwrite', async () => {

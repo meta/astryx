@@ -3,12 +3,12 @@ schema_version: 4
 template_version: 2
 kind: system-spec
 id: spec:AST-118
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
-phase: proposed
+approved_by: nynexman4464
+approved_at: 2026-11-12
+phase: accepted
 owners: [nynexman4464]
 affects_architecture: []
 affects_families: [family:input-fields]
