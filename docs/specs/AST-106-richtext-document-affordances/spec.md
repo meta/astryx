@@ -96,7 +96,7 @@ The admitted affordances:
 | -------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------ |
 | Table sizing         | Drags a column or row border, or uses the table's size commands from the keyboard            | Column widths and row minimum heights | The table, without its sizes (DEC-3) |
 | Typed menus          | Types `@`, `/`, or `:` and picks a person, a block, or an emoji from caller sources          | What the pick inserts                 | The inserted content's own form      |
-| Link popover         | Opens, edits, or removes the link at the caret or under the pointer                          | Links                                 | Links                                |
+| Link popover         | Opens, edits, or removes the link at the caret; Cmd/Ctrl-click opens it (DEC-4)              | Links                                 | Links                                |
 | Images               | Pastes, drops, or picks an image that the caller uploads, and moves it in the text           | Source, alternative text, and size    | `![alt](src)`, without its size      |
 | Math                 | Types inline or display formulas                                                             | Formula source                        | Core `Markdown`'s opt-in math syntax |
 | Collapsible headings | Folds the section under a heading while reading or editing                                   | Nothing (FR3)                         | None                                 |
@@ -200,6 +200,19 @@ editor value keeps them and the editor and `RichTextView` draw them. A Markdown
 table cannot hold sizes, so the export writes the table without them, and core
 `Markdown` lays it out as it lays out any table. A table with no sizes set lays
 out as `spec:AST-061/FR4` describes on every surface.
+
+### DEC-4 — The caret opens the link popover
+
+**Reference:** `spec:AST-106/DEC-4`
+**Decider:** `cixzhang`, `2026-11-11`
+
+The link popover opens when the caret is in a link, whether a click placed it
+or the keyboard moved it there. Cmd/Ctrl-click opens the link in a new tab.
+Hovering a link opens nothing, so no popup appears while the pointer crosses
+text during writing.
+
+Rejected: opening on hover as well as the caret. Rejected: Cmd/Ctrl-click only
+placing the caret.
 
 ## Open questions
 

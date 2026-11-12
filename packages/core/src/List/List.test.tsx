@@ -9,7 +9,7 @@
  * SYNC: When modified, update this header
  */
 
-import {useRef} from 'react';
+import {createRef, useRef} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {cleanup, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -745,14 +745,15 @@ describe('List', () => {
     expect(item).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('disables the invisible button when isDisabled', () => {
+  it('keeps the disabled action button focusable', () => {
     const {container} = render(
       <List>
         <ListItem label="Disabled" onClick={() => {}} isDisabled />
       </List>,
     );
     const button = container.querySelector('button');
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toBeDisabled();
   });
 
   it('does not fire onClick when disabled item is clicked', async () => {
@@ -1006,6 +1007,84 @@ describe('List', () => {
     const list = container.querySelector('ul')!;
     expect(list.getAttribute('role')).toBe('list');
     expect(list.getAttribute('aria-labelledby')).not.toBe('elsewhere');
+  });
+
+  it('forwards ref to the list element, with or without a header', () => {
+    for (const header of [undefined, 'Steps']) {
+      for (const listStyle of ['none', 'decimal'] as const) {
+        const ref = createRef<HTMLUListElement | HTMLOListElement>();
+        const {container} = render(
+          <List ref={ref} header={header} listStyle={listStyle}>
+            <ListItem label="First" />
+          </List>,
+        );
+        expect(ref.current).toBe(
+          container.querySelector(listStyle === 'decimal' ? 'ol' : 'ul'),
+        );
+        cleanup();
+      }
+    }
+  });
+
+  it('merges className and style onto the list element beside its target, with or without a header', () => {
+    for (const header of [undefined, 'Steps']) {
+      const {container} = render(
+        <List header={header} className="consumer" style={{maxWidth: 320}}>
+          <ListItem label="First" />
+        </List>,
+      );
+      const list = container.querySelector('ul')!;
+      expect(list).toHaveClass('astryx-list', 'consumer');
+      expect(list.style.maxWidth).toBe('320px');
+      cleanup();
+    }
+  });
+
+  it('keeps its own counter start beside a consumer style', () => {
+    const {container} = render(
+      <List listStyle="decimal" start={3} style={{maxWidth: 320}}>
+        <ListItem label="Third" />
+      </List>,
+    );
+    const list = container.querySelector('ol')!;
+    expect(list.style.maxWidth).toBe('320px');
+    expect(list.getAttribute('style')).toContain('astryx-list 2');
+  });
+
+  it('marks the corner reader where a bleeding list meets its container: the list, or its root under a header', () => {
+    // A rounded container gives its corner only to a direct child that
+    // carries the marker.
+    const marked = (container: HTMLElement) => [
+      ...container.querySelectorAll('[data-container-corner]'),
+    ];
+    const {container: bare} = render(
+      <List edge="bleed">
+        <ListItem label="First" />
+      </List>,
+    );
+    expect(marked(bare)).toEqual([bare.querySelector('ul')]);
+    cleanup();
+
+    const {container: titled} = render(
+      <List edge="bleed" header="Steps">
+        <ListItem label="First" />
+      </List>,
+    );
+    expect(marked(titled)).toEqual([titled.firstElementChild]);
+    expect(titled.firstElementChild).toContainElement(
+      titled.querySelector('ul'),
+    );
+    cleanup();
+
+    for (const edge of ['padded', 'flush', 'outset'] as const) {
+      const {container} = render(
+        <List edge={edge} header="Steps">
+          <ListItem label="First" />
+        </List>,
+      );
+      expect(marked(container)).toEqual([]);
+      cleanup();
+    }
   });
 
   it('accepts number as description (ReactNode)', () => {

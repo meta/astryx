@@ -233,6 +233,10 @@ function sortData<
 // Hook
 // =============================================================================
 
+// One options object, so the collator, and the sorted data with it, survive
+// a render that changes neither the locale nor the sort.
+const COLLATOR_OPTIONS: Intl.CollatorOptions = {numeric: true};
+
 /**
  * useTableSortableState — manages sort state and applies local sort to data.
  *
@@ -266,7 +270,7 @@ export function useTableSortableState<
     allowUnsortedState,
     isMultiSortEnabled,
   } = config;
-  const collator = useCollator({numeric: true});
+  const collator = useCollator(COLLATOR_OPTIONS);
 
   // Internal state (used in uncontrolled mode)
   const [internalSort, setInternalSort] =
