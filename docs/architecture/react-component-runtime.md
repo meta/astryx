@@ -138,6 +138,9 @@ those contracts.
   `useMemo`; render reads the value directly. One hook decides the timing once,
   and React has no built-in for it at Core's React floor. Where only an Effect
   calls the callback, `useEffectEvent` replaces it once that floor reaches 19.2.
+  INV3 gap: about 45 Core and Lab hooks and components keep a latest-value ref
+  in their own Effect, such as `useLayerDismissal`, `useHotkeys`,
+  `useGestureRecognizer`, ComplexSelector, and Lab's NavigationStack.
 - **INV4 — Mutable refs do not become hidden rendered state.** Refs MAY hold general
   non-rendering mutable data. A ref mutation MUST NOT be the sole source for a value
   later read to produce React-rendered output. A callback ref MAY synchronously
@@ -406,8 +409,8 @@ those contracts.
   list so its dismissal still reports `onHide` (`component:Toast` FR3), and a
   child can call it from a layout-effect cleanup in the commit that shows the
   toast. React runs that cleanup before the viewport's own insertion Effect, so
-  `useCommittedRef` there would read the previous list. INV17 gap:
-  `ToastRefSync` does not exist yet.
+  `useCommittedRef` there would read the previous list. INV17 gap: ToastViewport
+  writes its toast list during render.
 - **INV18 — Layout is read as little as possible.** Placement uses CSS
   (anchor positioning, container queries, logical properties) instead of
   measuring in JS, as `architecture:component-style-authoring` INV2 prefers. A
@@ -547,7 +550,8 @@ contracts.
   DOM nodes are not attached yet when this runs." Internal: never in
   `hooks/index.ts` or the package entry; Lab imports it from
   `@astryxdesign/core/internal/committed-ref`, as it reaches other Core
-  internals. INV3 gap: the hook and that entry do not exist yet.
+  internals. Until it exists, sites keep the per-site Effect copies INV3's gap
+  lists.
 
 ## Deciding specs
 
@@ -569,15 +573,15 @@ contracts.
 
 **Decider:** `cixzhang`, `2026-11-11`
 
-The owner answered "10161 A": latest-value refs use one shared internal hook,
-`useCommittedRef<T>(value: T): { readonly current: T }`, in
-`packages/core/src/hooks/`. It returns a read-only ref updated to the committed
-value whose `current` is written only in a commit-phase insertion Effect, never
-during render. One hook gives every component the same commit-safe timing, and
-one place to adopt `useEffectEvent` at React 19.2 for callbacks that only an
-Effect calls. No existing module does this: `useIsomorphicLayoutEffect` only
-picks the Effect, and the per-component copies it replaces each write the ref in
-their own Effect or during render.
+The owner chose option A, "one shared internal hook (useCommittedRef)":
+latest-value refs use one shared internal hook, `useCommittedRef<T>(value: T): {
+readonly current: T }`, in `packages/core/src/hooks/`. It returns a read-only
+ref updated to the committed value whose `current` is written only in a
+commit-phase insertion Effect, never during render. One hook gives every
+component the same commit-safe timing, and one place to adopt `useEffectEvent`
+at React 19.2 for callbacks that only an Effect calls. No existing module does
+this: `useIsomorphicLayoutEffect` only picks the Effect, and the per-component
+copies it replaces each write the ref in their own Effect or during render.
 
 The owner asked whether it is safe under concurrent rendering. It is: a
 commit-phase write survives a render React drops, a render-phase write does not,
