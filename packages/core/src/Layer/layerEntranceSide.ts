@@ -152,11 +152,10 @@ export function writeLayerEntranceSide(
     LAYER_ENTER_ORIGIN_PROPERTY,
     side == null ? 'initial' : `${px(side.originX)} ${px(side.originY)}`,
   );
-  // Floored, so a rounded step never reaches the anchor.
+  // Floored, so rounding never carries the step past the anchor's edge.
+  const gap = side == null ? 0 : Math.floor(side.gap * 1000) / 1000;
   layer.style.setProperty(
     LAYER_ENTER_GAP_PROPERTY,
-    side == null || side.gap <= 0
-      ? 'initial'
-      : `${Math.floor(side.gap * 1000) / 1000}px`,
+    gap > 0 ? `${gap}px` : 'initial',
   );
 }

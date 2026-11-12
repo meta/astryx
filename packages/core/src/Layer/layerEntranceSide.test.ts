@@ -144,6 +144,11 @@ describe('readLayerEntranceSide and writeLayerEntranceSide', () => {
     expect(layer.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe(
       'initial',
     );
+    // Room that floors to 0 px is no room.
+    writeLayerEntranceSide(layer, {...side!, gap: 0.0004});
+    expect(layer.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe(
+      'initial',
+    );
 
     writeLayerEntranceSide(layer, null);
     for (const property of [
