@@ -707,8 +707,24 @@ export function fontShorthandParts(value) {
     // `normal` fits several longhands: every other word is placed first,
     // then each `normal` takes the first longhand still free.
     const normals = words.filter(w => w.toLowerCase() === 'normal').length;
+    // A normal after the size is part of the family, read below.
+    const sizeAt = words.findIndex(
+      w => matchValue('font-size', w.split('/')[0]) && !/^[a-z-]+$/i.test(w),
+    );
+    if (
+      sizeAt >= 0 &&
+      words.slice(sizeAt + 1).some(w => w.toLowerCase() === 'normal')
+    )
+      all = false;
     for (const w of words.filter(x => x.toLowerCase() !== 'normal')) {
+      if (!all) break;
       const lower = w.toLowerCase();
+      // After the size, the rest is the family (16px bold names a family
+      // called bold): the grammar below reads it.
+      if ('font-size' in each) {
+        all = false;
+        break;
+      }
       // A size with its line height (1rem/1.5).
       const slash = /^([^/]+)\/([^/]+)$/.exec(w);
       if (
@@ -742,7 +758,12 @@ export function fontShorthandParts(value) {
         p => !(p in each) && keywordsOf(p).includes('normal'),
       );
       if (!free)
-        return {repeat: 'normal', part: 'every part that takes normal'};
+        return {
+          repeat: 'normal',
+          part: LONGHANDS.filter(p => keywordsOf(p).includes('normal')).join(
+            ', ',
+          ),
+        };
       each[free] = 'normal';
     }
     if (all && words.length) return each;

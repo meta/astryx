@@ -2489,6 +2489,21 @@ describe('colors16', () => {
       themeEditSet('p', 'font', 'bold bold', {cwd, on: 'card'}),
     );
     expect(twice.message).toContain('twice');
+    // After the size, the rest is the family; more normals than parts that
+    // take it are named as such.
+    const familyAfter = await refusal(() =>
+      themeEditSet('p', 'font', '16px bold', {cwd, on: 'card'}),
+    );
+    expect(familyAfter.run.join('\n')).toMatch(/ font-family bold --on card/);
+    const five = await refusal(() =>
+      themeEditSet('p', 'font', 'normal normal normal normal normal', {
+        cwd,
+        on: 'card',
+      }),
+    );
+    expect(five.message).toContain(
+      'gives normal more times than the parts that take it (font-weight, font-style, font-variant-caps, font-stretch)',
+    );
     // Another word for a part already given is the same part twice.
     for (const value of ['bold lighter', 'italic oblique']) {
       const again = await refusal(() =>

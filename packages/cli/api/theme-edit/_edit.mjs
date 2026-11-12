@@ -197,12 +197,20 @@ export async function themeEditNew(name, options = {}) {
   requireProject(cwd);
   // A corrected `new` keeps every option given, fixing only the bad one.
   // A --like in another case is the built-in theme it names.
+  // A --like that names no built-in theme is the nearest one, or none: a
+  // corrected command never repeats a --like that is refused below.
   const likeFixed =
-    like != null && LIKE.includes(String(like).toLowerCase())
-      ? String(like).toLowerCase()
-      : like;
-  const again = (/** @type {string} */ newName, likeValue = likeFixed) =>
-    `${P} new ${newName}${newFlags(likeValue, settings, png)}`;
+    like == null
+      ? options.like === 'none'
+        ? 'none'
+        : undefined
+      : LIKE.includes(String(like).toLowerCase())
+        ? String(like).toLowerCase()
+        : (nearest(String(like).toLowerCase(), LIKE)[0] ?? null);
+  const again = (
+    /** @type {string} */ newName,
+    /** @type {string | null | undefined} */ likeValue = likeFixed,
+  ) => `${P} new ${newName}${newFlags(likeValue, settings, png)}`;
   if (!slugOk(name)) {
     const fixed = slugFor(name);
     // The name as typed may be a theme that exists in another case.
@@ -225,6 +233,8 @@ export async function themeEditNew(name, options = {}) {
             fs.existsSync(themeFiles(cwd, `my-${name}`).dir)
               ? freeThemeName(cwd, `my-${name}`)
               : `my-${name}`,
+            // Built on the theme named, unless another base (or none) was
+            // given.
             likeFixed ?? name,
           ),
         ],
@@ -290,7 +300,7 @@ export async function themeEditNew(name, options = {}) {
             name,
             LIKE.includes(String(like).toLowerCase())
               ? String(like).toLowerCase()
-              : nearest(String(like).toLowerCase(), LIKE)[0],
+              : (nearest(String(like).toLowerCase(), LIKE)[0] ?? null),
           ),
         ],
       },
@@ -476,7 +486,8 @@ function applyNewSettings(ctx, slug, data, settings, png = false) {
     const given = settings[thing];
     if (given == null) continue;
     // `headings` takes a weight and a tracking: one value per axis.
-    for (const value of Array.isArray(given) ? given : [given]) {
+    const values = Array.isArray(given) ? given : [given];
+    for (const [index, value] of values.entries()) {
       /** @type {import('./_settings.mjs').Setting} */
       let s;
       try {
@@ -495,12 +506,12 @@ function applyNewSettings(ctx, slug, data, settings, png = false) {
             E.ERR_INVALID_ARGUMENT,
             `--${thing} was given two values for the same thing (${data.settings[same].value}, ${s.value}); give one.`,
             {
-              // Every other option given stays; this setting keeps its last
-              // value.
+              // Every other option given stays, and every other value of
+              // this one: only the later value for the same thing goes.
               run: [
                 `${P} new ${slug}${newFlags(
                   data.like,
-                  {...settings, [thing]: s.value},
+                  {...settings, [thing]: values.filter((_, i) => i !== index)},
                   png,
                 )}`,
               ],
@@ -515,7 +526,7 @@ function applyNewSettings(ctx, slug, data, settings, png = false) {
 /**
  * The options of a `new` as flags, in the order given (`new --help`'s order
  * for the command): `--like`, each dial setting, then `--png`.
- * @param {string | undefined} like
+ * @param {string | null | undefined} like none when null or undefined
  * @param {Record<string, string | string[] | undefined>} settings
  * @param {boolean} [png]
  * @returns {string[]}
@@ -533,7 +544,7 @@ export function newFlagList(like, settings, png = false) {
 
 /**
  * The options of a `new` as one flag line, with its leading space.
- * @param {string | undefined} like
+ * @param {string | null | undefined} like
  * @param {Record<string, string | string[] | undefined>} settings
  * @param {boolean} png
  */

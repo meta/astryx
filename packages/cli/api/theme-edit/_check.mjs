@@ -1862,7 +1862,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         refuse(
           E.ERR_THEME_BAD_VALUE,
           parts?.repeat
-            ? `font --on takes body, heading, or code, and "${v}" gives ${parts.part ?? 'one part of the font'} twice (${parts.repeat} is the second), which no CSS font value does. For one part's font use font-family with a family, and set each other part of the font once.`
+            ? `font --on takes body, heading, or code, and "${v}" ${parts.part?.includes(',') ? `gives ${parts.repeat} more times than the parts that take it (${parts.part})` : `gives ${parts.part ?? 'one part of the font'} twice (${parts.repeat} is the second)`}, which no CSS font value does. For one part's font use font-family with a family, and set each other part of the font once.`
             : parts?.system
               ? `font --on takes body, heading, or code, and "${v}" is a system font keyword of the CSS font shorthand, which sets every part of the font at once. For one part's font use font-family with a family.`
               : `font --on takes body, heading, or code. For one part's font use font-family${parts ? ', and the other parts of the font shorthand one by one' : ''}.`,

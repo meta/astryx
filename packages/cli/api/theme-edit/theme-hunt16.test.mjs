@@ -238,6 +238,29 @@ describe('how changes by an amount from the theme it reads', () => {
 describe('corrected new commands keep every option (r78e)', () => {
   it.each([
     [
+      ['new', 'q', '--like', 'banana', '--accent', 'red'],
+      / new q --accent red$/,
+    ],
+    [
+      ['new', 'neutral', '--like', 'none', '--accent', 'red'],
+      / new my-neutral --like none --accent red$/,
+    ],
+    [
+      [
+        'new',
+        'h3',
+        '--headings',
+        'bold',
+        '--headings',
+        'tight',
+        '--headings',
+        'heavy',
+        '--accent',
+        'red',
+      ],
+      / new h3 --accent red --headings bold --headings tight$/,
+    ],
+    [
       ['new', 'neutral', '--accent', 'red', '--png'],
       / new my-neutral --like neutral --accent red --png$/,
     ],
@@ -252,7 +275,8 @@ describe('corrected new commands keep every option (r78e)', () => {
         '--accent',
         'red',
       ],
-      / new hh .*--headings heavy.*--accent red|new hh .*--accent red.*--headings heavy/,
+      // The first value stays (hunt16); the later one for the same axis goes.
+      / new hh --accent red --headings bold$/,
     ],
   ])(
     '%j',
