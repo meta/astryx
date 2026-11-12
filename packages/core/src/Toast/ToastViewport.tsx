@@ -478,11 +478,9 @@ export function ToastViewport({
   // Announce toasts through the persistent singleton live regions. They are
   // mounted empty and only mutated afterwards, which screen readers announce
   // (see useAnnounce.ts). Plain React text is announced in addToast — the
-  // event-driven dispatch path. If a default body comes from a child
-  // component, or a custom renderer replaces the body, ToastSurface reads the
-  // committed rendered text because getNodeText cannot inspect a component's
-  // implementation or predict a custom layout. Both paths use this
-  // modal-aware writer.
+  // event-driven dispatch path. ToastSurface reads a component body or a
+  // custom layout after commit. getNodeText cannot see what a component
+  // renders. Both paths use this modal-aware writer.
   // The viewport is each toast's only announcement owner; the card carries no
   // live role. A top-layer viewport's host moves into the latest open native
   // modal, where the page's shared channel is not exposed, so it writes
