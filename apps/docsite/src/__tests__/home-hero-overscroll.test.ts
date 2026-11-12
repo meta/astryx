@@ -638,7 +638,8 @@ describe('AppShell content area stays a non-scroll container for sticky', () => 
       read(path.join(CORE, 'AppShell', 'AppShell.tsx')),
     );
     expect(source).toMatch(/const isFill = height === 'fill'/);
-    const main = source.indexOf('id={MAIN_CONTENT_ID}');
+    // The main region is the one LayoutContent with the main landmark role.
+    const main = source.indexOf('role="main"');
     expect(main, 'main LayoutContent not found').toBeGreaterThan(-1);
     const openingTag = source.slice(source.lastIndexOf('<LayoutContent', main));
     expect(openingTag.slice(0, openingTag.indexOf('>'))).toMatch(
