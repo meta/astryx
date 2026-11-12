@@ -18,7 +18,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import module from 'node:module';
-import {parseTemplateSource, walk} from './template-source-tree.mjs';
+import {
+  parseTemplateSource,
+  TEMPLATE_COMPONENTS_FILE,
+  walk,
+} from './template-source-tree.mjs';
+import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
 import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
 import {
@@ -81,6 +86,20 @@ export function extractImportedPackages(source) {
  * @returns {string[]}
  */
 function moduleSpecifiers(source) {
+  // A template Astryx ships answers from what parsing it returned at publish.
+  const stored = readStore(TEMPLATE_COMPONENTS_FILE).get(
+    `imports:${storedKey(source)}`,
+  );
+  if (Array.isArray(stored)) return [...stored];
+  return parsedSpecifiers(source);
+}
+
+/**
+ * moduleSpecifiers, read from the source's syntax tree.
+ * @param {string} source
+ * @returns {string[]}
+ */
+export function parsedSpecifiers(source) {
   let file;
   try {
     file = parseTemplateSource(source, {errorRecovery: true});

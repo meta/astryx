@@ -431,6 +431,13 @@ const CASES = [
     args: ['integration', 'pack', '--check'],
     skipFieldChecks: true,
   },
+  // A bare experimental theme group answers --json with its help: the
+  // text is the group's --help.
+  ...[
+    'experimental theme',
+    'experimental theme editor',
+    'experimental theme preview',
+  ].map(name => ({name, args: name.split(' '), skipFieldChecks: true})),
   {
     name: 'experimental icon',
     args: ['experimental', 'icon', 'remove'],
@@ -870,7 +877,9 @@ describe('text-json-parity', () => {
           textStatus: textResult.status,
           jsonStatus: jsonResult.status,
         };
-      });
+        // The editor commands build and render a theme twice here, which can
+        // pass the default hook budget on a loaded CI runner.
+      }, tc.name.startsWith('experimental theme editor') ? 120_000 : undefined);
 
       it('JSON output is a valid envelope', () => {
         expect(run.json).not.toBeNull();
