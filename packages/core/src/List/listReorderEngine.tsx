@@ -987,10 +987,10 @@ export class ListReorderController implements ListReorderSession {
       // the handles named some other way alone.
       const row = byPlace ? this.rowOf(handle) : null;
       const position = row == null ? null : (places.get(row) ?? null);
-      const previous = this.handleNames.get(handle);
+      const previous = this.handleNameOf(handle);
       if (
-        previous?.position !== position ||
-        previous?.labelNamesRow !== labelNamesRow
+        previous.position !== position ||
+        previous.labelNamesRow !== labelNamesRow
       ) {
         this.handleNames.set(handle, {position, labelNamesRow});
         changed = true;

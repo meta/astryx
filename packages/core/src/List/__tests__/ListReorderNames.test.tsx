@@ -7,7 +7,8 @@
  * @output jsdom proofs that a reorder handle's name follows its row when the
  *   handle does not render again. A nameless row's place follows a row above
  *   it that goes, and a reorder, also after the list's numbering turns on. A
- *   label names the handle while it shows text.
+ *   label names the handle while it shows text. A handle named some other way
+ *   renders once per mount.
  * @position Tests for List/ListReorderHandle.tsx
  */
 
@@ -17,6 +18,26 @@ import {describe, expect, it, vi} from 'vitest';
 import {List} from '../List';
 import {ListItem} from '../ListItem';
 import {createReorderable} from '../../reorderable/createReorderable';
+import {
+  InternationalizationContext,
+  type InternationalizationContextValue,
+} from '../../i18n/InternationalizationContext';
+import {getResolve} from '../../i18n/resolve';
+
+let verbReads = 0;
+const english = getResolve('en', {});
+/** English, counting the handle verb's reads. Module scope keeps it stable. */
+const COUNTING_ENGLISH: InternationalizationContextValue = {
+  locale: 'en',
+  direction: 'ltr',
+  messages: {},
+  translate: (key, values) => {
+    if (key === '@astryx.list.reorderHandleVerb') {
+      verbReads += 1;
+    }
+    return english(key, values);
+  },
+};
 
 describe('List reorder handle names', () => {
   it("keeps a nameless row's place in its handle's name when a row above it goes, though the row does not render again", async () => {
@@ -133,5 +154,40 @@ describe('List reorder handle names', () => {
       await screen.findByRole('button', {name: 'Reorder item 1'}),
     ).toBeInTheDocument();
     warn.mockRestore();
+  });
+
+  it("renders a handle its row's aria-label names once per mount, though the session reads the names after the commit", async () => {
+    // Each handle render reads the verb once, so the reads count renders.
+    verbReads = 0;
+    const reorderable = createReorderable({onReorder: () => {}});
+    const Row = memo(function Row({itemKey}: {itemKey: string}) {
+      return (
+        <ListItem itemKey={itemKey} aria-label={itemKey} label={itemKey} />
+      );
+    });
+    const rows = (keys: ReadonlyArray<string>) => (
+      <InternationalizationContext value={COUNTING_ENGLISH}>
+        <List reorderable={reorderable}>
+          {keys.map(key => (
+            <Row key={key} itemKey={key} />
+          ))}
+        </List>
+      </InternationalizationContext>
+    );
+    const {rerender} = render(rows(['Inbox', 'Sent']));
+    expect(
+      await screen.findByRole('button', {name: 'Reorder Sent'}),
+    ).toBeInTheDocument();
+    // The session reads the names in a microtask after the commit. An
+    // unchanged name keeps its snapshot, so no handle renders again.
+    await act(async () => {});
+    expect(verbReads).toBe(2);
+    // A row that mounts later renders its handle once too.
+    rerender(rows(['Inbox', 'Sent', 'Drafts']));
+    expect(
+      await screen.findByRole('button', {name: 'Reorder Drafts'}),
+    ).toBeInTheDocument();
+    await act(async () => {});
+    expect(verbReads).toBe(3);
   });
 });
