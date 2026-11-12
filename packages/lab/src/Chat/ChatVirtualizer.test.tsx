@@ -937,23 +937,27 @@ describe('ChatVirtualizer', () => {
     el.remove();
   });
 
-  it('announces a reply that arrives in history once, also when the reader scrolls down to it', async () => {
+  it('announces a reply that arrives in history once, and no history, as the reader scrolls down to it', async () => {
     const el = tallScroller();
     const list = (n: number) => <div role="log">{attachedTo(rows(n), el)}</div>;
     const {container, rerender} = render(list(60));
     await settled();
     const log = container.querySelector('[role="log"]')!;
     const block = log.firstElementChild as HTMLElement;
-    // A polite log reads out a row that is added while its block is not busy.
-    let announced = 0;
+    // The content starts at the top of the scroller: the top spacer sits one
+    // scroll position above the scroller's top, so the window follows the
+    // scroll position instead of re-anchoring to the first row.
+    const topSpacer = block.firstElementChild as HTMLElement;
+    topSpacer.getBoundingClientRect = () =>
+      ({top: -el.scrollTop, bottom: -el.scrollTop, height: 0}) as DOMRect;
+    // A polite log reads out each row added while its block is not busy.
+    const readOut: string[] = [];
     const observer = new MutationObserver(records => {
       for (const record of records) {
         for (const node of record.addedNodes) {
-          if (
-            node.textContent?.includes('message 60') === true &&
-            !block.hasAttribute('aria-busy')
-          ) {
-            announced++;
+          const text = node.textContent ?? '';
+          if (/message \d+/.test(text) && !block.hasAttribute('aria-busy')) {
+            readOut.push(text);
           }
         }
       }
@@ -968,18 +972,23 @@ describe('ChatVirtualizer', () => {
     scrollEvent(el, 0);
     await settled();
     await waitFor(() => expect(block.hasAttribute('aria-busy')).toBe(false));
+    readOut.length = 0;
     // The reply arrives at the tail and is read out.
     act(() => rerender(list(61)));
     await flush();
-    expect(announced).toBe(1);
+    expect(readOut).toEqual(['message 60']);
+    readOut.length = 0;
     // The reader scrolls down through history to the reply.
-    for (const at of [1500, 3000, 4500, 5800, 6100]) {
+    for (const at of [1500, 3000, 4500, 5700]) {
       scrollEvent(el, at);
       await flush();
       await settled();
     }
+    // The window reached the reply: the row before it is mounted.
+    expect(screen.getByText('message 59')).toBeInTheDocument();
     expect(screen.getByText('message 60')).toBeInTheDocument();
-    expect(announced).toBe(1);
+    // Nothing was read out on the way: not the reply again, and no history.
+    expect(readOut).toEqual([]);
     observer.disconnect();
     el.remove();
   });
