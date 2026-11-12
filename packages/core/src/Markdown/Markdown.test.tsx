@@ -975,14 +975,15 @@ describe('Markdown', () => {
   });
 
   describe('link destinations follow the shared navigation rule', () => {
-    // The same matrix Core's link plumbing and imperative navigation apply
-    // (utils/safeUrl.ts): only executable document schemes are blocked.
+    // The matrix Core's link plumbing and imperative navigation apply
+    // (utils/safeUrl.ts), plus every data: URL, which the parser rejects.
     const blocked = [
       'javascript:alert(1)',
       'JaVaScRiPt:alert(1)',
       'vbscript:MsgBox(1)',
       'data:text/html,<script>alert(1)</script>',
       'java\nscript:alert(1)',
+      'data:image/png;base64,iVBORw0KGgo=',
     ];
     const accepted = [
       'https://example.com',
@@ -991,7 +992,6 @@ describe('Markdown', () => {
       '//example.com/x',
       'mailto:a@example.com',
       'tel:+15555550100',
-      'data:image/png;base64,iVBORw0KGgo=',
     ];
 
     it.each(blocked)('renders %s as text, not a link', destination => {
@@ -1011,7 +1011,7 @@ describe('Markdown', () => {
       expect(link?.getAttribute('href')).toBe(destination);
     });
 
-    it('a data:image link is navigation and is accepted, while a data:image image stays rejected by the resource policy', () => {
+    it('renders a data:image link and a data:image image as text', () => {
       const {container} = render(
         <Markdown>
           {
@@ -1019,10 +1019,9 @@ describe('Markdown', () => {
           }
         </Markdown>,
       );
-      expect(container.querySelector('a')?.getAttribute('href')).toBe(
-        'data:image/png;base64,iVBORw0KGgo=',
-      );
+      expect(container.querySelector('a')).toBeNull();
       expect(container.querySelector('img')).toBeNull();
+      expect(container.textContent).toContain('view');
     });
   });
 

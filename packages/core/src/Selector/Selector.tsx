@@ -1410,6 +1410,9 @@ export function Selector<T extends SelectorOptionType>(
     }
   }, [hasSearch]);
 
+  // Explicit placement opts out of the selector-specific overlay behavior and
+  // uses the standard layer positioning API instead.
+  const shouldOverlaySelectedItem = placement == null && !hasSearch;
   const surface = useSelectorPresentation({
     presentation,
     onHide: handleLayerHide,
@@ -1429,6 +1432,9 @@ export function Selector<T extends SelectorOptionType>(
       // The entrance runs on the surface: an anchored layer lays out again on
       // each frame its own style animates.
       xstyle: layerAnimations[placement ?? 'below'],
+      // The overlay margin moves the list after the show, so the overlay
+      // writes the entrance's side once it has moved.
+      writesEntranceSide: shouldOverlaySelectedItem,
     },
   });
   const {popover} = surface;
@@ -1511,10 +1517,7 @@ export function Selector<T extends SelectorOptionType>(
     surface.isOpen && !isLoading && filteredItems.length === 0;
   useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery);
 
-  // Calculate offset to position selected item over trigger. Explicit
-  // placement opts out of the selector-specific overlay behavior and uses the
-  // standard layer positioning API instead.
-  const shouldOverlaySelectedItem = placement == null && !hasSearch;
+  // Calculate offset to position selected item over trigger.
   const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
     useSelectedItemOverlayMargin({
       isOpen: popover.isOpen && shouldOverlaySelectedItem,

@@ -409,7 +409,8 @@ const NOT_RENDERED =
   /(?:^|\/)__tests__\/|\.(?:test|stories|doc)\.[^/]+$|\.spec\.[^/]+$|\.d\.ts$/;
 const STATEMENT =
   /(?:^|[\n;])\s*(import|export)\s+(type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
-const RESOLVE_SUFFIXES = [
+/** The suffixes an import specifier resolves through, in order. */
+export const RESOLVE_SUFFIXES = [
   '',
   '.ts',
   '.tsx',
@@ -422,13 +423,29 @@ const RESOLVE_SUFFIXES = [
   '/index.js',
 ];
 
+const COMPONENT_FOLDER = /^packages\/([^/]+)\/src\/([A-Z][^/]*)\//;
+
 /**
  * The component folder that holds a file, as `<package>/<Folder>`.
  * @param {string} file
  */
 export const componentFolderOf = file => {
-  const match = /^packages\/([^/]+)\/src\/([A-Z][^/]*)\//.exec(file);
+  const match = COMPONENT_FOLDER.exec(file);
   return match ? `${match[1]}/${match[2]}` : null;
+};
+
+/**
+ * The folder path of the component a file belongs to: its component folder
+ * (`packages/core/src/Button/`), else its package's source folder, as for a
+ * package with no component folders (`packages/richtext/src/`).
+ * @param {string} file
+ * @returns {string | null}
+ */
+export const componentPathOf = file => {
+  const match = COMPONENT_FOLDER.exec(file);
+  if (match) return `packages/${match[1]}/src/${match[2]}/`;
+  const source = /^packages\/([^/]+)\/src\//.exec(file);
+  return source ? `packages/${source[1]}/src/` : null;
 };
 
 /**
@@ -639,6 +656,18 @@ export function renderingFolders(importers, touched) {
 }
 
 /**
+ * The listed file an import target names, through `RESOLVE_SUFFIXES`, or
+ * null.
+ * @param {Set<string>} known every listed file
+ * @param {string} target a repository path without its suffix
+ */
+export function resolveModule(known, target) {
+  for (const suffix of RESOLVE_SUFFIXES)
+    if (known.has(`${target}${suffix}`)) return `${target}${suffix}`;
+  return null;
+}
+
+/**
  * The files each proof page loads through value imports, followed file by
  * file: relative specifiers and `@astryxdesign/<package>` roots and paths.
  * The roots are the interaction specs and what their pages render: the
@@ -661,11 +690,7 @@ export function proofImporters({
   read = file => fs.readFileSync(path.join(root, file), 'utf8'),
 }) {
   const known = new Set(listed);
-  const resolve = target => {
-    for (const suffix of RESOLVE_SUFFIXES)
-      if (known.has(`${target}${suffix}`)) return `${target}${suffix}`;
-    return null;
-  };
+  const resolve = target => resolveModule(known, target);
   const targetOf = (file, specifier) => {
     if (specifier.startsWith('.'))
       return resolve(
@@ -1437,4 +1462,196 @@ function main() {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   process.exitCode = main();
+}
+
+/**
+ * The files a module loads through relative value imports, itself included.
+ * @param {string} file
+ * @param {Set<string>} known
+ * @param {(file: string) => string} read
+ */
+export function localModules(file, known, read) {
+  const seen = new Set([file]);
+  const queue = [file];
+  while (queue.length > 0) {
+    const current = queue.pop();
+    for (const {specifier} of valueImports(read(current))) {
+      if (!specifier.startsWith('.')) continue;
+      const target = resolveModule(
+        known,
+        path.posix.normalize(`${path.posix.dirname(current)}/${specifier}`),
+      );
+      if (target && !seen.has(target)) {
+        seen.add(target);
+        queue.push(target);
+      }
+    }
+  }
+  return [...seen];
+}
+
+/**
+ * The folder that holds a component: the one named for it, else the one with
+ * its source file (`SideNavCollapseButton` lives in `SideNav/`).
+ * @param {string} name
+ * @param {string[]} listed
+ * @param {string} [pkg] the package to look in, as a pattern; any by default
+ */
+export function componentFolderNamed(name, listed, pkg = '[^/]+') {
+  const own = listed.find(file =>
+    new RegExp(`^packages/${pkg}/src/${name}/`).test(file),
+  );
+  if (own) return componentPathOf(own);
+  const source = listed.find(file =>
+    new RegExp(`^packages/${pkg}/src/[A-Z][^/]*/${name}\\.tsx$`).test(file),
+  );
+  return source ? componentPathOf(source) : null;
+}
+
+/**
+ * Storybook's id for a title: lower case, each run of other characters a
+ * single `-`, as Storybook's own `sanitize` makes it.
+ * @param {string} title
+ */
+export function storyIdOf(title) {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/** A Storybook story file. */
+export const isStoryFile = file =>
+  /^apps\/storybook\/.+\.stories\.[cm]?[jt]sx?$/.test(file);
+
+/**
+ * The `title` and `id` of a story file's default-export meta, read at the
+ * meta's own depth, so a nested object's or a data row's `title` never counts.
+ * @param {string} text
+ * @returns {{title: string | null, id: string | null}}
+ */
+export function storyMeta(text) {
+  const exported = /export\s+default\s+(\{|[A-Za-z_$][\w$]*)/.exec(text);
+  if (!exported) return {title: null, id: null};
+  let start = exported.index + exported[0].length - 1;
+  if (exported[1] !== '{') {
+    const name = exported[1].replace(/[$]/g, '\\$');
+    const declared = new RegExp(
+      `(?:const|let|var)\\s+${name}\\b[^=]*=\\s*\\{`,
+    ).exec(text);
+    if (!declared) return {title: null, id: null};
+    start = declared.index + declared[0].length - 1;
+  }
+  const meta = {title: null, id: null};
+  let depth = 0;
+  for (let i = start; i < text.length; i += 1) {
+    const char = text[i];
+    if (char === '"' || char === "'" || char === '`') {
+      const end = text.indexOf(char, i + 1);
+      if (end === -1) break;
+      i = end;
+      continue;
+    }
+    if ('{[('.includes(char)) depth += 1;
+    else if ('}])'.includes(char)) {
+      depth -= 1;
+      if (depth === 0) break;
+    } else if (depth === 1) {
+      const field = /^(title|id)\s*:\s*(['"`])([^'"`]+)\2/.exec(
+        text.slice(i, i + 200),
+      );
+      if (field && /[\s{,]/.test(text[i - 1]) && meta[field[1]] == null)
+        meta[field[1]] = field[3];
+    }
+  }
+  return meta;
+}
+
+/**
+ * Each story id prefix (a title's id, or a meta's own id), to the story files
+ * that make it.
+ * @param {string[]} listed
+ * @param {(file: string) => string} read
+ * @returns {Map<string, string[]>}
+ */
+export function storyFiles(listed, read) {
+  const byId = new Map();
+  for (const file of listed.filter(isStoryFile)) {
+    const {title, id} = storyMeta(read(file));
+    if (title == null) continue;
+    const ids = new Set([storyIdOf(title)]);
+    if (id) ids.add(id);
+    for (const id of ids) byId.set(id, [...(byId.get(id) ?? []), file]);
+  }
+  return byId;
+}
+
+/** A story id prefix in a spec or its helpers: `core-bottomsheet--…`. */
+const STORY_ID = /(?:id=|['"`])([a-z0-9][a-z0-9-]*?)--(?:[a-z0-9$]|['"`])/g;
+/** A story id whose component part a template fills: `core-${name}--`. */
+const TEMPLATED_ID = /([a-z0-9][a-z0-9-]*)-\$\{[^}]+\}--/g;
+/** A quoted name a template can fill. */
+const NAME = /['"`]([a-z0-9][a-z0-9-]*)['"`]/g;
+/**
+ * The story ids a file and its local helpers open: each literal id, and each
+ * templated id (`core-${name}--`) a quoted name in the same file fills to a
+ * story that exists. `unfilled` lists each template no quoted name fills.
+ * @param {string} file
+ * @param {{listed: string[], read: (file: string) => string, stories: Map<string, string[]>}} options
+ * @returns {{ids: string[], unfilled: string[]}}
+ */
+export function storyIdsOpened(file, {listed, read, stories}) {
+  const texts = localModules(file, new Set(listed), read).map(read);
+  const ids = new Set(
+    texts.flatMap(text => [...text.matchAll(STORY_ID)].map(m => m[1])),
+  );
+  const unfilled = [];
+  for (const text of texts)
+    for (const [template, prefix] of text.matchAll(TEMPLATED_ID)) {
+      const filled = [...text.matchAll(NAME)]
+        .map(m => `${prefix}-${m[1]}`)
+        .filter(id => stories.has(id));
+      if (filled.length === 0) unfilled.push(template);
+      for (const id of filled) ids.add(id);
+    }
+  return {ids: [...ids], unfilled};
+}
+
+/**
+ * The component folders a story file renders: each component it, or a local
+ * helper it imports, takes by value. A package path names its folder
+ * (`@astryxdesign/core/Button`); a name from a package's root names the folder
+ * that holds that component's source; a relative import into a component
+ * folder names that folder. A name that no folder holds stays unresolved.
+ * @param {string} file
+ * @param {{listed: string[], read: (file: string) => string}} options
+ * @returns {{folders: string[], unresolved: string[]}}
+ */
+export function storyComponentFolders(file, {listed, read}) {
+  const known = new Set(listed);
+  const folders = new Set();
+  const unresolved = [];
+  for (const module of localModules(file, known, read)) {
+    const own = componentFolderOf(module) && componentPathOf(module);
+    if (own) folders.add(own);
+    for (const {specifier, names} of valueImports(read(module))) {
+      const match = /^@astryxdesign\/([^/]+)(?:\/([^/]+))?/.exec(specifier);
+      if (!match) continue;
+      const [, pkg, top] = match;
+      if (top) {
+        if (/^[A-Z]/.test(top)) folders.add(`packages/${pkg}/src/${top}/`);
+        continue;
+      }
+      if (names.length === 0) {
+        unresolved.push(`${module} takes all of @astryxdesign/${pkg}`);
+        continue;
+      }
+      for (const name of names) {
+        const folder = componentFolderNamed(name, listed, pkg);
+        if (folder) folders.add(folder);
+        else unresolved.push(`${module} takes ${name}, which no folder holds`);
+      }
+    }
+  }
+  return {folders: [...folders].sort(), unresolved};
 }

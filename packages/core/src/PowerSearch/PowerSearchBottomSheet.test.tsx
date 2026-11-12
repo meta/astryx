@@ -2833,8 +2833,10 @@ describe('PowerSearch Add filter (FR13)', () => {
         isReadOnly
       />,
     );
+    // A disabled Item action stays focusable: it is aria-disabled, and a
+    // click does nothing.
     const status = within(sheet()).getByRole('button', {name: 'Status'});
-    expect(status).toBeDisabled();
+    expect(status).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(status);
     expect(
       within(sheet()).getByRole('heading', {name: 'Add filter'}),

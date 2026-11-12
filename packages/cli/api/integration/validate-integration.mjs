@@ -41,6 +41,7 @@ import {
   iconSetIssues,
 } from '../../foundation/discovery/icon-set-checks.mjs';
 import {olderCliNotes} from '../../foundation/discovery/doc-stability.mjs';
+import {templateIconMeanings} from '../../foundation/discovery/template-icon-meanings.mjs';
 import {
   templateIconNotes,
   templateIconUndeclaredNotes,
@@ -503,7 +504,11 @@ async function validateAtPackageDir(
     issues.push(...iconSetIssues(packageDir, loaded, unchecked));
     // Which definitions each set leaves unmapped, and what the checks could
     // not judge: listed, never an issue.
-    result.iconSets = iconSetCoverage(loaded, unchecked);
+    result.iconSets = iconSetCoverage(
+      loaded,
+      unchecked,
+      await templateIconMeanings(),
+    );
   }
   // What the docs say that no reader serves: a prop listed twice, an
   // overlay's text for a prop the doc lacks, an empty or unreachable section,

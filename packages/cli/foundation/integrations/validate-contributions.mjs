@@ -24,8 +24,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {builtinModules} from 'node:module';
-import {parse as parseModule} from '@babel/parser';
+import {builtinModules, createRequire} from 'node:module';
 import {isValidSemver} from '../env/semver.mjs';
 import {findProjectCoreDir} from '../fs/paths.mjs';
 import {KNOWN_INTEGRATION_KEYS} from '../../authoring/integration/schema.mjs';
@@ -63,6 +62,18 @@ import {
 } from '../discovery/module-exports.mjs';
 import {discoverIntegrationDocs} from '../discovery/docs-discovery.mjs';
 import {discoverIntegrationThemes} from '../discovery/theme-discovery.mjs';
+
+const requireFromHere = createRequire(import.meta.url);
+
+/**
+ * `@babel/parser`'s parse, loaded on first use: most commands that load the
+ * project's integrations never validate a contribution's source.
+ * @param {string} source
+ * @param {import('@babel/parser').ParserOptions} [options]
+ */
+function parseModule(source, options) {
+  return requireFromHere('@babel/parser').parse(source, options);
+}
 
 /**
  * @typedef {import('./issue').AstryxIntegrationIssue} Issue
@@ -1647,15 +1658,17 @@ export async function componentExamplesCheck(integration) {
           : negated != null && !outsideFiles(assetRel, packedFiles)
             ? `${rel(template.filePath)}: loads ${assetRel}, which the \`files\` entry "${negated}" leaves out of the package, so the template breaks once installed. Fix: drop or narrow "${negated}" so it no longer matches ${assetRel}, and confirm with \`npm pack --dry-run\`.`
             : Array.isArray(packedFiles) &&
-            (outsideFiles(assetRel, packedFiles) ||
-              !ignoreFilesFor(base, assetRel).some(file => file.includes('/')))
-            ? `${rel(template.filePath)}: loads ${assetRel}, which npm leaves out of the package by its \`files\` field, so the template breaks once installed. Fix: add "${folder}" to \`files\`, drop any \`!\` entry that excludes it, and confirm with \`npm pack --dry-run\`.`
-            : ignoreFix(
-                base,
-                rel(template.filePath),
-                assetRel,
-                Array.isArray(packedFiles),
-              ),
+                (outsideFiles(assetRel, packedFiles) ||
+                  !ignoreFilesFor(base, assetRel).some(file =>
+                    file.includes('/'),
+                  ))
+              ? `${rel(template.filePath)}: loads ${assetRel}, which npm leaves out of the package by its \`files\` field, so the template breaks once installed. Fix: add "${folder}" to \`files\`, drop any \`!\` entry that excludes it, and confirm with \`npm pack --dry-run\`.`
+              : ignoreFix(
+                  base,
+                  rel(template.filePath),
+                  assetRel,
+                  Array.isArray(packedFiles),
+                ),
       });
     }
   }

@@ -22,6 +22,7 @@ import {
   drag,
   frames,
   openStory,
+  requireFrames,
   touchDriver,
   waitForRest,
   watchAnimations,
@@ -353,31 +354,42 @@ test('with a mouse a Next the owner refuses never moves the photo', async ({
       story: 'core-lightbox--gallery-keeps-index',
       trigger: 'Open gallery that keeps its photo',
     });
-    // Reads the track's offset on every frame from the press on.
+    // Reads the track's offset on every frame from the press on, for 40
+    // frames or 5 s, whichever comes first.
     await g.track.evaluate(track => {
-      const offsets: number[] = [];
-      (window as unknown as {__offsets: number[]}).__offsets = offsets;
-      const tick = () => {
-        const value = getComputedStyle(track).translate;
-        offsets.push(value === 'none' ? 0 : parseFloat(value));
-        if (offsets.length < 40) {
-          requestAnimationFrame(tick);
-        }
-      };
-      requestAnimationFrame(tick);
+      const offsets: {t: number; x: number}[] = [];
+      (
+        window as unknown as {__offsets: Promise<{t: number; x: number}[]>}
+      ).__offsets = new Promise(resolve => {
+        const start = performance.now();
+        setTimeout(() => resolve(offsets), 5_000);
+        const tick = (t: number) => {
+          const value = getComputedStyle(track).translate;
+          offsets.push({t, x: value === 'none' ? 0 : parseFloat(value)});
+          if (offsets.length < 40 && t - start < 5_000) {
+            requestAnimationFrame(tick);
+          } else {
+            resolve(offsets);
+          }
+        };
+        requestAnimationFrame(tick);
+      });
     });
     await g.dialog.getByRole('button', {name: 'Next'}).click();
-    await expect
-      .poll(async () =>
-        page.evaluate(
-          () => (window as unknown as {__offsets: number[]}).__offsets.length,
-        ),
-      )
-      .toBe(40);
-    const offsets = await page.evaluate(
-      () => (window as unknown as {__offsets: number[]}).__offsets,
+    // A page starved of frames reads too few of them to prove the photo
+    // stayed: that fails by name.
+    const offsets = requireFrames(
+      await page.evaluate(
+        async () =>
+          (
+            window as unknown as {
+              __offsets: Promise<{t: number; x: number}[]>;
+            }
+          ).__offsets,
+      ),
+      {min: 40, during: 'the page read the track after a refused Next'},
     );
-    expect(offsets.every(x => Math.abs(x) < 0.5)).toBe(true);
+    expect(offsets.every(({x}) => Math.abs(x) < 0.5)).toBe(true);
     expect(await g.counter()).toBe('1 / 4');
   } finally {
     await context.close();

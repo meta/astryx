@@ -1,5 +1,13 @@
 # @astryxdesign/richtext
 
+# 0.7.14
+
+---
+
+# 0.7.13
+
+---
+
 # 0.7.12
 
 #### New Features
