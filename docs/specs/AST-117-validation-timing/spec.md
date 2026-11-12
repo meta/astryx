@@ -163,10 +163,12 @@ type EntryErrorBehavior = 'complete' | 'blur-or-enter';
   rejection and does not announce it again; the next commit reveals the entry's
   current rejection. A new `value` or a pick that replaces the entry, as the
   member's record states, clears its rejection.
-- **FR6 — Disabled and busy fields reveal no rejection.** While a member is
-  disabled or busy, it reveals no rejection of its own, as its record states
+- **FR6 — Locked fields reveal no rejection.** While a member is disabled, or
+  busy where its record blocks edits (`component:DateInput` FR12,
+  `component:DateTimeInput` FR9 and FR13), it reveals no rejection of its own
   (`spec:AST-085` FR2). Once it is editable, its entry error behavior applies
-  again.
+  again. A busy member whose record keeps it editable keeps revealing
+  rejections under its entry error behavior.
 - **FR7 — Compositions keep the default.** `PowerSearch`'s value editors,
   Table's filter editors, and `Pagination`'s page input render members with
   `'complete'` and expose no entry error behavior prop. A `FormLayout` around
@@ -233,7 +235,7 @@ Requirement gaps:
 | FR3      | Each member's existing rejection suites, run with no prop and with `'complete'`              | Every rejection each member's record names                                                                                             | Any signal appears at a different moment, or with a different signal set, than with no prop                                           |
 | FR4      | Keystroke-by-keystroke and commit suites under `'blur-or-enter'`                             | Each rejection of each member; native edits; Enter and blur; an entry the member drops at blur                                         | A signal appears before Enter or blur, the signals appear apart, the announcement repeats, or a dropped entry is not announced        |
 | FR5      | Edit suites after a revealed rejection                                                       | Edit to valid; to empty; to still rejected; caller `value` change; calendar pick                                                       | A fixed entry keeps its rejection, a still-rejected edit clears it or announces it again under `'blur-or-enter'`, or a pick leaves it |
-| FR6      | Disabled and busy suites                                                                     | Rejection revealed, then disabled; draft kept while busy                                                                               | A locked field reveals a rejection, or its behavior does not apply again once editable                                                |
+| FR6      | Disabled suites, and busy suites for the records that block edits while busy                 | Rejection revealed, then disabled; draft kept while busy; a busy TimeInput that stays editable                                         | A locked field reveals a rejection, a busy editable field stops revealing, or its behavior does not apply again once editable         |
 | FR7      | `PowerSearch`, Table filter editor, and `Pagination` page input suites inside a `FormLayout` | `defaultEntryErrorBehavior="blur-or-enter"` around the composition                                                                     | An editor follows the form default                                                                                                    |
 | AR1–AR3  | Screen-reader evidence under `spec:AST-009`                                                  | Each member, typed and native, under `'blur-or-enter'`                                                                                 | A rejection is heard before commit, heard twice, or a dropped entry is not explained                                                  |
 
