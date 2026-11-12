@@ -67,8 +67,7 @@ async function importBuilt(file, query = '') {
  * @returns {string}
  */
 function packageName(dir) {
-  return JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'))
-    .name;
+  return JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).name;
 }
 
 /**
@@ -78,10 +77,7 @@ function packageName(dir) {
 export async function loadThemingTargets(repoRoot) {
   const module = await import(
     pathToFileURL(
-      path.join(
-        repoRoot,
-        'packages/cli/foundation/discovery/theming-targets.mjs',
-      ),
+      path.join(repoRoot, 'packages/cli/foundation/discovery/theming-targets.mjs'),
     ).href
   );
   return module.collectThemingTargets(path.join(repoRoot, 'packages/core/src'));
@@ -136,9 +132,7 @@ export async function loadThemeOverrides(
   const buildOnce = (pkg, why) => {
     if (rebuilt.includes(pkg)) return;
     rebuilt.push(pkg);
-    console.log(
-      `visual gate: ${why}; building ${pkg} here rather than failing.`,
-    );
+    console.log(`visual gate: ${why}; building ${pkg} here rather than failing.`);
     build(repoRoot, pkg);
   };
 
@@ -149,17 +143,8 @@ export async function loadThemeOverrides(
 
     let loaded = await importBuilt(built);
     if (!loaded.ok && readOnly) {
-      if (
-        fs.existsSync(built) &&
-        fs.existsSync(path.join(repoRoot, CORE_THEME_ENTRY))
-      ) {
-        throw unreadableTheme(
-          repoRoot,
-          entry.name,
-          built,
-          loaded.error,
-          rebuilt,
-        );
+      if (fs.existsSync(built) && fs.existsSync(path.join(repoRoot, CORE_THEME_ENTRY))) {
+        throw unreadableTheme(repoRoot, entry.name, built, loaded.error, rebuilt);
       }
       notBuilt.push(entry.name);
       continue;
@@ -172,32 +157,18 @@ export async function loadThemeOverrides(
         );
       }
       if (!fs.existsSync(built)) {
-        buildOnce(
-          packageName(dir),
-          `${path.relative(repoRoot, built)} is missing`,
-        );
+        buildOnce(packageName(dir), `${path.relative(repoRoot, built)} is missing`);
       }
       loaded = await importBuilt(built, '?rebuilt');
       if (!loaded.ok) {
-        throw unreadableTheme(
-          repoRoot,
-          entry.name,
-          built,
-          loaded.error,
-          rebuilt,
-        );
+        throw unreadableTheme(repoRoot, entry.name, built, loaded.error, rebuilt);
       }
     }
 
-    const theme = Object.values(loaded.module).find(
-      value => value?.name && value?.components,
-    );
+    const theme = Object.values(loaded.module).find(value => value?.name && value?.components);
     if (!theme || theme.name === probeTheme) continue;
     overrides[theme.name] = Object.fromEntries(
-      Object.entries(theme.components).map(([key, styles]) => [
-        key,
-        Object.keys(styles ?? {}),
-      ]),
+      Object.entries(theme.components).map(([key, styles]) => [key, Object.keys(styles ?? {})]),
     );
   }
 
@@ -250,10 +221,7 @@ export function loadConfig(repoRoot) {
     visualPlanSafetyLimit: 5000,
     tiers: ['surface', 'theme-matrix', 'probe'],
   };
-  const configPath = path.join(
-    repoRoot,
-    '.github/scripts/visual-gate/visual-gate.config.json',
-  );
+  const configPath = path.join(repoRoot, '.github/scripts/visual-gate/visual-gate.config.json');
   if (!fs.existsSync(configPath)) return defaults;
   return {...defaults, ...JSON.parse(fs.readFileSync(configPath, 'utf8'))};
 }

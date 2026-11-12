@@ -41,8 +41,7 @@ function writeBuilt(dir) {
 }
 
 afterEach(() => {
-  for (const root of made.splice(0))
-    fs.rmSync(root, {recursive: true, force: true});
+  for (const root of made.splice(0)) fs.rmSync(root, {recursive: true, force: true});
 });
 
 describe('loadThemeOverrides', () => {
@@ -51,9 +50,7 @@ describe('loadThemeOverrides', () => {
     /** @type {string[]} */
     const builds = [];
 
-    const overrides = await loadThemeOverrides(root, 'probe', (_root, pkg) =>
-      builds.push(pkg),
-    );
+    const overrides = await loadThemeOverrides(root, 'probe', (_root, pkg) => builds.push(pkg));
 
     expect(overrides).toEqual({butter: {badge: ['base', 'variant:info']}});
     expect(builds).toEqual([]);
@@ -64,15 +61,10 @@ describe('loadThemeOverrides', () => {
     /** @type {string[]} */
     const builds = [];
 
-    const overrides = await loadThemeOverrides(
-      root,
-      'probe',
-      (_root, pkg) => {
-        builds.push(pkg);
-        writeBuilt(dir);
-      },
-      {readOnly: false},
-    );
+    const overrides = await loadThemeOverrides(root, 'probe', (_root, pkg) => {
+      builds.push(pkg);
+      writeBuilt(dir);
+    }, {readOnly: false});
 
     expect(builds).toEqual(['@astryxdesign/theme-butter']);
     expect(overrides).toEqual({butter: {badge: ['base', 'variant:info']}});
@@ -84,28 +76,18 @@ describe('loadThemeOverrides', () => {
     /** @type {string[]} */
     const builds = [];
 
-    await loadThemeOverrides(
-      root,
-      'probe',
-      (_root, pkg) => {
-        builds.push(pkg);
-        if (pkg === '@astryxdesign/theme-butter') writeBuilt(dir);
-      },
-      {readOnly: false},
-    );
+    await loadThemeOverrides(root, 'probe', (_root, pkg) => {
+      builds.push(pkg);
+      if (pkg === '@astryxdesign/theme-butter') writeBuilt(dir);
+    }, {readOnly: false});
 
-    expect(builds).toEqual([
-      '@astryxdesign/core',
-      '@astryxdesign/theme-butter',
-    ]);
+    expect(builds).toEqual(['@astryxdesign/core', '@astryxdesign/theme-butter']);
   });
 
   it('says it tried when the rebuild does not produce a loadable theme', async () => {
     const {root} = fixture({built: false});
 
-    await expect(
-      loadThemeOverrides(root, 'probe', () => {}, {readOnly: false}),
-    ).rejects.toThrow(
+    await expect(loadThemeOverrides(root, 'probe', () => {}, {readOnly: false})).rejects.toThrow(
       /could not load theme butter[\s\S]*rebuilt @astryxdesign\/theme-butter here and the import still fails/,
     );
   });
@@ -116,13 +98,10 @@ describe('loadThemeOverrides', () => {
       const repo = path.resolve(import.meta.dirname, '../../../..');
       const workflows = path.join(repo, '.github/workflows');
       for (const file of fs.readdirSync(workflows))
-        expect(
-          fs.readFileSync(path.join(workflows, file), 'utf8'),
-          file,
-        ).not.toContain(READ_ONLY_ENV);
-      expect(
-        fs.readFileSync(path.join(repo, 'vitest.config.ts'), 'utf8'),
-      ).toContain(`env: {${READ_ONLY_ENV}: '1'}`);
+        expect(fs.readFileSync(path.join(workflows, file), 'utf8'), file).not.toContain(READ_ONLY_ENV);
+      expect(fs.readFileSync(path.join(repo, 'vitest.config.ts'), 'utf8')).toContain(
+        `env: {${READ_ONLY_ENV}: '1'}`,
+      );
     });
 
     it('builds nothing for a theme it cannot read, and names it', async () => {
@@ -132,14 +111,7 @@ describe('loadThemeOverrides', () => {
       /** @type {string[]} */
       const notBuilt = [];
 
-      const overrides = await loadThemeOverrides(
-        root,
-        'probe',
-        (_root, pkg) => builds.push(pkg),
-        {
-          notBuilt,
-        },
-      );
+      const overrides = await loadThemeOverrides(root, 'probe', (_root, pkg) => builds.push(pkg), {notBuilt});
 
       expect(builds).toEqual([]);
       expect(notBuilt).toEqual(['butter']);
@@ -154,12 +126,7 @@ describe('loadThemeOverrides', () => {
       /** @type {string[]} */
       const notBuilt = [];
 
-      await loadThemeOverrides(
-        root,
-        'probe',
-        (_root, pkg) => builds.push(pkg),
-        {notBuilt},
-      );
+      await loadThemeOverrides(root, 'probe', (_root, pkg) => builds.push(pkg), {notBuilt});
 
       expect(builds).toEqual([]);
       expect(notBuilt).toEqual(['butter']);
@@ -167,20 +134,15 @@ describe('loadThemeOverrides', () => {
 
     it('still reads a built theme, and still fails on a built one that does not load', async () => {
       const {root} = fixture({built: true});
-      expect(
-        await loadThemeOverrides(root, 'probe', () => {}, {notBuilt: []}),
-      ).toEqual({
+      expect(await loadThemeOverrides(root, 'probe', () => {}, {notBuilt: []})).toEqual({
         butter: {badge: ['base', 'variant:info']},
       });
       // A separate tree: the module cache keeps the first import of a path.
       const broken = fixture({built: false});
-      fs.writeFileSync(
-        path.join(broken.dir, 'dist/source.mjs'),
-        'export const = ;\n',
+      fs.writeFileSync(path.join(broken.dir, 'dist/source.mjs'), 'export const = ;\n');
+      await expect(loadThemeOverrides(broken.root, 'probe', () => {}, {notBuilt: []})).rejects.toThrow(
+        /could not load theme butter/,
       );
-      await expect(
-        loadThemeOverrides(broken.root, 'probe', () => {}, {notBuilt: []}),
-      ).rejects.toThrow(/could not load theme butter/);
     });
   });
 });
