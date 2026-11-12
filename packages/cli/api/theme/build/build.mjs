@@ -73,6 +73,7 @@ import {
   findCoreDir,
   findInstalledPackage,
   findProjectCoreDir,
+  findPackageRoot,
 } from '../../../foundation/fs/paths.mjs';
 import {isGlobalCopy} from '../../../foundation/release/choose.mjs';
 import {isInReleaseCache} from '../../../foundation/release/cache.mjs';
@@ -88,6 +89,7 @@ import {AstryxError} from '../../error.mjs';
 import {applyWrites} from '../../integration/add-helpers.mjs';
 import {logger} from '../../logger.mjs';
 import {loadComponentDoc} from '../../../foundation/discovery/component-loader.mjs';
+import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
 import {
   collectThemingTargets,
   targetsByKey,
@@ -831,11 +833,96 @@ function themeFilesIn(dir) {
   try {
     return fs
       .readdirSync(dir)
-      .filter(name => /(?:\.theme|Theme)\.(?:[cm]?[jt]sx?)$/.test(name))
+      .filter(
+        name =>
+          /(?:\.theme|Theme)\.[^.]+$/.test(name) &&
+          THEME_SOURCE_EXTENSIONS.includes(path.extname(name)) &&
+          !fileHead(path.join(dir, name)).includes(GENERATED_MARKER),
+      )
       .sort()
       .slice(0, 3);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Theme sources a missing build input probably meant, relative to `cwd`: the
+ * same path with `/` for `\`; or, for a bare theme name, the theme sources in
+ * `themes/<name>/` and `src/themes/<name>/` of the project, and `<name>` with a
+ * theme source extension. A build output is never offered.
+ * @param {string} file the input as given
+ * @param {string} cwd
+ * @returns {string[]} at most three paths
+ */
+export function themeSourceGuesses(file, cwd) {
+  const shown = (/** @type {string} */ absolute) =>
+    path.relative(cwd, absolute).split(path.sep).join('/');
+  const isSource = (/** @type {string} */ absolute) =>
+    fs.existsSync(absolute) &&
+    !fs.statSync(absolute).isDirectory() &&
+    !fileHead(absolute).includes(GENERATED_MARKER);
+  if (file.includes('\\')) {
+    const forward = path.resolve(cwd, file.replace(/\\/g, '/'));
+    return isSource(forward) ? [shown(forward)] : [];
+  }
+  if (/[/.]/.test(file)) return [];
+  const root = findPackageRoot(cwd) ?? cwd;
+  const guesses = [
+    path.join(root, 'themes', file),
+    path.join(root, 'src', 'themes', file),
+  ].flatMap(folder =>
+    themeFilesIn(folder).map(name => shown(path.join(folder, name))),
+  );
+  for (const extension of THEME_SOURCE_EXTENSIONS) {
+    const candidate = path.resolve(cwd, file + extension);
+    if (isSource(candidate)) guesses.push(shown(candidate));
+  }
+  return guesses.slice(0, 3);
+}
+
+/**
+ * Refuse a file that is not a theme source before loading it: an output of a
+ * build (it carries the `@generated` header, whatever its extension, and
+ * names the source it was built from), or a file whose extension no theme
+ * source has, such as `.css` or `.json` (THEME_SOURCE_EXTENSIONS).
+ * @param {string} filePath
+ * @param {string} cwd
+ */
+function assertThemeSourceFile(filePath, cwd) {
+  const rel = (/** @type {string} */ file) => path.relative(cwd, file);
+  const sourceHead = fileHead(filePath);
+  if (sourceHead.includes(GENERATED_MARKER)) {
+    const from = /Source: (.+)/.exec(sourceHead)?.[1]?.trim();
+    throw new AstryxError(
+      `${rel(filePath)} is an output of \`theme build\`, not a theme source.${from ? ` It was built from ${from}.` : ''}`,
+      from
+        ? [
+            {
+              name: formatCliCommand(`theme build ${shellWord(from)}`, cwd),
+              reason: 'build the theme source',
+            },
+          ]
+        : undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+  if (!THEME_SOURCE_EXTENSIONS.includes(path.extname(filePath).toLowerCase())) {
+    throw new AstryxError(
+      `${rel(filePath)} is not a theme module. A theme source is a ${THEME_SOURCE_EXTENSIONS.join(', ')} file that exports defineTheme(...).`,
+      themeFilesIn(path.dirname(filePath)).map(name => ({
+        name: formatCliCommand(
+          `theme build ${shellWord(
+            rel(path.join(path.dirname(filePath), name))
+              .split(path.sep)
+              .join('/'),
+          )}`,
+          cwd,
+        ),
+        reason: 'a theme source in that folder',
+      })),
+      ERROR_CODES.ERR_THEME_LOAD,
+    );
   }
 }
 
@@ -861,22 +948,6 @@ function assertOutputsReplaceable(
 ) {
   const rel = (/** @type {string} */ file) => path.relative(cwd, file);
   const sourceKey = outputKey(filePath);
-  const sourceHead = fileHead(filePath);
-  if (sourceHead.includes(GENERATED_MARKER)) {
-    const from = /Source: (.+)/.exec(sourceHead)?.[1]?.trim();
-    throw new AstryxError(
-      `${rel(filePath)} is an output of \`theme build\`, not a theme source.${from ? ` It was built from ${from}.` : ''}`,
-      from
-        ? [
-            {
-              name: formatCliCommand(`theme build ${shellWord(from)}`, cwd),
-              reason: 'build the theme source',
-            },
-          ]
-        : undefined,
-      ERROR_CODES.ERR_THEME_INVALID,
-    );
-  }
   const seen = new Set();
   for (const write of writes) {
     const key = outputKey(write.dest);
@@ -1983,17 +2054,24 @@ const THEME_SCOPE_TO = `[data-astryx-theme]`;
  * the author's TypeScript sees, which is the point: the CSS the build emits
  * matches the theme they type-checked.
  */
+// Every theme source extension is in this list: jiti hands a file whose
+// extension it does not list to Node's own loader, which cannot load `.jsx`
+// or, on some Node versions, TypeScript.
 const THEME_MODULE_EXTENSIONS = [
-  '.ts',
-  '.tsx',
-  '.mts',
-  '.cts',
-  '.mtsx',
-  '.ctsx',
-  '.mjs',
-  '.cjs',
-  '.js',
-  '.json',
+  ...new Set([
+    '.ts',
+    '.tsx',
+    '.mts',
+    '.cts',
+    '.mtsx',
+    '.ctsx',
+    '.mjs',
+    '.cjs',
+    '.js',
+    '.jsx',
+    '.json',
+    ...THEME_SOURCE_EXTENSIONS,
+  ]),
 ];
 // prettier-ignore
 const registryGraphError = (/** @type {string} */ message) => new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
@@ -3189,7 +3267,10 @@ async function themeBuildInternal(
   if (!fs.existsSync(filePath)) {
     throw new AstryxError(
       `File not found: ${filePath}`,
-      undefined,
+      themeSourceGuesses(file, cwd).map(guess => ({
+        name: formatCliCommand(`theme build ${shellWord(guess)}`, cwd),
+        reason: 'a theme source that exists',
+      })),
       ERROR_CODES.ERR_FILE_NOT_FOUND,
     );
   }
@@ -3207,6 +3288,8 @@ async function themeBuildInternal(
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
+
+  assertThemeSourceFile(filePath, cwd);
 
   if (!report.compact) {
     logger.log(`\nBuilding theme from ${path.relative(cwd, filePath)}...`);
