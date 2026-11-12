@@ -105,6 +105,9 @@ let lastOutcome = null;
  */
 let gatherCode = null;
 
+/** How many persistedGather calls are running, nested inside one another. */
+let gatherDepth = 0;
+
 /**
  * The outcome of the last kept gather in this process: whether it was a hit,
  * and why it missed. Null when no kept gather ran.
@@ -199,8 +202,9 @@ export async function recordRunFor(argv, fn) {
   ) {
     return fn();
   }
-  // Catalogs are kept only once the folder exists: the first search or build
-  // on a machine just makes it, so a one-off run never pays to store one.
+  // Gathers are kept only once the folder exists: the first recorded run on a
+  // machine (search, build, component, template, theme or discover) just makes
+  // it, so a one-off run never pays to store one.
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {
     try {
@@ -465,6 +469,28 @@ function staleReason(stamps, env) {
  * @returns {Promise<T>}
  */
 export async function persistedGather(key, load, codec, keep = () => true) {
+  // A gather inside another (an integration's checks inside search's catalog
+  // gather) leaves the run's recording to the outermost: only it disarms, so
+  // what the outer gather reads after the inner one is still stamped.
+  gatherDepth++;
+  try {
+    return await gatherAt(key, load, codec, keep);
+  } finally {
+    if (--gatherDepth === 0) run?.disarm();
+  }
+}
+
+/**
+ * persistedGather's body; the caller disarms the run's recording once the
+ * outermost gather is done.
+ * @template T, E
+ * @param {unknown[]} key
+ * @param {() => Promise<T>} load
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
+ * @param {(value: T) => boolean} keep
+ * @returns {Promise<T>}
+ */
+async function gatherAt(key, load, codec, keep) {
   const id = withoutRecording(buildId);
   // A run under Yarn Plug'n'Play's loader neither keeps nor reads catalogs:
   // its modules resolve through PnP, which a catalog's stamps do not follow.
@@ -480,11 +506,7 @@ export async function persistedGather(key, load, codec, keep = () => true) {
             ? "a run under Yarn Plug'n'Play's loader"
             : 'no usable cache folder',
     };
-    try {
-      return await load();
-    } finally {
-      run?.disarm();
-    }
+    return await load();
   }
   const file = entryFile(dir, key, id);
   let reason = 'no entry';
@@ -502,7 +524,6 @@ export async function persistedGather(key, load, codec, keep = () => true) {
         const value = codec.decode(stored.value);
         recordStates(stored.stamps);
         gatherCode = cliStates(stored.stamps);
-        run?.disarm();
         lastOutcome = {hit: true, reason: 'unchanged'};
         try {
           const now = new Date();
@@ -521,15 +542,11 @@ export async function persistedGather(key, load, codec, keep = () => true) {
   lastOutcome = {hit: false, reason};
   // A later gather in the run records its modules and variables again.
   const armed = run?.arm() ?? false;
-  try {
-    const value = await load();
-    if (run && armed && keep(value)) {
-      withoutRecording(() => store(dir, file, entryKey(key, id), value, codec));
-    }
-    return value;
-  } finally {
-    run?.disarm();
+  const value = await load();
+  if (run && armed && keep(value)) {
+    withoutRecording(() => store(dir, file, entryKey(key, id), value, codec));
   }
+  return value;
 }
 
 /**

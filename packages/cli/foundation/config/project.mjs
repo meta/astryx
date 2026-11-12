@@ -103,11 +103,6 @@ import {
 import {validateLoadedIntegration} from '../integrations/validate-contributions.mjs';
 import {persistedGather} from '../fs/gather-cache.mjs';
 
-/** Issues are plain records, kept as they are. */
-const ISSUES_CODEC = {
-  encode: (/** @type {any} */ value) => value,
-  decode: (/** @type {any} */ value) => value,
-};
 import {recordDeclaredCliCommands} from '../env/cli-command.mjs';
 import {
   hostedRun,
@@ -118,6 +113,12 @@ import {
   cacheKey,
   configContentHash,
 } from './config-cache.mjs';
+
+/** Issues are plain records, kept as they are. */
+const ISSUES_CODEC = {
+  encode: (/** @type {any} */ value) => value,
+  decode: (/** @type {any} */ value) => value,
+};
 
 export {CONFIG_BASENAMES, findConfigPath} from './config-path.mjs';
 
