@@ -10,7 +10,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -28,6 +28,15 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -70,7 +79,9 @@ beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-edit-', FIXTURE_PACKAGES);
   // CI builds only Core, so the base theme is a fixture, not a built package.
   writeFixtureBaseTheme(cwd, 'neutral');
-  await themeEditNew('t', {cwd, like: 'neutral'});
+  // The first theme renders for real: its preview and render folder are
+  // checked below.
+  await withRealRenders(() => themeEditNew('t', {cwd, like: 'neutral'}));
 }, 120_000);
 
 afterAll(() => {
@@ -134,7 +145,7 @@ describe('refusals', () => {
     expect(r.message).toContain('card never reads --color-on-info-muted');
     expect(r.message).toContain('Nothing was changed.');
     expect(r.run).toContain(
-      'astryx experimental theme editor set t color "#ffffff" --on card',
+      "astryx experimental theme editor set t color '#ffffff' --on card",
     );
     expect(settingsOf('t')).toBe(before);
   });
@@ -195,7 +206,7 @@ describe('refusals', () => {
     );
     expect(r.code).toBe('ERR_THEME_UNKNOWN_THING');
     expect(r.run[0]).toContain(
-      'background "linear-gradient(#fff, #000)" --on card',
+      "background 'linear-gradient(#fff, #000)' --on card",
     );
   });
 
@@ -241,8 +252,9 @@ describe('colors', () => {
       'var(--brand-ink)',
       {cwd},
     );
-    expect(r.data.problems.join(' ')).toContain('not checked');
-    expect(r.data.problems.join(' ')).toContain('var(--brand-ink)');
+    // What cannot be measured is a note, not a problem.
+    expect(r.data.notes.join(' ')).toContain('not checked');
+    expect(r.data.notes.join(' ')).toContain('var(--brand-ink)');
     await themeEditUndo('t', {cwd, thing: '--color-text-primary'});
   });
 
@@ -396,7 +408,7 @@ describe('typed modes', () => {
     );
     expect(r.code).toBe('ERR_THEME_NO_MODE');
     expect(r.run).toEqual([
-      'astryx experimental theme editor set night --color-accent "#ff0000"',
+      "astryx experimental theme editor set night --color-accent '#ff0000'",
     ]);
   });
 });
@@ -534,7 +546,9 @@ describe('settings round trip', () => {
 
   it('show lists the settings and writes both pages', async () => {
     await themeEditSet('t', 'surfaces', 'outlined', {cwd});
-    const r = await themeEditShow('t', {cwd, section: 'actions'});
+    const r = await withRealRenders(() =>
+      themeEditShow('t', {cwd, section: 'actions'}),
+    );
     expect(r.data.settings.map(s => s.thing)).toContain('surfaces');
     expect(fs.readFileSync(path.join(cwd, r.data.sheet), 'utf8')).toContain(
       'astryx-button',
@@ -552,7 +566,7 @@ describe('how on real parts, questions and settings', () => {
     const commands = r.data.results.flatMap(x => x.commands);
     expect(
       commands.some(c =>
-        c.endsWith('editor set t color "#ffffff" --on banner'),
+        c.endsWith("editor set t color '#ffffff' --on banner"),
       ),
     ).toBe(true);
     expect(
@@ -564,7 +578,7 @@ describe('how on real parts, questions and settings', () => {
   it('a question about soft shadows is answered with box-shadow on the part', async () => {
     const r = await themeEditHow('card soft shadow', {cwd});
     expect(r.data.results[0].commands[0]).toMatch(
-      /editor set t box-shadow "var\(--shadow-low\)" --on card$/,
+      /editor set t box-shadow 'var\(--shadow-low\)' --on card$/,
     );
   });
 
@@ -693,7 +707,7 @@ describe('the command', () => {
     expect(out.code).toBe('ERR_THEME_NO_EFFECT');
     // The same prefix the text output uses.
     expect(out.suggestions[0].name).toMatch(
-      /^(astryx|(?:npx|pnpm dlx|yarn dlx|bunx) \S+) experimental theme editor set t color "#ffffff" --on card$/,
+      /^(astryx|(?:npx|pnpm dlx|yarn dlx|bunx) \S+) experimental theme editor set t color '#ffffff' --on card$/,
     );
   });
 

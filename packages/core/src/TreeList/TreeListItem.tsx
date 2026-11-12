@@ -31,7 +31,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
-  cancelNestedTouchPress,
+  cancelNestedPress,
   hasInteractiveAncestor,
   useClickableContainer,
 } from '../hooks/useClickableContainer';
@@ -508,7 +508,7 @@ export function TreeListItem({
       chevron.contains(event.target)
         ? chevron
         : (linkRef.current ?? actionButtonRef.current);
-    cancelNestedTouchPress(event, event.currentTarget, ownAction);
+    cancelNestedPress(event, event.currentTarget, ownAction);
   };
   const {onMouseUp: openLinkOnMiddleClick} = useClickableContainer({
     containerRef: linkRowRef,
