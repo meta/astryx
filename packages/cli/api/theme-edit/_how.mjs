@@ -198,6 +198,7 @@ async function answer(subject, options, cwd) {
       refuse(
         E.ERR_THEME_INVALID,
         `${broken}, so settings cannot take effect and no command here would change the theme. Put back the import, extends and name lines in themes/${options.theme}/${options.theme}.theme.ts, then ask again.`,
+        {run: [`${P} show ${options.theme}`]},
       );
   }
   if (list != null) {
@@ -205,6 +206,7 @@ async function answer(subject, options, cwd) {
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--at reads a picture; --list lists names, so drop one of them.',
+        {run: [`${HOW} --list ${quoteCommandArgument(String(list))}`]},
       );
     const kind = listKind(list);
     if (kind === 'kinds')
@@ -1089,6 +1091,7 @@ export function parsePoints(at) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `--at reads at most ${MAX_POINTS} points; it got ${points.length}.`,
+      {run: [example]},
     );
   return points;
 }
@@ -1112,6 +1115,7 @@ function pictureColors(file, cwd, at, count) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       'A count lists main colors; --at reads points. Give one of them.',
+      {run: [`${HOW} ${quoteCommandArgument(file)} ${count}`]},
     );
   if (count != null && (!Number.isInteger(count) || count <= 0))
     refuse(
@@ -1132,6 +1136,7 @@ function pictureColors(file, cwd, at, count) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `${file} is a ${other[0]} picture; how reads PNG only. Save or convert it as PNG.`,
+      {run: [`${HOW} --list`]},
     );
   /** @type {import('./_png.mjs').Picture} */
   let pic;
@@ -1140,7 +1145,7 @@ function pictureColors(file, cwd, at, count) {
   } catch (e) {
     throw new AstryxError(
       `Could not read ${file} as a PNG picture: ${e instanceof Error ? e.message : String(e)}.`,
-      [],
+      [{name: `${HOW} --list`, reason: 'what how reads'}],
       E.ERR_INVALID_ARGUMENT,
     );
   }
@@ -1157,6 +1162,7 @@ function pictureColors(file, cwd, at, count) {
           .join(
             '; ',
           )} ${outside.length > 1 ? 'are' : 'is'} outside the picture, which is ${pic.width}x${pic.height} (x from 0 to ${pic.width - 1}, y from 0 to ${pic.height - 1}).`,
+        {run: [`${HOW} ${quoteCommandArgument(file)} --at 0,0`]},
       );
     return {
       file,

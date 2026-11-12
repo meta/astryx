@@ -18,6 +18,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {isAlive} from '../../foundation/release/cache.mjs';
+import {stillHolds} from '../../foundation/release/folder-lock.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {parse} from '@babel/parser';
@@ -64,6 +65,7 @@ export function writeWhole(file, text) {
       ERROR_CODES.ERR_WRITE_FAILED,
     );
   sweepTemps(path.dirname(file));
+  refuseIfLockLost();
   const tmp = tempFor(file);
   try {
     fs.writeFileSync(tmp, text);
@@ -73,19 +75,31 @@ export function writeWhole(file, text) {
   }
 }
 
-/** Folders swept of left temp files in this run. */
-const swept = new Set();
+/**
+ * A command stopped long enough for another to take its lock (Ctrl-Z, a
+ * sleeping computer, a debugger) writes nothing more: refuse. Called right
+ * before each write.
+ */
+export function refuseIfLockLost() {
+  try {
+    stillHolds();
+  } catch {
+    throw new AstryxError(
+      `Another command took over the theme's lock while this one was stopped (Ctrl-Z, a sleeping computer, a debugger), so this one wrote nothing more and its change was undone. Run it again.`,
+      [],
+      ERROR_CODES.ERR_THEME_BUSY,
+    );
+  }
+}
 
 /**
  * Remove the editor's own temp files a stopped command left in a folder:
- * only names the editor makes (`.<name>.astryx-<pid>-<random>.tmp`), whose
- * process is gone and that are more than ten minutes old. Links are never
- * followed. Once per folder per run.
+ * only names the editor makes (`.<name>.astryx-<pid>-<random>.tmp`) whose
+ * process is gone. Links are never followed. A theme folder holds a few
+ * files, so every write looks.
  * @param {string} dir
  */
 function sweepTemps(dir) {
-  if (swept.has(dir)) return;
-  swept.add(dir);
   let names;
   try {
     names = fs.readdirSync(dir);
@@ -98,7 +112,9 @@ function sweepTemps(dir) {
     const p = path.join(dir, n);
     try {
       const st = fs.lstatSync(p);
-      if (!st.isFile() || Date.now() - st.mtimeMs < 10 * 60_000) continue;
+      // Writes into a theme folder run under its lock, so a temp file
+      // whose process is gone is never one a live command still renames.
+      if (!st.isFile()) continue;
       if (isAlive(Number(m[1]))) continue;
       fs.rmSync(p, {force: true});
     } catch {
@@ -643,7 +659,7 @@ function usableStops(stops, slug) {
   const refuse = why => {
     throw new AstryxError(
       `themes/${slug}/palette.config.json: its stops (${shown}) ${why}. ${fix}`,
-      [],
+      [{name: `${P} how colors`, reason: 'how the shades are made'}],
       ERROR_CODES.ERR_THEME_INVALID,
     );
   };
@@ -1603,7 +1619,7 @@ function generate(config, file = 'palette.config.json') {
   } catch (e) {
     throw new AstryxError(
       `${file}: the colors could not be generated: ${(e instanceof Error ? e.message : String(e)).replace(/\.$/, '')}. Fix that part of the file by hand, or remove it. Nothing was changed.`,
-      [],
+      [{name: `${P} how colors`, reason: 'how the colors are made'}],
       ERROR_CODES.ERR_PALETTE_GENERATION,
     );
   }

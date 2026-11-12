@@ -158,6 +158,8 @@ const notChecked = cause =>
 export async function pictures(project, shots, modes) {
   /** @type {string[]} */
   const files = [];
+  /** @type {string[]} */
+  const cut = [];
   for (const {html, png} of shots) {
     for (const m of modes) {
       const out =
@@ -167,9 +169,16 @@ export async function pictures(project, shots, modes) {
       const r = await screenshot(project, html, out, m);
       if (!r.ok) return {files, problem: r.reason};
       files.push(r.file);
+      if (r.cut) cut.push(r.file);
     }
   }
-  return {files, problem: null};
+  return {
+    files,
+    // A picture of the window shows the top of a longer page only.
+    problem: cut.length
+      ? `${cut.join(', ')} show${cut.length === 1 ? 's' : ''} the top 2400 pixels of the page only (Chrome takes the window, not the whole page); open the .html beside ${cut.length === 1 ? 'it' : 'them'} to see all of it, or install Playwright (${installLine(project.cwd, ['playwright'])}) for whole-page pictures`
+      : null,
+  };
 }
 
 /**

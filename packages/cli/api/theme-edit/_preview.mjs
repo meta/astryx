@@ -1050,7 +1050,7 @@ const camelName = camel;
  * @param {string} html absolute
  * @param {string} png absolute
  * @param {'light' | 'dark'} mode
- * @returns {Promise<{ok: true, file: string} | {ok: false, reason: string}>}
+ * @returns {Promise<{ok: true, file: string, cut?: boolean} | {ok: false, reason: string}>} `cut` when the picture is of the window, not the whole page
  */
 export async function screenshot(project, html, png, mode) {
   /** What was found and why it could not take the picture. @type {string[]} */
@@ -1109,8 +1109,9 @@ export async function screenshot(project, html, png, mode) {
       ],
       {encoding: 'utf8', timeout: 60_000},
     );
+    // Chrome alone takes the window, not the whole page.
     if (r.status === 0 && fs.existsSync(png))
-      return {ok: true, file: shown(project.cwd, png)};
+      return {ok: true, file: shown(project.cwd, png), cut: true};
     failed.push(
       `${chrome}: ${firstLine(
         r.error ??

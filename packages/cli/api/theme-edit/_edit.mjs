@@ -52,6 +52,7 @@ import {
   buildTheme,
   staleBuild,
   EDITOR_SUFFIXES,
+  madeByEditor,
   themeSource,
   themeSourceProblem,
 } from './_settings.mjs';
@@ -68,6 +69,7 @@ import {
 import {renderPreview, renderSheet} from './_preview.mjs';
 import {refreshPreviewRoute} from './_preview-app.mjs';
 import {baseResolved, installLine} from './_project.mjs';
+import {refuseWithoutReact} from './_parts.mjs';
 import {
   requireProject,
   context,
@@ -92,19 +94,33 @@ const NEW_MARKER = '.astryx-new.json';
 const FOLDER_JUNK = new Set(['.DS_Store', '.gitkeep', 'Thumbs.db']);
 
 /**
- * What a stopped `new` left, when the folder holds its marker and only
- * files the editor writes for that name (its generated files, the source
- * exactly as it writes it, its pages, colors and temp files); null when
- * there is no marker or anything else is there. System files (.DS_Store)
- * stay.
+ * A folder the editor made but that has no settings: a stopped `new` left
+ * its marker, or the settings were removed beside the editor's generated
+ * module. `clear` is what `new` makes again (the files the editor writes
+ * for that name, the source only exactly as it writes it); `keep` is every
+ * other file, which is never touched. Null when the editor did not make
+ * the folder. System files (.DS_Store) are in neither.
  * @param {string} dir
  * @param {string} slug
- * @returns {string[] | null}
+ * @param {boolean} [damaged] its settings are there but not valid JSON
+ * @returns {{clear: string[], keep: string[]} | null}
  */
-function editorLeftovers(dir, slug) {
-  if (!fs.existsSync(path.join(dir, NEW_MARKER))) return null;
+function editorLeftovers(dir, slug, damaged = false) {
+  // The editor made this folder: a stopped `new` left its marker, the
+  // generated settings module (which carries the editor's header) is there
+  // without its settings, or its settings are there but damaged (kept
+  // aside by `new`, so neither cleared nor kept here).
+  const marked = fs.existsSync(path.join(dir, NEW_MARKER));
+  if (
+    !marked &&
+    !damaged &&
+    !madeByEditor(path.join(dir, `${slug}.settings.ts`))
+  )
+    return null;
   /** @type {string[]} */
-  const files = [];
+  const clear = [];
+  /** @type {string[]} */
+  const keep = [];
   const named = (/** @type {string} */ n) =>
     n === NEW_MARKER ||
     EDITOR_SUFFIXES.some(x => n === `${slug}.${x}`) ||
@@ -117,22 +133,38 @@ function editorLeftovers(dir, slug) {
   for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
     const p = path.join(dir, e.name);
     if (FOLDER_JUNK.has(e.name)) continue;
+    if (damaged && e.name === `${slug}.settings.json`) continue;
     if (e.isDirectory() && e.name === 'tokens') {
-      for (const t of fs.readdirSync(p, {withFileTypes: true})) {
-        if (!t.isFile() || !t.name.startsWith(`${slug}.palette`)) return null;
-        files.push(path.join(p, t.name));
-      }
+      for (const t of fs.readdirSync(p, {withFileTypes: true}))
+        (t.isFile() && t.name.startsWith(`${slug}.palette`)
+          ? clear
+          : keep
+        ).push(path.join(p, t.name));
       continue;
     }
-    if (!e.isFile()) return null;
-    if (e.name === `${slug}.theme.ts`) {
-      // Only the source exactly as the editor writes it, never one changed
-      // by hand.
-      if (fs.readFileSync(p, 'utf8') !== themeSource(slug)) return null;
-    } else if (!named(e.name)) return null;
-    files.push(p);
+    // The source as the editor writes it is made again; one changed by hand
+    // is the user's, and stays. The history stays too when the settings were
+    // removed, so `undo` can step back to them.
+    const mine =
+      e.isFile() &&
+      (e.name === `${slug}.theme.ts`
+        ? fs.readFileSync(p, 'utf8') === themeSource(slug)
+        : e.name === `${slug}.history.json`
+          ? marked
+          : named(e.name));
+    (mine ? clear : keep).push(p);
   }
-  return files;
+  return {clear, keep};
+}
+
+/** Whether a file parses as JSON. @param {string} file */
+function readableJson(file) {
+  try {
+    JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -190,7 +222,10 @@ export async function themeEditNew(name, options = {}) {
         {run: [`${P} new ${name}-copy`]},
       );
   }
-  if (fs.existsSync(f.settings))
+  // Settings that are not valid JSON are kept aside, and the theme is
+  // made again beside them.
+  const damaged = fs.existsSync(f.settings) && !readableJson(f.settings);
+  if (fs.existsSync(f.settings) && !damaged)
     refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.`, {
       run: [`${P} show ${name}`, `${P} set ${name} base neutral`],
     });
@@ -198,7 +233,9 @@ export async function themeEditNew(name, options = {}) {
   // beside the files it wrote: only such a folder is cleared, and only
   // after every argument is checked. Anything else in the folder, or a
   // folder without the marker, is never touched.
-  const left = fs.existsSync(f.dir) ? editorLeftovers(f.dir, name) : null;
+  const left = fs.existsSync(f.dir)
+    ? editorLeftovers(f.dir, name, damaged)
+    : null;
   const holdsOther =
     fs.existsSync(f.dir) &&
     !left &&
@@ -219,6 +256,18 @@ export async function themeEditNew(name, options = {}) {
       },
     );
   const ctx = await context(cwd);
+  /** @type {string[]} */
+  const keptNotes = [];
+  if (damaged) {
+    let n = 1;
+    const aside = (/** @type {number} */ k) =>
+      path.join(f.dir, `${name}.settings.damaged${k > 1 ? `-${k}` : ''}.json`);
+    while (fs.existsSync(aside(n))) n++;
+    fs.renameSync(f.settings, aside(n));
+    keptNotes.push(
+      `${name}.settings.json was not valid JSON: it is kept as ${path.basename(aside(n))}, and the theme was made again`,
+    );
+  }
   /** @type {import('./_settings.mjs').ThemeData} */
   const data = {name, ...(like ? {like} : {}), mode: 'both', settings: []};
   /** @type {import('./_settings.mjs').Ctx} */ (ctx).base = await baseResolved(
@@ -228,21 +277,38 @@ export async function themeEditNew(name, options = {}) {
   applyNewSettings(ctx, name, data, settings);
   /** @type {string[]} */
   const leftNotes = [];
-  if (left && left.length) {
-    for (const p of left) fs.rmSync(p, {force: true});
+  if (left && left.clear.length) {
+    for (const p of left.clear) fs.rmSync(p, {force: true});
     try {
       fs.rmdirSync(path.join(f.dir, 'tokens'));
     } catch {
       // Not there, or it holds something else.
     }
-    const shownLeft = left.filter(p => path.basename(p) !== NEW_MARKER);
+    const shownLeft = left.clear.filter(
+      (/** @type {string} */ p) => path.basename(p) !== NEW_MARKER,
+    );
+    const stopped = left.clear.some(p => path.basename(p) === NEW_MARKER);
     leftNotes.push(
-      `cleared ${shownLeft.length} file${shownLeft.length === 1 ? '' : 's'} a stopped \`new\` left in themes/${name}/ (${shownLeft
+      `cleared ${shownLeft.length} file${shownLeft.length === 1 ? '' : 's'} ${stopped ? 'a stopped `new` left' : 'the editor had left'} in themes/${name}/ (${shownLeft
         .slice(0, 4)
         .map(p => path.relative(f.dir, p))
         .join(', ')}${shownLeft.length > 4 ? ', …' : ''}), then made the theme`,
     );
   }
+  const ownKept = (left?.keep ?? []).filter(
+    p => path.basename(p) !== `${name}.history.json`,
+  );
+  if (ownKept.length)
+    leftNotes.push(
+      `kept your own files in themes/${name}/: ${ownKept
+        .slice(0, 4)
+        .map(p => path.relative(f.dir, p))
+        .join(', ')}${ownKept.length > 4 ? ', …' : ''}`,
+    );
+  if (left?.keep.some(p => path.basename(p) === `${name}.history.json`))
+    leftNotes.push(
+      `the earlier settings are kept in ${name}.history.json: \`${P} undo ${name}\` steps back to them`,
+    );
   // The marker goes first and comes off last: a `new` stopped between
   // leaves a folder the next `new` can prove it made.
   const dirMade = !fs.existsSync(f.dir);
@@ -270,6 +336,7 @@ export async function themeEditNew(name, options = {}) {
   const p = await previewAndRoute(ctx, name, data, png);
   /** @type {string[]} */
   const notes = [
+    ...keptNotes,
     ...leftNotes,
     ...(data.settings.some(s => s.thing === 'font')
       ? fontNotes(ctx, data)
@@ -1087,6 +1154,7 @@ export async function themeEditShow(theme, options = {}) {
             : [`${P} show ${theme}`],
       },
     );
+  if (!readOnly) refuseWithoutReact(cwd);
   const f = themeFiles(cwd, theme);
   // A build that does not match the settings (a command stopped mid-build,
   // a hand edit, another CLI) is made again from the settings, and said.

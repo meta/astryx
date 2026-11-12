@@ -525,8 +525,9 @@ function confined(file, root, what) {
       refuse(
         E.ERR_PATH_TRAVERSAL,
         link == null
-          ? `${what} ${file} is outside ${root}.`
-          : `${what} ${file}, which is a link to ${link}, outside ${root}.`,
+          ? `${what} names ${file}, which is outside ${root}.`
+          : `${what} names ${file}, which is a link to ${link}, outside ${root}.`,
+        {run: [`${PREVIEW} list`]},
       );
     }
     throw e;
@@ -1517,6 +1518,28 @@ function unrecordedPages(dir) {
 }
 
 /**
+ * Whether a step record names a path that leads out of the preview folder
+ * (a hand edit, a damaged file): such a record is not followed.
+ * @param {string} dir
+ * @param {any} p
+ */
+function pendingEscapes(dir, p) {
+  const rels = [
+    ...(Array.isArray(p?.temps) ? p.temps : []),
+    ...(Array.isArray(p?.record?.files) ? p.record.files : []),
+    ...(Array.isArray(p?.old?.files) ? p.old.files : []),
+  ].filter(x => typeof x === 'string');
+  return rels.some(rel => {
+    try {
+      assertWithin(path.join(dir, rel), dir, {allowAbsolute: true});
+      return false;
+    } catch {
+      return true;
+    }
+  });
+}
+
+/**
  * Finish a preview change that was stopped part way (a kill), from the
  * step record it left: its leftover temp files go; each file it was writing
  * keeps the hash of what is on disk when that is the new or the old text,
@@ -1533,13 +1556,11 @@ function recoverPreview(cwd, dir) {
   const pendingFile = path.join(dir, PENDING);
   /** @type {any} */
   let p;
-  try {
-    p = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
-  } catch (e) {
-    if (/** @type {any} */ (e)?.code === 'ENOENT') return null;
-    // Unreadable: the change is treated as never started. Its temp files
-    // are found by the names only the editor makes, when their process is
-    // gone.
+  // Unreadable, or naming a path outside the folder: the change is
+  // treated as never started.
+  const abandon = () => {
+    // Its temp files are found by the names only the editor makes, when
+    // their process is gone.
     for (const sub of ['', PAGES_DIR, LEGACY_PAGES_DIR]) {
       /** @type {string[]} */
       let names;
@@ -1559,7 +1580,14 @@ function recoverPreview(cwd, dir) {
       shown(cwd, path.join(dir, rel)),
     );
     return `removed ${shown(cwd, pendingFile)}, a damaged step record of a preview change that was stopped${strays.length ? `; ${strays.join(', ')} ${strays.length > 1 ? 'are' : 'is'} in no preview record and may be from that change, so ${strays.length > 1 ? 'they stay' : 'it stays'} until you remove ${strays.length > 1 ? 'them' : 'it'}` : ''}`;
+  };
+  try {
+    p = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+  } catch (e) {
+    if (/** @type {any} */ (e)?.code === 'ENOENT') return null;
+    return abandon();
   }
+  if (pendingEscapes(dir, p)) return abandon();
   const inside = (/** @type {string} */ rel) =>
     confined(path.join(dir, rel), dir, PENDING);
   for (const t of Array.isArray(p?.temps) ? p.temps : [])
@@ -3181,6 +3209,29 @@ function readVersion(project, pkg) {
     ).version;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Why the in-app preview's record is damaged, with how to fix it, or null
+ * (no preview, or a sound one). For answers that would suggest a preview
+ * command, which the damage refuses.
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function previewRecordProblem(cwd) {
+  try {
+    const at = previewDir(cwd, undefined, {
+      optional: true,
+      retry: () => `${PREVIEW} add`,
+    });
+    if (at) readPreview(cwd, at.dir);
+    return null;
+  } catch (e) {
+    const err = /** @type {any} */ (e);
+    if (err?.code !== E.ERR_THEME_INVALID) return null;
+    const fix = err.fix;
+    return `${String(err.message).replace(/ Nothing was changed\.$/, '')}${fix ? ` To fix it: ${fix}.` : ''}`;
   }
 }
 

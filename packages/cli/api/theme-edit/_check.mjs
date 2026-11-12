@@ -94,6 +94,17 @@ function tokenPx(base, token) {
   return lengthPx(v);
 }
 
+/**
+ * A `set` (or `undo`) command for a setting, with its scope, to suggest.
+ * @param {string} slug
+ * @param {string} thing
+ * @param {string} value
+ * @param {{on?: string, when?: string, state?: string, mode?: string}} s
+ * @param {boolean} [unset]
+ */
+const setLine = (slug, thing, value, s, unset = false) =>
+  `${P} ${unset ? 'undo' : 'set'} ${slug} ${thing}${value ? ` ${quoteCommandArgument(value)}` : ''}${s.on ? ` --on ${s.on}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`;
+
 /** @param {string} v */
 const cornerPxOf = v =>
   CORNERS.find(([n]) => n === v)?.[1] ?? lengthPx(v) ?? Number.NaN;
@@ -735,7 +746,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       refuse(
         E.ERR_THEME_BAD_VALUE,
         `--mode takes light or dark, not "${flags.mode}".`,
-        {didYouMean: nearest(mode, ['light', 'dark'])},
+        {
+          didYouMean: nearest(mode, ['light', 'dark']),
+          // The same setting for both modes runs as printed; the mode it
+          // probably meant is the did-you-mean.
+          run: [setLine(slug, thing, v, {...s, mode: undefined}, unset)],
+        },
       );
     s.mode = mode;
   }
@@ -832,7 +848,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       refuse(
         E.ERR_THEME_UNKNOWN_STATE,
         `"${s.state}" is not a state of ${s.on}. States: ${states.join(', ')}.`,
-        {didYouMean: nearest(s.state, states)},
+        {
+          didYouMean: nearest(s.state, states),
+          run: [
+            setLine(
+              slug,
+              thing,
+              v,
+              {...s, state: nearest(s.state, states)[0] ?? 'hover'},
+              unset,
+            ),
+          ],
+        },
       );
   }
   // On a group, a variant or state must belong to at least one member.
@@ -955,6 +982,17 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
               ...Object.keys(HEADING_WEIGHTS),
               ...Object.keys(HEADING_TRACKING),
             ]),
+            run: [
+              setLine(
+                slug,
+                'headings',
+                nearest(v, [
+                  ...Object.keys(HEADING_WEIGHTS),
+                  ...Object.keys(HEADING_TRACKING),
+                ])[0] ?? Object.keys(HEADING_WEIGHTS)[0],
+                s,
+              ),
+            ],
           },
         );
       return s;
@@ -1210,6 +1248,17 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
               v,
               SPACING.map(([n]) => n),
             ),
+            run: [
+              setLine(
+                slug,
+                'spacing',
+                nearest(
+                  v,
+                  SPACING.map(([n]) => n),
+                )[0] ?? 'roomy',
+                s,
+              ),
+            ],
           },
         );
     } else if (thing === 'text-size') {
@@ -1499,6 +1548,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       refuse(
         E.ERR_THEME_BAD_VALUE,
         `"more"/"less" work only on dials (${Object.keys(DIALS).join(', ')}). Give ${thing} a ${type} value.`,
+        {run: [setLine(slug, thing, exampleOf(type, thing), s)]},
       );
     checkTypedValue(type, v, thing, TOKENS, C.typeOf, slug);
     checkCycle(thing, v, TOKENS, data);
@@ -1708,6 +1758,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       refuse(
         E.ERR_THEME_BAD_VALUE,
         `"more"/"less" work only on dials. Give ${prop} an exact CSS value.`,
+        {run: [`${HOW} ${prop}`]},
       );
     const grammar = propertyProblem(prop, v);
     if (grammar)

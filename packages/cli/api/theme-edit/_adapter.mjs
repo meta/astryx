@@ -46,7 +46,7 @@ import {
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {withFolderLock} from '../../foundation/release/folder-lock.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
-import {LIKE} from './_tables.mjs';
+import {LIKE, P} from './_tables.mjs';
 
 export {parsePoints} from './_how.mjs';
 import {themeEditHow as howAt} from './_how.mjs';
@@ -225,7 +225,15 @@ async function withLock(root, name, fn, bestEffort = false) {
         onBusy: (o, held) => {
           throw new AstryxError(
             `Another command has been changing ${name.replace(/^theme-/, '')} for 30 seconds${o ? ` (process ${o.pid} on ${o.host}${held != null ? `, holding it ${held} s` : ''})` : ''}. Nothing was changed; run this command again. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
-            [],
+            // A look that takes no lock: the last build as it is.
+            [
+              {
+                name: name.startsWith('theme-')
+                  ? `${P} show ${name.replace(/^theme-/, '')}`
+                  : 'astryx experimental theme preview list',
+                reason: 'see it as it is now',
+              },
+            ],
             ERROR_CODES.ERR_THEME_BUSY,
           );
         },

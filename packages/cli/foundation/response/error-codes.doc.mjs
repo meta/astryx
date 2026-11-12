@@ -332,7 +332,7 @@ export const doc = {
       value: 'ERR_RENDER_FAILED',
       stability: 'experimental',
       description:
-        'The page threw while rendering, or Node crashed while it rendered the page. Nothing was written. Raised only by the experimental render command.',
+        "The page threw while rendering, or Node crashed while it rendered the page. Raised by the experimental render command, which then writes nothing, and by the experimental theme editor when it cannot render a theme's pages: React is not installed (refused before anything is written), or a render went past its time limit (the theme it built is kept, and the refusal says so).",
     },
     {
       value: 'ERR_RENDER_NOT_ASTRYX',

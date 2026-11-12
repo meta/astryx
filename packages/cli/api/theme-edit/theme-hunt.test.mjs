@@ -569,9 +569,11 @@ describe('fix3', () => {
 
   it('no command removes a file it did not write in that run', async () => {
     const dir = path.join(cwd, 'themes/h');
+    // A live process's temp file (this test's parent runs); a dead
+    // process's editor temp file is swept, and that is tested elsewhere.
     const mine = [
       'notes.4194311.tmp',
-      '.h.settings.json.astryx-4194311-abc.tmp',
+      `.h.settings.json.astryx-${process.ppid}-abc.tmp`,
     ];
     for (const f of mine) fs.writeFileSync(path.join(dir, f), 'mine');
     await themeEditShow('h', {cwd});

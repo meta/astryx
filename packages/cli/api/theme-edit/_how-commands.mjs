@@ -43,6 +43,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @typedef {object} HowTheme
  * @property {string} slug
  * @property {boolean} exists - false when the app has no theme: the commands name {@link EXAMPLE_THEME} and the answer starts with `new`.
+ * @property {string | null} previewDamage - why the in-app preview's record is damaged and how to fix it, or null.
  * @property {string[]} themes - Every theme the editor made in the app.
  * @property {string | null} note - Which theme the commands are for when the app has several, or that it has none.
  * @property {'named' | 'only' | 'last-changed' | 'none'} chosenBy - How the theme was picked.
@@ -134,11 +135,15 @@ export async function howTheme(ctx, cwd, name) {
         base,
       ).typography,
     );
+  // A damaged preview record refuses every preview command, so an answer
+  // names its fix instead of a preview command.
+  const {previewRecordProblem} = await import('./_preview-app.mjs');
   return {
     slug,
     exists,
     themes,
     note,
+    previewDamage: previewRecordProblem(cwd),
     chosenBy: name
       ? 'named'
       : !themes.length

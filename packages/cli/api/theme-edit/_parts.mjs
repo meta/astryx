@@ -18,6 +18,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {isAlive} from '../../foundation/release/cache.mjs';
+import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine, literals} from './_project.mjs';
@@ -244,6 +245,34 @@ export function catalogItems(project) {
   return {items, imports};
 }
 
+/**
+ * Refuse, before anything is built or written, when the project cannot
+ * render the editor's pages: react and react-dom must resolve from it.
+ * @param {string} cwd
+ */
+export function refuseWithoutReact(cwd) {
+  const req = createRequire(path.join(cwd, 'package.json'));
+  const missing = ['react', 'react-dom/server'].filter(m => {
+    try {
+      req.resolve(m);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  if (missing.length)
+    throw new AstryxError(
+      `This project cannot render the theme's pages: ${missing.join(' and ')} cannot be found from it. The theme command renders components on the server, so react and react-dom must be installed. Nothing was written.`,
+      [
+        {
+          name: installLine(cwd, ['react', 'react-dom']),
+          reason: 'install them',
+        },
+      ],
+      ERROR_CODES.ERR_RENDER_MISSING_DEPENDENCY,
+    );
+}
+
 /** How long the editor's own pages may take to render. */
 const EDITOR_RENDER_MS = 3 * RENDER_TIMEOUT_MS;
 
@@ -321,7 +350,12 @@ export async function renderGenerated(project, file, source, extra = []) {
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
   const entry = path.join(dir, file);
-  fs.writeFileSync(entry, source);
+  // Demo images point at the docs site's own folder (`/template-assets/…`),
+  // which a page opened from disk cannot reach: the inline placeholder
+  // takes their place, as when a template is scaffolded.
+  const {stripTemplateAssetRefs} =
+    await import('../../foundation/discovery/template-adapter.mjs');
+  fs.writeFileSync(entry, stripTemplateAssetRefs(source));
   for (const x of extra) {
     fs.mkdirSync(path.dirname(path.join(dir, x.name)), {recursive: true});
     fs.copyFileSync(x.from, path.join(dir, x.name));
@@ -347,7 +381,7 @@ export async function renderGenerated(project, file, source, extra = []) {
       const slow = e.code === 'ERR_RENDER_TIMEOUT';
       throw new AstryxError(
         slow
-          ? `The components did not finish rendering within ${EDITOR_RENDER_MS / 1000} seconds, so the render was stopped. The machine may be busy: run the command again when it is less loaded.`
+          ? `The components did not finish rendering within ${EDITOR_RENDER_MS / 1000} seconds, so the render was stopped. The theme files are written; only its pages were not rendered. The machine may be busy: run show again when it is less loaded.`
           : `Could not render the components with this project's React: ${e.message}${missing ? ' The theme command renders components on the server, so react and react-dom must be installed.' : ''}`,
         missing
           ? [

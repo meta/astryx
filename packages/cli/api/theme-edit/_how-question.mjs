@@ -3234,9 +3234,9 @@ export function draftAnswer(ctx, env, question) {
     ) {
       seenAspect('colors');
       return {
-        text: 'Every shade of every color, light and dark, with the tokens that use each, is on the Colors page of the in-app preview. It changes with every set.',
+        text: `Every shade of every color, light and dark, with the tokens that use each, is on the Colors page of the in-app preview. It changes with every set.${env.previewDamage ? ` The preview cannot be changed now: ${env.previewDamage}` : ''}`,
         options: [],
-        ...(env.exists
+        ...(env.exists && !env.previewDamage
           ? {
               lookup: `astryx experimental theme preview add --theme ${env.slug}`,
             }

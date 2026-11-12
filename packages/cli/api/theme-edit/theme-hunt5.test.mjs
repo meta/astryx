@@ -235,10 +235,16 @@ describe('locks', () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'silent-lock-'));
       const lock = path.join(dir, 'x.lock');
       fs.mkdirSync(lock);
-      // A live holder this run cannot judge (pid 1), that never renews.
+      // A holder this run cannot judge (pid 1 in another container's
+      // process space), that never renews.
       fs.writeFileSync(
         path.join(lock, 'owner.json'),
-        JSON.stringify({pid: 1, host: os.hostname(), at: Date.now()}),
+        JSON.stringify({
+          pid: 1,
+          host: os.hostname(),
+          at: Date.now(),
+          ns: 'pid:[1]',
+        }),
       );
       const started = Date.now();
       await withFolderLock(lock, async () => undefined, {
