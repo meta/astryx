@@ -902,7 +902,6 @@ export function Slider({ref, ...props}: SliderProps) {
     return currentValues.map(currentValue => clamp(currentValue, min, max));
   }, [value, min, max]);
 
-  // The committed values, which the handlers read.
   const valuesRef = useCommittedRef(values);
 
   const getValueFromPosition = useCallback(
@@ -1019,7 +1018,6 @@ export function Slider({ref, ...props}: SliderProps) {
     ],
   );
 
-  // The committed change-end callback, which the change-end report calls.
   const onChangeEndRef = useCommittedRef(onChangeEnd);
 
   const fireChangeEnd = useCallback(
