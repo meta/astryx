@@ -1339,6 +1339,23 @@ async function change(sub, slug, thing, value, options) {
           `this changes nothing you see: the theme already shows ${describe(s)} (it is saved, and stays when the base theme changes)`,
         ]
       : []),
+    // A card's content takes one radius from Core, whatever its corners.
+    ...(sub === 'set' &&
+    s.source === 'property' &&
+    s.thing === 'border-radius' &&
+    s.on &&
+    (ctx.derived?.[s.on] ?? []).some(
+      d => d.property === 'borderRadius' && d.vars?.length,
+    ) &&
+    /\s|\//.test(String(s.value).trim())
+      ? [
+          `each corner of ${s.on} takes its own radius; the content that reaches its edges takes one, ${
+            String(s.value)
+              .trim()
+              .split(/[\s/]+/)[0]
+          }, for every corner (Core gives it a single radius)`,
+        ]
+      : []),
     ...(longhands.length
       ? [
           `${s.thing} comes after ${longhands.map(x => x.thing).join(', ')} on ${s.on}, so it replaces them there`,

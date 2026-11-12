@@ -1201,6 +1201,108 @@ export function compileTheme(ctx, data, base) {
     }
     return b;
   };
+  /**
+   * A padding on a part whose padding Core writes one variable per side
+   * (its derivedVarRegistry's container expansion), as each side's value,
+   * split at top-level spaces by the CSS shorthand rules: Core splits a
+   * shorthand at every space, which cuts calc(4px + 2px) and loses a
+   * fourth value. On the part itself the sides go as logical longhands,
+   * which Core carries as they are; for a variant or state they go to the
+   * side variables themselves, since Core writes one variable for equal
+   * sides there and the part's own side variables would win over it.
+   * Null for any other property or part.
+   * @param {string} target @param {Setting} s
+   * @returns {Record<string, string> | null}
+   */
+  const containerSides = (target, s) => {
+    const prop = kebab(s.thing);
+    if (s.mode || !/^padding(-block|-inline)?$/.test(prop)) return null;
+    if (
+      !(ctx.derived?.[target] ?? []).some(
+        d => d.property === 'padding' && d.expand,
+      )
+    )
+      return null;
+    const w = splitTop(String(s.value).trim(), ' ').map(x => x.trim());
+    if (!w.length || w.length > (prop === 'padding' ? 4 : 2)) return null;
+    const scoped = s.when != null || s.state != null;
+    // Only what Core would split wrong is written side by side: math or a
+    // function, four values with different left and right sides; and, for
+    // a variant or state, any padding once the part sets a side itself.
+    const coreSplitsWrong =
+      /\(/.test(String(s.value)) ||
+      (prop === 'padding' && w.length === 4 && w[1] !== w[3]);
+    const partSides = data.settings.some(
+      x =>
+        x.source === 'property' &&
+        x.on === s.on &&
+        x.when == null &&
+        x.state == null &&
+        (/^padding-/.test(kebab(x.thing)) ||
+          (kebab(x.thing) === 'padding' &&
+            /\(|\S+\s+\S+\s+\S+\s+\S+/.test(x.value))),
+    );
+    if (!coreSplitsWrong && !(scoped && partSides)) return null;
+    /** @type {Record<string, string>} */
+    const side = {};
+    if (prop === 'padding') {
+      const [top, right = top, bottom = top, left = right] = w;
+      Object.assign(side, {
+        'block-start': top,
+        'inline-end': right,
+        'block-end': bottom,
+        'inline-start': left,
+      });
+    } else {
+      const axis = prop.slice('padding-'.length);
+      side[`${axis}-start`] = w[0];
+      side[`${axis}-end`] = w[1] ?? w[0];
+    }
+    return Object.fromEntries(
+      Object.entries(side).map(([k, v]) => [
+        scoped ? `--astryx-${target}-padding-${k}` : camel(`padding-${k}`),
+        v,
+      ]),
+    );
+  };
+  /**
+   * A radius of more than one value on a part whose radius Core copies
+   * into a variable for the content inside it (a card's full-bleed
+   * children), as each corner's own radius, so Core writes no copy of the
+   * whole value there (where one corner reads it, and `10px / 20px` or four
+   * values are wrong). The inner variable takes one radius, the first
+   * corner's across: Core gives the content one radius for every corner.
+   * Null for any other property, part or a single radius.
+   * @param {string} target @param {Setting} s
+   * @returns {Record<string, string> | null}
+   */
+  const cornerRadii = (target, s) => {
+    if (s.mode || kebab(s.thing) !== 'border-radius') return null;
+    const vars = (ctx.derived?.[target] ?? []).find(
+      d => d.property === 'borderRadius' && d.vars?.length,
+    )?.vars;
+    if (!vars) return null;
+    const [across, down] = splitTop(String(s.value).trim(), '/').map(x =>
+      splitTop(x.trim(), ' ').map(y => y.trim()),
+    );
+    if (!across?.length || (across.length === 1 && !down)) return null;
+    /** @param {string[]} w top-left, top-right, bottom-right, bottom-left */
+    const four = w => {
+      const [tl, tr = tl, br = tl, bl = tr] = w;
+      return [tl, tr, br, bl];
+    };
+    const h = four(across);
+    const v = down?.length ? four(down) : null;
+    const corner = (/** @type {number} */ i) =>
+      v && v[i] !== h[i] ? `${h[i]} ${v[i]}` : h[i];
+    return {
+      borderTopLeftRadius: corner(0),
+      borderTopRightRadius: corner(1),
+      borderBottomRightRadius: corner(2),
+      borderBottomLeftRadius: corner(3),
+      ...Object.fromEntries(vars.map(name => [name, h[0]])),
+    };
+  };
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
     const b = block(s, target);
@@ -1453,7 +1555,12 @@ export function compileTheme(ctx, data, base) {
       if (parts.length) for (const t of parts) putComp(s, t, s.thing, s.value);
       else putTok(s.thing, s.value, s.mode);
     } else if (s.source === 'property') {
-      for (const t of parts) putComp(s, t, camel(s.thing), s.value);
+      for (const t of parts) {
+        const sides = containerSides(t, s) ?? cornerRadii(t, s);
+        if (sides)
+          for (const [k, v] of Object.entries(sides)) putComp(s, t, k, v);
+        else putComp(s, t, camel(s.thing), s.value);
+      }
     }
   }
   // Core gives headings the body font when a theme sets only the body's:

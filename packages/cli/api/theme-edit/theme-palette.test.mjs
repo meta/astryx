@@ -2763,20 +2763,7 @@ describe('parts24', () => {
     expect(lifted.map(x => x.prop)).toContain('background');
   });
 
-  it('refuses a variant padding after a card side, reads plural parts, and keeps a hint value', async () => {
-    await themeEditSet('p', 'padding-top', '12px', {cwd, on: 'card'});
-    expect(
-      (
-        await refusal(() =>
-          themeEditSet('p', 'padding', '4px', {
-            cwd,
-            on: 'card',
-            when: 'variant:muted',
-          }),
-        )
-      ).code,
-    ).toBe('ERR_THEME_BAD_VALUE');
-    await themeEditUndo('p', {cwd, thing: 'padding-top', on: 'card'});
+  it('reads plural parts, and keeps a hint value', async () => {
     for (const [plural, part] of [
       ['cards', 'card'],
       ['dialogs', 'dialog'],
@@ -2799,5 +2786,103 @@ describe('parts24', () => {
       themeEditSet('p', 'bold', 'false', {cwd, on: 'button'}),
     );
     expect(bold.run[0]).toMatch(/font-weight normal --on button$/);
+  });
+});
+
+describe('parts28', () => {
+  /** The card's padding variables in the built CSS, by side. */
+  const cardSides = (/** @type {string} */ selector = '.astryx-card') => {
+    const css = read('p.css');
+    /** @type {Record<string, string>} */
+    const out = {};
+    const at =
+      css.indexOf(`${selector} {`) >= 0
+        ? css.indexOf(`${selector} {`)
+        : css.indexOf(`${selector}{`);
+    const body = css.slice(at, css.indexOf('}', at));
+    for (const m of body.matchAll(
+      /--astryx-card-padding(-[a-z-]+)?:\s*([^;]+);/g,
+    ))
+      out[m[1] ?? 'all'] = m[2].trim();
+    return out;
+  };
+
+  it('writes each side of a card padding exactly, whatever Core splits', async () => {
+    for (const [value, want] of [
+      ['clamp(12px, 2vw, 24px)', {all: 'clamp(12px, 2vw, 24px)'}],
+      [
+        'calc(4px + 2px) 8px',
+        {
+          '-block-start': 'calc(4px + 2px)',
+          '-block-end': 'calc(4px + 2px)',
+          '-inline-start': '8px',
+          '-inline-end': '8px',
+        },
+      ],
+      [
+        '4px 8px 12px 16px',
+        {
+          '-block-start': '4px',
+          '-inline-end': '8px',
+          '-block-end': '12px',
+          '-inline-start': '16px',
+        },
+      ],
+    ]) {
+      await themeEditSet('p', 'padding', value, {cwd, on: 'card'});
+      const sides = cardSides();
+      for (const [k, v] of Object.entries(want))
+        expect(sides[k], `${value} ${k}`).toBe(v);
+      expect(JSON.stringify(sides), value).not.toMatch(/: \+|"\+"/);
+      await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+    }
+  });
+
+  it('reaches a variant after a side set for every variant', async () => {
+    await themeEditSet('p', 'padding-top', '12px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding', '4px', {
+      cwd,
+      on: 'card',
+      when: 'variant:muted',
+    });
+    const sides = cardSides('.astryx-card[data-variant="muted"]');
+    for (const k of [
+      '-block-start',
+      '-block-end',
+      '-inline-start',
+      '-inline-end',
+    ])
+      expect(sides[k], k).toBe('4px');
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'card',
+      when: 'variant:muted',
+    });
+    await themeEditUndo('p', {cwd, thing: 'padding-top', on: 'card'});
+  });
+
+  it('gives each card corner its own radius, and the content inside one radius', async () => {
+    for (const [value, corners, inner] of [
+      ['12px 12px 0 0', ['12px', '12px', '0', '0'], '12px'],
+      [
+        '10px / 20px',
+        ['10px 20px', '10px 20px', '10px 20px', '10px 20px'],
+        '10px',
+      ],
+    ]) {
+      await themeEditSet('p', 'border-radius', value, {cwd, on: 'card'});
+      const css = read('p.css');
+      const at = css.indexOf('.astryx-card {');
+      const body = css.slice(at, css.indexOf('}', at));
+      ['top-left', 'top-right', 'bottom-right', 'bottom-left'].forEach((c, i) =>
+        expect(body, `${value} ${c}`).toContain(
+          `border-${c}-radius: ${corners[i]};`,
+        ),
+      );
+      expect(body, value).toContain(`--_card-radius: ${inner};`);
+      expect(body, value).not.toContain(`--_card-radius: ${value};`);
+      await themeEditUndo('p', {cwd, thing: 'border-radius', on: 'card'});
+    }
   });
 });

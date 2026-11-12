@@ -731,7 +731,7 @@ export function cssNumber(value) {
  * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
  * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
  * @param {string} v
- * @param {',' | ' '} sep
+ * @param {',' | ' ' | '/'} sep
  * @returns {string[]}
  */
 export function splitTop(v, sep) {

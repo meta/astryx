@@ -2641,37 +2641,6 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
-    // Where Core writes a property to variables of its own (a card's padding
-    // to one variable per side, its radius to the inner corners), only what
-    // those variables carry is taken; the rest is refused with a form that
-    // works.
-    const derived = s.on ? (ctx.derived?.[s.on] ?? []) : [];
-    if (
-      /^padding(-block|-inline)?$/.test(prop) &&
-      derived.some(d => d.property === 'padding' && d.expand)
-    ) {
-      // A side set on the part itself fills every side's variable, which a
-      // variant's padding cannot reach.
-      const side = data.settings.find(
-        x =>
-          x.source === 'property' &&
-          x.on === s.on &&
-          !x.when &&
-          !x.state &&
-          /^padding-/.test(x.thing),
-      );
-      if (s.when && side)
-        refuse(
-          E.ERR_THEME_BAD_VALUE,
-          `${s.on} sets ${side.thing} for every variant, which writes each side's variable there, so a padding for one variant would not show. Undo the side first, or set each side for this variant.`,
-          {
-            run: [
-              `${P} undo ${slug} ${side.thing} --on ${s.on}`,
-              `${P} set ${slug} ${side.thing} ${quoteCommandArgument(v)} --on ${s.on} --when ${s.when}`,
-            ],
-          },
-        );
-    }
     // Text, headings and links take their color from the color prop.
     const textParts = COLOR_PROP_PARTS;
     if (

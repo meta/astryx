@@ -2287,7 +2287,8 @@ const QUESTIONS_G = [
     'card padding clamp(12px, 2vw, 24px)',
     {
       top: /^set q padding 'clamp\(12px, 2vw, 24px\)' --on card$/,
-      adds: /card\.base\.padding=clamp\(12px, 2vw, 24px\)/,
+      // Core splits padding at every space: each side is written whole.
+      adds: /card\.base\.padding(BlockStart|InlineEnd|BlockEnd|InlineStart)=clamp\(12px, 2vw, 24px\)/,
     },
   ],
   [
@@ -2495,7 +2496,12 @@ describe('how answers final-2 questions', () => {
       ['inputs caret-color #2563eb', [/caret-color:\s*#2563eb/]],
       [
         'card border-radius 12px 12px 0 0',
-        [/card[^{]*\{[^}]*border-radius:\s*12px 12px 0 0/],
+        // Each corner its own radius, so Core copies no four-value radius
+        // into the one radius the card's content takes.
+        [
+          /card[^{]*\{[^}]*border-top-left-radius:\s*12px/,
+          /card[^{]*\{[^}]*border-bottom-left-radius:\s*0/,
+        ],
       ],
       ['the modal needs 24px padding', [/dialog[^{]*\{[^}]*padding:\s*24px/]],
       [
