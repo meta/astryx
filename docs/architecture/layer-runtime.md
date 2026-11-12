@@ -634,9 +634,12 @@ layers use Layer rendering without joining Escape/platform dismissal.
   lift settles. Surfaces opt in;
   any surface that lifts uses this module and never its own copy, and layers
   that do not lift do not use it. It is internal and unexported
-  (`spec:AST-017` FR21). Its entry points are `createLiftFromTrigger`, which
-  lifts a source, presents a surface beside it, drops and ends, and
-  `surfacePlacement`, which picks the surface's side.
+  (`spec:AST-017` FR21). It has four functions. `createLiftFromTrigger` lifts
+  a source, presents a surface beside it, drops and ends.
+  `liftFromTriggerScale` and `liftFromTriggerRect` compute the scale and the
+  rectangle a source lifts to. `surfacePlacement` picks the side of the
+  surface. One module gives each surface that lifts the same lift, tint, input
+  hold and return.
 - **INV17 — A click inside a layer stops at the layer root.** A pointer,
   mouse, touch, or click event that starts inside a layer root (both
   `useLayer` renderers and the Dialog, Drawer, Lightbox, MobileNav,
