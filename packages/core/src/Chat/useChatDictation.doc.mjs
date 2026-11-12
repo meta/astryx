@@ -29,7 +29,8 @@ export const docs = {
     {
       name: 'options.interimResults',
       type: 'boolean',
-      description: 'Whether partial transcripts are reported before the final one.',
+      description:
+        'Whether partial transcripts are reported before the final one.',
       default: 'true',
       required: false,
     },
@@ -37,7 +38,7 @@ export const docs = {
       name: 'options.inputRef',
       type: 'React.RefObject<ChatComposerInputHandle | null>',
       description:
-        'The composer handle. When set, interim text is shown in that input.',
+        'The composer handle. When set, the hook focuses that composer, shows each partial transcript there, and inserts each final transcript. onResult still runs, so do not insert that text again.',
       required: false,
     },
     {
@@ -108,7 +109,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Pass inputRef when the words should appear in the composer while the person is still speaking.',
+          'Pass inputRef when the words should appear in the composer. The hook inserts each final transcript there and still calls onResult.',
       },
       {
         guidance: true,
@@ -137,7 +138,8 @@ export const docsDense = {
     'options.lang': 'BCP-47 recognition language.',
     'options.continuous': 'keep listening until stop or abort.',
     'options.interimResults': 'report partial transcripts.',
-    'options.inputRef': 'composer handle for interim text.',
+    'options.inputRef':
+      'composer handle. Focuses it, shows partial text, and inserts each final transcript. onResult still runs.',
     'options.hasSounds': 'play a cue on start and stop.',
     'options.onResult': 'called with each final transcript.',
   },
@@ -158,7 +160,8 @@ export const docsDense = {
     bestPractices: [
       {
         guidance: true,
-        description: 'Pass inputRef to show interim words in the composer.',
+        description:
+          'Pass inputRef to put the words in the composer. Do not insert onResult as well.',
       },
       {
         guidance: true,
