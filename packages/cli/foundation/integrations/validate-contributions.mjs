@@ -2622,16 +2622,25 @@ const SVG_ATTRIBUTE = /([^\s"'=<>/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'))?/gu;
  * @returns {boolean}
  */
 function isLocalSvgValue(name, value) {
-  // A character reference or a CSS escape could spell a URL the tests
-  // below would miss.
-  if (value.includes('&') || value.includes('\\')) return false;
+  // A character reference or a CSS escape could spell a reference the
+  // tests below would miss.
+  if (/[<>&\\]/u.test(value)) return false;
   if (name === 'xmlns') return value === 'http://www.w3.org/2000/svg';
   if (name === 'xmlns:xlink') return value === 'http://www.w3.org/1999/xlink';
   if (name === 'href' || name === 'xlink:href') {
     return /^#[\w.-]+$/u.test(value.trim());
   }
-  const rest = value.replace(/url\(\s*(["']?)#[\w.-]+\1\s*\)/giu, '');
-  return !/url|[<>]|javascript:|data:|\/\//iu.test(rest);
+  if (name === 'mask' || name === 'clip-path') {
+    return /^\s*(?:none|url\(\s*(["']?)#[\w.-]+\1\s*\))\s*$/iu.test(value);
+  }
+  if (name === 'fill' || name === 'stroke') {
+    // A local paint server, then colors; the only functions are colors.
+    const rest = value.replace(/url\(\s*(["']?)#[\w.-]+\1\s*\)/giu, '');
+    return [...rest.matchAll(/([\w-]*)\s*\(/gu)].every(([, fn]) =>
+      /^(?:rgba?|hsla?)$/iu.test(fn),
+    );
+  }
+  return true;
 }
 
 const XML_DECLARATION =

@@ -96,6 +96,14 @@ describe('isListingImage', () => {
       `<?xml version="1.0"?>\n<!-- Generator: Adobe Illustrator 24.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->\n${SVG}`,
     ],
     [
+      'words like url and data in labels and ids',
+      '<svg xmlns="http://www.w3.org/2000/svg" aria-label="Big data: Inc" viewBox="0 0 8 8"><rect id="surly-mark" class="curly" width="8" height="8" fill="rgb(0, 102, 255)" stroke="hsla(0, 0%, 0%, 0.5)"/></svg>',
+    ],
+    [
+      'a mask and clip-path by fragment or none',
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><defs><mask id="m"><rect width="8" height="8" fill="#fff"/></mask><clipPath id="c"><circle r="4"/></clipPath></defs><rect width="8" height="8" mask="url(#m)" clip-path="url( #c )"/><rect mask="none"/></svg>',
+    ],
+    [
       'a title',
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><title>Acme &amp; Co</title><rect width="8" height="8"/></svg>',
     ],
@@ -188,6 +196,26 @@ describe('isListingImage', () => {
     [
       'markup in the namespace value',
       '<svg xmlns="<!--javascript:alert(1)"><rect/></svg>',
+    ],
+    [
+      'an image-set mask',
+      `<svg xmlns="http://www.w3.org/2000/svg"><rect mask="image-set('https:other.host/m.png' 1x)"/></svg>`,
+    ],
+    [
+      'a prefixed image-set mask',
+      `<svg xmlns="http://www.w3.org/2000/svg"><rect mask="-webkit-image-set('m.png' 1x)"/></svg>`,
+    ],
+    [
+      'a relative image-set clip-path',
+      `<svg xmlns="http://www.w3.org/2000/svg"><rect clip-path="image-set('m.png')"/></svg>`,
+    ],
+    [
+      'an image-set fill',
+      `<svg xmlns="http://www.w3.org/2000/svg"><rect fill="image-set('m.png')"/></svg>`,
+    ],
+    [
+      'two masks',
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect mask="url(#a) url(#b)"/></svg>',
     ],
     [
       'text outside a title',
