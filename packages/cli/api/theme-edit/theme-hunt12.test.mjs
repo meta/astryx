@@ -70,3 +70,13 @@ describe('a tab marked disabled', () => {
     await themeEditUndo('a', {cwd});
   }, 240_000);
 });
+
+describe('a theme name with a space', () => {
+  it('is one name, not a list', async () => {
+    await themeEditNew('my-theme', {cwd});
+    const {refusal} = await import('../../test-utils/theme-edit-fixture.mjs');
+    const r = await refusal(() => themeEditUndo('My Theme', {cwd}));
+    expect(r.run[0]).toMatch(/ show my-theme$/);
+    expect(r.message).not.toMatch(/more than one theme/);
+  }, 240_000);
+});

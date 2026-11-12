@@ -281,17 +281,36 @@ function readNextConfig(cwd) {
     }
     const config = exported && configOf(exported);
     if (!config) return exported ? unknown : none;
-    const spread = config.properties.some(
-      (/** @type {any} */ x) => x.type === 'SpreadElement',
-    );
-    /** @param {string} key */
-    const prop = key =>
-      config.properties.find(
-        (/** @type {any} */ x) =>
-          x.type === 'ObjectProperty' &&
-          !x.computed &&
-          (x.key.name === key || x.key.value === key),
-      );
+    // The config's keys in order, with a spread of a constant object read
+    // in place; a spread of anything else may set any key (`null`).
+    /** @type {Array<{key: string, value: any} | null>} */
+    const entries = [];
+    /** @param {any} obj @param {number} depth */
+    const flatten = (obj, depth) => {
+      for (const x of obj.properties) {
+        if (x.type === 'SpreadElement') {
+          const inner = resolve(x.argument);
+          if (inner?.type === 'ObjectExpression' && depth < 4)
+            flatten(inner, depth + 1);
+          else entries.push(null);
+        } else if (
+          (x.type === 'ObjectProperty' || x.type === 'ObjectMethod') &&
+          !x.computed
+        )
+          entries.push({key: x.key.name ?? x.key.value, value: x.value});
+        else entries.push(null);
+      }
+    };
+    flatten(config, 0);
+    /** The entry that sets a key last; null when an unreadable spread may; undefined when nothing does. @param {string} key */
+    const prop = key => {
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const e = entries[i];
+        if (e === null) return null;
+        if (e.key === key) return e;
+      }
+      return undefined;
+    };
     /** @param {any} n @returns {string | null} */
     const str = n => {
       n = resolve(n);
@@ -303,8 +322,7 @@ function readNextConfig(cwd) {
     /** @param {string} key @param {(n: any) => any} read */
     const value = (key, read) => {
       const p = prop(key);
-      if (!p) return spread ? null : undefined;
-      return read(p.value);
+      return p ? read(p.value) : p;
     };
     return {
       file: name,
@@ -3376,31 +3394,22 @@ export async function themeEditPreviewApp(dir, options = {}) {
   if (slug != null && theme) {
     const from = themeFiles(cwd, slug);
     const ctx = await context(cwd);
-    const mtime = (/** @type {string} */ f) => {
-      try {
-        return fs.statSync(f).mtimeMs;
-      } catch {
-        return -1;
-      }
-    };
-    const built = Math.min(mtime(from.js), mtime(from.css));
-    // The editor writes the settings a moment after the build, so only a
-    // settings file clearly newer than the build means the build is stale.
-    // Without the theme's lock (it cannot be taken), a change may be in
-    // progress: nothing is built, and only a build that matches its
+    // The build is judged by its content (staleBuild), never by file
+    // times. Without the theme's lock (it cannot be taken), a change may be
+    // in progress: nothing is built, and only a build that matches its
     // settings is copied.
+    const why = staleBuild(cwd, slug, theme);
     if (/** @type {any} */ (options).readOnly) {
-      const why = staleBuild(cwd, slug, theme);
       if (why)
         refuse(
           E.ERR_THEME_BUSY,
           `The lock for ${slug} could not be taken, and its build is not current (${why}), so it is not copied. Nothing was changed.`,
           {run: [`${P} show ${slug}`]},
         );
-    } else if (built < 0 || mtime(from.settings) > built + 2000) {
+    } else if (why) {
       await buildTheme(ctx, slug, theme);
       notes.push(
-        `built ${shown(cwd, from.dir)}/ first: its build was ${built < 0 ? 'missing' : 'older than its settings'}, and the app gets a current copy`,
+        `built ${shown(cwd, from.dir)}/ first: its build was not current (${why}), and the app gets a current copy`,
       );
     }
     const to = themeFiles('', slug);

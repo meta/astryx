@@ -60,6 +60,8 @@ import {
   isSafeValue,
   isSize,
   parseColor,
+  mixSide,
+  splitTop,
 } from './_color.mjs';
 import {
   PALETTE_DIALS,
@@ -407,8 +409,8 @@ function isFixedColor(value) {
   if (SYSTEM_COLORS.includes(v)) return true;
   // Percentages that add up to 0 leave color-mix() no color.
   const zeroMix = (/** @type {string[]} */ colors) => {
-    const pcts = colors.map(c => /\s(\d*\.?\d+)%$/.exec(c)?.[1]);
-    return pcts.every(p => p != null) && pcts.every(p => Number(p) === 0);
+    const pcts = colors.map(c => mixSide(c).pct);
+    return pcts.every(p => p != null) && pcts.every(p => p === 0);
   };
   const inner = (/** @type {string} */ fn) =>
     splitTop(v.slice(fn.length + 1, -1), ',').map(x => x.trim());
@@ -423,7 +425,7 @@ function isFixedColor(value) {
       /^in\s+[a-z-]+/.test(space ?? '') &&
       colors.length === 2 &&
       !zeroMix(colors) &&
-      colors.every(c => isFixedColor(c.replace(/\s+\d*\.?\d+%$/, '')))
+      colors.every(c => isFixedColor(mixSide(c).color))
     );
   }
   if (!isColorValue(v)) return false;
@@ -511,30 +513,6 @@ function isShadow(value) {
     );
     return !(lengths[2] ?? '').startsWith('-');
   });
-}
-
-/**
- * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
- * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
- * @param {string} v
- * @param {',' | ' '} sep
- * @returns {string[]}
- */
-function splitTop(v, sep) {
-  /** @type {string[]} */
-  const out = [];
-  let depth = 0;
-  let cur = '';
-  for (const c of v) {
-    if (c === '(') depth++;
-    if (c === ')') depth--;
-    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
-      if (cur.trim() || sep === ',') out.push(cur);
-      cur = '';
-    } else cur += c;
-  }
-  if (cur.trim() || sep === ',') out.push(cur);
-  return out.filter(x => sep === ',' || x.trim());
 }
 
 /**

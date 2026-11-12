@@ -47,6 +47,7 @@ import {
   isSafeValue,
   parseColor,
   ratio,
+  splitTop,
 } from './_color.mjs';
 import {
   PALETTE_DIALS,
@@ -288,12 +289,13 @@ export function loadTheme(
     const fixed = slugFor(plain);
     const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
     // A list where one theme goes (t,u or "t;u"): one theme at a time,
-    // each that exists named; never a new theme made of the list.
+    // each that exists named; never a new theme made of the list. A name
+    // with spaces ("My Theme") is one name: its theme, found above, wins.
     const words = String(slug ?? '')
-      .split(/[\s,;|]+/)
-      .map(w => w.trim().toLowerCase())
+      .split(/\s*[,;|]\s*/)
+      .map(w => slugFor(w.trim()))
       .filter(Boolean);
-    if (words.length > 1) {
+    if (!same && words.length > 1) {
       const existing = words.filter(
         w => slugOk(w) && fs.existsSync(themeFiles(cwd, w).settings),
       );
@@ -303,7 +305,7 @@ export function loadTheme(
         {
           run: existing.length
             ? existing.map(w => `${P} show ${w}`)
-            : [`${P} new ${slugFor(words[0])}`],
+            : [`${P} new ${words[0]}`],
         },
       );
     }
@@ -1022,15 +1024,8 @@ export function compileTheme(ctx, data, base) {
       // At the top-level comma: a mode's color may hold commas itself.
       const split = (/** @type {string} */ x, /** @type {1 | 2} */ side) => {
         const inner = /^light-dark\((.*)\)$/s.exec(x.trim())?.[1];
-        if (inner == null) return x;
-        let depth = 0;
-        for (let i = 0; i < inner.length; i++) {
-          if (inner[i] === '(') depth++;
-          else if (inner[i] === ')') depth--;
-          else if (inner[i] === ',' && depth === 0)
-            return (side === 1 ? inner.slice(0, i) : inner.slice(i + 1)).trim();
-        }
-        return x;
+        const halves = inner == null ? [] : splitTop(inner, ',');
+        return halves.length === 2 ? halves[side - 1].trim() : x;
       };
       b[prop] =
         s.mode === 'light'

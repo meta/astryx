@@ -1746,6 +1746,56 @@ describe('final pass 5', () => {
     expect(typed.data.open).toContain('open /t/c5 in the running app');
   }, 180_000);
 
+  it('notes pageExtensions only when the config may set it in a way it cannot read', async () => {
+    /** @param {string} text @param {string} where */
+    const notesWith = async (text, where) => {
+      write('next.config.mjs', text);
+      try {
+        return (
+          await themeEditPreviewAdd(undefined, {cwd, path: where})
+        ).data.notes.join(' ');
+      } finally {
+        rm('next.config.mjs');
+        rm(where);
+      }
+    };
+    const NOTE = 'sets pageExtensions in a way only running it tells';
+    // A spread of a constant object is read in place.
+    expect(
+      await notesWith(
+        'const base = {reactStrictMode: true};\nexport default {...base};\n',
+        'src/app/n1',
+      ),
+    ).not.toContain(NOTE);
+    // A literal list after a spread of anything wins.
+    expect(
+      await notesWith(
+        "import shared from './shared.mjs';\nexport default {...shared, pageExtensions: ['tsx', 'mdx']};\n",
+        'src/app/n2',
+      ),
+    ).not.toContain(NOTE);
+    // Methods and other keys say nothing about it.
+    expect(
+      await notesWith(
+        'export default {reactStrictMode: true, async headers() { return []; }};\n',
+        'src/app/n3',
+      ),
+    ).not.toContain(NOTE);
+    // A spread of an import may carry it, and so may a function config.
+    expect(
+      await notesWith(
+        "import shared from './shared.mjs';\nexport default {...shared};\n",
+        'src/app/n4',
+      ),
+    ).toContain(NOTE);
+    expect(
+      await notesWith(
+        'export default phase => ({reactStrictMode: true});\n',
+        'src/app/n5',
+      ),
+    ).toContain(NOTE);
+  }, 180_000);
+
   it('reads basePath without comments, and says when code sets it', async () => {
     write('next.config.mjs', "export default {\n  // basePath: '/old',\n};\n");
     try {

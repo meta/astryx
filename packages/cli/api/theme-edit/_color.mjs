@@ -490,6 +490,49 @@ function linearToOklab([r, g, b]) {
 }
 
 /**
+ * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
+ * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
+ * @param {string} v
+ * @param {',' | ' '} sep
+ * @returns {string[]}
+ */
+export function splitTop(v, sep) {
+  /** @type {string[]} */
+  const out = [];
+  let depth = 0;
+  let cur = '';
+  for (const c of v) {
+    if (c === '(') depth++;
+    if (c === ')') depth--;
+    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
+      if (cur.trim() || sep === ',') out.push(cur);
+      cur = '';
+    } else cur += c;
+  }
+  if (cur.trim() || sep === ',') out.push(cur);
+  return out.filter(x => sep === ',' || x.trim());
+}
+
+/**
+ * One side of a color-mix(): the color, and the share written before or
+ * after it at the top level (null when none). A percentage inside the
+ * color (`hsl(0 100% 50%) 30%`) is the color's own.
+ * @param {string} side
+ * @returns {{color: string, pct: number | null}}
+ */
+export function mixSide(side) {
+  const words = splitTop(side.trim(), ' ');
+  const share = (/** @type {string | undefined} */ w) =>
+    w != null && /^-?\d*\.?\d+%$/.test(w) ? Number.parseFloat(w) : null;
+  if (words.length < 2) return {color: side.trim(), pct: null};
+  const last = share(words.at(-1));
+  if (last != null) return {color: words.slice(0, -1).join(' '), pct: last};
+  const first = share(words[0]);
+  if (first != null) return {color: words.slice(1).join(' '), pct: first};
+  return {color: side.trim(), pct: null};
+}
+
+/**
  * The fixed color a color-mix() of two fixed colors gives, as CSS Color 5
  * mixes them (shares that do not add up to 100% are scaled, and a total
  * under 100% makes the result see-through), or null when it is not one: a
@@ -499,19 +542,7 @@ function linearToOklab([r, g, b]) {
  * @returns {{rgb: Rgb, alpha: number} | null}
  */
 function mixColor(inner) {
-  /** @type {string[]} */
-  const args = [];
-  let depth = 0;
-  let cur = '';
-  for (const c of inner) {
-    if (c === '(') depth++;
-    if (c === ')') depth--;
-    if (c === ',' && depth === 0) {
-      args.push(cur.trim());
-      cur = '';
-    } else cur += c;
-  }
-  args.push(cur.trim());
+  const args = splitTop(inner, ',').map(x => x.trim());
   if (args.length !== 3) return null;
   const sp =
     /^in\s+([a-z0-9-]+)(?:\s+(shorter|longer|increasing|decreasing)\s+hue)?$/i.exec(
@@ -521,15 +552,8 @@ function mixColor(inner) {
   if (!MIX_SPACES.includes(space)) return null;
   const hueWay = (sp?.[2] ?? 'shorter').toLowerCase();
   const sides = args.slice(1).map(a => {
-    const m =
-      /^(.*?)\s+(\d*\.?\d+)%$/.exec(a) ?? /^(\d*\.?\d+)%\s+(.*)$/.exec(a);
-    const color = m
-      ? /%$/.test(m[0]) && m[1] && !/%/.test(m[1])
-        ? m[1]
-        : m[2]
-      : a;
-    const pct = m ? Number(/^\d/.test(m[1]) ? m[1] : m[2]) : null;
-    return {read: readColor(color.trim()), pct};
+    const {color, pct} = mixSide(a);
+    return {read: readColor(color), pct};
   });
   if (sides.some(x => !x.read)) return null;
   let [p1, p2] = sides.map(x => x.pct);

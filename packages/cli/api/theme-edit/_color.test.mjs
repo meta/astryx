@@ -14,6 +14,7 @@ import {
   hex,
   isClipped,
   isColorValue,
+  mixSide,
   parseColor,
   ratio,
 } from './_color.mjs';
@@ -166,5 +167,31 @@ describe('see-through colors', () => {
   it('measures translucent text over what is under it', () => {
     const seen = compositeOver([0, 0, 0], 0.15, [255, 255, 255]);
     expect(ratio(seen, [255, 255, 255])).toBeLessThan(1.5);
+  });
+});
+
+describe('color-mix() sides', () => {
+  it('takes a share after or before a color that holds percentages itself', () => {
+    expect(
+      hex(
+        /** @type {any} */ (
+          parseColor('color-mix(in srgb, hsl(0 100% 50%) 30%, blue)')
+        ),
+      ),
+    ).toBe('#4d00b3');
+    expect(
+      hex(
+        /** @type {any} */ (
+          parseColor('color-mix(in srgb, 30% hsl(0 100% 50%), blue)')
+        ),
+      ),
+    ).toBe('#4d00b3');
+    expect(
+      parseColor('color-mix(in oklch, oklch(70% 0.1 200) 25%, white)'),
+    ).not.toBeNull();
+    expect(mixSide('rgb(255 0 0 / 50%)')).toEqual({
+      color: 'rgb(255 0 0 / 50%)',
+      pct: null,
+    });
   });
 });

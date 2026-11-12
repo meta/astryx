@@ -3296,6 +3296,37 @@ describe('how answers final-6 lows', () => {
   }, 120_000);
 });
 
+describe('how reads a mode only from mode phrases, and a later token whole', () => {
+  it('"day" alone is no mode', async () => {
+    for (const q of [
+      'make the selected day in the calendar blue',
+      'I look at it all day, please make the cards rounder',
+    ]) {
+      const {data} = await themeEditHow(q, {cwd, theme: 'q'});
+      expect(JSON.stringify(data.results), q).not.toMatch(
+        /--mode light|light mode only/,
+      );
+    }
+    const {data} = await themeEditHow(
+      'in daytime mode use a cream background',
+      {cwd, theme: 'q'},
+    );
+    expect(bare(data.results[0].commands[0])).toBe(
+      "set q --color-background-body '#fef3c7' --mode light",
+    );
+  });
+
+  it('a token in a later clause keeps its whole value', async () => {
+    const {data} = await themeEditHow(
+      'cards rounder and set --shadow-high 0 4px 12px black',
+      {cwd, theme: 'q'},
+    );
+    expect(
+      data.results.flatMap((/** @type {any} */ r) => r.commands).map(bare),
+    ).toContain("set q --shadow-high '0 4px 12px black'");
+  });
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;

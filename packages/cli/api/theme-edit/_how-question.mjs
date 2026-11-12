@@ -1033,9 +1033,10 @@ function clausesOf(q, partWords) {
     const mode =
       (/\bdark( mode| theme)?\b/.test(text) &&
         /\b(mode|theme|in dark)\b/.test(text)) ||
-      /\bnight( mode| theme)?\b|\bat night\b|\boled\b|^dark\s*:/.test(text)
+      // Only mode phrases: "all day" or "the selected day" is no mode.
+      /\bnight (mode|theme)\b|\bat night\b|\boled\b|^dark\s*:/.test(text)
         ? 'dark'
-        : /\blight (mode|theme)\b|\bday ?(time)?( mode| theme)?\b|^light\s*:/.test(
+        : /\blight (mode|theme)\b|\bday ?time\b|\bday (mode|theme)\b|\bin the day\b|^light\s*:/.test(
               text,
             )
           ? 'light'
@@ -2399,11 +2400,20 @@ export function draftAnswer(ctx, env, question) {
       }
     }
     // "… and set --border-width 2px": a real token typed in a clause.
-    const tok = /(?:^|\s)(--[a-z][a-z0-9-]*)\s*:?\s+([^\s;,]+)/.exec(c.text);
+    // The value runs to the clause end ("--shadow-high 0 4px 12px black").
+    const tok = /(?:^|\s)(--[a-z][a-z0-9-]*)\s*:?\s+([^;]+?)\s*$/.exec(c.text);
     if (tok && Object.hasOwn(TOKENS, tok[1])) {
       const d = {
         text: `the token ${tok[1]}, as you wrote it`,
-        options: [[set(tok[1], tok[2], modeOf(c))]],
+        options: [
+          [
+            set(
+              tok[1],
+              tok[2].replace(/\s+(on|for|in|everywhere)\b.*$/, ''),
+              modeOf(c),
+            ),
+          ],
+        ],
       };
       push(d);
       recordTop(c, d.options[0] ?? []);
