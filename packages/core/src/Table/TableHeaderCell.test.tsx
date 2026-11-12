@@ -176,8 +176,11 @@ describe('TableHeaderCell', () => {
     expect(declarations).toContain('z-index: 2');
     expect(declarations.join('\n')).toContain('table-sticky-background');
     expect(declarations.join('\n')).toContain(
-      'background-color: var(--color-border)',
+      'background-image: linear-gradient',
     );
+    expect(
+      declarations.some(declaration => declaration.includes('::after')),
+    ).toBe(false);
   });
 
   it('keeps the sticky header with custom cell renderers', () => {

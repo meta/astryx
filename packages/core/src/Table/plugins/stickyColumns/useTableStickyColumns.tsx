@@ -293,6 +293,14 @@ const stickyStyles = stylex.create({
   },
 });
 
+/**
+ * The opaque pinned-cell layer is also the header's moving surface when a
+ * table combines sticky columns with a sticky header. Keeping one layer for
+ * both cases prevents two divider pseudo-elements from competing at their
+ * intersection.
+ */
+export const tableStickyCellStyles = stickyStyles.cell;
+
 // Soft drop shadow over the scrolling region (a standard sticky-column shadow treatment).
 // border-collapse tables don't paint box-shadow on cells in Chromium, so it's a
 // ::after gradient strip just past the pinned edge (visible thanks to the cell's

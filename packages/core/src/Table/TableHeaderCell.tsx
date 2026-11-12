@@ -31,6 +31,7 @@ import {useTableContext, mergeXStyle} from './useTableCellStyles';
 import {wrapInTableContextMenu} from './tableContextMenu';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {tableStickyCellStyles} from './plugins/stickyColumns/useTableStickyColumns';
 
 /** Props for TableHeaderCell — `<th>` wrapper with context-aware styling */
 export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
@@ -93,22 +94,8 @@ const headerDividerStyles = stylex.create({
 
 const stickyHeaderStyles = stylex.create({
   cell: {
-    position: 'sticky',
     insetBlockStart: 0,
     zIndex: 2,
-    backgroundColor:
-      'var(--table-sticky-background, var(--color-background-card))',
-    // Collapsed table borders stay at the cell's static position when the
-    // header moves. Paint the separator in the moved cell as sticky columns do.
-    '::after': {
-      content: '""',
-      position: 'absolute',
-      insetInline: 0,
-      insetBlockEnd: 0,
-      blockSize: borderVars['--border-width'],
-      backgroundColor: colorVars['--color-border'],
-      pointerEvents: 'none',
-    },
   },
 });
 
@@ -170,7 +157,7 @@ export function TableHeaderCell({
       cellStyles.push(dividerColumnStyles.cell);
     }
     if (ctx.hasStickyHeader) {
-      cellStyles.push(stickyHeaderStyles.cell);
+      cellStyles.push(tableStickyCellStyles, stickyHeaderStyles.cell);
     }
   }
 

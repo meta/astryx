@@ -248,6 +248,8 @@ function TableScrollWrapper({
     axis: hasBlockViewport ? 'both' : 'inline',
     keyboardAccess: {owner: 'content'},
     overscroll: 'contain',
+    unrequestedOverflow:
+      tableName?.hasStickyHeader && !hasBlockViewport ? 'clip' : 'hidden',
   });
   // The spread below replaces className and style. Merge the plugin's instead.
   const {
@@ -292,15 +294,6 @@ function TableScrollWrapper({
 
   if (hasBlockViewport) {
     viewportProps.style = {...viewportProps.style, overscrollBehaviorY: 'auto'};
-  }
-  if (tableName?.hasStickyHeader && !hasBlockViewport) {
-    // The table owns inline overflow, but the caller owns block scrolling for
-    // sticky headers. `clip` keeps a horizontally overflowing table from
-    // becoming the header's vertical sticky containing block.
-    viewportProps.style = {
-      ...viewportProps.style,
-      overflowBlock: 'clip',
-    };
   }
   if (tableName?.hasStickyHeader) {
     viewportProps.className = [
