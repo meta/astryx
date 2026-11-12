@@ -433,7 +433,8 @@ export function useTouchTriggerInternal(
   onReleaseInLayer?: () => void,
   /**
    * Whether a tap on a text-entry control inside the trigger only focuses
-   * that control (Tooltip FR5). Only useTooltip passes it.
+   * that control, so no tooltip covers text the person starts to type. Only
+   * useTooltip passes it.
    */
   isTextEntryTapIgnored = false,
 ): UseTouchTriggerInternalReturn {
@@ -565,8 +566,8 @@ export function useTouchTriggerInternal(
   answerTapRef.current = (tapEvent: Event | null) => {
     const trigger = triggerRef.current;
     const tapped = isElement(tapEvent?.target) ? tapEvent.target : null;
-    // Tooltip FR5. A disabled field keeps its reason's tap, and a trigger
-    // that is itself a field keeps its own tap.
+    // A disabled field keeps its reason's tap, and a trigger that is itself
+    // a field keeps its own tap.
     if (isTextEntryTapIgnored && tapped != null && isHTMLElement(trigger)) {
       const field = findTextEntryControl(tapped, trigger);
       if (
