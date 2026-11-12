@@ -1905,4 +1905,207 @@ describe('final pass 5', () => {
       fs.rmSync(outside, {recursive: true, force: true});
     }
   }, 120_000);
+
+  it('reads next.config as Next loads it: file order, later assignments, the last key, export as default', async () => {
+    /** @param {Record<string, string>} files @param {string} where */
+    const addWith = async (files, where) => {
+      for (const [f, t] of Object.entries(files)) write(f, t);
+      try {
+        return await themeEditPreviewAdd(undefined, {cwd, path: where});
+      } finally {
+        for (const f of Object.keys(files)) rm(f);
+        rm(where);
+      }
+    };
+    const js = await addWith(
+      {
+        'next.config.js': "module.exports = {basePath: '/js'};\n",
+        'next.config.mjs': 'export default {};\n',
+      },
+      'src/app/d1',
+    );
+    expect(js.data.open).toContain('open /js/d1');
+    const mts = await addWith(
+      {'next.config.mts': "export default {basePath: '/m'};\n"},
+      'src/app/d2',
+    );
+    expect(mts.data.open).toContain('open /m/d2');
+    const later = await addWith(
+      {
+        'next.config.mjs':
+          "const c = {};\nc.basePath = '/x';\nexport default c;\n",
+      },
+      'src/app/d3',
+    );
+    expect(later.data.open).toContain('open /x/d3');
+    const named = await addWith(
+      {
+        'next.config.mjs':
+          "const c = {basePath: '/x'};\nexport {c as default};\n",
+      },
+      'src/app/d4',
+    );
+    expect(named.data.open).toContain('open /x/d4');
+    const twice = await addWith(
+      {'next.config.mjs': "export default {basePath: '/a', basePath: '/b'};\n"},
+      'src/app/d5',
+    );
+    expect(twice.data.open).toContain('open /b/d5');
+    write(
+      'next.config.mjs',
+      "const c = {};\nc.pageExtensions = ['mdx'];\nexport default c;\n",
+    );
+    try {
+      expect(
+        (
+          await refusal(() =>
+            themeEditPreviewAdd(undefined, {cwd, path: 'src/app/d6'}),
+          )
+        ).message,
+      ).toContain('next.config sets pageExtensions to mdx');
+    } finally {
+      rm('next.config.mjs');
+    }
+    const assigned = await addWith(
+      {
+        'next.config.mjs':
+          'const c = {};\nObject.assign(c, extra);\nexport default c;\n',
+      },
+      'src/app/d7',
+    );
+    expect(assigned.data.notes.join(' ')).toContain(
+      'sets pageExtensions in a way only running it tells',
+    );
+  }, 240_000);
+
+  it('brings the default pages back for a default page id', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/dp',
+    });
+    await themeEditPreviewRemove('overview', {cwd, path: 'src/app/dp'});
+    for (const r of [
+      await themeEditPreviewAdd('overview', {cwd, path: 'src/app/dp'}),
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        path: 'src/app/dp',
+        template: 'Components',
+      }),
+    ]) {
+      expect(r.data.pages).toContain('overview');
+      expect(r.data.notes.join(' ')).toContain(
+        "a default page's id brings back the default pages",
+      );
+    }
+    rm('src/app/dp');
+  }, 120_000);
+
+  it('refuses a default page id beside another page, and says why colors did not come', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/m1',
+    });
+    try {
+      for (const [d, template] of [
+        ['overview', 'dashboard'],
+        ['a sales dashboard', 'colors'],
+      ]) {
+        const r = await refusal(() =>
+          themeEditPreviewAdd(d, {cwd, path: 'src/app/m1', template}),
+        );
+        expect(r.code, d).toBe('ERR_INVALID_ARGUMENT');
+        expect(r.message, d).toContain('drop one of them');
+      }
+      const colors = await themeEditPreviewAdd('colors', {
+        cwd,
+        path: 'src/app/m1',
+      });
+      expect(colors.data.pages).not.toContain('colors');
+      expect(colors.data.notes.join(' ')).toContain(
+        'sea has none yet; it appears once it does: astryx experimental theme editor set sea accent <color>',
+      );
+    } finally {
+      rm('src/app/m1');
+    }
+  }, 120_000);
+
+  it('lists a page whose file is gone, and add writes it back as added', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/m3',
+    });
+    try {
+      rm('src/app/m3/_pages/components.tsx');
+      const list = await themeEditPreviewList({cwd, path: 'src/app/m3'});
+      expect(list.data.pages).toContainEqual({
+        id: 'components',
+        label: 'Components',
+        missing: true,
+      });
+      expect(list.data.notes.join(' ')).toContain(
+        'components is listed, but its file is gone, so the route does not build',
+      );
+      const r = await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/m3'});
+      expect(r.data.added).toContain('components');
+      expect(exists('src/app/m3/_pages/components.tsx')).toBe(true);
+    } finally {
+      rm('src/app/m3');
+    }
+  }, 120_000);
+
+  it('notes a stopped change in list, and the same remove run again exits 0', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/m4',
+    });
+    try {
+      let deletes = 0;
+      stopPreviewCommitAt(step => step === 'delete' && ++deletes === 1);
+      try {
+        await expect(
+          themeEditPreviewRemove('overview', {cwd, path: 'src/app/m4'}),
+        ).rejects.toBeTypeOf('symbol');
+      } finally {
+        stopPreviewCommitAt(null);
+      }
+      const list = await themeEditPreviewList({cwd, path: 'src/app/m4'});
+      expect(list.data.notes.join(' ')).toContain(
+        'a preview change was stopped part way',
+      );
+      const again = await themeEditPreviewRemove('overview', {
+        cwd,
+        path: 'src/app/m4',
+      });
+      expect(again.data.pages).not.toContain('overview');
+      expect(again.data.notes.join(' ')).toContain(
+        'overview is no longer in the preview: the change that was stopped removed it',
+      );
+    } finally {
+      rm('src/app/m4');
+    }
+  }, 120_000);
+
+  it('is sure of basePath only for a top-level literal on the exported object', async () => {
+    const UNSURE = 'after the basePath next.config sets from code';
+    for (const [i, text] of [
+      "const c = {};\nif (process.env.CI) c.basePath = '/ci';\nexport default c;\n",
+      "const c = {};\nfunction later() { c.basePath = '/x'; }\nexport default c;\n",
+      "const c = {basePath: '/x'};\ndelete c.basePath;\nexport default c;\n",
+      "const withBase = c => ({...c, basePath: '/w'});\nexport default withBase({});\n",
+    ].entries()) {
+      write('next.config.mjs', text);
+      const where = `src/app/r${i}`;
+      try {
+        const r = await themeEditPreviewAdd(undefined, {cwd, path: where});
+        expect(r.data.open, text).toContain(UNSURE);
+      } finally {
+        rm('next.config.mjs');
+        rm(where);
+      }
+    }
+  }, 180_000);
 });

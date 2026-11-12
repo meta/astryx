@@ -12,10 +12,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {baseThemeFile} from './_project.mjs';
+import {baseInstalled, baseThemeFile} from './_project.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   MATH_FUNCTION,
+  cssNumber,
   belowRange,
   fontShorthandParts,
   cssProperties,
@@ -28,6 +29,7 @@ import {
   propertyGrammar,
   takesPercentage,
 } from './_css.mjs';
+import {multipliedTokens} from './_parts.mjs';
 import {
   AUTO_SPREAD,
   COLOR_PROP_PARTS,
@@ -83,6 +85,7 @@ import {
   radiusTokenOf,
   focusStateOf,
   valueProblem,
+  partComponentDocs,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
@@ -223,6 +226,22 @@ export function storedProblems(ctx, slug, data, skip = '') {
         !(s.thing === 'font' && FONT_ROLES.includes(s.on))
       )
         return scope(`there is no part or group "${s.on}"`);
+      // A token that is no design token, or a part property that is no
+      // CSS property or names no part, styles nothing: reported, never
+      // built.
+      if (s.source === 'token' && !(s.thing in TOKENS))
+        return {setting: s, why: `${s.thing} is not a design token`};
+      if (s.source === 'property' && !s.on)
+        return {
+          setting: s,
+          why: `${s.thing} is a CSS property, so it needs a part (--on)`,
+        };
+      if (
+        s.source === 'property' &&
+        !s.thing.startsWith('--') &&
+        !cssProperties().has(s.thing)
+      )
+        return {setting: s, why: `${s.thing} is not a CSS property`};
       if (s.source === 'dial' && s.on && WHOLE_ONLY.includes(s.thing))
         return scope(`${s.thing} applies to the whole theme, not to ${s.on}`);
       if (s.mode && s.source === 'dial' && !PALETTE_DIALS.includes(s.thing))
@@ -252,6 +271,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
         ctx.C.typeOf,
         slug,
         ctx.C.propsReading(s.thing),
+        multipliedTokens(ctx.project).has(s.thing),
       );
       checkCycle(s.thing, s.value, TOKENS, data);
     } catch (e) {
@@ -305,6 +325,7 @@ function groupOfPropType(prop) {
  * @param {(token: string) => string} typeOf
  * @param {string} slug
  * @param {string[]} [readers] the CSS properties that read the token
+ * @param {boolean} [multiplied] whether Core multiplies the token by a size
  */
 function checkTypedValue(
   type,
@@ -314,6 +335,7 @@ function checkTypedValue(
   typeOf,
   slug,
   readers = [],
+  multiplied = false,
 ) {
   /** @param {string} what @param {string} example */
   const bad = (what, example) =>
@@ -380,6 +402,33 @@ function checkTypedValue(
   }
   if (type === 'number' && !isNumber(value, name))
     bad('a number', /weight/.test(name) ? '600' : '1.4');
+  // A token Core's stylesheet multiplies by a size inside calc() (the line
+  // heights) takes a number with no unit: there a length, a percentage or
+  // normal is invalid.
+  const coreDefault = String(TOKENS[name] ?? '').trim();
+  const v0 = value.trim();
+  const read = cssNumber(v0);
+  if (
+    type === 'number' &&
+    multiplied &&
+    !/^var\(--[a-z0-9-]+\)$/i.test(v0) &&
+    read?.unit !== '' &&
+    !(MATH_FUNCTION.test(v0) && matchType('number', v0) != null)
+  ) {
+    const unitless =
+      read?.unit === 'em'
+        ? String(read.value)
+        : read?.unit === '%'
+          ? String(read.value / 100)
+          : coreDefault;
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `${name} takes a number with no unit: Core multiplies it by a text size inside calc() (field heights, dialog headers, code blocks), where "${value}" is invalid. ${unitless === coreDefault ? `Core's own value is ${coreDefault}.` : `${unitless} is the same line height as a number.`}`,
+      {
+        run: [`${P} set ${slug} ${name} ${quoteCommandArgument(unitless)}`],
+      },
+    );
+  }
   if (type === 'time' && !isTime(value)) bad('a time up to 60s', '150ms');
   if (type === 'easing' && !isEasing(value))
     bad('an easing', 'cubic-bezier(0.2, 0, 0, 1)');
@@ -408,9 +457,13 @@ function isFixedColor(value) {
   if (/^var\(/.test(v)) return true;
   if (SYSTEM_COLORS.includes(v)) return true;
   // Percentages that add up to 0 leave color-mix() no color.
+  // A share is 0% to 100%.
   const zeroMix = (/** @type {string[]} */ colors) => {
     const pcts = colors.map(c => mixSide(c).pct);
-    return pcts.every(p => p != null) && pcts.every(p => p === 0);
+    return (
+      pcts.some(p => p != null && (p < 0 || p > 100)) ||
+      (pcts.every(p => p != null) && pcts.every(p => p === 0))
+    );
   };
   const inner = (/** @type {string} */ fn) =>
     splitTop(v.slice(fn.length + 1, -1), ',').map(x => x.trim());
@@ -584,7 +637,10 @@ function propertyProblem(prop, value) {
   if (!known || COLOR_PROPS.test(prop)) return null;
   if (matchValue(prop, v))
     return belowRange(prop, v)
-      ? {takes: 'a value of 0 or more', near: null}
+      ? {
+          takes: 'a value of 0 or more',
+          near: v.replace(/(^|[\s(,/])-(?=\.?\d)/g, '$1'),
+        }
       : null;
   // Only keywords the property takes on their own are offered; the same
   // word without its dashes or a trailing -ed/-s comes first (no-wrap is
@@ -990,16 +1046,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     // The part's component, or the one named like the part (tab is Tab,
     // under TabList), takes a disabled prop.
     const disables = (/** @type {string} */ t) => {
-      const comps = /** @type {Record<string, any>} */ (
-        ctx.project.components ?? {}
-      );
-      const pascal = t.replace(/(^|-)([a-z0-9])/g, (_, __, c) =>
-        c.toUpperCase(),
-      );
       // Or its built module sets aria-disabled (a tab takes it through its
       // other props): what Core renders, read from Core itself.
-      const marks = (/** @type {string} */ n) => {
-        const at = comps[n]?.importPath?.split('/').pop();
+      const marks = (/** @type {string} */ n, /** @type {any} */ doc) => {
+        const at = doc?.importPath?.split('/').pop();
         const file =
           at && ctx.project.coreDir
             ? path.join(ctx.project.coreDir, 'dist', at, `${n}.js`)
@@ -1012,13 +1062,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           return false;
         }
       };
-      return [ctx.project.target.get(t)?.component, pascal].some(
-        n =>
-          n != null &&
-          (Object.keys(comps[n]?.props ?? {}).some(p => /disabled/i.test(p)) ||
-            marks(n)),
+      return partComponentDocs(ctx, t).some(
+        ({name, doc}) =>
+          Object.keys(doc.props ?? {}).some(p => /disabled/i.test(p)) ||
+          marks(name, doc),
       );
     };
+    // A part whose component takes children holds content that can take
+    // focus, so focus-within applies there (a dialog, a section, a field).
+    const holdsContent = (/** @type {string} */ t) =>
+      partComponentDocs(ctx, t).some(
+        ({doc}) => 'children' in (doc.props ?? {}),
+      );
     // A part Core never styles in focus is not what takes focus (the
     // focusable element is inside it, or beside it).
     const focusable = (/** @type {string} */ t) =>
@@ -1038,7 +1093,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           // focusable is inside it (a switch's input sits beside its track).
           (s.state === 'focus-within' &&
             !keys(t, 'focus-within') &&
-            !focusable(t))),
+            !focusable(t) &&
+            !holdsContent(t))),
     );
     if (parts.length && dead.length === parts.length) {
       const bare = Object.keys(own(dead[0])).length === 0;
@@ -1068,6 +1124,37 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         },
       );
     }
+  }
+  // Core expands a part's padding into its container tokens from a plain
+  // padding only, so in a state that padding never reaches what sits edge
+  // to edge inside it: refused, judged on the part named (a group member
+  // spreads; when only another member is the reason, --only keeps it to
+  // the part named).
+  if (!unset && s.on && s.state && ctx.derived) {
+    const prop =
+      /^padding/.test(thing) || thing === 'spacing' ? 'padding' : null;
+    const expands = (/** @type {string} */ t) =>
+      (ctx.derived?.[t] ?? []).some(
+        d => d.property === prop && d.expand === 'container',
+      );
+    const named = ctx.project.target.get(s.on) ? s.on : null;
+    const hit = prop
+      ? named && expands(named)
+        ? named
+        : partsOf(ctx, s).find(expands)
+      : undefined;
+    if (hit)
+      refuse(
+        E.ERR_THEME_NO_EFFECT,
+        `Core sets ${hit}'s inner padding (what sits edge to edge inside it) from a plain padding setting only, so with --state ${s.state} it would stay behind.`,
+        {
+          run: [
+            named && !expands(named) && !s.only
+              ? setLine(slug, thing, v, {...s, only: true})
+              : setLine(slug, thing, v, {...s, state: undefined}),
+          ],
+        },
+      );
   }
   // On a group, a variant or state must belong to at least one member.
   if (s.on && FAMILIES[s.on] && (s.when || s.state)) {
@@ -1209,28 +1296,36 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       }
       if (HEADING_WEIGHTS[v] !== undefined) s.axis = 'weight';
       else if (HEADING_TRACKING[v] !== undefined) s.axis = 'tracking';
-      else
+      else {
+        // The word meant: in other letters (BOLD), or the rung nearest a
+        // weight number (800 is heavy); never a rung the other way.
+        const lower = v.trim().toLowerCase();
+        const words = [
+          ...Object.keys(HEADING_WEIGHTS),
+          ...Object.keys(HEADING_TRACKING),
+        ];
+        const weight = /^\d+(\.\d+)?$/.test(lower) ? Number(lower) : null;
+        const meant =
+          words.find(w => w === lower) ??
+          (weight != null
+            ? Object.entries(HEADING_WEIGHTS).reduce((a, b) =>
+                Math.abs(Number(b[1]) - weight) <
+                Math.abs(Number(a[1]) - weight)
+                  ? b
+                  : a,
+              )[0]
+            : nearest(lower, words)[0]);
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `headings takes ${DIALS.headings.values}, not "${v}".`,
+          `headings takes ${DIALS.headings.values}, not "${v}".${weight != null && meant ? ` ${meant} sets weight ${HEADING_WEIGHTS[meant]}.` : ''}`,
           {
-            didYouMean: nearest(v, [
-              ...Object.keys(HEADING_WEIGHTS),
-              ...Object.keys(HEADING_TRACKING),
-            ]),
-            run: [
-              setLine(
-                slug,
-                'headings',
-                nearest(v, [
-                  ...Object.keys(HEADING_WEIGHTS),
-                  ...Object.keys(HEADING_TRACKING),
-                ])[0] ?? Object.keys(HEADING_WEIGHTS)[0],
-                s,
-              ),
-            ],
+            didYouMean: meant ? [meant] : [],
+            run: meant
+              ? [setLine(slug, 'headings', meant, s)]
+              : [`${HOW} headings`],
           },
         );
+      }
       return s;
     }
     if (unset) return s;
@@ -1309,17 +1404,26 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         const edge = /** @type {[string, number]} */ (
           v === 'more' ? L[L.length - 1] : L[0]
         );
+        // The example stays inside what the dial takes (text-size: 10 to
+        // 32); at that end, the exact token takes the size instead.
+        const [lo, hi] = thing === 'text-size' ? [10, 32] : [0, Infinity];
+        const want = Math.round(px + (v === 'more' ? 2 : -2));
+        const atEnd = v === 'more' ? px >= hi : px <= lo;
         const example = String(cur).replace(
           /\d*\.?\d+/,
-          String(Math.max(0, Math.round(px + (v === 'more' ? 2 : -2)))),
+          String(Math.max(lo, Math.min(hi, want))),
         );
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `${thing} is ${typeof cur === 'number' ? `${cur}px` : cur}, already ${v === 'more' ? 'above' : 'below'} its ${v === 'more' ? 'largest' : 'smallest'} step (${edge[0]}, ${edge[1]}px), so "${v}" has nowhere to go. Give an exact size.`,
+          `${thing} is ${typeof cur === 'number' ? `${cur}px` : cur}, already ${v === 'more' ? 'above' : 'below'} its ${v === 'more' ? 'largest' : 'smallest'} step (${edge[0]}, ${edge[1]}px), so "${v}" has nowhere to go.${atEnd ? ` It is also the ${v === 'more' ? 'largest' : 'smallest'} size ${thing} takes (${lo} to ${hi}); the base font size token takes any size.` : ' Give an exact size.'}`,
           {
-            run: [
-              `${P} set ${slug} ${thing} ${quoteCommandArgument(example)}${s.on ? ` --on ${s.on}` : ''}`,
-            ],
+            run: atEnd
+              ? [
+                  `${P} set ${slug} --font-size-base ${quoteCommandArgument(`${Math.max(1, want)}px`)}`,
+                ]
+              : [
+                  `${P} set ${slug} ${thing} ${quoteCommandArgument(example)}${s.on ? ` --on ${s.on}` : ''}`,
+                ],
           },
         );
       }
@@ -1469,9 +1573,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       } else {
         // A rung in any case, a size in px written any way: the plain form.
         const lower = v.toLowerCase();
-        const px = /^(\d+(?:\.\d+)?|\.\d+)px$/.exec(lower);
+        // Any CSS number in px (2e1px, +4px), the shared length parse.
+        const pxLen = /px$/.test(lower) ? lengthPx(lower) : null;
         if (CORNERS.some(([n]) => n === lower)) s.value = lower;
-        else if (px) s.value = `${Number(px[1])}px`;
+        else if (pxLen != null && pxLen >= 0)
+          s.value =
+            pxLen >= 1000 ? 'pill' : `${Math.round(pxLen * 10000) / 10000}px`;
         else if (lower === '0') s.value = 'square';
         else {
           // What it most likely means, as a value corners takes: a simple
@@ -1741,7 +1848,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         const family = !parts && matchValue('font-family', v);
         const example = `${P} set ${slug} font-family ${quoteCommandArgument(exampleOf('font', 'font-family'))} --on ${s.on}`;
         const runs = parts
-          ? parts.system
+          ? parts.system || parts.repeat
             ? [example]
             : Object.entries(parts).map(
                 ([k, x]) =>
@@ -1754,9 +1861,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             : [example];
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          parts?.system
-            ? `font --on takes body, heading, or code, and "${v}" is a system font keyword of the CSS font shorthand, which sets every part of the font at once. For one part's font use font-family with a family.`
-            : `font --on takes body, heading, or code. For one part's font use font-family${parts ? ', and the other parts of the font shorthand one by one' : ''}.`,
+          parts?.repeat
+            ? `font --on takes body, heading, or code, and "${v}" ${parts.part?.includes(',') ? `gives ${parts.repeat} more times than the parts that take it (${parts.part})` : `gives ${parts.part ?? 'one part of the font'} twice (${parts.repeat} is the second)`}, which no CSS font value does. For one part's font use font-family with a family, and set each other part of the font once.`
+            : parts?.system
+              ? `font --on takes body, heading, or code, and "${v}" is a system font keyword of the CSS font shorthand, which sets every part of the font at once. For one part's font use font-family with a family.`
+              : `font --on takes body, heading, or code. For one part's font use font-family${parts ? ', and the other parts of the font shorthand one by one' : ''}.`,
           {run: runs},
         );
       }
@@ -1876,15 +1985,26 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           .toLowerCase()
           .replace(/^base\s*[=:]\s*/, '')
           .trim();
+        // The base named in other letters is the one meant; a guess is only
+        // among the bases installed here (and none).
         const near = [...LIKE, 'none'].includes(meant)
           ? [meant]
-          : nearest(meant, [...LIKE, 'none']);
+          : nearest(meant, [
+              ...LIKE.filter(b => baseInstalled(ctx.project, b)),
+              'none',
+            ]);
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `base takes ${DIALS.base.values}, not "${v}".`,
           {
             didYouMean: near,
-            run: near[0] ? [`${P} set ${slug} base ${near[0]}`] : [],
+            // With nothing near, every base that works here, none first.
+            run: near[0]
+              ? [`${P} set ${slug} base ${near[0]}`]
+              : [
+                  'none',
+                  ...LIKE.filter(b => baseInstalled(ctx.project, b)),
+                ].map(b => `${P} set ${slug} base ${b}`),
           },
         );
       }
@@ -1965,6 +2085,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       C.typeOf,
       slug,
       C.propsReading(thing),
+      multipliedTokens(ctx.project).has(thing),
     );
     checkCycle(thing, v, TOKENS, data);
     // With no part data, what reads the token is unknown: save, unchecked.
@@ -2131,7 +2252,13 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     // With a state, the other mode would take one variant's value for
     // every variant, so any part whose variants read their own value needs
     // the variant named.
-    if (s.mode && !s.when) {
+    // Per-variant colors only: a value that is not a color is refused for
+    // --mode below, with the reason that holds.
+    if (
+      s.mode &&
+      !s.when &&
+      (COLOR_PROPS.test(prop) || (prop === 'background' && isColorValue(v)))
+    ) {
       const g = C.groupOfProp(
         prop === 'background' ? 'background-color' : prop,
       );
@@ -2232,8 +2359,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       !COLOR_PROPS.test(prop) &&
       !(prop === 'background' && isColorValue(v))
     ) {
-      const alt =
-        prop === 'border' || prop.startsWith('border-')
+      // A color mixed into the value (a border's) can go per mode on its
+      // own; a value with none (a radius) is just set for both modes.
+      const hasColor = /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(v);
+      const alt = !hasColor
+        ? null
+        : prop === 'border' || prop.startsWith('border-')
           ? 'border-color'
           : prop === 'background'
             ? 'background-color'

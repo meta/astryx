@@ -41,7 +41,7 @@ export const doc = {
       flag: '-o, --out <path>',
       param: 'options.out',
       description:
-        'Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A folder, or a path ending in /, writes <theme name>.css into it. The path should end in .css; another name still builds, with a warning. A build never replaces the theme source (ERR_THEME_INVALID). At a path --out names, it replaces its own earlier outputs, and the output of another theme source with a warning that names both sources; any other existing file fails with ERR_FILE_EXISTS and nothing is written. A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)',
+        'Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A folder, or a path ending in /, writes <theme name>.css into it. The path should end in .css; another name still builds, with a warning. A build never replaces the theme source (ERR_THEME_INVALID). At a path --out names, it replaces its own earlier outputs, and the output of another theme source with a warning that names both sources; any other existing file fails with ERR_FILE_EXISTS and nothing is written. Into a folder the theme editor made (folder <slug>/ holds <slug>.settings.json), a source outside that folder builds there too, with a warning; to keep the editor folder to its own theme, build beside the source, or pass an --out outside it. A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)',
     },
     {
       flag: '--icons-specifier <specifier>',
@@ -91,7 +91,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'a build or validation error, or --check finds stale or missing outputs',
+      when: 'a build or validation error (an error envelope), or --check finds stale or missing outputs (the check result, with upToDate false, the stale files and code ERR_THEME_STALE)',
     },
   ],
   related: ['theme add', 'theme list'],
