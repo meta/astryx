@@ -1548,9 +1548,10 @@ describe('useLayer', () => {
       act(() => runToggleTasks());
       expect(events).toEqual([]);
       // The browser hides the popover itself, as a close watcher's Escape.
+      // The hook records the close as the hide starts, before its toggle.
       const popover = getByText('Content').closest<HTMLElement>('[popover]')!;
       act(() => browserHide(popover));
-      expect(events).toEqual(['close-start']);
+      expect(events).toEqual(['close-start', 'hide']);
       act(() => runToggleTasks());
       expect(events).toEqual(['close-start', 'hide']);
       // The hook's own hide() starts a close the same way, before its hide.
@@ -1732,6 +1733,134 @@ describe('useLayer', () => {
       expect(getByText('Tip').closest('[popover]')).not.toHaveAttribute(
         'data-open',
       );
+    });
+
+    /**
+     * One layer with two triggers, as a view with one popover for many
+     * items has: each press shows the layer from its own trigger, and a
+     * press on the open trigger hides it. `log` records what the parent
+     * sees, as a controlled `onOpenChange` would.
+     */
+    function TwoTriggerHarness({log}: {log: string[]}) {
+      const [openKey, setOpenKey] = useState<string | null>(null);
+      const layer = useLayerInternal({
+        mode: 'context',
+        onHide: () => {
+          log.push('hide');
+          setOpenKey(null);
+        },
+      });
+      const press = (key: string, button: HTMLButtonElement) => {
+        if (layer.isOpen && openKey === key) {
+          layer.hide();
+          return;
+        }
+        log.push(`show ${key}`);
+        setOpenKey(key);
+        layer.ref(button);
+        layer.show();
+      };
+      return (
+        <>
+          {['A', 'B'].map(key => (
+            <button
+              key={key}
+              type="button"
+              onClick={event => press(key, event.currentTarget)}>
+              {key}
+            </button>
+          ))}
+          <span data-testid="open-key">{openKey ?? 'none'}</span>
+          {layer.render(<span>Layer content</span>, {placement: 'below'})}
+        </>
+      );
+    }
+
+    /** A press that the browser's light dismiss answers before its click. */
+    function pressWithLightDismiss(
+      button: HTMLElement,
+      popover: HTMLElement,
+      browserHide: (popover: HTMLElement) => void,
+    ) {
+      fireEvent.pointerDown(button);
+      act(() => browserHide(popover));
+      fireEvent.click(button);
+    }
+
+    it('opens the layer at another trigger when the press on it light-dismissed the layer', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const log: string[] = [];
+      const {container, getByRole, getByTestId} = render(
+        <TwoTriggerHarness log={log} />,
+      );
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      fireEvent.click(getByRole('button', {name: 'A'}));
+      act(() => runToggleTasks());
+      expect(popover).toHaveAttribute('data-open', 'true');
+
+      pressWithLightDismiss(
+        getByRole('button', {name: 'B'}),
+        popover,
+        browserHide,
+      );
+      // The close is recorded as the browser starts it, before its click.
+      expect(log).toEqual(['show A', 'hide', 'show B']);
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      expect(popover).toHaveAttribute('data-open', 'true');
+      expect(getByTestId('open-key')).toHaveTextContent('B');
+      expect(log).toEqual(['show A', 'hide', 'show B']);
+    });
+
+    it('ends closed when the press on the open trigger light-dismissed the layer', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const log: string[] = [];
+      const {container, getByRole} = render(<TwoTriggerHarness log={log} />);
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      const a = getByRole('button', {name: 'A'});
+      fireEvent.click(a);
+      act(() => runToggleTasks());
+
+      pressWithLightDismiss(a, popover, browserHide);
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      expect(popover).not.toHaveAttribute('data-open');
+      expect(log.filter(entry => entry === 'hide')).toHaveLength(1);
+    });
+
+    it('fires onHide once for a browser close followed by hide() in the same task', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const onHide = vi.fn();
+      function Harness() {
+        const layer = useLayerInternal({mode: 'context', onHide});
+        return (
+          <>
+            <button type="button" ref={layer.ref} onClick={layer.show}>
+              Trigger
+            </button>
+            <button type="button" onClick={layer.hide}>
+              Hide
+            </button>
+            {layer.render(<span>Layer content</span>, {placement: 'below'})}
+          </>
+        );
+      }
+      const {container, getByRole} = render(<Harness />);
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      fireEvent.click(getByRole('button', {name: 'Trigger'}));
+      act(() => runToggleTasks());
+
+      act(() => {
+        browserHide(popover);
+        getByRole('button', {name: 'Hide'}).click();
+      });
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      expect(onHide).toHaveBeenCalledTimes(1);
+      expect(popover).not.toHaveAttribute('data-open');
     });
   });
 
