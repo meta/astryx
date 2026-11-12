@@ -493,7 +493,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     try {
       // The integration's manifest in TypeScript, importing a helper: jiti
       // compiles both on the first load and writes them to its cache in the
-      // temp folder.
+      // per-user cache folder, beside the catalogs.
       fs.rmSync(path.join(other.widgets, 'astryx.integration.mjs'));
       fs.writeFileSync(
         path.join(other.widgets, 'helper.ts'),
@@ -514,7 +514,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
           before.get(name)?.ino === after.get(name)?.ino ? 'hit' : 'miss',
         );
       }
-      expect(fs.existsSync(path.join(tmp, 'jiti'))).toBe(true);
+      expect(fs.readdirSync(path.join(tmp, 'astryx', 'jiti')).length).toBe(2);
       expect(outcomes).toEqual(['miss', 'hit', 'hit']);
     } finally {
       fs.rmSync(other.dir, {recursive: true, force: true});
