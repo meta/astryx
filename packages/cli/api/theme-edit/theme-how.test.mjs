@@ -2351,14 +2351,8 @@ const QUESTIONS_G = [
     },
   ],
   ['footer rounder', {top: /^set q corners more --on layout-footer$/}],
-  [
-    'combobox rounder',
-    {top: null, text: /no part is called "combobox".*selector/},
-  ],
-  [
-    'accordion headers bold',
-    {top: null, text: /no part is called "accordion"/},
-  ],
+  // a word for a component how has no part for: the closest parts
+  ['image rounder', {top: null, text: /no part is called "image"/}],
   // "too" words, states, modes and second parts
   [
     'the cards are too shadowy',
@@ -2507,6 +2501,260 @@ describe('how answers final-2 questions', () => {
       fs.rmSync(dir, {recursive: true, force: true});
       fs.cpSync(keep, dir, {recursive: true});
       const {data} = await themeEditHow(question, {cwd, theme: 'pg'});
+      const top = data.results.find((/** @type {any} */ r) =>
+        r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
+      );
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const before = css();
+      for (const c of commands) {
+        const [, theme, thing, ...rest] = words(bare(c));
+        const fi = rest.findIndex(w => /^--(on|when|state|mode)$/.test(w));
+        /** @type {Record<string, string>} */
+        const flags = {};
+        for (let i = fi < 0 ? rest.length : fi; i < rest.length; i += 2)
+          flags[rest[i].slice(2)] = rest[i + 1];
+        await themeEditSet(
+          theme,
+          thing,
+          (fi < 0 ? rest : rest.slice(0, fi)).join(' '),
+          {cwd, ...flags},
+        );
+      }
+      for (const w of want) {
+        expect(before, question).not.toMatch(w);
+        expect(css(), question).toMatch(w);
+      }
+    }
+    fs.rmSync(keep, {recursive: true, force: true});
+  }, 300_000);
+});
+
+/**
+ * Final-3 questions: percents inside functions, typed values without a
+ * colon, ratio and direction words, resets, problem descriptions, part and
+ * state words, CSS named colors.
+ * @type {Array<[string, {top: RegExp | null, adds?: RegExp, text?: RegExp}]>}
+ */
+const QUESTIONS_H = [
+  // a percent inside a gradient or after a color is never an opacity
+  [
+    'header background linear-gradient(135deg, #2563eb 0%, #9333ea 100%)',
+    {
+      top: /^set q background 'linear-gradient\(135deg, #2563eb 0%, #9333ea 100%\)' --on app-shell-header$/,
+      adds: /app-shell-header\.base\.background=linear-gradient/,
+    },
+  ],
+  [
+    'button gradient #2563eb 0% to #9333ea 100%',
+    {
+      top: /^set q background 'linear-gradient\(#2563eb 0%, #9333ea 100%\)' --on button$/,
+    },
+  ],
+  // typed values without a colon
+  [
+    'card background linear-gradient(to right, #2563eb, #9333ea)',
+    {
+      top: /^set q background 'linear-gradient\(to right, #2563eb, #9333ea\)' --on card$/,
+    },
+  ],
+  [
+    'card opacity 0.5',
+    {top: /^set q opacity 0\.5 --on card$/, adds: /card\.base\.opacity=0\.5/},
+  ],
+  ['card border 0', {top: /^set q border 0 --on card$/}],
+  [
+    'card border color transparent',
+    {top: /^set q border-color transparent --on card$/},
+  ],
+  [
+    'card background light-dark(#fff, #111)',
+    {top: /^set q background 'light-dark\(#fff, #111\)' --on card$/},
+  ],
+  [
+    'card background var(--color-background-muted)',
+    {top: /^set q background 'var\(--color-background-muted\)' --on card$/},
+  ],
+  [
+    'card padding var(--spacing-6)',
+    {top: /^set q padding 'var\(--spacing-6\)' --on card$/},
+  ],
+  [
+    'card radius var(--radius-container)',
+    {top: /^set q border-radius 'var\(--radius-container\)' --on card$/},
+  ],
+  ['card filter: blur(2px)', {top: /^set q filter 'blur\(2px\)' --on card$/}],
+  [
+    'card backdrop-filter blur(8px)',
+    {top: /^set q backdrop-filter 'blur\(8px\)' --on card$/},
+  ],
+  [
+    'card padding NaNpx',
+    {top: null, text: /"nanpx" is not a value padding takes/},
+  ],
+  [
+    'card filter: drop-shadow(0 1px 2px #0003)',
+    {top: /^set q filter 'drop-shadow\(0 1px 2px #0003\)' --on card$/},
+  ],
+  ['card margin 16px', {top: /^set q margin 16px --on card$/}],
+  [
+    'button box-shadow: 0 0 0 2px #2563eb, 0 1px 2px #0002',
+    {
+      top: /^set q box-shadow '0 0 0 2px #2563eb, 0 1px 2px #0002' --on button$/,
+    },
+  ],
+  // ratio words and spaced units
+  ['halve the spacing', {top: /^set q spacing less$/}],
+  [
+    'cut the border radius in half on inputs',
+    {top: /^set q corners less --on inputs$/},
+  ],
+  [
+    'corners: 0.5 rem',
+    {top: /^set q corners 8px$/, adds: /--radius-element=8px/},
+  ],
+  ['card padding 1.5 em', {top: /^set q padding 1\.5em --on card$/}],
+  ['button text 14 px', {top: /^set q font-size 14px --on button$/}],
+  // direction words
+  [
+    'buttons feel heavy, lighten them up',
+    {top: /^set q font-weight 300 --on button$/},
+  ],
+  [
+    'tighten up the letter spacing on headings',
+    {top: /^set q letter-spacing -0\.02em --on heading$/},
+  ],
+  [
+    'knock the contrast of secondary text down a bit',
+    {
+      top: /^set q --color-text-secondary '#[0-9a-f]{6}' --mode light && set q --color-text-secondary '#[0-9a-f]{6}' --mode dark$/,
+      text: /less contrast/,
+    },
+  ],
+  [
+    'the gray text fails contrast, darken it',
+    {
+      top: /^set q --color-text-secondary '#323232' --mode light && set q --color-text-secondary '#bbbbbb' --mode dark$/,
+    },
+  ],
+  [
+    'the body copy is cramped, open up the leading',
+    {top: /^set q --text-body-leading [\d.]+$/},
+  ],
+  // a problem description is not a change
+  [
+    'the type hierarchy is flat, headings need more weight',
+    {top: /^set q headings bold$/},
+  ],
+  [
+    'make the buttons rounder? or maybe not. actually yes',
+    {top: /^set q corners more --on button$/},
+  ],
+  // parts and states
+  [
+    'accordion headers bold',
+    {top: /^set q font-weight 700 --on collapsible-trigger$/},
+  ],
+  ['combobox rounder', {top: /^set q corners more --on complex-selector$/}],
+  ['notification rounder', {top: /^set q corners more --on toast$/}],
+  [
+    'error toasts red',
+    {top: /^set q background '#dc2626' --on toast --when type:error$/},
+  ],
+  ['read-only inputs gray background', {top: /--on inputs --state readonly$/}],
+  [
+    'loading buttons at 70% opacity',
+    {top: null, text: /button has no loading state/},
+  ],
+  [
+    'unchecked checkboxes: thicker border',
+    {top: null, text: /checks has no unchecked state/},
+  ],
+  ['heading color red', {top: null, text: /color prop|text color/}],
+  // CSS named colors
+  ['accent tomato', {top: /^set q accent '#ff6347'$/}],
+  // a font size of 0
+  ['font size 0px', {top: null, text: /hides the text/}],
+];
+
+describe('how answers final-3 questions', () => {
+  for (const [question, want] of QUESTIONS_H)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      const all = results.map(r => r.text).join('\n') + (data.hint ?? '');
+      if (want.text) expect(all).toMatch(want.text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want.top === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      if (want.adds) expect(await effect(commands)).toMatch(want.adds);
+    });
+
+  it('reset, revert and back to default take back what the theme sets, or say it sets nothing', async () => {
+    await themeEditNew('rs', {cwd, like: 'neutral'});
+    await themeEditSet('rs', 'corners', 'pill', {cwd});
+    await themeEditSet('rs', 'accent', '#e11d48', {cwd});
+    await themeEditSet('rs', 'font', 'georgia', {cwd});
+    await themeEditSet('rs', 'background', '#fafafa', {cwd, on: 'card'});
+    for (const [q, want] of /** @type {Array<[string, string]>} */ ([
+      ['reset the corners to default', 'undo rs corners'],
+      ['put the accent back to what it was', 'undo rs accent'],
+      ['revert the font', 'undo rs font'],
+      ['clear the card background override', 'undo rs background --on card'],
+    ])) {
+      const {data} = await themeEditHow(q, {cwd, theme: 'rs'});
+      expect(data.results[0].commands.map(bare)[0], q).toBe(want);
+    }
+    const none = (
+      await themeEditHow('no custom spacing, use the standard scale', {
+        cwd,
+        theme: 'rs',
+      })
+    ).data;
+    expect(none.results[0].text).toMatch(/sets nothing for spacing/);
+  }, 120_000);
+
+  it('a part word with no part lists the parts of components that name it', async () => {
+    const list = (await themeEditHow('accordion', {cwd, list: 'parts'})).data;
+    expect(list.items.map((/** @type {any} */ x) => x.name)).toContain(
+      'collapsible',
+    );
+  });
+
+  it('runs final-3 answers through set and checks the built CSS', async () => {
+    await themeEditNew('ph', {cwd, like: 'neutral'});
+    const dir = path.join(cwd, 'themes', 'ph');
+    const keep = path.join(cwd, 'ph-pristine');
+    fs.cpSync(dir, keep, {recursive: true});
+    const css = () => fs.readFileSync(path.join(dir, 'ph.css'), 'utf8');
+    for (const [question, want] of /** @type {Array<[string, RegExp[]]>} */ ([
+      [
+        'header background linear-gradient(135deg, #2563eb 0%, #9333ea 100%)',
+        [
+          /app-shell-header[^{]*\{[^}]*background:\s*linear-gradient\(135deg, #2563eb 0%, #9333ea 100%\)/,
+        ],
+      ],
+      ['card opacity 0.5', [/card[^{]*\{[^}]*opacity:\s*0\.5/]],
+      [
+        'card filter: drop-shadow(0 1px 2px #0003)',
+        [/filter:\s*drop-shadow\(0 1px 2px #0003\)/],
+      ],
+      ['card margin 16px', [/card[^{]*\{[^}]*margin:\s*16px/]],
+      [
+        'error toasts red',
+        [/toast[^{]*error[^{]*\{[^}]*background(-color)?:\s*#dc2626/],
+      ],
+    ])) {
+      fs.rmSync(dir, {recursive: true, force: true});
+      fs.cpSync(keep, dir, {recursive: true});
+      const {data} = await themeEditHow(question, {cwd, theme: 'ph'});
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );

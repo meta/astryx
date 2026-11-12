@@ -1039,6 +1039,37 @@ async function listItems(kind, filter, cwd) {
     for (const s of x.states) if (!e.states.includes(s)) e.states.push(s);
     byKey.set(x.key, e);
   }
+  // A filter no part name holds lists the closest names, never nothing.
+  if (!byKey.size && filter) {
+    const word = filter.toLowerCase().replace(/s$/, '');
+    // The parts of components whose doc lists the word, else the names
+    // nearest it.
+    const owners = Object.entries(ctx.project.components)
+      .filter(([, info]) =>
+        (info.keywords ?? []).some(
+          k => k.toLowerCase().replace(/s$/, '') === word,
+        ),
+      )
+      .map(([name]) => name);
+    const close = new Set(
+      owners.length
+        ? ctx.project.targets
+            .filter(x => owners.includes(x.component))
+            .map(x => x.key)
+        : nearest(
+            word,
+            ctx.project.targets.map(x => x.key),
+            5,
+          ),
+    );
+    for (const x of ctx.project.targets) {
+      if (!close.has(x.key)) continue;
+      const e = byKey.get(x.key) ?? {key: x.key, components: [], states: []};
+      if (!e.components.includes(x.component)) e.components.push(x.component);
+      for (const st of x.states) if (!e.states.includes(st)) e.states.push(st);
+      byKey.set(x.key, e);
+    }
+  }
   return {
     list: kind,
     items: [...byKey.values()].map(x => ({
