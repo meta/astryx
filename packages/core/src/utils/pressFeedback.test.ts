@@ -1333,6 +1333,25 @@ describe('a phone or tablet paints a mouse or Space press itself', () => {
     expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
   });
 
+  it("paints nothing for a pen press on a held surface's content, and paints once the hold goes (spec:AST-057 FR7)", () => {
+    const label = rows[1].firstElementChild;
+    if (label == null) {
+      throw new Error('the row has no label to press');
+    }
+    setPressHeld(rows[1], true);
+    press(label, 'pointerdown', 10, 100, 'pen');
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(label, 'pointerup', 10, 100, 'pen');
+    vi.advanceTimersByTime(PRESS_FADE_MS * 2);
+    expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+    setPressHeld(rows[1], false);
+    press(label, 'pointerdown', 10, 100, 'pen');
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(label, 'pointerup', 10, 100, 'pen');
+  });
+
   it('keeps the paint while the mouse is dragged off the surface, as `:active` does', () => {
     press(rows[1], 'pointerdown', 10, 100, 'mouse');
     press(document.body, 'pointermove', 400, 900, 'mouse');

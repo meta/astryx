@@ -289,11 +289,8 @@ export default function SwipeActionsLayer({
     },
   });
   const {onKeyDown} = swipe;
-  // The root's key events reach this layer's key handler through the bridge
-  // the row's root forwards them into. The handler and the bridge are stable,
-  // so the Effect runs once per layer.
-  // The Effect syncs the row's bridge with this layer: it publishes the handler
-  // when the layer mounts and clears it when the layer leaves.
+  // The Effect publishes the layer's key handler to the row's bridge and clears
+  // it when the layer leaves. Both are stable, so it runs once per layer.
   useEffect(() => {
     onBridge?.({onKeyDown});
     return () => onBridge?.(null);
