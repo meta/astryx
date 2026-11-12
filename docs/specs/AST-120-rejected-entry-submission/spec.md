@@ -302,13 +302,17 @@ control shows no bubble, and the member moves focus itself (FR3).
 ### DEC-4 — `noValidate` and `form.submit()` are the way past the block
 
 **Reference:** `spec:AST-120/DEC-4`
-**Decider:** pending
+**Decider:** `nynexman4464`, `2026-11-12`
 
 An app that validates in its own code sets `noValidate` or calls
 `form.submit()`, and both skip constraint validation by definition. There a
 member keeps posting what `spec:AST-118` FR4 states, and its control still
-reports its validity for the app to read (FR4). OQ1 asks whether a member also
-needs its own way past the block.
+reports its validity for the app to read (FR4). No member has its own way
+past the block.
+
+Rejected: a prop that keeps one member out of constraint validation. A form
+that validates in its own code already has `noValidate`, and a member-level
+option can be added later without a breaking change.
 
 ### DEC-5 — A caller error status with a message wins on every member
 
@@ -334,10 +338,4 @@ as one `[breaking]` Changeset in a declared minor (`spec:AST-017` FR28, FR31).
 
 ## Open questions
 
-- **OQ1 — Does a member need its own way past the block?** (`human-api`) FR4
-  states option (a).
-  - (a) No. `noValidate`, `formNoValidate`, and `form.submit()` cover a form
-    that validates in its own code, and the block applies to every member.
-  - (b) A prop that keeps one member out of constraint validation, as React
-    Spectrum's `validationBehavior="aria"` lets a form show errors without
-    stopping its submission.
+None.
