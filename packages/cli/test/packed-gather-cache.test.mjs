@@ -545,8 +545,38 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(run(QUERIES[0], {tmp: pnp, env: asPnp})).toEqual(fresh);
     expect(run(QUERIES[0], {tmp: pnp, env: asPnp})).toEqual(fresh);
     expect(entries(pnp).size).toBe(0);
-
     expect(derivedEntries(pnp)).toEqual([]);
+  }, 120_000);
+
+  it("is not used when another entry is copied over this one's name", () => {
+    const tmp = keptTmp('copied');
+    const other = makeProject();
+    try {
+      fs.mkdirSync(path.join(other.widgets, 'templates'), {recursive: true});
+      fs.writeFileSync(
+        path.join(other.widgets, 'templates', 'tally.doc.mjs'),
+        `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(other.widgets, 'templates', 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      run(QUERIES[0], {tmp, cwd: project});
+      const [mine] = [...entries(tmp).keys()];
+      run(QUERIES[0], {tmp, cwd: other.dir});
+      const [theirs] = [...entries(tmp).keys()].filter(name => name !== mine);
+      const dir = path.join(tmp, CACHE_NAME);
+      fs.copyFileSync(path.join(dir, theirs), path.join(dir, mine));
+      // Only the other project has the tally template.
+      const ask = ['search', 'tally'];
+      const fresh = run(ask, {tmp: freshTmp(), cwd: project});
+      expect(run(ask, {tmp: freshTmp(), cwd: other.dir}).stdout).not.toBe(
+        fresh.stdout,
+      );
+      expect(run(ask, {tmp, cwd: project})).toEqual(fresh);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
   }, 120_000);
 
   it('is never kept by a checkout, even one a pack left a build id in', () => {
