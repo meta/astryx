@@ -8,17 +8,6 @@
  * @position Motion foundation, beside reducedMotion.ts's dip, for a change
  *   that a component cross-fades itself instead of through the animator. Lab
  *   reaches it through internal/touch.ts.
- *
- * A copy of the element as it shows now fades out where it is, and the
- * element changes at once and fades in. The two fades run together, so the
- * element's area shows the old state, the new one or both on every frame. A
- * dip fades out, lands and fades back in, so the area goes blank between the
- * two. The copy is inert and hidden from assistive technology
- * (transientCopy.ts). It is laid next to the box that clips the element,
- * never inside a scroll container. So a scroll that the change makes does not
- * move it. It is clipped to that box's visible part, past its own edges, so
- * what the element draws outside its box, such as an indicator band above a
- * list, shows in it as it did.
  */
 
 import {ENTRANCE_OPACITY_FLOOR} from './opacityFloor';
@@ -44,6 +33,17 @@ const PLACING_PROPERTIES = ['translate', 'transform', 'scale', 'rotate'];
  * when only the viewport clips it. Returns null when the element cannot be
  * copied (too large, or not laid out): the caller then plays its own form,
  * such as a dip.
+ *
+ * A copy of the element as it shows now fades out where it is, and the
+ * element changes at once and fades in. The two fades run together, so the
+ * element's area shows the old state, the new one or both on every frame. A
+ * dip fades out, lands and fades back in, so the area goes blank between the
+ * two. The copy is inert and hidden from assistive technology
+ * (transientCopy.ts). It is laid next to the box that clips the element,
+ * never inside a scroll container. So a scroll that the change makes does not
+ * move it. It is clipped to that box's visible part, past its own edges. So
+ * the copy shows what the element draws outside its box, such as an indicator
+ * band above a list.
  */
 export function playReducedMotionCrossFade(
   element: HTMLElement,

@@ -1285,6 +1285,73 @@ test('under Reduce Motion an end scrolled into the inset reads no layout between
   expect(await shownPull(content)).toBeCloseTo(0, 1);
 });
 
+test('under Reduce Motion a refresh that begins during the end’s cross-fade keeps its inset: the list does not jump over the spinner', async ({
+  page,
+}) => {
+  // The controlled story's Refresh button starts a refresh with no finger.
+  // Pressed while the end cross-fades, it puts the list back on the inset.
+  // The end's own finish must not run after that and drop the inset.
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await primaryPointer(page, 'coarse');
+  const {driver, content, start} = await openRefresh(
+    page,
+    'lab-pull-to-refresh--controlled',
+    {refreshMs: '-1'},
+  );
+  await driver.play(slowPull(start, 300, 200));
+  await waitForContentRest(content);
+  expect(await shownPull(content)).toBeCloseTo(HEIGHT, 1);
+  // Presses Refresh 60 ms into the end's cross-fade, and notes whether the
+  // copy was still on screen then.
+  await page.evaluate(() => {
+    const record = window as unknown as {
+      __pressScheduled: boolean;
+      __pressedMidFade: boolean | null;
+    };
+    record.__pressScheduled = false;
+    record.__pressedMidFade = null;
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      if (
+        !record.__pressScheduled &&
+        this.hasAttribute('data-refresh-content') &&
+        this.hasAttribute('inert')
+      ) {
+        record.__pressScheduled = true;
+        setTimeout(() => {
+          record.__pressedMidFade =
+            document.querySelector('[data-refresh-content][inert]') != null;
+          const button = [...document.querySelectorAll('button')].find(
+            element => element.textContent?.trim() === 'Refresh',
+          );
+          button?.click();
+        }, 60);
+      }
+      return animate.apply(this, args);
+    };
+  });
+  const pressedMidFade = () =>
+    page.evaluate(
+      () =>
+        (window as unknown as {__pressedMidFade: boolean | null})
+          .__pressedMidFade,
+    );
+  await endRefresh(page);
+  await expect.poll(pressedMidFade, {timeout: 8000}).not.toBeNull();
+  expect(await pressedMidFade(), 'the press landed after the cross-fade').toBe(
+    true,
+  );
+  await expect.poll(() => isBusy(content)).toBe(true);
+  // Past the end's cross-fade, the new refresh still holds the inset.
+  await expect(page.locator('[data-refresh-content][inert]')).toHaveCount(0);
+  await frames(page, 3);
+  await waitForContentRest(content);
+  expect(await shownPull(content)).toBeCloseTo(HEIGHT, 1);
+});
+
 test('under Reduce Motion a release cross-fades onto the inset: opacity only, within 200 ms', async ({
   page,
 }) => {

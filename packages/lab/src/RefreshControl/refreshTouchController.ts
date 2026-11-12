@@ -900,14 +900,23 @@ export function useRefreshTouchController({
   const begin = useCallback(() => {
     showIndicator();
     if (!model.current.isPulling) {
-      // The inset arrives with no visible motion, as beginRefreshing().
+      // The inset arrives with no visible motion, as beginRefreshing(). An
+      // end still playing stops first, so its finish cannot drop the inset.
       cancelPendingEnd();
+      stopPlacing();
       const current = resolveOwner();
       place(REFRESH_HEIGHT);
       scrollOwnerBy(current, REFRESH_HEIGHT);
       hasInset.current = true;
     }
-  }, [cancelPendingEnd, model, place, resolveOwner, showIndicator]);
+  }, [
+    cancelPendingEnd,
+    model,
+    place,
+    resolveOwner,
+    showIndicator,
+    stopPlacing,
+  ]);
 
   return useMemo(
     () => ({
