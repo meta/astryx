@@ -97,6 +97,7 @@ import {
   ownSourceTokenValues,
   baseTopTokens,
   baseComponentReads,
+  partRuleTokens,
   cssFamily,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
@@ -1019,8 +1020,22 @@ function checkCycle(thing, value, TOKENS, data, cwd, scope = {}) {
         (s.state ?? null) === (scope.state ?? null) &&
         (s.when ?? null) === (scope.when ?? null),
     );
-    return (same ?? onPart.find(s => s.state == null && s.when == null))?.value;
+    const set = (same ?? onPart.find(s => s.state == null && s.when == null))
+      ?.value;
+    if (set !== undefined) return set;
+    // Else what the part's plain rule holds as built: the own source's and
+    // the base theme's part rules (neutral's progress-bar reads
+    // --color-border-emphasized).
+    if (scope.state || scope.when || !cwd) return undefined;
+    const rule = partRule().get(t);
+    return rule ?? undefined;
   };
+  /** @type {Map<string, string | null> | null} */
+  let rule = null;
+  const partRule = () =>
+    (rule ??= on
+      ? partRuleTokens(/** @type {string} */ (cwd), data.name, data.like, on)
+      : new Map());
   /** @param {string} t */
   const globalValue = t =>
     String(

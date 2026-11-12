@@ -1085,7 +1085,7 @@ function ownPageTokens(cwd, slug) {
  * that names it whatever token it starts from.
  * @param {string} cwd
  * @param {string} slug
- * @returns {Array<{key: string, path: string[]}>}
+ * @returns {Array<{key: string, path: string[], part?: string}>}
  */
 function builtLoops(cwd, slug) {
   const tokens = builtTopTokens(cwd, slug);
@@ -1094,7 +1094,7 @@ function builtLoops(cwd, slug) {
     [...String(tokens.get(t) ?? '').matchAll(/var\(\s*(--[a-z0-9-]+)/gi)].map(
       m => m[1],
     );
-  /** @type {Array<{key: string, path: string[]}>} */
+  /** @type {Array<{key: string, path: string[], part?: string}>} */
   const loops = [];
   const seen = new Set();
   for (const start of tokens.keys()) {
@@ -1120,7 +1120,54 @@ function builtLoops(cwd, slug) {
     };
     walk(start);
   }
+  // Inside one part: a part's own token reads the part's other own tokens
+  // first, and a whole-theme one only as already resolved, so a loop there
+  // closes among the part's own tokens.
+  for (const part of blockKeys(themeFiles(cwd, slug).js, ['components'])) {
+    const block = blockOf(themeFiles(cwd, slug).js, [
+      'components',
+      part,
+      'base',
+    ]);
+    for (const start of block.keys()) {
+      if (!start.startsWith('--')) continue;
+      /** @type {string[]} */
+      const path = [];
+      /** @param {string} t @returns {boolean} */
+      const walk = t => {
+        const at = path.indexOf(t);
+        if (at >= 0) {
+          const cycle = path.slice(at);
+          const key = `${part}: ${[...cycle].sort().join(' ')}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            loops.push({key, path: [...cycle, t], part});
+          }
+          return true;
+        }
+        if (!block.has(t) || path.length > 50) return false;
+        path.push(t);
+        for (const m of String(block.get(t) ?? '').matchAll(
+          /var\(\s*(--[a-z0-9-]+)/gi,
+        ))
+          if (walk(m[1])) return true;
+        path.pop();
+        return false;
+      };
+      walk(start);
+    }
+  }
   return loops;
+}
+
+/**
+ * The keys of one object in a built theme module (see blockOf).
+ * @param {string} file
+ * @param {string[]} keys
+ * @returns {string[]}
+ */
+function blockKeys(file, keys) {
+  return [...blockOf(file, keys).keys()];
 }
 
 /**
@@ -1202,24 +1249,47 @@ export function baseTopTokens(cwd, like) {
 function topTokensOf(file) {
   /** @type {Map<string, string | null>} */
   const out = new Map();
+  for (const [k, v] of blockOf(file, ['tokens']))
+    if (k.startsWith('--')) out.set(k, v);
+  return out;
+}
+
+/**
+ * One block of a built theme module (plain data the build wrote), by its
+ * path from the theme object (`['tokens']`, `['components', 'card',
+ * 'base']`): every key with its text value, a [light, dark] pair as the
+ * build writes it, else null. An empty map when it is not there.
+ * @param {string} file
+ * @param {string[]} keys
+ * @returns {Map<string, string | null>}
+ */
+function blockOf(file, keys) {
+  /** @type {Map<string, string | null>} */
+  const out = new Map();
   try {
     const ast = /** @type {any} */ (
       parseModule(fs.readFileSync(file, 'utf8'), {
         sourceType: 'module',
+        plugins: ['typescript'],
       })
     );
     for (const st of ast.program.body) {
       const decl = st.declaration?.declarations?.[0];
-      const obj = decl?.init;
+      /** @type {any} */
+      let obj = decl?.init;
+      // The generated settings module: defineTheme({...}).
+      if (obj?.type === 'CallExpression') obj = obj.arguments?.[0];
+      for (const key of keys)
+        obj =
+          obj?.type === 'ObjectExpression'
+            ? obj.properties.find(
+                (/** @type {any} */ p) => (p.key?.name ?? p.key?.value) === key,
+              )?.value
+            : undefined;
       if (obj?.type !== 'ObjectExpression') continue;
-      const tokens = obj.properties.find(
-        (/** @type {any} */ p) =>
-          (p.key?.name ?? p.key?.value) === 'tokens' &&
-          p.value?.type === 'ObjectExpression',
-      );
-      for (const p of tokens?.value.properties ?? []) {
+      for (const p of obj.properties) {
         const k = p.key?.value ?? p.key?.name;
-        if (typeof k === 'string' && k.startsWith('--'))
+        if (typeof k === 'string')
           out.set(
             k,
             p.value?.type === 'StringLiteral'
@@ -1234,9 +1304,93 @@ function topTokensOf(file) {
                 : null,
           );
       }
+      if (out.size) break;
     }
   } catch {
     // No build yet, or not one this reads.
+  }
+  return out;
+}
+
+/**
+ * What a part's plain rule (its `base` block) holds in the theme as built
+ * (the base theme's, the settings' and the own source's together), else in
+ * the base theme alone when there is no build: tokens and properties by
+ * name. Kebab-case property names, as the editor names them.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string | null | undefined} like
+ * @param {string} part
+ * @returns {Map<string, string | null>}
+ */
+export function partRuleTokens(cwd, slug, like, part) {
+  const built = blockOf(themeFiles(cwd, slug).js, ['components', part, 'base']);
+  const baseFile = like ? baseModule(cwd, like) : null;
+  const base = baseFile
+    ? blockOf(baseFile, ['components', part, 'base'])
+    : new Map();
+  /** @type {Map<string, string | null>} */
+  const out = new Map();
+  for (const m of [base, built])
+    for (const [k, v] of m)
+      out.set(
+        k.startsWith('--')
+          ? k
+          : k.replace(
+              /[A-Z]/g,
+              (/** @type {string} */ c) => `-${c.toLowerCase()}`,
+            ),
+        v,
+      );
+  return out;
+}
+
+/**
+ * The tokens and properties a theme's own source sets on a part's plain
+ * rule, read from the build as ownTokens reads page-wide ones: what the
+ * built rule holds that the settings module and the base theme do not give
+ * as they are, and that the person's files name.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} part
+ * @returns {Map<string, string | null>}
+ */
+export function ownPartTokens(cwd, slug, part) {
+  /** @type {Map<string, string | null>} */
+  const out = new Map();
+  const f = themeFiles(cwd, slug);
+  /** @type {string} */
+  let module;
+  try {
+    module = fs.readFileSync(f.settingsTs, 'utf8');
+  } catch {
+    return out;
+  }
+  const stamp = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(
+    module,
+  )?.[1];
+  if (!stamp || stamp !== themeSourceHash(cwd, slug)) return out;
+  const like = /\/\/ Built on @astryxdesign\/theme-([a-z0-9-]+) /.exec(
+    module,
+  )?.[1];
+  const baseFile = like ? baseModule(cwd, like) : null;
+  const base = baseFile
+    ? blockOf(baseFile, ['components', part, 'base'])
+    : new Map();
+  const settings = blockOf(f.settingsTs, ['components', part, 'base']);
+  const named = namedInOwnSource(cwd, slug);
+  for (const [k, v] of blockOf(f.js, ['components', part, 'base'])) {
+    const given = settings.has(k) ? settings.get(k) : base.get(k);
+    if (given !== v && named(k))
+      out.set(
+        k.startsWith('--')
+          ? k
+          : k.replace(
+              /[A-Z]/g,
+              (/** @type {string} */ c) => `-${c.toLowerCase()}`,
+            ),
+        v,
+      );
   }
   return out;
 }
@@ -1332,6 +1486,7 @@ function builtOwnTokens(cwd, slug) {
   )?.[1];
   const baseFile = like ? baseModule(cwd, like) : null;
   const base = baseFile ? topTokensOf(baseFile) : new Map();
+  const named = namedInOwnSource(cwd, slug);
   /** @type {Map<string, string | null>} */
   const out = new Map();
   for (const [k, v] of builtTopTokens(cwd, slug)) {
@@ -1342,9 +1497,34 @@ function builtOwnTokens(cwd, slug) {
         : given === 'pair'
           ? !/^light-dark\(/.test(String(v ?? ''))
           : given !== 'other' && given !== v;
-    if (own) out.set(k, v);
+    if (own && named(k)) out.set(k, v);
   }
   return out;
+}
+
+/**
+ * Whether a token or property name appears in the person's theme files: a
+ * value the build shows that no file of theirs names came from the
+ * settings (a dial's typography, a lifted value), not from them.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {(name: string) => boolean}
+ */
+function namedInOwnSource(cwd, slug) {
+  const text = ownSourceFiles(cwd, slug)
+    .map(file => {
+      try {
+        return fs.readFileSync(file, 'utf8');
+      } catch {
+        return '';
+      }
+    })
+    .join('\n');
+  return name =>
+    text.includes(name) ||
+    // A property may be written camelCase (borderRadius).
+    (!name.startsWith('--') &&
+      text.includes(name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())));
 }
 
 /**
@@ -2852,19 +3032,35 @@ function themeSourceHash(cwd, slug) {
     hash.update(themeModuleSource(slug));
     return hash.digest('hex').slice(0, 16);
   }
-  // The theme source and every local module it reaches (an own helper
-  // such as ./my-tokens), read the way theme discovery reads them; the
-  // editor's generated modules change with each build and are judged by
-  // their own stamps.
+  for (const file of ownSourceFiles(cwd, slug)) {
+    hash.update(`${path.relative(f.dir, file)}\0`);
+    hash.update(fs.readFileSync(file));
+  }
+  return hash.digest('hex').slice(0, 16);
+}
+
+/**
+ * The theme source and every local module it reaches (an own helper such
+ * as ./my-tokens), read the way theme discovery reads them: the person's
+ * files. The editor's generated modules change with each build and are
+ * judged by their own stamps.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string[]}
+ */
+function ownSourceFiles(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  if (!fs.existsSync(f.ts)) return [];
   const generated = new Set([f.settingsTs]);
   const seen = new Set();
+  /** @type {string[]} */
+  const files = [];
   const queue = [f.ts];
   while (queue.length) {
     const file = /** @type {string} */ (queue.shift());
     if (seen.has(file)) continue;
     seen.add(file);
-    hash.update(`${path.relative(f.dir, file)}\0`);
-    hash.update(fs.readFileSync(file));
+    files.push(file);
     /** @type {string[]} */
     let specifiers = [];
     try {
@@ -2886,7 +3082,7 @@ function themeSourceHash(cwd, slug) {
         queue.push(target);
     }
   }
-  return hash.digest('hex').slice(0, 16);
+  return files;
 }
 
 /** The extensions a theme's local module may have, as the build reads them. */
@@ -4459,7 +4655,7 @@ export async function commitTheme(
     const loop = builtLoops(cwd, slug).find(l => !loopsBefore.has(l.key));
     if (loop)
       throw new AstryxError(
-        `${loop.path.join(' reads ')}: the change makes these tokens read each other (with what ${slug}.theme.ts sets), so they would have no value at all. Nothing was changed.`,
+        `${loop.path.join(' reads ')}${loop.part ? ` on ${loop.part}` : ''}: the change makes these tokens read each other (with what ${slug}.theme.ts or the base theme sets), so they would have no value at all. Nothing was changed.`,
         [
           {
             name: `${P} how ${loop.path[0].replace(/^--/, '')}`,

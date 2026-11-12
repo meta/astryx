@@ -73,6 +73,7 @@ import {
   refuseThemeParse,
   ownSourceTokens,
   ownSourceTokenValues,
+  ownPartTokens,
   freeThemeName,
   usableNewName,
 } from './_settings.mjs';
@@ -1291,6 +1292,11 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
         !x.when &&
         x.thing === `--font-family-${s.on}`,
     );
+  // The theme's own source wins over an exact setting, as the exact
+  // setting does over a dial: an exact token the file also sets is named
+  // as the file's below, never as the one that shows after an undo.
+  const ownFirst = new Set(ownSourceTokens(cwd, slug));
+  exactWins = exactWins.filter(x => !ownFirst.has(x.thing));
   const kept =
     sub === 'set' && s.source === 'dial' && !s.on
       ? [
@@ -1367,18 +1373,29 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
   // An exact token the theme's own source also sets: the file's value
   // shows (read from what the build made of it), not the setting.
   const ownOverToken =
-    sub === 'set' && s.source === 'token' && !s.on && !s.when && !s.state
-      ? (Object.entries(ownSourceTokenValues(cwd, slug)).find(
-          ([k]) => k === s.thing,
-        ) ??
-        (ownSourceTokens(cwd, slug).includes(s.thing) ? [s.thing, null] : null))
-      : null;
+    sub !== 'set' || s.when || s.state
+      ? null
+      : s.on
+        ? // On a part: a token or property the own source sets on its
+          // plain rule.
+          (s.source === 'token' || s.source === 'property') &&
+          ownPartTokens(cwd, slug, s.on).has(s.thing)
+          ? [s.thing, ownPartTokens(cwd, slug, s.on).get(s.thing) ?? null]
+          : null
+        : s.source === 'token'
+          ? (Object.entries(ownSourceTokenValues(cwd, slug)).find(
+              ([k]) => k === s.thing,
+            ) ??
+            (ownSourceTokens(cwd, slug).includes(s.thing)
+              ? [s.thing, null]
+              : null))
+          : null;
   /** @type {string[]} */
   const notes = [
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
     ...(ownOverToken
       ? [
-          `${slug}.theme.ts sets ${s.thing} itself${ownOverToken[1] != null ? ` (${ownOverToken[1]})` : ''}, and your own source wins over the settings, so this does not show; change it in ${slug}.theme.ts, or take this back with \`${P} undo ${slug} ${s.thing}\``,
+          `${slug}.theme.ts sets ${s.thing}${s.on ? ` on ${s.on}` : ''} itself${ownOverToken[1] != null ? ` (${ownOverToken[1]})` : ''}, and your own source wins over the settings, so this does not show; change it in ${slug}.theme.ts, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\``,
         ]
       : []),
     ...(exactWins.length
@@ -1500,8 +1517,13 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
   // A token the theme's own source sets itself wins over what this dial
   // writes, as an exact setting does.
   const ownWins = ownSourceTokens(cwd, slug).filter(
-    k => dialTokens.has(k) && !exactWins.some(x => x.thing === k),
+    k =>
+      (dialTokens.has(k) ||
+        // A role font writes --font-family-<role>.
+        (s.thing === 'font' && s.on && k === `--font-family-${s.on}`)) &&
+      !exactWins.some(x => x.thing === k),
   );
+  const ownSet = new Set(ownSourceTokens(cwd, slug));
   if (ownWins.length)
     notes.push(
       `${slug}.theme.ts sets ${ownWins.slice(0, 4).join(', ')}${ownWins.length > 4 ? ` and ${ownWins.length - 4} more` : ''} itself, and your own source wins over the settings, so ${ownWins.length > 1 ? 'those do' : 'that does'} not change; take ${ownWins.length > 1 ? 'them' : 'it'} out of ${slug}.theme.ts to let ${s.thing} set ${ownWins.length > 1 ? 'them' : 'it'}`,
@@ -1513,18 +1535,31 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
         s.thing,
         slug,
         modesOf(data),
-      ).map(n => {
-        // The exact color is the one the theme's own source sets: named so.
-        const token = n.split(' ')[0];
-        return ownWins.includes(token) && / uses your exact setting \(/.test(n)
-          ? n
-              .replace(
-                ' uses your exact setting (',
-                ` uses the value ${slug}.theme.ts sets (`,
-              )
-              .replace('an exact setting wins', 'your own source wins')
-          : n;
-      }),
+      )
+        // A shade the mapping would pick for a token the theme's own source
+        // sets never shows: the file's value does (named once above).
+        .filter(n => {
+          const subject = /^(?:in (?:light|dark), )?(--[a-z0-9-]+) /.exec(
+            n,
+          )?.[1];
+          return (
+            !subject ||
+            !ownSet.has(subject) ||
+            / uses your exact setting \(/.test(n)
+          );
+        })
+        .map(n => {
+          // The exact color is the one the theme's own source sets: named so.
+          const token = n.split(' ')[0];
+          return ownSet.has(token) && / uses your exact setting \(/.test(n)
+            ? n
+                .replace(
+                  ' uses your exact setting (',
+                  ` uses the value ${slug}.theme.ts sets (`,
+                )
+                .replace('an exact setting wins', 'your own source wins')
+            : n;
+        }),
     );
   // An exact color the mapping reads (a fill, a tint, text on a fill)
   // changes what it picks around it: say what, as the dial does.
@@ -2021,6 +2056,13 @@ function dialWrites(ctx, data, dial, base) {
  * @returns {string}
  */
 function nowApplies(ctx, data, removed, base) {
+  // A token the theme's own source sets shows its value, whatever else
+  // the settings give it.
+  if (removed.source === 'token' && !removed.on && !removed.when) {
+    const own = ownSourceTokenValues(ctx.project.cwd, data.name)[removed.thing];
+    if (own != null)
+      return `${removed.thing} = ${own} (set in ${data.name}.theme.ts)`;
+  }
   // A role font removed under an exact --font-family-<role>: that token is
   // what shows there.
   if (
@@ -2635,6 +2677,18 @@ export async function themeEditUndo(theme, options = {}) {
       prev = {...prev, settings: prev.settings.filter(s => !bad.has(s))};
     }
   }
+  // The steps a later undo can still go back to: one equal to the settings
+  // it would leave (a step this undo left a setting out of may then equal
+  // the next one) is skipped, as undo skips it.
+  let stepsLeft = 0;
+  {
+    let at = JSON.stringify(prev);
+    for (let i = history.length - 1; i >= 0; i--)
+      if (!same(history[i], at)) {
+        stepsLeft++;
+        at = history[i];
+      }
+  }
   // The popped history is written with the change, inside its rollback.
   const committed = await commitTheme(ctx, theme, prev, {
     history: false,
@@ -2678,7 +2732,7 @@ export async function themeEditUndo(theme, options = {}) {
       action: 'step',
       undone,
       settings: prev.settings.length,
-      stepsLeft: history.length,
+      stepsLeft: stepsLeft,
       // What the step back changed, as a change reports it.
       changedTokens: committed.changed,
       problems: committed.problems,
