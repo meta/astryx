@@ -47,6 +47,7 @@ import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {Carousel} from '@astryxdesign/core/Carousel';
 import {useClipboard} from '@astryxdesign/core/hooks';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import type {CSSProperties} from 'react';
@@ -304,6 +305,36 @@ const STAR_COUNTS = [
   {stars: 3, count: 38},
   {stars: 2, count: 12},
   {stars: 1, count: 6},
+];
+const RELATED = [
+  {
+    topic: 'Evaluation',
+    title: 'Ship it: the reviewed project',
+    teacher: 'Gabriela Fernández',
+    rating: '4.9',
+    price: 89,
+  },
+  {
+    topic: 'Retrieval',
+    title: 'Vector search from first principles',
+    teacher: 'Priya Raman',
+    rating: '4.7',
+    price: 69,
+  },
+  {
+    topic: 'Tooling',
+    title: 'The working setup: SDK, keys, scratchpad',
+    teacher: 'Tomas Beck',
+    rating: '4.6',
+    price: 49,
+  },
+  {
+    topic: 'Prompting',
+    title: 'Prompt design that survives production',
+    teacher: 'Ines Vogel',
+    rating: '4.8',
+    price: 59,
+  },
 ];
 
 function StarRating({rating, count}: {rating: number; count?: number}) {
@@ -926,6 +957,48 @@ function ReviewsSection() {
     </Section>
   );
 }
+function RelatedRail() {
+  return (
+    <Section padding={6}>
+      <VStack gap={4}>
+        <SectionHeader
+          title="Next courses"
+          action={
+            <Link href="#" type="supporting" color="secondary">
+              Browse all
+            </Link>
+          }
+        />
+        <Carousel hasSnap hasEdgeFade gap={3} aria-label="More courses">
+          {RELATED.map(course => (
+            <Card key={course.title} padding={4}>
+              <VStack gap={2}>
+                <Badge label={course.topic} />
+                <Text type="large" weight="bold">
+                  {course.title}
+                </Text>
+                <Text type="supporting" color="secondary">
+                  {course.teacher}
+                </Text>
+                <HStack gap={2} vAlign="center" hAlign="between">
+                  <HStack gap={1} vAlign="center">
+                    <Icon icon={StarIcon} size="sm" />
+                    <Text type="supporting" color="secondary">
+                      {course.rating}
+                    </Text>
+                  </HStack>
+                  <Text type="body" weight="bold">
+                    {fmt(course.price)}
+                  </Text>
+                </HStack>
+              </VStack>
+            </Card>
+          ))}
+        </Carousel>
+      </VStack>
+    </Section>
+  );
+}
 // ─── FAQ ─────────────────────────────────────────────────────────────────────
 function FaqSection() {
   return (
@@ -975,6 +1048,7 @@ export default function CourseDetailTemplate() {
                 <EnrollRail />
               </VStack>
             </Grid>
+            <RelatedRail />
           </VStack>
         </LayoutContent>
       }
