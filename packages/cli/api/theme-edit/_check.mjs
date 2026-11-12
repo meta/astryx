@@ -56,9 +56,9 @@ import {
   nearest,
   partDefault,
   partsOf,
-  q,
   refuse,
 } from './_settings.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 const E = ERROR_CODES;
 
@@ -206,13 +206,17 @@ function checkTypedValue(type, value, name, TOKENS, typeOf, slug) {
     refuse(
       E.ERR_THEME_BAD_VALUE,
       `${name} is ${what}; "${value}" is not one.`,
-      {run: [`${P} set ${slug} ${name} ${q(example)}`]},
+      {run: [`${P} set ${slug} ${name} ${quoteCommandArgument(example)}`]},
     );
   if (!isSafeValue(value))
     refuse(
       E.ERR_THEME_BAD_VALUE,
       `"${value}" cannot be a CSS value: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote.`,
-      {run: [`${P} set ${slug} ${name} ${q(exampleOf(type, name))}`]},
+      {
+        run: [
+          `${P} set ${slug} ${name} ${quoteCommandArgument(exampleOf(type, name))}`,
+        ],
+      },
     );
   // A var() naming a design token must name one of the same kind; the
   // app's own variables are its business.
@@ -496,6 +500,19 @@ function checkCycle(thing, value, TOKENS, data) {
 }
 
 /**
+ * A length in pixels: px as given, rem and em at 16px; null for anything
+ * else (a percentage, calc(), a word).
+ * @param {string} v
+ * @returns {number | null}
+ */
+export function lengthPx(v) {
+  const m = /^\s*(-?\d+(?:\.\d+)?|-?\.\d+)\s*(px|rem|em)?\s*$/i.exec(String(v));
+  if (!m) return null;
+  const n = Number(m[1]);
+  return (m[2] ?? 'px').toLowerCase() === 'px' ? n : n * 16;
+}
+
+/**
  * Check one setting and give it back ready to store, or refuse.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
@@ -530,7 +547,7 @@ export function checkSetting(
       `Give the token and its value as two words: ${name} ${rest.join('=')}.`,
       {
         run: [
-          `${P} ${unset ? 'undo' : 'set'} ${slug} ${name}${unset ? '' : ` ${q(rest.join('='))}`}`,
+          `${P} ${unset ? 'undo' : 'set'} ${slug} ${name}${unset ? '' : ` ${quoteCommandArgument(rest.join('='))}`}`,
         ],
       },
     );
@@ -546,7 +563,8 @@ export function checkSetting(
       refuse(E.ERR_MISSING_ARGUMENT, `--${k} was given no value.`, {
         run: [`${P} ${unset ? 'undo' : 'set'} --help`],
       });
-  const v = (value ?? '').trim();
+  // A value pasted over several lines is one value.
+  const v = (value ?? '').replace(/\s*[\r\n]+\s*/g, ' ').trim();
   // A var() that misspells a design token would read nothing.
   if (!unset)
     for (const [, name] of v.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
@@ -575,6 +593,16 @@ export function checkSetting(
     );
   /** @type {import('./_settings.mjs').Setting} */
   const s = {thing, value: v, source: 'dial'};
+  // A flag given only spaces names nothing; it is never read as absent.
+  for (const k of /** @type {const} */ (['on', 'when', 'state', 'mode']))
+    if (typeof flags[k] === 'string' && flags[k].trim() === '')
+      refuse(E.ERR_MISSING_ARGUMENT, `--${k} is empty.`, {
+        run: [
+          k === 'mode'
+            ? `${P} set ${slug} ${thing} ${quoteCommandArgument(v || '#1f2937')}`
+            : `${HOW} --list parts`,
+        ],
+      });
   if (flags.on) s.on = flags.on.trim();
   if (flags.when) s.when = flags.when.trim();
   if (flags.state) s.state = flags.state.trim();
@@ -595,7 +623,7 @@ export function checkSetting(
     refuse(
       E.ERR_THEME_NO_MODE,
       `This theme is ${data.mode}; --mode is for themes with both modes.`,
-      {run: [`${P} set ${slug} ${thing} ${q(v)}${onFlag}`]},
+      {run: [`${P} set ${slug} ${thing} ${quoteCommandArgument(v)}${onFlag}`]},
     );
   if ((s.when || s.state) && !s.on)
     refuse(E.ERR_MISSING_ARGUMENT, '--when and --state need --on <part>.', {
@@ -616,8 +644,8 @@ export function checkSetting(
         {
           run: [
             unset
-              ? `${P} undo ${slug} ${thing}${v ? ` ${q(v)}` : ''} --on ${s.on}`
-              : `${P} set ${slug} ${thing} ${q(v)} --on ${s.on}`,
+              ? `${P} undo ${slug} ${thing}${v ? ` ${quoteCommandArgument(v)}` : ''} --on ${s.on}`
+              : `${P} set ${slug} ${thing} ${quoteCommandArgument(v)} --on ${s.on}`,
           ],
         },
       );
@@ -631,13 +659,14 @@ export function checkSetting(
         E.ERR_THEME_UNKNOWN_PART,
         `"${s.on}" is not a part you can style.`,
         {
-          didYouMean: nearest(s.on, [
+          // A plural or another case names the part it means.
+          didYouMean: nearest(s.on.toLowerCase().replace(/s$/, ''), [
             ...TARGET.keys(),
             ...Object.keys(FAMILIES),
           ]),
           run: [
-            `${HOW} --list parts ${s.on.split('-')[0]}`,
-            `${HOW} ${q(s.on)}`,
+            `${HOW} --list parts ${s.on.toLowerCase().replace(/s$/, '').split('-')[0]}`,
+            `${HOW} ${quoteCommandArgument(s.on)}`,
           ],
         },
       );
@@ -713,7 +742,7 @@ export function checkSetting(
           `${thing} moves every part it covers; drop --on. For one part, set CSS properties --on <part>.`,
           {
             run: [
-              `${P} set ${slug} ${thing} ${q(v || DIALS[thing].values.split('|')[0])}`,
+              `${P} set ${slug} ${thing} ${quoteCommandArgument(v || DIALS[thing].values.split('|')[0])}`,
             ],
           },
         );
@@ -721,7 +750,7 @@ export function checkSetting(
         refuse(
           E.ERR_THEME_NO_MODE,
           `${thing} is the same in light and dark; drop --mode.`,
-          {run: [`${P} set ${slug} ${thing} ${q(v)}`]},
+          {run: [`${P} set ${slug} ${thing} ${quoteCommandArgument(v)}`]},
         );
       if (unset) return s;
       const ok = DIALS[thing].values.split('|');
@@ -756,7 +785,7 @@ export function checkSetting(
           'headings is the same in light and dark; drop --mode.',
           {
             run: [
-              `${P} ${unset ? 'undo' : 'set'} ${slug} headings${v ? ` ${q(v)}` : ''}`,
+              `${P} ${unset ? 'undo' : 'set'} ${slug} headings${v ? ` ${quoteCommandArgument(v)}` : ''}`,
             ],
           },
         );
@@ -793,14 +822,21 @@ export function checkSetting(
     const ladder = (L, def) => {
       // The value in effect for the target: its own setting, else the
       // whole-theme one, else the starting point.
+      // Same target: the part, and the same variant and state.
       const own = (/** @type {string} */ on) =>
         [...data.settings]
           .reverse()
-          .find(x => x.thing === thing && (x.on ?? '') === on)?.value;
+          .find(
+            x =>
+              x.thing === thing &&
+              (x.on ?? '') === on &&
+              (x.when ?? '') === (on ? (s.when ?? '') : '') &&
+              (x.state ?? '') === (on ? (s.state ?? '') : ''),
+          )?.value;
       const cur = own(s.on ?? '') ?? (s.on ? own('') : undefined) ?? def;
       let i = L.findIndex(([n]) => n === cur);
       if (i < 0) {
-        const px = parseFloat(cur);
+        const px = lengthPx(cur) ?? Number.NaN;
         i = L.findIndex(([, n]) => n >= px);
         if (i < 0) i = L.length - 1;
       }
@@ -810,7 +846,7 @@ export function checkSetting(
     };
     if (PALETTE_DIALS.includes(thing) && (s.on || s.mode)) {
       const token = paletteToken(thing);
-      const value = q(v || '#7c3aed');
+      const value = quoteCommandArgument(v || '#7c3aed');
       /** @type {string[]} */
       let run = [
         `${P} set ${slug} ${token} ${value}${onFlag}${s.mode ? ` --mode ${s.mode}` : ''}`,
@@ -846,19 +882,25 @@ export function checkSetting(
       refuse(
         E.ERR_THEME_NO_MODE,
         `${thing} is not a color, so it is the same in light and dark; drop --mode.`,
-        {run: [`${P} set ${slug} ${thing} ${q(v)}${onFlag}`]},
+        {
+          run: [
+            `${P} set ${slug} ${thing} ${quoteCommandArgument(v)}${onFlag}`,
+          ],
+        },
       );
     if (thing === 'corners') {
       if (s.on) refuseInvisibleCorners(ctx, slug, s, data);
       // With no corners setting yet, a step starts from the base theme's
       // own radius.
       if (step) {
-        const px = Number.parseFloat(ctx.base?.light['--radius-element'] ?? '');
-        const from = Number.isFinite(px)
-          ? CORNERS.reduce((a, b) =>
-              Math.abs(b[1] - px) < Math.abs(a[1] - px) ? b : a,
-            )[0]
-          : 'medium';
+        // The base theme's radius may be in rem or em (0.625rem is 10px).
+        const px = lengthPx(ctx.base?.light['--radius-element'] ?? '');
+        const from =
+          px != null
+            ? CORNERS.reduce((a, b) =>
+                Math.abs(b[1] - px) < Math.abs(a[1] - px) ? b : a,
+              )[0]
+            : 'medium';
         s.value = ladder(CORNERS, from);
       } else if (!CORNERS.some(([n]) => n === v) && !/^\d+(\.\d+)?px$/.test(v))
         refuse(
@@ -906,7 +948,7 @@ export function checkSetting(
     } else if (PALETTE_DIALS.includes(thing)) {
       if (step)
         refuse(E.ERR_THEME_BAD_VALUE, `${thing} takes a color, not a step.`, {
-          run: [`${P} set ${slug} ${thing} "#7c3aed"`],
+          run: [`${P} set ${slug} ${thing} ${quoteCommandArgument('#7c3aed')}`],
         });
       const problem = colorProblem(v);
       if (problem) {
@@ -934,7 +976,9 @@ export function checkSetting(
           `"${v}" ${problem.message}.${problem.kind === 'unknown' || problem.kind === 'malformed' ? ' Give a hex, a color name, or an rgb(), hsl(), hwb(), lab(), lch(), oklab(), oklch() or color() color.' : ''}`,
           {
             didYouMean: better ? [better] : near,
-            run: [`${P} set ${slug} ${thing} ${q(better ?? '#7c3aed')}`],
+            run: [
+              `${P} set ${slug} ${thing} ${quoteCommandArgument(better ?? '#7c3aed')}`,
+            ],
           },
         );
       }
@@ -943,7 +987,7 @@ export function checkSetting(
         refuse(
           E.ERR_THEME_BAD_VALUE,
           'vibrancy applies to every generated color of the theme; drop --on.',
-          {run: [`${P} set ${slug} vibrancy ${q(v)}`]},
+          {run: [`${P} set ${slug} vibrancy ${quoteCommandArgument(v)}`]},
         );
       if (step) {
         const saved = [...data.settings]
@@ -991,7 +1035,7 @@ export function checkSetting(
           colors.length
             ? 'vibrancy sets how saturated the generated colors are, and every color this theme sets is a gray, so it would change nothing. Set a color first.'
             : 'vibrancy sets how saturated the generated colors are, and this theme sets no color yet. Set one first.',
-          {run: [`${P} set ${slug} accent "#7c3aed"`]},
+          {run: [`${P} set ${slug} accent ${quoteCommandArgument('#7c3aed')}`]},
         );
     } else if (thing === 'font') {
       if (s.when || s.state)
@@ -1000,7 +1044,7 @@ export function checkSetting(
           'font sets a role (body, heading, code) for the whole theme; it takes no --when or --state. For one part use font-family.',
           {
             run: [
-              `${P} set ${slug} font-family ${q(v)} --on heading${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
+              `${P} set ${slug} font-family ${quoteCommandArgument(v)} --on heading${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
             ],
           },
         );
@@ -1008,7 +1052,11 @@ export function checkSetting(
         refuse(
           E.ERR_THEME_BAD_VALUE,
           "font --on takes body, heading, or code. For one part's font use font-family.",
-          {run: [`${P} set ${slug} font-family ${q(v)} --on ${s.on}`]},
+          {
+            run: [
+              `${P} set ${slug} font-family ${quoteCommandArgument(v)} --on ${s.on}`,
+            ],
+          },
         );
       if (step)
         refuse(
@@ -1020,6 +1068,12 @@ export function checkSetting(
       // could end the CSS declaration or the preview's style block. A
       // preset typed in another case or spacing is the preset.
       s.value = v.trim();
+      // A font package names its preset: @fontsource/inter is inter.
+      const fromPackage = /^@fontsource(?:-variable)?\/([a-z0-9-]+)$/i.exec(
+        s.value,
+      )?.[1];
+      if (fromPackage && OPEN_FONTS[fromPackage.toLowerCase()])
+        s.value = fromPackage.toLowerCase();
       const key = s.value.toLowerCase().replace(/[\s_-]+/g, '');
       const preset = [...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)].find(
         k => k.toLowerCase().replace(/[\s_-]+/g, '') === key,
@@ -1072,7 +1126,7 @@ export function checkSetting(
         refuse(
           E.ERR_THEME_BAD_VALUE,
           'base applies to the whole theme; drop --on.',
-          {run: [`${P} set ${slug} base ${q(v)}`]},
+          {run: [`${P} set ${slug} base ${quoteCommandArgument(v)}`]},
         );
       if (![...LIKE, 'none'].includes(v))
         refuse(
@@ -1085,7 +1139,7 @@ export function checkSetting(
         refuse(
           E.ERR_THEME_BAD_VALUE,
           'mode applies to the whole theme; drop --on.',
-          {run: [`${P} set ${slug} mode ${q(v)}`]},
+          {run: [`${P} set ${slug} mode ${quoteCommandArgument(v)}`]},
         );
       if (!['both', 'light-only', 'dark-only'].includes(v))
         refuse(
@@ -1101,7 +1155,7 @@ export function checkSetting(
       refuse(
         E.ERR_THEME_PRIVATE_TOKEN,
         `"${thing}" is private to a component; themes cannot set it.`,
-        {run: [`${HOW} ${q(thing)}`]},
+        {run: [`${HOW} ${quoteCommandArgument(thing)}`]},
       );
     if (!(thing in TOKENS)) {
       refuse(E.ERR_THEME_UNKNOWN_TOKEN, `"${thing}" is not a design token.`, {
@@ -1126,7 +1180,7 @@ export function checkSetting(
           run: [
             unset
               ? `${P} undo ${slug} ${thing}${onFlag}`
-              : `${P} set ${slug} ${thing} ${q(v)}${onFlag}`,
+              : `${P} set ${slug} ${thing} ${quoteCommandArgument(v)}${onFlag}`,
           ],
         },
       );
@@ -1248,7 +1302,7 @@ export function checkSetting(
         `${prop} is a CSS property, so it needs --on <part|group>. For the whole theme use a dial or a token.`,
         {
           run: [
-            `${P} set ${slug} ${prop} ${q(v || exampleOf(groupOfPropType(prop), prop))} --on card`,
+            `${P} set ${slug} ${prop} ${quoteCommandArgument(v || exampleOf(groupOfPropType(prop), prop))} --on card`,
             `${HOW} "${prop}"`,
           ],
         },
@@ -1256,8 +1310,37 @@ export function checkSetting(
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
+    // Text, headings and links take their color from the color prop, whose
+    // rule Core writes after part styles: a color set on them never shows.
+    const textParts = ['text', 'heading', 'link'];
+    if (
+      (prop === 'color' || prop === '-webkit-text-fill-color') &&
+      partsOf(ctx, s).some(t => textParts.includes(t))
+    ) {
+      if (partsOf(ctx, s).every(t => textParts.includes(t))) {
+        const named = /^color:([\w-]+)$/.exec(s.when ?? '')?.[1];
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the text color token instead.`,
+          {
+            run: [
+              `${P} set ${slug} --color-text-${named ?? 'primary'} ${quoteCommandArgument(v || '#1f2937')}${s.mode ? ` --mode ${s.mode}` : ''}`,
+              ...(named
+                ? []
+                : [
+                    `${P} set ${slug} --color-text-secondary ${quoteCommandArgument(v || '#1f2937')}${s.mode ? ` --mode ${s.mode}` : ''}`,
+                  ]),
+            ],
+          },
+        );
+      }
+      s.note = `text, heading and link inside ${s.on} keep the color their color prop gives; set --color-text-primary for those`;
+    }
     // One mode on a part whose variants each read their own value: the
     // other mode cannot keep each variant's value in one rule.
+    // With a state, the other mode would take one variant's value for
+    // every variant, so any part whose variants read their own value needs
+    // the variant named.
     if (s.mode && !s.when) {
       const g = C.groupOfProp(
         prop === 'background' ? 'background-color' : prop,
@@ -1266,20 +1349,25 @@ export function checkSetting(
         const reads = g
           ? C.partReads(t, g).filter(r => r.props.includes(prop))
           : [];
-        const variants = reads
-          .flatMap(r => r.when)
-          .filter(w => /variant=/.test(w));
+        const variants = [
+          ...new Set(
+            reads
+              .flatMap(r => r.when)
+              .map(w => /(?:^|,)variant=([\w-]+)/.exec(w)?.[1])
+              .filter(Boolean),
+          ),
+        ];
         if (
           reads.length &&
-          !reads.some(r => r.when.includes('')) &&
-          variants.length
+          variants.length &&
+          (s.state || !reads.some(r => r.when.includes('')))
         )
           refuse(
             E.ERR_THEME_NO_MODE,
-            `Each variant of ${t} has its own ${prop}, so one mode cannot be set for all of them at once; name the variant.`,
+            `Each variant of ${t} has its own ${prop}${s.state ? ` when ${s.state}` : ''}, so one mode cannot be set for all of them at once: the other mode would take one variant's color for every variant. Name the variant.`,
             {
               run: [
-                `${P} set ${slug} ${prop} ${q(v)} --on ${s.on} --when ${variants[0].split(',')[0].replace('=', ':')} --mode ${s.mode}`,
+                `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on} --when variant:${variants[0]}${s.state ? ` --state ${s.state}` : ''} --mode ${s.mode}`,
               ],
             },
           );
@@ -1303,7 +1391,9 @@ export function checkSetting(
         `${prop} takes a color; "${v}" is not one.${/gradient/.test(v) ? ' Gradients go in background.' : ''}`,
         {
           run: /gradient/.test(v)
-            ? [`${P} set ${slug} background ${q(v)} --on ${s.on}`]
+            ? [
+                `${P} set ${slug} background ${quoteCommandArgument(v)} --on ${s.on}`,
+              ]
             : [],
         },
       );
@@ -1326,22 +1416,61 @@ export function checkSetting(
         {
           run: alt
             ? [
-                `${P} set ${slug} ${prop} ${q(v.replace(/#[0-9a-f]{3,8}|rgba?\([^)]*\)/i, 'currentcolor'))} --on ${s.on}${whenFlag}   # the shape, both modes`,
-                `${P} set ${slug} ${alt} "<color>" --on ${s.on}${whenFlag} --mode ${s.mode}   # then the color per mode`,
+                `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(/#[0-9a-f]{3,8}|rgba?\([^)]*\)/i, 'currentcolor'))} --on ${s.on}${whenFlag}   # the shape, both modes`,
+                `${P} set ${slug} ${alt} ${quoteCommandArgument(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/i.exec(v)?.[0] ?? '#1f2937')} --on ${s.on}${whenFlag} --mode ${s.mode}   # then the color per mode`,
               ]
             : [
-                `${P} set ${slug} ${prop} ${q(v)} --on ${s.on}${whenFlag}   # both modes`,
+                `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${whenFlag}   # both modes`,
               ],
         },
       );
     }
+    // The other mode keeps the part's own value there; with none to keep,
+    // the setting would change that mode too.
     if (
       s.mode &&
-      !partsOf(ctx, s).some(t => partDefault(ctx, t, camel(prop), s.when))
+      !partsOf(ctx, s).every(t =>
+        partDefault(ctx, t, camel(prop), s.when, s.state),
+      ) &&
+      !data.settings.some(
+        x =>
+          x.thing === prop &&
+          x.on === s.on &&
+          x.when === s.when &&
+          x.state === s.state &&
+          x.mode &&
+          x.mode !== s.mode,
+      )
     )
-      s.note = `the ${s.mode === 'light' ? 'dark' : 'light'} side keeps the part's current ${prop}`;
+      refuse(
+        E.ERR_THEME_NO_MODE,
+        `${s.on} has no ${prop}${s.state ? ` when ${s.state}` : ''}${s.when ? ` for ${s.when}` : ''} of its own for the ${s.mode === 'light' ? 'dark' : 'light'} mode to keep, so a ${s.mode}-only value would change it too. Set it for both modes.`,
+        {
+          run: [
+            `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
+          ],
+        },
+      );
     return s;
   }
+  // A property written with _ or spaces, a trailing colon, or in camel
+  // case: the property meant.
+  const meant = kebab(String(thing).trim().replace(/:$/, ''))
+    .replace(/[_\s]+/g, '-')
+    .replace(/-+/g, '-');
+  if (meant !== prop && CSS_PROPERTIES.has(meant))
+    refuse(
+      E.ERR_THEME_UNKNOWN_THING,
+      `"${thing}" is not a dial, a token, or a CSS property; the property is ${meant}.`,
+      {
+        didYouMean: [meant],
+        run: [
+          unset
+            ? `${P} undo ${slug} ${meant}${onFlag}`
+            : `${P} set ${slug} ${meant} ${quoteCommandArgument(v || exampleOf(groupOfPropType(meant), meant))}${onFlag || ' --on card'}`,
+        ],
+      },
+    );
   const hint =
     /** @type {((v: string, on: string | undefined) => string[]) | undefined} */ (
       THING_HINTS[thing.toLowerCase()]
@@ -1358,7 +1487,7 @@ export function checkSetting(
         run: aliases.map(d =>
           unset
             ? `${P} undo ${slug} ${d}${onFlag}`
-            : `${P} set ${slug} ${d} ${q(valueFor(d, v))}${onFlag}`,
+            : `${P} set ${slug} ${d} ${quoteCommandArgument(valueFor(d, v))}${onFlag}`,
         ),
       },
     );
@@ -1366,8 +1495,22 @@ export function checkSetting(
     E.ERR_THEME_UNKNOWN_THING,
     `"${thing}" is not a dial, a token, or a CSS property.`,
     {
+      // A hint names this theme and the part (card when none is given),
+      // and a corners value corners takes.
       run: hint
-        ? hint(v, s.on)
+        ? hint(
+            /corners/.test(String(hint('', '')))
+              ? CORNERS.some(([n]) => n === v) || /^\d+(\.\d+)?px$/.test(v)
+                ? v
+                : ''
+              : v,
+            s.on,
+          ).map(x =>
+            x
+              .replace(/<theme>/g, slug)
+              .replace(/<part>/g, 'card')
+              .replace(/"([^"]*)"/g, (_, q) => quoteCommandArgument(q)),
+          )
         : [`${HOW} "${thing}${s.on ? ` on ${s.on}` : ''}"`],
       didYouMean: hint
         ? []
@@ -1405,7 +1548,8 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
     {
       run: kids.length
         ? kids.map(
-            k => `${P} set ${slug} corners ${q(s.value || 'round')} --on ${k}`,
+            k =>
+              `${P} set ${slug} corners ${quoteCommandArgument(s.value || 'round')} --on ${k}`,
           )
         : [`${HOW} ${s.on}`],
     },

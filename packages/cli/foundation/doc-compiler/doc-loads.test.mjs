@@ -327,6 +327,10 @@ const RUNNERS = {
     runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
     sites: ['child_process.spawnSync'],
   },
+  'foundation/fs/gather-cache.mjs': {
+    runs: 'nothing; a module hook that notes each module a search or build loads, with its state, and loads it unchanged',
+    sites: ['module.registerHooks'],
+  },
   'foundation/fs/file-protection.mjs': {
     runs: 'the ignore matcher (CommonJS), loaded when a resolver first reads an ignore file',
     sites: ['require(ignore)'],
@@ -449,8 +453,8 @@ const RUNNERS = {
     sites: ['importUserModule'],
   },
   'foundation/integrations/validate-contributions.mjs': {
-    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a template loads an asset (no lifecycle script runs, nothing is written)",
-    sites: ['child_process.spawnSync'],
+    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a template loads an asset (no lifecycle script runs, nothing is written); and @babel/parser, loaded on first use, to read a contribution's source",
+    sites: ['child_process.spawnSync', 'require(@babel/parser)'],
   },
   'foundation/release/cache.mjs': {
     runs: 'npm (under npm-guard.mjs), to install and look up CLI releases in the per-user cache; each installed release once, to check it starts and reports its version; and ps (tasklist on Windows), to confirm the process a stale lock records is node or npm before ending it',

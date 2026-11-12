@@ -101,10 +101,49 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @typedef {object} ThemeCommandWords
  * @property {string} group - The group's command path: `theme` or `experimental theme`.
  * @property {string} build - The build subcommand's name: `build` or `compile`.
+ * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
+ * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  */
 
 /** @type {ThemeCommandWords} */
 const THEME_WORDS = {group: 'theme', build: 'build'};
+
+/**
+ * Text as the group that ran the command words it: under `experimental
+ * theme`, the commands it names are that group's own (`build` is `compile`
+ * there). Only a command the CLI wrote is reworded: one after the CLI's
+ * name, or in backticks; text a person typed (a path, a name) stays as
+ * typed. Under `theme`, the text is unchanged.
+ * @param {string} text
+ * @param {ThemeCommandWords} words
+ */
+function inGroupWords(text, words) {
+  return words.group === THEME_WORDS.group
+    ? text
+    : text.replace(
+        /((?:\bastryx|@astryxdesign\/cli@[\w.-]+) |`)theme (add|use|remove|list|build|eject|template|targets)\b/g,
+        (_, lead, sub) =>
+          `${lead}${words.group} ${sub === 'build' ? words.build : sub}`,
+      );
+}
+
+/**
+ * A theme app result with its notes in the words of the group that ran it.
+ * @template {{data: {notes?: string[]}}} R
+ * @param {R} result
+ * @param {ThemeCommandWords} words
+ * @returns {R}
+ */
+function inGroupNotes(result, words) {
+  if (!result?.data?.notes || words.group === THEME_WORDS.group) return result;
+  return {
+    ...result,
+    data: {
+      ...result.data,
+      notes: result.data.notes.map(n => inGroupWords(n, words)),
+    },
+  };
+}
 
 /**
  * A theme API refusal as the group that ran it words it: under
@@ -114,14 +153,9 @@ const THEME_WORDS = {group: 'theme', build: 'build'};
  * @param {ThemeCommandWords} [words]
  */
 function themeError(err, words = THEME_WORDS) {
+  err = words.explain?.(err, process.cwd()) ?? err;
   /** @param {string} text */
-  const local = text =>
-    words.group === THEME_WORDS.group
-      ? text
-      : text.replace(
-          /(?<!experimental )\btheme (add|use|remove|list|build|eject|template|targets)\b/g,
-          (_, sub) => `${words.group} ${sub === 'build' ? words.build : sub}`,
-        );
+  const local = text => inGroupWords(text, words);
   return cliError(local(err.message), {
     suggestions: (err.suggestions || []).map(x => ({
       ...x,
@@ -847,6 +881,13 @@ function registerThemeCommands(theme, program, docs, words) {
         privateVarError = true;
       };
 
+      const refused = await words.preflight?.(files, {
+        cwd: process.cwd(),
+        check: options.check,
+        family: Boolean(options.family),
+      });
+      if (refused) return themeError(refused, words);
+
       if (options.family) {
         try {
           const result = await themeBuildFamily(
@@ -856,6 +897,7 @@ function registerThemeCommands(theme, program, docs, words) {
               check: options.check,
               iconsSpecifier: options.iconsSpecifier,
               __onPrivateVarError: onPrivateVarError,
+              __commandWords: words,
             },
             {cwd: process.cwd()},
           );
@@ -870,10 +912,7 @@ function registerThemeCommands(theme, program, docs, words) {
         } catch (e) {
           const err =
             /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-          return cliError(err.message, {
-            suggestions: err.suggestions,
-            code: err.code,
-          });
+          return themeError(err, words);
         }
       }
 
@@ -895,6 +934,7 @@ function registerThemeCommands(theme, program, docs, words) {
             iconsSpecifier: options.iconsSpecifier,
             __onPrivateVarError: onPrivateVarError,
             __claimedOutputs: claimedOutputs,
+            __commandWords: words,
           };
           let result;
           if (report) {
@@ -937,10 +977,8 @@ function registerThemeCommands(theme, program, docs, words) {
           // and font guidance.
           if (report && compact) printCompactTrailer(trailers);
           else if (report) printBatchTrailer(trailers);
-          return cliError(
-            entries.length > 1 ? `${entry.file}: ${err.message}` : err.message,
-            {suggestions: err.suggestions, code: err.code},
-          );
+          if (entries.length > 1) err.message = `${entry.file}: ${err.message}`;
+          return themeError(err, words);
         }
       }
 
@@ -1057,6 +1095,10 @@ function registerThemeCommands(theme, program, docs, words) {
           ? resultSet({count: result.data.length, resultKind: 'theme'})
           : NO_RESULT_SET;
 
+      if (result.type !== 'theme.list')
+        result = /** @type {any} */ (
+          inGroupNotes(/** @type {any} */ (result), words)
+        );
       if (json) {
         jsonOut(result);
         return answered;
@@ -1086,6 +1128,7 @@ function registerThemeCommands(theme, program, docs, words) {
         return themeError(err, words);
       }
       await warnOnThemeIntegrationIssues(json);
+      result = inGroupNotes(result, words);
       if (json) jsonOut(result);
       else printThemeApp(result);
       return NO_RESULT_SET;
@@ -1106,6 +1149,7 @@ function registerThemeCommands(theme, program, docs, words) {
         return themeError(err, words);
       }
       await warnOnThemeIntegrationIssues(json);
+      result = inGroupNotes(result, words);
       if (json) jsonOut(result);
       else printThemeApp(result);
       return NO_RESULT_SET;
