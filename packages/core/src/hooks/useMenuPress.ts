@@ -194,8 +194,8 @@ function normalizePointerType(type: string): MenuPressPointerType | null {
 
 /**
  * The identifier of the touch that a pointer's touchstart started. WebKit
- * gives the touch the pointer's id, and Chromium gives it its own, so a lone
- * changed touch is the pointer's too. Several changed touches, none with the
+ * gives the touch the pointer's id. Chromium gives it its own id, so a lone
+ * changed touch is the pointer's. Several changed touches, none with the
  * pointer's id, name no touch.
  */
 function touchOfPointer(

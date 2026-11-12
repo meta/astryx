@@ -31,8 +31,9 @@
 // The menu press model's arm at a finger's release also cancels that touch's
 // `touchend`, so the browser creates no click and no compatibility mouse
 // events. A busy main thread can otherwise hold that click past the window,
-// when a drill-in has put another row under the finger. The guard names the
-// touch by its identifier, so another finger's `touchend` passes.
+// when a drill-in has put another row under the finger. When the menu names
+// the touch by its identifier, another finger's `touchend` passes; a touch it
+// could not name keeps the old rule, and the next `touchend` is cancelled.
 //
 // Some clicks always pass:
 // - a click with `detail` 0: a keyboard's, a screen reader's, or one that the
@@ -74,7 +75,7 @@ export interface ClickGuardOptions {
   readonly cancelsTouchEnd?: boolean;
   /**
    * With `cancelsTouchEnd`: the `Touch.identifier` of the touch that lifted.
-   * Only a `touchend` that ends this touch is cancelled. Another finger's
+   * The guard cancels only a `touchend` that ends this touch. Another finger's
    * `touchend` passes, and the guard stays armed for this touch. Without it,
    * the next `touchend` counts as this touch's own.
    */
