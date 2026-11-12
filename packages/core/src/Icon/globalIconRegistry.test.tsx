@@ -92,6 +92,13 @@ describe('iconRegistry (global, RSC-compatible)', () => {
     expect(completeRegistry.upload).toBe(defaultIcons.upload);
   });
 
+  it('lets a complete icon registry omit drag in this release', () => {
+    const {drag: _drag, ...withoutDrag} = defaultIcons;
+    const registry: IconRegistry = withoutDrag;
+    expect(registry).toBeDefined();
+    expect(getIconRegistry().drag).toBe(defaultIcons.drag);
+  });
+
   it('lets a theme draw upload without changing arrowUp', () => {
     const theme = defineTheme({
       name: 'upload-only',

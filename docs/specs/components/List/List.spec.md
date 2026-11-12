@@ -231,6 +231,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   model to list rows, and FR12's motion plays an FR4 role.
 - `spec:AST-105` owns the animated layout handle and its shared motion; List
   adopts it for row updates (FR12).
+- Additive theme surface: a theme may map the reorder handle's grip through
+  `componentIcons['list-reorder-handle']`; with no entry, the grip is the
+  `drag` icon.
 - `spec:AST-103` owns reordering. List is its first adopter: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
