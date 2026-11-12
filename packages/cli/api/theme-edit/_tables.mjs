@@ -731,6 +731,17 @@ export const DESIGN = wordTable(
   }),
 );
 
+/**
+ * Parts whose theme class sits on a transparent wrapper while Core draws the
+ * visible box on an inner element with no class of its own (see
+ * /core-gaps: the composer body). Padding reaches the box only through the
+ * part's padding variable; a surface (background, border, shadow) paints
+ * the wrapper's square corners; a density re-sets the variable on the box.
+ */
+export const WRAPPED_PARTS = /** @type {Record<string, {box: string}>} */ ({
+  'chat-composer': {box: 'the rounded composer body'},
+});
+
 /** States every part takes, beyond the ones its doc lists. */
 export const COMMON_STATES = [
   'hover',

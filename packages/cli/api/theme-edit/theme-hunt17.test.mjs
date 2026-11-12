@@ -84,7 +84,9 @@ describe('hunt17', () => {
 
   it('F8-3 rest: focus-within on a part that holds content', async () => {
     for (const on of ['chat-composer', 'popover', 'dropdown-menu']) {
-      const r = await themeEditSet('n', 'background-color', '#ff0000', {
+      // A surface on chat-composer paints its transparent wrapper (refused);
+      // the state itself is what this checks.
+      const r = await themeEditSet('n', 'opacity', '0.9', {
         cwd,
         on,
         state: 'focus-within',

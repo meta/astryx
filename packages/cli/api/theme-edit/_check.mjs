@@ -57,6 +57,7 @@ import {
   TYPE_STYLES,
   familyOf,
   wordTable,
+  WRAPPED_PARTS,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -2852,6 +2853,35 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
+    // A part whose visible box is drawn inside its themed wrapper: only
+    // what reaches that box is taken.
+    const wrapped = s.on ? WRAPPED_PARTS[s.on] : undefined;
+    if (wrapped) {
+      const surface =
+        /^(background|border|box-shadow|outline)(-|$)/.test(prop) &&
+        !/radius/.test(prop);
+      const side = /^padding-/.test(prop);
+      const density = prop === 'padding' && /^density:/.test(s.when ?? '');
+      if (surface || side || density)
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          surface
+            ? `${s.on}'s theme class is on a transparent wrapper; Core draws ${wrapped.box} inside it, and that box has no class of its own, so ${prop} would paint the wrapper's square corners, not the box. Its colors come from the theme's popover tokens.`
+            : side
+              ? `${s.on}'s theme class is on a transparent wrapper; ${wrapped.box} inside it reads one padding for every side, so a side padding would add a strip outside the box. Set padding (every side).`
+              : `${s.on} sets its own padding on ${wrapped.box} for each density, which a theme padding for one density cannot reach. Set padding for every density.`,
+          {
+            run: surface
+              ? [
+                  `${P} set ${slug} --color-background-popover ${quoteCommandArgument('#ffffff')}`,
+                  `${HOW} ${s.on}`,
+                ]
+              : [
+                  `${P} set ${slug} padding ${quoteCommandArgument(v)} --on ${s.on}`,
+                ],
+          },
+        );
+    }
     // Core writes a container part's padding to variables of its own, where
     // a keyword that takes its value from elsewhere means no value at all.
     if (

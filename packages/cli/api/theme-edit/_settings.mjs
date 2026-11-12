@@ -42,6 +42,7 @@ import {
   TEXT_SIZE,
   TYPE_STYLES,
   familyOf,
+  WRAPPED_PARTS,
 } from './_tables.mjs';
 import {
   alphaOf,
@@ -1590,10 +1591,10 @@ export function compileTheme(ctx, data, base) {
   };
   /**
    * A one-side logical padding on a part whose whole padding Core copies
-   * into a variable of its own (a composer's or a menu's inner padding), as
-   * its physical side (left-to-right): Core feeds every logical padding into
-   * that variable, so one side would set the whole box; a physical side it
-   * leaves alone. Null for any other property or part.
+   * into a variable of its own (a composer's or a menu's inner padding),
+   * still logical (right-to-left apps get their own side) but under its CSS
+   * name: Core feeds every camelCase padding key into that variable, so one
+   * side would set the whole box. Null for any other property or part.
    * @param {string} target @param {Setting} s
    * @returns {Record<string, string> | null}
    */
@@ -1606,20 +1607,37 @@ export function compileTheme(ctx, data, base) {
       !derived.some(d => d.property === 'padding' && d.vars?.length)
     )
       return null;
-    const PHYSICAL = /** @type {Record<string, string[]>} */ ({
-      'padding-block-start': ['top'],
-      'padding-block-end': ['bottom'],
-      'padding-inline-start': ['left'],
-      'padding-inline-end': ['right'],
-      'padding-block': ['top', 'bottom'],
-      'padding-inline': ['left', 'right'],
+    const SIDES = /** @type {Record<string, string[]>} */ ({
+      'padding-block-start': ['block-start'],
+      'padding-block-end': ['block-end'],
+      'padding-inline-start': ['inline-start'],
+      'padding-inline-end': ['inline-end'],
+      'padding-block': ['block-start', 'block-end'],
+      'padding-inline': ['inline-start', 'inline-end'],
     });
-    const sides = PHYSICAL[prop];
+    const sides = SIDES[prop];
     if (!sides) return null;
     const w = splitTop(String(s.value).trim(), ' ').map(x => x.trim());
     return Object.fromEntries(
-      sides.map((side, i) => [camel(`padding-${side}`), w[i] ?? w[0]]),
+      // Written as CSS names: Core feeds only its camelCase padding keys
+      // into the whole-box variable, and writes any other key as it is.
+      sides.map((side, i) => [`padding-${side}`, w[i] ?? w[0]]),
     );
+  };
+  /**
+   * A padding on a part whose visible box sits inside its themed wrapper,
+   * as the padding variable that box reads, not the wrapper's own padding
+   * (which would add a gap outside the box). Null for any other part.
+   * @param {string} target @param {Setting} s
+   * @returns {Record<string, string> | null}
+   */
+  const wrappedPadding = (target, s) => {
+    if (s.mode || !WRAPPED_PARTS[target] || kebab(s.thing) !== 'padding')
+      return null;
+    const name = (ctx.derived?.[target] ?? []).find(
+      d => d.property === 'padding' && d.vars?.length,
+    )?.vars?.[0];
+    return name ? {[name]: String(s.value).trim()} : null;
   };
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
@@ -1875,7 +1893,10 @@ export function compileTheme(ctx, data, base) {
     } else if (s.source === 'property') {
       for (const t of parts) {
         const sides =
-          containerSides(t, s) ?? cornerRadii(t, s) ?? boxSides(t, s);
+          wrappedPadding(t, s) ??
+          containerSides(t, s) ??
+          cornerRadii(t, s) ??
+          boxSides(t, s);
         if (sides)
           for (const [k, v] of Object.entries(sides)) putComp(s, t, k, v);
         else putComp(s, t, camel(s.thing), s.value);

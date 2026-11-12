@@ -3056,18 +3056,18 @@ describe('parts33', () => {
     await themeEditUndo('p', {cwd, thing: 'border-radius', on: 'containers'});
   });
 
-  it('writes one logical side as its physical side where Core copies the whole padding', async () => {
+  it('keeps one logical side logical, off the whole-box variable, where Core copies the whole padding', async () => {
     await themeEditSet('p', 'padding-inline-start', '5px', {
       cwd,
-      on: 'chat-composer',
+      on: 'dropdown-menu',
     });
-    const box = blockOf('.astryx-chat-composer');
-    expect(box).toMatch(/padding-left:\s*5px/);
-    expect(box).not.toMatch(/--_chat-composer-padding:\s*5px/);
+    const box = blockOf('.astryx-dropdown-menu');
+    expect(box).toMatch(/padding-inline-start:\s*5px/);
+    expect(box).not.toMatch(/--_dropdown-menu-padding:\s*5px/);
     await themeEditUndo('p', {
       cwd,
       thing: 'padding-inline-start',
-      on: 'chat-composer',
+      on: 'dropdown-menu',
     });
   });
 
@@ -3080,5 +3080,40 @@ describe('parts33', () => {
     expect(card).toMatch(/--astryx-card-padding-block-start:\s*0/);
     expect(card).not.toContain('initial');
     await themeEditUndo('p', {cwd, thing: 'padding-block-start', on: 'card'});
+  });
+});
+
+describe('parts34', () => {
+  /** @param {string} selector */
+  const blockOf = selector => {
+    const css = read('p.css');
+    const at = css.indexOf(`${selector} {`);
+    return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  };
+
+  it('pads the composer box through its variable, and refuses what paints its wrapper', async () => {
+    await themeEditSet('p', 'padding', '5px', {cwd, on: 'chat-composer'});
+    const box = blockOf('.astryx-chat-composer');
+    expect(box).toMatch(/--_chat-composer-padding:\s*5px/);
+    expect(box).not.toMatch(/(^|[;{\s])padding:\s*5px/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
+    for (const [prop, value, when] of [
+      ['background', '#f3f4f6'],
+      ['box-shadow', 'none'],
+      ['padding-left', '5px'],
+      ['padding', '5px', 'density:compact'],
+    ])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', prop, value, {
+              cwd,
+              on: 'chat-composer',
+              ...(when ? {when} : {}),
+            }),
+          )
+        ).code,
+        `${prop} ${when ?? ''}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
   });
 });
