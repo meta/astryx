@@ -223,6 +223,29 @@ describe('integration authoring CLI', () => {
     expect(json.stdout).not.toContain('is TypeScript');
   });
 
+  it('prints no note for a packable JavaScript manifest', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      `${JSON.stringify({
+        name: '@acme/widgets',
+        version: '1.0.0',
+        files: ['astryx.integration.mjs', 'docs'],
+      })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      "export default {docs: './docs'};\n",
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'deploying.doc.mjs'),
+      "export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it.'}]}]};\n",
+    );
+    const text = await runCli(['integration', 'verify'], tmpDir);
+    expect(text.stdout).toContain('packed files');
+    expect(text.stdout).not.toContain('is TypeScript');
+  });
+
   it('keeps `integration pack --check` as a deprecated alias of `integration verify`', async () => {
     // The old spelling runs the same check: the same JSON, the same exit code.
     const verify = await runCli(['integration', 'verify', '--json'], tmpDir);
@@ -231,9 +254,6 @@ describe('integration authoring CLI', () => {
       tmpDir,
     );
     expect(old.status).toBe(verify.status);
-    // A JavaScript manifest gets no note.
-    const plain = await runCli(['integration', 'verify'], tmpDir);
-    expect(plain.stdout).not.toContain('is TypeScript');
     const verifyEnvelope = parseEnvelope(verify.stdout);
     const oldEnvelope = parseEnvelope(old.stdout);
     expect(oldEnvelope.type).toBe('integration.pack-check');
