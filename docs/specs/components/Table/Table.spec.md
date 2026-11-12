@@ -129,10 +129,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 - `Table/internByIdentity.ts`: keeps resolved columns and merged plugins stable
   across renders by input identity, with no state or ref; each entry is written
   once, on first sight of an identity path, and never changed
-  (react-component-runtime INV17's lazy one-time initialization), so a render
-  React discards can only add entries, never change the array a later render
-  gets; BaseTable and useBaseTablePlugins import it; no existing helper keys a
-  list by its items' identities.
+  (`architecture:react-component-runtime` INV17's lazy one-time
+  initialization), so a render React discards can only add entries, never
+  change the array a later render gets; BaseTable and useBaseTablePlugins import
+  it; no existing helper keys a list by its items' identities.
 
 **Does not own / non-goals**
 
