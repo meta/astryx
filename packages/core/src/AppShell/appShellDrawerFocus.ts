@@ -4,14 +4,14 @@
 
 /**
  * @file appShellDrawerFocus.ts
- * @input React createContext
+ * @input createSharedContext
  * @output Exports `AppShellDrawerFocusContext`: where focus goes when the
  *   AppShell drawer closes and the button that opened it is gone
  * @position Internal to Core, not exported from the AppShell entry. AppShell
  *   provides it; MobileNav reads it when its drawer closes.
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 export interface AppShellDrawerFocus {
   /** This shell's main region. */
@@ -24,5 +24,9 @@ export interface AppShellDrawerFocus {
 }
 
 export const AppShellDrawerFocusContext =
-  createContext<AppShellDrawerFocus | null>(null);
+  createSharedContext<AppShellDrawerFocus | null>(
+    'AppShellDrawerFocusContext',
+    1,
+    null,
+  );
 AppShellDrawerFocusContext.displayName = 'AppShellDrawerFocusContext';

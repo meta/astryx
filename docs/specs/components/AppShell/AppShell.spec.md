@@ -128,6 +128,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   subtree (FR11, FR13).
 - Content continuity across the breakpoint switch (FR14).
 - The layout-root reset at the shell's root (FR18).
+- `appShellDrawerFocus.ts`, which AppShell provides and MobileNav and TopNav
+  read: where focus goes when the drawer closes after a hidden region empties
+  it (FR20). The public mobile context (`useAppShellMobile`) cannot carry it
+  without changing a public hook's return, and no other focus module spans the
+  shell and its nav children.
 - Hiding the top nav and the side nav while keeping their state, the focus
   handoff and the one motion it plays (FR19–FR21).
 

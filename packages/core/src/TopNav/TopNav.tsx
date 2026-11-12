@@ -21,7 +21,6 @@ import {
   AppShellDrawerFocusContext,
   type AppShellDrawerFocus,
 } from '../AppShell/appShellDrawerFocus';
-import {TopNavShellContext} from './TopNavShellContext';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
@@ -250,7 +249,8 @@ export function TopNav({
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.topNav.landmarkLabel');
   const renderMode = useTopNavRenderMode();
-  const mobileContent = useTopNavMobileContent();
+  const mobile = useTopNavMobileContent();
+  const mobileContent = mobile?.content;
   const {hasAutoToggle} = useAppShellMobile();
   const resolvedStartContent = startContent ?? children;
   // The layout flags use the same test as the slots they gate.
@@ -258,13 +258,12 @@ export function TopNav({
   const hasStartContent = isRenderable(resolvedStartContent);
   const hasMobileContent = isRenderable(mobileContent);
   const hasCollapsibleContent = hasStartContent || hasCenterContent;
-  const shell = use(TopNavShellContext);
-  const isOwnContentHidden = shell?.isOwnContentHidden === true;
+  const isOwnContentHidden = mobile?.isOwnContentHidden === true;
   // Show the mobile toggle only for drawer content still visible: its own
   // items, or the SideNav passed in through context, unless hidden.
   const hasMobileDrawerContent =
     (hasCollapsibleContent && !isOwnContentHidden) ||
-    (hasMobileContent && shell?.isMobileContentHidden !== true);
+    (hasMobileContent && mobile?.isContentHidden !== true);
   // A drawer with nothing visible closes, and its menu button is gone, so
   // focus goes to main.
   const drawerFocus = use(AppShellDrawerFocusContext);
@@ -338,7 +337,7 @@ export function TopNav({
           {hasCollapsibleContent &&
             hasMobileContent &&
             !isOwnContentHidden &&
-            shell?.isMobileContentHidden !== true && (
+            mobile?.isContentHidden !== true && (
               <Divider xstyle={styles.drawerDivider} />
             )}
           {hasMobileContent && (

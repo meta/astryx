@@ -68,10 +68,6 @@ import {
   AppShellDrawerFocusContext,
   type AppShellDrawerFocus,
 } from './appShellDrawerFocus';
-import {
-  TopNavShellContext,
-  type TopNavShell,
-} from '../TopNav/TopNavShellContext';
 import {topNavHasDrawerItems} from '../TopNav/TopNav';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
@@ -1019,7 +1015,6 @@ export function AppShell({
   // in the drawer and shows the toggle even without its own collapsible items.
   const mobileContentValue =
     hasSideNav && mobileNavHasToggle ? (
-      // eslint-disable-next-line @eslint-react/no-unstable-context-value -- context transports ReactNode; instability is inherent
       <SideNavRenderContext value="drawer-content">
         {sideNav}
       </SideNavRenderContext>
@@ -1027,7 +1022,6 @@ export function AppShell({
 
   // A hidden side nav stays mounted in the drawer, keeping its state.
   const drawerMobileContentValue = hasSideNav ? (
-    // eslint-disable-next-line @eslint-react/no-unstable-context-value -- context transports ReactNode; instability is inherent
     <div
       {...stylex.props(
         isSideNavHidden ? styles.drawerContentHidden : styles.drawerContent,
@@ -1049,24 +1043,27 @@ export function AppShell({
     }),
     [],
   );
-  const topNavShell = useMemo<TopNavShell>(
-    () => ({
-      isOwnContentHidden: isTopNavHidden,
-      isMobileContentHidden: isSideNavHidden,
-    }),
-    [isTopNavHidden, isSideNavHidden],
-  );
+  // eslint-disable-next-line @eslint-react/no-unstable-context-value -- context transports ReactNode; instability is inherent
+  const barMobileContent = {
+    content: mobileContentValue,
+    isOwnContentHidden: isTopNavHidden,
+    isContentHidden: isSideNavHidden,
+  };
+  // eslint-disable-next-line @eslint-react/no-unstable-context-value -- context transports ReactNode; instability is inherent
+  const drawerMobileContent = {
+    content: drawerMobileContentValue,
+    isOwnContentHidden: isTopNavHidden,
+    isContentHidden: isSideNavHidden,
+  };
 
   const topNavContent = hasTopNav ? (
-    <TopNavShellContext value={topNavShell}>
-      {isBelowBreakpoint && !mobileNavDisabled && mobileNavReactNode == null ? (
-        <TopNavMobileContentContext value={mobileContentValue}>
-          <TopNavRenderContext value="mobile-bar">{topNav}</TopNavRenderContext>
-        </TopNavMobileContentContext>
-      ) : (
-        topNav
-      )}
-    </TopNavShellContext>
+    isBelowBreakpoint && !mobileNavDisabled && mobileNavReactNode == null ? (
+      <TopNavMobileContentContext value={barMobileContent}>
+        <TopNavRenderContext value="mobile-bar">{topNav}</TopNavRenderContext>
+      </TopNavMobileContentContext>
+    ) : (
+      topNav
+    )
   ) : null;
 
   const headerInner =
@@ -1638,14 +1635,11 @@ export function AppShell({
                         </SideNavRenderContext>
                       )}
                       {hasTopNav && (
-                        <TopNavShellContext value={topNavShell}>
-                          <TopNavMobileContentContext
-                            value={drawerMobileContentValue}>
-                            <TopNavRenderContext value="drawer">
-                              {topNav}
-                            </TopNavRenderContext>
-                          </TopNavMobileContentContext>
-                        </TopNavShellContext>
+                        <TopNavMobileContentContext value={drawerMobileContent}>
+                          <TopNavRenderContext value="drawer">
+                            {topNav}
+                          </TopNavRenderContext>
+                        </TopNavMobileContentContext>
                       )}
                     </ActivityWrapper>
                   )}
