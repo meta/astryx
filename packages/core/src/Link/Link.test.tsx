@@ -251,6 +251,49 @@ describe('Link', () => {
     expect(link).not.toHaveAttribute('href');
   });
 
+  it.each([undefined, -1])(
+    'keeps a plain focused href link inert when disabled with tabIndex=%s',
+    async tabIndex => {
+      const user = userEvent.setup();
+      const fixture = (isDisabled: boolean) => (
+        <>
+          <button type="button">Before</button>
+          <Link
+            href="#destination"
+            isDisabled={isDisabled}
+            tabIndex={tabIndex}
+            aria-describedby="reason">
+            Destination
+          </Link>
+          <span id="reason">Unavailable reason</span>
+          <button type="button">After</button>
+        </>
+      );
+      const {rerender} = render(fixture(false));
+      screen.getByRole('link').focus();
+      rerender(fixture(true));
+      const disabled = screen.getByRole('link');
+      expect(disabled).toHaveFocus();
+      expect(disabled).toHaveAttribute('aria-disabled', 'true');
+      expect(disabled).not.toHaveAttribute('href');
+      expect(disabled).toHaveAccessibleDescription('Unavailable reason');
+      expect(fireEvent.click(disabled)).toBe(false);
+      await user.keyboard('{Enter} ');
+      expect(disabled).toHaveFocus();
+      screen.getByRole('button', {name: 'Before'}).focus();
+      await user.tab();
+      expect(
+        tabIndex === -1
+          ? screen.getByRole('button', {name: 'After'})
+          : disabled,
+      ).toHaveFocus();
+      disabled.focus();
+      rerender(fixture(false));
+      expect(screen.getByRole('link')).not.toHaveFocus();
+      expect(screen.getByRole('link')).toHaveAttribute('href', '#destination');
+    },
+  );
+
   it('keeps a focused href link with onClick inert and reachable across disablement', async () => {
     const user = userEvent.setup();
     const ref = vi.fn();
@@ -289,12 +332,11 @@ describe('Link', () => {
 
     rerender(fixture(false));
     const enabled = screen.getByRole('link');
-    expect(enabled).toHaveFocus();
     expect(enabled).toHaveAttribute('href', '#destination');
     expect(ref).toHaveBeenLastCalledWith(enabled);
   });
 
-  it('keeps focus across disabled transitions under an inherited button role', () => {
+  it('keeps focus when disabled under an inherited button role', () => {
     const fixture = (isDisabled: boolean) => (
       <InteractiveRoleContext value="button">
         <Link href="#destination" isDisabled={isDisabled}>
@@ -310,7 +352,6 @@ describe('Link', () => {
     expect(disabled).toHaveAttribute('aria-disabled', 'true');
     expect(disabled).not.toHaveAttribute('href');
     rerender(fixture(false));
-    expect(screen.getByRole('link')).toHaveFocus();
     expect(screen.getByRole('link')).toHaveAttribute('href', '#destination');
   });
 
@@ -350,7 +391,6 @@ describe('Link', () => {
 
     disabled.focus();
     rerender(fixture(false));
-    expect(screen.getByRole('link')).toHaveFocus();
     expect(screen.getByRole('link')).toHaveAttribute('href', '#destination');
   });
 
@@ -389,7 +429,6 @@ describe('Link', () => {
     expect(screen.getByRole('button', {name: 'Destination'})).toHaveFocus();
     rerender(fixture(false));
     const enabled = screen.getByRole('link');
-    expect(enabled).toHaveFocus();
     expect(enabled).toHaveAttribute('href', '#destination');
     fireEvent.click(enabled);
     expect(onClick).toHaveBeenCalledOnce();
@@ -412,7 +451,6 @@ describe('Link', () => {
     expect(screen.getByRole('link')).toHaveFocus();
     expect(screen.getByRole('link')).not.toHaveAttribute('href');
     rerender(fixture(false));
-    expect(screen.getByRole('link')).toHaveFocus();
     expect(screen.getByRole('link')).toHaveAttribute('href', '#destination');
   });
 

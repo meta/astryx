@@ -4,7 +4,7 @@
 
 /**
  * @file useFocusAcrossSwap.ts
- * @input An optional forwarded ref
+ * @input An optional forwarded ref and focus-target options
  * @output A callback ref that carries focus to a replacement element
  * @position Internal hook for a component whose element type changes with a
  *   prop (a link row that renders a plain anchor while disabled). React
@@ -21,11 +21,19 @@
 
 import {useCallback, useRef, type Ref} from 'react';
 import {mergeRefs} from './mergeRefs';
+import {deepActiveElement} from './flatTree';
 
 export function useFocusAcrossSwap<T extends HTMLElement>(
   ref?: Ref<T>,
+  {
+    resolveFocusTarget,
+    restoreFocus = true,
+  }: {
+    resolveFocusTarget?: (node: T) => HTMLElement | null;
+    restoreFocus?: boolean;
+  } = {},
 ): (node: T | null) => (() => void) | undefined {
-  const focusedNodeRef = useRef<T | null>(null);
+  const focusedNodeRef = useRef<HTMLElement | null>(null);
   return useCallback(
     (node: T | null) => {
       if (node === null) {
@@ -33,23 +41,27 @@ export function useFocusAcrossSwap<T extends HTMLElement>(
       }
       const outgoing = focusedNodeRef.current;
       focusedNodeRef.current = null;
-      const focusFell =
-        document.activeElement === null ||
-        document.activeElement === document.body;
+      const target = resolveFocusTarget ? resolveFocusTarget(node) : node;
+      const document = node.ownerDocument;
+      const active = deepActiveElement(document);
+      const focusFell = active === null || active === document.body;
       if (
+        restoreFocus &&
+        target?.isConnected &&
         outgoing !== null &&
-        outgoing !== node &&
+        outgoing !== target &&
         !outgoing.isConnected &&
         focusFell
       ) {
-        node.focus();
+        target.focus({preventScroll: true});
       }
       const release = mergeRefs<T>(ref)(node);
       return () => {
-        focusedNodeRef.current = document.activeElement === node ? node : null;
+        focusedNodeRef.current =
+          deepActiveElement(document) === target ? target : null;
         release?.();
       };
     },
-    [ref],
+    [ref, resolveFocusTarget, restoreFocus],
   );
 }

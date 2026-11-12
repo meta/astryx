@@ -41,7 +41,7 @@ import type {
   TextDisplay,
 } from '../theme/types';
 import {useLinkComponent} from './useLinkComponent';
-import {useLinkFocus} from './useLinkFocus';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import type {LinkComponentType} from './types';
 import {mergeProps} from '../utils';
 import {computeTargetAndRel} from './computeTargetAndRel';
@@ -312,6 +312,14 @@ function disabledAnchorProps(onKeyDown?: LinkKeyDownHandler) {
   } as const;
 }
 
+function resolveLinkFocusTarget(node: HTMLElement): HTMLElement | null {
+  const root = node.closest('.astryx-link');
+  const control = node.closest<HTMLElement>(
+    'a,button,[role="link"],[role="button"],[tabindex]',
+  );
+  return control && root?.contains(control) ? control : null;
+}
+
 // The native button keeps its own role.
 function disabledButtonProps(onKeyDown?: LinkKeyDownHandler) {
   return {
@@ -374,7 +382,10 @@ export function Link({
   const newTabLabel = newTabLabelFromProps ?? t('@astryx.link.newTab');
   const LinkComponent = useLinkComponent(as);
   const role = useInteractiveRole({href, onClick, isDisabled});
-  const contentRef = useLinkFocus(isDisabled);
+  const contentRef = useFocusAcrossSwap<HTMLElement>(undefined, {
+    resolveFocusTarget: resolveLinkFocusTarget,
+    restoreFocus: isDisabled,
+  });
   // Determine target and rel based on isExternalLink
   const {target, rel} = computeTargetAndRel(
     isExternalLink ? '_blank' : targetFromProps,
