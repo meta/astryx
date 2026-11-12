@@ -240,4 +240,10 @@ describe('duration-balanced Node legs', () => {
       'scripts/vitest-node-durations.json',
     );
   });
+
+  it('reads colour codes spelled out, as `gh run view --log` prints them', () => {
+    const log =
+      'job\tstep\t2026-11-11T07:54:35.11Z ^[[32m✓^[[39m ^[[30m^[[46m node ^[[49m^[[39m packages/cli/a.test.mjs ^[[2m(12 tests)^[[22m^[[33m 542123^[[2mms^[[22m^[[39m';
+    expect(recordDurations(log)).toEqual({'packages/cli/a.test.mjs': 542.1});
+  });
 });

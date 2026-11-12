@@ -1512,6 +1512,14 @@ holds for every other head.
 
 Rejected: a new take after every main merge.
 
+Amended by the owner (`cixzhang`, 2026-11-10): once the owner has passed a
+behavior on a device, a later head of the same pull request is verified by a
+side-by-side on the same devices against the head she passed, with the same
+steps and frame-checked evidence, instead of by her; it returns to her only when
+the side-by-side shows a major difference. A first check of a behavior still
+goes to her. The owner's words: "Can you just check it yourself after and only
+ahow me if theres major differences".
+
 ### DEC-28 — Sheet stretch at the tallest detent
 
 **Reference:** `spec:AST-094/DEC-28`
