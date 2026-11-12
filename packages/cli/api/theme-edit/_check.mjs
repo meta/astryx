@@ -525,6 +525,13 @@ export function storedProblems(ctx, slug, data, skip = '') {
   for (const s of data.settings) {
     if (s.source !== 'token' || s.thing === skip || !(s.thing in TOKENS))
       continue;
+    // A var() a hand edit put in that names no design token reads nothing,
+    // as set refuses it.
+    const bad = unknownVarRef(String(s.value ?? ''), TOKENS, s.thing);
+    if (bad) {
+      found.push({setting: s, why: bad.message});
+      continue;
+    }
     try {
       checkTypedValue(
         ctx.C.typeOf(s.thing),
@@ -1338,42 +1345,20 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         run: [`${P} ${unset ? 'undo' : 'set'} --help`],
       });
   // A value pasted over several lines is one value.
-  const v = (value ?? '')
-    .replace(/\s*[\r\n]+\s*/g, ' ')
-    .replace(/\t+/g, ' ')
-    .trim();
+  const v = normalValue(thing, value ?? '');
   // A var() that misspells a design token would read nothing.
-  if (!unset)
-    for (const [, name, comma] of v.matchAll(
-      /var\(\s*(--[a-z0-9-]+)\s*(,)?/gi,
-    )) {
-      if (name in TOKENS || name.startsWith('--_')) continue;
-      const near = nearest(name, Object.keys(TOKENS)).filter(
-        n => levenshteinDistance(n, name) <= 2,
-      );
-      // Without a fallback, a variable no design token names reads
-      // nothing; var(--x, <value>) falls back to the value.
-      if (!near.length && !comma && !DIALS[thing])
-        refuse(
-          E.ERR_THEME_UNKNOWN_TOKEN,
-          `${name} is not a design token, so var(${name}) would read nothing. Give a fallback (var(${name}, <value>)) for a variable your app sets, or use a design token.`,
-          {
-            didYouMean: nearest(name, Object.keys(TOKENS)).slice(0, 3),
-            run: [`${HOW} --list tokens`],
-          },
-        );
-      if (near.length)
-        refuse(
-          E.ERR_THEME_UNKNOWN_TOKEN,
-          `${name} is not a design token, so var(${name}) would read nothing.`,
-          {
-            didYouMean: near,
-            run: [
-              `${HOW} --list tokens ${near[0].replace(/^--/, '').split('-')[0]}`,
-            ],
-          },
-        );
-    }
+  if (!unset) {
+    const bad = unknownVarRef(v, TOKENS, thing);
+    if (bad)
+      refuse(E.ERR_THEME_UNKNOWN_TOKEN, bad.message, {
+        didYouMean: bad.near,
+        run: [
+          bad.close
+            ? `${HOW} --list tokens ${bad.near[0].replace(/^--/, '').split('-')[0]}`
+            : `${HOW} --list tokens`,
+        ],
+      });
+  }
   // A placeholder copied from a suggestion is not a value.
   if (!unset && /<[a-z][\w -]*>/i.test(v))
     refuse(
@@ -3378,3 +3363,50 @@ const dialWrites = token =>
 
 /** The aspects `how` answers at the whole-theme level. */
 export const ASPECTS = [...Object.keys(GROUPS), 'colors'];
+
+/**
+ * A setting's value as set reads it: one line, and tabs as spaces; in a font
+ * value every run of spaces or tabs is one space, so `'Open  Sans'` and
+ * `'Open\tSans'` both name Open Sans.
+ * @param {string} thing
+ * @param {string} value
+ */
+export function normalValue(thing, value) {
+  const one = value.replace(/\s*[\r\n]+\s*/g, ' ');
+  return (
+    thing === 'font' ? one.replace(/[ \t]+/g, ' ') : one.replace(/\t+/g, ' ')
+  ).trim();
+}
+
+/**
+ * The first var() in a value that names no design token and would read
+ * nothing (no fallback), or one a letter or two off a token, else null.
+ * Dials take their own words, so a dial's var() with no near token passes.
+ * @param {string} v
+ * @param {Record<string, unknown>} TOKENS
+ * @param {string} thing
+ * @returns {{message: string, near: string[], close: boolean} | null}
+ */
+export function unknownVarRef(v, TOKENS, thing) {
+  for (const [, name, comma] of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/gi)) {
+    if (name in TOKENS || name.startsWith('--_')) continue;
+    const near = nearest(name, Object.keys(TOKENS)).filter(
+      n => levenshteinDistance(n, name) <= 2,
+    );
+    if (near.length)
+      return {
+        message: `${name} is not a design token, so var(${name}) would read nothing.`,
+        near,
+        close: true,
+      };
+    // Without a fallback, a variable no design token names reads nothing;
+    // var(--x, <value>) falls back to the value.
+    if (!comma && !DIALS[thing])
+      return {
+        message: `${name} is not a design token, so var(${name}) would read nothing. Give a fallback (var(${name}, <value>)) for a variable your app sets, or use a design token.`,
+        near: nearest(name, Object.keys(TOKENS)).slice(0, 3),
+        close: false,
+      };
+  }
+  return null;
+}

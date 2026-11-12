@@ -1450,7 +1450,10 @@ export function fontOf(value) {
     .split(',')
     .map(x => x.trim())
     .filter(Boolean);
-  const family = unquote(parts[0] ?? v);
+  // Runs of spaces or tabs inside a family name are one space.
+  const family = unquote(parts[0] ?? v)
+    .replace(/[ \t]+/g, ' ')
+    .trim();
   return {
     family: cssFamily(family),
     fallbacks:
@@ -1471,6 +1474,7 @@ export function fontOf(value) {
  * @param {boolean} [spaced]
  */
 export function cssFamily(name, spaced = false) {
+  name = name.replace(/[ \t]+/g, ' ');
   const words = name.trim().split(/\s+/);
   const ident = (/** @type {string} */ w) =>
     /^-?(?:[A-Za-z_]|[\u0080-\uffff])(?:[\w-]|[\u0080-\uffff])*$/.test(w) &&
