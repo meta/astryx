@@ -270,7 +270,7 @@ Read from source, with no focused test yet:
 ### DEC-1 — A drag that reaches the composer closes the keyboard there, with one small bounce
 
 **Reference:** `component:ChatLayout/DEC-1`
-**Decider:** Cindy (`cixzhang`), card 76b, `2026-11-05`
+**Decider:** `cixzhang`, `2026-11-05`
 
 When a drag down the conversation reaches the composer, the field blurs at
 that moment and the composer gives one small spring bounce. No cue follows the
