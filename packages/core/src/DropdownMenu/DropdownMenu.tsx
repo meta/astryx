@@ -81,7 +81,10 @@ import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInternalListFocus} from '../hooks/useListFocus';
-import {MENU_PRESS_LONG_PRESS_MS, useMenuPress} from '../hooks/useMenuPress';
+import {
+  MENU_PRESS_LONG_PRESS_MS,
+  useMenuPressInternal,
+} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
@@ -1026,9 +1029,6 @@ function DropdownMenuPopover({
   // Whether a finger or a pen opened the menu, a tap's open at its lift
   // included, until the layer shows.
   const isTouchOpenRef = useRef(false);
-  // The pointer of the latest press on the trigger: a tap's click opens the
-  // menu after its press ended.
-  const triggerPointerTypeRef = useRef<string | null>(null);
   // Runs as the menu opens, before it paints; set once `usePopoverInternal`
   // has returned the surface it presents.
   const presentSurfaceRef = useRef<() => void>(() => {});
@@ -1520,7 +1520,7 @@ function DropdownMenuPopover({
   // The press model: the row under a release acts, the highlight follows a
   // held pointer. A mouse released outside the menu dismisses it; a finger
   // released outside leaves it open, so the hook never calls onDismiss then.
-  const menuPress = useMenuPress({
+  const {press: menuPress, triggerClickPointerType} = useMenuPressInternal({
     menuRef: listRef,
     triggerRef: buttonRef,
     itemSelector: MENU_ITEM_SELECTOR,
@@ -1543,10 +1543,11 @@ function DropdownMenuPopover({
       // activation): treat it as keyboard so those users still land on the
       // first item. Real pointer clicks report detail >= 1.
       const modality = e.detail === 0 ? 'keyboard' : 'pointer';
+      const pressPointerType = triggerClickPointerType();
       isTouchOpenRef.current =
         modality === 'pointer' &&
-        (triggerPointerTypeRef.current === 'touch' ||
-          triggerPointerTypeRef.current === 'pen');
+        pressPointerType != null &&
+        pressPointerType !== 'mouse';
       if (isControlled) {
         if (controlledIsOpen) {
           onClick?.();
@@ -1563,6 +1564,7 @@ function DropdownMenuPopover({
     },
     [
       menuPress,
+      triggerClickPointerType,
       onClick,
       isControlled,
       onOpenChange,
@@ -1762,17 +1764,12 @@ function DropdownMenuPopover({
     [triggerRef, consumerButtonRef],
   );
 
-  const handleTriggerPointerDown = (event: React.PointerEvent<HTMLElement>) => {
-    triggerPointerTypeRef.current = event.pointerType;
-    menuPress.triggerProps.onPointerDown(event);
-  };
-
   const triggerProps: DropdownMenuTriggerProps = {
     ref: triggerRef,
     id: triggerId,
     onClick: handleButtonClick,
     onClickCapture: handleTriggerClickCapture,
-    onPointerDown: handleTriggerPointerDown,
+    onPointerDown: menuPress.triggerProps.onPointerDown,
     onContextMenu: menuPress.triggerProps.onContextMenu,
     onKeyDown: handleButtonKeyDown,
     // The caller's control paints its own ring, and the menu's focus return
@@ -1808,7 +1805,7 @@ function DropdownMenuPopover({
           onKeyDown={handleButtonKeyDown}
           onPointerDown={event => {
             button.onPointerDown?.(event);
-            handleTriggerPointerDown(event);
+            menuPress.triggerProps.onPointerDown(event);
           }}
           onContextMenu={event => {
             button.onContextMenu?.(event);

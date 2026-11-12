@@ -2,7 +2,8 @@
 
 /**
  * @file useMenuPress.test.tsx
- * @input vitest, @testing-library/react, useMenuPress
+ * @input vitest, @testing-library/react, useMenuPress and
+ *   useMenuPressInternal
  * @output Unit tests for the DOM half of the menu press model: tracking,
  *   highlight, activation, the stray-click swallower, dismissal, the trigger
  *   press and edge autoscroll
@@ -13,7 +14,14 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {act, fireEvent, render, screen, within} from '@testing-library/react';
+import {
+  cleanup,
+  act,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
 import {useRef, useState} from 'react';
 import {
   MENU_PRESS_AUTOSCROLL_ZONE_PX,
@@ -21,6 +29,7 @@ import {
   MENU_PRESS_STRAY_CLICK_MS,
   __resetMenuPressForTest,
   useMenuPress,
+  useMenuPressInternal,
 } from './useMenuPress';
 import {MENU_PRESS_HANDOFF_PX, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
 import {holdInput, isInputShield} from '../Layer/inputHold';
@@ -101,6 +110,7 @@ interface HarnessProps {
   onHighlight?: (row: HTMLElement | null) => void;
   touchModel?: 'pointer' | 'uikit';
   longPressDelayMs?: number;
+  onClickPointerType?: (pointerType: string | null) => void;
 }
 
 function Harness({
@@ -112,6 +122,7 @@ function Harness({
   onHighlight,
   touchModel,
   longPressDelayMs,
+  onClickPointerType,
 }: HarnessProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -123,7 +134,7 @@ function Harness({
   // The harness picks the touch model as DropdownMenu does, through the
   // delay: `touchModel="uikit"` leaves it unset. Without `touchModel` it keeps
   // the pointer model with the released wait.
-  const press = useMenuPress({
+  const {press, triggerClickPointerType} = useMenuPressInternal({
     menuRef,
     triggerRef,
     itemSelector: ITEM_SELECTOR,
@@ -152,6 +163,7 @@ function Harness({
         {...press.triggerProps}
         aria-expanded={isOpen}
         onClick={() => {
+          onClickPointerType?.(triggerClickPointerType());
           if (press.isTriggerClickFromPress()) {
             return;
           }
@@ -203,6 +215,43 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+describe('useMenuPress — the press a trigger click comes from', () => {
+  function clickAfter(presses: Record<string, unknown>[]) {
+    const seen: (string | null)[] = [];
+    render(<Harness onClickPointerType={type => seen.push(type)} />);
+    const trigger = screen.getByRole('button', {name: 'Open'});
+    for (const down of presses) {
+      fireEvent.pointerDown(trigger, down);
+    }
+    fireEvent.pointerUp(trigger, presses.at(-1));
+    fireEvent.click(trigger, {detail: 1});
+    return seen;
+  }
+
+  it("reports a finger's or a pen's press for its click", () => {
+    expect(clickAfter([touch()])).toEqual(['touch']);
+    cleanup();
+    expect(clickAfter([pen()])).toEqual(['pen']);
+  });
+
+  it('reports no press after one it ignores: a second finger, or a Control-click', () => {
+    expect(clickAfter([touch(1), touch(2)])).toEqual([null]);
+    cleanup();
+    expect(clickAfter([{...mouse(), ctrlKey: true}])).toEqual([null]);
+  });
+
+  it('reports no press for a click in a later gesture', () => {
+    const seen: (string | null)[] = [];
+    render(<Harness onClickPointerType={type => seen.push(type)} />);
+    const trigger = screen.getByRole('button', {name: 'Open'});
+    fireEvent.pointerDown(trigger, touch());
+    fireEvent.pointerUp(trigger, touch());
+    fireEvent.keyDown(document.body, {key: 'a'});
+    fireEvent.click(trigger, {detail: 1});
+    expect(seen).toEqual([null]);
+  });
 });
 
 describe('useMenuPress — an input hold over the menu', () => {

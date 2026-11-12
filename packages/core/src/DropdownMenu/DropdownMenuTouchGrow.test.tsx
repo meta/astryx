@@ -277,6 +277,22 @@ describe('DropdownMenu touch grow', () => {
     expect(measure().source).toEqual(TRIGGER_BOX);
   });
 
+  it("a second finger's tap, a press the press model ignores, keeps the layer's own entrance", async () => {
+    render(
+      <ScrollView>
+        <DropdownMenu button={{label: 'Actions'}} items={ITEMS} />
+      </ScrollView>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    fireEvent.pointerDown(trigger, touch);
+    fireEvent.pointerDown(trigger, {...touch, pointerId: 2});
+    fireEvent.pointerUp(trigger, {...touch, pointerId: 2});
+    fireEvent.click(trigger, {detail: 1});
+    await settle();
+    expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
+    expect(motion.enter).not.toHaveBeenCalled();
+  });
+
   it("a pen's press grows it", async () => {
     render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
     fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), pen);
