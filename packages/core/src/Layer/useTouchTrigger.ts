@@ -48,13 +48,13 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {currentGesture} from './gestureCounter';
 import {noteOutsideDismissal} from './outsidePress';
 import {
@@ -434,31 +434,16 @@ export function useTouchTriggerInternal(
   } = options;
 
   const isTouchPointerRef = useRef(false);
-  // Mirrors `isOpen` for synchronous reads inside the pointer handler, which
-  // runs outside React's render and would otherwise close over a stale value.
-  const isOpenRef = useRef(isOpen);
-  // Syncs the tap handler's open state with the committed `isOpen`.
-  useLayoutEffect(() => {
-    isOpenRef.current = isOpen;
-  });
+  // The committed `isOpen`, for synchronous reads inside the pointer handler,
+  // which runs outside React's render and would otherwise close over a stale
+  // value.
+  const isOpenRef = useCommittedRef(isOpen);
 
-  // Latest values for the document listener, which outlives the render that
-  // armed it.
-  const hideRef = useRef(hide);
-  // Syncs the document listener's `hide` with the committed one.
-  useLayoutEffect(() => {
-    hideRef.current = hide;
-  });
-  const layerIdRef = useRef(layerId);
-  // Syncs the document listener's layer id with the committed one.
-  useLayoutEffect(() => {
-    layerIdRef.current = layerId;
-  });
-  const onReleaseInLayerRef = useRef(onReleaseInLayer);
-  // Syncs the document listener's release callback with the committed one.
-  useLayoutEffect(() => {
-    onReleaseInLayerRef.current = onReleaseInLayer;
-  });
+  // The committed values for the document listener, which outlives the render
+  // that armed it.
+  const hideRef = useCommittedRef(hide);
+  const layerIdRef = useCommittedRef(layerId);
+  const onReleaseInLayerRef = useCommittedRef(onReleaseInLayer);
 
   // Whether a tap is what opened the layer. Only a tap-open owes the user an
   // outside-tap dismissal: a hover-opened layer already closes on
@@ -538,7 +523,13 @@ export function useTouchTriggerInternal(
       doc.addEventListener('pointerup', handleOutsidePointerEnd, true);
       doc.addEventListener('pointercancel', handleOutsidePointerEnd, true);
     }
-  }, [triggerRef, disarmOutsideDismiss]);
+  }, [
+    triggerRef,
+    disarmOutsideDismiss,
+    hideRef,
+    layerIdRef,
+    onReleaseInLayerRef,
+  ]);
 
   // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
@@ -590,11 +581,8 @@ export function useTouchTriggerInternal(
     armOutsideDismiss();
     show();
   };
-  const answerTapRef = useRef(respondToTap);
-  // Syncs the tap's answer with the committed props.
-  useLayoutEffect(() => {
-    answerTapRef.current = respondToTap;
-  });
+  // The committed answer to a tap.
+  const answerTapRef = useCommittedRef(respondToTap);
 
   const handlePointerDown = useCallback(
     (event: PointerEvent): boolean => {
@@ -613,7 +601,7 @@ export function useTouchTriggerInternal(
       );
       return true;
     },
-    [isControlled, triggerRef, tapRecognizer],
+    [isControlled, triggerRef, tapRecognizer, answerTapRef],
   );
 
   // A layer closed by any other path (Escape, a consumer, the browser) leaves
@@ -631,7 +619,7 @@ export function useTouchTriggerInternal(
 
   const answerTap = useCallback(
     (tapEvent: Event | null) => answerTapRef.current(tapEvent),
-    [],
+    [answerTapRef],
   );
 
   return {
