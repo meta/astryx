@@ -821,9 +821,9 @@ export function BottomSheetPanel({
 
   // Everything derived from the snap points keys off their identity, not the
   // array's: the resolver's identity is the hook's signal that the stops
-  // changed, so it must not churn on a re-render the drag caused. The memo
-  // reads the points through a ref, so the resolver resolves them at call time
-  // — against whatever the viewport is then, not what it was at memo time.
+  // changed, so it must not churn on a re-render the drag caused. The resolver
+  // reads the points through a ref, so it resolves them at call time —
+  // against whatever the viewport is then, not what it was at memo time.
   const snapPointsKey = snapPointsKeyFor(snapPoints);
   const snapPointsRef = useRef(snapPoints);
   snapPointsRef.current = snapPoints;
@@ -831,7 +831,7 @@ export function BottomSheetPanel({
     if (snapPointsKey === '') {
       return {snapHeights: undefined, ignoredSnapPointsMessage: ''};
     }
-    const ignored = (snapPointsRef.current ?? []).filter(
+    const ignored = (snapPoints ?? []).filter(
       point => !isValidSnapPoint(point),
     );
     return {
@@ -842,6 +842,7 @@ export function BottomSheetPanel({
           ? ''
           : `snapPoints ignored ${JSON.stringify(ignored)}. A snap point is a viewport fraction above 0 and up to 1 (0.5 is half the screen), a px length ('320px'), or a percentage ('50%').`,
     };
+    // eslint-disable-next-line @eslint-react/exhaustive-deps -- keyed by the snap points' identity, not the array's
   }, [snapPointsKey]);
   useDevWarning(
     'BottomSheet',

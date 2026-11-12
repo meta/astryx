@@ -188,6 +188,14 @@ describe('internal/touch', () => {
     }
   });
 
+  it("re-exports by name UIKit's timing table, which Lab's SearchField reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const uikit = await import('../motion/uikit/timing');
+    // Identity alone passes when both sides are undefined.
+    expect(typeof entry.timing).toBe('object');
+    expect(entry.timing).toBe(uikit.timing);
+  });
+
   it("re-exports by name the scroll test Lab's TabBar reads", async () => {
     const entry: Record<string, unknown> = await import('./touch');
     const geometry = await import('../hooks/scrollGeometry');
