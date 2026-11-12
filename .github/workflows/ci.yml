@@ -1178,19 +1178,20 @@ jobs:
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
         run: |
           if [ "$SCOPED" = true ]; then
-            .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:node --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-            # Tests no module graph relates to the change run too: guards
-            # that read sources, and tests that load a changed package from
-            # its build (by name or its dist/).
-            # The list goes through a file so a failing lister fails the step.
-            # The guard run leaves out the tests the run above already ran, so
-            # no test runs twice. Every leg splits the same reduced list, so a
-            # leg that cannot list them fails rather than split a different one.
-            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
-            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
-            mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
-            if [ "${#GUARDS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+            # One run covers the tests the change reaches and the tests no
+            # module graph relates to it: guards that read sources, and tests
+            # that load a changed package from its build (by name or its
+            # dist/). In one run the legs balance both lists by recorded
+            # time, so a slow changed test does not land on top of a full
+            # share of guards.
+            # The lists go through files so a failing lister fails the step.
+            # Every leg splits the same list, so a leg that cannot list the
+            # tests fails rather than split a different one.
+            .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
+            .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
+            mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"
+            if [ "${#TESTS[@]}" -gt 0 ]; then
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${TESTS[@]}"
             fi
           else
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
