@@ -50,6 +50,7 @@ import {
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {DIALS, LIKE, P} from './_tables.mjs';
+import {colorProblem} from './_color.mjs';
 import {SHOWCASE_GROUPS} from './_preview.mjs';
 import {camel} from './_settings.mjs';
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
@@ -111,10 +112,9 @@ export function dialValueFits(dial, value) {
       return option === v.toLowerCase();
     if (option.startsWith('"')) return true;
     if (option.includes('size')) return /^\d*\.?\d+(px|rem|em)$/.test(v);
-    if (option === '<color>')
-      return /^(#[0-9a-f]{3,8}|[a-z]+|(rgb|rgba|hsl|hsla|oklch|oklab|lab|lch|color)\(.*\))$/i.test(
-        v,
-      );
+    // A color by the editor's own color check (a bare word only when it
+    // names a color).
+    if (option === '<color>') return colorProblem(v) == null;
     if (option === '<0-100>') return /^\d{1,3}$/.test(v) && Number(v) <= 100;
     if (option === '<number>') return /^\d*\.?\d+$/.test(v);
     return false;

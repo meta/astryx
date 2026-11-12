@@ -9,7 +9,15 @@
  */
 
 import {CSS_WIDE} from './_tables.mjs';
-import {MATH_FUNCTION, cssNumber, keywordsOf, matchType} from './_css.mjs';
+import {
+  MATH_FUNCTION,
+  cssNumber,
+  keywordsOf,
+  matchType,
+  splitTop,
+} from './_css.mjs';
+
+export {splitTop};
 import {luminance, oklabToLinearRgb} from '../theme/palette/generate/color.mjs';
 
 /** @typedef {[number, number, number]} Rgb */
@@ -487,30 +495,6 @@ function linearToOklab([r, g, b]) {
     1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
     0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
   ];
-}
-
-/**
- * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
- * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
- * @param {string} v
- * @param {',' | ' '} sep
- * @returns {string[]}
- */
-export function splitTop(v, sep) {
-  /** @type {string[]} */
-  const out = [];
-  let depth = 0;
-  let cur = '';
-  for (const c of v) {
-    if (c === '(') depth++;
-    if (c === ')') depth--;
-    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
-      if (cur.trim() || sep === ',') out.push(cur);
-      cur = '';
-    } else cur += c;
-  }
-  if (cur.trim() || sep === ',') out.push(cur);
-  return out.filter(x => sep === ',' || x.trim());
 }
 
 /**

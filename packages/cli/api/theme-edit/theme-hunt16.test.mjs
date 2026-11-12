@@ -142,6 +142,11 @@ describe('repeated flags', () => {
       ['show', 't', '--section', 'colors', '--section', 'actions'],
       / show t --section actions$/,
     ],
+    // A bare word that is no color is not taken for one.
+    [
+      ['new', 'q', '--accent', 'banana', '--accent', 'red'],
+      / new q --accent red$/,
+    ],
   ])(
     'suggest the first value the flag takes: %j',
     async (args, expected) => {
@@ -210,4 +215,22 @@ describe('corrected new commands keep every option', () => {
     },
     120_000,
   );
+});
+
+describe('how changes by an amount from the theme it reads', () => {
+  it('moves the theme corners from its own radius, not the base theme', async () => {
+    await themeEditNew('rr', {cwd});
+    await themeEditSet('rr', 'corners', '20px', {cwd});
+    const {themeEditHow} = await import('./theme-edit.mjs');
+    const up = await themeEditHow('make corners 2px rounder', {
+      cwd,
+      theme: 'rr',
+    });
+    expect(JSON.stringify(up.data)).toMatch(/from 20px to 22px/);
+    const down = await themeEditHow('decrease the radius by 2px', {
+      cwd,
+      theme: 'rr',
+    });
+    expect(JSON.stringify(down.data)).toMatch(/from 20px to 18px/);
+  }, 240_000);
 });

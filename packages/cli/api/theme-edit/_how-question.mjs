@@ -2222,8 +2222,11 @@ export function draftAnswer(ctx, env, question) {
     if (!aspectsSeen.includes(a)) aspectsSeen.push(a);
   };
   /** @param {string} token @param {'light' | 'dark'} [mode] */
+  // The theme's own value (its settings applied), else the base theme's.
   const current = (token, mode = 'light') =>
-    env.base[mode]?.[token] ?? String(TOKENS[token] ?? '');
+    env.own?.[mode]?.[token] ??
+    env.base[mode]?.[token] ??
+    String(TOKENS[token] ?? '');
   /** The member a group's checks read. @param {string} on */
   const one = on => (FAMILIES[on] ? FAMILIES[on][0] : on);
   /**

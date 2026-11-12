@@ -647,23 +647,29 @@ export function cssNumber(value) {
   return null;
 }
 
-/** Words split at top-level spaces. @param {string} v */
-const topWords = v => {
+/**
+ * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
+ * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
+ * @param {string} v
+ * @param {',' | ' '} sep
+ * @returns {string[]}
+ */
+export function splitTop(v, sep) {
   /** @type {string[]} */
   const out = [];
   let depth = 0;
   let cur = '';
-  for (const c of v.trim()) {
+  for (const c of v) {
     if (c === '(') depth++;
     if (c === ')') depth--;
-    if (/\s/.test(c) && depth === 0) {
-      if (cur) out.push(cur);
+    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
+      if (cur.trim() || sep === ',') out.push(cur);
       cur = '';
     } else cur += c;
   }
-  if (cur) out.push(cur);
-  return out;
-};
+  if (cur.trim() || sep === ',') out.push(cur);
+  return out.filter(x => sep === ',' || x.trim());
+}
 
 /** The longhand each type of the `font` grammar sets, where css-tree names a type, not a property. */
 const FONT_TYPE_LONGHAND = /** @type {Record<string, string>} */ ({
@@ -696,7 +702,7 @@ export function fontShorthandParts(value) {
   if (!value.includes(',')) {
     /** @type {Record<string, string>} */
     const each = {};
-    const words = topWords(value);
+    const words = splitTop(value.trim(), ' ');
     let all = true;
     for (const w of words) {
       const lower = w.toLowerCase();
