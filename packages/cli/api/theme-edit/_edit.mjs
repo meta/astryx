@@ -1479,17 +1479,21 @@ export async function themeEditShow(theme, options = {}) {
   // a hand edit, another CLI) is made again from the settings, and said.
   const stale = staleBuild(cwd, theme, data);
   const brokenSource = themeSourceProblem(cwd, theme);
+  // Every file the build may rewrite or remove (the settings module, the
+  // built outputs, the variants types, section sheets, pictures), so a
+  // theme source that does not build, or builds a value that is not text,
+  // leaves the folder exactly as it was.
+  /** @type {Map<string, Buffer>} */
+  let kept = new Map();
   if (stale && !brokenSource && !readOnly) {
-    // Every file the build may rewrite or remove (the settings module, the
-    // variants types, section sheets, pictures), so a theme source that
-    // does not build leaves the folder exactly as it was.
-    const kept = new Map(
+    kept = new Map(
       fs
         .readdirSync(f.dir)
         .filter(
           n =>
             n === path.basename(f.settingsTs) ||
-            n === `${theme}.variants.d.ts` ||
+            (n.startsWith(`${theme}.`) &&
+              /\.(css|js|d\.ts|css\.d\.ts|variants\.d\.ts)$/.test(n)) ||
             /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?\.png)$/.test(n),
         )
         .map(n => [path.join(f.dir, n), fs.readFileSync(path.join(f.dir, n))]),
@@ -1521,6 +1525,15 @@ export async function themeEditShow(theme, options = {}) {
   /** @type {string | null} */
   let unreadable = null;
   const res = await resolvedTokens(ctx, theme).catch(async e => {
+    if (
+      e instanceof AstryxError &&
+      e.code === E.ERR_THEME_INVALID &&
+      kept.size
+    ) {
+      // What this show just built goes back with the refusal.
+      for (const [file, bytes] of kept) writeWhole(file, bytes);
+      throw e;
+    }
     if (e instanceof AstryxError || readOnly) throw e;
     // The source lines the settings need are missing too: the build cannot
     // be made again until they are back, and show says so (never a run of
@@ -1669,16 +1682,28 @@ function nowApplies(ctx, data, removed, base) {
   // exact property on the part that this dial would have competed with.
   if (removed.on) {
     const fam = familyOf(removed.on);
-    const reaches = [...data.settings]
-      .reverse()
-      .find(
-        x =>
-          x.thing === removed.thing &&
-          x !== removed &&
-          (!x.mode || x.mode === removed.mode) &&
-          ((x.on === removed.on && !x.when && !x.state) ||
-            (fam && x.on === fam && !x.when && !x.state)),
-      );
+    // The part's or its group's setting for the same variant and state
+    // first (a group's hover after the part's hover goes), then a plain one.
+    /** @param {(x: import('./_settings.mjs').Setting) => boolean} scoped */
+    const find = scoped =>
+      [...data.settings]
+        .reverse()
+        .find(
+          x =>
+            x.thing === removed.thing &&
+            x !== removed &&
+            (!x.mode || x.mode === removed.mode) &&
+            (x.on === removed.on || (fam != null && x.on === fam)) &&
+            scoped(x),
+        );
+    const reaches =
+      (removed.when || removed.state
+        ? find(
+            x =>
+              (x.when ?? '') === (removed.when ?? '') &&
+              (x.state ?? '') === (removed.state ?? ''),
+          )
+        : undefined) ?? find(x => !x.when && !x.state);
     if (reaches) return describe(reaches);
     const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
       corners: /radius$/,

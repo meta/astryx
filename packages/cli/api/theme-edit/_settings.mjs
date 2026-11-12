@@ -1707,18 +1707,21 @@ function themeSourceHash(cwd, slug) {
     for (const spec of specifiers) {
       if (!spec.startsWith('.')) continue;
       const base = path.resolve(path.dirname(file), spec);
+      // As TypeScript resolves: `./x.js` names ./x.ts (or .tsx, .mts).
+      const stem = base.replace(/\.m?js$/, '');
       const target = [
-        '',
-        '.ts',
-        '.tsx',
-        '.mts',
-        '.js',
-        '.mjs',
-        '/index.ts',
-        '/index.js',
-      ]
-        .map(x => base + x)
-        .find(p => fs.existsSync(p) && fs.statSync(p).isFile());
+        ...(stem !== base ? ['.ts', '.tsx', '.mts'].map(x => stem + x) : []),
+        ...[
+          '',
+          '.ts',
+          '.tsx',
+          '.mts',
+          '.js',
+          '.mjs',
+          '/index.ts',
+          '/index.js',
+        ].map(x => base + x),
+      ].find(p => fs.existsSync(p) && fs.statSync(p).isFile());
       if (
         target &&
         !generated.has(target) &&
@@ -1985,19 +1988,25 @@ export async function resolvedTokens(ctx, slug) {
     try {
       return asText(core.resolveThemeTokens(t, {mode}));
     } catch (e) {
-      const bad = Object.entries(/** @type {any} */ (t)?.tokens ?? {}).find(
-        ([, v]) =>
-          typeof v !== 'string' && (typeof v !== 'object' || v == null),
-      );
+      const bad = nonTextToken(t);
       throw new AstryxError(
         bad
-          ? `${slug}.theme.ts gives ${bad[0]} the value ${JSON.stringify(bad[1])}, which is not text: a token value is a CSS value in quotes (such as '${bad[1]}px').`
+          ? nonTextMessage(ctx, slug, bad)
           : `${slug} could not be read: ${e instanceof Error ? e.message : String(e)}.`,
         [{name: `${P} how --list tokens`, reason: 'every token and its type'}],
         ERROR_CODES.ERR_THEME_INVALID,
       );
     }
   };
+  // A pair that holds a value that is not text ([8, 8]) resolves, but
+  // builds nothing a browser reads: named the same way.
+  const pairBad = nonTextToken(t);
+  if (pairBad)
+    throw new AstryxError(
+      nonTextMessage(ctx, slug, pairBad),
+      [{name: `${P} how --list tokens`, reason: 'every token and its type'}],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
   const out = {light: resolve('light'), dark: resolve('dark')};
   // The tokens each part sets for itself (the official themes lift
   // secondary text on some parts), for the contrast check; kept out of the
@@ -2011,6 +2020,84 @@ export async function resolvedTokens(ctx, slug) {
           (parts[target] ??= {})[k] = v;
   Object.defineProperty(out, 'parts', {value: parts, enumerable: false});
   return out;
+}
+
+/**
+ * The first token a built theme gives a value that is not text, alone or
+ * in a [light, dark] pair, or null.
+ * @param {any} t
+ * @returns {[string, unknown] | null}
+ */
+function nonTextToken(t) {
+  for (const [k, raw] of Object.entries(t?.tokens ?? {})) {
+    // A pair may come as [light, dark] or as {light, dark}.
+    const v =
+      raw &&
+      typeof raw === 'object' &&
+      !Array.isArray(raw) &&
+      ('light' in raw || 'dark' in raw)
+        ? [/** @type {any} */ (raw).light, /** @type {any} */ (raw).dark]
+        : raw;
+    // A built theme writes a pair as light-dark(); a half that was not
+    // text comes out as a bare number, null or a boolean.
+    const pair =
+      typeof v === 'string'
+        ? /^light-dark\(\s*([^,]*?)\s*,\s*([^,]*?)\s*\)$/.exec(v)
+        : null;
+    if (
+      pair &&
+      [pair[1], pair[2]].some(x =>
+        /^(|null|undefined|true|false|-?\d+(\.\d+)?)$/.test(x),
+      )
+    ) {
+      const half = (/** @type {string} */ x) =>
+        /^-?\d+(\.\d+)?$/.test(x)
+          ? Number(x)
+          : x === '' || x === 'undefined' || x === 'null'
+            ? null
+            : x === 'true' || x === 'false'
+              ? x === 'true'
+              : x;
+      return [k, [half(pair[1]), half(pair[2])]];
+    }
+    const values = Array.isArray(v) ? v : [v];
+    if (
+      Array.isArray(v) &&
+      (v.length !== 2 || values.some(x => typeof x !== 'string'))
+    )
+      return [k, v];
+    if (
+      !Array.isArray(v) &&
+      typeof v !== 'string' &&
+      (typeof v !== 'object' || v == null)
+    )
+      return [k, v];
+  }
+  return null;
+}
+
+/**
+ * Why a token value is not one, with a value of the token's own type to
+ * write instead (a size in px, a weight as a number in quotes), or none.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {[string, unknown]} bad
+ */
+function nonTextMessage(ctx, slug, [name, value]) {
+  const type = ctx.C.typeOf(name);
+  const one = Array.isArray(value)
+    ? value.find(x => typeof x !== 'string')
+    : value;
+  const example =
+    typeof one === 'number'
+      ? type === 'size'
+        ? `'${one}px'`
+        : `'${one}'`
+      : null;
+  const shape = Array.isArray(value)
+    ? 'a [light, dark] pair of two CSS values in quotes'
+    : 'a CSS value in quotes';
+  return `${slug}.theme.ts gives ${name} the value ${JSON.stringify(value)}, which is not text: a token value is ${shape}${example ? ` (such as ${Array.isArray(value) ? `[${example}, ${example}]` : example})` : ''}.`;
 }
 
 /**
@@ -2375,10 +2462,14 @@ export function partComponentDocs(ctx, part) {
  * @param {string} target
  */
 export function wrapsOneControl(ctx, target) {
+  // One control: a form control with a disabled prop whose content is not
+  // other elements (a radio list's items, an input group's or a field's
+  // children each hold controls of their own).
   return partComponentDocs(ctx, target).some(
     ({doc: d}) =>
       /form/i.test(String(d.category ?? '')) &&
-      Object.keys(d.props ?? {}).some(p => /disabled/i.test(p)),
+      Object.keys(d.props ?? {}).some(p => /disabled/i.test(p)) &&
+      d.props?.children?.type !== 'ReactNode',
   );
 }
 
@@ -3006,10 +3097,15 @@ export async function commitTheme(
     throw new AstryxError(
       `The theme did not build, so the change was undone: ${why}${own ? ` (${shown(cwd, f.ts)} is your own file: fix it, then run the command again)` : ''}`,
       [
-        {
-          name: `${P} show ${slug}`,
-          reason: 'do this instead: see the settings as they are',
-        },
+        own
+          ? {
+              name: `cat ${quoteCommandArgument(shown(cwd, f.ts))}`,
+              reason: 'see your own file, then fix it',
+            }
+          : {
+              name: `${P} show ${slug}`,
+              reason: 'do this instead: see the settings as they are',
+            },
       ],
       ERROR_CODES.ERR_THEME_INVALID,
     );

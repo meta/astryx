@@ -1068,11 +1068,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           marks(name, doc),
       );
     };
-    // A part whose component takes children holds content that can take
-    // focus, so focus-within applies there (a dialog, a section, a field).
+    // A part holds content that can take focus, so focus-within applies
+    // there: its component takes children or elements in a prop (a dialog,
+    // a section, a chat composer's input).
     const holdsContent = (/** @type {string} */ t) =>
-      partComponentDocs(ctx, t).some(
-        ({doc}) => 'children' in (doc.props ?? {}),
+      partComponentDocs(ctx, t).some(({doc}) =>
+        Object.entries(doc.props ?? {}).some(
+          ([k, v]) =>
+            k === 'children' ||
+            /\bReact(Node|Element)\b/.test(
+              String(/** @type {any} */ (v)?.type ?? ''),
+            ),
+        ),
       );
     // A part Core never styles in focus is not what takes focus (the
     // focusable element is inside it, or beside it).
@@ -1081,7 +1088,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     const dead = parts.filter(
       t =>
         !states(t).includes(/** @type {string} */ (s.state)) &&
-        (Object.keys(own(t)).length === 0 ||
+        ((Object.keys(own(t)).length === 0 &&
+          !(s.state === 'focus-within' && holdsContent(t))) ||
           ((s.state === 'focus' || s.state === 'focus-visible') &&
             !focusable(t)) ||
           (s.state === 'disabled' &&
@@ -1579,7 +1587,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         else if (pxLen != null && pxLen >= 0)
           s.value =
             pxLen >= 1000 ? 'pill' : `${Math.round(pxLen * 10000) / 10000}px`;
-        else if (lower === '0') s.value = 'square';
+        // No rounding, said any way, is square.
+        else if (/^(0|0%|none|sharp|zero|no|flat)$/.test(lower))
+          s.value = 'square';
         else {
           // What it most likely means, as a value corners takes: a simple
           // calc() of px is worked out.
@@ -1679,6 +1689,17 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           {
             didYouMean: [nearFactor],
             run: [setLine(slug, 'spacing', nearFactor, s)],
+          },
+        );
+      else if (/^(0|none|zero|no|off)$/i.test(v))
+        // Spacing scales the theme's space; it never goes to nothing. The
+        // tightest rung is the nearest that works.
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `spacing scales the theme's space and never removes it; the tightest it goes is ${SPACING[0][0]}. For no space on one part, set padding or gap 0 on it.`,
+          {
+            didYouMean: [SPACING[0][0]],
+            run: [setLine(slug, 'spacing', SPACING[0][0], s)],
           },
         );
       else if (!SPACING.some(([n]) => n === v))
