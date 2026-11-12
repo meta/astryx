@@ -2,8 +2,7 @@
 
 /**
  * @file Show a decorative preview that the build rendered to static HTML.
- * @input A preview id: a template slug from landingTemplateRows.json, or
- *   'themes-store'.
+ * @input A preview id: 'themes-store', the themes card store.
  * @output The preview markup as server HTML. It follows the page's light or
  *   dark mode through CSS variables.
  * @position Client boundary whose only data is the id. The server render
@@ -16,7 +15,6 @@
 
 import {useEffect, useRef, useState, type CSSProperties} from 'react';
 import {LANDING_PREVIEWS} from '@/generated/landingPreviews';
-import previewSurface from '../../../components/TemplatePreviewSurface.module.css';
 import styles from './FrozenPreview.module.css';
 
 // A client-side navigation to the homepage has no server HTML. The generate
@@ -35,14 +33,10 @@ function loadClientNavigationPreviews(): Promise<Record<string, string>> {
 
 export function FrozenPreview({
   id,
-  fillHeight = false,
   className,
   style,
 }: {
   id: string;
-  /** Stretch the preview's root to the full height of its box, as the live
-   *  template preview surface does. */
-  fillHeight?: boolean;
   /** Styles for the element that holds the snapshot, so it can be the
    *  caller's own layout box instead of an extra wrapper. */
   className?: string;
@@ -78,13 +72,7 @@ export function FrozenPreview({
   return (
     <div
       ref={hostRef}
-      className={[
-        styles.snapshot,
-        fillHeight && previewSurface.snapshotHost,
-        className,
-      ]
-        .filter(Boolean)
-        .join(' ')}
+      className={[styles.snapshot, className].filter(Boolean).join(' ')}
       style={style}
       suppressHydrationWarning
       dangerouslySetInnerHTML={{__html: html}}
