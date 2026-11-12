@@ -52,6 +52,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateTimeInput/NativeDateSegment.generated';
+import type {EntryErrorBehavior} from '../DateInput/useTypedDate';
 
 registerEnglishFallback(english);
 
@@ -72,6 +73,7 @@ export type NativeDateSegmentProps = {
   isEffectivelyRequired: boolean;
   isBusy: boolean;
   statusType?: InputStatusType;
+  entryErrorBehavior?: EntryErrorBehavior;
   ariaDescribedBy?: string;
   /**
    * The caller's base props (data-*, aria-*, DOM handlers, …) for the native
@@ -99,6 +101,7 @@ export function NativeDateSegment({
   isEffectivelyRequired,
   isBusy,
   statusType,
+  entryErrorBehavior = 'complete',
   ariaDescribedBy,
   controlProps,
 }: NativeDateSegmentProps) {
@@ -140,7 +143,9 @@ export function NativeDateSegment({
   }
 
   const nativeValue = value && ISO_DATE.test(value) ? value : '';
-  const isInputValid = rejectedValue === null;
+  const isInputValid =
+    rejectedValue === null ||
+    (entryErrorBehavior === 'blur-or-enter' && isFocused);
   const overlayText = nativeValue
     ? formatSharedDate(plainDateFromISO(nativeValue), 'date_long', locale)
     : placeholder;
@@ -252,7 +257,9 @@ export function NativeDateSegment({
     const wasRejected = rejectedValue !== null;
     valueAtFocusRef.current = null;
     setIsFocused(false);
-    setRejectedValue(null);
+    if (entryErrorBehavior === 'complete') {
+      setRejectedValue(null);
+    }
     if (
       !valueChangedWhileFocused &&
       !wasRejected &&
@@ -262,7 +269,7 @@ export function NativeDateSegment({
       commitValue(domValue);
     }
     lastCommitRef.current = null;
-  }, [commitValue, nativeValue, rejectedValue]);
+  }, [commitValue, entryErrorBehavior, nativeValue, rejectedValue]);
 
   const openPicker = useCallback(() => {
     if (isEffectivelyDisabled) {

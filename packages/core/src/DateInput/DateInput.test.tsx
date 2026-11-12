@@ -605,6 +605,40 @@ describe('DateInput', () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the committed form value while deferred unreadable text is shown', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateInput
+          label="Start date"
+          name="startDate"
+          value="2026-01-12"
+          entryErrorBehavior="blur-or-enter"
+          onChange={() => {}}
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+
+    const input = screen.getByRole('combobox');
+    input.focus();
+    await user.clear(input);
+    await user.type(input, 'tomorrowish');
+    await user.keyboard('{Enter}');
+
+    expect(input).toHaveValue('tomorrowish');
+    expect(input).not.toHaveAttribute('name');
+    expect(screen.getByDisplayValue('2026-01-12')).toHaveAttribute(
+      'name',
+      'startDate',
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   describe('press inside and outside the open calendar', () => {
     function press(target: Element) {
       fireEvent.pointerDown(target, {composed: true});
@@ -2351,6 +2385,31 @@ describe('DateInput onEntryErrorChange', () => {
     fireEvent.click(getButton(/March 15, 2026/));
     expect(onEntryErrorChange).toHaveBeenCalledTimes(4);
     expect(onEntryErrorChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('keeps a revealed rejection when another rejected date is edited', () => {
+    const onEntryErrorChange = vi.fn();
+    render(
+      <DateInput
+        label="Due"
+        value="2026-03-15"
+        entryErrorBehavior="blur-or-enter"
+        onChange={() => {}}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+
+    fireEvent.change(input, {target: {value: '02/30/2026'}});
+    expect(input).not.toHaveAttribute('aria-invalid');
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(onEntryErrorChange).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(onEntryErrorChange).toHaveBeenCalledTimes(1);
   });
 
   it('reports a rejection that a new max starts on kept text, and its end', () => {

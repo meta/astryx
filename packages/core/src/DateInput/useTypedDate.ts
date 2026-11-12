@@ -368,6 +368,8 @@ export interface TypedDateField {
   formatHint: string | null;
   /** Whether typed text waits to commit. */
   isPending: boolean;
+  /** Whether unreadable text is kept after a blur-or-enter rejection commit. */
+  hasKeptUnreadableText: boolean;
   isInvalid: boolean;
   /** The status the field shows. */
   fieldStatus: InputStatus | undefined;
@@ -402,6 +404,10 @@ export function useTypedDateField({
   const [pendingInput, setPendingInput] = useState<string | null>(null);
   // Set when Enter or blur keeps rejected text so the person can correct it.
   const [isRejectionCommitted, setIsRejectionCommitted] = useState(false);
+  // The rejection revealed at the last Enter or blur. A still-rejected edit
+  // keeps this signal and its announcement quiet until the next commit.
+  const [committedEntryError, setCommittedEntryError] =
+    useState<DateInputEntryError | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   // The date that typing last reported, so one typing session reports each
   // date once. Only the handlers write it. A value from outside and a
@@ -437,7 +443,7 @@ export function useTypedDateField({
     isErrorShown && errorMessage != null
       ? {type: 'error', message: errorMessage}
       : undefined;
-  const entryError = isDisabled
+  const currentEntryError = isDisabled
     ? null
     : dateEntryError(
         typedResult,
@@ -447,6 +453,13 @@ export function useTypedDateField({
         options.min,
         options.max,
       );
+  const entryError =
+    entryErrorBehavior === 'blur-or-enter' &&
+    isRejectionCommitted &&
+    currentEntryError != null &&
+    committedEntryError != null
+      ? committedEntryError
+      : currentEntryError;
 
   // The rejection that the caller last received. Handlers report a rejection
   // that they cause in the same update. A rejection that a prop change causes
@@ -571,6 +584,7 @@ export function useTypedDateField({
   const reset = useCallback(() => {
     setPendingInput(null);
     setIsRejectionCommitted(false);
+    setCommittedEntryError(null);
     reportEntryError(null);
   }, [reportEntryError]);
 
@@ -585,6 +599,7 @@ export function useTypedDateField({
       if (pendingInput !== null) {
         setPendingInput(null);
         setIsRejectionCommitted(false);
+        setCommittedEntryError(null);
       }
     }
   }
@@ -604,6 +619,7 @@ export function useTypedDateField({
       setFiredEpoch(epoch => epoch + 1);
       setPendingInput(null);
       setIsRejectionCommitted(false);
+      setCommittedEntryError(null);
     }
   }
 
@@ -625,19 +641,36 @@ export function useTypedDateField({
         return;
       }
       setPendingInput(text);
-      setIsRejectionCommitted(false);
       // Report a date only once more typing cannot change it.
       const result = typedDate.parse(text);
-      reportEntryError(
-        dateEntryError(
-          text.trim() ? result : null,
-          false,
-          entryErrorBehavior,
-          text,
-          options.min,
-          options.max,
-        ),
+      const currentError = dateEntryError(
+        text.trim() ? result : null,
+        true,
+        entryErrorBehavior,
+        text,
+        options.min,
+        options.max,
       );
+      const keepsRevealedRejection =
+        entryErrorBehavior === 'blur-or-enter' &&
+        isRejectionCommitted &&
+        currentError != null;
+      setIsRejectionCommitted(keepsRevealedRejection);
+      if (!keepsRevealedRejection) {
+        setCommittedEntryError(null);
+      }
+      if (!keepsRevealedRejection) {
+        reportEntryError(
+          dateEntryError(
+            text.trim() ? result : null,
+            false,
+            entryErrorBehavior,
+            text,
+            options.min,
+            options.max,
+          ),
+        );
+      }
       if (result.kind === 'value' && result.isComplete) {
         const date = plainDateToISO(result.date);
         if (report(date)) {
@@ -654,6 +687,7 @@ export function useTypedDateField({
       options.max,
       report,
       onTypedDate,
+      isRejectionCommitted,
     ],
   );
 
@@ -675,16 +709,16 @@ export function useTypedDateField({
       // at the commit that reveals it. The shipped complete behavior continues
       // to drop unreadable text after announcing it while typing.
       setIsRejectionCommitted(true);
-      reportEntryError(
-        dateEntryError(
-          result,
-          true,
-          entryErrorBehavior,
-          pendingInput,
-          options.min,
-          options.max,
-        ),
+      const error = dateEntryError(
+        result,
+        true,
+        entryErrorBehavior,
+        pendingInput,
+        options.min,
+        options.max,
       );
+      setCommittedEntryError(error);
+      reportEntryError(error);
       return;
     }
     if (
@@ -695,16 +729,16 @@ export function useTypedDateField({
       // Keep the text and show why it cannot commit; never finish or adjust
       // the date.
       setIsRejectionCommitted(true);
-      reportEntryError(
-        dateEntryError(
-          result,
-          true,
-          entryErrorBehavior,
-          pendingInput,
-          options.min,
-          options.max,
-        ),
+      const error = dateEntryError(
+        result,
+        true,
+        entryErrorBehavior,
+        pendingInput,
+        options.min,
+        options.max,
       );
+      setCommittedEntryError(error);
+      reportEntryError(error);
       return;
     }
     if (result.kind === 'value') {
@@ -751,7 +785,11 @@ export function useTypedDateField({
       !hasPlaceholder && isFocused && !displayValue
         ? typedDate.getFormatHint()
         : null,
-    isPending: pendingInput !== null,
+    isPending:
+      pendingInput !== null &&
+      !(isRejectionCommitted && typedResult?.kind === 'unreadable'),
+    hasKeptUnreadableText:
+      isRejectionCommitted && typedResult?.kind === 'unreadable',
     isInvalid: typedError != null,
     fieldStatus,
     alertMessage,

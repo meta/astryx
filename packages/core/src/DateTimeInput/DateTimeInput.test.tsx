@@ -734,6 +734,37 @@ describe('DateTimeInput', () => {
     expect(onChange).toHaveBeenCalledWith('2026-03-15T15:45');
   });
 
+  it('holds a rejected typed time until the first Enter, then lets the form submit', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T10:00' as ISODateTimeString}
+          entryErrorBehavior="blur-or-enter"
+          min={'2026-03-15T09:00' as ISODateTimeString}
+          max={'2026-03-15T17:00' as ISODateTimeString}
+          onChange={() => {}}
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+
+    const timeInput = screen.getByLabelText('Meeting time');
+    timeInput.focus();
+    await user.clear(timeInput);
+    await user.type(timeInput, '08:00');
+
+    expect(screen.queryByText('Invalid time')).not.toBeInTheDocument();
+    await user.keyboard('{Enter}');
+    expect(screen.getByText('Invalid time')).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('renders with size="lg"', () => {
     render(
       <DateTimeInput label="Meeting time" onChange={() => {}} size="lg" />,

@@ -52,6 +52,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateTimeInput/NativeTimeSegment.generated';
+import type {EntryErrorBehavior} from '../DateInput/useTypedDate';
 
 registerEnglishFallback(english);
 
@@ -91,6 +92,7 @@ export type NativeTimeSegmentProps = {
   isEffectivelyRequired: boolean;
   isBusy: boolean;
   statusType?: InputStatusType;
+  entryErrorBehavior?: EntryErrorBehavior;
   ariaDescribedBy?: string;
   /**
    * The caller's base props (data-*, aria-*, DOM handlers, …) for the native
@@ -123,6 +125,7 @@ export function NativeTimeSegment({
   isEffectivelyRequired,
   isBusy,
   statusType,
+  entryErrorBehavior = 'complete',
   ariaDescribedBy,
   controlProps,
 }: NativeTimeSegmentProps) {
@@ -163,7 +166,9 @@ export function NativeTimeSegment({
   }
 
   const nativeValue = normalizeNativeTime(value) ?? '';
-  const isInputValid = rejectedValue === null;
+  const isInputValid =
+    rejectedValue === null ||
+    (entryErrorBehavior === 'blur-or-enter' && isFocused);
   const overlayText = nativeValue
     ? formatLocaleTime(nativeValue, locale, hourFormat, false)
     : placeholder;
@@ -265,7 +270,9 @@ export function NativeTimeSegment({
     const wasRejected = rejectedValue !== null;
     valueAtFocusRef.current = null;
     setIsFocused(false);
-    setRejectedValue(null);
+    if (entryErrorBehavior === 'complete') {
+      setRejectedValue(null);
+    }
     if (
       !valueChangedWhileFocused &&
       !wasRejected &&
@@ -275,7 +282,7 @@ export function NativeTimeSegment({
       commitValue(domValue);
     }
     lastCommitRef.current = null;
-  }, [commitValue, nativeValue, rejectedValue]);
+  }, [commitValue, entryErrorBehavior, nativeValue, rejectedValue]);
 
   const openPicker = useCallback(() => {
     if (isEffectivelyDisabled) {

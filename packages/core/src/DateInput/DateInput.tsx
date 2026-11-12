@@ -224,6 +224,10 @@ export interface DateInputProps extends Omit<
 > {
   /** Ref forwarded to the date input (the field's semantic control) */
   ref?: React.Ref<HTMLInputElement>;
+
+  /** HTML name used when the date field participates in form submission. */
+  name?: string;
+
   /**
    * Label text for the input (required for accessibility).
    */
@@ -350,9 +354,10 @@ export interface DateInputProps extends Omit<
   status?: InputStatus;
 
   /**
-   * Controls when the field reveals its own typed-entry rejection.
-   * `'complete'` preserves the field's immediate complete-date behavior;
-   * `'blur-or-enter'` holds every rejection signal until Enter or blur.
+   * Controls when the field reveals a typed or native-control rejection.
+   * `'complete'` preserves the field's immediate rejection behavior;
+   * `'blur-or-enter'` holds rejection styling, announcements, and callbacks
+   * until Enter or blur.
    * @default 'complete'
    */
   entryErrorBehavior?: EntryErrorBehavior;
@@ -637,6 +642,7 @@ function PointerDateField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
+  const nameProp = (controlProps as {name?: string}).name;
   const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -715,6 +721,7 @@ function PointerDateField({
     displayValue,
     formatHint,
     isPending,
+    hasKeptUnreadableText,
     isInvalid,
     fieldStatus,
     alertMessage,
@@ -996,6 +1003,7 @@ function PointerDateField({
       </button>
       <input
         {...controlProps}
+        name={hasKeptUnreadableText ? undefined : nameProp}
         ref={useMergedRefs(ref, inputRef)}
         id={id}
         type="text"
@@ -1035,6 +1043,9 @@ function PointerDateField({
           isInvalid && styles.inputInvalid,
         )}
       />
+      {hasKeptUnreadableText && nameProp != null && value != null && (
+        <input type="hidden" name={nameProp} value={value} />
+      )}
       {/*
           Announces the rejection message that the field status does not
           announce. The field status announces the rest.
@@ -1187,7 +1198,13 @@ export function DateInput(props: DateInputProps) {
   } = props;
   switch (surface) {
     case 'native':
-      return <NativeDateField {...rest} isDisabled={isDisabled} />;
+      return (
+        <NativeDateField
+          {...rest}
+          isDisabled={isDisabled}
+          entryErrorBehavior={entryErrorBehavior}
+        />
+      );
     case 'sheet':
       return (
         <TouchDateField

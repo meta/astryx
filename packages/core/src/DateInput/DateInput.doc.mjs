@@ -24,6 +24,12 @@ export const docs = {
       required: true,
     },
     {
+      name: 'name',
+      type: 'string',
+      description:
+        'HTML name used for form submission; while deferred unreadable text is kept, the hidden input carries the committed date.',
+    },
+    {
       name: 'isLabelHidden',
       type: 'boolean',
       description: 'Visually hide the label.',
@@ -127,7 +133,7 @@ export const docs = {
       name: 'entryErrorBehavior',
       type: "'complete' | 'blur-or-enter'",
       description:
-        "When the field reveals its own typed-entry rejection. 'complete' preserves the shipped timing; 'blur-or-enter' holds every rejection signal until Enter or blur.",
+        "When the field reveals a typed or native-control rejection. 'complete' preserves the shipped timing; 'blur-or-enter' holds rejection styling, announcements, and callbacks until Enter or blur.",
       default: "'complete'",
     },
     {
@@ -417,6 +423,12 @@ export const docsZh = {
   props: [
     {name: 'label', type: 'string', description: '标签文本。', required: true},
     {
+      name: 'name',
+      type: 'string',
+      description:
+        '用于表单提交的 HTML name；保留无法识别的文本时，隐藏输入框携带已提交的日期。',
+    },
+    {
       name: 'isLabelHidden',
       type: 'boolean',
       description: '视觉隐藏标签。',
@@ -519,7 +531,7 @@ export const docsZh = {
       name: 'entryErrorBehavior',
       type: "'complete' | 'blur-or-enter'",
       description:
-        "设置字段何时显示输入文本的拒绝。'complete' 保持已发布的时机；'blur-or-enter' 会将所有拒绝信号延迟到按 Enter 或失焦。",
+        "设置字段何时显示输入文本或原生控件的拒绝。'complete' 保持已发布的时机；'blur-or-enter' 会将拒绝样式、播报和回调延迟到按 Enter 或失焦。",
       default: "'complete'",
     },
     {
@@ -703,6 +715,7 @@ export const docsDense = {
   },
   propDescriptions: {
     label: 'label text',
+    name: 'HTML name used for form submission',
     isLabelHidden: 'visually hide label',
     description: 'helper text below label',
     isOptional: 'show "(optional)" indicator',
@@ -725,7 +738,7 @@ export const docsDense = {
     onEntryErrorChange:
       "(error|null) on each typed-rejection change: kind 'unreadable'|'incomplete'|'nonexistent'|'outOfRange' (min/max)|'unavailable' (dateConstraints), text, date (Gregorian ISO, outOfRange/unavailable); also on new min/max/dateConstraints/value, calendar pick, disable, Enter/blur; never twice for one rejection; null when the typed field leaves mid-rejection (presentation/pointer switch); with it an error status w/ message replaces the field's own message, re-announced once if unchanged when a rejection starts; never a rejection on native/touch pickers",
     entryErrorBehavior:
-      "When typed-entry rejection shows: 'complete' (default shipped timing) or 'blur-or-enter' (hold every rejection signal until Enter/blur)",
+      "When typed or native-control rejection shows: 'complete' (default shipped timing) or 'blur-or-enter' (hold rejection styling, announcements, and callbacks until Enter/blur)",
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     labelTooltip: 'tooltip text via info icon at label end',

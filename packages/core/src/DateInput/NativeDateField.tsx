@@ -273,6 +273,7 @@ export function NativeDateField({
   placeholder: placeholderFromProps,
   size: sizeProp,
   status,
+  entryErrorBehavior = 'complete',
   statusVariant = 'attached',
   labelTooltip,
   hasClear = false,
@@ -399,7 +400,9 @@ export function NativeDateField({
   // what the picker reads and writes. `format` rides on the overlay instead.
   const nativeValue =
     optimisticValue && ISO_DATE.test(optimisticValue) ? optimisticValue : '';
-  const isInputValid = rejectedValue === null;
+  const isInputValid =
+    rejectedValue === null ||
+    (entryErrorBehavior === 'blur-or-enter' && isFocused);
 
   const formatValue = useCallback(
     (iso: ISODateString): string =>
@@ -562,11 +565,13 @@ export function NativeDateField({
     // rejection past that point would mark good data invalid, with no way
     // back except changing the field again. The live region announced the
     // refusal while it happened; that is the feedback.
-    setRejectedValue(null);
+    if (entryErrorBehavior === 'complete') {
+      setRejectedValue(null);
+    }
     if (domValue !== undefined && domValue !== nativeValue) {
       commitValue(domValue);
     }
-  }, [commitValue, nativeValue]);
+  }, [commitValue, entryErrorBehavior, nativeValue]);
 
   // Focusing a date control is what raises the OS picker, so the usual
   // focus-restore after a clear would pop the picker the tap just dismissed —

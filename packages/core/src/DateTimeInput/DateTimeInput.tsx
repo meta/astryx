@@ -314,6 +314,9 @@ export interface DateTimeInputProps extends Omit<
   /** Ref forwarded to the date input element */
   ref?: React.Ref<HTMLInputElement>;
 
+  /** HTML name used by the committed date segment in form submission. */
+  name?: string;
+
   /**
    * Label text for the input (required for accessibility).
    */
@@ -514,9 +517,10 @@ export interface DateTimeInputProps extends Omit<
   status?: InputStatus;
 
   /**
-   * Controls when the date segment reveals its own typed-entry rejection.
-   * `'complete'` preserves the field's immediate complete-date behavior;
-   * `'blur-or-enter'` holds every rejection signal until Enter or blur.
+   * Controls when the date and time segments reveal a typed or native-control
+   * rejection. `'complete'` preserves the field's immediate rejection
+   * behavior; `'blur-or-enter'` holds rejection styling, announcements, and
+   * callbacks until Enter or blur.
    * @default 'complete'
    */
   entryErrorBehavior?: EntryErrorBehavior;
@@ -734,6 +738,7 @@ function PointerDateTimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
+  const nameProp = (controlProps as {name?: string}).name;
   const t = useComponentTranslator();
   const locale = useLocale();
   const usesNativePicker = nativeMode !== 'off';
@@ -841,6 +846,8 @@ function PointerDateTimeField({
 
   // --- Time input state ---
   const [timePendingInput, setTimePendingInput] = useState<string | null>(null);
+  const [isTimeRejectionCommitted, setIsTimeRejectionCommitted] =
+    useState(false);
   const [isTimeFocused, setIsTimeFocused] = useState(false);
   // Native date and time are separate OS pickers. Hold a time chosen before the
   // date exists, then combine it when the date picker commits.
@@ -875,16 +882,19 @@ function PointerDateTimeField({
       : '';
   }, [timePendingInput, valueParts.time, formatDisplayTime, hasSeconds]);
 
-  const isTimeInputValid = useMemo(() => {
+  const isTimeInputRejected = useMemo(() => {
     if (timePendingInput === null || !timePendingInput.trim()) {
-      return true;
+      return false;
     }
     const parsed = parseLocaleTime(timePendingInput, locale, hasSeconds);
     if (!parsed) {
-      return false;
+      return true;
     }
-    return isTimeInRange(parsed, timeMin, timeMax);
+    return !isTimeInRange(parsed, timeMin, timeMax);
   }, [timePendingInput, locale, hasSeconds, timeMin, timeMax]);
+  const isTimeInputValid =
+    !isTimeInputRejected ||
+    (entryErrorBehavior === 'blur-or-enter' && !isTimeRejectionCommitted);
 
   const resolvedTimePlaceholder = useMemo(() => {
     if (isTimeFocused && !timeDisplayValue) {
@@ -1054,6 +1064,7 @@ function PointerDateTimeField({
     displayValue: dateDisplayValue,
     formatHint: dateFormatHint,
     isPending: isDatePending,
+    hasKeptUnreadableText,
     isInvalid: isDateInvalid,
     fieldStatus,
     alertMessage: dateAlertMessage,
@@ -1447,6 +1458,16 @@ function PointerDateTimeField({
       setTimePendingInput(text);
 
       const parsed = parseLocaleTime(text, locale, hasSeconds);
+      const isRejected =
+        !!text.trim() &&
+        (parsed == null || !isTimeInRange(parsed, timeMin, timeMax));
+      if (!(
+        entryErrorBehavior === 'blur-or-enter' &&
+        isTimeRejectionCommitted &&
+        isRejected
+      )) {
+        setIsTimeRejectionCommitted(false);
+      }
 
       // Typing narrows nothing — free-form entry is the contract, and a time
       // between two options must stay reachable. The list instead follows the
@@ -1480,6 +1501,8 @@ function PointerDateTimeField({
       isEffectivelyDisabled,
       timePopover.isOpen,
       closestOptionIndex,
+      entryErrorBehavior,
+      isTimeRejectionCommitted,
     ],
   );
 
@@ -1520,6 +1543,7 @@ function PointerDateTimeField({
       if (!timePendingInput.trim()) {
         // Empty time: revert display to previous value (don't emit partial datetime)
         setTimePendingInput(null);
+        setIsTimeRejectionCommitted(false);
         return;
       }
 
@@ -1531,8 +1555,18 @@ function PointerDateTimeField({
             fireChange(combined);
           }
         }
+        setTimePendingInput(null);
+        setIsTimeRejectionCommitted(false);
+        return;
       }
-      setTimePendingInput(null);
+      if (entryErrorBehavior === 'complete') {
+        setTimePendingInput(null);
+        setIsTimeRejectionCommitted(false);
+        return;
+      }
+      // Keep a rejected time visible and reveal it at blur. A second edit that
+      // remains rejected keeps this state quiet until the next commit.
+      setIsTimeRejectionCommitted(true);
     },
     [
       timePendingInput,
@@ -1543,6 +1577,7 @@ function PointerDateTimeField({
       valueParts,
       fireChange,
       timePopover,
+      entryErrorBehavior,
     ],
   );
 
@@ -1634,6 +1669,33 @@ function PointerDateTimeField({
         }
       }
 
+      if (e.key === 'Enter' && !timePopover.isOpen) {
+        if (timePendingInput === null || !timePendingInput.trim()) {
+          setTimePendingInput(null);
+          setIsTimeRejectionCommitted(false);
+          return;
+        }
+        const parsed = parseLocaleTime(timePendingInput, locale, hasSeconds);
+        if (parsed && isTimeInRange(parsed, timeMin, timeMax)) {
+          if (parsed !== valueParts.time && valueParts.date) {
+            const combined = combineDateTime(valueParts.date, parsed);
+            if (combined) {
+              fireChange(combined);
+            }
+          }
+          setTimePendingInput(null);
+          setIsTimeRejectionCommitted(false);
+          return;
+        }
+        if (
+          entryErrorBehavior === 'blur-or-enter' &&
+          !isTimeRejectionCommitted
+        ) {
+          e.preventDefault();
+          setIsTimeRejectionCommitted(true);
+        }
+      }
+
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();
 
@@ -1682,6 +1744,8 @@ function PointerDateTimeField({
       timePendingInput,
       showTimeOptions,
       commitTimeOption,
+      entryErrorBehavior,
+      isTimeRejectionCommitted,
     ],
   );
 
@@ -1790,6 +1854,7 @@ function PointerDateTimeField({
               isEffectivelyRequired={isEffectivelyRequired}
               isBusy={isBusy}
               statusType={status?.type}
+              entryErrorBehavior={entryErrorBehavior}
               ariaDescribedBy={ariaDescribedBy}
               controlProps={{
                 ...controlProps,
@@ -1839,6 +1904,7 @@ function PointerDateTimeField({
               </button>
               <input
                 {...controlProps}
+                name={hasKeptUnreadableText ? undefined : nameProp}
                 ref={mergedDateInputRef}
                 id={dateInputId}
                 type="text"
@@ -1876,6 +1942,15 @@ function PointerDateTimeField({
                   isDateInvalid && styles.inputInvalid,
                 )}
               />
+              {hasKeptUnreadableText &&
+                nameProp != null &&
+                valueParts.date != null && (
+                  <input
+                    type="hidden"
+                    name={nameProp}
+                    value={valueParts.date}
+                  />
+                )}
               {/*
             Announces the date rejection message that the field status does
             not announce. The field status announces the rest.
@@ -1950,6 +2025,7 @@ function PointerDateTimeField({
               isEffectivelyRequired={isEffectivelyRequired}
               isBusy={isBusy}
               statusType={status?.type}
+              entryErrorBehavior={entryErrorBehavior}
               ariaDescribedBy={ariaDescribedBy}
             />
           ) : (

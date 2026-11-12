@@ -453,6 +453,31 @@ describe('DateInput nativePicker', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Invalid date');
   });
 
+  it('waits until blur to reveal a native rejection in deferred mode', () => {
+    stubPointer(true);
+    render(
+      <DateInput
+        label="Date"
+        value="2026-03-23"
+        dateConstraints={[date => date.getDay() !== 0]}
+        entryErrorBehavior="blur-or-enter"
+        onChange={() => {}}
+      />,
+    );
+
+    const input = getInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '2026-03-22'}});
+
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText('Invalid date')).not.toBeInTheDocument();
+
+    fireEvent.blur(input);
+
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Invalid date')).toBeInTheDocument();
+  });
+
   it('drops the rejection once the field reverts', () => {
     // The refused date is reverted the moment focus leaves, so the field is
     // showing a valid date again. Marking that date invalid would be a lie

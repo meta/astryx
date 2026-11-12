@@ -582,6 +582,30 @@ describe('DateTimeInput nativePicker', () => {
     expect(getNativeDateInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
+  it('waits until blur to reveal a rejected native date in deferred mode', () => {
+    stubPointer(true);
+    render(
+      <DateTimeInput
+        label="Meeting"
+        dateConstraints={[() => false]}
+        entryErrorBehavior="blur-or-enter"
+        onChange={() => {}}
+      />,
+    );
+
+    const dateInput = getNativeDateInput();
+    fireEvent.focus(dateInput);
+    fireEvent.change(dateInput, {target: {value: '2026-03-15'}});
+
+    expect(dateInput).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText('Invalid date')).not.toBeInTheDocument();
+
+    fireEvent.blur(dateInput);
+
+    expect(dateInput).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Invalid date')).toBeInTheDocument();
+  });
+
   it('refuses an out-of-range native time and announces the rejection', () => {
     stubPointer(true);
     const onChange = vi.fn();
@@ -600,6 +624,32 @@ describe('DateTimeInput nativePicker', () => {
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByText('Invalid time')).toBeInTheDocument();
     expect(getNativeTimeInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('waits until blur to reveal a rejected native time in deferred mode', () => {
+    stubPointer(true);
+    render(
+      <DateTimeInput
+        label="Meeting"
+        value={'2026-03-15T10:00' as ISODateTimeString}
+        min={'2026-03-15T09:00' as ISODateTimeString}
+        max={'2026-03-15T17:00' as ISODateTimeString}
+        entryErrorBehavior="blur-or-enter"
+        onChange={() => {}}
+      />,
+    );
+
+    const timeInput = getNativeTimeInput();
+    fireEvent.focus(timeInput);
+    fireEvent.change(timeInput, {target: {value: '08:00'}});
+
+    expect(timeInput).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText('Invalid time')).not.toBeInTheDocument();
+
+    fireEvent.blur(timeInput);
+
+    expect(timeInput).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Invalid time')).toBeInTheDocument();
   });
 
   it('keeps a refused native date refused when React discards a render with a value', async () => {
