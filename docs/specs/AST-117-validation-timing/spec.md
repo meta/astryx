@@ -137,9 +137,9 @@ type ValidationBehavior = 'complete' | 'commit';
   it (`spec:AST-038` FR7, FR8).
 - **FR3 — `'complete'` is each member's shipped behavior.** Under
   `'complete'`, a member reveals each rejection when, and with the signals,
-  its own record states, and nothing in this record changes that. A field with no `validationBehavior` and no
-  `FormLayout` default behaves exactly as a field of the latest stable release
-  does.
+  its own record states, and nothing in this record changes that. A field
+  with no `validationBehavior` and no `FormLayout` default behaves the same
+  way.
 - **FR4 — `'commit'` holds every signal until commit.** Under `'commit'`, while
   a person types or edits, a member shows, marks, styles, and announces no
   rejection of its own. At Enter or blur, it reveals the rejection that the
