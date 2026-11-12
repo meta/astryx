@@ -990,7 +990,10 @@ test('a widening that leaves a settling row past its new last page lands it ther
       {once: true},
     );
   });
-  await swipe(page, scroller, {px: -80, ms: 80});
+  // A short drag held still settles the row back onto its last page. It
+  // moves away from where the widened row ends, so the widening always
+  // leaves it past the new last page.
+  await swipe(page, scroller, {px: -60, ms: 160, restMs: 120});
   await expect
     .poll(
       async () =>
@@ -1009,6 +1012,22 @@ test('a widening that leaves a settling row past its new last page lands it ther
     'the row still settles at the widening',
   ).not.toBe(true);
   await settled(scroller);
+  // A slow page can hand the row back before it draws a frame at rest, so
+  // the case waits for that frame.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const {frames} = window as unknown as {
+            frames: {isMoving: boolean}[];
+          };
+          return frames.some(
+            (frame, i) => i > 0 && frames[i - 1].isMoving && !frame.isMoving,
+          );
+        }),
+      {message: 'the page draws a frame at rest', timeout: 5000},
+    )
+    .toBe(true);
   const frames = await page.evaluate(
     () =>
       (window as unknown as {frames: {shown: number; isMoving: boolean}[]})
