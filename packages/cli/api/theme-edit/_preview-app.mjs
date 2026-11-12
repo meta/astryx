@@ -204,11 +204,12 @@ function readNextConfig(cwd) {
     basePath: undefined,
     distDir: undefined,
   };
+  // The order Next loads them in; it refuses next.config.cjs.
   for (const name of [
-    'next.config.mjs',
     'next.config.js',
+    'next.config.mjs',
     'next.config.ts',
-    'next.config.cjs',
+    'next.config.mts',
   ]) {
     /** @type {string} */
     let text;
@@ -270,6 +271,11 @@ function readNextConfig(cwd) {
     let exported = null;
     for (const st of body) {
       if (st.type === 'ExportDefaultDeclaration') exported = st.declaration;
+      // export {config as default}
+      if (st.type === 'ExportNamedDeclaration' && !st.source)
+        for (const sp of st.specifiers ?? [])
+          if ((sp.exported?.name ?? sp.exported?.value) === 'default')
+            exported = sp.local;
       if (
         st.type === 'ExpressionStatement' &&
         st.expression.type === 'AssignmentExpression' &&
@@ -281,6 +287,44 @@ function readNextConfig(cwd) {
     }
     const config = exported && configOf(exported);
     if (!config) return exported ? unknown : none;
+    // Changes to the config after it is made: `config.key = value` sets a
+    // key (the last one counts), and anything else (Object.assign, a
+    // computed key) makes every key unknown.
+    const names = new Set(
+      [...consts]
+        .filter(([, init]) => resolve(init) === config)
+        .map(([n]) => n),
+    );
+    /** @type {Map<string, any>} */
+    const later = new Map();
+    let changed = false;
+    /** @param {any} n */
+    const visit = n => {
+      if (!n || typeof n !== 'object') return;
+      if (Array.isArray(n)) return n.forEach(visit);
+      if (
+        n.type === 'AssignmentExpression' &&
+        n.left?.type === 'MemberExpression' &&
+        names.has(n.left.object?.name)
+      ) {
+        if (n.left.computed) changed = true;
+        else later.set(n.left.property.name, n.right);
+      }
+      if (
+        n.type === 'CallExpression' &&
+        n.arguments?.some(
+          (/** @type {any} */ a) =>
+            a.type === 'Identifier' && names.has(a.name),
+        ) &&
+        n.callee?.type === 'MemberExpression' &&
+        n.callee.object?.name === 'Object'
+      )
+        changed = true;
+      for (const [k, v] of Object.entries(n))
+        if (k !== 'loc' && k !== 'start' && k !== 'end') visit(v);
+    };
+    visit(body);
+    if (changed) return unknown;
     // The config's keys in order, with a spread of a constant object read
     // in place; a spread of anything else may set any key (`null`).
     /** @type {Array<{key: string, value: any} | null>} */
@@ -302,8 +346,9 @@ function readNextConfig(cwd) {
       }
     };
     flatten(config, 0);
-    /** The entry that sets a key last; null when an unreadable spread may; undefined when nothing does. @param {string} key */
+    /** The entry that sets a key last: a later assignment, else the last key; null when an unreadable spread may; undefined when nothing does. @param {string} key */
     const prop = key => {
+      if (later.has(key)) return {key, value: later.get(key)};
       for (let i = entries.length - 1; i >= 0; i--) {
         const e = entries[i];
         if (e === null) return null;
@@ -3008,6 +3053,16 @@ async function addPreview(description, options, box) {
     options.theme != null
       ? ` --theme ${quoteCommandArgument(options.theme)}`
       : '';
+  // A default page's id (overview, components, colors), as `remove` takes
+  // it, asks for the default pages back: the same as a bare add.
+  const DEFAULT_IDS = ['overview', 'components', COLORS_PAGE.id];
+  const isDefault = (/** @type {unknown} */ v) =>
+    typeof v === 'string' && DEFAULT_IDS.includes(v.trim().toLowerCase());
+  const again = isDefault(description) || isDefault(options.template);
+  if (again) {
+    description = undefined;
+    options = {...options, template: undefined};
+  }
   const said = (description ?? '').trim();
   const named =
     options.template == null ? null : String(options.template).trim();
@@ -3328,6 +3383,10 @@ async function addPreview(description, options, box) {
   const worn = data.theme;
   if (worn)
     await themeLocked(options, worn, () => recordPreview(cwd, worn, at.dir));
+  if (again)
+    notes.push(
+      `a default page's id brings back the default pages that are missing, as ${PREVIEW} add does`,
+    );
   return {
     type: 'themeEdit.previewAdd',
     data: {

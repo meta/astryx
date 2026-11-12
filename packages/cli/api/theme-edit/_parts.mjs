@@ -118,7 +118,7 @@ export function demoProps(project, name) {
       // A doc that declares no props of its own name is a family page,
       // not a component the Core exports.
       !Object.keys(info.props ?? {}).length ||
-      (info.subComponentOf && isItemOf(project, name)))
+      needsParent(project, name))
   )
     return null;
   const props = given ?? {};
@@ -142,6 +142,22 @@ export function demoProps(project, name) {
     }
   }
   return props;
+}
+
+/**
+ * Whether a part works only inside its parent: its parent lists it as an
+ * item, or it is a piece of its parent by name (TableBody of Table) and
+ * its doc gives no playground of its own.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ */
+export function needsParent(project, name) {
+  const info = project.components[name];
+  const parent = info?.subComponentOf;
+  if (!parent) return false;
+  if (isItemOf(project, name)) return true;
+  const own = info.defaults && typeof info.defaults === 'object';
+  return !own && name.startsWith(parent) && name !== parent;
 }
 
 /**

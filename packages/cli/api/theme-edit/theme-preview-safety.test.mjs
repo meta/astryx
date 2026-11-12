@@ -1905,4 +1905,99 @@ describe('final pass 5', () => {
       fs.rmSync(outside, {recursive: true, force: true});
     }
   }, 120_000);
+
+  it('reads next.config as Next loads it: file order, later assignments, the last key, export as default', async () => {
+    /** @param {Record<string, string>} files @param {string} where */
+    const addWith = async (files, where) => {
+      for (const [f, t] of Object.entries(files)) write(f, t);
+      try {
+        return await themeEditPreviewAdd(undefined, {cwd, path: where});
+      } finally {
+        for (const f of Object.keys(files)) rm(f);
+        rm(where);
+      }
+    };
+    const js = await addWith(
+      {
+        'next.config.js': "module.exports = {basePath: '/js'};\n",
+        'next.config.mjs': 'export default {};\n',
+      },
+      'src/app/d1',
+    );
+    expect(js.data.open).toContain('open /js/d1');
+    const mts = await addWith(
+      {'next.config.mts': "export default {basePath: '/m'};\n"},
+      'src/app/d2',
+    );
+    expect(mts.data.open).toContain('open /m/d2');
+    const later = await addWith(
+      {
+        'next.config.mjs':
+          "const c = {};\nc.basePath = '/x';\nexport default c;\n",
+      },
+      'src/app/d3',
+    );
+    expect(later.data.open).toContain('open /x/d3');
+    const named = await addWith(
+      {
+        'next.config.mjs':
+          "const c = {basePath: '/x'};\nexport {c as default};\n",
+      },
+      'src/app/d4',
+    );
+    expect(named.data.open).toContain('open /x/d4');
+    const twice = await addWith(
+      {'next.config.mjs': "export default {basePath: '/a', basePath: '/b'};\n"},
+      'src/app/d5',
+    );
+    expect(twice.data.open).toContain('open /b/d5');
+    write(
+      'next.config.mjs',
+      "const c = {};\nc.pageExtensions = ['mdx'];\nexport default c;\n",
+    );
+    try {
+      expect(
+        (
+          await refusal(() =>
+            themeEditPreviewAdd(undefined, {cwd, path: 'src/app/d6'}),
+          )
+        ).message,
+      ).toContain('next.config sets pageExtensions to mdx');
+    } finally {
+      rm('next.config.mjs');
+    }
+    const assigned = await addWith(
+      {
+        'next.config.mjs':
+          'const c = {};\nObject.assign(c, extra);\nexport default c;\n',
+      },
+      'src/app/d7',
+    );
+    expect(assigned.data.notes.join(' ')).toContain(
+      'sets pageExtensions in a way only running it tells',
+    );
+  }, 240_000);
+
+  it('brings the default pages back for a default page id', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/dp',
+    });
+    await themeEditPreviewRemove('overview', {cwd, path: 'src/app/dp'});
+    for (const r of [
+      await themeEditPreviewAdd('overview', {cwd, path: 'src/app/dp'}),
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        path: 'src/app/dp',
+        template: 'Components',
+      }),
+    ]) {
+      expect(r.data.pages).toContain('overview');
+      expect(r.data.notes.join(' ')).toContain(
+        "a default page's id brings back the default pages",
+      );
+    }
+    rm('src/app/dp');
+  }, 120_000);
 });
