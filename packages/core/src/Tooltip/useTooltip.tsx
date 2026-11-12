@@ -351,7 +351,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideLayer();
   }, [clearTimeouts, hideLayer]);
 
-  // DOM listeners read the committed controlled state through a ref.
   const latestRef = useCommittedRef({isOpen, isLayerOpen, onShow, onHide});
 
   // The app's show() holds the tooltip open until hide(), Escape, a press or
@@ -726,9 +725,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       latest.hideNow();
     }
   }, [handlersRef]);
-  // A commit that renders this hook settles a detach here, after its
-  // insertion Effects wrote the flags. A detach in a commit that does not
-  // render this hook settles in the microtask it queues.
+  // Synchronizes the tooltip's popover with a trigger that detached in this
+  // commit. It runs after the insertion Effects write the flags. A detach in a
+  // commit that does not render this hook settles in its microtask.
   useIsomorphicLayoutEffect(() => {
     settleDetach();
   });
