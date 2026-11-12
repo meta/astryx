@@ -10,6 +10,7 @@
 
 import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
+import nodeModule from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -327,7 +328,13 @@ async function expectSameAsFresh(tmp, options = {}) {
   return outcomes;
 }
 
-describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
+// The CLI keeps a catalog through module.registerHooks, which Node has from
+// 22.15 and 23.5. On an older Node the CLI supports (its oldest is 22.13), it
+// keeps none and gathers fresh each run, as the suite after this one shows.
+const hasModuleHooks =
+  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
+
+describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)('a kept catalog', () => {
   it('answers as a fresh gather, and is used while nothing changed', async () => {
     const tmp = keptTmp('warm');
     const cold = run(QUERIES[0], {tmp});
@@ -1072,5 +1079,17 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     );
     expect(broken.status).toBe(0);
     expect(broken.stdout).toBe(expected.stdout);
+  }, 120_000);
+});
+
+describe.skipIf(process.platform !== 'linux' || hasModuleHooks)('a Node without module.registerHooks', () => {
+  it('answers as a fresh gather on every run, and keeps no catalog', () => {
+    const tmp = keptTmp('no-module-hooks');
+    const first = run(QUERIES[0], {tmp});
+    const second = run(QUERIES[0], {tmp});
+    expect(first.status).toBe(0);
+    expect(second).toEqual(first);
+    expect(second).toEqual(run(QUERIES[0], {tmp: freshTmp()}));
+    expect(entries(tmp).size).toBe(0);
   }, 120_000);
 });

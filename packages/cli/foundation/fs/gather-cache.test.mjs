@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
+import nodeModule, {createRequire} from 'node:module';
 import {describe, expect, it} from 'vitest';
 import {persistedGather, recordedRun, recordRun} from './gather-cache.mjs';
 import {withoutRecording} from './read-record.mjs';
@@ -14,8 +14,14 @@ const identity = {
   decode: (/** @type {any} */ v) => v,
 };
 
+// A recorded run arms through module.registerHooks, which Node has from 22.15
+// and 23.5. On an older Node the CLI supports (its oldest is 22.13), a recorded
+// run only runs the gather, as the last case here shows.
+const hasModuleHooks =
+  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
+
 describe('a recorded run', () => {
-  it('gives every reader of process.env what the real one gives, then puts it back', async () => {
+  it.skipIf(!hasModuleHooks)('gives every reader of process.env what the real one gives, then puts it back', async () => {
     const real = process.env;
     const name = `ASTRYX_GATHER_CACHE_TEST_${process.pid}`;
     await recordRun(async () => {
@@ -71,7 +77,7 @@ describe('a recorded run', () => {
     expect(recordedRun()).toBe(null);
   });
 
-  it('keeps recording after a gather nested inside another, until the outer one ends', async () => {
+  it.skipIf(!hasModuleHooks)('keeps recording after a gather nested inside another, until the outer one ends', async () => {
     const real = process.env;
     const name = `ASTRYX_GATHER_CACHE_NESTED_${process.pid}`;
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gather-cache-nested-'));
@@ -105,7 +111,18 @@ describe('a recorded run', () => {
     expect(process.env).toBe(real);
   });
 
-  it('notes the modules a gather loads while it is armed', async () => {
+  it.skipIf(hasModuleHooks)('only runs the gather on a Node without module.registerHooks, and records nothing', async () => {
+    const real = process.env;
+    const result = await recordRun(async () => {
+      expect(recordedRun()).toBeNull();
+      expect(process.env).toBe(real);
+      return 42;
+    });
+    expect(result).toBe(42);
+    expect(recordedRun()).toBeNull();
+  });
+
+  it.skipIf(!hasModuleHooks)('notes the modules a gather loads while it is armed', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gather-cache-hook-'));
     // Loaded through Node's own loader (vitest serves its own imports), and
     // outside fs recording, so only the module hook can note it.
