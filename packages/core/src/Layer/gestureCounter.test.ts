@@ -28,6 +28,15 @@ import {
   isPressInFlight,
   isReleaseInFlight,
 } from './gestureCounter';
+import {armClickGuard, disarmClickGuard} from '../utils/clickGuard';
+
+/** A touch pointer event of `type` for `pointerId`. */
+function touchPointerEvent(type: string, pointerId: number): Event {
+  const event = new Event(type, {bubbles: true});
+  Object.defineProperty(event, 'pointerId', {value: pointerId});
+  Object.defineProperty(event, 'pointerType', {value: 'touch'});
+  return event;
+}
 
 /** The browser's click for a release: `detail` counts the clicks. */
 function browserClick(target: Element): void {
@@ -472,6 +481,59 @@ describe('the release in flight and afterRelease', () => {
     expect(callback).toHaveBeenCalledTimes(1);
     vi.runOnlyPendingTimers();
     expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends the release at its click before afterRelease runs, so a show it asks for is not held again', () => {
+    const {button, release} = press();
+    let inFlightInCallback: boolean | null = null;
+    button.addEventListener('pointerup', () => {
+      afterRelease(document, () => {
+        inFlightInCallback = isReleaseInFlight();
+      });
+    });
+    release();
+    browserClick(button);
+    expect(inFlightInCallback).toBe(false);
+  });
+
+  it('holds no touch release whose touchend the click guard cancels', () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    button.dispatchEvent(touchPointerEvent('pointerdown', 9));
+    button.addEventListener(
+      'pointerup',
+      () => armClickGuard(document, {cancelsTouchEnd: true}),
+      {once: true},
+    );
+    let inFlight: boolean | null = null;
+    button.addEventListener(
+      'pointerup',
+      () => {
+        inFlight = isReleaseInFlight();
+      },
+      {once: true},
+    );
+    button.dispatchEvent(touchPointerEvent('pointerup', 9));
+    expect(inFlight).toBe(false);
+    disarmClickGuard(document);
+  });
+
+  it('holds a touch release that the click guard does not cancel', () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    button.dispatchEvent(touchPointerEvent('pointerdown', 10));
+    let inFlight: boolean | null = null;
+    button.addEventListener(
+      'pointerup',
+      () => {
+        inFlight = isReleaseInFlight();
+      },
+      {once: true},
+    );
+    button.dispatchEvent(touchPointerEvent('pointerup', 10));
+    expect(inFlight).toBe(true);
   });
 
   it('runs afterRelease once at the next task when no click comes', () => {

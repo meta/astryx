@@ -24,6 +24,7 @@
  * the dismissal", no matter how long the main thread was blocked in between.
  */
 
+import {willCancelTouchEnd} from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
 import {sharedState} from '../utils/sharedRealm';
 
@@ -38,6 +39,8 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
   // Whether a pointerup is being dispatched now: from the window's capture
   // phase to its bubble phase.
   isDispatchingRelease: false,
+  // The pointer type of the release in flight.
+  releasingPointerType: '',
   claimedPress: null as {
     layer: HTMLElement;
     pointerId: number;
@@ -57,6 +60,9 @@ function ensureFields(): void {
   }
   if (state.isDispatchingRelease === undefined) {
     state.isDispatchingRelease = false;
+  }
+  if (state.releasingPointerType === undefined) {
+    state.releasingPointerType = '';
   }
 }
 
@@ -93,6 +99,7 @@ function endPress(event: PointerEvent) {
   if (event.type === 'pointerup') {
     const gesture = state.gesture;
     state.releasingGesture = gesture;
+    state.releasingPointerType = event.pointerType;
     state.isDispatchingRelease = true;
     // A release that brings no click (a touch whose touchend was cancelled)
     // ends at the next task.
@@ -166,15 +173,25 @@ export function currentGestureHasClicked(): boolean {
 }
 
 /**
- * Whether the page is handling a press's release: from its `pointerup` until
- * the browser's click for it, or the next task when no click comes. The
- * browser's light dismiss for that release has not run yet. A click the page
- * dispatches while the release is dispatched does not end it.
+ * Whether the page is handling a press's release that will light-dismiss:
+ * from its `pointerup` until the browser's click for it, or the next task when
+ * no click comes. The browser's light dismiss for that release has not run
+ * yet. A click the page dispatches while the release is dispatched does not
+ * end it. A touch whose touchend the click guard cancels brings no light
+ * dismiss, so its release is not in flight here.
  */
 export function isReleaseInFlight(): boolean {
   listen();
-  return (
-    state.releasingGesture !== null && state.releasingGesture === state.gesture
+  if (
+    state.releasingGesture === null ||
+    state.releasingGesture !== state.gesture
+  ) {
+    return false;
+  }
+  return !(
+    state.releasingPointerType === 'touch' &&
+    typeof document !== 'undefined' &&
+    willCancelTouchEnd(document)
   );
 }
 
@@ -192,20 +209,34 @@ export function afterRelease(doc: Document, callback: () => void): () => void {
     cancel();
     callback();
   };
-  // Bubble phase on the window: the click has passed every handler, and the
-  // browser's light dismiss for the release has run. A click dispatched
-  // while the release is dispatched is not the release's own.
+  // First on the window's capture phase: the browser's light dismiss for the
+  // release ran before the click, and the callback runs inside the click, so
+  // focus it moves counts as made during the click. A click dispatched while
+  // the release is dispatched is not the release's own.
   const view = doc.defaultView;
-  const onClick = (event: MouseEvent) => {
-    if (!(state.isDispatchingRelease && event.detail === 0)) {
-      run();
-    }
-  };
-  view?.addEventListener('click', onClick);
+  const stopClick =
+    view == null
+      ? () => {}
+      : subscribeInput(
+          view,
+          'click',
+          event => {
+            if (state.isDispatchingRelease && event.detail === 0) {
+              return;
+            }
+            // The release ends at its click, before the callback runs, so a
+            // show the callback asks for is not held again.
+            if (state.releasingGesture === state.gesture) {
+              state.releasingGesture = null;
+            }
+            run();
+          },
+          {first: true},
+        );
   const timer = setTimeout(run, 0);
   function cancel() {
     isDone = true;
-    view?.removeEventListener('click', onClick);
+    stopClick();
     clearTimeout(timer);
   }
   return cancel;

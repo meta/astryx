@@ -76,6 +76,8 @@ export interface ClickGuardOptions {
 interface Guard {
   readonly unsubscribers: (() => void)[];
   timer: ReturnType<typeof setTimeout> | null;
+  /** Whether the guard cancels the next touchend. */
+  cancelsTouchEnd: boolean;
 }
 
 /**
@@ -122,7 +124,7 @@ export function armClickGuard(
     return;
   }
   disarmClickGuard(doc);
-  const guard: Guard = {unsubscribers: [], timer: null};
+  const guard: Guard = {unsubscribers: [], timer: null, cancelsTouchEnd: false};
   if (staysInstalled && !stayingClickListeners.has(view)) {
     stayingClickListeners.set(view, listenForClicks(view));
   }
@@ -143,6 +145,7 @@ export function armClickGuard(
     }
   }
   if (cancelsTouchEnd) {
+    guard.cancelsTouchEnd = true;
     // A touch sends its pointerup before its touchend, so the next touchend is
     // that touch's own. The next pointerdown disarms the guard first.
     const stopTouchEnd = subscribeInput(
@@ -150,6 +153,7 @@ export function armClickGuard(
       'touchend',
       event => {
         stopTouchEnd();
+        guard.cancelsTouchEnd = false;
         // A touchend that the browser took for a scroll is not cancelable.
         // The guard stays armed for a click that may follow it.
         if (event.cancelable) {
@@ -178,6 +182,14 @@ export function disarmClickGuard(doc: Document): void {
   for (const unsubscribe of guard.unsubscribers) {
     unsubscribe();
   }
+}
+
+/**
+ * Whether the guard on `doc` cancels the next touchend. A cancelled touchend
+ * brings no compatibility click, and so no light dismiss.
+ */
+export function willCancelTouchEnd(doc: Document): boolean {
+  return guards.get(doc)?.cancelsTouchEnd === true;
 }
 
 /** Whether the guard on `doc` would swallow the next click. */
