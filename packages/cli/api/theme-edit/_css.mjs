@@ -87,6 +87,47 @@ let patched = null;
 /** css-tree's lexer with the current specifications' grammar. */
 const currentLexer = () => (patched ??= csstree().fork(syntaxPatches()).lexer);
 
+/** @type {Map<string, Set<string>>} */
+const longhandCache = new Map();
+
+/**
+ * Every longhand a shorthand sets, through shorthands inside it (border
+ * sets border-color, so border-top-color), as MDN's data lists them; empty
+ * for a property that is no shorthand.
+ * @param {string} prop
+ * @returns {Set<string>}
+ */
+export function longhandsOf(prop) {
+  const cached = longhandCache.get(prop);
+  if (cached) return cached;
+  /** @type {Set<string>} */
+  const out = new Set();
+  longhandCache.set(prop, out);
+  const computed = /** @type {any} */ (mdnProperties()[prop])?.computed;
+  if (Array.isArray(computed))
+    for (const p of computed) {
+      if (typeof p !== 'string' || p === prop) continue;
+      out.add(p);
+      for (const q of longhandsOf(p)) out.add(q);
+    }
+  return out;
+}
+
+/**
+ * Whether setting `a` sets `b` too: `b` is one of `a`'s longhands, or a
+ * shorthand whose every longhand `a` sets (border covers border-top).
+ * overflow-wrap is no part of overflow, nor transform-origin of transform.
+ * @param {string} a
+ * @param {string} b
+ */
+export function coversProperty(a, b) {
+  if (a === b) return false;
+  const of = longhandsOf(a);
+  if (of.has(b)) return true;
+  const sub = longhandsOf(b);
+  return sub.size > 0 && [...sub].every(x => of.has(x));
+}
+
 /** What a var() or env() may stand for while the rest of a value is matched. */
 const VAR_STANDS_FOR = ['0', '1px', '1ms', 'red', 'ease', 'serif', '0 0 red'];
 

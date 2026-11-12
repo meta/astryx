@@ -658,21 +658,25 @@ export const THING_HINTS = {
   bevel: (_v, on) => [
     `${P} set <theme> box-shadow "inset 1px 1px 0 #ffffff, inset -1px -1px 0 #9ca3af" --on ${on ?? '<part>'}`,
   ],
-  shadow: (_v, on) => [
-    `${P} set <theme> box-shadow "0 2px 6px rgb(0 0 0 / 0.3)" --on ${on ?? '<part>'}`,
+  // The value given is carried (none, false and off are no shadow); the
+  // sample only when none is.
+  shadow: (v, on) => [
+    `${P} set <theme> box-shadow ${/^(none|false|off|no|0)$/i.test(v.trim()) ? 'none' : v.trim() ? JSON.stringify(v.trim()) : '"0 2px 6px rgb(0 0 0 / 0.3)"'} --on ${on ?? '<part>'}`,
   ],
   radius: (v, on) => [
     `${P} set <theme> corners ${v || 'medium'}${on ? ` --on ${on}` : ''}`,
   ],
-  rounded: (_v, on) => [
-    `${P} set <theme> corners round${on ? ` --on ${on}` : ''}`,
+  rounded: (v, on) => [
+    `${P} set <theme> corners ${/^(none|false|off|no|0)$/i.test(v.trim()) ? 'square' : /^(true|yes|on)?$/i.test(v.trim()) ? 'round' : v.trim()}${on ? ` --on ${on}` : ''}`,
   ],
   padding: (_v, on) => [
     `${P} set <theme> spacing roomy${on ? ` --on ${on}` : ''}`,
     `${P} set <theme> padding 12px --on ${on ?? '<part>'}`,
   ],
   density: () => [`${P} set <theme> spacing compact`],
-  bold: (_v, on) => [`${P} set <theme> font-weight 700 --on ${on ?? '<part>'}`],
+  bold: (v, on) => [
+    `${P} set <theme> font-weight ${/^(none|false|off|no|normal)$/i.test(v.trim()) ? 'normal' : 'bold'} --on ${on ?? '<part>'}`,
+  ],
   'text-color': (_v, on) => [`${HOW} "text color on ${on ?? '<part>'}"`],
 };
 

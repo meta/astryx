@@ -2719,3 +2719,85 @@ describe('colors19', () => {
     fs.rmSync(path.join(cwd, 'themes', 'f19'), {recursive: true, force: true});
   });
 });
+
+describe('parts24', () => {
+  it('replaces only the longhands a shorthand really sets', async () => {
+    for (const [long, longValue, short, shortValue] of [
+      ['overflow-wrap', 'anywhere', 'overflow', 'hidden'],
+      ['transform-origin', 'top left', 'transform', 'scale(1.1)'],
+      ['outline-offset', '2px', 'outline', '1px solid red'],
+      ['flex-direction', 'column', 'flex', '1'],
+      ['background-blend-mode', 'multiply', 'background', 'red'],
+      ['text-decoration-skip-ink', 'none', 'text-decoration', 'underline'],
+    ]) {
+      await themeEditSet('p', long, longValue, {cwd, on: 'button'});
+      await themeEditSet('p', short, shortValue, {cwd, on: 'button'});
+      const shown = await themeEditShow('p', {cwd});
+      expect(
+        JSON.stringify(shown.data).includes(long),
+        `${short} kept ${long}`,
+      ).toBe(true);
+      await themeEditUndo('p', {cwd, thing: short, on: 'button'});
+      await themeEditUndo('p', {cwd, thing: long, on: 'button'});
+    }
+    await themeEditSet('p', 'padding-top', '12px', {cwd, on: 'button'});
+    await themeEditSet('p', 'padding', '4px', {cwd, on: 'button'});
+    expect(
+      JSON.stringify((await themeEditShow('p', {cwd})).data),
+    ).not.toContain('padding-top');
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'button'});
+  });
+
+  it('keeps a background on variants when a blend mode comes later', async () => {
+    const {findOverrides} = await import('./_settings.mjs');
+    const lifted = findOverrides(
+      '.astryx-button[data-variant="destructive"] { background: var(--color-error-muted); }',
+      {
+        components: {
+          button: {
+            base: {background: 'red', backgroundBlendMode: 'multiply'},
+          },
+        },
+      },
+    );
+    expect(lifted.map(x => x.prop)).toContain('background');
+  });
+
+  it('refuses a variant padding after a card side, reads plural parts, and keeps a hint value', async () => {
+    await themeEditSet('p', 'padding-top', '12px', {cwd, on: 'card'});
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('p', 'padding', '4px', {
+            cwd,
+            on: 'card',
+            when: 'variant:muted',
+          }),
+        )
+      ).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+    await themeEditUndo('p', {cwd, thing: 'padding-top', on: 'card'});
+    for (const [plural, part] of [
+      ['cards', 'card'],
+      ['dialogs', 'dialog'],
+      ['tabs', 'tab'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'opacity', '0.9', {cwd, on: plural}),
+      );
+      expect(r.run[0], plural).toMatch(new RegExp(`--on ${part}$`));
+    }
+    const shadow = await refusal(() =>
+      themeEditSet('p', 'shadow', 'none', {cwd, on: 'card'}),
+    );
+    expect(shadow.run[0]).toMatch(/box-shadow none --on card$/);
+    const rounded = await refusal(() =>
+      themeEditSet('p', 'rounded', '8px', {cwd, on: 'card'}),
+    );
+    expect(rounded.run[0]).toMatch(/corners 8px --on card$/);
+    const bold = await refusal(() =>
+      themeEditSet('p', 'bold', 'false', {cwd, on: 'button'}),
+    );
+    expect(bold.run[0]).toMatch(/font-weight normal --on button$/);
+  });
+});

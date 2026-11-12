@@ -10,6 +10,7 @@
  */
 
 import * as fs from 'node:fs';
+import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {
@@ -1136,14 +1137,18 @@ async function change(sub, slug, thing, value, options) {
           x =>
             x !== s &&
             x.source === 'property' &&
-            x.on === s.on &&
+            // On the same part, or on a member of the group it is set on:
+            // the later setting wins, whichever way Core writes it.
+            (x.on === s.on ||
+              (s.on != null &&
+                (FAMILIES[s.on] ?? []).includes(
+                  /** @type {string} */ (x.on),
+                ))) &&
             x.when === s.when &&
             x.state === s.state &&
-            x.thing.startsWith(`${s.thing}-`) &&
-            // Not part of border: its radius, collapse and spacing.
-            !/^border-(radius|collapse|spacing)$|^border-[a-z]+-radius$/.test(
-              x.thing,
-            ),
+            // A longhand the shorthand really sets (MDN's data), never a
+            // property that only shares its name (overflow-wrap).
+            coversProperty(s.thing, x.thing),
         )
       : [];
   // They go, as the note says: Core writes each side to its own variable,

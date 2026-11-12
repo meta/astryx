@@ -13,6 +13,7 @@
 import {parse as parseModule} from '@babel/parser';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
+import {coversProperty} from './_css.mjs';
 import postcss from 'postcss';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
@@ -1683,16 +1684,13 @@ export function findOverrides(cssText, theme) {
       'g',
     );
     // A shorthand and its longhands are one property: the last one set
-    // (background after background-color) is the one in effect.
-    // border-radius, border-collapse and border-spacing are not part of
-    // border.
-    const NOT_LONGHAND =
-      /^border-(radius|collapse|spacing)|^border-[a-z]+-radius$/;
+    // (background after background-color) is the one in effect. Which
+    // longhands a shorthand sets is MDN's data (background-blend-mode is
+    // no part of background).
     /** @param {string} a @param {string} b */
     const sameProperty = (a, b) => {
       const [x, y] = [kebab(a), kebab(b)];
-      if (NOT_LONGHAND.test(x) || NOT_LONGHAND.test(y)) return x === y;
-      return x.startsWith(`${y}-`) || y.startsWith(`${x}-`) || x === y;
+      return x === y || coversProperty(x, y) || coversProperty(y, x);
     };
     const last = props.filter(
       (p, i) => !props.slice(i + 1).some(later => sameProperty(later, p)),
