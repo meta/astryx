@@ -18,7 +18,7 @@ import {flushSync} from 'react-dom';
 import {isTerminal} from '../gestures/GestureRecognizer';
 import {playHaptic} from '../gestures/haptics';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
-import {useCommittedRef} from '../hooks/useCommittedRef';
+import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import {contextMenu} from '../motion/uikit/contextMenu';
 import {isElement} from '../utils/nodeType';
 import {ContextMenuPressRecognizer} from './contextMenuPress';
@@ -82,8 +82,7 @@ export function ContextMenuTouchLayer({
     isShown,
     isFollowedRef,
   );
-  const feedbackRef = useRef(feedback);
-  feedbackRef.current = feedback;
+  const feedbackRef = useCommittedRef(feedback);
   const onCancelRef = useCommittedRef(onCancel);
   const hasPressOpenedRef = useRef(false);
 
@@ -151,8 +150,10 @@ export function ContextMenuTouchLayer({
     },
   );
 
-  isFollowedRef.current = () =>
-    recognizer.numberOfTouches > 0 && !isTerminal(recognizer.state);
+  useCommittedRefInto(
+    isFollowedRef,
+    () => recognizer.numberOfTouches > 0 && !isTerminal(recognizer.state),
+  );
 
   useImperativeHandle(
     ref,
@@ -160,7 +161,7 @@ export function ContextMenuTouchLayer({
       release: () => feedbackRef.current.release(),
       isTracking: () => recognizer.numberOfTouches > 0,
     }),
-    [recognizer],
+    [feedbackRef, recognizer],
   );
 
   return null;

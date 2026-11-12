@@ -18,6 +18,7 @@
 
 import {useCallback, useRef, type RefObject} from 'react';
 import {useAttachment} from '../hooks/useAttachment';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {
   closestContextMenuTrigger,
   markContextMenuTrigger,
@@ -107,8 +108,7 @@ export function useContextMenuPressFeedback(
   isFollowed: RefObject<() => boolean> = ALWAYS_FOLLOWED,
 ): ContextMenuPressFeedback {
   const animatorRef = useRef<Animator | null>(null);
-  const isShownRef = useRef(isShown);
-  isShownRef.current = isShown;
+  const isShownRef = useCommittedRef(isShown);
   // Whether the visual carries a scale of ours (to put back and clear).
   const isGrownRef = useRef(false);
   // The menu the press opened is up: the growth holds until it closes.
@@ -198,7 +198,7 @@ export function useContextMenuPressFeedback(
         {at: time},
       );
     },
-    [animatorFor, isFollowed],
+    [animatorFor, isFollowed, isShownRef],
   );
 
   const end = useCallback(
