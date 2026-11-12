@@ -7,7 +7,8 @@
  * (kit/signals.mjs), the block picker's blocks (blocks/blocks.mjs), and the
  * kit around them (kit/answer.mjs).
  * @input {query, options} and the data build's adapter gathered: the root's
- *   weights and the block picker's
+ *   weights and the block picker's, and the adapter's keeper for the picker's
+ *   per-block vectors
  * @output the build.kit response
  * @position api/build; build.mjs runs it with the shared route helper
  */

@@ -765,8 +765,9 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     );
     const source = fs.readFileSync(file, 'utf8');
     const weights = JSON.parse(source);
-    // Every term weighs nothing in the picker's word vectors.
-    weights.idf = weights.idf.map(() => 0);
+    // Every term weighs the same, which moves every block's vector while
+    // the requests keep weighted words.
+    weights.idf = weights.idf.map(() => 1024);
     try {
       fs.writeFileSync(file, JSON.stringify(weights));
       let changed = 0;
@@ -790,7 +791,8 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     const querySource = fs.readFileSync(query, 'utf8');
     const editedQuery = querySource.replace(
       'export const STOPWORDS = new Set([',
-      "export const STOPWORDS = new Set([\n  'dashboard',\n  'chart',\n  'table',\n  'settings',\n  'form',\n  'kanban',\n  'board',\n  'cards',",
+      // Words of block docs the requests do not use.
+      "export const STOPWORDS = new Set([\n  'list',\n  'grid',\n  'header',\n  'summary',\n  'metric',\n  'metrics',\n  'stats',\n  'navigation',\n  'sidebar',\n  'row',\n  'rows',\n  'column',\n  'columns',\n  'section',\n  'filter',\n  'filters',\n  'toolbar',\n  'actions',",
     );
     expect(editedQuery).not.toBe(querySource);
     try {

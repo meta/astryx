@@ -2,7 +2,8 @@
 
 /**
  * @file The build subject's environment access: the page templates a project
- * can scaffold, the components it can use, and the checked-in matcher weights.
+ * can scaffold, the components it can use, the checked-in matcher weights, and
+ * the block picker's per-block vectors kept between runs.
  *
  * @input Template and component discovery for `cwd` — the CLI's own templates
  *   and Core's components, plus any that the project's configured integrations
@@ -11,7 +12,8 @@
  *   keywords, command}`, where `command` is the `astryx template` command that
  *   selects exactly that template; blocks as search names them; components as
  *   `{name, keywords}`; the kit's matcher weights, the root's classifier
- *   weights, and the block picker's weights.
+ *   weights, and the block picker's weights; `keptBlockCatalog`, which keeps
+ *   the picker's per-block vectors beside the kept search catalog.
  * @position Beside build.mjs (api/build/). The kit leaf reads templates and
  *   components only through here, because a subject's `_adapter.mjs` is its
  *   only environment access. This adds no discovery of its own: templates come
