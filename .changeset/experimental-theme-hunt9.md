@@ -10,3 +10,5 @@
 - A `--state` that a part never takes (a disabled button, which Core marks with an attribute) is refused and says what to do.
 - `undo` names the setting that applies after it. Refusals suggest the nearest value that works.
 - A command that lost its theme lock publishes no build output. A change that changes nothing rebuilds a build left stale.
+
+@josephfarina
