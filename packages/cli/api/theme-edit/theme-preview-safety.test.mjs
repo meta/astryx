@@ -11,7 +11,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createHash} from 'node:crypto';
-import {afterAll, beforeAll, beforeEach, describe, expect, it} from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {
   themeEditNew,
   themeEditSet,
@@ -32,6 +40,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 const APP_PACKAGES = {
   name: 'app',
@@ -1472,5 +1488,55 @@ describe('an older preview move stopped part way', () => {
     expect(r.data.notes.join(' ')).toContain('finished a preview change');
     expect(r.data.kept).toEqual([]);
     expect(exists(ROUTE)).toBe(false);
+  }, 120_000);
+});
+
+describe('a formatter over the preview', () => {
+  it('prettier with its default options over every preview file is no change by hand', async () => {
+    const prettier = await import('prettier');
+    await themeEditPreviewAdd(undefined, {cwd, theme: 'brand'});
+    const files = /** @type {string[]} */ (
+      fs.readdirSync(path.join(cwd, ROUTE), {recursive: true})
+    )
+      .map(String)
+      .filter(f => f.endsWith('.tsx'));
+    expect(files.length).toBeGreaterThanOrEqual(4);
+    for (const f of files) {
+      const file = path.join(cwd, ROUTE, f);
+      const text = fs.readFileSync(file, 'utf8');
+      // Defaults: double quotes, keys unquoted as needed, parentheses
+      // around every arrow parameter, trailing commas, its own wrapping.
+      const formatted = await prettier.format(text, {filepath: file});
+      fs.writeFileSync(file, formatted);
+    }
+    expect(read(`${ROUTE}/page.tsx`)).toContain('"use client"');
+    const added = await themeEditPreviewAdd(undefined, {
+      cwd,
+      template: 'login',
+    });
+    expect(added.data.added).toEqual(['login']);
+    const removed = await themeEditPreviewRemove('colors', {cwd});
+    expect(removed.data.removed).toEqual([`${ROUTE}/_pages/colors.tsx`]);
+    expect(removed.data.kept).toEqual([]);
+  }, 120_000);
+
+  it('still sees an edit to code, a string or a comment after formatting', async () => {
+    await themeEditPreviewAdd(undefined, {cwd, theme: 'sea'});
+    // page.tsx is written again on every add, so its edits are checked.
+    const file = path.join(cwd, ROUTE, 'page.tsx');
+    const text = fs.readFileSync(file, 'utf8');
+    for (const edited of [
+      text.replace('// Written by', '// Mine. Written by'),
+      text.replace('label="Theme preview"', 'label="Theme previews"'),
+      text.replace("position: 'fixed'", "position: 'absolute'"),
+    ]) {
+      expect(edited).not.toBe(text);
+      fs.writeFileSync(file, edited);
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, template: 'blank'}),
+      );
+      expect(r.code).toBe('ERR_FILE_EXISTS');
+    }
+    fs.writeFileSync(file, text);
   }, 120_000);
 });

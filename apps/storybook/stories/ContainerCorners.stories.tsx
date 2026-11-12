@@ -167,6 +167,22 @@ export const BleedListInDialog: Story = {
 };
 
 /**
+ * A Dialog with no padding: the bleeding list has a header, so the header
+ * sits above the first row, and only the last row takes the dialog corners.
+ */
+export const BleedListWithHeaderInDialog: Story = {
+  render: () => (
+    <Dialog isOpen isInline onOpenChange={() => {}} width={360} padding={0}>
+      <List edge="bleed" hasDividers header={<Text>Folders</Text>}>
+        {rows.map(label => (
+          <ListItem key={label} label={label} onClick={() => {}} />
+        ))}
+      </List>
+    </Dialog>
+  ),
+};
+
+/**
  * A Dialog with no padding, with the table between two lines of text: the
  * table reaches no corner, so it stays square.
  */

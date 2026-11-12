@@ -94,14 +94,17 @@ export const doc = {
     },
   ],
   throws: [
-    {code: 'ERR_FILE_NOT_FOUND', when: 'the theme file does not exist'},
+    {
+      code: 'ERR_FILE_NOT_FOUND',
+      when: 'the theme file does not exist; for a bare theme name or a path written with backslashes, the suggestions name the theme sources that exist',
+    },
     {
       code: 'ERR_THEME_LOAD',
-      when: 'the file cannot be loaded or parsed into a defineTheme() result',
+      when: 'the file cannot be loaded or parsed into a defineTheme() result, or its extension is not one a theme source has (.mjs, .js, .mts, .ts, .tsx, .jsx, .cjs, .cts), which is refused before loading',
     },
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the resolved theme is invalid, for example it has no name, a custom Heading type has no standalone rule with a declaration the compiler can emit, or its icon registry cannot be preserved through an import (also rejected in check mode); or an output would replace the theme source, two outputs share one path, or the file is itself an output of a build',
+      when: 'the resolved theme is invalid, for example it has no name, a custom Heading type has no standalone rule with a declaration the compiler can emit, or its icon registry cannot be preserved through an import (also rejected in check mode); or an output would replace the theme source, two outputs share one path, or the file is itself an output of a build, whatever its extension (refused before loading, naming the source it was built from)',
     },
     {
       code: 'ERR_FILE_EXISTS',
