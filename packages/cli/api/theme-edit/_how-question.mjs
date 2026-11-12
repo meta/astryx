@@ -59,7 +59,7 @@ const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
       '圆|丸く|丸い|둥글게|둥근',
       'rounded',
     ],
-    ['cuadrad[oa]s|carrés|eckige', '四角|方形|네모', 'square'],
+    ['cuadrad[oa]s|carrés|eckige\\p{L}*', '四角|方形|네모', 'square'],
     ['esquinas?|coins|ecken|углы', '角', 'corners'],
     [
       'sombras?|ombres?|ombra|ombre|schatten|тен[ьи]|ظل',
@@ -150,6 +150,9 @@ const SHORT = /** @type {Record<string, string>} */ ({
   txt: 'text',
   clr: 'color',
   shdw: 'shadow',
+  squre: 'square',
+  sqaure: 'square',
+  suqare: 'square',
   fnot: 'font',
   fnt: 'font',
 });
@@ -735,6 +738,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
   [/\b(picked|chosen|choose|pick)\b/, 'selected'],
   [/\b(invalid|errors? state|has an error|with an error)\b/, 'invalid'],
   [/\bvisited\b/, 'visited'],
+  [/\b(opened|expanded)\b/, 'open'],
   // Words for states a part may not have: the answer says so.
   [/\bread-?only\b/, 'readonly'],
   [
@@ -1453,6 +1457,49 @@ export function draftAnswer(ctx, env, question) {
   const quoted = /** @type {string[]} */ ([]);
   let q = question
     .normalize('NFKC')
+    // "3 pixels sharper": pixels are px.
+    .replace(/(\d+(?:\.\d+)?)\s*pixels?\b/gi, '$1px')
+    // "take 2px off", "remove 4px from": an amount down.
+    .replace(
+      /\b(?:take|knock|shave|cut)\s+(\d+(?:\.\d+)?(?:px|rem|em))\s+off\b/gi,
+      'minus $1 off',
+    )
+    .replace(
+      /\bremove\s+(\d+(?:\.\d+)?(?:px|rem|em))\s+(?=from\b)/gi,
+      'minus $1 ',
+    )
+    // "darkmode", "html.dark .card", "@media (prefers-color-scheme: dark)".
+    .replace(/\b(dark|light)mode\b/gi, '$1 mode')
+    .replace(
+      /@media\s*\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)\s*\{/gi,
+      'in $1 mode {',
+    )
+    .replace(
+      /(?:\bhtml)?\.(dark|light)\s+(?=\.)|\[data-(?:theme|mode)=["']?(dark|light)["']?\]\s*/gi,
+      (_, a, b) => `in ${a ?? b} mode `,
+    )
+    // "I hate the shadows", "skip the shadows", "not a fan of": none of it.
+    // "I hate the shadows", "not a fan of the rounded buttons": none of it,
+    // when that is the whole ask.
+    .replace(
+      /^\s*(?:i )?(?:hate|dislike|can'?t stand|don'?t like|am not a fan of|not a fan of|skip|ditch)(?: the)? ([^,.;?!]+?)[.!]?\s*$/i,
+      'no $1',
+    )
+    // "pointer cursor on hover": the cursor, no state needed.
+    .replace(
+      /\bpointer cursor(?: on hover)?\b|\bcursor:?\s+pointer(?: on hover)?\b/gi,
+      'cursor: pointer',
+    )
+    // "cards look flat": a complaint that asks for depth.
+    .replace(
+      /\b(look|looks|feel|feels|seem|seems) (?:too |so |very )?flat\b(?!.*\bshadow)/gi,
+      'need more shadow',
+    )
+    // "darker while being clicked": the pressed state.
+    .replace(
+      /\b(darker|lighter) while being (clicked|pressed|tapped)\b/gi,
+      'get $1 when clicked',
+    )
     // "except in dark mode", "but not in dark mode", "leave dark mode alone":
     // the other mode.
     .replace(
@@ -1694,7 +1741,10 @@ export function draftAnswer(ctx, env, question) {
     // "bordes redondeados": rounded edges are corners.
     .replace(/\bborders?\s+rounded\b/g, 'rounded corners')
     .replace(/\bbutton-s\b/g, 'buttons')
-    .replace(/[a-z]+/g, w => corrected(w, lex.vocab))
+    .replace(/[a-z]+/g, w => {
+      const fixed = corrected(w, lex.vocab);
+      return fixed;
+    })
     // "buttons, but not bold": the "not" is about the buttons.
     .replace(
       /,?\s*\bbut not\s+(?=(bold|italic|uppercase|rounded|round|shadowed|underlined|bordered|faded|dark|light|bright|big|small|too \w+)\b)/g,
@@ -2448,6 +2498,15 @@ export function draftAnswer(ctx, env, question) {
       thing,
       value,
       ...Object.fromEntries(Object.entries(flags).filter(([, v]) => v)),
+      // One member of a group ("the text area") is that member only; set
+      // otherwise reaches the whole group.
+      // (set spreads only the inputs and checks groups).
+      ...(flags.on &&
+      ['inputs', 'checks'].some(g =>
+        (FAMILIES[g] ?? []).includes(/** @type {string} */ (flags.on)),
+      )
+        ? {only: true}
+        : {}),
     });
   /** A color for the clause, for a fill or a text color. @param {Clause} c @param {'fill' | 'text'} kind */
   const colorFor = (c, kind) => {
@@ -3006,7 +3065,7 @@ export function draftAnswer(ctx, env, question) {
           };
     }
     if (
-      !/\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|by accident|accidentally|put .* back|.* back to normal)\b/.test(
+      !/\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/.test(
         c.text,
       ) ||
       /\bby default\b|\bthe last change\b|\beverything\b/.test(c.text) ||
@@ -5063,6 +5122,21 @@ export function draftAnswer(ctx, env, question) {
     });
   }
   result.push(...drafts.slice(0, clashes.length ? 0 : undefined));
+  // A confidence gate: a question, a "tell me", a "but not too" or a typo
+  // read as a direction leaves how unsure which way to go; a wrong write is
+  // worse than none, so it gives the lookup and asks for the ask.
+  const unsure =
+    /\b(tell me|explain|what does|how does|but not too|stop (making|turning|being|using))\b|^(is|are|does|do) (the|my|this|these|those|our)\b.*\?\s*$/i.test(
+      question.trim(),
+    );
+  if (unsure && result.some(d => d.options.some(o => o.length))) {
+    const part = partsSeen[0];
+    result.splice(0, result.length, {
+      text: `how is not sure which change you want; say it as an ask instead (for example "rounder cards" or "no shadows on buttons")`,
+      options: [],
+      lookup: part ? `${HOW} ${part}` : `${P} show ${env.slug}`,
+    });
+  }
   if (media)
     result.push({
       text: 'the theme editor has no screen-size, print or device conditions: this applies on every screen; a media query needs your own CSS',

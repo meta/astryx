@@ -1986,7 +1986,7 @@ const QUESTIONS_F = [
   [
     'radio buttons accent color when checked',
     {
-      top: /^set q background 'var\(--color-accent\)' --on radio-indicator --state checked$/,
+      top: /^set q background 'var\(--color-accent\)' --on radio-indicator --state checked --only$/,
     },
   ],
   [
@@ -2013,9 +2013,12 @@ const QUESTIONS_F = [
   ],
   [
     'textarea min height 120px',
-    {top: /^set q min-height 120px --on text-area$/},
+    {top: /^set q min-height 120px --on text-area --only$/},
   ],
-  ['select dropdown 40px tall', {top: /^set q min-height 40px --on selector$/}],
+  [
+    'select dropdown 40px tall',
+    {top: /^set q min-height 40px --on selector --only$/},
+  ],
   [
     'skeleton loaders lighter',
     {
@@ -2343,7 +2346,7 @@ const QUESTIONS_G = [
   ['Fira Code for monospace', {top: /^set q font 'Fira Code' --on code$/}],
   // part words: a catalog part, or say there is none
   ['menu rounder', {top: /^set q corners more --on dropdown-menu$/}],
-  ['select rounder', {top: /^set q corners more --on selector$/}],
+  ['select rounder', {top: /^set q corners more --on selector --only$/}],
   // A list shows no edge of its own (its items do): no command, and the
   // answer names the parts inside that show one.
   [
@@ -2657,7 +2660,10 @@ const QUESTIONS_H = [
     'accordion headers bold',
     {top: /^set q font-weight 700 --on collapsible-trigger$/},
   ],
-  ['combobox rounder', {top: /^set q corners more --on complex-selector$/}],
+  [
+    'combobox rounder',
+    {top: /^set q corners more --on complex-selector --only$/},
+  ],
   ['notification rounder', {top: /^set q corners more --on toast$/}],
   [
     'error toasts red',
@@ -3573,7 +3579,7 @@ const QUESTIONS_P = [
     'text on the accent color is hard to read',
     /^set q --color-on-accent '#(000000|ffffff)'/,
   ],
-  ['5 lines tall text box', /^set q min-height 5lh --on text-area$/],
+  ['5 lines tall text box', /^set q min-height 5lh --on text-area --only$/],
   ['dropdown shadow', /--on dropdown-menu$/],
   [
     'checkboxes green',
@@ -3645,6 +3651,87 @@ describe('how reads rem and em amounts and more comparatives as a change', () =>
       }
       expect(bare(changes[0].commands[0])).toMatch(want);
     });
+});
+
+/**
+ * Final-10 questions: the confidence gate, dislike as none, --only on one
+ * member of a group, amounts taken off, dark-mode selectors, take-backs,
+ * the pointer cursor, typo and translated squares, and complaints.
+ * @type {Array<[string, RegExp | null, RegExp?]>}
+ */
+const QUESTIONS_R = [
+  ['is the card too round?', null, /not sure which change you want/],
+  ['rounder buttons but not too round', null, /not sure which change you want/],
+  ['stop making links blue', null, /not sure which change you want/],
+  [
+    'I hate the shadows',
+    /^set q --shadow-low none && set q --shadow-med none && set q --shadow-high none$/,
+  ],
+  [
+    'only the text area border red',
+    /^set q border-color '#dc2626' --on text-area --only$/,
+  ],
+  [
+    'knock 2px off the card radius',
+    /^set q border-radius 'max\(0px, calc\(var\(--radius-container\) - 2px\)\)' --on card$/,
+  ],
+  ['darkmode accent teal', /^set q --color-accent '#0d9488' --mode dark$/],
+  [
+    'html.dark .card { background: #111 }',
+    /^set q background '#111' --on card --mode dark$/,
+  ],
+  [
+    '@media (prefers-color-scheme: dark) { .card { background: #111 } }',
+    /^set q background '#111' --on card --mode dark$/,
+  ],
+  ['take back the shadow change', null, /sets nothing for shadow/],
+  ['pointer cursor on hover for cards', /^set q cursor pointer --on card$/],
+  ['squre corners', /^set q corners square$/],
+  ['eckiger corners', /^set q corners square$/],
+  ['cards look flat', /^set q box-shadow 'var\(--shadow-[a-z]+\)' --on card$/],
+  ['buttons darker while being clicked', /--on button --state active$/],
+];
+
+describe('how answers final-10 questions', () => {
+  for (const [question, want, text] of QUESTIONS_R)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      if (text) expect(results.map(r => r.text).join('\n')).toMatch(text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
+    });
+
+  it('"explain spacing" is the lookup of spacing, not a question', async () => {
+    const {data} = await themeEditHow('explain spacing', {cwd, theme: 'q'});
+    expect(data.kind).toBe(
+      (await themeEditHow('spacing', {cwd, theme: 'q'})).data.kind,
+    );
+    expect(data.kind).not.toBe('question');
+  });
+
+  it('relative amounts taken off move the corners down', async () => {
+    const px = async (/** @type {string} */ q) => {
+      const {data} = await themeEditHow(q, {cwd, theme: 'q'});
+      return Number(
+        /corners (\d+(?:\.\d+)?)px/.exec(
+          bare(data.results[0].commands[0]),
+        )?.[1],
+      );
+    };
+    const up = await px('make the corners 2px rounder');
+    expect(up - (await px('take 2px off the corners'))).toBe(4);
+    expect(up - (await px('make the corners 3 pixels sharper'))).toBe(5);
+  });
 });
 
 describe('how lookups', () => {

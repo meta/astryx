@@ -194,6 +194,13 @@ async function answer(subject, options, cwd) {
       /(\d*)(?:¾|3\u20444)/g,
       (_, n) => `${n ? Number(n) + 0.75 : '0.75'}`,
     );
+  // "explain spacing", "tell me about the accent": the lookup of what is
+  // named, never a change.
+  const explain =
+    /^(?:explain|describe|tell me about)\s+(?:the |my )?([a-z][a-z -]*?)\s*$/i.exec(
+      t,
+    );
+  if (explain && explain[1] !== t) return answer(explain[1], options, cwd);
   // --theme names a theme whatever the subject, so a bad one is refused
   // for a picture and a list too.
   if (options.theme === '')
