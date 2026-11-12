@@ -64,7 +64,7 @@ import {
 } from './lib/plan.mjs';
 import {renderReport} from './lib/report.mjs';
 import {accept, incomparable, readBaseline} from './lib/baseline.mjs';
-import {loadConfig, loadThemeOverrides, loadThemingTargets} from './lib/sources.mjs';
+import {loadConfig, loadThemeOverrides, loadThemingTargets, readOnlyGate} from './lib/sources.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -205,6 +205,11 @@ function storybookBuildSha() {
   return fs.existsSync(stamp) ? fs.readFileSync(stamp, 'utf8').trim() || null : null;
 }
 
+// The themes a read-only gate could not read because they are not built
+// (lib/sources.mjs READ_ONLY_ENV). The verdict names them.
+/** @type {string[]} */
+const themesNotBuilt = [];
+
 /**
  * @param {{scoutOnly?: boolean}} [options] `scoutOnly` returns the scout's
  *   story list instead of a plan; `null` when this plan scouts nothing.
@@ -218,7 +223,7 @@ async function plan({scoutOnly = false} = {}) {
   }
   const [targets, allThemeOverrides] = await Promise.all([
     loadThemingTargets(REPO_ROOT),
-    loadThemeOverrides(REPO_ROOT, config.probeTheme),
+    loadThemeOverrides(REPO_ROOT, config.probeTheme, undefined, {notBuilt: themesNotBuilt}),
   ]);
   const themeOverrides = releasePlanInputs
     ? Object.fromEntries(
@@ -501,6 +506,7 @@ async function check() {
         tiers,
         components,
         ...(releasePlan ? {releasePlan} : {}),
+        ...(readOnlyGate() ? {themesNotBuilt: [...new Set(themesNotBuilt)].sort()} : {}),
       },
       counts: {total: shots.length, unchanged: 0, changed: 0, added: 0, removed: 0, failed: 0},
       components,
@@ -575,7 +581,7 @@ async function check() {
 
   const [targets, themeOverrides] = await Promise.all([
     loadThemingTargets(REPO_ROOT),
-    loadThemeOverrides(REPO_ROOT, config.probeTheme),
+    loadThemeOverrides(REPO_ROOT, config.probeTheme, undefined, {notBuilt: themesNotBuilt}),
   ]);
   const targeting = analyzeTargeting({
     observedTargets: manifest.observedTargets,
@@ -595,6 +601,7 @@ async function check() {
       baselineExists: exists,
       components,
       ...(baselineAccounting ? {baselineAccounting} : {}),
+      ...(readOnlyGate() ? {themesNotBuilt: [...new Set(themesNotBuilt)].sort()} : {}),
     },
   });
 

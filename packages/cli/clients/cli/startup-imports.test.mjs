@@ -87,14 +87,32 @@ function modulesLoadedBy(args) {
     hook,
     [
       "import {appendFileSync} from 'node:fs';",
-      "import {registerHooks} from 'node:module';",
-      'registerHooks({',
-      '  resolve(specifier, context, nextResolve) {',
-      '    const result = nextResolve(specifier, context);',
-      `    appendFileSync(${JSON.stringify(log)}, result.url + '\\n');`,
-      '    return result;',
-      '  },',
-      '});',
+      'export async function resolve(specifier, context, nextResolve) {',
+      '  const result = await nextResolve(specifier, context);',
+      `  appendFileSync(${JSON.stringify(log)}, result.url + '\\n');`,
+      '  return result;',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  const preload = path.join(dir, 'register-resolved.mjs');
+  fs.writeFileSync(
+    preload,
+    [
+      "import {appendFileSync} from 'node:fs';",
+      "import Module, {register} from 'node:module';",
+      "import {isAbsolute} from 'node:path';",
+      "import {pathToFileURL} from 'node:url';",
+      // Async module hooks do not observe CommonJS require calls.
+      'const resolveFilename = Module._resolveFilename;',
+      'Module._resolveFilename = function (...args) {',
+      '  const file = resolveFilename.apply(this, args);',
+      '  if (isAbsolute(file)) {',
+      `    appendFileSync(${JSON.stringify(log)}, pathToFileURL(file).href + '\\n');`,
+      '  }',
+      '  return file;',
+      '};',
+      `register(${JSON.stringify(pathToFileURL(hook).href)});`,
       '',
     ].join('\n'),
   );
@@ -119,7 +137,7 @@ function modulesLoadedBy(args) {
   });
   const result = spawnSync(
     process.execPath,
-    ['--import', pathToFileURL(hook).href, BIN, ...args],
+    ['--import', pathToFileURL(preload).href, BIN, ...args],
     {cwd: app, env, encoding: 'utf8'},
   );
   const packages = new Set();
@@ -142,6 +160,9 @@ describe('a run of the bin that prints the version', () => {
     const {status, packages, cliModules} = modulesLoadedBy(['--version']);
     expect(status).toBe(0);
     expect(packages.has('commander')).toBe(true);
+    expect(fs.readFileSync(path.join(dir, 'resolved.txt'), 'utf8')).toContain(
+      '/node_modules/commander/lib/command.js',
+    );
     expect(cliModules.has('clients/cli/bin/astryx.mjs')).toBe(true);
   });
 

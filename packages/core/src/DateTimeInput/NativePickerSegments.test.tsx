@@ -14,6 +14,13 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {DateTimeInput} from './DateTimeInput';
 import type {ISODateTimeString} from './DateTimeInput';
@@ -79,6 +86,58 @@ function getNativeTimeInput(): HTMLInputElement {
     throw new Error('DateTimeInput rendered no native time control');
   }
   return input;
+}
+
+// A transition that suspends for good: React renders its element, then keeps
+// the committed tree and never commits that render.
+const forever = new Promise<never>(() => {});
+function Forever(): null {
+  use(forever);
+  return null;
+}
+function Discardable({
+  children,
+  isPending = false,
+}: {
+  children: ReactNode;
+  isPending?: boolean;
+}) {
+  return (
+    <Suspense fallback={null}>
+      {children}
+      {isPending ? <Forever /> : null}
+    </Suspense>
+  );
+}
+async function discardRender(
+  rerender: (ui: ReactElement) => void,
+  ui: ReactElement,
+): Promise<void> {
+  await act(async () => {
+    startTransition(() => {
+      rerender(<Discardable isPending>{ui}</Discardable>);
+    });
+  });
+}
+
+// A changeAction that stays pending until the test settles it. React holds
+// every later transition behind a pending action. A test that left one
+// pending would keep the next tests' transitions from ever rendering.
+function pendingActions() {
+  const resolvers: (() => void)[] = [];
+  return {
+    action: async (_value?: ISODateTimeString) =>
+      new Promise<void>(resolve => {
+        resolvers.push(resolve);
+      }),
+    all: async () => {
+      await act(async () => {
+        for (const resolve of resolvers) {
+          resolve();
+        }
+      });
+    },
+  };
 }
 
 beforeEach(() => {
@@ -309,10 +368,11 @@ describe('DateTimeInput nativePicker', () => {
     },
   );
 
-  it('keeps native picker edits enabled while changeAction is pending', () => {
+  it('keeps native picker edits enabled while changeAction is pending', async () => {
     stubPointer(true);
     const onChange = vi.fn();
-    const changeAction = vi.fn(async () => new Promise<void>(() => {}));
+    const settle = pendingActions();
+    const changeAction = vi.fn(settle.action);
     render(
       <DateTimeInput
         label="Meeting"
@@ -331,6 +391,7 @@ describe('DateTimeInput nativePicker', () => {
 
     expect(onChange).toHaveBeenCalledWith('2026-03-15T15:00');
     expect(onChange).toHaveBeenCalledWith('2026-03-15T15:30');
+    await settle.all();
     expect(changeAction).toHaveBeenCalledTimes(2);
   });
 
@@ -346,6 +407,34 @@ describe('DateTimeInput nativePicker', () => {
     fireEvent.change(getNativeDateInput(), {target: {value: '2026-03-21'}});
 
     expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-03-21T09:45');
+  });
+
+  it('retains a native time chosen before the date when React discards a render with a value', async () => {
+    stubPointer(true);
+    const {rerender} = render(
+      <Discardable>
+        <DateTimeInput label="Meeting" onChange={() => {}} />
+      </Discardable>,
+    );
+    fireEvent.change(getNativeTimeInput(), {target: {value: '09:45'}});
+    expect(getNativeTimeInput()).toHaveValue('09:45');
+
+    await discardRender(
+      rerender,
+      <DateTimeInput
+        label="Meeting"
+        value={'2026-03-21T10:00' as ISODateTimeString}
+        onChange={() => {}}
+      />,
+    );
+    // A committed render with the same value: nothing changed for the user.
+    rerender(
+      <Discardable>
+        <DateTimeInput label="Meeting start" onChange={() => {}} />
+      </Discardable>,
+    );
+
+    expect(getNativeTimeInput()).toHaveValue('09:45');
   });
 
   it('clamps a time chosen before the date to that date’s boundary', () => {
@@ -366,10 +455,11 @@ describe('DateTimeInput nativePicker', () => {
     expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-03-21T09:00');
   });
 
-  it('can clear an optimistic datetime created from an empty value', () => {
+  it('can clear an optimistic datetime created from an empty value', async () => {
     stubPointer(true);
     const onChange = vi.fn();
-    const changeAction = vi.fn(async () => new Promise<void>(() => {}));
+    const settle = pendingActions();
+    const changeAction = vi.fn(settle.action);
     render(
       <DateTimeInput
         label="Meeting"
@@ -386,6 +476,7 @@ describe('DateTimeInput nativePicker', () => {
 
     expect(onChange).toHaveBeenLastCalledWith(undefined);
     expect(changeAction).toHaveBeenLastCalledWith(undefined);
+    await settle.all();
   });
 
   it('retains the preset-time combobox when timeOptionInterval is set', () => {
@@ -509,6 +600,106 @@ describe('DateTimeInput nativePicker', () => {
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByText('Invalid time')).toBeInTheDocument();
     expect(getNativeTimeInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('keeps a refused native date refused when React discards a render with a value', async () => {
+    stubPointer(true);
+    const field = (label: string, value?: ISODateTimeString) => (
+      <DateTimeInput
+        label={label}
+        value={value}
+        dateConstraints={[() => false]}
+        onChange={() => {}}
+      />
+    );
+    const {rerender} = render(<Discardable>{field('Meeting')}</Discardable>);
+    fireEvent.change(getNativeDateInput(), {target: {value: '2026-03-15'}});
+    expect(getNativeDateInput()).toHaveAttribute('aria-invalid', 'true');
+
+    await discardRender(
+      rerender,
+      field('Meeting', '2026-03-21T10:00' as ISODateTimeString),
+    );
+    rerender(<Discardable>{field('Meeting start')}</Discardable>);
+
+    expect(screen.getByText('Invalid date')).toBeInTheDocument();
+    expect(getNativeDateInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('keeps a refused native time refused when React discards a render with a value', async () => {
+    stubPointer(true);
+    const field = (label: string, value: ISODateTimeString) => (
+      <DateTimeInput
+        label={label}
+        value={value}
+        min={'2026-03-15T09:00' as ISODateTimeString}
+        max={'2026-03-15T17:00' as ISODateTimeString}
+        onChange={() => {}}
+      />
+    );
+    const committed = '2026-03-15T10:00' as ISODateTimeString;
+    const {rerender} = render(
+      <Discardable>{field('Meeting', committed)}</Discardable>,
+    );
+    fireEvent.change(getNativeTimeInput(), {target: {value: '08:00'}});
+    expect(getNativeTimeInput()).toHaveAttribute('aria-invalid', 'true');
+
+    await discardRender(
+      rerender,
+      field('Meeting', '2026-03-15T11:00' as ISODateTimeString),
+    );
+    rerender(<Discardable>{field('Meeting start', committed)}</Discardable>);
+
+    expect(screen.getByText('Invalid time')).toBeInTheDocument();
+    expect(getNativeTimeInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('commits a native date edit once when React discards a render between its events', async () => {
+    stubPointer(true);
+    const onChange = vi.fn();
+    // The parent keeps its value: the edit is reported, not accepted.
+    const field = (label: string, value: ISODateTimeString) => (
+      <DateTimeInput label={label} value={value} onChange={onChange} />
+    );
+    const committed = '2026-03-15T10:00' as ISODateTimeString;
+    const {rerender} = render(
+      <Discardable>{field('Meeting', committed)}</Discardable>,
+    );
+    const dateInput = getNativeDateInput();
+    fireEvent.change(dateInput, {target: {value: '2026-03-21'}});
+    expect(onChange).toHaveBeenCalledOnce();
+
+    await discardRender(
+      rerender,
+      field('Meeting', '2026-04-01T10:00' as ISODateTimeString),
+    );
+    // The same edit's native input event, which the picker also sends.
+    fireEvent.input(dateInput);
+
+    expect(onChange).toHaveBeenCalledOnce();
+  });
+
+  it('commits a native time edit once when React discards a render between its events', async () => {
+    stubPointer(true);
+    const onChange = vi.fn();
+    const field = (label: string, value: ISODateTimeString) => (
+      <DateTimeInput label={label} value={value} onChange={onChange} />
+    );
+    const committed = '2026-03-15T10:00' as ISODateTimeString;
+    const {rerender} = render(
+      <Discardable>{field('Meeting', committed)}</Discardable>,
+    );
+    const timeInput = getNativeTimeInput();
+    fireEvent.change(timeInput, {target: {value: '11:30'}});
+    expect(onChange).toHaveBeenCalledOnce();
+
+    await discardRender(
+      rerender,
+      field('Meeting', '2026-03-15T12:00' as ISODateTimeString),
+    );
+    fireEvent.input(timeInput);
+
+    expect(onChange).toHaveBeenCalledOnce();
   });
 
   it('announces the same rejected date again after the picker closes', () => {
