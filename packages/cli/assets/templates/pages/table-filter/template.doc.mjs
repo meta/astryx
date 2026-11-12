@@ -30,7 +30,7 @@ export const doc = {
   category: 'Table - Filtering',
   icons: {
     Bookmark: 'bookmark',
-    BookmarkPlus: 'bookmark',
+    BookmarkPlus: 'bookmarkAdd',
     Calendar: 'calendar',
     ChevronDown: 'chevronDown',
     CircleX: 'error',
@@ -43,7 +43,7 @@ export const doc = {
     Search: 'search',
     SlidersHorizontal: 'adjustments',
     Table: 'table',
-    Table2: 'table',
+    Table2: 'group',
     UserPlus: 'userAdd',
     X: 'close',
   },

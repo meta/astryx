@@ -1373,7 +1373,9 @@ describe('astryx experimental render (CLI)', () => {
     expect(r.status).toBe(1);
     const out = JSON.parse(r.stdout);
     expect(out.code).toBe('ERR_UNKNOWN_SUBCOMMAND');
-    expect(out.suggestions.map((/** @type {any} */ s) => s.name)).toContain('render');
+    expect(
+      out.suggestions.some((/** @type {any} */ s) => /experimental render$/.test(s.name)),
+    ).toBe(true);
   });
 
   it('fails with exit 1 and a readable message without --json', async () => {
@@ -1512,8 +1514,12 @@ export default function Page() {
   async function initialsOf(name) {
     await render(`initials/${name}.tsx`, {cwd: dir});
     const html = fs.readFileSync(path.join(dir, 'initials', `${name}.html`), 'utf8');
-    // Generated content draws the initials from this attribute, not a text node.
-    return [...html.matchAll(/<div data-name="\d+">([\s\S]*?)(?=<div data-name=|<\/main>)/g)].map(m => /\bdata-initials="([^"]*)"/.exec(m[1])?.[1] ?? '');
+    // Generated content draws the initials from a private inline custom
+    // property, not a text node. The plain string is the one not followed by
+    // its empty alternative text.
+    return [...html.matchAll(/<div data-name="\d+">([\s\S]*?)(?=<div data-name=|<\/main>)/g)].map(
+      m => /--[\w-]+:\s*(?:&quot;|")([^&"]*)(?:&quot;|")\s*(?:;|"|$)/.exec(m[1])?.[1] ?? '',
+    );
   }
 
   // On a Node build that crashes in Intl.Segmenter, both renders run without it.

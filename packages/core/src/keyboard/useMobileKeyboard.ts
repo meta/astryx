@@ -16,6 +16,7 @@
 import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
 import {flushSync} from 'react-dom';
 import {useAttachment} from '../hooks/useAttachment';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {
   animatorFor,
@@ -27,6 +28,7 @@ import {deepActiveElement} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 import {isDocument, isNode} from '../utils/nodeType';
 import {observeResize} from '../utils/sharedResizeObserver';
+import {sharedState} from '../utils/sharedRealm';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {
   KEYBOARD_EPSILON,
@@ -118,11 +120,17 @@ function getObstructionTop(): number {
 // agent.
 // From then on, a sheet there reveals its field at once, in the report's own
 // frame.
-let revealsAtReport = new WeakSet<Window>();
+const reveals = sharedState(
+  'keyboard/use-mobile-keyboard/reveals-at-report',
+  1,
+  () => ({
+    atReport: new WeakSet<Window>(),
+  }),
+);
 
 /** Forgets every window's recorded reveal, for tests. */
 export function __resetRevealsAtReportForTest(): void {
-  revealsAtReport = new WeakSet<Window>();
+  reveals.atReport = new WeakSet<Window>();
 }
 
 // How far the body runs under the keyboard's top, CSS px. The keyboard's top
@@ -179,12 +187,12 @@ export function useMobileKeyboard(
   const [keyboardInset, setKeyboardInset] = useState(0);
   const hasKeyboardLayoutRef = useRef(false);
   const retainKeyboardLayoutRef = useRef(false);
-  const isEnabledRef = useRef(isEnabled);
-  const isExpandedRef = useRef(isExpanded);
-  const isOpenRef = useRef(isOpen);
-  isEnabledRef.current = isEnabled;
-  isExpandedRef.current = isExpanded;
-  isOpenRef.current = isOpen;
+  // The committed options, which the listeners and the dismissal read. They
+  // are current before any layout effect, where an earlier sibling can move
+  // focus.
+  const isEnabledRef = useCommittedRef(isEnabled);
+  const isExpandedRef = useCommittedRef(isExpanded);
+  const isOpenRef = useCommittedRef(isOpen);
   // Touch-only work, the ride and the reveal-pan watch, attaches only under a
   // coarse primary pointer (the touch query). Under a fine one, the hook
   // registers no touch listener.
@@ -213,7 +221,7 @@ export function useMobileKeyboard(
         focusTarget.focus({preventScroll: true});
       }
     },
-    [targetRef],
+    [isEnabledRef, targetRef],
   );
 
   // Syncs the on-screen keyboard with closing: a target that closes blurs its
@@ -610,7 +618,7 @@ export function useMobileKeyboard(
 
         scrollControlIntoSafeArea(
           focusedControl,
-          overlap > 0 && !revealsAtReport.has(window),
+          overlap > 0 && !reveals.atReport.has(window),
           overlap > 0 ? showOnSlide(atReport) : null,
         );
       };
@@ -968,7 +976,7 @@ export function useMobileKeyboard(
           return;
         }
         if (revealPan?.isRevealPan(event.height) === true) {
-          revealsAtReport.add(window);
+          reveals.atReport.add(window);
           cancelAnimationFrame(animationFrame);
           // A smooth reveal still under way lands the field where it is going.
           // Another scroll on top of it would overshoot in Firefox, which keeps

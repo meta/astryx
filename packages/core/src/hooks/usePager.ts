@@ -289,7 +289,89 @@ function sameOffsets(
   );
 }
 
-function mod(value: number, count: number): number {
+/**
+ * Where `position` falls among `offsets`, in pages: an index plus the
+ * fraction of the way to the next page. Past either end, it counts in the end
+ * page's spacing. A lone page spans `single`.
+ */
+function pageIn(
+  offsets: ReadonlyArray<number>,
+  position: number,
+  single: number,
+): number {
+  const n = offsets.length;
+  if (n === 1) {
+    return (position - offsets[0]) / single;
+  }
+  if (position < offsets[0]) {
+    return (position - offsets[0]) / (offsets[1] - offsets[0]);
+  }
+  for (let i = 0; i < n - 1; i++) {
+    if (position < offsets[i + 1]) {
+      return i + (position - offsets[i]) / (offsets[i + 1] - offsets[i]);
+    }
+  }
+  return (
+    n - 1 + (position - offsets[n - 1]) / (offsets[n - 1] - offsets[n - 2])
+  );
+}
+
+/**
+ * Every spacing between pages in `after` is its match in `before` times one
+ * ratio, to half a pixel: the same pages, scaled with the row. The ratio comes
+ * from the pages, so a gap or padding that keeps its size still counts.
+ * Spacings also drop a shift that every offset shares. A stop clamped to the
+ * row's end shares none, so the stops must come from what the row draws.
+ */
+function scaledPages(
+  before: ReadonlyArray<number>,
+  after: ReadonlyArray<number>,
+): boolean {
+  if (before.length !== after.length || before.length < 2) {
+    return false;
+  }
+  const spacing = (offsets: ReadonlyArray<number>, i: number) =>
+    offsets[i] - offsets[i - 1];
+  let cross = 0;
+  let square = 0;
+  for (let i = 1; i < before.length; i++) {
+    cross += spacing(before, i) * spacing(after, i);
+    square += spacing(before, i) ** 2;
+  }
+  if (!(square > 0)) {
+    return false;
+  }
+  const ratio = cross / square;
+  for (let i = 1; i < before.length; i++) {
+    if (Math.abs(spacing(before, i) * ratio - spacing(after, i)) > 0.5) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** A settle's track as one read: its time, position and velocity. */
+interface Seed {
+  readonly at: number;
+  readonly shown: number;
+  readonly velocity: number;
+}
+
+/** The position at `page` among `offsets`: the inverse of `pageIn`. */
+function positionIn(
+  offsets: ReadonlyArray<number>,
+  page: number,
+  single: number,
+): number {
+  const n = offsets.length;
+  if (n === 1) {
+    return offsets[0] + page * single;
+  }
+  const i = Math.max(0, Math.min(n - 2, Math.floor(page)));
+  return offsets[i] + (page - i) * (offsets[i + 1] - offsets[i]);
+}
+
+export function mod(value: number, count: number): number {
   return ((value % count) + count) % count;
 }
 
@@ -477,7 +559,9 @@ function isScrollContact(recognizer: PanGestureRecognizer): boolean {
  *   When a replaced viewport or track attaches, a motion that the detach
  *   stopped ends on its page. Its report and `onSettle` go out from a frame.
  * - A controlled `index` wins. A page that the pager reports and the owner
- *   does not take returns the pager to `index`, without a report.
+ *   does not take returns the pager to `index`, without a report. A resize
+ *   that renumbers the pages keeps the settle's page under its new number,
+ *   also without a report. A controlled `index` then names the old number.
  * - The pan and the catch attach for every pointer. A mouse drags the track
  *   as a finger does. The pan follows a trackpad's scroll along its axis, but
  *   never a mouse wheel's.
@@ -524,6 +608,8 @@ export function createPager(
   let viewport: HTMLElement | null = null;
   let trackElement: HTMLElement | null = null;
   let animator: PagerAnimator | null = null;
+  // The gesture host's clock, which the animator shares.
+  let clock: () => number = () => performance.now();
   let pageWidth = 0;
   let isRtl = false;
   // With `pages: 'children'`, each page's offset (px, ascending), once
@@ -559,28 +645,27 @@ export function createPager(
     if (!(isChildPages() && childOffsets != null)) {
       return position / stride();
     }
-    const at = childOffsets;
-    const n = at.length;
-    if (n === 1) {
-      return (position - at[0]) / (pageWidth > 0 ? pageWidth : 1);
-    }
-    if (position < at[0]) {
-      return (position - at[0]) / (at[1] - at[0]);
-    }
-    for (let i = 0; i < n - 1; i++) {
-      if (position < at[i + 1]) {
-        return i + (position - at[i]) / (at[i + 1] - at[i]);
-      }
-    }
-    return n - 1 + (position - at[n - 1]) / (at[n - 1] - at[n - 2]);
+    return pageIn(childOffsets, position, pageWidth > 0 ? pageWidth : 1);
   }
 
-  /** The page nearest `position`, or the target before anything is measured. */
-  function nearestPage(position: number): number {
+  /**
+   * The page nearest `position`, or the target before anything is measured.
+   * Within half a pixel of halfway between two pages, it is the one `toward`
+   * names (+1 the end, −1 the start).
+   */
+  function nearestPage(position: number, toward = 0): number {
     if (!isChildPages() && !(stride() > 0)) {
       return target;
     }
-    return Math.round(pageAt(position));
+    const page = pageAt(position);
+    const below = Math.floor(page);
+    if (toward !== 0 && below >= 0 && below + 1 <= count() - 1) {
+      const halfway = (offsetOf(below) + offsetOf(below + 1)) / 2;
+      if (Math.abs(position - halfway) <= 0.5) {
+        return toward > 0 ? below + 1 : below;
+      }
+    }
+    return Math.round(page);
   }
 
   /**
@@ -662,6 +747,8 @@ export function createPager(
   let isSwipeSettle = false;
   // Whether the running settle follows a release, not the program's `goTo`.
   let isReleaseSettle = false;
+  // Whether a touch's release started the settle, for a retarget.
+  let isTouchReleaseSettle = false;
   let settleToken = 0;
   let isDragging = false;
 
@@ -894,16 +981,19 @@ export function createPager(
     curve: MotionCurve,
     touchRelease = false,
     isRelease = false,
+    at?: number,
   ): void {
     isSwipeSettle = false;
     isReleaseSettle = isRelease;
+    isTouchReleaseSettle = touchRelease;
     if (animator == null) {
       return;
     }
-    follow(animator.play({x: toTrackCurve(curve, sign())}, {touchRelease}));
+    const x = toTrackCurve(curve, sign());
+    follow(animator.play({x}, {touchRelease, at}), x);
   }
 
-  function follow(handle: MotionHandle): void {
+  function follow(handle: MotionHandle, x: MotionCurve): void {
     const token = ++settleToken;
     settleHandle = handle;
     if (pendingReport != null) {
@@ -922,6 +1012,9 @@ export function createPager(
       }
       settleHandle = null;
       if (finished) {
+        // Set the track on its curve's end. A clock read one frame before the
+        // finish shows a value short of that end.
+        animator?.set({x: x.at(x.duration)});
         rest();
       }
     });
@@ -935,6 +1028,7 @@ export function createPager(
     position: number,
     velocity: number,
     touchRelease: boolean,
+    at?: number,
   ): void {
     const to = offsetOf(target);
     // UIKit's integrator, as a playable curve (touch motion stays internal),
@@ -951,7 +1045,7 @@ export function createPager(
       rest();
       return;
     }
-    play(curve, touchRelease, true);
+    play(curve, touchRelease, true, at);
   }
 
   function measure(): void {
@@ -961,18 +1055,79 @@ export function createPager(
     const width = viewport.clientWidth;
     const rtl = isRtlElement(viewport);
     // A new writing direction mirrors the track, so it re-places it too.
-    let changed = width !== pageWidth || rtl !== isRtl;
+    const isFlipped = rtl !== isRtl;
+    let changed = width !== pageWidth || isFlipped;
+    // Read the settle's track before measuring the pages. Measuring a held
+    // row can re-place its children and end their curves.
+    const seed =
+      settleHandle != null && animator != null ? readSeed(animator) : null;
+    const oldStride = stride();
+    const oldWidth = pageWidth > 0 ? pageWidth : 1;
+    // A settle that began before the viewport had a width showed nothing.
+    const wasLaidOut = pageWidth > 0;
     isRtl = rtl;
     pageWidth = width;
+    // Where a position on the old layout sits on the new one. The same pages
+    // keep their numbers, and the track keeps its fraction of a page.
+    let remap: ((position: number) => number) | null =
+      isChildPages() || !(oldStride > 0)
+        ? null
+        : position => (position * stride()) / oldStride;
     if (isChildPages()) {
       const offsets = measureChildOffsets();
-      if (!sameOffsets(offsets, childOffsets)) {
+      const before = childOffsets;
+      if (
+        before != null &&
+        !sameOffsets(offsets, before) &&
+        scaledPages(before, offsets)
+      ) {
+        // Pages whose spacings scaled with the row are the same pages, whose
+        // items follow the row's width. Each keeps its number.
+        childOffsets = offsets;
+        const single = width > 0 ? width : 1;
+        remap = position =>
+          positionIn(offsets, pageIn(before, position, oldWidth), single);
+        changed = true;
+        const pageCount = offsets.length;
+        deliver(() => options.onPagesChange?.(pageCount));
+      } else if (!sameOffsets(offsets, childOffsets)) {
         // A drag's release moves at most one page from where the drag began.
         // New pages renumber, so the drag keeps the page nearest that offset.
         const dragFrom = isDragging ? offsetOf(dragStartIndex) : null;
+        // New pages renumber, so the old index can name another page. The
+        // settle keeps the page nearest its target's offset, a tie going the way
+        // it moves, or the last page.
+        const settleFrom =
+          settleHandle != null
+            ? {
+                isToLast: target >= count() - 1,
+                target: offsetOf(target),
+                toward:
+                  seed == null ? 0 : Math.sign(offsetOf(target) - seed.shown),
+                isFromLast: settled >= count() - 1,
+                settled: offsetOf(settled),
+              }
+            : null;
         childOffsets = offsets;
         if (dragFrom != null) {
           dragStartIndex = nearestPage(dragFrom);
+        }
+        if (settleFrom != null) {
+          const last = count() - 1;
+          settled = settleFrom.isFromLast
+            ? last
+            : nearestPage(settleFrom.settled);
+          const next = settleFrom.isToLast
+            ? last
+            : nearestPage(settleFrom.target, settleFrom.toward);
+          if (next !== target) {
+            target = next;
+            // The same page, renumbered: the owner hears it only through a
+            // release's report still waiting.
+            if (pendingReport == null) {
+              report('controlled');
+            }
+          }
         }
         changed = true;
         const pageCount = offsets.length;
@@ -988,10 +1143,34 @@ export function createPager(
       goTo(count() - 1, {animated: false, reason: 'controlled'});
       return;
     }
-    // A resize lands on the target page at its new offset (a settle in
-    // flight ends there), as a paging scroll view does on rotation. A finger
-    // that holds a caught track keeps it; its lift settles on the new offsets.
+    // A resize lands on the target page at its new offset, as a paging
+    // scroll view does on rotation. A settle in flight heads there and keeps
+    // its velocity; on pages that scaled, it keeps its fraction of a page. A
+    // finger that holds a caught track keeps it; its lift settles on the new
+    // offsets.
     if (!isDragging && !caughtSettle) {
+      // A track the resize leaves past its new last page lands on its target
+      // at once, as at rest. A held row's scroll offset can still move under
+      // it as the browser clamps it. A settle that began before the viewport
+      // had a width also lands at once. It showed nothing, so a viewer that
+      // opens on a photo shows it with no slide from the first.
+      const isPastEnd =
+        seed != null &&
+        !isLooping() &&
+        (remap == null ? seed.shown : remap(seed.shown)) >
+          offsetOf(count() - 1) + 0.5;
+      if (
+        settleHandle != null &&
+        animator != null &&
+        seed != null &&
+        wasLaidOut &&
+        !isFlipped &&
+        !isPastEnd
+      ) {
+        retargetSettle(animator, remap, seed);
+        return;
+      }
+      // A mirrored track has no settle to carry on, so it stops and re-places.
       // A settle cut short still ends, even on the page it left.
       const wasSettling = settleHandle != null;
       stopSettle();
@@ -1002,10 +1181,84 @@ export function createPager(
     }
   }
 
+  /**
+   * Where the track shows and its velocity, read at one time. That time also
+   * starts the retargeted curve, so a stall cannot leave it behind.
+   */
+  function readSeed(running: PagerAnimator): Seed {
+    const at = clock();
+    return {
+      at,
+      shown: sign() * running.get('x', at),
+      velocity: sign() * running.getVelocity('x', at),
+    };
+  }
+
+  /**
+   * Plays the settle in flight on toward the target's offset, from `seed`,
+   * read before the pages were measured. When the same pages moved, `remap`
+   * carries the seed onto the new layout. A release keeps UIKit's paging
+   * integrator; any other move keeps the animated scroll.
+   */
+  function retargetSettle(
+    running: PagerAnimator,
+    remap: ((position: number) => number) | null,
+    seed: Seed,
+  ): void {
+    const {at, shown} = seed;
+    const from = remap == null ? shown : remap(shown);
+    // The velocity scales as the layout does where the track shows.
+    const rate = remap == null ? 1 : remap(shown + 0.5) - remap(shown - 0.5);
+    const velocity = seed.velocity * rate;
+    const isRelease = isReleaseSettle;
+    const touchRelease = isTouchReleaseSettle;
+    const isSwipe = isSwipeSettle;
+    // A release's report still waiting goes out two frames after the new
+    // settle starts, as after the first one. A finger's catch still waiting
+    // catches the new settle.
+    const waiting = pendingReport;
+    const isCatchArmed = isCatchTimerArmed;
+    pendingReport = null;
+    isCatchTimerArmed = false;
+    stopSettle();
+    pendingReport = waiting;
+    isCatchTimerArmed = isCatchArmed;
+    // The old settle's report timer may not have fired yet. It goes stale,
+    // so only the new settle's two-frame wait sends the report.
+    reportToken += 1;
+    if (isRelease) {
+      settleFrom(from, velocity, touchRelease, at);
+      isSwipeSettle = isSwipe && settleHandle != null;
+      return;
+    }
+    const to = offsetOf(target);
+    if (from === to) {
+      running.set({x: positionToX(to)});
+      rest();
+      return;
+    }
+    play(
+      solveAnimatedPageScroll({
+        from,
+        to,
+        durationMs: resolveMotion(
+          trackElement,
+          paging.animatedScroll,
+          'durationMs',
+        ),
+        curve: resolveMotion(trackElement, paging.animatedScroll.curve),
+        velocity,
+      }),
+      false,
+      false,
+      at,
+    );
+  }
+
   function onPan(recognizer: PanGestureRecognizer): void {
     const state = recognizer.state;
     if (state === 'began') {
-      // Read before measure(), which can stop the settle on a resize.
+      // Read before measure(), which can retarget the settle on a resize.
       const wasSwipeSettle = settleHandle != null && isSwipeSettle;
       measure();
       clearCatchTimer();
@@ -1346,6 +1599,7 @@ export function createPager(
     const removePanListener = pan.addListener(onPan);
     const removeCatchListener = catcher.addListener(onCatch);
     const host = environment.host ?? getGestureHost(nextViewport.ownerDocument);
+    clock = () => host.arena.now();
     const detachPan = host.attach(nextViewport, pan);
     // The catcher sits on the track, so its long-press styles (no callout, no
     // selection) stay off the pages' text. The viewport's touch-action
