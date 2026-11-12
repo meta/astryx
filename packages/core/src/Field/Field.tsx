@@ -319,8 +319,6 @@ export function Field({
                 type="supporting"
                 display="block"
                 id={resolvedDescriptionID}>
-                {/* As in FieldLabel: plain left-to-right text keeps its
-                    written order on a right-to-left page. */}
                 {withTextDirection(description)}
               </Text>
             ))}

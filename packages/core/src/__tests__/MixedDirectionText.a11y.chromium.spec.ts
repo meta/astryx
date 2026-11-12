@@ -204,4 +204,35 @@ for (const direction of ['rtl', 'ltr'] as const) {
       }
     }
   });
+
+  test(`a wrapped Field label in a centred container stays centred under ${direction.toUpperCase()}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 390, height: 800});
+    await open(page, 'core-field--mixed-direction', direction);
+    const centres = await page.evaluate(() => {
+      const label = document.querySelector('label[for="mixed-wrap"]');
+      const text = label?.querySelector('[dir="ltr"]');
+      const container = document.getElementById('storybook-root');
+      if (!label || !text || !container) {
+        return null;
+      }
+      container.style.textAlign = 'center';
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const box = label.getBoundingClientRect();
+      return {
+        label: (box.left + box.right) / 2,
+        lines: [...range.getClientRects()].map(
+          line => (line.left + line.right) / 2,
+        ),
+      };
+    });
+    expect(centres).not.toBeNull();
+    expect(centres!.lines.length).toBeGreaterThan(1);
+    // The span takes the container's alignment, on either page direction.
+    for (const centre of centres!.lines) {
+      expect(Math.abs(centre - centres!.label)).toBeLessThanOrEqual(1);
+    }
+  });
 }

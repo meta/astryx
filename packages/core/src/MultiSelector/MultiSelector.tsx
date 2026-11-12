@@ -2436,9 +2436,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const listboxOwnsKeyboard =
     surface.activePresentation === 'bottom-sheet' || hasExternalTrigger;
   // A bottom sheet is a modal layer, so Chromium cannot reliably compute the
-  // listbox's name from the trigger outside that layer. A sheet names the
-  // listbox directly from `label`, with or without search; a popover keeps
-  // its trigger relationship.
+  // listbox's name from the trigger outside that layer.
   const panelListboxLabelProps =
     surface.activePresentation === 'bottom-sheet'
       ? {'aria-label': label}
