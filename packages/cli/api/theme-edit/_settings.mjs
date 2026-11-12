@@ -68,10 +68,19 @@ import {
   lockHeld,
   removeEmptyFolder,
   writeWhole,
+  setOwnTokenReader,
 } from './_palette.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
-import {baseInstalled, baseResolved, baseThemeFile} from './_project.mjs';
+import {
+  baseInstalled,
+  baseModule,
+  baseResolved,
+  baseThemeFile,
+} from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+
+// The palette reads the tokens the own source sets through this module.
+setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
 
 /**
  * One setting the CLI owns.
@@ -1029,12 +1038,53 @@ function ownPageTokens(cwd, slug) {
     }
   };
   collect(tokensProp.value, 0);
-  // A value no read of the file can resolve (a call, an import): the
-  // built theme's own top-level tokens, which the build evaluated.
-  if (unresolved)
-    for (const [k, v] of builtTopTokens(cwd, slug))
-      if (!out.has(k)) out.set(k, v);
+  // A value no read of the file can resolve (a call, an import) is read
+  // from the build (ownTokens), and checked again after the next one.
+  void unresolved;
   return out;
+}
+
+/**
+ * The var() loops among a theme's built top-level tokens, each with a key
+ * that names it whatever token it starts from.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Array<{key: string, path: string[]}>}
+ */
+function builtLoops(cwd, slug) {
+  const tokens = builtTopTokens(cwd, slug);
+  /** @param {string} t */
+  const refs = t =>
+    [...String(tokens.get(t) ?? '').matchAll(/var\(\s*(--[a-z0-9-]+)/gi)].map(
+      m => m[1],
+    );
+  /** @type {Array<{key: string, path: string[]}>} */
+  const loops = [];
+  const seen = new Set();
+  for (const start of tokens.keys()) {
+    /** @type {string[]} */
+    const path = [];
+    /** @param {string} t @returns {boolean} */
+    const walk = t => {
+      const at = path.indexOf(t);
+      if (at >= 0) {
+        const cycle = path.slice(at);
+        const key = [...cycle].sort().join(' ');
+        if (!seen.has(key)) {
+          seen.add(key);
+          loops.push({key, path: [...cycle, t]});
+        }
+        return true;
+      }
+      if (!tokens.has(t) || path.length > 50) return false;
+      path.push(t);
+      for (const r of refs(t)) if (walk(r)) return true;
+      path.pop();
+      return false;
+    };
+    walk(start);
+  }
+  return loops;
 }
 
 /**
@@ -1045,11 +1095,80 @@ function ownPageTokens(cwd, slug) {
  * @returns {Map<string, string | null>}
  */
 function builtTopTokens(cwd, slug) {
+  return topTokensOf(themeFiles(cwd, slug).js);
+}
+
+/**
+ * The tokens a base theme's own component rules for a part read through
+ * var() (neutral's progress-bar reads --color-border-emphasized), from its
+ * built module; an empty set when it is not installed.
+ * @param {string} cwd
+ * @param {string | null | undefined} like
+ * @param {string} target
+ * @returns {Set<string>}
+ */
+export function baseComponentReads(cwd, like, target) {
+  /** @type {Set<string>} */
+  const out = new Set();
+  const file = like ? baseModule(cwd, like) : null;
+  if (!file) return out;
+  try {
+    const ast = /** @type {any} */ (
+      parseModule(fs.readFileSync(file, 'utf8'), {sourceType: 'module'})
+    );
+    /** @param {any} node */
+    const visit = node => {
+      if (!node || typeof node !== 'object') return;
+      if (
+        node.type === 'ObjectProperty' &&
+        (node.key?.name ?? node.key?.value) === 'components' &&
+        node.value?.type === 'ObjectExpression'
+      ) {
+        const part = node.value.properties.find(
+          (/** @type {any} */ p) => (p.key?.value ?? p.key?.name) === target,
+        );
+        if (part) {
+          const text = JSON.stringify(part.value);
+          for (const m of text.matchAll(/var\(\s*(--[a-z0-9-]+)/gi))
+            out.add(m[1]);
+        }
+        return;
+      }
+      for (const v of Object.values(node))
+        if (Array.isArray(v)) v.forEach(visit);
+        else if (v && typeof v === 'object' && v.type) visit(v);
+    };
+    visit(ast.program);
+  } catch {
+    // Not one this reads.
+  }
+  return out;
+}
+
+/**
+ * The top-level tokens a base theme's built module gives (what the
+ * editor's settings extend), or an empty map when it is not installed.
+ * @param {string} cwd
+ * @param {string | null | undefined} like
+ * @returns {Map<string, string | null>}
+ */
+export function baseTopTokens(cwd, like) {
+  const file = like ? baseModule(cwd, like) : null;
+  return file ? topTokensOf(file) : new Map();
+}
+
+/**
+ * The top-level tokens of a built theme module (plain data the build
+ * wrote), or an empty map.
+ * @param {string} file
+ * @returns {Map<string, string | null>}
+ */
+function topTokensOf(file) {
   /** @type {Map<string, string | null>} */
   const out = new Map();
   try {
     const ast = /** @type {any} */ (
-      parseModule(fs.readFileSync(themeFiles(cwd, slug).js, 'utf8'), {
+      parseModule(fs.readFileSync(file, 'utf8'), {
         sourceType: 'module',
       })
     );
@@ -1065,7 +1184,19 @@ function builtTopTokens(cwd, slug) {
       for (const p of tokens?.value.properties ?? []) {
         const k = p.key?.value ?? p.key?.name;
         if (typeof k === 'string' && k.startsWith('--'))
-          out.set(k, p.value?.type === 'StringLiteral' ? p.value.value : null);
+          out.set(
+            k,
+            p.value?.type === 'StringLiteral'
+              ? p.value.value
+              : // A [light, dark] pair, as the build writes it.
+                p.value?.type === 'ArrayExpression' &&
+                  p.value.elements.length === 2 &&
+                  p.value.elements.every(
+                    (/** @type {any} */ e) => e?.type === 'StringLiteral',
+                  )
+                ? `light-dark(${p.value.elements.map((/** @type {any} */ e) => e.value).join(', ')})`
+                : null,
+          );
       }
     }
   } catch {
@@ -1075,19 +1206,125 @@ function builtTopTokens(cwd, slug) {
 }
 
 /**
- * The page-wide tokens a theme's own source sets itself (the top-level
- * `tokens` of its `defineTheme`): they win over the settings it extends.
+ * The page-wide tokens the theme's own source sets, read from what the
+ * build made of it: the built module's top-level tokens that the
+ * generated settings module does not give as they are (the own source wins
+ * over the settings it extends). The build evaluates the file, so any way
+ * of writing it counts (a namespace import, a renamed defineTheme, a
+ * template, a spread of a shared object). Only a build made from the
+ * source as it is now is read; with none, the file is read as written.
+ * Both are joined: a key either names is the source's.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Map<string, string | null>}
+ */
+function ownTokens(cwd, slug) {
+  const out = new Map(ownPageTokens(cwd, slug));
+  const fromBuild = builtOwnTokens(cwd, slug);
+  if (fromBuild) for (const [k, v] of fromBuild) out.set(k, v);
+  return out;
+}
+
+/**
+ * The tokens the own source sets, as the current build shows them, or null
+ * when there is no build made from the source as it is now.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Map<string, string | null> | null}
+ */
+function builtOwnTokens(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  /** @type {string} */
+  let module;
+  try {
+    module = fs.readFileSync(f.settingsTs, 'utf8');
+  } catch {
+    return null;
+  }
+  const built = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(
+    module,
+  )?.[1];
+  if (!built || !fs.existsSync(f.js) || built !== themeSourceHash(cwd, slug))
+    return null;
+  // What the settings module gives each top-level token: a text value as
+  // it is, a [light, dark] pair as a pair.
+  /** @type {Map<string, string | 'pair' | 'other'>} */
+  const settings = new Map();
+  try {
+    const ast = /** @type {any} */ (
+      parseModule(module, {sourceType: 'module', plugins: ['typescript']})
+    );
+    /** @param {any} node */
+    const visit = node => {
+      if (!node || typeof node !== 'object') return;
+      if (
+        node.type === 'CallExpression' &&
+        node.callee?.name === 'defineTheme' &&
+        node.arguments?.[0]?.type === 'ObjectExpression'
+      ) {
+        const tokens = node.arguments[0].properties.find(
+          (/** @type {any} */ p) =>
+            (p.key?.value ?? p.key?.name) === 'tokens' &&
+            p.value?.type === 'ObjectExpression',
+        );
+        for (const p of tokens?.value.properties ?? []) {
+          const k = p.key?.value ?? p.key?.name;
+          if (typeof k !== 'string') continue;
+          settings.set(
+            k,
+            p.value?.type === 'StringLiteral'
+              ? p.value.value
+              : p.value?.type === 'ArrayExpression'
+                ? 'pair'
+                : 'other',
+          );
+        }
+        return;
+      }
+      for (const v of Object.values(node))
+        if (Array.isArray(v)) v.forEach(visit);
+        else if (v && typeof v === 'object' && v.type) visit(v);
+    };
+    visit(ast.program);
+  } catch {
+    return null;
+  }
+  // What the base theme's built module gives: the tokens the settings
+  // extend, which are no more the source's than the settings' are.
+  const like = /\/\/ Built on @astryxdesign\/theme-([a-z0-9-]+) /.exec(
+    module,
+  )?.[1];
+  const baseFile = like ? baseModule(cwd, like) : null;
+  const base = baseFile ? topTokensOf(baseFile) : new Map();
+  /** @type {Map<string, string | null>} */
+  const out = new Map();
+  for (const [k, v] of builtTopTokens(cwd, slug)) {
+    const given = settings.get(k);
+    const own =
+      given === undefined
+        ? !base.has(k) || base.get(k) !== v
+        : given === 'pair'
+          ? !/^light-dark\(/.test(String(v ?? ''))
+          : given !== 'other' && given !== v;
+    if (own) out.set(k, v);
+  }
+  return out;
+}
+
+/**
+ * The page-wide tokens a theme's own source sets itself (see ownTokens):
+ * they win over the settings it extends.
  * @param {string} cwd
  * @param {string} slug
  * @returns {string[]}
  */
 export function ownSourceTokens(cwd, slug) {
-  return [...ownPageTokens(cwd, slug).keys()];
+  return [...ownTokens(cwd, slug).keys()];
 }
 
 /**
- * The values a theme's own source gives page-wide tokens as plain text
- * (`'--radius-page': 'var(--radius-element)'`), by token.
+ * The values a theme's own source gives page-wide tokens as plain text, by
+ * token (see ownTokens).
  * @param {string} cwd
  * @param {string} slug
  * @returns {Record<string, string>}
@@ -1095,7 +1332,7 @@ export function ownSourceTokens(cwd, slug) {
 export function ownSourceTokenValues(cwd, slug) {
   /** @type {Record<string, string>} */
   const out = {};
-  for (const [k, v] of ownPageTokens(cwd, slug)) if (v != null) out[k] = v;
+  for (const [k, v] of ownTokens(cwd, slug)) if (v != null) out[k] = v;
   return out;
 }
 
@@ -4008,6 +4245,10 @@ export async function commitTheme(
   fs.mkdirSync(f.dir, {recursive: true});
   /** @type {{warnings: string[], lifted: string[], notes: string[]}} */
   let built;
+  // The token loops the last build had, so a change that adds one (through
+  // tokens the own source sets in a way no read of the file follows) is
+  // refused once the build shows it.
+  const loopsBefore = new Set(builtLoops(cwd, slug).map(l => l.key));
   try {
     refuseIfLockLost();
     try {
@@ -4018,6 +4259,18 @@ export async function commitTheme(
     // The build writes its outputs itself: a lock lost meanwhile is seen
     // before anything else is written.
     refuseIfLockLost();
+    const loop = builtLoops(cwd, slug).find(l => !loopsBefore.has(l.key));
+    if (loop)
+      throw new AstryxError(
+        `${loop.path.join(' reads ')}: the change makes these tokens read each other (with what ${slug}.theme.ts sets), so they would have no value at all. Nothing was changed.`,
+        [
+          {
+            name: `${P} how ${loop.path[0].replace(/^--/, '')}`,
+            reason: 'see what it takes',
+          },
+        ],
+        ERROR_CODES.ERR_THEME_BAD_VALUE,
+      );
     data.lifted = built.lifted;
     // The undo step and the settings are part of the change: written whole,
     // inside the rollback, the settings first. A command stopped between
@@ -4080,7 +4333,8 @@ export async function commitTheme(
         e.code === ERROR_CODES.ERR_THEME_INVALID ||
         e.code === ERROR_CODES.ERR_PALETTE_GENERATION ||
         e.code === ERROR_CODES.ERR_WRITE_FAILED ||
-        e.code === ERROR_CODES.ERR_THEME_BUSY)
+        e.code === ERROR_CODES.ERR_THEME_BUSY ||
+        e.code === ERROR_CODES.ERR_THEME_BAD_VALUE)
     )
       throw e;
     // A folder where a built file goes: named for the editor, which has no

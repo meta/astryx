@@ -72,6 +72,7 @@ import {
   themeSourceProblem,
   refuseThemeParse,
   ownSourceTokens,
+  ownSourceTokenValues,
 } from './_settings.mjs';
 import {checkSetting, exampleOf, storedProblems} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
@@ -1377,9 +1378,23 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
             (x.state ?? '') === (s.state ?? ''),
         ) ?? null)
       : null);
+  // An exact token the theme's own source also sets: the file's value
+  // shows (read from what the build made of it), not the setting.
+  const ownOverToken =
+    sub === 'set' && s.source === 'token' && !s.on && !s.when && !s.state
+      ? (Object.entries(ownSourceTokenValues(cwd, slug)).find(
+          ([k]) => k === s.thing,
+        ) ??
+        (ownSourceTokens(cwd, slug).includes(s.thing) ? [s.thing, null] : null))
+      : null;
   /** @type {string[]} */
   const notes = [
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
+    ...(ownOverToken
+      ? [
+          `${slug}.theme.ts sets ${s.thing} itself${ownOverToken[1] != null ? ` (${ownOverToken[1]})` : ''}, and your own source wins over the settings, so this does not show; change it in ${slug}.theme.ts, or take this back with \`${P} undo ${slug} ${s.thing}\``,
+        ]
+      : []),
     ...(exactWins.length
       ? [
           `keeps your exact ${exactWins.map(describe).join(', ')}: an exact setting wins over a dial, so ${exactWins.length > 1 ? 'those do' : 'that does'} not change; this shows after \`${P} undo ${slug} ${exactWins.map(x => undoArgs(x)).join(`\` and \`${P} undo ${slug} `)}\``,
@@ -1444,6 +1459,7 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
     ...(sub === 'set' &&
     !exactOver &&
     !roleOver.length &&
+    !ownOverToken &&
     // With the last build unreadable or missing, nothing was compared.
     !r.notes.some(
       n =>
@@ -1511,7 +1527,18 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
         s.thing,
         slug,
         modesOf(data),
-      ),
+      ).map(n => {
+        // The exact color is the one the theme's own source sets: named so.
+        const token = n.split(' ')[0];
+        return ownWins.includes(token) && / uses your exact setting \(/.test(n)
+          ? n
+              .replace(
+                ' uses your exact setting (',
+                ` uses the value ${slug}.theme.ts sets (`,
+              )
+              .replace('an exact setting wins', 'your own source wins')
+          : n;
+      }),
     );
   // An exact color the mapping reads (a fill, a tint, text on a fill)
   // changes what it picks around it: say what, as the dial does.

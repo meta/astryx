@@ -94,6 +94,8 @@ import {
   partComponentDocs,
   themeFiles,
   ownSourceTokenValues,
+  baseTopTokens,
+  baseComponentReads,
   cssFamily,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
@@ -956,6 +958,9 @@ function isShadow(value) {
  */
 function checkCycle(thing, value, TOKENS, data, cwd, scope = {}) {
   const own = cwd ? ownSourceTokenValues(cwd, data.name) : {};
+  // The base theme's own values come under the settings: a base that maps
+  // one token to another closes a loop too.
+  const baseTokens = cwd ? baseTopTokens(cwd, data.like) : new Map();
   const on = scope.on ?? null;
   const settings = [...data.settings].reverse();
   /**
@@ -981,6 +986,7 @@ function checkCycle(thing, value, TOKENS, data, cwd, scope = {}) {
       (Object.hasOwn(own, t) ? own[t] : null) ??
         settings.find(s => s.source === 'token' && s.thing === t && !s.on)
           ?.value ??
+        baseTokens.get(t) ??
         TOKENS[t] ??
         '',
     );
@@ -2820,11 +2826,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     if (ctx.unchecked) return s;
     const parts = partsOf(ctx, s);
     if (parts.length) {
+      // A part the base theme's own rule makes read the token reads it.
       const results = parts.map(
         t =>
           /** @type {[string, import('./_compiler.mjs').CheckFailure | null]} */ ([
             t,
-            C.checkTokenOn(slug, t, thing, v, P),
+            baseComponentReads(ctx.project.cwd, data.like, t).has(thing)
+              ? null
+              : C.checkTokenOn(slug, t, thing, v, P),
           ]),
       );
       const recorded = results.filter(([, r]) => !r?.soft);

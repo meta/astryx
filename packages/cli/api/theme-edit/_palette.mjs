@@ -36,6 +36,20 @@ import {
   perceptualDelta,
 } from '../theme/palette/generate/generator.mjs';
 import {themePaletteGenerate} from '../theme/palette/generate/generate.mjs';
+/**
+ * How the page-wide tokens a theme's own source sets are read: given by
+ * _settings (which imports this module) when it loads.
+ * @type {(cwd: string, slug: string) => Record<string, string>}
+ */
+let ownSourceTokenValues = () => ({});
+
+/**
+ * Give the reader of the tokens a theme's own source sets.
+ * @param {(cwd: string, slug: string) => Record<string, string>} read
+ */
+export function setOwnTokenReader(read) {
+  ownSourceTokenValues = read;
+}
 import {hexToOklch, normalizeColor} from '../theme/palette/generate/color.mjs';
 import {
   alphaOf,
@@ -760,7 +774,12 @@ function usableStops(stops, slug) {
  * @param {{settings: Setting[]}} data
  * @param {{light: Record<string, string>, dark: Record<string, string>} | undefined} base
  */
-function tools(candidate, data, base) {
+function tools(
+  candidate,
+  data,
+  base,
+  /** @type {Record<string, string>} */ own = {},
+) {
   const {stops} = candidate;
   /** @param {number} n */
   const at = n => nearestStop(stops, n);
@@ -776,6 +795,9 @@ function tools(candidate, data, base) {
    * @param {string} token @param {Mode} m
    */
   const settingOf = (token, m) =>
+    // A page-wide token the theme's own source sets wins over the settings
+    // (the build shows it), as an exact setting would.
+    (Object.hasOwn(own, token) ? own[token] : undefined) ??
     [...data.settings]
       .reverse()
       .find(
@@ -1224,7 +1246,12 @@ function planPalette(cwd, slug, data, base) {
   // The exact color anchors dark mode too when it reads there, as the
   // official themes anchor a brand color in both modes.
   if (modes.includes('dark') && Object.keys(fills).length) {
-    const t = tools(generate(config, file), data, base);
+    const t = tools(
+      generate(config, file),
+      data,
+      base,
+      ownSourceTokenValues(cwd, slug),
+    );
     /** @type {string[]} */
     const add = [];
     for (const [id, fill] of Object.entries(fills)) {
@@ -1803,7 +1830,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   const plan = /** @type {PalettePlan} */ (planPalette(cwd, slug, data, base));
   const {config} = plan;
   const candidate = generate(config, paletteFiles(slug).config);
-  const t = tools(candidate, data, base);
+  const t = tools(candidate, data, base, ownSourceTokenValues(cwd, slug));
   const {stops, at, ref, exactOf, rawOf, settingOf, side, solid, surfaces} = t;
   const modes = modesOf(data);
   /** @type {PaletteMapping['tokens']} */
