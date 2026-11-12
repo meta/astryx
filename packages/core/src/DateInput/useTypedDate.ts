@@ -7,12 +7,13 @@
  * @input Provider locale and calendar, a field's format, bounds and constraints;
  *   calendarDateParser, and parseDateInput for other Gregorian text
  * @output Typed-date reading, committed text, the format hint, the calendar
- *   description and rejection messages for a date text field, and the typed
- *   entry state that DateInput and DateTimeInput share
+ *   description and rejection messages for a date text field, the typed
+ *   entry state that DateInput and DateTimeInput share, and the
+ *   DateInputEntryError that the field reports to its caller
  * @position DateInput helper hook; used by DateInput and DateTimeInput
  */
 
-import {useCallback, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {InputStatus} from '../Field/types';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
@@ -49,6 +50,55 @@ registerEnglishFallback(english);
 
 /** A rejected typed date, by the message it announces. */
 export type TypedDateError = 'unreadable' | 'nonexistent' | 'outOfRange';
+
+/**
+ * Why a date field rejects the text that a person typed. The field reports it
+ * through `onEntryErrorChange`, so the app can word its own message.
+ */
+export interface DateInputEntryError {
+  /**
+   * The reason, independent of the locale and the calendar:
+   * - `'unreadable'`: text that is not a date
+   * - `'incomplete'`: part of a date that Enter or blur cannot finish
+   * - `'nonexistent'`: a date that the calendar does not have
+   * - `'outOfRange'`: a date before `min` or after `max`
+   * - `'unavailable'`: a date that `dateConstraints` rules out
+   */
+  kind:
+    'unreadable' | 'incomplete' | 'nonexistent' | 'outOfRange' | 'unavailable';
+  /** The typed text. */
+  text: string;
+  /**
+   * The Gregorian ISO date that the text names. It is set for `outOfRange` and
+   * `unavailable`.
+   */
+  date?: ISODateString;
+}
+
+function isSameEntryError(
+  a: DateInputEntryError | null,
+  b: DateInputEntryError | null,
+): boolean {
+  return (
+    a === b ||
+    (a != null &&
+      b != null &&
+      a.kind === b.kind &&
+      a.text === b.text &&
+      a.date === b.date)
+  );
+}
+
+function isOutsideBounds(
+  date: PlainDate,
+  min: ISODateString | undefined,
+  max: ISODateString | undefined,
+): boolean {
+  return (
+    (min != null && plainDateIsBefore(date, plainDateFromISO(min))) ||
+    (max != null && plainDateIsAfter(date, plainDateFromISO(max)))
+  );
+}
 
 export interface UseTypedDateOptions {
   /** The component that names itself in development warnings. */
@@ -102,6 +152,33 @@ export function typedDateError(
     return result.kind;
   }
   return null;
+}
+
+/** The rejection a result shows, as the field reports it to its caller. */
+function dateEntryError(
+  result: CalendarDateParseResult | null,
+  isCommitted: boolean,
+  text: string,
+  min: ISODateString | undefined,
+  max: ISODateString | undefined,
+): DateInputEntryError | null {
+  const error = typedDateError(result, isCommitted);
+  if (error == null || result == null) {
+    return null;
+  }
+  if (result.kind === 'incomplete') {
+    return {kind: 'incomplete', text};
+  }
+  if (result.kind === 'outOfRange') {
+    return {
+      kind: isOutsideBounds(result.date, min, max)
+        ? 'outOfRange'
+        : 'unavailable',
+      text,
+      date: plainDateToISO(result.date),
+    };
+  }
+  return {kind: error, text};
 }
 
 /**
@@ -186,10 +263,17 @@ export function useTypedDate({
     [calendar, locale],
   );
 
+  const isProviderCalendar = isGregorian
+    ? isGregorianCalendar(providerCalendar)
+    : calendar === providerCalendar;
+
   const errorMessage = useCallback(
     (result: CalendarDateParseResult) => {
       if (result.kind === 'nonexistent') {
-        return t('@astryx.dateInput.nonexistentDate', {calendar: calendarName});
+        return t('@astryx.dateInput.nonexistentDate', {
+          named: isProviderCalendar ? 'no' : 'yes',
+          calendar: calendarName,
+        });
       }
       if (result.kind === 'outOfRange') {
         const boundFormat = typeof format === 'function' ? 'date_long' : format;
@@ -200,18 +284,13 @@ export function useTypedDate({
             locale,
             calendar,
           );
-        const isBeforeMin =
-          min != null && plainDateIsBefore(result.date, plainDateFromISO(min));
-        const isAfterMax =
-          max != null && plainDateIsAfter(result.date, plainDateFromISO(max));
-        const bounds =
-          !isBeforeMin && !isAfterMax
-            ? 'none'
-            : min != null && max != null
-              ? 'both'
-              : min != null
-                ? 'min'
-                : 'max';
+        const bounds = !isOutsideBounds(result.date, min, max)
+          ? 'none'
+          : min != null && max != null
+            ? 'both'
+            : min != null
+              ? 'min'
+              : 'max';
         return t('@astryx.dateInput.outOfRangeDate', {
           bounds,
           min: min != null ? writeBound(min) : '',
@@ -220,12 +299,8 @@ export function useTypedDate({
       }
       return t('@astryx.dateInput.invalidDate');
     },
-    [t, calendarName, format, locale, calendar, min, max],
+    [t, isProviderCalendar, calendarName, format, locale, calendar, min, max],
   );
-
-  const isProviderCalendar = isGregorian
-    ? isGregorianCalendar(providerCalendar)
-    : calendar === providerCalendar;
 
   return {
     calendar,
@@ -258,10 +333,19 @@ export interface UseTypedDateFieldOptions extends UseTypedDateOptions {
    * date typing already reported gives way to the field's value.
    */
   isDisabled: boolean;
-  /** The caller's status. Rejected text that stays shows its own error instead. */
+  /**
+   * The caller's status. Rejected text that stays shows its own error instead,
+   * except that a caller with `onEntryErrorChange` words the error: its error
+   * status shows in place of the field's own message.
+   */
   status?: InputStatus;
   /** Whether the shown status announces itself, as Field's status does. */
   isStatusAnnounced: boolean;
+  /**
+   * Reports each change of the typed rejection, and null when it ends or when
+   * the field unmounts while it stands.
+   */
+  onEntryErrorChange?: (error: DateInputEntryError | null) => void;
   /** Whether the caller gave a placeholder, which replaces the format hint. */
   hasPlaceholder: boolean;
 }
@@ -277,7 +361,7 @@ export interface TypedDateField {
   isInvalid: boolean;
   /** The status the field shows. */
   fieldStatus: InputStatus | undefined;
-  /** A typed rejection that the field status does not announce. */
+  /** The rejection message that the field status does not announce. */
   alertMessage: string;
   handleChange: (text: string) => void;
   /** Commits typed text, on Enter or blur. */
@@ -298,6 +382,7 @@ export function useTypedDateField({
   isDisabled,
   status,
   isStatusAnnounced,
+  onEntryErrorChange,
   hasPlaceholder,
   ...options
 }: UseTypedDateFieldOptions): TypedDateField {
@@ -308,8 +393,16 @@ export function useTypedDateField({
   const [isRejectionCommitted, setIsRejectionCommitted] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   // The date that typing last reported, so one typing session reports each
-  // date once.
-  const lastFiredRef = useRef<ISODateString | undefined>(undefined);
+  // date once. Only the handlers write it. A value from outside and a
+  // re-enable retire it by moving `firedEpoch` on, during render, so no
+  // render React discards can retire it.
+  const [lastFired, setLastFired] = useState<{
+    date: ISODateString | undefined;
+    epoch: number;
+  }>({date: undefined, epoch: 0});
+  const [firedEpoch, setFiredEpoch] = useState(0);
+  const lastFiredDate =
+    lastFired.epoch === firedEpoch ? lastFired.date : undefined;
 
   const typedResult =
     pendingInput !== null && pendingInput.trim()
@@ -333,20 +426,150 @@ export function useTypedDateField({
     isErrorShown && errorMessage != null
       ? {type: 'error', message: errorMessage}
       : undefined;
-  const fieldStatus = typedStatus ?? status;
+  const entryError = isDisabled
+    ? null
+    : dateEntryError(
+        typedResult,
+        isRejectionCommitted,
+        pendingInput ?? '',
+        options.min,
+        options.max,
+      );
+
+  // The rejection that the caller last received. Handlers report a rejection
+  // that they cause in the same update. A rejection that a prop change causes
+  // reaches the caller only after the render. Until then the field keeps the
+  // caller's status, so it never shows and announces its own message just
+  // before the caller's message replaces it.
+  const [heardEntryError, setHeardEntryError] =
+    useState<DateInputEntryError | null>(null);
+  const reportedEntryErrorRef = useRef<DateInputEntryError | null>(null);
+  // The callback of the latest commit, for the report at unmount.
+  const latestEntryErrorCallbackRef = useRef(onEntryErrorChange);
+  const hasEntryErrorCallback = onEntryErrorChange != null;
+  const isCallerBehind =
+    hasEntryErrorCallback && !isSameEntryError(entryError, heardEntryError);
+  // A caller that receives rejections words them: its error message replaces
+  // the field's own message. A warning or a success never hides a rejection.
+  const callerErrorMessage =
+    hasEntryErrorCallback && status?.type === 'error' && status.message
+      ? status.message
+      : null;
+  const fieldStatus =
+    isCallerBehind || callerErrorMessage != null
+      ? status
+      : (typedStatus ?? status);
+
+  // Field announces its status when the status appears or changes. A
+  // rejection that starts under the caller's error message changes no status,
+  // so the field's alert announces that message once for it. This record
+  // holds the error message that the status showed while no rejection stood.
+  // A change of the shown message during the rejection ends the repeat,
+  // because Field announces that change.
+  const shownErrorMessage =
+    fieldStatus?.type === 'error' ? (fieldStatus.message ?? null) : null;
+  const [statusRecord, setStatusRecord] = useState<{
+    message: string | null;
+    isRepeatable: boolean;
+  }>({message: shownErrorMessage, isRepeatable: true});
+  // The alert and the status change in the same render.
+  const statusRecordInput = `${entryError != null}:${shownErrorMessage}`;
+  const prevStatusRecordInputRef = useRef(statusRecordInput);
+  if (
+    hasEntryErrorCallback &&
+    statusRecordInput !== prevStatusRecordInputRef.current
+  ) {
+    prevStatusRecordInputRef.current = statusRecordInput;
+    if (entryError == null) {
+      if (
+        statusRecord.message !== shownErrorMessage ||
+        !statusRecord.isRepeatable
+      ) {
+        setStatusRecord({message: shownErrorMessage, isRepeatable: true});
+      }
+    } else if (
+      statusRecord.isRepeatable &&
+      statusRecord.message !== shownErrorMessage
+    ) {
+      setStatusRecord({message: statusRecord.message, isRepeatable: false});
+    }
+  }
+
+  let alertMessage = '';
+  if (errorMessage != null && !isCallerBehind) {
+    if (callerErrorMessage != null) {
+      const isStatusRepeated =
+        statusRecord.isRepeatable &&
+        statusRecord.message === callerErrorMessage;
+      // Inside an InputGroup no Field announces the caller's status.
+      alertMessage =
+        !isStatusAnnounced || isStatusRepeated ? callerErrorMessage : '';
+    } else {
+      alertMessage =
+        isStatusAnnounced && typedStatus != null ? '' : errorMessage;
+    }
+  }
+
+  const reportEntryError = useCallback(
+    (error: DateInputEntryError | null) => {
+      if (onEntryErrorChange == null) {
+        return;
+      }
+      setHeardEntryError(error);
+      if (!isSameEntryError(error, reportedEntryErrorRef.current)) {
+        reportedEntryErrorRef.current = error;
+        onEntryErrorChange(error);
+      }
+    },
+    [onEntryErrorChange],
+  );
+
+  // Syncs the caller's entry error with a rejection that a new `min`, `max`,
+  // `dateConstraints`, `value`, or disabled state starts, changes, or ends.
+  useEffect(() => {
+    latestEntryErrorCallbackRef.current = onEntryErrorChange;
+    if (onEntryErrorChange == null) {
+      return;
+    }
+    if (!isSameEntryError(entryError, reportedEntryErrorRef.current)) {
+      reportedEntryErrorRef.current = entryError;
+      // Called through the ref: the set-state-in-effect rule takes a call to a
+      // hook parameter for the whole hook's body.
+      latestEntryErrorCallbackRef.current?.(entryError);
+    }
+    if (!isSameEntryError(entryError, heardEntryError)) {
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- shows the field's own message once the caller has the rejection
+      setHeardEntryError(entryError);
+    }
+  }, [entryError, heardEntryError, onEntryErrorChange]);
+
+  // Syncs the caller's entry error at unmount. A presentation or pointer
+  // change can replace the field while its reported rejection stands, and
+  // the rejection ends with the field.
+  useEffect(
+    () => () => {
+      if (reportedEntryErrorRef.current != null) {
+        reportedEntryErrorRef.current = null;
+        latestEntryErrorCallbackRef.current?.(null);
+      }
+    },
+    [],
+  );
 
   const reset = useCallback(() => {
     setPendingInput(null);
     setIsRejectionCommitted(false);
-  }, []);
+    reportEntryError(null);
+  }, [reportEntryError]);
 
-  // A value from outside drops typed text. Computed during render, so it
-  // takes no extra render.
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
-    if (value !== lastFiredRef.current) {
-      lastFiredRef.current = undefined;
+  // A value from outside drops typed text. Adjusted during render, so it
+  // takes no extra commit; state, so a render React discards takes its
+  // adjustment with it.
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    if (value !== lastFiredDate) {
+      setFiredEpoch(epoch => epoch + 1);
       if (pendingInput !== null) {
         setPendingInput(null);
         setIsRejectionCommitted(false);
@@ -357,16 +580,16 @@ export function useTypedDateField({
   // Typing already reported this date through `onChange`. Once the field is
   // editable, it shows its value. A retyped date then reports again. A focused
   // field keeps the text until Enter or blur, which end the typing session.
-  const wasDisabledRef = useRef(isDisabled);
-  if (isDisabled !== wasDisabledRef.current) {
-    wasDisabledRef.current = isDisabled;
+  const [wasDisabled, setWasDisabled] = useState(isDisabled);
+  if (isDisabled !== wasDisabled) {
+    setWasDisabled(isDisabled);
     if (
       !isDisabled &&
       !isFocused &&
       typedResult?.kind === 'value' &&
-      plainDateToISO(typedResult.date) === lastFiredRef.current
+      plainDateToISO(typedResult.date) === lastFiredDate
     ) {
-      lastFiredRef.current = undefined;
+      setFiredEpoch(epoch => epoch + 1);
       setPendingInput(null);
       setIsRejectionCommitted(false);
     }
@@ -374,14 +597,14 @@ export function useTypedDateField({
 
   const report = useCallback(
     (date: ISODateString) => {
-      if (date === value || date === lastFiredRef.current) {
+      if (date === value || date === lastFiredDate) {
         return false;
       }
-      lastFiredRef.current = date;
+      setLastFired({date, epoch: firedEpoch});
       onChange(date);
       return true;
     },
-    [value, onChange],
+    [value, lastFiredDate, firedEpoch, onChange],
   );
 
   const handleChange = useCallback(
@@ -393,6 +616,15 @@ export function useTypedDateField({
       setIsRejectionCommitted(false);
       // Report a date only once more typing cannot change it.
       const result = typedDate.parse(text);
+      reportEntryError(
+        dateEntryError(
+          text.trim() ? result : null,
+          false,
+          text,
+          options.min,
+          options.max,
+        ),
+      );
       if (result.kind === 'value' && result.isComplete) {
         const date = plainDateToISO(result.date);
         if (report(date)) {
@@ -400,7 +632,15 @@ export function useTypedDateField({
         }
       }
     },
-    [isDisabled, typedDate, report, onTypedDate],
+    [
+      isDisabled,
+      typedDate,
+      reportEntryError,
+      options.min,
+      options.max,
+      report,
+      onTypedDate,
+    ],
   );
 
   const commit = useCallback(() => {
@@ -421,15 +661,29 @@ export function useTypedDateField({
       // Keep the text and show why it cannot commit; never finish or adjust
       // the date.
       setIsRejectionCommitted(true);
+      reportEntryError(
+        dateEntryError(result, true, pendingInput, options.min, options.max),
+      );
       return;
     }
     if (result.kind === 'value') {
       report(plainDateToISO(result.date));
     }
     // A new typing session reports a retyped date again.
-    lastFiredRef.current = undefined;
+    setLastFired({date: undefined, epoch: firedEpoch});
     reset();
-  }, [pendingInput, isDisabled, onClear, typedDate, report, reset]);
+  }, [
+    pendingInput,
+    isDisabled,
+    onClear,
+    typedDate,
+    reportEntryError,
+    options.min,
+    options.max,
+    report,
+    reset,
+    firedEpoch,
+  ]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -458,8 +712,7 @@ export function useTypedDateField({
     isPending: pendingInput !== null,
     isInvalid: typedError != null,
     fieldStatus,
-    alertMessage:
-      isStatusAnnounced && typedStatus != null ? '' : (errorMessage ?? ''),
+    alertMessage,
     handleChange,
     commit,
     handleFocus,

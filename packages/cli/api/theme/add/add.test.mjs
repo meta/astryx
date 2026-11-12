@@ -447,4 +447,53 @@ describe('themeAdd', () => {
       ),
     });
   });
+
+  it('names how to rebuild a module whose record header is damaged, theme by theme', async () => {
+    installTheme();
+    await themeAdd('ocean', {cwd: tmpDir, package: '@acme/themes'});
+    const moduleFile = path.join(tmpDir, 'src/astryx-themes.ts');
+    fs.writeFileSync(
+      moduleFile,
+      fs
+        .readFileSync(moduleFile, 'utf-8')
+        .split('\n')
+        .filter(line => !line.includes('@astryx-theme-record'))
+        .join('\n'),
+    );
+    await expect(themeAdd('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message: expect.stringContaining(
+        'Delete src/astryx-themes.ts, then add its themes again',
+      ),
+      suggestions: [{name: expect.stringMatching(/ theme add ocean$/)}],
+    });
+  });
+
+  it('names theme use with an added theme when the record default is not added', async () => {
+    installTheme();
+    await themeAdd('ocean', {cwd: tmpDir, package: '@acme/themes'});
+    const moduleFile = path.join(tmpDir, 'src/astryx-themes.ts');
+    fs.writeFileSync(
+      moduleFile,
+      fs
+        .readFileSync(moduleFile, 'utf-8')
+        .replace('"defaultThemeSlug":"ocean"', '"defaultThemeSlug":"zzz"'),
+    );
+    await expect(themeAdd('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+      message: expect.stringContaining(' theme use ocean`'),
+      suggestions: [{name: expect.stringMatching(/ theme use ocean$/)}],
+    });
+  });
+
+  it('refuses a folder where the generated module goes, in plain words', async () => {
+    installTheme();
+    fs.mkdirSync(path.join(tmpDir, 'src/astryx-themes.ts'));
+    await expect(
+      themeAdd('ocean', {cwd: tmpDir, package: '@acme/themes'}),
+    ).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message:
+        'src/astryx-themes.ts is a folder, where the generated theme module goes. Move or delete that folder, then run the same command again.',
+    });
+  });
 });
