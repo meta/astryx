@@ -3882,6 +3882,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-long-press-touch-right-click-context-actions",
+      "path": "examples/use-long-press/touch-right-click-context-actions",
+      "aliases": []
+    },
+    {
       "name": "example-use-merged-refs-auto-grow-text-area",
       "path": "examples/use-merged-refs/auto-grow-text-area",
       "aliases": []
