@@ -439,6 +439,23 @@ describe('generateOnMediaCSS scheme-dependent replays', () => {
     );
   });
 
+  it("keeps the root's value for a reference to a token the surface declares", () => {
+    const referring = defineTheme({
+      name: 'media-scheme-replay-reference',
+      tokens: {
+        '--color-accent': ['#111111', '#eeeeee'],
+        '--color-border-emphasized': 'var(--color-accent)',
+      },
+    });
+    const declared = mediaDeclarations(generateOnMediaCSS(referring), 'dark');
+    // The dark surface declares its own accent. Without lowering, the root
+    // resolves the reference, so the surface shows the root's accent.
+    expect(declared['--color-accent']).toBe('var(--color-on-dark)');
+    expect(declared['--color-border-emphasized']).toBe(
+      referring.tokens['--color-accent'],
+    );
+  });
+
   it('writes no core default the theme leaves unset', () => {
     expect(mediaDeclarations(css, 'dark')).not.toHaveProperty(
       '--color-background-surface',

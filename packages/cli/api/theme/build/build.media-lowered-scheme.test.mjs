@@ -17,6 +17,7 @@
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {themeBuild} from './build.mjs';
 
@@ -147,21 +148,26 @@ function surfaceValue(source, page, surface, token) {
 }
 
 /**
- * The value a token should compute to inside a media surface: every root
- * value resolved under the surface's own scheme, as `light-dark()` resolves
- * where it is used.
+ * The value a token should compute to inside a media surface, as without
+ * lowering: the root resolves its own references, and `light-dark()` resolves
+ * under the surface's scheme where it is used. A surface declaration that
+ * resolves to the root's value is a re-declaration of a root token, not one of
+ * the surface's own tokens.
  */
 function intendedSurfaceValue(source, surface, token) {
   const {root, surfaces} = blocks(source);
   const own = surfaces[surface];
-  const resolve = name => {
-    if (own[name] !== undefined) {
-      return substitute(own[name], resolve);
-    }
-    return root[name] === undefined
+  const resolveRoot = name =>
+    root[name] === undefined
       ? SCHEME_SWITCHES[surface][name]
-      : substitute(root[name], resolve);
-  };
+      : substitute(root[name], resolveRoot);
+  const redeclaresRoot = name =>
+    root[name] !== undefined &&
+    substitute(own[name], resolveRoot) === resolveRoot(name);
+  const resolve = name =>
+    own[name] !== undefined && !redeclaresRoot(name)
+      ? substitute(own[name], resolve)
+      : resolveRoot(name);
   return resolve(token) ?? '';
 }
 
@@ -202,5 +208,58 @@ describe('media surfaces after light-dark() lowering', () => {
         });
       }
     }
+  }
+});
+
+describe('a root token that refers to a token the surface declares', () => {
+  /** @type {string} */
+  let tmpDir;
+  /** @type {string} */
+  let built;
+  /** @type {string} */
+  let lowered;
+
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-media-reference-'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'theme.mjs'),
+      `export default {
+        name: 'surface-reference',
+        tokens: {
+          '--color-text-primary': '#222222',
+          '--color-accent': ['#102030', '#e0d0c0'],
+          '--color-border-emphasized': 'var(--color-accent)',
+        },
+        onLight: {tokens: {'--color-accent': '#123456'}},
+      };\n`,
+    );
+    const out = path.join(tmpDir, 'theme.css');
+    await themeBuild('theme.mjs', {out}, {cwd: tmpDir});
+    built = fs.readFileSync(out, 'utf8');
+    lowered = transform({
+      filename: 'theme.css',
+      code: Buffer.from(built),
+      targets: LOWERING_TARGETS,
+    }).code.toString();
+  }, 60_000);
+
+  afterAll(() => {
+    fs.rmSync(tmpDir, {recursive: true, force: true});
+  });
+
+  it("re-declares it with the root's value of the surface token", () => {
+    const {root, surfaces} = blocks(built);
+    expect(surfaces.light['--color-accent']).toBe('#123456');
+    expect(surfaces.light['--color-border-emphasized']).toBe(
+      root['--color-accent'],
+    );
+  });
+
+  for (const page of /** @type {const} */ (['light', 'dark'])) {
+    it(`resolves to the root's value on a ${page} page after lowering`, () => {
+      expect(
+        surfaceValue(lowered, page, 'light', '--color-border-emphasized'),
+      ).toBe('#102030');
+    });
   }
 });

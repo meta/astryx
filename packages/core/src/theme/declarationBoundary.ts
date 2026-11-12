@@ -343,11 +343,22 @@ export function checkDeclarationValue(input: string): string | null {
   return null;
 }
 
+/** One `var()` call: its custom property and its span in the analyzed value. */
+export interface VarCall {
+  reference: string;
+  start: number;
+  end: number;
+}
+
 export interface DeclarationValueAnalysis {
   reason: string | null;
   references: string[];
   important: boolean;
   singleVarReference: string | null;
+  /** The value as tokenized: line breaks and NUL normalized. */
+  value: string;
+  /** Each `var()` call with a custom property name, in source order. */
+  varCalls: VarCall[];
 }
 
 function skipWhitespaceAndComments(input: string, start: number): number {
@@ -448,6 +459,8 @@ export function analyzeDeclarationValue(
       references: [],
       important: false,
       singleVarReference: null,
+      value: input,
+      varCalls: [],
     };
     if (DECLARATION_ANALYSIS_CACHE.size >= MAX_DECLARATION_ANALYSIS_CACHE) {
       DECLARATION_ANALYSIS_CACHE.clear();
@@ -458,6 +471,9 @@ export function analyzeDeclarationValue(
 
   const value = preprocess(input);
   const references: string[] = [];
+  const varCalls: VarCall[] = [];
+  // A `var()` call waits here until the `)` that closes it.
+  const openVarCalls: {reference: string; start: number; depth: number}[] = [];
   const open: string[] = [];
   type TopLevelToken = {
     type: 'delim' | 'ident' | 'var-function' | 'other';
@@ -521,6 +537,7 @@ export function analyzeDeclarationValue(
       continue;
     }
     if (startsIdent(value, index)) {
+      const identStart = index;
       const ident = consumeIdent(value, index);
       index = ident.end;
       const isFunction = value[index] === '(';
@@ -539,6 +556,7 @@ export function analyzeDeclarationValue(
       if (isFunction) {
         if (reference !== null) {
           references.push(reference);
+          openVarCalls.push({reference, start: identStart, depth: open.length});
         }
         if (ident.name.toLowerCase() === 'url') {
           let body = index + 1;
@@ -564,6 +582,19 @@ export function analyzeDeclarationValue(
     }
     if (character === ')' || character === ']' || character === '}') {
       open.pop();
+      const call = openVarCalls.at(-1);
+      if (
+        character === ')' &&
+        call !== undefined &&
+        call.depth === open.length
+      ) {
+        openVarCalls.pop();
+        varCalls.push({
+          reference: call.reference,
+          start: call.start,
+          end: index + 1,
+        });
+      }
       index++;
       continue;
     }
@@ -588,12 +619,50 @@ export function analyzeDeclarationValue(
     firstTopLevelToken?.type === 'var-function'
       ? (firstTopLevelToken.reference ?? null)
       : null;
-  const analysis = {reason: null, references, important, singleVarReference};
+  varCalls.sort((a, b) => a.start - b.start);
+  const analysis = {
+    reason: null,
+    references,
+    important,
+    singleVarReference,
+    value,
+    varCalls,
+  };
   if (DECLARATION_ANALYSIS_CACHE.size >= MAX_DECLARATION_ANALYSIS_CACHE) {
     DECLARATION_ANALYSIS_CACHE.clear();
   }
   DECLARATION_ANALYSIS_CACHE.set(input, analysis);
   return analysis;
+}
+
+/**
+ * Replaces each `var()` call in `input` whose custom property `replace` maps to
+ * a value, the way the browser substitutes it. A call inside a replaced call is
+ * replaced with it. Returns `input` unchanged when no call is replaced or the
+ * value is not a valid declaration value.
+ */
+export function substituteVarReferences(
+  input: string,
+  replace: (reference: string) => string | null,
+): string {
+  const {reason, value, varCalls} = analyzeDeclarationValue(input);
+  if (reason !== null) {
+    return input;
+  }
+  let output = '';
+  let cursor = 0;
+  for (const call of varCalls) {
+    if (call.start < cursor) {
+      continue;
+    }
+    const replacement = replace(call.reference);
+    if (replacement === null) {
+      continue;
+    }
+    output += value.slice(cursor, call.start) + replacement;
+    cursor = call.end;
+  }
+  return cursor === 0 ? input : output + value.slice(cursor);
 }
 
 /** The browser-canonical spelling of one valid declaration name. */

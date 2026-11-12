@@ -38,6 +38,7 @@ import {STATUS_NAMES, deriveStatusRoleTokens} from './statusRoleDerivation';
 import {cssVar, classPrefix, dataAttrNamespace} from '../naming';
 import {
   analyzeDeclarationValue,
+  substituteVarReferences,
   canonicalizeDeclarationName,
   checkDeclarationName,
   checkDeclarationValue,
@@ -1698,19 +1699,16 @@ const SCHEME_CAPABLE_DEFAULTS: Record<string, string> = {
   ...domainTokenDefaults,
 };
 
-const VAR_REFERENCE = /var\(\s*(--[\w-]+)/g;
-
 /**
  * Root tokens that a media surface re-declares, so that they resolve under the
  * surface's own color scheme.
  *
  * A bundler that lowers `light-dark()` for older browsers writes each value as
  * `var()` switches. A custom property resolves its `var()` references on the
- * element that declares it, so the theme root fixes such a token in the page's
+ * element that declares it. So the theme root fixes such a token in the page's
  * scheme, and a surface that does not re-declare it inherits that value. A
  * token depends on the scheme when its value holds `light-dark()` or refers to
- * a token that does. The surface re-declares the same value, so CSS that keeps
- * `light-dark()` resolves exactly as before.
+ * a token that does.
  */
 function schemeDependentEntries(
   values: Record<string, string>,
@@ -1730,7 +1728,7 @@ function schemeDependentEntries(
     visiting.add(name);
     const result =
       value.includes('light-dark(') ||
-      [...value.matchAll(VAR_REFERENCE)].some(([, reference]) =>
+      analyzeDeclarationValue(value).references.some(reference =>
         dependsOnScheme(reference, visiting),
       );
     visiting.delete(name);
@@ -1747,6 +1745,39 @@ function schemeDependentEntries(
 }
 
 /**
+ * The value a re-declared root token takes on a media surface. A reference to
+ * a token the surface declares itself is replaced with the root's value of
+ * that token. Without lowering, the root resolves the reference and the
+ * surface inherits the result, so the surface's own value never applies; the
+ * replacement keeps that result. A reference whose root value is unknown, is
+ * `!important`, or is in a cycle stays as it is.
+ */
+function withRootValuesForSurfaceTokens(
+  value: string,
+  surfaceNames: ReadonlySet<string>,
+  rootValues: Record<string, string>,
+  resolving: ReadonlySet<string> = new Set(),
+): string {
+  return substituteVarReferences(value, reference => {
+    const rootValue = rootValues[reference];
+    if (
+      !surfaceNames.has(reference) ||
+      resolving.has(reference) ||
+      typeof rootValue !== 'string' ||
+      analyzeDeclarationValue(rootValue).important
+    ) {
+      return null;
+    }
+    return withRootValuesForSurfaceTokens(
+      rootValue,
+      surfaceNames,
+      rootValues,
+      new Set([...resolving, reference]),
+    );
+  });
+}
+
+/**
  * Drops re-declarations that would close a `var()` cycle with the surface's
  * own declarations. A custom property in a cycle is invalid, so such a token
  * keeps its inherited value instead.
@@ -1757,25 +1788,11 @@ function withoutDeclarationCycles(
 ): [string, string][] {
   let kept = replayed;
   for (;;) {
-    const declared = new Map([...kept, ...own]);
-    const inCycle = (start: string): boolean => {
-      const stack = [start];
-      const seen = new Set<string>();
-      while (stack.length > 0) {
-        const value = declared.get(stack.pop() as string) ?? '';
-        for (const [, reference] of value.matchAll(VAR_REFERENCE)) {
-          if (reference === start) {
-            return true;
-          }
-          if (declared.has(reference) && !seen.has(reference)) {
-            seen.add(reference);
-            stack.push(reference);
-          }
-        }
-      }
-      return false;
-    };
-    const next = kept.filter(([name]) => !inCycle(name));
+    const declared = Object.fromEntries([...kept, ...own]);
+    const next = kept.filter(
+      ([name, value]) =>
+        !tokenValuesWouldHaveCycleWithValue(declared, name, value),
+    );
     if (next.length === kept.length) {
       return kept;
     }
@@ -1805,7 +1822,7 @@ export function generateOnMediaCSS(
     [string, string][]
   >();
   // The values the theme root declares. Core defaults stay in Core's own
-  // stylesheet; they only tell whether a root value refers to the scheme.
+  // stylesheet. They only show whether a root value depends on the scheme.
   const rootValues: Record<string, string> = {
     ...theme.tokens,
     ...Object.fromEntries(rootAliases),
@@ -1842,7 +1859,14 @@ export function generateOnMediaCSS(
       ...statusRoleDefaults,
     ];
     const replayedEntries = withoutDeclarationCycles(
-      schemeDependentEntries(schemeValues, Object.keys(rootValues), ownNames),
+      schemeDependentEntries(
+        schemeValues,
+        Object.keys(rootValues),
+        ownNames,
+      ).map(([name, value]): [string, string] => [
+        name,
+        withRootValuesForSurfaceTokens(value, ownNames, schemeValues),
+      ]),
       ownEntries,
     );
     surfaceReplays.set(surface, replayedEntries);
@@ -1921,14 +1945,20 @@ export function generateOnMediaCSS(
           excluded,
         ).map(([name]) => name),
       );
-      // A rule restates a token the base surface replays even when its own
-      // value does not depend on the scheme, so the base replay never hides
-      // the rule's value on the surface.
-      const ruleReplays = Object.entries(ruleValues).filter(
-        ([name]) =>
-          !excluded.has(name) &&
-          (dependentNames.has(name) || replayedNames.has(name)),
-      );
+      // A rule restates each token the base surface replays, scheme-dependent
+      // or not. Otherwise the base replay hides the rule's value on the
+      // surface.
+      const ruleRootValues = {...schemeValues, ...ruleValues};
+      const ruleReplays = Object.entries(ruleValues)
+        .filter(
+          ([name]) =>
+            !excluded.has(name) &&
+            (dependentNames.has(name) || replayedNames.has(name)),
+        )
+        .map(([name, value]): [string, string] => [
+          name,
+          withRootValuesForSurfaceTokens(value, excluded, ruleRootValues),
+        ]);
       // Under this query the surface also holds the base replays this rule
       // does not restate.
       const baseReplays = (surfaceReplays.get(surface) ?? []).filter(
