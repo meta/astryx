@@ -463,3 +463,67 @@ describe('astryx theme build --out into a folder the theme editor made', () => {
     expect(JSON.parse(json.stdout).meta?.deprecations).toBeUndefined();
   });
 });
+
+describe('theme build --check with a missing CSS type stub', () => {
+  beforeAll(() => {
+    ensureCoreBuilt();
+  }, 200_000);
+
+  it.each([[['theme', 'build']], [['experimental', 'theme', 'compile']]])(
+    '%j --check names the stub as checked and warns without failing',
+    async words => {
+      writeTheme(tmpDir, 'stub');
+      const built = await runCli([...words, 'theme.mjs'], {cwd: tmpDir});
+      expect(built.status).toBe(0);
+      fs.rmSync(path.join(tmpDir, 'stub.css.d.ts'));
+
+      const text = await runCli([...words, 'theme.mjs', '--check'], {
+        cwd: tmpDir,
+      });
+      expect(text.status).toBe(0);
+      const warnings = text.stderr
+        .split('\n')
+        .filter(line => line.includes('stub.css.d.ts'));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('Warning:');
+
+      const json = await runCli(['--json', ...words, 'theme.mjs', '--check'], {
+        cwd: tmpDir,
+      });
+      expect(json.status).toBe(0);
+      expect(json.stderr).toBe('');
+      const {data} = JSON.parse(json.stdout);
+      expect(data.upToDate).toBe(true);
+      expect(data.code).toBeUndefined();
+      expect(data.checked).toContain('stub.css.d.ts');
+      expect(data.stale).toEqual([]);
+    },
+  );
+
+  it.each([
+    [['theme', 'build'], 'stub.css'],
+    [['theme', 'build'], 'stub.d.ts'],
+    [['experimental', 'theme', 'compile'], 'stub.css'],
+    [['experimental', 'theme', 'compile'], 'stub.d.ts'],
+  ])('%j --check still fails on a missing %s', async (words, file) => {
+    writeTheme(tmpDir, 'stub');
+    const built = await runCli([...words, 'theme.mjs'], {cwd: tmpDir});
+    expect(built.status).toBe(0);
+    fs.rmSync(path.join(tmpDir, file));
+
+    const text = await runCli([...words, 'theme.mjs', '--check'], {
+      cwd: tmpDir,
+    });
+    expect(text.status).toBe(1);
+    expect(text.stderr).toContain(`  missing: ${file}`);
+
+    const json = await runCli(['--json', ...words, 'theme.mjs', '--check'], {
+      cwd: tmpDir,
+    });
+    expect(json.status).toBe(1);
+    const {data} = JSON.parse(json.stdout);
+    expect(data.upToDate).toBe(false);
+    expect(data.code).toBe('ERR_THEME_STALE');
+    expect(data.stale).toEqual([{path: file, reason: 'missing'}]);
+  });
+});

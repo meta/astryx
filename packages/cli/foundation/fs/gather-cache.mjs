@@ -16,7 +16,9 @@
  *   (foundation/config/project.mjs) for its integration issues: each
  *   integration's contribution-check results and the whole list (with the
  *   template and component replacement passes), which `component`,
- *   `template`, `theme`, `discover` and `search` report. Gathers are kept only once the folder exists: the first such run
+ *   `template`, `theme`, `discover` and `search` report, and by `doctor`
+ *   (api/doctor/_adapter.mjs) for its file-only docs checks, in a run that
+ *   records modules and variables to its end. Gathers are kept only once the folder exists: the first such run
  *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
@@ -68,6 +70,8 @@ const KEPT_COMMANDS = new Set([
   'template',
   'theme',
   'discover',
+  // The project check alone (no subcommand): its docs checks are kept.
+  'doctor',
 ]);
 
 /** Where `prepack` writes the id of the package's exact contents. */
@@ -92,13 +96,16 @@ const UNSET = null;
  * their states, modules it loaded with theirs, and environment variables with
  * their values. Files and folders are recorded for the whole run; modules and
  * variables only while the run is armed: from its start to the end of its
- * first gather, and during each later gather. Null outside a recorded run.
- * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void} | null}
+ * first gather, and during each later gather, or, in a run armed throughout
+ * (`doctor`), to its end. Null outside a recorded run.
+ * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean} | null}
  */
 let run = null;
 
 /**
- * The running recorded run's reads and variables, for tests: null outside one.
+ * The running recorded run's reads and variables, or null outside one: for
+ * tests, and for a caller that keeps a value only in a recorded run (doctor's
+ * kept checks).
  * @returns {{reads: Map<string, string>, env: Map<string, string | null>} | null}
  */
 export function recordedRun() {
@@ -226,6 +233,8 @@ export async function recordRunFor(argv, fn) {
   if (
     !command ||
     !KEPT_COMMANDS.has(command) ||
+    (command === 'doctor' &&
+      argv.filter(arg => !arg.startsWith('-')).length > 1) ||
     runsUnderPnp() ||
     currentUid() == null ||
     withoutRecording(buildId) == null ||
@@ -241,6 +250,10 @@ export async function recordRunFor(argv, fn) {
   // it, so a one-off run never pays to store one.
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {
+    // Once the per-user cache folder exists doctor uses it; it never makes
+    // it, so a doctor alone changes nothing on the machine (nor its own
+    // cache row).
+    if (command === 'doctor') return fn();
     try {
       withoutRecording(() => fs.mkdirSync(dir, {recursive: true, mode: 0o700}));
     } catch {
@@ -251,7 +264,10 @@ export async function recordRunFor(argv, fn) {
   // A folder the cache would refuse (not the user's own, open to others, a
   // link) leaves the run exactly as without the cache: no hook is installed.
   if (withoutRecording(gatherCacheDir) == null) return fn();
-  return recordRun(fn);
+  // doctor's kept checks read docs modules that load between its gathers, so
+  // its run records modules and variables to the end, not only during each
+  // gather.
+  return recordRun(fn, {armedThroughout: command === 'doctor'});
 }
 
 /**
@@ -259,9 +275,12 @@ export async function recordRunFor(argv, fn) {
  * tests; `recordRunFor` decides which runs are recorded.
  * @template T
  * @param {() => Promise<T>} fn
+ * @param {{armedThroughout?: boolean}} [options] - `armedThroughout`: record
+ *   modules and variables until the run ends, not only until each gather
+ *   ends, for a run whose later gathers read modules loaded in between.
  * @returns {Promise<T>}
  */
-export async function recordRun(fn) {
+export async function recordRun(fn, {armedThroughout = false} = {}) {
   const registerHooks = /** @type {any} */ (nodeModule).registerHooks;
   if (typeof registerHooks !== 'function' || run != null) return fn();
   /** @type {Map<string, string>} */
@@ -347,7 +366,7 @@ export async function recordRun(fn) {
     }
   };
   if (!arm()) return fn();
-  run = {reads, env, arm, disarm};
+  run = {reads, env, arm, disarm, armedThroughout};
   try {
     return await recordReads(reads, fn, {exact: true});
   } finally {
@@ -510,7 +529,7 @@ export async function persistedGather(key, load, codec, keep = () => true) {
   try {
     return await gatherAt(key, load, codec, keep);
   } finally {
-    if (--gatherDepth === 0) run?.disarm();
+    if (--gatherDepth === 0 && !run?.armedThroughout) run?.disarm();
   }
 }
 
@@ -762,6 +781,12 @@ export function runsUnderPnp() {
  *   `pnp`: whether this run is under Yarn Plug'n'Play's loader (runsUnderPnp)
  */
 export function gatherCacheSummary() {
+  // The cache's own bookkeeping, never an input of what it keeps.
+  return withoutRecording(summarize);
+}
+
+/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean} | null} */
+function summarize() {
   if (buildId() == null) return null;
   const dir = gatherCacheDir();
   if (dir == null) return null;

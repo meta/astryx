@@ -174,7 +174,7 @@ export const docs = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        'Status indicator object for error, warning, or success states with a message. For a typed date the field rejects, and for unfinished text that Enter or blur keeps, the field shows its own error message instead; unreadable text is announced, not shown; with onEntryErrorChange, an error status with a message shows in place of that message. A warning or success never replaces a rejection.',
+        'Status indicator object for error, warning, or success states with a message. For a date the field rejects, typed or picked in the native control, and for unreadable or unfinished text that Enter or blur keeps, the field shows its own error message instead; with onEntryErrorChange, an error status with a message shows in place of that message. A warning or success never replaces a rejection.',
     },
     {
       name: 'onEntryErrorChange',
@@ -580,7 +580,7 @@ export const docsZh = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        '错误、警告或成功状态的状态指示对象，附带消息。对于字段拒绝的输入日期，以及按 Enter 或失焦后保留的未完成文本，字段显示自身的错误消息；无法识别的文本只会被播报，不会显示；传入 onEntryErrorChange 时，改为显示带消息的 error 状态。warning 或 success 状态不会替代拒绝消息。',
+        '错误、警告或成功状态的状态指示对象，附带消息。对于字段拒绝的日期（无论是输入的还是在原生控件中选择的），以及按 Enter 或失焦后保留的无法识别或未完成的文本，字段显示自身的错误消息；传入 onEntryErrorChange 时，改为显示带消息的 error 状态。warning 或 success 状态不会替代拒绝消息。',
     },
     {
       name: 'onEntryErrorChange',
@@ -751,7 +751,7 @@ export const docsDense = {
       'accessible label for the time input; defaults to "{label} time"',
     size: 'input control size',
     status:
-      'error/warning/success status w/ message; a rejected date or kept unfinished text shows its own error instead (unreadable text is only announced), unless onEntryErrorChange is set and status is an error w/ message',
+      'error/warning/success status w/ message; a rejected date (typed or native) or kept unreadable/unfinished text shows its own error instead, unless onEntryErrorChange is set and status is an error w/ message',
     onEntryErrorChange:
       "(error|null) on each typed-rejection change: kind 'unreadable'|'incomplete'|'nonexistent'|'outOfRange' (min/max)|'unavailable' (dateConstraints), text, date (Gregorian ISO, outOfRange/unavailable); also on new min/max/dateConstraints/value, calendar pick, disable, Enter/blur; never twice for one rejection; null when the typed field leaves mid-rejection (presentation/pointer switch); with it an error status w/ message replaces the field's own message, re-announced once if unchanged when a rejection starts; never a rejection on native/touch pickers",
     labelTooltip: 'tooltip text via info icon at label end',

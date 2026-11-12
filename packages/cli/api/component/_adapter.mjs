@@ -590,10 +590,25 @@ export function extractProps(docs) {
 }
 
 /**
+ * Give every example its `kind`, so a JSON reader never has to know the
+ * default: an example with no `kind` is a `demo`.
+ * @param {unknown} examples
+ * @returns {unknown}
+ */
+function withExampleKinds(examples) {
+  if (!Array.isArray(examples)) return examples;
+  return examples.map(example =>
+    example && typeof example === 'object'
+      ? {...example, kind: example.kind ?? 'demo'}
+      : example,
+  );
+}
+
+/**
  * Augment a loaded `component.detail` doc with ownership metadata. Adds
  * `package`, the resolved `import` specifier, and `sourceAvailable` (whether a
  * swizzleable source file exists for the owner). Existing doc fields (name,
- * usage, props, …) are preserved.
+ * usage, props, …) are preserved; each example carries its `kind`.
  * @param {LoadedComponentDoc} docs
  * @param {OwnershipSubject} owner
  * @param {string} componentName
@@ -605,8 +620,20 @@ export function withOwnership(docs, owner, componentName, coreDir) {
     owner.package === CORE_PACKAGE
       ? (docs.import ?? resolveImportPath(coreDir, componentName))
       : resolveIntegrationImportPath(owner, componentName, docs.import);
+  /** @type {any} */
+  const doc = docs;
   return /** @type {any} */ ({
     ...docs,
+    ...(doc.examples ? {examples: withExampleKinds(doc.examples)} : {}),
+    ...(Array.isArray(doc.components)
+      ? {
+          components: doc.components.map((/** @type {any} */ entry) =>
+            entry?.examples
+              ? {...entry, examples: withExampleKinds(entry.examples)}
+              : entry,
+          ),
+        }
+      : {}),
     package: owner.package,
     import: importSpec,
     sourceAvailable: owner.sourcePath != null,

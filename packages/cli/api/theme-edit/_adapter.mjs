@@ -31,6 +31,7 @@
  * @position api/theme-edit — adapter for api/theme-edit/theme-edit.mjs
  */
 
+import {writeThemeTemplate} from '../theme/template/template.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -50,6 +51,7 @@ import {
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {DIALS, LIKE, P} from './_tables.mjs';
+import {setLine} from './_check.mjs';
 import {colorProblem} from './_color.mjs';
 import {SHOWCASE_GROUPS} from './_preview.mjs';
 import {camel, typedThemeName} from './_settings.mjs';
@@ -227,9 +229,15 @@ function lockDir(root) {
  * @param {boolean} [bestEffort] a command that can run read-only runs
  *   without the lock when it cannot be taken (a read-only node_modules),
  *   told so, and then writes nothing
+ * @param {string | null} [again] the command's own words after the CLI
+ *   name, to suggest running it again (never the host process's argv: an
+ *   API caller is not a CLI run)
  * @returns {Promise<T>}
  */
-async function withLock(root, name, fn, bestEffort = false) {
+async function withLock(root, name, fn, bestEffort = false, again = null) {
+  // A preview command, which holds the preview lock, suggests the list of
+  // previews (what the other command may be changing).
+  again ??= name === 'preview' ? 'experimental theme preview list' : null;
   /** @type {string | null} */
   let dir;
   try {
@@ -271,16 +279,17 @@ async function withLock(root, name, fn, bestEffort = false) {
       {
         onBusy: (o, held) => {
           throw new AstryxError(
-            `Another command has been changing ${name.replace(/^theme-/, '')} for 30 seconds${o ? ` (process ${o.pid} on ${o.host}${held != null ? `, holding it ${held} s` : ''})` : ''}. Nothing was changed; run this command again. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
-            // A look that takes no lock: the last build as it is.
-            [
-              {
-                name: name.startsWith('theme-')
-                  ? `${P} show ${name.replace(/^theme-/, '')}`
-                  : 'astryx experimental theme preview list',
-                reason: 'see it as it is now',
-              },
-            ],
+            `Another command has been changing ${name.replace(/^theme-/, '')} for 30 seconds${o ? ` (process ${o.pid} on ${o.host}${held != null ? `, holding it ${held} s` : ''})` : ''}. Nothing was changed; run this command again once the other one ends. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
+            // Every editor command (show too) takes this lock, so none of
+            // them works meanwhile: this same command, once the other ends.
+            again
+              ? [
+                  {
+                    name: runLine(root, again),
+                    reason: 'run it again once the other command ends',
+                  },
+                ]
+              : [],
             ERROR_CODES.ERR_THEME_BUSY,
           );
         },
@@ -378,9 +387,11 @@ function absolute(result, root, from) {
  * @param {O} options
  * @param {string | null} lock
  * @param {(o: O & {cwd: string}) => Promise<T>} fn
+ * @param {boolean} [bestEffort]
+ * @param {string | null} [again] the command's own words, for a busy lock
  * @returns {Promise<T>}
  */
-async function inProject(options, lock, fn, bestEffort = false) {
+async function inProject(options, lock, fn, bestEffort = false, again = null) {
   const from = options.cwd ?? process.cwd();
   const o = atRoot(options);
   try {
@@ -392,6 +403,7 @@ async function inProject(options, lock, fn, bestEffort = false) {
           lock,
           locked => fn(locked ? o : {...o, readOnly: true}),
           bestEffort,
+          again,
         )
       : await fn(o);
     return absolute(r, o.cwd, from);
@@ -466,20 +478,74 @@ const withThemeLock = o => ({
   ) => withLock(o.cwd, lockName(slug), fn),
 });
 
+/**
+ * A command's own words after the CLI name, from what it was called with,
+ * every option kept: set and undo as `set` writes them (scope flags and
+ * --only), new with --like and each dial, --png where given.
+ * @param {string} line a command as the editor writes one (`astryx …`)
+ * @param {{png?: boolean}} [o]
+ */
+const words = (line, o = {}) =>
+  `${line.replace(/^astryx /, '').trimEnd()}${o.png ? ' --png' : ''}`;
+
 /** @type {typeof edit.themeEditNew} */
 export const themeEditNew = (name, options = {}) =>
-  inProject(options, lockName(name), o => edit.themeEditNew(name, o));
+  inProject(
+    options,
+    lockName(name),
+    o => edit.themeEditNew(name, o),
+    false,
+    words(
+      `${P} new ${quoteCommandArgument(name)} ${edit
+        .newFlagList(
+          options.like,
+          options.settings ?? {},
+          /** @type {boolean} */ (options.png),
+        )
+        .join(' ')}`,
+    ),
+  );
 /** @type {typeof edit.themeEditSet} */
 export const themeEditSet = (theme, thing, value, options = {}) =>
-  inProject(options, lockName(theme), o =>
-    edit.themeEditSet(theme, thing, value, o),
+  inProject(
+    options,
+    lockName(theme),
+    o => edit.themeEditSet(theme, thing, value, o),
+    false,
+    words(setLine(theme, thing, value, options), options),
   );
 /** @type {typeof edit.themeEditUndo} */
 export const themeEditUndo = (theme, options = {}) =>
-  inProject(options, lockName(theme), o => edit.themeEditUndo(theme, o));
+  inProject(
+    options,
+    lockName(theme),
+    o => edit.themeEditUndo(theme, o),
+    false,
+    words(
+      options.thing
+        ? setLine(
+            theme,
+            options.thing,
+            /** @type {string} */ (options.value ?? ''),
+            options,
+            true,
+          )
+        : `${P} undo ${theme}`,
+      options,
+    ),
+  );
 /** @type {typeof edit.themeEditShow} */
 export const themeEditShow = (theme, options = {}) =>
-  inProject(options, lockName(theme), o => edit.themeEditShow(theme, o), true);
+  inProject(
+    options,
+    lockName(theme),
+    o => edit.themeEditShow(theme, o),
+    true,
+    words(
+      `${P} show ${theme}${options.section ? ` --section ${quoteCommandArgument(String(options.section))}` : ''}`,
+      options,
+    ),
+  );
 /** @type {typeof preview.themeEditPreviewAdd} */
 export const themeEditPreviewAdd = (description, options = {}) =>
   inProject(options, 'preview', o =>
@@ -732,6 +798,13 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         )
       )
         why = null;
+      // A missing built output is one compile writes itself.
+      if (
+        why &&
+        !check &&
+        /^[^/]+\.(css|js|d\.ts|css\.d\.ts) was missing$/.test(why)
+      )
+        why = null;
       if (why && !check)
         return new AstryxError(
           `${slug}'s generated settings do not match its settings (${why}), so compile would build the old ones. The editor builds it from its settings.`,
@@ -826,4 +899,14 @@ export async function editorThemeHold(files, {cwd}) {
     });
   }
   return releaseAll;
+}
+
+/**
+ * `theme template` for the experimental command: in a folder the theme
+ * editor made, only the editor's own files are protected.
+ * @param {{targetPath?: string, overwrite?: boolean, cwd?: string}} options
+ * @returns {import('../theme/theme.type.mjs').ThemeTemplateResponse}
+ */
+export function editorThemeTemplate(options) {
+  return writeThemeTemplate(options, true);
 }
