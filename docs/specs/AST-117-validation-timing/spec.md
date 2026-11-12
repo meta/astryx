@@ -30,7 +30,10 @@ affects_consumer_docs:
     "packages/core/src/DateTimeInput/**",
     "packages/core/src/TimeInput/**",
     "packages/core/src/NumberInput/**",
-    "packages/core/src/FormLayout/**"
+    "packages/core/src/FormLayout/**",
+    "packages/core/src/PowerSearch/PowerSearchValueEditor.tsx",
+    "packages/core/src/Table/plugins/filtering/useTableFiltering.tsx",
+    "packages/core/src/Pagination/Pagination.tsx"
   ]
 }
 ```
@@ -204,7 +207,7 @@ Classified under `spec:AST-017` against the latest stable release:
 
 ## Current-state impact
 
-- `family:input-fields` names validation timing as a canonical concept and adds
+- `family:input-fields` names entry error behavior as a canonical concept and adds
   FR14, a projection of this record; its shared-owner section gives `FormLayout`
   the form-level default.
 - `component:DateInput`, `component:DateTimeInput`, `component:TimeInput`, and
@@ -224,15 +227,15 @@ Requirement gaps:
 
 ## Verification
 
-| Contract | Verification                                                                    | Representative states                                                                                                                  | Mutation or failure expectation                                                                                                       |
-| -------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1, FR2 | Member and `FormLayout` render suites; type tests                               | No prop; field prop; form default; both, disagreeing; nested layout with and without a value; a field in a Dialog opened inside a form | A field ignores its prop, a form default outranks the field, a nested or layered field keeps the outer default, or the type widens    |
-| FR3      | Each member's existing rejection suites, run with no prop and with `'complete'` | Every rejection each member's record names                                                                                             | Any signal appears at a different moment, or with a different signal set, than with no prop                                           |
-| FR4      | Keystroke-by-keystroke and commit suites under `'blur-or-enter'`                | Each rejection of each member; native edits; Enter and blur; an entry the member drops at blur                                         | A signal appears before Enter or blur, the signals appear apart, the announcement repeats, or a dropped entry is not announced        |
-| FR5      | Edit suites after a revealed rejection                                          | Edit to valid; to empty; to still rejected; caller `value` change; calendar pick                                                       | A fixed entry keeps its rejection, a still-rejected edit clears it or announces it again under `'blur-or-enter'`, or a pick leaves it |
-| FR6      | Disabled and busy suites                                                        | Rejection revealed, then disabled; draft kept while busy                                                                               | A locked field reveals a rejection, or its behavior does not apply again once editable                                                |
-| FR7      | `PowerSearch` and Table filter editor suites inside a `FormLayout`              | `defaultEntryErrorBehavior="blur-or-enter"` around the composition                                                                     | An editor follows the form default                                                                                                    |
-| AR1–AR3  | Screen-reader evidence under `spec:AST-009`                                     | Each member, typed and native, under `'blur-or-enter'`                                                                                 | A rejection is heard before commit, heard twice, or a dropped entry is not explained                                                  |
+| Contract | Verification                                                                                 | Representative states                                                                                                                  | Mutation or failure expectation                                                                                                       |
+| -------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, FR2 | Member and `FormLayout` render suites; type tests                                            | No prop; field prop; form default; both, disagreeing; nested layout with and without a value; a field in a Dialog opened inside a form | A field ignores its prop, a form default outranks the field, a nested or layered field keeps the outer default, or the type widens    |
+| FR3      | Each member's existing rejection suites, run with no prop and with `'complete'`              | Every rejection each member's record names                                                                                             | Any signal appears at a different moment, or with a different signal set, than with no prop                                           |
+| FR4      | Keystroke-by-keystroke and commit suites under `'blur-or-enter'`                             | Each rejection of each member; native edits; Enter and blur; an entry the member drops at blur                                         | A signal appears before Enter or blur, the signals appear apart, the announcement repeats, or a dropped entry is not announced        |
+| FR5      | Edit suites after a revealed rejection                                                       | Edit to valid; to empty; to still rejected; caller `value` change; calendar pick                                                       | A fixed entry keeps its rejection, a still-rejected edit clears it or announces it again under `'blur-or-enter'`, or a pick leaves it |
+| FR6      | Disabled and busy suites                                                                     | Rejection revealed, then disabled; draft kept while busy                                                                               | A locked field reveals a rejection, or its behavior does not apply again once editable                                                |
+| FR7      | `PowerSearch`, Table filter editor, and `Pagination` page input suites inside a `FormLayout` | `defaultEntryErrorBehavior="blur-or-enter"` around the composition                                                                     | An editor follows the form default                                                                                                    |
+| AR1–AR3  | Screen-reader evidence under `spec:AST-009`                                                  | Each member, typed and native, under `'blur-or-enter'`                                                                                 | A rejection is heard before commit, heard twice, or a dropped entry is not explained                                                  |
 
 ## Decision log
 
@@ -273,7 +276,7 @@ member's entry error, the rejection that `onEntryErrorChange` already reports,
 so the option is `entryErrorBehavior`, the form default
 `defaultEntryErrorBehavior`, and the type `EntryErrorBehavior`. Its values name
 when an entry error appears:
-`'complete'`, as soon as the entry is complete enough to be wrong, and
+`'complete'`, the member's shipped moment (FR3), and
 `'blur-or-enter'`, when the person leaves the field or presses Enter. The
 second value names both triggers, because Enter commits an entry without
 moving focus.
