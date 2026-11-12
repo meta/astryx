@@ -32,7 +32,7 @@ import {
   type RefObject,
 } from 'react';
 import {flushSync} from 'react-dom';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -902,11 +902,8 @@ export function Slider({ref, ...props}: SliderProps) {
     return currentValues.map(currentValue => clamp(currentValue, min, max));
   }, [value, min, max]);
 
-  const valuesRef = useRef(values);
-  // Syncs the handlers' values with the committed ones.
-  useIsomorphicLayoutEffect(() => {
-    valuesRef.current = values;
-  });
+  // The committed values, which the handlers read.
+  const valuesRef = useCommittedRef(values);
 
   const getValueFromPosition = useCallback(
     (clientX: number, clientY: number): number => {
@@ -1022,11 +1019,8 @@ export function Slider({ref, ...props}: SliderProps) {
     ],
   );
 
-  const onChangeEndRef = useRef(onChangeEnd);
-  // Syncs the change-end report's callback with the committed one.
-  useIsomorphicLayoutEffect(() => {
-    onChangeEndRef.current = onChangeEnd;
-  });
+  // The committed change-end callback, which the change-end report calls.
+  const onChangeEndRef = useCommittedRef(onChangeEnd);
 
   const fireChangeEnd = useCallback(
     (newValues?: number[]) => {
@@ -1040,7 +1034,7 @@ export function Slider({ref, ...props}: SliderProps) {
         (cb as SliderSingleProps['onChangeEnd'])?.(currentValues[0]);
       }
     },
-    [isRange],
+    [isRange, onChangeEndRef, valuesRef],
   );
 
   // Pointer handlers
@@ -1255,7 +1249,7 @@ export function Slider({ref, ...props}: SliderProps) {
       }
       updateValue(draggingThumbRef.current, newVal);
     },
-    [isDisabled, getValueFromPosition, updateValue],
+    [isDisabled, getValueFromPosition, updateValue, valuesRef],
   );
 
   const handlePointerUp = useCallback(
@@ -1264,11 +1258,7 @@ export function Slider({ref, ...props}: SliderProps) {
   );
 
   // The touch presentation's value model (useSliderTouch reads it fresh).
-  const updateValueRef = useRef(updateValue);
-  // Syncs the touch model's update with the committed one.
-  useIsomorphicLayoutEffect(() => {
-    updateValueRef.current = updateValue;
-  });
+  const updateValueRef = useCommittedRef(updateValue);
   const touchModel: SliderTouchModel = {
     min,
     max,
