@@ -463,3 +463,35 @@ describe('astryx theme build --out into a folder the theme editor made', () => {
     expect(JSON.parse(json.stdout).meta?.deprecations).toBeUndefined();
   });
 });
+
+describe('theme build --check with a missing CSS type stub', () => {
+  beforeAll(() => {
+    ensureCoreBuilt();
+  }, 200_000);
+
+  it.each([[['theme', 'build']], [['experimental', 'theme', 'compile']]])(
+    '%j --check names the stub as checked and fails on it',
+    async words => {
+      writeTheme(tmpDir, 'stub');
+      const built = await runCli([...words, 'theme.mjs'], {cwd: tmpDir});
+      expect(built.status).toBe(0);
+      fs.rmSync(path.join(tmpDir, 'stub.css.d.ts'));
+
+      const text = await runCli([...words, 'theme.mjs', '--check'], {
+        cwd: tmpDir,
+      });
+      expect(text.status).toBe(1);
+      expect(text.stderr).toContain('  missing: stub.css.d.ts');
+
+      const json = await runCli(['--json', ...words, 'theme.mjs', '--check'], {
+        cwd: tmpDir,
+      });
+      expect(json.status).toBe(1);
+      const {data} = JSON.parse(json.stdout);
+      expect(data.upToDate).toBe(false);
+      expect(data.code).toBe('ERR_THEME_STALE');
+      expect(data.checked).toContain('stub.css.d.ts');
+      expect(data.stale).toEqual([{path: 'stub.css.d.ts', reason: 'missing'}]);
+    },
+  );
+});

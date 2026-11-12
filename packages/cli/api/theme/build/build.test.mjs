@@ -461,29 +461,40 @@ describe('themeBuild() — check mode', () => {
     expect(fs.readFileSync(path.join(tmpDir, 'chk.css'), 'utf8')).toBe(before);
   });
 
-  it('accepts released outputs that do not have a CSS type stub', async () => {
-    const themeFile = path.join(tmpDir, 'released.mjs');
+  it('flags a missing CSS type stub, which the check names as checked', async () => {
+    const themeFile = path.join(tmpDir, 'nostub.mjs');
     fs.writeFileSync(
       themeFile,
-      `export default { name: 'released', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+      `export default { name: 'nostub', tokens: { '--color-bg': '#0a0a0a' } };\n`,
     );
-    await themeBuild('released.mjs', {}, {cwd: tmpDir});
-    fs.rmSync(path.join(tmpDir, 'released.css.d.ts'));
+    await themeBuild('nostub.mjs', {}, {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'nostub.css.d.ts'));
 
-    const result = await themeBuild(
-      'released.mjs',
-      {check: true},
-      {cwd: tmpDir},
-    );
+    const lines = [];
+    const error = vi.spyOn(logger, 'error').mockImplementation(message => {
+      lines.push(String(message));
+    });
+    let result;
+    try {
+      result = await themeBuild('nostub.mjs', {check: true}, {cwd: tmpDir});
+    } finally {
+      error.mockRestore();
+    }
 
-    expect(result?.data.upToDate).toBe(true);
-    expect(result?.data.stale).toEqual([]);
-    expect(result?.data.checked).toEqual([
-      'released.css',
-      'released.js',
-      'released.d.ts',
+    expect(result?.data.upToDate).toBe(false);
+    expect(result?.data.stale).toEqual([
+      {path: 'nostub.css.d.ts', reason: 'missing'},
     ]);
-    expect(fs.existsSync(path.join(tmpDir, 'released.css.d.ts'))).toBe(false);
+    expect(/** @type {any} */ (result)?.data?.code).toBe('ERR_THEME_STALE');
+    // Every output the build writes is checked, the stub too.
+    expect(result?.data.checked).toEqual([
+      'nostub.css',
+      'nostub.css.d.ts',
+      'nostub.js',
+      'nostub.d.ts',
+    ]);
+    expect(lines.join('\n')).toContain('  missing: nostub.css.d.ts');
+    expect(fs.existsSync(path.join(tmpDir, 'nostub.css.d.ts'))).toBe(false);
   });
 
   it('flags a stale output when the committed CSS content drifts from the source', async () => {

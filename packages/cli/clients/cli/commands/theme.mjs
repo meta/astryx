@@ -1548,6 +1548,8 @@ function registerThemeCommands(theme, program, docs, words) {
           overwrite: options.overwrite,
           cwd: process.cwd(),
           package: options.package,
+          // A text-only warning: silent under --json (cli-surface INV12).
+          __onEditorFolder: json ? () => {} : undefined,
         });
       } catch (e) {
         const err =

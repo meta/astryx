@@ -191,3 +191,36 @@ describe('astryx theme template outside a project', () => {
     expect(stderr).not.toMatch(/no package\.json/);
   });
 });
+
+describe('theme eject into a subfolder of a folder the theme editor made', () => {
+  it('writes there as released CLIs did, warning once in text and silent under --json', async () => {
+    const editor = path.join(tmpDir, 'themes', 'g');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(path.join(editor, 'g.settings.json'), '{}\n');
+
+    const text = await runCli(['theme', 'eject', 'neutral', 'themes/g/sub'], {
+      cwd: tmpDir,
+    });
+    expect(text.status).toBe(0);
+    expect(
+      fs.existsSync(path.join(editor, 'sub', 'neutralTheme.doc.mjs')),
+    ).toBe(true);
+    expect(text.stderr.match(/theme editor made/g)).toHaveLength(1);
+    expect(text.stderr).toMatch(
+      /pick a path outside themes\/g, to keep the editor's folder to its own theme/,
+    );
+
+    const json = await runCli(
+      ['--json', 'theme', 'eject', 'neutral', 'themes/g/other'],
+      {cwd: tmpDir},
+    );
+    expect(json.status).toBe(0);
+    expect(
+      fs.existsSync(path.join(editor, 'other', 'neutralTheme.doc.mjs')),
+    ).toBe(true);
+    expect(json.stderr).not.toMatch(/theme editor made/);
+    expect(JSON.parse(json.stdout).data.outputDir).toBe(
+      path.join('themes', 'g', 'other'),
+    );
+  });
+});

@@ -129,7 +129,10 @@ described.
   describe itself as maintained by the theme's original owner. `--overwrite` replaces the files of an earlier fork of
   the same theme. Eject MUST refuse a target folder that holds a theme the theme
   editor made (folder `<slug>/` holds `<slug>.settings.json`) or another theme's
-  descriptor or entry, with `--overwrite` too, and write nothing. It returns the
+  descriptor or entry, with `--overwrite` too, and write nothing. A target
+  inside such an editor folder (a subfolder of `<slug>/`) is written, and eject
+  warns once in text mode, naming the default fork and a path outside the
+  editor's folder; `--json` stays silent. It returns the
   copy fields of the `theme.add` response as the `theme.eject` response, with
   the descriptor in its file list, followed by `missingPackages`, the packages
   the copy imports that the app does not declare, and `installCommand`, the

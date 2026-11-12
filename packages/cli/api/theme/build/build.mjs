@@ -711,16 +711,14 @@ export function normalizeThemeBuildForCompare(content) {
     .join('\n');
 }
 
-/** @param {Array<{dest: string, content: string, allowMissingInCheck?: boolean}>} writes @param {string} cwd @returns {Array<{path: string, reason: 'missing' | 'outdated'}>} */
+/** @param {Array<{dest: string, content: string}>} writes @param {string} cwd @returns {Array<{path: string, reason: 'missing' | 'outdated'}>} */
 function staleBuildOutputs(writes, cwd) {
   /** @type {Array<{path: string, reason: 'missing' | 'outdated'}>} */
   const stale = [];
   for (const write of writes) {
     const rel = path.relative(cwd, write.dest);
     if (!fs.existsSync(write.dest)) {
-      if (!write.allowMissingInCheck) {
-        stale.push({path: rel, reason: 'missing'});
-      }
+      stale.push({path: rel, reason: 'missing'});
       continue;
     }
     const onDisk = fs.readFileSync(write.dest, 'utf8');
@@ -734,11 +732,14 @@ function staleBuildOutputs(writes, cwd) {
   return stale;
 }
 
-/** @param {Array<{dest: string, allowMissingInCheck?: boolean}>} writes @param {string} cwd */
+/**
+ * Every output the build writes, from the same write list the build and the
+ * stale comparison use, so a file the check names as checked is one whose
+ * absence makes it stale.
+ * @param {Array<{dest: string}>} writes @param {string} cwd
+ */
 function checkedBuildOutputs(writes, cwd) {
-  return writes
-    .filter(write => !write.allowMissingInCheck || fs.existsSync(write.dest))
-    .map(write => path.relative(cwd, write.dest));
+  return writes.map(write => path.relative(cwd, write.dest));
 }
 
 /** Remedies that end a confinement error, by where the output path came from. */
@@ -4280,7 +4281,7 @@ async function themeBuildInternal(
 
   const writes = [
     {dest: outPath, content: cssContent},
-    {dest: cssDtsPath, content: cssDtsContent, allowMissingInCheck: true},
+    {dest: cssDtsPath, content: cssDtsContent},
     {dest: jsPath, content: jsContent},
     {dest: dtsPath, content: dtsContent},
   ];
@@ -4945,7 +4946,6 @@ export async function themeBuildFamily(
     },
     {
       dest: cssDtsPath,
-      allowMissingInCheck: true,
       content:
         generatedHeader(headerSource, 'ts', buildCommand, root.versions) +
         'export {};\n',

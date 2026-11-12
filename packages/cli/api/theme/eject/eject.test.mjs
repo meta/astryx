@@ -180,6 +180,45 @@ describe('themeEject (api/theme/eject)', () => {
     ).toBe('{"mine":true}\n');
   });
 
+  it('writes a subfolder of a folder the theme editor made, as released CLIs did, and warns', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const editor = path.join(tmpDir, 'themes', 'g');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(path.join(editor, 'g.settings.json'), '{}\n');
+
+    /** @type {string[]} */
+    const warnings = [];
+    const result = await themeEject('neutral', {
+      cwd: tmpDir,
+      targetPath: 'themes/g/sub',
+      __onEditorFolder: warning => warnings.push(warning),
+    });
+
+    expect(result.data.outputDir).toBe(path.join('themes', 'g', 'sub'));
+    expect(
+      fs.existsSync(path.join(editor, 'sub', 'neutralTheme.doc.mjs')),
+    ).toBe(true);
+    // The receipt is the released one: the warning adds no field.
+    expect(Object.keys(result.data)).not.toContain('editorFolder');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(
+      `${path.join('themes', 'g')} is a folder the theme editor made`,
+    );
+    expect(warnings[0]).toContain('theme eject neutral');
+    expect(warnings[0]).toContain(
+      "to keep the editor's folder to its own theme",
+    );
+
+    // A folder outside any editor folder warns nothing.
+    const quiet = [];
+    await themeEject('neutral', {
+      cwd: tmpDir,
+      targetPath: 'themes/plain',
+      __onEditorFolder: warning => quiet.push(warning),
+    });
+    expect(quiet).toEqual([]);
+  });
+
   it('refuses to mix two forks in one folder, even with overwrite', async () => {
     await themeEject('neutral', {cwd: tmpDir});
     const dir = path.join(tmpDir, 'src', 'themes', 'neutral');
