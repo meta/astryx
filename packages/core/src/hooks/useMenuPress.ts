@@ -244,13 +244,13 @@ interface MenuPressConfig extends UseMenuPressOptions {
 }
 
 /**
- * An in-flight pointer handed to
- * {@link UseMenuPressReturn.continueGesture}.
- *
- * @internal
+ * A pointer that went down elsewhere and is still down as a menu opens under
+ * it, for {@link UseMenuPressReturn.continueGesture}.
  */
 export interface MenuPressContinuation {
+  /** The `pointerId` of its pointer events. */
   pointerId: number;
+  /** Whether it is a mouse, a finger or a pen. */
   pointerType: MenuPressPointerType;
   /** `Date.now()` of the moment the menu opened under it. */
   time: number;
@@ -286,8 +286,6 @@ export interface UseMenuPressReturn {
    * position the menu sees. Its lift before that acts on nothing and leaves
    * the menu open. A mouse follows the settle rule. Ignored while another
    * gesture is live or the model is off.
-   *
-   * @internal
    */
   continueGesture: (pointer: MenuPressContinuation) => void;
 }
