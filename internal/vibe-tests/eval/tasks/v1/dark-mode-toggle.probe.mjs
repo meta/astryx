@@ -33,8 +33,9 @@ const LUMINANCE_SOURCE = `(color => {
 
 /**
  * Luminance of what is painted near the bottom-left corner: the first
- * opaque background from the element at that point up to <html>, or the
- * canvas color the browser paints for <html> when none is opaque.
+ * opaque background from the element at that point up to <html>, then the
+ * <body> background, which the browser paints over the whole canvas when
+ * <html> has none, then the canvas color.
  */
 async function backgroundLuminance(page) {
   return page.evaluate(source => {
@@ -44,6 +45,8 @@ async function backgroundLuminance(page) {
       const value = luminance(getComputedStyle(element).backgroundColor);
       if (value !== null) return value;
     }
+    const body = document.body && luminance(getComputedStyle(document.body).backgroundColor);
+    if (body !== null && body !== undefined) return body;
     const probe = document.createElement('span');
     probe.style.backgroundColor = 'Canvas';
     document.documentElement.appendChild(probe);
