@@ -3,13 +3,12 @@
 /**
  * @file Shows a decorative grid of page-template previews on a feature card.
  * @input Uses the tile rows and the static preview pages that scripts/generate-landing-template-previews.mjs renders at build time.
- * @output Renders each preview page in a lazy-loaded frame, scaled to its tile, in the site's color mode.
+ * @output Renders each preview page in a lazy-loaded frame, scaled to its tile. The frame's URL fragment gives the page the site's color mode.
  * @position Landing and community feature cards.
  */
 
 'use client';
 
-import {useCallback, useEffect, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   spacingVars,
@@ -157,38 +156,15 @@ export function TemplatesPreview({
   maxRows?: number;
 }) {
   const {themeMode} = useThemeMode();
-  const containerRef = useRef<HTMLDivElement>(null);
   const rows =
     maxRows != null ? TEMPLATE_ROWS.slice(0, maxRows) : TEMPLATE_ROWS;
-
-  // A preview page follows the OS color scheme on its own. This gives it the
-  // site's color mode, which a visitor can set by hand.
-  const applyColorMode = useCallback(
-    (frame: HTMLIFrameElement) => {
-      const page = frame.contentDocument;
-      if (!page) {
-        return;
-      }
-      const scheme = themeMode === 'system' ? '' : themeMode;
-      const themed = page.querySelector<HTMLElement>('[data-astryx-theme]');
-      for (const element of [page.documentElement, themed]) {
-        element?.style.setProperty('color-scheme', scheme);
-      }
-    },
-    [themeMode],
-  );
-
-  // Syncs the preview frames that are already loaded with the site's color
-  // mode. A frame that loads later gets it from its load handler.
-  useEffect(() => {
-    const frames = containerRef.current?.querySelectorAll('iframe') ?? [];
-    for (const frame of frames) {
-      applyColorMode(frame);
-    }
-  }, [applyColorMode]);
+  // A preview page follows the OS color scheme on its own. A fragment gives
+  // it the site's color mode, which a visitor can set by hand. A change of
+  // fragment does not reload the page.
+  const colorMode = themeMode === 'system' ? '' : `#${themeMode}`;
 
   return (
-    <div ref={containerRef} {...stylex.props(styles.container)} inert>
+    <div {...stylex.props(styles.container)} inert>
       <div {...stylex.props(styles.root)}>
         {rows.map((row, rowIndex) => (
           <div
@@ -206,14 +182,12 @@ export function TemplatesPreview({
                 )}>
                 <div {...stylex.props(styles.frameBox)}>
                   <iframe
-                    src={`${PREVIEW_DIRECTORY}/${slug}.html`}
+                    src={`${PREVIEW_DIRECTORY}/${slug}.html${colorMode}`}
                     title={`${slug} template preview`}
                     loading="lazy"
-                    // The page has no script. Same-origin access lets this
-                    // component set the page's color scheme.
-                    sandbox="allow-same-origin"
+                    // The page has no script, and the card does not read it.
+                    sandbox=""
                     tabIndex={-1}
-                    onLoad={event => applyColorMode(event.currentTarget)}
                     {...stylex.props(styles.frame)}
                   />
                 </div>

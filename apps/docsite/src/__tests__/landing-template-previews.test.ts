@@ -1,12 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import {describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   fontStylesheetOf,
   previewDocument,
   previewPageSource,
+  stagePreviewPage,
 } from '../../scripts/generate-landing-template-previews.mjs';
 import templateRows from '../app/(site)/_landing/landingTemplateRows.json';
 
@@ -81,13 +83,101 @@ describe('previewDocument', () => {
 
   it('loads the theme fonts and stays out of search results', () => {
     expect(html).toContain(
-      '<meta name="robots" content="noindex"><link rel="stylesheet" href="https://fonts.example/css2?family=Figtree"></head>',
+      '<meta name="robots" content="noindex"><link rel="stylesheet" href="https://fonts.example/css2?family=Figtree"><style>',
     );
   });
 
   it('adds no font stylesheet when the theme names none', () => {
     expect(previewDocument(RENDERED, {fontStylesheet: null})).toContain(
-      '<meta name="robots" content="noindex"></head>',
+      '<meta name="robots" content="noindex"><style>',
     );
+  });
+
+  it('fills the frame and never scrolls', () => {
+    expect(html).toContain('html,body{height:100%;overflow:hidden}');
+    expect(html).toContain(
+      'body>[data-astryx-theme]>:first-child{height:100%!important;min-height:100%!important}',
+    );
+  });
+
+  it('takes its color mode from the URL fragment', () => {
+    expect(html).toContain(
+      '<body><a id="light" hidden></a><a id="dark" hidden></a><img',
+    );
+    expect(html).toContain(
+      ':root:has(#dark:target),:root:has(#dark:target) [data-astryx-theme]{color-scheme:dark!important}',
+    );
+    expect(html).toContain(
+      ':root:has(#light:target),:root:has(#light:target) [data-astryx-theme]{color-scheme:light!important}',
+    );
+  });
+});
+
+describe('stagePreviewPage', () => {
+  let work: string;
+  let pageDir: string;
+  let templates: string;
+
+  beforeEach(() => {
+    work = fs.mkdtempSync(path.join(os.tmpdir(), 'landing-previews-'));
+    pageDir = path.join(work, 'out', 'ide');
+    templates = path.join(work, 'templates');
+    fs.mkdirSync(pageDir, {recursive: true});
+    fs.mkdirSync(path.join(templates, 'ide'), {recursive: true});
+    fs.writeFileSync(path.join(templates, 'ide', 'page.tsx'), 'PAGE');
+    fs.writeFileSync(path.join(templates, 'ide', 'data.ts'), 'DATA');
+  });
+
+  afterEach(() => {
+    fs.rmSync(work, {recursive: true, force: true});
+  });
+
+  it('renders the template where it is when no icon set is named', async () => {
+    const rewrite = vi.fn();
+    await stagePreviewPage({
+      slug: 'ide',
+      pageDir,
+      templatesDir: templates,
+      iconSets: [],
+      projectDir: work,
+      rewrite,
+    });
+
+    expect(rewrite).not.toHaveBeenCalled();
+    expect(fs.readdirSync(pageDir)).toEqual(['page.tsx']);
+    expect(fs.readFileSync(path.join(pageDir, 'page.tsx'), 'utf8')).toContain(
+      'import Page from "../../templates/ide/page";',
+    );
+  });
+
+  it('renders a copy with the icons of the named sets', async () => {
+    const rewrite = vi.fn(async (source: string) => `${source} WITH SET ICONS`);
+    await stagePreviewPage({
+      slug: 'ide',
+      pageDir,
+      templatesDir: templates,
+      iconSets: ['pkg/glyphs', 'pkg/backup'],
+      projectDir: work,
+      rewrite,
+    });
+
+    // The rewrite finds the template's doc by the path of the original.
+    expect(rewrite).toHaveBeenCalledWith(
+      'PAGE',
+      path.join(templates, 'ide', 'page.tsx'),
+      {projectDir: work, list: ['pkg/glyphs', 'pkg/backup']},
+    );
+    expect(
+      fs.readFileSync(path.join(pageDir, 'template', 'page.tsx'), 'utf8'),
+    ).toBe('PAGE WITH SET ICONS');
+    expect(
+      fs.readFileSync(path.join(pageDir, 'template', 'data.ts'), 'utf8'),
+    ).toBe('DATA');
+    expect(fs.readFileSync(path.join(pageDir, 'page.tsx'), 'utf8')).toContain(
+      'import Page from "./template/page";',
+    );
+    expect(
+      fs.readFileSync(path.join(templates, 'ide', 'page.tsx'), 'utf8'),
+    ).toBe('PAGE');
   });
 });

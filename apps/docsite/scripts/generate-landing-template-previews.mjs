@@ -2,10 +2,11 @@
 
 /**
  * @file Renders the landing templates card previews to static HTML files.
- * @input The tile rows, the page templates, the neutral theme, and the CLI's
- *   experimental page renderer.
+ * @input The tile rows, the page templates, the neutral theme, the CLI's
+ *   experimental page renderer, and the experimental DOCSITE_ICON_SET setting.
  * @output public/landing/template-previews/<slug>.html: each tile's template
- *   as one self-contained page with no script.
+ *   as one self-contained page with no script. `#light` or `#dark` in its URL
+ *   sets its color mode.
  * @position Part of `pnpm generate`, before the docsite build and dev server.
  *   TemplatesPreview shows the files in frames.
  */
@@ -14,6 +15,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {render} from '@astryxdesign/cli/api/experimental';
+import {
+  ICON_SET_SETTING,
+  previewIconSetList,
+  rewriteTemplatePreview,
+} from './template-icon-loader.mjs';
 
 const docsiteDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -40,6 +46,22 @@ const themeFontsFile = path.resolve(
 // A tile shows its page at less than half size, so this width is enough on a
 // high-density screen. It must be a width the image optimizer allows.
 const PREVIEW_IMAGE_WIDTH = 640;
+
+// The page fills the frame and never scrolls, as a live template preview
+// fills its tile: without this, a template taller than the frame shows a
+// scrollbar where scrollbars are always visible. The card cannot run script
+// in the page, so the URL fragment carries the site's color mode: `#light` or
+// `#dark` targets one of two hidden anchors, and these rules follow it.
+const PREVIEW_STYLE = [
+  'html,body{height:100%;overflow:hidden}',
+  'body>[data-astryx-theme]{height:100%}',
+  'body>[data-astryx-theme]>:first-child{height:100%!important;min-height:100%!important}',
+  ...['light', 'dark'].map(
+    mode =>
+      `:root:has(#${mode}:target),:root:has(#${mode}:target) [data-astryx-theme]{color-scheme:${mode}!important}`,
+  ),
+].join('');
+const COLOR_MODE_ANCHORS = '<a id="light" hidden></a><a id="dark" hidden></a>';
 
 const SOURCE_BLOCK =
   /<script type="application\/x-astryx-source">[\s\S]*?<\/script>/u;
@@ -84,7 +106,8 @@ export function fontStylesheetOf(fontsCss) {
  * Turns a rendered page into a preview document. It drops the embedded
  * source, which only `render --reverse` reads. It loads each template photo
  * through the image optimizer at preview size, and loads the theme's fonts.
- * Search engines must not index the file.
+ * It makes the page fill its frame, and lets the URL fragment set the color
+ * mode. Search engines must not index the file.
  * @param {string} html
  * @param {{fontStylesheet: string | null}} options
  * @returns {string}
@@ -93,6 +116,7 @@ export function previewDocument(html, {fontStylesheet}) {
   const head = [
     '<meta name="robots" content="noindex">',
     fontStylesheet ? `<link rel="stylesheet" href="${fontStylesheet}">` : '',
+    `<style>${PREVIEW_STYLE}</style>`,
   ].join('');
   return html
     .replace(SOURCE_BLOCK, '')
@@ -101,7 +125,53 @@ export function previewDocument(html, {fontStylesheet}) {
       image =>
         `/_next/image?url=${encodeURIComponent(image)}&w=${PREVIEW_IMAGE_WIDTH}&q=75`,
     )
-    .replace('</head>', `${head}</head>`);
+    .replace('</head>', `${head}</head>`)
+    .replace(/<body[^>]*>/u, body => `${body}${COLOR_MODE_ANCHORS}`);
+}
+
+/**
+ * Writes the page that the renderer renders for one tile into `pageDir`.
+ * With icon sets named, the page renders a copy of the template whose icons
+ * come from those sets, the rewrite that the Webpack loader gives every other
+ * template preview.
+ * @param {object} input
+ * @param {string} input.slug
+ * @param {string} input.pageDir an empty folder for this tile
+ * @param {string} input.templatesDir the folder of the page templates
+ * @param {string[]} input.iconSets the sets DOCSITE_ICON_SET names
+ * @param {string} input.projectDir the docsite, where the sets are installed
+ * @param {typeof rewriteTemplatePreview} [input.rewrite]
+ */
+export async function stagePreviewPage({
+  slug,
+  pageDir,
+  templatesDir,
+  iconSets,
+  projectDir,
+  rewrite = rewriteTemplatePreview,
+}) {
+  const templateDir = path.join(templatesDir, slug);
+  let templatePage = path
+    .relative(pageDir, path.join(templateDir, 'page'))
+    .split(path.sep)
+    .join('/');
+  if (iconSets.length > 0) {
+    const copyDir = path.join(pageDir, 'template');
+    fs.cpSync(templateDir, copyDir, {recursive: true});
+    const file = path.join(templateDir, 'page.tsx');
+    fs.writeFileSync(
+      path.join(copyDir, 'page.tsx'),
+      await rewrite(fs.readFileSync(file, 'utf8'), file, {
+        projectDir,
+        list: iconSets,
+      }),
+    );
+    templatePage = './template/page';
+  }
+  fs.writeFileSync(
+    path.join(pageDir, 'page.tsx'),
+    previewPageSource(templatePage),
+  );
 }
 
 async function main() {
@@ -110,6 +180,7 @@ async function main() {
   const fontStylesheet = fontStylesheetOf(
     fs.readFileSync(themeFontsFile, 'utf8'),
   );
+  const iconSets = previewIconSetList(process.env[ICON_SET_SETTING]);
   fs.rmSync(workDir, {recursive: true, force: true});
   fs.rmSync(outDir, {recursive: true, force: true});
   fs.mkdirSync(outDir, {recursive: true});
@@ -122,14 +193,13 @@ async function main() {
     for (const slug of slugs) {
       const pageDir = path.join(workDir, slug);
       fs.mkdirSync(pageDir);
-      const templatePage = path
-        .relative(pageDir, path.join(templatesDir, slug, 'page'))
-        .split(path.sep)
-        .join('/');
-      fs.writeFileSync(
-        path.join(pageDir, 'page.tsx'),
-        previewPageSource(templatePage),
-      );
+      await stagePreviewPage({
+        slug,
+        pageDir,
+        templatesDir,
+        iconSets,
+        projectDir: docsiteDir,
+      });
       await render('page.tsx', {cwd: pageDir, out: 'page.html'});
       const html = previewDocument(
         fs.readFileSync(path.join(pageDir, 'page.html'), 'utf8'),
