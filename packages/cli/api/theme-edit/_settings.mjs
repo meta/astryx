@@ -67,7 +67,7 @@ import {
   writeWhole,
 } from './_palette.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
-import {baseResolved, baseThemeFile} from './_project.mjs';
+import {baseInstalled, baseResolved, baseThemeFile} from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /**
@@ -176,6 +176,57 @@ export function themeFiles(cwd, slug) {
     previewPng: path.join(dir, 'preview.png'),
     sheetPng: path.join(dir, 'sheet.png'),
   };
+}
+
+/**
+ * Why the editor cannot read one of its files, or null when it can (or the
+ * file is not there): a folder in the file's place, or no permission to read
+ * it. Bad content is a different problem, judged where the file is parsed.
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function unreadableReason(file) {
+  let st;
+  try {
+    st = fs.statSync(file);
+  } catch (e) {
+    const code = /** @type {any} */ (e)?.code;
+    return code === 'ENOENT' || code === 'ENOTDIR'
+      ? null
+      : `it cannot be read (${code ?? 'unknown error'})`;
+  }
+  if (st.isDirectory()) return 'it is a folder, not a file';
+  try {
+    fs.accessSync(file, fs.constants.R_OK);
+  } catch (e) {
+    return `it cannot be read (${/** @type {any} */ (e)?.code ?? 'no permission'}: permission denied)`;
+  }
+  return null;
+}
+
+/**
+ * Refuse, by name, when a file of the theme is a folder or cannot be read:
+ * every command reads them, and none should crash on one. The fix is to
+ * look at the file and give it back its place; a file is never deleted.
+ * @param {string} cwd
+ * @param {string} slug
+ */
+export function refuseUnreadableFiles(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  for (const file of [f.settings, f.ts, f.settingsTs, f.js, f.css, f.history]) {
+    const why = unreadableReason(file);
+    if (why)
+      throw new AstryxError(
+        `${path.relative(cwd, file)} ${why}, so the theme cannot be read. Put the file back in its place (or give it read permission); nothing was changed.`,
+        [
+          {
+            name: `ls -la ${quoteCommandArgument(path.relative(cwd, file))}`,
+            reason: 'see what is there',
+          },
+        ],
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+  }
 }
 
 /**
@@ -297,15 +348,19 @@ export function refuse(code, message, extra = {}) {
  * @returns {string}
  */
 export function typedThemeName(s) {
-  return String(s ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/^.*themes[\\/]/, '')
-    .replace(/[\\/].*$/, '')
-    .replace(
-      /\.(theme\.ts|settings\.(json|ts)|history\.json|css\.d\.ts|d\.ts|css|js|ts)$/,
-      '',
-    );
+  return (
+    String(s ?? '')
+      .trim()
+      .toLowerCase()
+      // ./t and .\t name the theme t.
+      .replace(/^(\.[\\/])+/, '')
+      .replace(/^.*themes[\\/]/, '')
+      .replace(/[\\/].*$/, '')
+      .replace(
+        /\.(theme\.ts|settings\.(json|ts)|history\.json|css\.d\.ts|d\.ts|css|js|ts)$/,
+        '',
+      )
+  );
 }
 
 /**
@@ -443,6 +498,9 @@ export function loadTheme(
     );
   }
   refuseLinks(cwd, slug);
+  // A file of the theme that is a folder or cannot be read is named, never
+  // called damaged.
+  refuseUnreadableFiles(cwd, slug);
   // undo is offered only when there is a step to go back to.
   const steps = readHistory(f.history).steps.length;
   const recover = steps
@@ -544,10 +602,17 @@ export function loadTheme(
     );
   }
   // A bad mode or base is fixed by setting it.
+  // A value written in other letters (Dark-Only, Neutral) is the one meant.
+  const modeMeant = String(data?.mode ?? '')
+    .trim()
+    .toLowerCase();
+  const likeMeant = String(data?.like ?? '')
+    .trim()
+    .toLowerCase();
   const fieldFix = /^(it has no mode|mode ")/.test(problem ?? '')
-    ? `${P} set ${slug} mode both`
+    ? `${P} set ${slug} mode ${['both', 'light-only', 'dark-only'].includes(modeMeant) ? modeMeant : 'both'}`
     : /^base "/.test(problem ?? '')
-      ? `${P} set ${slug} base none`
+      ? `${P} set ${slug} base ${LIKE.includes(likeMeant) && baseInstalled(cwd, likeMeant) ? likeMeant : 'none'}`
       : null;
   // A setting listed twice: setting it to one of its values, or undoing
   // it, keeps one entry or none.
@@ -3190,6 +3255,19 @@ export const HISTORY_STEPS = 80;
  */
 export function readHistory(file) {
   if (!fs.existsSync(file)) return {steps: [], dropped: 0};
+  // A history that cannot be read is not damaged: it is refused by name.
+  const why = unreadableReason(file);
+  if (why)
+    throw new AstryxError(
+      `${path.basename(file)} ${why}, so the undo history cannot be read. Give it back its place or its read permission; nothing was changed.`,
+      [
+        {
+          name: `ls -la ${quoteCommandArgument(file)}`,
+          reason: 'see what is there',
+        },
+      ],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
   /** @type {unknown} */
   let h;
   try {

@@ -46,6 +46,7 @@ import {
   NAME_RULE,
   HISTORY_STEPS,
   readHistory,
+  refuseUnreadableFiles,
   refuse,
   settingsProblem,
   resolvedTokens,
@@ -2228,6 +2229,9 @@ export async function themeEditUndo(theme, options = {}) {
   // entry replaces it without the current file being read.
   /** @type {import('./_settings.mjs').ThemeData | null} */
   let current = null;
+  // A file in the theme that is a folder or cannot be read is named first;
+  // the damaged-settings path below never sees it.
+  if (slugOk(theme)) refuseUnreadableFiles(cwd, theme);
   try {
     current = loadTheme(cwd, theme);
   } catch (e) {
@@ -2240,7 +2244,7 @@ export async function themeEditUndo(theme, options = {}) {
       E.ERR_THEME_INVALID,
       `${theme}.history.json is damaged, so there is no step to go back to.`,
       {
-        fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
+        fix: `move ${shown(cwd, f.history)} out of the theme folder (it is kept as it is): the next change starts a new history, and your settings stay as they are`,
         run: [`${P} show ${theme}`],
       },
     );
@@ -2316,7 +2320,7 @@ export async function themeEditUndo(theme, options = {}) {
         E.ERR_THEME_INVALID,
         `The settings before the last change, in ${theme}.history.json, are damaged: ${still}.`,
         {
-          fix: `delete ${shown(cwd, f.history)}: the next change starts a new history, and your settings stay as they are`,
+          fix: `move ${shown(cwd, f.history)} out of the theme folder (it is kept as it is): the next change starts a new history, and your settings stay as they are`,
           run: [`${P} show ${theme}`],
         },
       );

@@ -777,7 +777,9 @@ describe('review fixes', () => {
     const before = read('themes/hi/hi.settings.json');
     const u = await refusal(() => themeEditUndo('hi', {cwd}));
     expect(u.code).toBe('ERR_THEME_INVALID');
-    expect(u.message).toContain('delete themes/hi/hi.history.json');
+    expect(u.message).toContain(
+      'move themes/hi/hi.history.json out of the theme folder',
+    );
     expect(read('themes/hi/hi.settings.json')).toBe(before);
     const r = await themeEditSet('hi', 'spacing', 'roomy', {cwd});
     expect(r.data.notes.join(' ')).toContain('a new undo history starts');

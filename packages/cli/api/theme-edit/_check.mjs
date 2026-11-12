@@ -2394,14 +2394,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           .toLowerCase()
           .replace(/^base\s*[=:]\s*/, '')
           .trim();
-        // The base named in other letters is the one meant; a guess is only
-        // among the bases installed here (and none).
-        const near = [...LIKE, 'none'].includes(meant)
-          ? [meant]
-          : nearest(meant, [
-              ...LIKE.filter(b => baseInstalled(ctx.project, b)),
-              'none',
-            ]);
+        // Only a base this project has installed is suggested; a theme
+        // made here is never a base.
+        const bases = [
+          ...LIKE.filter(b => baseInstalled(ctx.project, b)),
+          'none',
+        ];
+        // The base named in other letters is the one meant; a guess is
+        // only among installed bases.
+        const near = bases.includes(meant) ? [meant] : nearest(meant, bases);
         const madeHere = fs.existsSync(themeFiles(ctx.project.cwd, v).settings);
         refuse(
           E.ERR_THEME_BAD_VALUE,
