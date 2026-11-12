@@ -1712,3 +1712,72 @@ describe('colors and type, final checks', () => {
       await themeEditUndo('p', {cwd, thing, ...(on ? {on} : {})});
   });
 });
+
+describe('chaos round 4', () => {
+  it('refuses a font the loader would refuse, so a saved font never blocks the theme', async () => {
+    for (const v of ['serif !important', 'Foo /* x */']) {
+      const r = await refusal(() => themeEditSet('p', 'font', v, {cwd}));
+      expect(r.code, v).toBe('ERR_THEME_BAD_VALUE');
+    }
+    // The theme still takes commands.
+    await themeEditSet('p', 'corners', 'small', {cwd});
+    await themeEditUndo('p', {cwd, thing: 'corners'});
+  });
+
+  it('refuses part values the browser drops: a bad word, a negative width or duration, a broken url', async () => {
+    for (const [prop, value] of [
+      ['line-height', 'banana'],
+      ['border-width', '-1px'],
+      ['transition-duration', '-1s'],
+      ['background', 'url(photo(1).png)'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', prop, value, {cwd, on: 'card'})))
+          .code,
+        `${prop} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+  });
+
+  it('lists what the dropped mode loses when a theme becomes one-mode', async () => {
+    await themeEditNew('m', {cwd});
+    await themeEditSet('m', 'accent', '#0d9488', {cwd});
+    const dark = await themeEditSet('m', 'mode', 'dark-only', {cwd});
+    expect(dark.data.changedTokens.some(x => /\(light\): /.test(x))).toBe(true);
+    await themeEditUndo('m', {cwd, thing: 'mode'});
+    const light = await themeEditSet('m', 'mode', 'light-only', {cwd});
+    expect(light.data.changedTokens.some(x => /\(dark\): /.test(x))).toBe(true);
+    fs.rmSync(path.join(cwd, 'themes', 'm'), {recursive: true, force: true});
+  });
+
+  it('keeps the shades a theme shows until a color changes', async () => {
+    await themeEditNew('o', {cwd});
+    await themeEditSet('o', 'accent', '#7c3aed', {cwd});
+    const ts = path.join(cwd, 'themes', 'o', 'o.settings.ts');
+    // As an earlier editor mapped the tint: dark 25, not 30.
+    const older = fs
+      .readFileSync(ts, 'utf8')
+      .replace(
+        /("--color-accent-muted": \[\s*palette\.accent\.light\[85\],\s*palette\.accent\.dark\[)30(\])/,
+        '$125$2',
+      );
+    expect(older).toContain('palette.accent.dark[25]');
+    fs.writeFileSync(ts, older);
+    await themeEditSet('o', 'corners', 'pill', {cwd});
+    expect(fs.readFileSync(ts, 'utf8')).toContain('palette.accent.dark[25]');
+    // The next change reports no color change either.
+    const corners = await themeEditSet('o', 'corners', 'small', {cwd});
+    expect(
+      corners.data.changedTokens.some(x =>
+        x.startsWith('--color-accent-muted'),
+      ),
+    ).toBe(false);
+    await themeEditUndo('o', {cwd, thing: 'corners'});
+    expect(fs.readFileSync(ts, 'utf8')).toContain('palette.accent.dark[25]');
+    // A color change maps the colors with this editor's rules.
+    await themeEditSet('o', 'accent', '#6d28d9', {cwd});
+    expect(fs.readFileSync(ts, 'utf8')).toMatch(
+      /"--color-accent-muted": \[\s*palette\.accent\.light\[85\],\s*palette\.accent\.dark\[30\]/,
+    );
+    fs.rmSync(path.join(cwd, 'themes', 'o'), {recursive: true, force: true});
+  });
+});

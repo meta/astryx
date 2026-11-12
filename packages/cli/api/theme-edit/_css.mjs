@@ -127,6 +127,42 @@ function matchWith(value, match) {
   return fill(value, 0);
 }
 
+/**
+ * Whether a value that matches a property's grammar is still below a range
+ * the specs set and css-tree's data does not carry: a `<line-width>` (a
+ * border or outline width) and a duration are never negative.
+ * @param {string} property
+ * @param {string} value
+ */
+export function belowRange(property, value) {
+  const {lexer, parse} = csstree();
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parse(value, {context: 'value'});
+  } catch {
+    return false;
+  }
+  const r = lexer.matchProperty(property, ast);
+  if (r.error || !r.matched) return false;
+  let below = false;
+  /** @param {any} m @param {boolean} inWidth */
+  const visit = (m, inWidth) => {
+    const here =
+      inWidth || (m.syntax?.type === 'Type' && m.syntax.name === 'line-width');
+    if (here && typeof m.token === 'string' && m.token.startsWith('-'))
+      below = true;
+    for (const c of m.match ?? []) visit(c, here);
+  };
+  visit(r.matched, false);
+  if (
+    /-duration$/.test(property) &&
+    numbersIn(ast).some(n => n.value < 0 && ['s', 'ms'].includes(n.unit))
+  )
+    below = true;
+  return below;
+}
+
 /** CSS math functions, whose insides css-tree's grammar does not check. */
 const MATH = new Set([
   'calc',

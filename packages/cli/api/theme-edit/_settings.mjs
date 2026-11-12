@@ -93,7 +93,7 @@ import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -529,7 +529,7 @@ export function withoutBadValues(data) {
  * @param {any} s
  * @returns {string | null}
  */
-function valueProblem(s) {
+export function valueProblem(s) {
   if (typeof s.value !== 'string')
     return `${s.thing} has a value that is not text (${JSON.stringify(s.value)})`;
   for (const k of ['on', 'when', 'state', 'mode'])
@@ -753,6 +753,77 @@ function partDefault(ctx, target, prop, when, state) {
 }
 
 /**
+ * The palette stops each token reads in a generated settings module, as
+ * written there (`palette.accent.light[85]`, with ` + 'aa'` for a
+ * see-through one): `[light, dark]` per token.
+ * @param {string} source
+ * @returns {Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>>}
+ */
+export function stopsIn(source) {
+  /** @type {Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>>} */
+  const out = {};
+  const one = String.raw`palette(?:\.([a-z][\w]*)|\["([a-z][\w-]*)"\])\.(?:light|dark)\[(\d+(?:\.\d+)?)\](?: \+ '([0-9a-f]{2})')?`;
+  const pair = new RegExp(
+    String.raw`"(--[\w-]+)": \[\s*${one},\s*${one}\s*\]`,
+    'g',
+  );
+  // Whether the module lifts secondary text on parts (an earlier editor
+  // did not): the key cannot be a token's name.
+  out['lifted parts'] = /** @type {any} */ (
+    /"components":[\s\S]*"--color-text-secondary"/.test(source)
+  );
+  for (const m of source.matchAll(pair))
+    out[m[1]] = {
+      light: {
+        family: m[2] ?? m[3],
+        stop: Number(m[4]),
+        ...(m[5] ? {alpha: m[5]} : {}),
+      },
+      dark: {
+        family: m[6] ?? m[7],
+        stop: Number(m[8]),
+        ...(m[9] ? {alpha: m[9]} : {}),
+      },
+    };
+  return out;
+}
+
+/**
+ * The palette mapping with the shades a theme already shows kept, where
+ * the palette still has them (see commitTheme).
+ * @param {import('./_palette.mjs').PaletteMapping | null} pal
+ * @param {ReturnType<typeof stopsIn> | null | undefined} kept
+ * @returns {import('./_palette.mjs').PaletteMapping | null}
+ */
+function keepShades(pal, kept) {
+  if (!pal || !kept) return pal;
+  const tokens = {...pal.tokens};
+  for (const [k, v] of Object.entries(tokens)) {
+    if (k === 'lifted parts') continue;
+    const old = kept[k];
+    if (!old) continue;
+    /** @type {any} */
+    const next = {...v};
+    for (const m of /** @type {const} */ (['light', 'dark'])) {
+      const r = old[m];
+      const color = /** @type {any} */ (pal.candidate.palette)[r.family]?.[m]?.[
+        r.stop
+      ];
+      if (typeof color !== 'string') continue;
+      next[m] = {
+        stop: r.stop,
+        color: r.alpha ? `${color}${r.alpha}` : color,
+        ...(r.alpha ? {alpha: r.alpha} : {}),
+        ...(r.family !== v.family ? {family: r.family} : {}),
+      };
+    }
+    tokens[k] = next;
+  }
+  // A theme built without lifted text keeps the base theme's own.
+  return {...pal, tokens, lift: kept['lifted parts'] ? pal.lift : null};
+}
+
+/**
  * The settings, as a `defineTheme` object.
  * @param {Ctx} ctx
  * @param {ThemeData} data
@@ -843,7 +914,10 @@ export function compileTheme(ctx, data, base) {
     } else b[prop] = v;
   };
   // Palette stops go first, so an exact token setting always wins over them.
-  const pal = paletteMapping(ctx.project.cwd, data.name, data, base, TOKENS);
+  const pal = keepShades(
+    paletteMapping(ctx.project.cwd, data.name, data, base, TOKENS),
+    ctx.keepStops,
+  );
   for (const [k, v] of Object.entries(pal?.tokens ?? {}))
     putTok(k, [v.light.color, v.dark.color]);
   // Secondary text lifted on the parts the official neutral theme lifts it
@@ -1494,12 +1568,9 @@ export async function buildTheme(ctx, slug, data) {
   if (data.like) baseThemeFile(ctx.project, data.like);
   const base = await baseResolved(ctx.project, data.like);
   const theme = compileTheme(ctx, data, base);
-  const pal = paletteMapping(
-    cwd,
-    slug,
-    data,
-    base,
-    ctx.project.core.tokenDefaults,
+  const pal = keepShades(
+    paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults),
+    ctx.keepStops,
   );
   fs.mkdirSync(f.dir, {recursive: true});
   // Each write is recorded for a rollback; the time between them is not.
@@ -2279,6 +2350,26 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
       : null;
   const before = parseSettings(snapBefore);
   const liftedBefore = new Set(before?.lifted ?? []);
+  // A change that leaves every color setting as it was keeps the shades the
+  // theme already shows: a theme an earlier editor built keeps its colors
+  // until a color, the mode or the base changes, and undo brings them back.
+  /** @param {ThemeData | null} d */
+  const colorKey = d =>
+    d &&
+    JSON.stringify({
+      mode: d.mode ?? 'both',
+      like: d.like ?? null,
+      colors: d.settings.filter(
+        x =>
+          (x.source === 'dial' &&
+            (PALETTE_DIALS.includes(x.thing) || x.thing === 'vibrancy')) ||
+          (x.source === 'token' && isColorToken(x.thing)),
+      ),
+    });
+  ctx.keepStops =
+    before && colorKey(before) === colorKey(data) && fs.existsSync(f.settingsTs)
+      ? stopsIn(fs.readFileSync(f.settingsTs, 'utf8'))
+      : null;
   // What this run writes is recorded as it writes it, so a failed change
   // puts back exactly that and nothing else.
   const rootMade = !fs.existsSync(f.root);
@@ -2291,7 +2382,11 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
   /** @type {{warnings: string[], lifted: string[], notes: string[]}} */
   let built;
   try {
-    built = await buildTheme(ctx, slug, data);
+    try {
+      built = await buildTheme(ctx, slug, data);
+    } finally {
+      ctx.keepStops = null;
+    }
     data.lifted = built.lifted;
     // The undo step and the settings are part of the change: written whole,
     // inside the rollback, the settings first. A command stopped between
@@ -2370,18 +2465,37 @@ export async function commitTheme(ctx, slug, data, {history, historyAfter}) {
     res = await resolvedTokens(ctx, slug);
     const modes = modesOf(data);
     if (resBefore) {
-      for (const m of modes) {
+      /** @param {unknown} a @param {unknown} b */
+      const same = (a, b) =>
+        String(a).toLowerCase() === String(b).toLowerCase();
+      // Both modes are compared: a theme that becomes one-mode changes what
+      // the other mode's visitors see, though it no longer has that mode.
+      for (const m of /** @type {const} */ (['light', 'dark'])) {
+        const own = modes.includes(m);
         for (const k of Object.keys(res[m])) {
           // A change of letter case alone (#FFFFFF, #ffffff) is no change.
+          if (same(resBefore[m][k], res[m][k])) continue;
+          const modal = MODAL.has(ctx.C.typeOf(k));
+          if (!modal && m === 'dark') continue;
+          // A one-mode theme writes its mode on both sides: the other side
+          // that moved with it says nothing new, and a setting made for the
+          // mode it dropped (and what reads it) is named as not applied
+          // instead.
           if (
-            String(resBefore[m][k]).toLowerCase() ===
-            String(res[m][k]).toLowerCase()
+            modal &&
+            !own &&
+            ((same(resBefore[m][k], resBefore[modes[0]][k]) &&
+              same(res[m][k], res[modes[0]][k])) ||
+              data.settings.some(
+                x =>
+                  x.source === 'token' &&
+                  x.mode === m &&
+                  (x.thing === k || same(x.value, resBefore[m][k])),
+              ))
           )
             continue;
-          const modal = MODAL.has(ctx.C.typeOf(k));
-          if (!modal && m === 'dark' && modes.length > 1) continue;
           changed.push(
-            `${k}${modal && modes.length > 1 ? ` (${m})` : ''}: ${resBefore[m][k]} -> ${res[m][k]}`,
+            `${k}${modal && (modes.length > 1 || !own) ? ` (${m})` : ''}: ${resBefore[m][k]} -> ${res[m][k]}`,
           );
         }
       }

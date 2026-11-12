@@ -14,6 +14,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {baseThemeFile} from './_project.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
+  belowRange,
   cssProperties,
   grammarText,
   initialOf,
@@ -71,6 +72,7 @@ import {
   refuse,
   lengthPx,
   radiusAt,
+  valueProblem,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
@@ -524,7 +526,11 @@ function checkCycle(thing, value, TOKENS, data) {
 function propertyProblem(prop, value) {
   const v = value.trim();
   const known = propertyGrammar(prop);
-  if (!known || COLOR_PROPS.test(prop) || matchValue(prop, v)) return null;
+  if (!known || COLOR_PROPS.test(prop)) return null;
+  if (matchValue(prop, v))
+    return belowRange(prop, v)
+      ? {takes: 'a value of 0 or more', near: null}
+      : null;
   const near = /^[a-z-]+$/i.test(v)
     ? (nearest(v.toLowerCase(), keywordsOf(prop))[0] ?? null)
     : null;
@@ -596,7 +602,9 @@ function baseReads(ctx, like, token) {
 }
 
 /**
- * Check one setting and give it back ready to store, or refuse.
+ * Check one setting and give it back ready to store, or refuse. What it
+ * accepts, the settings loader takes too: the loader's own check runs last,
+ * so a saved setting never blocks the theme.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
@@ -615,6 +623,37 @@ export function checkSetting(
   flags,
   unset = false,
 ) {
+  const s = checkOne(ctx, slug, data, thing, value, flags, unset);
+  const why = unset ? null : valueProblem(s);
+  if (why)
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      /cannot be a CSS value$/.test(why)
+        ? `${why}: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote, so the browser would drop it.`
+        : `${why}.`,
+      {
+        run: [
+          s.thing === 'font'
+            ? `${P} set ${slug} font inter${s.on ? ` --on ${s.on}` : ''}`
+            : `${HOW} ${s.thing}`,
+        ],
+      },
+    );
+  return s;
+}
+
+/**
+ * The checks of one setting, before the loader's (see checkSetting).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} thing
+ * @param {string | undefined} value
+ * @param {SetFlags} flags
+ * @param {boolean} unset
+ * @returns {import('./_settings.mjs').Setting}
+ */
+function checkOne(ctx, slug, data, thing, value, flags, unset) {
   const {C} = ctx;
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
