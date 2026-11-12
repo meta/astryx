@@ -77,6 +77,7 @@
  *   | 'ERR_WRITE_FAILED'
  *   | 'ERR_THEME_INVALID'
  *   | 'ERR_THEME_LOAD'
+ *   | 'ERR_THEME_STALE'
  *   | 'ERR_PALETTE_GENERATION'
  *   | 'ERR_VERSION_DETECT'
  *   | 'ERR_INVALID_VERSION'
@@ -219,6 +220,8 @@ export const ERROR_CODES = Object.freeze({
   ERR_THEME_INVALID: 'ERR_THEME_INVALID',
   /** A theme file could not be loaded / parsed into a defineTheme result. */
   ERR_THEME_LOAD: 'ERR_THEME_LOAD',
+  /** `--check` found built outputs stale or missing (a result, exit 1). */
+  ERR_THEME_STALE: 'ERR_THEME_STALE',
 
   // ── Palette generation ──────────────────────────────────────────
   /** A palette generation request or its constraints were invalid. */

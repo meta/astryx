@@ -3213,7 +3213,7 @@ const QUESTIONS_K = [
   ],
   ['no more than 2px borders', {top: /^set q --border-width 2px$/}],
   ['error text red', {top: null, text: /error text belong to the parts/}],
-  ['labels smaller', {top: null, text: /labels belong to the parts/}],
+  ['labels smaller', {top: /--on field-label$/}],
 ];
 
 describe('how answers final-6 questions', () => {
@@ -3325,6 +3325,205 @@ describe('how reads a mode only from mode phrases, and a later token whole', () 
       data.results.flatMap((/** @type {any} */ r) => r.commands).map(bare),
     ).toContain("set q --shadow-high '0 4px 12px black'");
   });
+});
+
+/**
+ * Final-7 questions: mode words only as mode phrases, both modes, a
+ * trailing dark-only, state questions, the focus ring, deltas, cursor and
+ * selection, and media conditions.
+ * @type {Array<[string, RegExp | null, RegExp?]>}
+ */
+const QUESTIONS_M = [
+  [
+    'I look at it all day, please make the cards rounder',
+    /^set q corners more --on card$/,
+  ],
+  ['the night shift wants a pink accent', /^set q accent '#db2777'$/],
+  ['same accent in light and dark: #7c3aed', /^set q accent '#7c3aed'$/],
+  [
+    'accent #5865f2 and dark mode only',
+    /^set q accent '#5865f2' && set q mode dark-only$/,
+  ],
+  [
+    'at night the page background should be pure black',
+    /^set q --color-background-body '#000000' --mode dark$/,
+  ],
+  ['badges rounder', null, /already at the roundest rung/],
+  ['how round are the cards now?', null, /show lists what q sets now/],
+  ['remove the focus outline', /^set q --focus-outline-width 0px$/],
+  ['outline offset 3px on focus', /^set q --focus-outline-offset 3px$/],
+  ['decrease corner radius by 2 pixels', /^set q corners \d+(\.\d+)?px$/],
+  ['add 8px to the button padding', null, /not a change by 8px/],
+  [
+    'caret color accent in inputs',
+    /^set q caret-color 'var\(--color-accent\)' --on inputs$/,
+  ],
+  ['text selection highlight color #fde68a', null, /no setting/],
+  [
+    'below 600px, cards have no corners',
+    /^set q corners square --on card$/,
+    /no screen-size, print or device conditions/,
+  ],
+  [
+    'make the print version black and white',
+    null,
+    /no screen-size, print or device conditions/,
+  ],
+  [
+    'headings 32px bold, body 16px regular, captions 12px',
+    /^set q headings bold && set q font-size 32px --on heading && set q --text-body-weight 400 && set q text-size 16$/,
+  ],
+];
+
+describe('how answers final-7 questions', () => {
+  for (const [question, want, text] of QUESTIONS_M)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      if (text) expect(results.map(r => r.text).join('\n')).toMatch(text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
+    });
+});
+
+/**
+ * Final-8 questions: a negated mode, the CSS cursor, device words beside an
+ * ask, state lookups, "not so", invalid numbers, labels, Tailwind classes,
+ * a pasted variant selector and resets.
+ * @type {Array<[string, RegExp | null, RegExp?]>}
+ */
+const QUESTIONS_N = [
+  [
+    "don't touch dark mode, make the accent orange",
+    /^set q --color-accent '#f97316' --mode light$/,
+  ],
+  ['cursor: pointer on cards', /^set q cursor pointer --on card$/],
+  [
+    'cursor color accent in inputs',
+    /^set q caret-color 'var\(--color-accent\)' --on inputs$/,
+  ],
+  [
+    'cards feel cramped on mobile',
+    /^set q spacing more --on card$/,
+    /no screen-size, print or device conditions/,
+  ],
+  ['which parts are in the inputs group', null, /how inputs says/],
+  ['not so round', /^set q corners less$/],
+  [
+    'avoid pure black text',
+    /^set q --color-text-primary '#(?!000000)[0-9a-f]{6}' --mode light$/,
+  ],
+  ['flat cards, not flat buttons', /^set q box-shadow none --on card$/],
+  ['corners NaNpx', null, /not a number/],
+  ['corners 1e3px', /^set q corners 1000px$/],
+  ['smaller labels on form fields', /--on field-label$/],
+  ['checkbox label bold', /^set q font-weight 700 --on checkbox-label$/],
+  ['border-2 on cards', /^set q border-width 2px --on card$/],
+  ['rounded-full buttons', /^set q corners pill --on button$/],
+  [
+    '.btn-primary { background: #16a34a }',
+    /^set q background '#16a34a' --on button --when variant:primary$/,
+  ],
+  ['角を四角に', /^set q corners square$/],
+];
+
+describe('how answers final-8 questions', () => {
+  for (const [question, want, text] of QUESTIONS_N)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      if (text) expect(results.map(r => r.text).join('\n')).toMatch(text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
+    });
+
+  it('"remove all my changes" takes back every setting', async () => {
+    await themeEditNew('rc', {cwd, like: 'neutral'});
+    await themeEditSet('rc', 'accent', '#e11d48', {cwd});
+    await themeEditSet('rc', 'corners', 'pill', {cwd});
+    const {data} = await themeEditHow('remove all my changes', {
+      cwd,
+      theme: 'rc',
+    });
+    expect(data.results[0].commands.map(bare)).toEqual([
+      'undo rc accent',
+      'undo rc corners',
+    ]);
+  }, 120_000);
+});
+
+/**
+ * Chaos-10 R10-C and O11: an amount with a comparative is a change from
+ * the value now, and "all corners like the buttons" copies their radius.
+ * @type {Array<[string, RegExp | null, RegExp?]>}
+ */
+const QUESTIONS_O = [
+  [
+    'make buttons 2px rounder',
+    /^set q border-radius 'max\(0px, calc\(var\(--radius-element\) \+ 2px\)\)' --on button$/,
+  ],
+  [
+    'make buttons 2px sharper',
+    /^set q border-radius 'max\(0px, calc\(var\(--radius-element\) - 2px\)\)' --on button$/,
+  ],
+  ['make buttons 4px wider', null, /not a change by 4px/],
+  [
+    'all corners like the buttons',
+    /^set q --radius-inner 'var\(--radius-element\)' && set q --radius-container 'var\(--radius-element\)'/,
+  ],
+];
+
+describe('how answers amounts with comparatives, and corners copied from a part', () => {
+  it('moves the theme corners from their radius now', async () => {
+    const px = async (/** @type {string} */ q) => {
+      const {data} = await themeEditHow(q, {cwd, theme: 'q'});
+      const m = /^set q corners (\d+(?:\.\d+)?)px$/.exec(
+        bare(data.results[0].commands[0]),
+      );
+      expect(m, q).not.toBeNull();
+      return Number(m?.[1]);
+    };
+    const up = await px('make the corners 2px rounder');
+    const down = await px('corners 2px sharper');
+    expect(up - down).toBe(4);
+    expect(down).toBeGreaterThan(2);
+  });
+
+  for (const [question, want, text] of QUESTIONS_O)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      if (text) expect(results.map(r => r.text).join('\n')).toMatch(text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
+    });
 });
 
 describe('how lookups', () => {
