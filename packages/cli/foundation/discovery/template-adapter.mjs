@@ -38,6 +38,7 @@ import {
   programPath,
   traverseTemplateSource,
   writtenNames,
+  TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
 
 const require = createRequire(import.meta.url);
@@ -358,10 +359,41 @@ export function stripTemplateAssetRefs(source) {
  * @returns {{source: string, demoMediaReplaced: number}}
  */
 export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
+  const {source: output, replaced} = mapFixtureRefs(source, ({kind}) =>
+    kind === 'video' ? videoPlaceholder : PLACEHOLDER_IMAGE,
+  );
+  return {source: output, demoMediaReplaced: replaced};
+}
+
+/**
+ * One Astryx template fixture reference in template source.
+ * @typedef {object} FixtureRef
+ * @property {string} reference - The whole reference, query and fragment
+ *   included.
+ * @property {'image' | 'video'} kind - What the suffix of its last path
+ *   segment names.
+ * @property {boolean} isValue - Whether the reference is a whole quoted or
+ *   `url()` value. False for a mention in text.
+ */
+
+/**
+ * Replace each Astryx template fixture reference with what `map` returns for
+ * it. This is the one scanner for fixture references: a copy replaces them
+ * with placeholders ({@link replaceDemoMedia}), and the docsite's preview
+ * build points them at its image optimizer. It finds and refuses references
+ * as {@link stripTemplateAssetRefs} describes.
+ *
+ * @param {string} source - Template source code.
+ * @param {(ref: FixtureRef) => string | null} map - The replacement text, or
+ *   null to keep the reference as written.
+ * @returns {{source: string, replaced: number}} `replaced` counts the
+ *   references that `map` replaced.
+ */
+export function mapFixtureRefs(source, map) {
   const needle = `/${FIXTURE_SEGMENT}`;
   let output = '';
   let copied = 0;
-  let demoMediaReplaced = 0;
+  let replaced = 0;
   /** @type {Array<[number, number]> | undefined} */
   let comments;
   let at = source.indexOf(needle);
@@ -373,7 +405,7 @@ export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
     /** @type {{text: string, end: number} | null} */
     let edit;
     try {
-      edit = fixtureEdit(source, start, at, end, videoPlaceholder);
+      edit = fixtureEdit(source, start, at, end, map);
     } catch (err) {
       comments ??= commentRanges(source);
       if (!comments.some(([from, to]) => from <= at && at < to)) throw err;
@@ -382,11 +414,11 @@ export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
     if (edit) {
       output += source.slice(copied, start) + edit.text;
       copied = edit.end;
-      demoMediaReplaced += 1;
+      replaced += 1;
     }
     at = source.indexOf(needle, end);
   }
-  return {source: output + source.slice(copied), demoMediaReplaced};
+  return {source: output + source.slice(copied), replaced};
 }
 
 /**
@@ -911,15 +943,15 @@ function fixtureSegments(reference) {
 /**
  * The replacement for the fixture reference in the URL token [start, end),
  * which contains FIXTURE_SEGMENT's path at `at`; null when the token is not a
- * fixture reference or is a prose mention.
+ * fixture reference, is a prose mention, or `map` keeps it.
  * @param {string} source
  * @param {number} start
  * @param {number} at
  * @param {number} end
- * @param {string} videoPlaceholder
+ * @param {(ref: FixtureRef) => string | null} map
  * @returns {{text: string, end: number} | null}
  */
-function fixtureEdit(source, start, at, end, videoPlaceholder) {
+function fixtureEdit(source, start, at, end, map) {
   const token = source.slice(start, end);
   if (ABSOLUTE_URL.test(token)) return null;
   if (!token.startsWith('/')) {
@@ -987,11 +1019,17 @@ function fixtureEdit(source, start, at, end, videoPlaceholder) {
     .extname(segments[segments.length - 1])
     .slice(1)
     .toLowerCase();
-  if (VIDEO_EXTENSIONS.has(ext)) {
-    return {text: videoPlaceholder, end: referenceEnd};
-  }
-  if (IMAGE_EXTENSIONS.has(ext)) {
-    return {text: PLACEHOLDER_IMAGE, end: referenceEnd};
+  /** @type {FixtureRef['kind'] | null} */
+  let kind = null;
+  if (VIDEO_EXTENSIONS.has(ext)) kind = 'video';
+  else if (IMAGE_EXTENSIONS.has(ext)) kind = 'image';
+  if (kind) {
+    const text = map({
+      reference: source.slice(start, referenceEnd),
+      kind,
+      isValue: whole,
+    });
+    return text === null ? null : {text, end: referenceEnd};
   }
   if (whole || ext) {
     throw new Error(
@@ -2109,13 +2147,7 @@ export function componentsInSource(src) {
   return parsedComponents(src);
 }
 
-/** Where the component lists of the templates Astryx ships are stored. */
-export const TEMPLATE_COMPONENTS_FILE = path.join(
-  CLI_ROOT,
-  'assets',
-  'templates',
-  'components.generated.json',
-);
+export {TEMPLATE_COMPONENTS_FILE} from './template-source-tree.mjs';
 
 /**
  * The components a template source composes, read from its syntax tree (see

@@ -2803,17 +2803,9 @@ describe('useLayer public return types', () => {
     const fixedHasKeepOpenProps: 'keepOpenProps' extends keyof FixedLayerReturn
       ? true
       : false = false;
-    const contextHasGuard: 'wasJustDismissed' extends keyof ContextLayerReturn
-      ? true
-      : false = false;
-    const fixedHasGuard: 'wasJustDismissed' extends keyof FixedLayerReturn
-      ? true
-      : false = false;
 
     expect(contextHasKeepOpenProps).toBe(false);
     expect(fixedHasKeepOpenProps).toBe(false);
-    expect(contextHasGuard).toBe(false);
-    expect(fixedHasGuard).toBe(false);
   });
 });
 
@@ -2900,8 +2892,9 @@ describe('internal keep-open props (controls on the trigger, #5004)', () => {
   });
 });
 
-describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => {
-  function GuardedTriggerHarness() {
+describe('light dismiss vs. the trigger click', () => {
+  /** A trigger that calls show()/hide() directly, checking nothing. */
+  function TriggerHarness() {
     const layer = useLayerInternal({mode: 'context'});
     return (
       <>
@@ -2909,9 +2902,6 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
           type="button"
           ref={layer.ref}
           onClick={() => {
-            if (layer.wasJustDismissed()) {
-              return;
-            }
             if (layer.isOpen) {
               layer.hide();
             } else {
@@ -2945,9 +2935,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('absorbs the trigger click that follows a light dismiss', async () => {
     const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(
-      <GuardedTriggerHarness />,
-    );
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     await user.click(trigger);
@@ -2963,9 +2951,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('acts on a deliberate second press', async () => {
     const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(
-      <GuardedTriggerHarness />,
-    );
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     await user.click(trigger);
@@ -2980,7 +2966,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('leaves a programmatic hide unguarded', async () => {
     const user = userEvent.setup();
-    const {getByRole, getByTestId} = render(<GuardedTriggerHarness />);
+    const {getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     // Three presses with no browser-initiated close between them.
@@ -2993,9 +2979,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('acts on a synthesized click after a stopped click-first dismissal', async () => {
     const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(
-      <GuardedTriggerHarness />,
-    );
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     await user.click(trigger);
@@ -3014,38 +2998,6 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
     });
 
     expect(getByTestId('state')).toHaveTextContent('open');
-  });
-
-  /** A trigger that calls show()/hide() directly, checking nothing. */
-  function PlainTriggerHarness() {
-    const layer = useLayerInternal({mode: 'context'});
-    return (
-      <>
-        <button
-          type="button"
-          ref={layer.ref}
-          onClick={() => (layer.isOpen ? layer.hide() : layer.show())}>
-          Trigger
-        </button>
-        <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
-        {layer.render(<span>Layer content</span>, {placement: 'below'})}
-      </>
-    );
-  }
-
-  it('absorbs the click for a trigger that never calls wasJustDismissed', async () => {
-    const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(<PlainTriggerHarness />);
-    const trigger = getByRole('button', {name: 'Trigger'});
-
-    await user.click(trigger);
-    expect(getByTestId('state')).toHaveTextContent('open');
-
-    fireEvent.pointerDown(trigger);
-    lightDismiss(container);
-    fireEvent.click(trigger);
-
-    expect(getByTestId('state')).toHaveTextContent('closed');
   });
 });
 

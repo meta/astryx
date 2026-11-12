@@ -26,6 +26,7 @@ import {listDirEntries} from '../fs/listing-cache.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
+import {THEME_MODULE_EXTENSIONS} from './theme-module-extensions.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
@@ -114,14 +115,7 @@ function resolveThemePath(value, root, label) {
   }
 }
 
-export const THEME_MODULE_EXTENSIONS = [
-  '.mjs',
-  '.js',
-  '.mts',
-  '.ts',
-  '.tsx',
-  '.jsx',
-];
+export {THEME_MODULE_EXTENSIONS};
 
 /** A theme directory's name: lower-kebab, starting with a letter. */
 export const THEME_SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
