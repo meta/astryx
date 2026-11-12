@@ -428,8 +428,8 @@ export interface RichTextEditorProps extends Omit<
    * `- ` for a list). Uses the `transformers` prop (defaults to the standard
    * `@lexical/markdown` transformers plus GFM tables). At the start of a list
    * item, `- `, `1. `, or `[ ] ` switches its list between bullets, numbers,
-   * and tasks, and `# ` or `> ` takes the item out of its list as a heading
-   * or a quote.
+   * and tasks, and `# ` or `> ` takes a top-level item out of its list as a
+   * heading or a quote.
    * @default true
    */
   hasMarkdownShortcuts?: boolean;
@@ -758,7 +758,6 @@ export const RichTextEditor = function RichTextEditor({
               {hasMarkdownShortcuts && (
                 <MarkdownShortcutPlugin transformers={markdownTransformers} />
               )}
-              {/* The same shortcuts typed at the start of a list item. */}
               {hasMarkdownShortcuts && (
                 <ListItemShortcutsPlugin transformers={markdownTransformers} />
               )}

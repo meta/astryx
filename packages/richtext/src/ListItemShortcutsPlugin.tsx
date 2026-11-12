@@ -10,18 +10,13 @@
  * @output Exports ListItemShortcutsPlugin, which re-marks a list item when a
  *   Markdown block marker is typed at its start, keeping the item's text:
  *   `- `, `1. `, or `[ ] ` switches the item's list between bullets, numbers,
- *   and tasks, and `# ` or `> ` takes the item out of its list as a heading
- *   or a quote, the rest of the list continuing after it.
+ *   and tasks, and `# ` or `> ` takes a top-level item out of its list as a
+ *   heading or a quote, the rest of the list continuing after it.
  * @position Rendered by RichTextEditor beside MarkdownShortcutPlugin, only
- *   when `hasMarkdownShortcuts` is on. Lexical's shortcuts re-mark a block
- *   that sits directly in the root (`### ` before an h2's text makes an h3)
- *   but never look inside a list. A marker counts here only when the editor's
- *   `transformers` turn the same marker into that block at the start of a
- *   paragraph, so the transformers stay the one source of Markdown behavior.
- *   Each re-marking is one undo step, back to the typed marker. Tasks keep
- *   RichText's shape (markdownTaskList.ts): items of a bulleted list that
- *   carry task state, which TaskCheckboxPlugin draws and LIST_EXPORT writes
- *   as `[ ]` or `[x]`.
+ *   when `hasMarkdownShortcuts` is on. Lexical's shortcuts never look inside a
+ *   list. A marker counts only when the editor's `transformers` make that
+ *   block from it, and a task takes the shape of the transformer that matched.
+ *   Each re-mark is one undo step.
  */
 
 import {useEffect} from 'react';
@@ -33,7 +28,7 @@ import {
   type ListItemNode,
   type ListNode,
 } from '@lexical/list';
-import type {Transformer} from '@lexical/markdown';
+import {CHECK_LIST, type Transformer} from '@lexical/markdown';
 import {
   $createHeadingNode,
   $createQuoteNode,
@@ -106,12 +101,12 @@ function markerOf(
   return null;
 }
 
-/** Whether one of `transformers` makes a block from `line`, all of it. */
-function isTransformed(
+/** The first of `transformers` that makes a block from `line`, all of it. */
+function transformerFor(
   line: string,
   transformers: ReadonlyArray<Transformer>,
-): boolean {
-  return transformers.some(
+): Transformer | undefined {
+  return transformers.find(
     transformer =>
       transformer.type === 'element' &&
       line.match(transformer.regExp)?.[0] === line,
@@ -138,23 +133,45 @@ function $itemsOf(list: ListNode): Array<ListItemNode> {
 }
 
 /**
- * Switches the list holding `item` to bullets, numbers, or tasks. Tasks are
- * bulleted items that carry task state: switching to tasks makes every item
- * a task, keeping the state of those that already were, and `item` takes the
- * marker's; switching to bullets or numbers makes every item a plain one. A
- * numbered list starts at the marker's number when `item` is its first item.
+ * Switches the list holding `item` to bullets, numbers, or tasks. Tasks take
+ * the shape the matching transformer reads and writes: Lexical's `check`
+ * list for CHECK_LIST, or else RichText's bulleted items with task state
+ * (markdownTaskList.ts). Switching to tasks makes every item a task, keeping
+ * the state of those that already were, and `item` takes the marker's;
+ * switching to bullets or numbers makes every item a plain one. A numbered
+ * list starts at the marker's number when `item` is its first item.
  */
 function $switchList(
   list: ListNode,
   item: ListItemNode,
   marker: Extract<ListItemMarker, {kind: 'bullet' | 'number' | 'task'}>,
+  isCheckList: boolean,
 ): void {
   const items = $itemsOf(list);
+  if (marker.kind === 'task' && isCheckList) {
+    for (const each of items) {
+      if ($getTaskState(each) != null) {
+        each.setChecked($getTaskState(each) === 'checked');
+        $setTaskState(each, null);
+      }
+    }
+    list.setListType('check');
+    item.setChecked(marker.checked);
+    return;
+  }
   if (marker.kind === 'task') {
-    if (list.getListType() === 'number') {
+    const wasCheckList = list.getListType() === 'check';
+    if (list.getListType() !== 'bullet') {
       list.setListType('bullet');
     }
     for (const each of items) {
+      if (wasCheckList && each.getChecked() !== undefined) {
+        $setTaskState(
+          each,
+          each.getChecked() === true ? 'checked' : 'unchecked',
+        );
+        each.setChecked(undefined);
+      }
       if ($getTaskState(each) == null) {
         $setTaskState(each, 'unchecked');
       }
@@ -165,6 +182,9 @@ function $switchList(
   for (const each of items) {
     if ($getTaskState(each) != null) {
       $setTaskState(each, null);
+    }
+    if (each.getChecked() !== undefined) {
+      each.setChecked(undefined);
     }
   }
   const wasNumbered = list.getListType() === 'number';
@@ -183,7 +203,9 @@ function $switchList(
  * items before it stay in `list`; the lists nested under it follow `block`
  * at the top level, since a heading or a quote cannot hold them; and the
  * items after it continue in a list of the same kind, numbered on from where
- * they were.
+ * they were. When the last of those nested lists has the same type, Lexical
+ * merges the items after it into that list, which numbers them on from its
+ * own items.
  */
 function $takeOutOfList(
   list: ListNode,
@@ -225,7 +247,12 @@ function $takeOutOfList(
 }
 
 /** Re-marks the item whose first text, `key`, starts with `prefix`. */
-function $remark(key: NodeKey, prefix: string, marker: ListItemMarker): void {
+function $remark(
+  key: NodeKey,
+  prefix: string,
+  marker: ListItemMarker,
+  isCheckList: boolean,
+): void {
   const text = $getNodeByKey(key);
   const item = text?.getParent();
   const list = item?.getParent();
@@ -253,7 +280,7 @@ function $remark(key: NodeKey, prefix: string, marker: ListItemMarker): void {
     $takeOutOfList(list, item, block);
     block.selectStart();
   } else {
-    $switchList(list, item, marker);
+    $switchList(list, item, marker, isCheckList);
     item.selectStart();
   }
   // Its own undo step, so undo returns to the marker as typed.
@@ -311,12 +338,14 @@ function registerListItemShortcuts(
         const match = markerOf(prefix);
         const item = text.getParent();
         const list = item?.getParent();
+        const transformer =
+          match == null ? undefined : transformerFor(match.line, transformers);
         if (
           match == null ||
+          transformer == null ||
           !$isListItemNode(item) ||
           !text.is(item.getFirstChild()) ||
-          !$isListNode(list) ||
-          !isTransformed(match.line, transformers)
+          !$isListNode(list)
         ) {
           return null;
         }
@@ -328,10 +357,17 @@ function registerListItemShortcuts(
         ) {
           return null;
         }
-        return {key, prefix, marker: match.marker};
+        return {
+          key,
+          prefix,
+          marker: match.marker,
+          isCheckList: transformer === CHECK_LIST,
+        };
       });
       if (found != null) {
-        editor.update(() => $remark(found.key, found.prefix, found.marker));
+        editor.update(() =>
+          $remark(found.key, found.prefix, found.marker, found.isCheckList),
+        );
       }
     },
   );

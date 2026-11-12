@@ -16,6 +16,11 @@ import {createRef} from 'react';
 import {act, render, waitFor} from '@testing-library/react';
 import {$isListNode} from '@lexical/list';
 import {
+  $convertToMarkdownString,
+  CHECK_LIST,
+  TRANSFORMERS,
+} from '@lexical/markdown';
+import {
   $getRoot,
   $getSelection,
   $isRangeSelection,
@@ -175,6 +180,35 @@ describe('Markdown shortcuts typed at the start of a list item', () => {
       expect(markdownOf(editor)).toBe(expected);
     },
   );
+
+  it("with Lexical's CHECK_LIST, makes the check list it writes, so the tasks survive a reload", async () => {
+    const transformers = [...TRANSFORMERS, CHECK_LIST];
+    const {editor} = await typeAt(
+      '- Plan the launch\n- Ship it\n',
+      'Ship',
+      '[x] ',
+      {transformers},
+    );
+    const written = editor
+      .getEditorState()
+      .read(() => $convertToMarkdownString(transformers));
+    expect(written).toBe('- [ ] Plan the launch\n- [x] Ship it');
+    expect(
+      editor.getEditorState().read(() => {
+        const list = $getRoot().getFirstChild();
+        return $isListNode(list) ? list.getListType() : null;
+      }),
+    ).toBe('check');
+  });
+
+  it('renumbers the items after a lifted item that holds a nested numbered list, as one list', async () => {
+    const {editor} = await typeAt(
+      '1. One\n2. Two\n   1. Two a\n3. Three\n',
+      'Two',
+      '## ',
+    );
+    expect(markdownOf(editor)).toBe('1. One\n\n## Two\n\n1. Two a\n2. Three\n');
+  });
 
   it('makes a task item from `- [ ] ` typed at the start of a paragraph', async () => {
     const {editor} = await typeAt('Plan the launch\n', 'Plan', '- [ ] ');
