@@ -236,6 +236,10 @@ each finding at its file and line.
   `if (ref.current == null) ref.current = value`; and a DOM node in React state
   ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
   INV1, INV2, INV3 and INV17).
+  The check reads only the lines a change adds or changes. A render-time write
+  that a current record allows is not a finding: Markdown's streaming fade-in
+  refs (`component:Markdown` DEC-7), and `useTableSortable`'s config ref while
+  its INV17 gap is open.
 - **k. Release notes and records (automatic).** A package that ships a change
   with no Changeset, a `[fix]`, `[feat]`, or `[perf]` Changeset for a package
   where nothing that ships changes, such as a change to tests or tooling only,

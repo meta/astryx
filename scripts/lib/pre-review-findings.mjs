@@ -137,6 +137,26 @@ export function sharedOwnerFindings(addedLines) {
 const EFFECT =
   /\b(?:React\.)?use(?:Isomorphic)?(?:Layout|Insertion)?Effect\s*\(/;
 const COMMITTED_REF_MODULE = 'packages/core/src/hooks/useCommittedRef.ts';
+// Render-time ref writes that a current record allows, by file and ref name.
+// `record` names the clause; a test checks that the clause names the site.
+export const RENDER_WRITE_EXCEPTIONS = [
+  {
+    file: 'packages/core/src/Markdown/Markdown.tsx',
+    refs: ['boundariesRef', 'prevBlocksRef', 'prevInlineNodesRef'],
+    record: 'component:Markdown/DEC-7',
+  },
+  {
+    file: 'packages/core/src/Table/plugins/sortable/useTableSortable.tsx',
+    refs: ['configRef'],
+    record: 'architecture:react-component-runtime/INV17',
+  },
+];
+
+function isRenderWriteException(file, ref) {
+  return RENDER_WRITE_EXCEPTIONS.some(
+    exception => exception.file === file && exception.refs.includes(ref),
+  );
+}
 const COMMITTED_REF_HOOKS = `\`useCommittedRef\` or \`useCommittedRefInto\` (\`${COMMITTED_REF_MODULE}\`)`;
 const DOM_STATE =
   /\buseState\s*<[^>]*(?<![\w$.])(?:(?:HTML|SVG)\w*Element|Element|Node|NodeList|HTMLCollection)\b/;
@@ -448,7 +468,7 @@ export function effectFindings(addedLines, readHead) {
     }
     if (/\.current\b/.test(text)) {
       const {writes, reads} = renderUsesOf(file);
-      if (writes.has(line)) {
+      if (writes.has(line) && !isRenderWriteException(file, writes.get(line))) {
         add(
           file,
           line,

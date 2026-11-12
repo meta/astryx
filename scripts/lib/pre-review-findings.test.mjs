@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {
+  RENDER_WRITE_EXCEPTIONS,
   SHARED_OWNERS,
   addsDocumentListener,
   authoredLineCount,
@@ -341,6 +342,111 @@ describe('effectFindings', () => {
       [18, '`passesRef.current` is written during render'],
       [20, '`seedRef.current` is written during render'],
     ]);
+  });
+
+  it('reports only the lines a change adds, not existing ones in a touched file', () => {
+    const source = [
+      'export function Panel({label, next, onPan}: Props) {',
+      '  labelRef.current = label;',
+      '  const onPanRef = useCommittedRef(onPan);',
+      '  const text = onPanRef.current;',
+      '  // Keeps the latest handler.',
+      '  useLayoutEffect(() => {',
+      '    handlerRef.current = onPan;',
+      '  });',
+      '  nextRef.current = next;',
+      '  return null;',
+      '}',
+    ].join('\n');
+    const added = [{file, line: 9, text: '  nextRef.current = next;'}];
+
+    expect(
+      effectFindings(added, name => (name === file ? source : null)).map(f => [
+        f.line,
+        f.rule,
+      ]),
+    ).toEqual([[9, '`nextRef.current` is written during render']]);
+  });
+
+  it('exempts the render-time writes a current record allows, and only those', () => {
+    const at = (path, lines) =>
+      effectFindings(addedLinesOf(path, lines), () => lines.join('\n')).map(
+        f => [f.line, f.rule],
+      );
+    const markdown = 'packages/core/src/Markdown/Markdown.tsx';
+    const sortable =
+      'packages/core/src/Table/plugins/sortable/useTableSortable.tsx';
+    expect(
+      at(markdown, [
+        'export function Markdown({children}: Props) {',
+        '  boundariesRef.current = next;',
+        '  prevBlocksRef.current = blocks;',
+        '  prevInlineNodesRef.current = nodes;',
+        '  prevMathRef.current = hasMath;',
+        '}',
+      ]),
+    ).toEqual([[5, '`prevMathRef.current` is written during render']]);
+    expect(
+      at(sortable, [
+        'export function useTableSortable(config: Config) {',
+        '  configRef.current = config;',
+        '}',
+      ]),
+    ).toEqual([]);
+    // The same writes elsewhere stay findings.
+    expect(
+      at('packages/core/src/List/List.tsx', [
+        'export function List({config}: Props) {',
+        '  boundariesRef.current = next;',
+        '  configRef.current = config;',
+        '}',
+      ]),
+    ).toEqual([
+      [2, '`boundariesRef.current` is written during render'],
+      [3, '`configRef.current` is written during render'],
+    ]);
+  });
+
+  it('names an exception only where its record clause names the site', () => {
+    const records = {
+      'component:Markdown': 'docs/specs/components/Markdown/Markdown.spec.md',
+      'architecture:react-component-runtime':
+        'docs/architecture/react-component-runtime.md',
+    };
+    for (const {file: site, record} of RENDER_WRITE_EXCEPTIONS) {
+      const [id, clause] = record.split('/');
+      const text = fs.readFileSync(path.join(repoRoot, records[id]), 'utf8');
+      expect(text).toMatch(new RegExp(`\\b${clause}\\b`));
+      expect(fs.existsSync(path.join(repoRoot, site))).toBe(true);
+    }
+    const runtime = fs.readFileSync(
+      path.join(repoRoot, records['architecture:react-component-runtime']),
+      'utf8',
+    );
+    expect(runtime).toMatch(/INV17[\s\S]*useTableSortable/);
+    expect(runtime).toMatch(/INV17[\s\S]*`component:Markdown` DEC-7/);
+  });
+
+  it("does not flag Toast's earlier-sibling commit sync", () => {
+    const toast = 'packages/core/src/Toast/ToastViewport.tsx';
+    const lines = [
+      'function ToastRefSync({onCommit}: {onCommit: () => void}): null {',
+      "  // Syncs the viewport's rendered list with the committed render.",
+      '  useInsertionEffect(() => {',
+      '    onCommit();',
+      '  });',
+      '  return null;',
+      '}',
+      'export function ToastViewport() {',
+      '  const syncRendered = useCallback(() => {',
+      '    renderedToastsRef.current = toasts;',
+      '  }, [toasts]);',
+      '  return null;',
+      '}',
+    ];
+    expect(
+      effectFindings(addedLinesOf(toast, lines), () => lines.join('\n')),
+    ).toEqual([]);
   });
 
   it('accepts lazy initialization of a ref during render', () => {
