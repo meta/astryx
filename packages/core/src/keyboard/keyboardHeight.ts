@@ -127,8 +127,9 @@ interface KeyboardStore {
   detachFocus: (() => void) | null;
 }
 
-// The room's fields changed the store's shape, so its version moved on: a copy
-// of Core built against another shape keeps its own store.
+// The hide's touch count and the room's fields changed the store's shape, so
+// its version moved on: a copy of Core built against another shape keeps its
+// own store.
 const stores = sharedWeakMap<Window, KeyboardStore>(
   'keyboard/keyboard-height/stores',
   3,

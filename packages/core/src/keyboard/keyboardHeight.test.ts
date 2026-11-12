@@ -23,6 +23,7 @@ import {
   __resetLayoutViewportForTest,
   layoutViewportHeight,
 } from '../utils/layoutViewport';
+import {sharedWeakMap} from '../utils/sharedRealm';
 import {
   claimTapFocus,
   findTextEntryControl,
@@ -510,6 +511,47 @@ describe('a hide Chrome reports in steps under Remove animations (FR8)', () => {
       vi.advanceTimersByTime(1000);
     });
     expect(heightsOf(listener)).toEqual([300]);
+  });
+});
+
+describe('the store beside another copy of Core (spec:AST-110 FR3)', () => {
+  it('keeps its own store beside a copy whose store has the earlier shape, and each reads its own height', () => {
+    // An earlier copy of Core keeps the window's store under the first
+    // version, without the hide's touch count. It listens, and read 300 px.
+    const earlier = sharedWeakMap<Window, object>(
+      'keyboard/keyboard-height/stores',
+      1,
+    );
+    const previous = earlier.get(window);
+    const theirs = {
+      height: 300,
+      listeners: new Set(),
+      focusListeners: new Set(),
+      detach: () => {},
+      detachFocus: null,
+    };
+    earlier.set(window, theirs);
+    const stop = subscribeKeyboardHeight(window, () => {});
+    try {
+      expect(getKeyboardHeight(window)).toBe(0);
+      report({height: window.innerHeight - 200});
+      expect(getKeyboardHeight(window)).toBe(200);
+      expect(theirs.height).toBe(300);
+      expect(Object.keys(theirs)).toEqual([
+        'height',
+        'listeners',
+        'focusListeners',
+        'detach',
+        'detachFocus',
+      ]);
+    } finally {
+      stop();
+      if (previous == null) {
+        earlier.delete(window);
+      } else {
+        earlier.set(window, previous);
+      }
+    }
   });
 });
 
