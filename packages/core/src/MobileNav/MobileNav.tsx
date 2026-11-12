@@ -562,11 +562,15 @@ export function MobileNav({
     setWasOpen(isOpen);
     if (isOpen && side === 'auto') {
       // The opener is the focused element. If a tap left no focus, fall back to
-      // the element whose `aria-controls` names this dialog.
+      // the element whose `aria-controls` names this dialog. Focus already
+      // inside the dialog is not the opener: a drawer open in the server
+      // markup has run showModal() by the time it resolves after hydration.
       const active = document.activeElement as HTMLElement | null;
       const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
       const trigger =
-        active && active !== document.body
+        active &&
+        active !== document.body &&
+        !dialogRef.current?.contains(active)
           ? active
           : Array.from(
               // eslint-disable-next-line @eslint-react/purity -- runs only on the closed-to-open render. Never on the server or while hydrating.
