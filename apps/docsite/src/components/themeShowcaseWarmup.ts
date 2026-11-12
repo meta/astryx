@@ -2,7 +2,7 @@
 
 /**
  * @file Loads the /themes showcase photos of every theme before a visitor picks one.
- * @input The bespoke showcase photos (themeShowcaseContent.ts), the docsite's idle scheduler (lib/searchWarmup.ts), and the connection's data-saving hints.
+ * @input The bespoke showcase photos (themeShowcaseContent.ts), the docsite's idle scheduler (lib/searchWarmup.ts), and the connection's data-saving hints (lib/prefersReducedData.ts).
  * @output Image requests that fill the browser's cache, and a function that cancels a warm-up that has not started.
  * @position Called by ThemePackagePage.tsx.
  *
@@ -11,26 +11,13 @@
  * 30 photos are about 0.6 MB in all, so the page can load them in idle time.
  */
 
+import {prefersReducedData} from '../lib/prefersReducedData';
 import {whenIdle} from '../lib/searchWarmup';
 import {THEME_SHOWCASE_PHOTOS} from './themeShowcaseContent';
 
 // A browser with no idle callback waits this long. The others wait for idle
 // time, for at most twice this long.
 const WARMUP_FALLBACK_MS = 1000;
-
-interface ConnectionHints {
-  saveData?: boolean;
-  effectiveType?: string;
-}
-
-/** Whether the visitor's browser reports a data-saving mode or a 2G link. */
-function shouldSaveData(): boolean {
-  const {connection} = navigator as Navigator & {connection?: ConnectionHints};
-  return (
-    connection?.saveData === true ||
-    /(?:^|-)2g$/u.test(connection?.effectiveType ?? '')
-  );
-}
 
 /**
  * Requests every showcase photo once the page is idle. The returned images
@@ -45,7 +32,7 @@ export function warmThemeShowcasePhotos(): {
   cancel: () => void;
 } {
   const images: HTMLImageElement[] = [];
-  if (shouldSaveData()) {
+  if (prefersReducedData()) {
     return {images, cancel: () => {}};
   }
   const load = () => {
