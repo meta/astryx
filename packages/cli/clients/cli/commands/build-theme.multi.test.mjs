@@ -194,6 +194,27 @@ describe('theme build with several files', () => {
     }
   }, 120_000);
 
+  it('shows the warnings of a theme that fails in a batch, after the themes before it', async () => {
+    const dir = themeDir();
+    // The theme warns about an unknown component, then fails: its output is a
+    // folder.
+    fs.writeFileSync(
+      path.join(dir, 'loud.mjs'),
+      "export default { name: 'loud', tokens: { '--color-bg': '#000000' }, components: { 'not-a-part': { base: { color: 'red' } } } };\n",
+    );
+    fs.mkdirSync(path.join(dir, 'loud.css'));
+    const r = await runCli(['theme', 'build', 'alpha.mjs', 'loud.mjs'], dir);
+    expect(r.status).toBe(1);
+    const out = r.stdout + r.stderr;
+    expect(out).toMatch(/\[ok\] alpha\.css/);
+    expect(out).toContain('Unknown component "not-a-part"');
+    expect(r.stderr).toContain('loud.mjs: The output loud.css is a folder');
+    expect(out.indexOf('[ok] alpha.css')).toBeLessThan(
+      out.indexOf('Unknown component'),
+    );
+    expect(fs.existsSync(path.join(dir, 'alpha.css'))).toBe(true);
+  }, 120_000);
+
   it('prints each theme of a batch after it is written', async () => {
     const dir = themeDir();
     const r = await runCli(['theme', 'build', 'alpha.mjs', 'beta.mjs'], dir);

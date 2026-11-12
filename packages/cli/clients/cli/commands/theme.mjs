@@ -1090,27 +1090,36 @@ function registerThemeCommands(theme, program, docs, words) {
       // two themes that build the same files are refused before either
       // writes. Any other failure writes the themes built before it, as a
       // shell loop under `set -e` would have, and stops.
-      /** @type {Array<Array<{dest: string, content: string}>> | undefined} */
-      const deferred = !options.check && entries.length > 1 ? [] : undefined;
-      // What each deferred theme prints waits until its outputs are written,
-      // so no `[ok]` line names a file that is never written.
-      /** @type {Array<Array<() => void>>} */
-      const pending = [];
+      const deferred = !options.check && entries.length > 1;
+      // Each built theme keeps its writes and what it prints together; what
+      // it prints waits until its outputs are written, so no `[ok]` line
+      // names a file that is never written.
+      /** @type {Array<{writes: Array<Array<{dest: string, content: string}>>, lines: Array<() => void>}>} */
+      const built = [];
       const publish = () => {
-        const queue =
-          /** @type {Array<Array<{dest: string, content: string}>>} */ (
-            deferred
-          ).splice(0);
-        queue.forEach((writes, index) => {
-          writeDeferredBuildOutputs([writes]);
-          for (const show of pending[index] ?? []) show();
-        });
+        for (const theme of built.splice(0)) {
+          writeDeferredBuildOutputs(theme.writes);
+          for (const show of theme.lines) show();
+        }
       };
+      const writeFailed = (/** @type {unknown} */ error) =>
+        themeError(
+          /** @type {import('../../../api/error.mjs').AstryxError} */ (error),
+          words,
+          [
+            buildWithout(
+              [],
+              'run the same build again once the files can be written',
+            ),
+          ],
+        );
       /** @type {Map<string, string>} */
       const claimedOutputs = new Map();
       for (const entry of entries) {
         /** @type {Array<() => void>} */
         const lines = [];
+        /** @type {Array<Array<{dest: string, content: string}>>} */
+        const writes = [];
         const log = logger.log;
         const warn = logger.warn;
         if (deferred) {
@@ -1128,7 +1137,7 @@ function registerThemeCommands(theme, program, docs, words) {
             iconsSpecifier: options.iconsSpecifier,
             __onPrivateVarError: onPrivateVarError,
             __claimedOutputs: claimedOutputs,
-            __deferredWrites: deferred,
+            __deferredWrites: deferred ? writes : undefined,
             __commandWords: words,
           };
           let result;
@@ -1160,7 +1169,7 @@ function registerThemeCommands(theme, program, docs, words) {
           logger.log = log;
           logger.warn = warn;
           results.push({file: entry.file, receipt: result ?? null});
-          if (deferred) pending.push(lines);
+          if (deferred) built.push({writes, lines});
           if (
             options.check &&
             result &&
@@ -1179,6 +1188,8 @@ function registerThemeCommands(theme, program, docs, words) {
           // one broke, so name it. Themes already written keep their install
           // and font guidance.
           if (/** @type {any} */ (err).outputCollision) {
+            // Nothing is written, so only this theme's warnings are shown.
+            for (const show of lines) show();
             return themeError(err, words, [
               buildWithout([], 'build the first theme on its own', [
                 entries[0].file,
@@ -1189,13 +1200,11 @@ function registerThemeCommands(theme, program, docs, words) {
             try {
               publish();
             } catch (writeError) {
-              return themeError(
-                /** @type {import('../../../api/error.mjs').AstryxError} */ (
-                  writeError
-                ),
-                words,
-              );
+              return writeFailed(writeError);
             }
+            // The failing theme's warnings, such as a missing package, say
+            // why it failed.
+            for (const show of lines) show();
           }
           if (report && compact) printCompactTrailer(trailers);
           else if (report) printBatchTrailer(trailers);
@@ -1207,10 +1216,7 @@ function registerThemeCommands(theme, program, docs, words) {
         try {
           publish();
         } catch (e) {
-          return themeError(
-            /** @type {import('../../../api/error.mjs').AstryxError} */ (e),
-            words,
-          );
+          return writeFailed(e);
         }
       }
 
