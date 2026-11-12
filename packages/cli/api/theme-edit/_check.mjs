@@ -679,9 +679,15 @@ function propertyProblem(prop, value) {
   // the property's initial value, or an example of its kind; each checked.
   const example = exampleOf(groupOfPropType(prop), prop);
   const initial = initialOf(prop);
+  // A bare number on a length property means px (`padding 4` → `4px`, each
+  // number in a list too), when the property takes that.
+  const withPx = /^[\d.\s-]+$/.test(v)
+    ? v.replace(/(^|\s)(-?\d*\.?\d+)(?=\s|$)/g, '$1$2px')
+    : null;
   return {
     takes: `a value its CSS grammar takes (${grammarText(known)})`,
     near:
+      (withPx && matchValue(prop, withPx) ? withPx : null) ??
       near ??
       (initial && matchValue(prop, initial) ? initial : null) ??
       (matchValue(prop, example) ? example : null),
@@ -956,17 +962,23 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
   if (s.on && !isRole && !FAMILIES[s.on]) {
     const t = TARGET.get(s.on);
     if (!t) {
-      // Another case of a part or group: that one, as a working command.
-      const lower = s.on.toLowerCase();
+      // Another case of a part or group, its class name copied from the
+      // page (`.astryx-card`), or its component (`<Card>`, `Card`): that
+      // part, as a working command with every flag kept.
+      const lower = s.on
+        .trim()
+        .replace(/^<\/?\s*|\s*\/?>$/g, '')
+        .replace(/^\./, '')
+        .replace(/^astryx-/, '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+        .toLowerCase();
       if (TARGET.has(lower) || FAMILIES[lower])
         refuse(
           E.ERR_THEME_UNKNOWN_PART,
-          `"${s.on}" is not a part you can style; part names are lower case: ${lower}.`,
+          `"${s.on}" is not a part name; the part is ${lower}.`,
           {
             didYouMean: [lower],
-            run: [
-              `${P} ${unset ? 'undo' : 'set'} ${slug} ${thing}${v ? ` ${quoteCommandArgument(v)}` : ''} --on ${lower}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
-            ],
+            run: [setLine(slug, thing, v, {...s, on: lower}, unset)],
           },
         );
       refuse(
@@ -979,7 +991,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             ...Object.keys(FAMILIES),
           ]),
           run: [
-            `${HOW} --list parts ${s.on.toLowerCase().replace(/s$/, '').split('-')[0]}`,
+            `${HOW} --list parts ${quoteCommandArgument(lower.replace(/s$/, '').split('-')[0] || 'button')}`,
             `${HOW} ${quoteCommandArgument(s.on)}`,
           ],
         },
@@ -1008,20 +1020,35 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         );
     }
     const states = [...t.states, ...COMMON_STATES];
+    // Other words for a state, mapped to the one the part has; with none
+    // near, the list of its states (never a guess such as hover).
+    const SYNONYMS = /** @type {Record<string, string[]>} */ ({
+      pressed: ['active'],
+      press: ['active'],
+      down: ['active'],
+      clicked: ['active'],
+      hovered: ['hover'],
+      focused: ['focus-visible', 'focus-within', 'focus'],
+      checked: ['checked', 'selected'],
+      selected: ['selected', 'checked'],
+      open: ['open', 'expanded'],
+      expanded: ['expanded', 'open'],
+      inactive: ['disabled'],
+    });
+    const meant =
+      (SYNONYMS[String(s.state ?? '').toLowerCase()] ?? []).find(x =>
+        states.includes(x),
+      ) ?? nearest(String(s.state ?? ''), states)[0];
     if (s.state && !states.includes(s.state))
       refuse(
         E.ERR_THEME_UNKNOWN_STATE,
         `"${s.state}" is not a state of ${s.on}. States: ${states.join(', ')}.`,
         {
-          didYouMean: nearest(s.state, states),
+          ...(meant ? {didYouMean: [meant]} : {}),
           run: [
-            setLine(
-              slug,
-              thing,
-              v,
-              {...s, state: nearest(s.state, states)[0] ?? 'hover'},
-              unset,
-            ),
+            meant
+              ? setLine(slug, thing, v, {...s, state: meant}, unset)
+              : `${HOW} ${quoteCommandArgument(s.on)}`,
           ],
         },
       );
@@ -1177,11 +1204,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         E.ERR_THEME_NO_EFFECT,
         `Core sets ${hit}'s inner padding (what sits edge to edge inside it) from a plain padding setting only, so with --state ${s.state} it would stay behind.`,
         {
-          run: [
-            named && !expands(named) && !s.only
-              ? setLine(slug, thing, v, {...s, only: true})
-              : setLine(slug, thing, v, {...s, state: undefined}),
-          ],
+          // The value as set takes it: a bare number in px.
+          run: (() => {
+            const fixed =
+              thing === 'spacing' ? v : (propertyProblem(thing, v)?.near ?? v);
+            return [
+              named && !expands(named) && !s.only
+                ? setLine(slug, thing, fixed, {...s, only: true})
+                : setLine(slug, thing, fixed, {...s, state: undefined}),
+            ];
+          })(),
         },
       );
   }

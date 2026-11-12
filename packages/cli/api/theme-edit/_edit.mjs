@@ -56,6 +56,7 @@ import {
   staleBuild,
   EDITOR_SUFFIXES,
   madeByEditor,
+  kebab,
   camel,
   NEW_MARKER,
   clearNewMarker,
@@ -90,6 +91,7 @@ import {
   styledChanges,
   previewAfter,
   checkSection,
+  stampSheet,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -1201,8 +1203,28 @@ async function change(sub, slug, thing, value, options) {
     corners: /radius$/,
     spacing: /^(padding|gap)(-|$)/,
   });
+  // A whole-theme look dial (buttons, surfaces) writes part properties
+  // too: an exact property on one of them wins there, read from the build.
+  const looksOver =
+    sub === 'set' && s.source === 'dial' && !DIAL_PROPERTY[s.thing]
+      ? (() => {
+          const writes = dialWrites(ctx, data, s, base);
+          if (!writes.size) return null;
+          return (
+            data.settings.find(
+              x =>
+                x.source === 'property' &&
+                x.on &&
+                !x.when &&
+                !x.state &&
+                partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
+            ) ?? null
+          );
+        })()
+      : null;
   const exactOver =
-    sub === 'set' && s.source === 'dial' && s.on && DIAL_PROPERTY[s.thing]
+    looksOver ??
+    (sub === 'set' && s.source === 'dial' && s.on && DIAL_PROPERTY[s.thing]
       ? (data.settings.find(
           x =>
             x.source === 'property' &&
@@ -1212,7 +1234,7 @@ async function change(sub, slug, thing, value, options) {
             (x.when ?? '') === (s.when ?? '') &&
             (x.state ?? '') === (s.state ?? ''),
         ) ?? null)
-      : null;
+      : null);
   /** @type {string[]} */
   const notes = [
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
@@ -1611,6 +1633,9 @@ export async function themeEditShow(theme, options = {}) {
   const sheet = noPages
     ? {file: shown(cwd, f.sheet), components: 0, skipped: []}
     : await renderSheet(ctx, theme, data, {group: section});
+  // The full sheet records the build it shows, so a later change tells a
+  // sheet that still matches (after an undo) from one that does not.
+  if (!noPages && !section) stampSheet(f.sheet, theme, cwd);
   const modes = modesOf(data);
   const shots =
     png && !noPages
@@ -1635,10 +1660,32 @@ export async function themeEditShow(theme, options = {}) {
       theme,
       like: data.like ?? null,
       mode: data.mode,
-      settings: data.settings.map(s => {
-        const masked = maskedSettings(data, ctx).get(s);
-        return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
-      }),
+      settings: await (async () => {
+        const looksBase = await baseResolved(ctx.project, data.like).catch(
+          () => null,
+        );
+        return data.settings.map(s => {
+          let masked = maskedSettings(data, ctx).get(s);
+          // A look dial (buttons, surfaces) under an exact property on a
+          // part it writes: named, as corners under border-radius is.
+          if (!masked && looksBase && s.source === 'dial' && !s.on) {
+            const writes = dialWrites(ctx, data, s, looksBase);
+            const exact = writes.size
+              ? data.settings.find(
+                  x =>
+                    x.source === 'property' &&
+                    x.on &&
+                    !x.when &&
+                    !x.state &&
+                    partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
+                )
+              : undefined;
+            if (exact)
+              masked = `${describe(exact)} is an exact property and wins over ${s.thing} on ${exact.on}`;
+          }
+          return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
+        });
+      })(),
       notes: [
         ...(noReact
           ? [
@@ -1694,6 +1741,39 @@ export async function themeEditShow(theme, options = {}) {
       colorFiles: pal ? colorFiles(theme) : null,
     },
   };
+}
+
+/**
+ * The part properties a dial writes, read from what the build writes with
+ * it and without it (so a dial's outputs are never listed by hand), as
+ * `target\0css-property` keys.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} dial
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @returns {Set<string>}
+ */
+function dialWrites(ctx, data, dial, base) {
+  /** @type {Set<string>} */
+  const out = new Set();
+  const comps = (/** @type {import('./_settings.mjs').Setting[]} */ settings) =>
+    /** @type {Record<string, Record<string, Record<string, unknown>>>} */ (
+      compileTheme(ctx, {...data, settings}, base).components ?? {}
+    );
+  let plain;
+  let withDial;
+  try {
+    plain = comps([]);
+    withDial = comps([dial]);
+  } catch {
+    return out;
+  }
+  for (const [target, keys] of Object.entries(withDial))
+    for (const [key, block] of Object.entries(keys ?? {}))
+      for (const [prop, value] of Object.entries(block ?? {}))
+        if (typeof value === 'string' && plain[target]?.[key]?.[prop] !== value)
+          out.add(`${target}\0${kebab(prop)}`);
+  return out;
 }
 
 /**
@@ -1767,8 +1847,25 @@ function nowApplies(ctx, data, removed, base) {
           )
         : null;
     if (exact) return describe(exact);
-    // A removed exact property leaves the dial that writes it: on the part,
-    // its group, or the whole theme.
+    // A removed exact property leaves the dial whose build writes it there
+    // (buttons, surfaces: read from the build), on the part, its group, or
+    // the whole theme.
+    if (removed.source === 'property') {
+      const targets = partsOf(ctx, removed);
+      const writer = [...data.settings].reverse().find(
+        x =>
+          x.source === 'dial' &&
+          x !== removed &&
+          (!x.on || x.on === removed.on || (fam != null && x.on === fam)) &&
+          (x.when ?? '') === (removed.when ?? '') &&
+          (x.state ?? '') === (removed.state ?? '') &&
+          [...dialWrites(ctx, data, x, base)].some(k => {
+            const [t, prop] = k.split('\0');
+            return targets.includes(t) && prop === removed.thing;
+          }),
+      );
+      if (writer) return describe(writer);
+    }
     if (removed.source === 'property') {
       const dial = Object.entries(DIAL_PROPERTY).find(([, re]) =>
         re.test(removed.thing),

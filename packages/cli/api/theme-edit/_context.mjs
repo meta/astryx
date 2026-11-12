@@ -8,6 +8,7 @@
  * @position api/theme-edit — imported only by the adapter's operation helpers
  */
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
@@ -398,7 +399,7 @@ export async function previewAfter(ctx, slug, data, png) {
   const f = themeFiles(ctx.project.cwd, slug);
   // The sheet of every component is made by show only: after a change it
   // says, at its top, that it shows the theme as it was.
-  const sheetStale = markSheetStale(f.sheet, slug);
+  const sheetStale = markSheetStale(f.sheet, slug, ctx.project.cwd);
   const shots =
     png && preview
       ? await pictures(
@@ -422,17 +423,84 @@ export async function previewAfter(ctx, slug, data, png) {
 
 const STALE_MARK = '<!-- astryx: sheet older than the theme -->';
 
+/** The build a full sheet was made from, recorded in the sheet. */
+const SHEET_STAMP = /<!-- astryx: sheet of build ([0-9a-f]{16}) -->/;
+
+/** @param {string} s */
+const escapeForRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /**
- * Put a notice at the top of a sheet the last change made out of date
- * (once). Returns whether there is such a sheet.
- * @param {string} file
+ * A hash of a theme's built stylesheet and module, or null when either is
+ * missing.
+ * @param {string} cwd
  * @param {string} slug
  */
-function markSheetStale(file, slug) {
+function buildHash(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  try {
+    return createHash('sha256')
+      .update(fs.readFileSync(f.css))
+      .update('\0')
+      .update(fs.readFileSync(f.js))
+      .digest('hex')
+      .slice(0, 16);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Record in a freshly made full sheet the build it shows.
+ * @param {string} file
+ * @param {string} slug
+ * @param {string} cwd
+ */
+export function stampSheet(file, slug, cwd) {
+  const hash = buildHash(cwd, slug);
+  if (!hash) return;
+  try {
+    const html = fs.readFileSync(file, 'utf8').replace(SHEET_STAMP, '');
+    // At the end: a comment before the doctype would put the page in
+    // quirks mode.
+    writeWhole(
+      file,
+      `${html.trimEnd()}\n<!-- astryx: sheet of build ${hash} -->\n`,
+    );
+  } catch (e) {
+    if (/** @type {any} */ (e)?.lockLost) throw e;
+  }
+}
+
+/**
+ * Put a notice at the top of a sheet the last change made out of date
+ * (once), or take it off a sheet made from the build there is now.
+ * Returns whether the sheet is out of date.
+ * @param {string} file
+ * @param {string} slug
+ * @param {string} cwd
+ */
+function markSheetStale(file, slug, cwd) {
   let html;
   try {
     html = fs.readFileSync(file, 'utf8');
   } catch {
+    return false;
+  }
+  // A sheet made from the build there is now (a change, then its undo)
+  // shows the theme as it is: no banner, and the result says nothing.
+  const made = SHEET_STAMP.exec(html)?.[1];
+  if (made && made === buildHash(cwd, slug)) {
+    if (html.includes(STALE_MARK)) {
+      const clean = html.replace(
+        new RegExp(`${escapeForRegExp(STALE_MARK)}<div[^>]*>[\\s\\S]*?</div>`),
+        '',
+      );
+      try {
+        writeWhole(file, clean);
+      } catch (e) {
+        if (/** @type {any} */ (e)?.lockLost) throw e;
+      }
+    }
     return false;
   }
   if (html.includes(STALE_MARK)) return true;
