@@ -217,7 +217,9 @@ describe('integration authoring CLI', () => {
     const text = await runCli(['integration', 'verify'], tmpDir);
     expect(text.status).toBe(json.status);
     expect(text.stdout).toContain('[info] astryx.integration.ts is TypeScript');
-    expect(text.stdout).toContain('authoring/ship/publishing');
+    expect(text.stdout).toContain(
+      'authoring/ship/publishing keep-private-files-out',
+    );
     expect(json.stdout).not.toContain('is TypeScript');
   });
 
@@ -229,6 +231,9 @@ describe('integration authoring CLI', () => {
       tmpDir,
     );
     expect(old.status).toBe(verify.status);
+    // A JavaScript manifest gets no note.
+    const plain = await runCli(['integration', 'verify'], tmpDir);
+    expect(plain.stdout).not.toContain('is TypeScript');
     const verifyEnvelope = parseEnvelope(verify.stdout);
     const oldEnvelope = parseEnvelope(old.stdout);
     expect(oldEnvelope.type).toBe('integration.pack-check');

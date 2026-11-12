@@ -99,7 +99,7 @@ async function verifyPackage(program) {
     if (tarball != null && /\.ts$/.test(inventory.manifest ?? '')) {
       blocks.push(
         text(
-          `[info] ${inventory.manifest} is TypeScript, which the CLI transpiles on its first read on each machine; ship astryx.integration.mjs to load faster. See \`${formatCliCommand('docs authoring/ship/publishing')}\`.`,
+          `[info] ${inventory.manifest} is TypeScript, which the CLI transpiles on its first read on each machine; ship astryx.integration.mjs to load faster. See \`${formatCliCommand('docs authoring/ship/publishing keep-private-files-out')}\`.`,
         ),
       );
     }
