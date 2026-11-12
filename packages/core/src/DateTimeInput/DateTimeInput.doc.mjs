@@ -174,7 +174,13 @@ export const docs = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        'Status indicator object for error, warning, or success states with a message.',
+        'Status indicator object for error, warning, or success states with a message. For a typed date the field rejects, and for unfinished text that Enter or blur keeps, the field shows its own error message instead; unreadable text is announced, not shown; with onEntryErrorChange, an error status with a message shows in place of that message. A warning or success never replaces a rejection.',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'incomplete' | 'nonexistent' | 'outOfRange' | 'unavailable', text: string, date?: ISODateString} | null) => void",
+      description:
+        "Called each time the date segment's rejection of typed text changes, and with null when the rejection ends. kind is 'unreadable', 'incomplete' (part of a date that Enter or blur cannot finish), 'nonexistent' (a date the calendar does not have), 'outOfRange' (before the date of min or after the date of max), or 'unavailable' (a day dateConstraints rules out); text is the typed text; date is the Gregorian ISO date the text names, for 'outOfRange' and 'unavailable'. It also runs when a new min, max, dateConstraints, or value, a calendar pick, disabling the field, or Enter or blur changes the rejection, and never twice for the same rejection; it reports null when the typed field leaves while its rejection stands, as when a presentation or pointer change shows the native or touch picker. With it, an error status with a message replaces the field's own message, and a rejection that starts under an unchanged error message announces that message once. The native and touch pickers take no typed text, so it never reports a rejection there.",
     },
     {
       name: 'labelTooltip',
@@ -573,7 +579,14 @@ export const docsZh = {
     {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
-      description: '错误、警告或成功状态的状态指示对象，附带消息。',
+      description:
+        '错误、警告或成功状态的状态指示对象，附带消息。对于字段拒绝的输入日期，以及按 Enter 或失焦后保留的未完成文本，字段显示自身的错误消息；无法识别的文本只会被播报，不会显示；传入 onEntryErrorChange 时，改为显示带消息的 error 状态。warning 或 success 状态不会替代拒绝消息。',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'incomplete' | 'nonexistent' | 'outOfRange' | 'unavailable', text: string, date?: ISODateString} | null) => void",
+      description:
+        "每当日期部分对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。kind 为 'unreadable'、'incomplete'（按 Enter 或失焦也无法补全的部分日期）、'nonexistent'（该日历中不存在的日期）、'outOfRange'（早于 min 的日期或晚于 max 的日期）或 'unavailable'（被 dateConstraints 排除的日期）；text 为输入的文本；date 为文本所指的公历 ISO 日期，用于 'outOfRange' 和 'unavailable'。新的 min、max、dateConstraints 或 value、在日历中选择日期、禁用字段，或按 Enter、失焦改变拒绝时也会调用；同一拒绝不会重复调用；拒绝仍存在时若输入字段被替换（例如展示方式或指针类型改变而显示原生或触控选择器），会传入 null。传入此回调后，带消息的 error 状态会替代字段自身的错误消息；若拒绝开始时该错误消息未变，字段会再播报一次该消息。原生和触控选择器不接受输入文本，因此不会报告拒绝。",
     },
     {
       name: 'labelTooltip',
@@ -737,7 +750,10 @@ export const docsDense = {
     timeLabel:
       'accessible label for the time input; defaults to "{label} time"',
     size: 'input control size',
-    status: 'error/warning/success status w/ message',
+    status:
+      'error/warning/success status w/ message; a rejected date or kept unfinished text shows its own error instead (unreadable text is only announced), unless onEntryErrorChange is set and status is an error w/ message',
+    onEntryErrorChange:
+      "(error|null) on each typed-rejection change: kind 'unreadable'|'incomplete'|'nonexistent'|'outOfRange' (min/max)|'unavailable' (dateConstraints), text, date (Gregorian ISO, outOfRange/unavailable); also on new min/max/dateConstraints/value, calendar pick, disable, Enter/blur; never twice for one rejection; null when the typed field leaves mid-rejection (presentation/pointer switch); with it an error status w/ message replaces the field's own message, re-announced once if unchanged when a rejection starts; never a rejection on native/touch pickers",
     labelTooltip: 'tooltip text via info icon at label end',
     numberOfMonths:
       'Astryx pointer-calendar months shown simultaneously; ignored by native date controls and the mobile touch sheet',

@@ -451,7 +451,9 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   outputs. The deprecated plain `theme add` keeps copying source until its scheduled
   cleanup. `theme eject` is the explicit source fork; it copies the complete
   theme directory and same-stem descriptor, with the local descriptor marked as
-  not maintained by the package owner.
+  not maintained by the package owner. The `theme targets` filter drops a
+  leading `.` and surrounding spaces, so a class selector as the output prints
+  it (`.astryx-switch`) matches.
 - **INV20 — A command's API subject has one layout.** A command's behavior lives
   in `api/<subject>/`. `<subject>.mjs` is the subject's entry, and `api/index.mjs`
   re-exports what it exports. A subject with more than one operation puts each in

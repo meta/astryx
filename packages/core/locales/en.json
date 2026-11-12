@@ -1216,11 +1216,11 @@
     "description": "Screen-reader-only live-region alert in DateInput / DateTimeInput when the typed text cannot be read as a date. Text the field cannot finish, such as a one-digit year, stays on Enter or blur and shows this message as the field status."
   },
   "@astryx.dateInput.nonexistentDate": {
-    "defaultMessage": "This date does not exist in the {calendar}",
-    "description": "Error in DateInput / DateTimeInput, shown below the field and announced, when the typed date is readable but the calendar does not have it, such as 30 Esfand in a common Persian year or February 30. {calendar} is the calendar's localized name from the platform, such as \"Persian Calendar\" or \"Gregorian Calendar\"."
+    "defaultMessage": "{named, select, yes {Enter a real date ({calendar})} other {Enter a real date}}",
+    "description": "Error in DateInput / DateTimeInput, shown below the field and announced, when the typed date is readable but the calendar does not have it, such as February 30 or 30 Esfand in a common Persian year. Ask for a date that exists, in plain words. `named` is `yes` when the field's calendar differs from the app's calendar, and then {calendar} is the calendar's localized name from the platform, such as \"Persian Calendar\"; keep it in parentheses, because the name is a standalone form that may not fit inside a sentence."
   },
   "@astryx.dateInput.outOfRangeDate": {
-    "defaultMessage": "{bounds, select, both {Enter a date from {min} to {max}} min {Enter a date on or after {min}} max {Enter a date on or before {max}} other {This date is not available}}",
+    "defaultMessage": "{bounds, select, both {Enter a date from {min} to {max}} min {Enter a date on or after {min}} max {Enter a date on or before {max}} other {Enter an available date}}",
     "description": "Error in DateInput / DateTimeInput, shown below the field and announced, when the typed date is outside the allowed range. {min} and {max} are the bounds, written as dates in the field's calendar. `bounds` is `both`, `min`, or `max` for a date outside those bounds, and `other` for a date that a custom rule rejects."
   },
   "@astryx.dateInput.formatHint": {
@@ -1918,6 +1918,10 @@
   "@astryx.timestamp.copy": {
     "defaultMessage": "Copy",
     "description": "Short label shown in the tooltip on a Timestamp copyable-hover-card row's copy button (hover/focus), in its default state. Imperative verb. Pairs with `timestamp.copied` (post-click state). The full `copyValue` string remains the button's aria-label for assistive tech."
+  },
+  "@astryx.timestamp.copyFailed": {
+    "defaultMessage": "Failed to copy value to clipboard.",
+    "description": "Aria label, tooltip and screen-reader announcement on a Timestamp copy button for ~1.5s after the clipboard write fails. Pairs with `timestamp.copyValue` and `timestamp.copied`."
   },
   "@astryx.timestamp.copied": {
     "defaultMessage": "Copied",

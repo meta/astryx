@@ -89,6 +89,10 @@ const addViewportProbe = (doc: Document): HTMLElement => {
   return probe;
 };
 
+// A scroll soon after a window resize, with no finger, is the browser's.
+// Safari's last rotation scroll lands inside this time. Reader input ends it.
+const VIEWPORT_SETTLE_MS = 500;
+
 // While a finger scroll ends in an elastic overscroll, a write would snap the
 // bounce onto the clamp; the flush waits a frame at a time until it is over.
 const isBouncing = (vp: ViewportRead): boolean =>
@@ -352,6 +356,15 @@ export function ChatVirtualizer<T>(
   // passes run between two scroll events, and clearing per pass re-created
   // the staleness class mid-gesture (measured: 5.2% jitter at 60px steps).
   const userScrolledRef = React.useRef(false);
+  // A rotating phone moves the page's scrollTop to keep the reader's place.
+  // The new row heights are not measured yet. Safari can move it before the
+  // resize event or after the pass. The list restores the held row instead,
+  // with at most one extra pass before the viewport's pass and one after it.
+  const isPageViewport = React.useRef(false);
+  const viewportChangedAt = React.useRef(-Infinity);
+  const passViewportHeight = React.useRef<number | null>(null);
+  const isRestoreArmed = React.useRef(false);
+  const restoreFrame = React.useRef<number | null>(null);
   // Last scrollTop observed by a scroll event, and the px the user has moved
   // away from where the machinery last placed them — the end→anchor decision
   // runs on the latter (see onScroll).
@@ -765,6 +778,15 @@ export function ChatVirtualizer<T>(
     // where the content starts, and rows not measured yet (below).
     const vp = readViewport(el);
     const entryScrollTop = vp.scrollTop;
+    if (
+      isPageViewport.current &&
+      passViewportHeight.current !== null &&
+      vp.clientHeight !== passViewportHeight.current
+    ) {
+      // A browser scroll write can still follow this viewport pass.
+      isRestoreArmed.current = true;
+    }
+    passViewportHeight.current = vp.clientHeight;
     measureOrigin(el, vp);
     // Refresh the anchor from the LIVE scrollTop against the pre-measure
     // geometry (= what's currently painted). scroll events lag rAF-driven
@@ -1226,8 +1248,32 @@ export function ChatVirtualizer<T>(
     // and against the previous event's value that net can still read as
     // "moved down" — the user's own upward step erased by the re-pin.
     const lastWrite = progTarget.current;
-    const isEcho =
+    // A finger owns the position even while the viewport changes size.
+    // The browser writes its scroll for a viewport change before that
+    // change's pass, at a height the pass has not read, or once soon after it.
+    // The list's own write is neither. Any other scroll is the reader's.
+    const isOwnEcho =
       lastWrite !== null && Math.abs(vp.scrollTop - lastWrite) <= 1;
+    const isViewportMove =
+      isPageViewport.current &&
+      !isFingerScroll() &&
+      !isOwnEcho &&
+      ((passViewportHeight.current !== null &&
+        vp.clientHeight !== passViewportHeight.current) ||
+        (isRestoreArmed.current &&
+          performance.now() - viewportChangedAt.current < VIEWPORT_SETTLE_MS));
+    const isEcho = isViewportMove || isOwnEcho;
+    if (isViewportMove) {
+      userScrolledRef.current = false;
+      if (isRestoreArmed.current && restoreFrame.current === null) {
+        isRestoreArmed.current = false;
+        geoChanged.current = true;
+        restoreFrame.current = requestAnimationFrame(() => {
+          restoreFrame.current = null;
+          syncRef.current();
+        });
+      }
+    }
     // STICKY echo: k offset changes within one frame queue up to k scroll
     // events, dispatched across successive frames, EACH reading the same
     // final scrollTop. A consume-once slot matches the first and misreads
@@ -1341,9 +1387,15 @@ export function ChatVirtualizer<T>(
     // Whether the container moved is what onScroll measures, against the
     // position the machinery last wrote, so a wheel the next write outruns
     // still shows there.
+    // Reader input ends the time in which a scroll counts as the browser's.
+    const endViewportMove = (): void => {
+      viewportChangedAt.current = -Infinity;
+      isRestoreArmed.current = false;
+    };
     const onWheel = (): void => {
       converging.current = false;
       priceFreeze.current = false;
+      endViewportMove();
     };
     setScrollAnchoringOff(el, true);
     const scrollHandler = (): void => onScrollRef.current();
@@ -1361,6 +1413,26 @@ export function ChatVirtualizer<T>(
     if (viewportProbe !== null) {
       observeSize(viewportProbe);
     }
+    // Capture phase: a key whose handler stops propagation still scrolls.
+    const doc = el.ownerDocument;
+    if (viewportProbe !== null) {
+      doc.addEventListener('keydown', endViewportMove, {
+        capture: true,
+        passive: true,
+      });
+      doc.addEventListener('pointerdown', endViewportMove, {
+        capture: true,
+        passive: true,
+      });
+    }
+    isPageViewport.current = viewportProbe !== null;
+    const view = viewportProbe !== null ? el.ownerDocument.defaultView : null;
+    // Reads nothing.
+    const onViewportResize = (): void => {
+      viewportChangedAt.current = performance.now();
+      isRestoreArmed.current = true;
+    };
+    view?.addEventListener('resize', onViewportResize, {passive: true});
     // Observe the CONTAINER too (rows alone miss clientHeight changes): a
     // window resize or a growing composer moves the end-mode target and the
     // window coverage without any row changing size. Container entries have
@@ -1370,9 +1442,20 @@ export function ChatVirtualizer<T>(
       setScrollAnchoringOff(el, false);
       scrollTarget.removeEventListener('scroll', scrollHandler);
       el.removeEventListener('wheel', onWheel);
+      doc.removeEventListener('keydown', endViewportMove, {capture: true});
+      doc.removeEventListener('pointerdown', endViewportMove, {capture: true});
       if (viewportProbe !== null) {
         unobserveSize(viewportProbe);
         viewportProbe.remove();
+      }
+      view?.removeEventListener('resize', onViewportResize);
+      isPageViewport.current = false;
+      viewportChangedAt.current = -Infinity;
+      passViewportHeight.current = null;
+      isRestoreArmed.current = false;
+      if (restoreFrame.current !== null) {
+        cancelAnimationFrame(restoreFrame.current);
+        restoreFrame.current = null;
       }
       // A replaced or unmounted scroller ends the gesture with it: the
       // finger-scroll watch moves to the new element and reports no end for

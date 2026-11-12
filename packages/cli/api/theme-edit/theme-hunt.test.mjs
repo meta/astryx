@@ -12,7 +12,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditNew,
   themeEditSet,
@@ -21,6 +21,7 @@ import {
 } from './theme-edit.mjs';
 import {projectRoot} from './_adapter.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -29,6 +30,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -771,10 +780,12 @@ describe('hunt2: order and scope', () => {
   it('a step on a part starts from the whole-theme setting', async () => {
     await themeEditNew('o3', {cwd});
     await themeEditSet('o3', 'corners', 'large', {cwd});
+    // The card reads the container radius: large on no base makes it 18px,
+    // and the next rung that shows the card rounder is round (24px).
     const r = await themeEditSet('o3', 'corners', 'more', {cwd, on: 'card'});
     expect(r.data.setting.value).toBe('round');
     const pill = await themeEditSet('o3', 'corners', 'pill', {cwd});
-    expect(pill.data.changedTokens.join(' ')).toContain('--radius-inner');
+    expect(pill.data.changedTokens.join(' ')).toContain('--radius-element');
     expect(read('themes/o3/o3.css')).toMatch(/--radius-inner: 6px/);
     fs.rmSync(path.join(cwd, 'themes/o3'), {recursive: true, force: true});
   }, 240_000);
@@ -859,11 +870,15 @@ describe('hunt2: files', () => {
   }, 240_000);
 
   it('a section of the sheet goes to its own file', async () => {
-    const full = read('themes/h/sheet.html');
-    await themeEditShow('h', {cwd, section: 'Inputs'});
-    expect(exists('themes/h/sheet-inputs.html')).toBe(true);
-    expect(read('themes/h/sheet.html')).toBe(full);
-  }, 120_000);
+    // The file names come from the real sheet render, not the stand-in.
+    await withRealRenders(async () => {
+      await themeEditShow('h', {cwd});
+      const full = read('themes/h/sheet.html');
+      await themeEditShow('h', {cwd, section: 'Inputs'});
+      expect(exists('themes/h/sheet-inputs.html')).toBe(true);
+      expect(read('themes/h/sheet.html')).toBe(full);
+    });
+  }, 240_000);
 });
 
 describe('hunt2: words', () => {

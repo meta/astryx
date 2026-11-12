@@ -2,7 +2,7 @@
 
 /**
  * @file Seeded chaos test for `astryx experimental theme`. One fixed seed
- *   drives about 200 random but plausible commands through the real CLI
+ *   drives 80 random but plausible commands (200 with THEME_EDIT_SLOW=1) through the real CLI
  *   program: valid values, near misses, edge values, undo chains, a damaged
  *   settings file. After every step it checks that an accepted command takes
  *   effect, that a refused command writes nothing and carries a documented
@@ -24,9 +24,12 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {SLOW} from '../../test-utils/theme-render-stub.mjs';
 
 const SEED = 20261110;
-const STEPS = 200;
+// The first 80 steps of the seeded sequence run by default, as a sample;
+// THEME_EDIT_SLOW=1 runs all 200.
+const STEPS = SLOW ? 200 : 80;
 
 /** @param {number} a */
 function prng(a) {
@@ -537,8 +540,8 @@ describe(`theme chaos, seed ${SEED}`, () => {
         );
     }
     expect(counts.steps).toBe(STEPS);
-    expect(counts.accepted).toBeGreaterThan(20);
-    expect(counts.refused).toBeGreaterThan(20);
+    expect(counts.accepted).toBeGreaterThan(STEPS / 10);
+    expect(counts.refused).toBeGreaterThan(STEPS / 10);
   });
   it('1: exit 0 is ok; a refusal has a documented code and writes nothing', () => {
     expect(of('1')).toEqual([]);
