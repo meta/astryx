@@ -2000,4 +2000,112 @@ describe('final pass 5', () => {
     }
     rm('src/app/dp');
   }, 120_000);
+
+  it('refuses a default page id beside another page, and says why colors did not come', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/m1',
+    });
+    try {
+      for (const [d, template] of [
+        ['overview', 'dashboard'],
+        ['a sales dashboard', 'colors'],
+      ]) {
+        const r = await refusal(() =>
+          themeEditPreviewAdd(d, {cwd, path: 'src/app/m1', template}),
+        );
+        expect(r.code, d).toBe('ERR_INVALID_ARGUMENT');
+        expect(r.message, d).toContain('drop one of them');
+      }
+      const colors = await themeEditPreviewAdd('colors', {
+        cwd,
+        path: 'src/app/m1',
+      });
+      expect(colors.data.pages).not.toContain('colors');
+      expect(colors.data.notes.join(' ')).toContain(
+        'sea has none yet; it appears once it does: astryx experimental theme editor set sea accent <color>',
+      );
+    } finally {
+      rm('src/app/m1');
+    }
+  }, 120_000);
+
+  it('lists a page whose file is gone, and add writes it back as added', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/m3',
+    });
+    try {
+      rm('src/app/m3/_pages/components.tsx');
+      const list = await themeEditPreviewList({cwd, path: 'src/app/m3'});
+      expect(list.data.pages).toContainEqual({
+        id: 'components',
+        label: 'Components',
+        missing: true,
+      });
+      expect(list.data.notes.join(' ')).toContain(
+        'components is listed, but its file is gone, so the route does not build',
+      );
+      const r = await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/m3'});
+      expect(r.data.added).toContain('components');
+      expect(exists('src/app/m3/_pages/components.tsx')).toBe(true);
+    } finally {
+      rm('src/app/m3');
+    }
+  }, 120_000);
+
+  it('notes a stopped change in list, and the same remove run again exits 0', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/m4',
+    });
+    try {
+      let deletes = 0;
+      stopPreviewCommitAt(step => step === 'delete' && ++deletes === 1);
+      try {
+        await expect(
+          themeEditPreviewRemove('overview', {cwd, path: 'src/app/m4'}),
+        ).rejects.toBeTypeOf('symbol');
+      } finally {
+        stopPreviewCommitAt(null);
+      }
+      const list = await themeEditPreviewList({cwd, path: 'src/app/m4'});
+      expect(list.data.notes.join(' ')).toContain(
+        'a preview change was stopped part way',
+      );
+      const again = await themeEditPreviewRemove('overview', {
+        cwd,
+        path: 'src/app/m4',
+      });
+      expect(again.data.pages).not.toContain('overview');
+      expect(again.data.notes.join(' ')).toContain(
+        'overview is no longer in the preview: the change that was stopped removed it',
+      );
+    } finally {
+      rm('src/app/m4');
+    }
+  }, 120_000);
+
+  it('is sure of basePath only for a top-level literal on the exported object', async () => {
+    const UNSURE = 'after the basePath next.config sets from code';
+    for (const [i, text] of [
+      "const c = {};\nif (process.env.CI) c.basePath = '/ci';\nexport default c;\n",
+      "const c = {};\nfunction later() { c.basePath = '/x'; }\nexport default c;\n",
+      "const c = {basePath: '/x'};\ndelete c.basePath;\nexport default c;\n",
+      "const withBase = c => ({...c, basePath: '/w'});\nexport default withBase({});\n",
+    ].entries()) {
+      write('next.config.mjs', text);
+      const where = `src/app/r${i}`;
+      try {
+        const r = await themeEditPreviewAdd(undefined, {cwd, path: where});
+        expect(r.data.open, text).toContain(UNSURE);
+      } finally {
+        rm('next.config.mjs');
+        rm(where);
+      }
+    }
+  }, 180_000);
 });
