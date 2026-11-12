@@ -859,6 +859,31 @@ describe('TreeList', () => {
         expect(open).not.toHaveBeenCalled();
         open.mockRestore();
       });
+
+      it('keeps the rendered link referrer policy on a target blank row', () => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        render(
+          <TreeList
+            items={[
+              {
+                id: 'report',
+                label: 'Report',
+                href: '/report',
+                target: '_blank',
+              },
+            ]}
+          />,
+        );
+        const link = screen.getByRole('link', {name: 'Report'});
+        expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+
+        fireEvent.mouseUp(rowSurfaceOf(link), {button: 1});
+        expect(open).toHaveBeenCalledWith(
+          '/report',
+          '_blank',
+          'noopener,noreferrer',
+        );
+      });
     });
 
     it("keeps focus on an item's inner link when the item becomes disabled (spec:AST-085 FR4)", () => {

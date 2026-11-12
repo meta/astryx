@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Button, IconButton, and ClickableCard now add `noopener noreferrer` when an `href` uses `target="_blank"`, matching Link and Item.
+[fix] Button, IconButton, ClickableCard, and TreeList link rows now keep `noopener noreferrer` when an `href` uses `target="_blank"`, including enlarged-surface and middle-click navigation.
 
 @bezabyte

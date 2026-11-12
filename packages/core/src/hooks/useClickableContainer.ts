@@ -210,6 +210,35 @@ export interface ClickableContainerResult {
   onPointerDown: (event: PointerEvent<HTMLElement>) => void;
 }
 
+function getWindowOpenFeatures(
+  target: string | undefined,
+  interactiveRef: RefObject<HTMLElement | null> | undefined,
+): string {
+  if (target !== '_blank') {
+    return 'noopener';
+  }
+
+  if (interactiveRef?.current == null) {
+    // A surface without a delegated anchor still owns the target prop, so
+    // retain the hook's safe default for its direct window.open path.
+    return 'noopener,noreferrer';
+  }
+
+  // A delegated link is the source of truth for referrer policy. This keeps
+  // the hook's synthetic middle-click path aligned with the anchor's normal
+  // activation, including links whose rel is supplied by a router component.
+  const interactive = interactiveRef.current;
+  if (
+    typeof HTMLAnchorElement !== 'undefined' &&
+    interactive instanceof HTMLAnchorElement &&
+    interactive.relList.contains('noreferrer')
+  ) {
+    return 'noopener,noreferrer';
+  }
+
+  return 'noopener';
+}
+
 /**
  * Hook that makes a container element clickable while preserving
  * nested interactive element behavior.
@@ -311,7 +340,7 @@ export function useClickableContainerProxy({
           window.open(
             href,
             '_blank',
-            target === '_blank' ? 'noopener,noreferrer' : 'noopener',
+            getWindowOpenFeatures(target, interactiveRef),
           );
         } else if (interactiveRef?.current) {
           // Proxy click to the sr-only link so the framework link component
@@ -370,7 +399,7 @@ export function useClickableContainerProxy({
         window.open(
           href,
           '_blank',
-          target === '_blank' ? 'noopener,noreferrer' : 'noopener',
+          getWindowOpenFeatures(target, interactiveRef),
         );
       }
     },
