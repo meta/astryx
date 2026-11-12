@@ -394,6 +394,54 @@ async function answer(subject, options, cwd) {
     };
   }
   // "What does --color-accent do", "what's the variable for card padding":
+  // "--focus-outline-width: 3px": a token typed with a value is set exactly,
+  // or refused with the nearest names; never another token.
+  const typedToken =
+    /(?:^|\s)(--[a-z][a-z0-9-]*)\s*(?::|\s+to\s+|\s+)\s*([^;]+?)\s*;?\s*(?:\bin (light|dark) mode\b.*)?$/i.exec(
+      t.replace(/^\s*(?:change|set|make|token)\s+/i, ' '),
+    );
+  if (
+    typedToken &&
+    !/^--(on|when|state|mode|theme|list|at)$/.test(typedToken[1]) &&
+    // "what does --color-accent do" is a lookup.
+    !/^\s*(what|which|where|how|is|are|does|do|explain|why)\b/i.test(t) &&
+    !/^(do|does|mean|means|for|control|controls)\b/i.test(typedToken[2].trim())
+  ) {
+    const token = typedToken[1].toLowerCase();
+    const mode = /\bin (light|dark) mode\b/i.exec(t)?.[1]?.toLowerCase();
+    const defaults = ctx.project.core.tokenDefaults;
+    if (!Object.hasOwn(defaults, token))
+      return refuse(E.ERR_INVALID_ARGUMENT, `There is no token ${token}.`, {
+        run: nearest(token, Object.keys(defaults)).map(k => `${HOW} ${k}`),
+      });
+    const value = typedToken[2].trim().replace(/^["']|["']$/g, '');
+    const {commands, refused} = checked(env, [
+      [
+        {
+          verb: 'set',
+          thing: token,
+          value,
+          ...(mode && env.data.mode === 'both' ? {mode} : {}),
+        },
+      ],
+    ]);
+    return {
+      kind: 'question',
+      subject: t,
+      understood: {parts: [], aspects: []},
+      ...themeFields,
+      results: [
+        {
+          text: commands.length
+            ? `the token ${token}, as you wrote it`
+            : `${token} ${value}: ${refused[0]?.why ?? 'no command does it'}`,
+          commands,
+          ...(refused.length ? {refused} : {}),
+        },
+      ],
+      ...unknown,
+    };
+  }
   // A question about the tool itself gets the command that answers it.
   const tool = toolAnswer(t, env);
   if (tool === 'list') {

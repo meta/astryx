@@ -708,7 +708,13 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
     /\b(selected|active (tab|nav|item|link|page))\b|\bactive\b(?=.*\b(nav|tab|item)\b)/,
     'selected',
   ],
-  [/\b(press(ed|es)?|clicked|tapped|on press|on click)\b/, 'active'],
+  [
+    /\b(press(ed|es)?|click(ed|s)?|tap(ped|s)?|on press|on click|when i click)\b/,
+    'active',
+  ],
+  [/\b(typing|type in|tab to|tabbing|keyboard focus)\b/, 'focus'],
+  [/\b(after i check|once checked|i check)\b/, 'checked'],
+  [/\b(picked|chosen|choose|pick)\b/, 'selected'],
   [/\b(invalid|errors? state|has an error|with an error)\b/, 'invalid'],
   // Words for states a part may not have: the answer says so.
   [/\bread-?only\b/, 'readonly'],
@@ -918,6 +924,8 @@ function clausesOf(q, partWords) {
     const parts = [];
     // A property name is not a part: "backdrop-filter" names no backdrop.
     let rest = ` ${text} `
+      // "when I tab to a link": the key, not the tab part.
+      .replace(/\b(i |we |you )?tab(bing)? (to|through|into)\b/g, ' ')
       .replace(/\bvar\([^)]*\)|--[a-z][\w-]*/g, ' ')
       .replace(/\b[a-z]+(?:-[a-z]+)+\b/g, m =>
         cssProperties().has(m) ? ' ' : m,
@@ -968,14 +976,23 @@ function clausesOf(q, partWords) {
       ),
       ' ',
     );
+    // "shouldn't links be underlined?": a question that asks for it.
+    const askedFor =
+      /^(shouldn'?t|wouldn'?t|isn'?t|aren'?t|can'?t|couldn'?t) .*\?$/.test(
+        text.trim(),
+      ) ||
+      (/^(shouldn'?t|wouldn'?t|isn'?t|aren'?t)\b/.test(text.trim()) &&
+        /\?/.test(text));
     const neg =
+      !askedFor &&
       /\b(no|not|nothing|none of|don'?t|do not|never|without|remove|removing|get rid of|lose|drop|ditch|nix|scrap|kill|none|shouldn'?t|should not|mustn'?t|turn off|turn (the|it|them) off|switch off|stop|unbold\w*|unround\w*|disable|(?:revert|undo|take back) (?:the|those|that|these|my|our|all)|(?:shadows?|borders?|underlines?|outlines?|gradients?|uppercase|caps) (?:off|out|gone))\b/.test(
         negText
           .replace(/\bdisabled\b/g, ' ')
           // "not round enough" asks for more; "not so much" for less.
           .replace(/\bnot (\w+ ){0,2}enough\b/g, ' ')
           .replace(/\bnot (so|as|that|too) (much|many)\b/g, ' '),
-      ) && !/\bno (wait|longer)\b/.test(negText);
+      ) &&
+      !/\bno (wait|longer)\b/.test(negText);
     // "too X" asks for less X: too sharp is rounder, too heavy is lighter.
     const tooLess =
       /\btoo (big|large|round|rounded|roundy|bubbly|shadowy|bold|heavy|thick|dark|spacious|airy|bright|loud|strong|harsh|aggressive|intense|garish|saturated|much|wide|tall)\b/;
@@ -987,7 +1004,7 @@ function clausesOf(q, partWords) {
         ? 'less'
         : tooMore.test(text)
           ? 'more'
-          : /\b(less|fewer|smaller|lower|reduce|softer|lighter|lighten|thinner|narrower|shorter|tight(en|er)?|dense(r)?|denser|compact|sharper|squarer|subtler|tone down|dimmer|halve|half|halved)\b|\bcut\b.*\bin half\b|\bx ?0?\.\d+\b|\b(knock|turn|dial|bring|tone)\b.*\bdown\b/.test(
+          : /\b(less|fewer|smaller|lower|reduce|softer|lighter|lighten|thinner|narrower|shorter|tight(en|er)?|dense(r)?|denser|compact|sharper|squarer|subtler|tone down|dimmer|halve|half|halved|least|minimum|min|minimal|barely|as little)\b|\bcut\b.*\bin half\b|\bx ?0?\.\d+\b|\b(knock|turn|dial|bring|tone)\b.*\bdown\b/.test(
                 text,
               )
             ? 'less'
@@ -1307,6 +1324,51 @@ const ROLE_DIALS = /** @type {Array<[RegExp, string, string]>} */ ([
   [/\b(neutrals?|grays?|greys?)\b/, 'neutral', '--color-neutral'],
 ]);
 
+/** Number words, longest phrase first. */
+const NUMBER_WORDS = /** @type {Record<string, number>} */ ({
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  seventy: 70,
+  eighty: 80,
+  ninety: 90,
+  hundred: 100,
+});
+const NUMBER_WORDS_RE = new RegExp(
+  `\\b(?:(?:one|a) and a half|half an?|an? quarter(?: of an?)?|an? half|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[- ](?:one|two|three|four|five|six|seven|eight|nine)|${Object.keys(NUMBER_WORDS).join('|')})\\b(?=\\s*(?:-|\\s)?\\s*(?:px|pixels?|rem|em|pt|percent|%|radius|corners?|line height|times|x\\b|\\w+ (?:tall|wide|thick)|tall|wide|thick))`,
+  'gi',
+);
+/** A number phrase as digits. @param {string} m */
+function numberWord(m) {
+  const w = m.toLowerCase().replace(/-/g, ' ');
+  if (/and a half/.test(w)) return '1.5';
+  if (/^(half|a half|an half)/.test(w)) return '0.5';
+  if (/quarter/.test(w)) return '0.25';
+  return String(w.split(' ').reduce((n, x) => n + (NUMBER_WORDS[x] ?? 0), 0));
+}
+
 /**
  * Whether a few words name a color or a font, for "swap A for B".
  * @param {string} words lower-case
@@ -1402,6 +1464,8 @@ export function draftAnswer(ctx, env, question) {
       /\bmatch\s+(?:the\s+)?(.+?)\s+to\s+(?:the\s+)?[a-z][a-z -]*?(?=\s*[(,;.]|\s*$)/gi,
       '$1',
     )
+    // Numbers written as words are numbers.
+    .replace(NUMBER_WORDS_RE, m => numberWord(m))
     // "0.5 rem", "14 px": a number and its unit are one length.
     .replace(/\b(\d+(?:\.\d+)?)\s+(px|rem|em|pt|vh|vw|ch)\b/gi, '$1$2')
     // Typography words for the properties they name.
@@ -1611,8 +1675,9 @@ export function draftAnswer(ctx, env, question) {
     }
   }
   // "the cards and the dialogs both need 16px radius": a clause that only
-  // names a part, before one that says what to change, takes that ask.
-  for (let i = 0; i < clauses.length - 1; i++) {
+  // names a part, before one that says what to change, takes that ask
+  // ("h1, h2, h3 { … }": read from the last, so each takes it in turn).
+  for (let i = clauses.length - 2; i >= 0; i--) {
     const c = clauses[i];
     const next = clauses[i + 1];
     if (
@@ -2150,6 +2215,80 @@ export function draftAnswer(ctx, env, question) {
         options: [],
       });
       continue;
+    }
+    // "cards the same radius as buttons": the first part takes the second
+    // part's value, read from the token the second part reads.
+    const same = /\b(?:the )?same (\w+(?: \w+)?) as (?:the )?([a-z-]+)\b/.exec(
+      c.text,
+    );
+    // "buttons twice as round as inputs": the part after "as" is only the
+    // measure; the first part is the one that changes.
+    const asAs = /\bas \w+ as (?:the )?([a-z-]+)/.exec(c.text);
+    if (asAs && c.parts.length >= 2) {
+      const after = (/** @type {{on: string}} */ p) =>
+        lex.parts.some(
+          ([re, x]) =>
+            x.on === p.on && (re.exec(c.text)?.index ?? -1) > (asAs.index ?? 0),
+        );
+      c.parts = c.parts.filter(p => !after(p));
+    }
+    // "focus ring the same color as the danger color": a role's token.
+    const role = same ? ROLE_DIALS.find(([re]) => re.test(same[0])) : null;
+    if (same && role && c.parts.length === 1) {
+      const target = c.parts[0];
+      const d =
+        target.on === 'focus-ring'
+          ? {
+              text: `the focus ring takes the ${role[1]} color: --focus-outline-color reads ${role[2]}`,
+              options: [[set('--focus-outline-color', `var(${role[2]})`)]],
+            }
+          : {
+              text: `${target.on} takes the ${role[1]} color`,
+              options: [
+                [set('background', `var(${role[2]})`, {on: target.on})],
+              ],
+            };
+      seenPart(target.on);
+      push(d);
+      recordTop(c, d.options[0] ?? []);
+      continue;
+    }
+    if (same && c.parts.length >= 2) {
+      // The part named first takes the value; the order is the question's.
+      const at = (/** @type {{on: string}} */ p) =>
+        Math.min(
+          ...lex.parts
+            .filter(([, x]) => x.on === p.on)
+            .map(([re]) => re.exec(c.text)?.index ?? Infinity),
+        );
+      const [target, source] = [...c.parts].sort((x, y) => at(x) - at(y));
+      const group =
+        /** @type {Record<string, string>} */ ({
+          corners: 'corners',
+          radius: 'corners',
+          color: 'background',
+          background: 'background',
+          border: 'border',
+          shadow: 'shadow',
+          padding: 'spacing',
+          spacing: 'spacing',
+          font: 'font',
+        })[same[1].split(' ').pop() ?? ''] ??
+        c.aspects.map(a => (a === 'family' ? 'font' : a)).find(a => GROUPS[a]);
+      const reads = group ? C.partReads(one(source.on), group) : [];
+      const read = reads.find(r => r.when.includes('')) ?? reads[0];
+      const prop = read?.props[0];
+      if (read && prop) {
+        seenPart(target.on);
+        seenPart(source.on);
+        const d = {
+          text: `${target.on} takes ${source.on}'s ${prop}: ${source.on} reads ${read.token} for it`,
+          options: [[set(prop, `var(${read.token})`, {on: target.on})]],
+        };
+        push(d);
+        recordTop(c, d.options[0] ?? []);
+        continue;
+      }
     }
     // A CSS property named with its value is set as named, on each part.
     const named = c.named;
@@ -2778,7 +2917,7 @@ export function draftAnswer(ctx, env, question) {
         const shape =
           zero || c.neg || /\b(square(d)?|sharp)\b/.test(shapeText)
             ? 'square'
-            : /\b(pill|circular(?! (font|typeface))|circles?|fully round)\b/.test(
+            : /\b(pill|circular(?! (font|typeface))|circles?|fully round|max(imum)? round\w*|most round\w*|as round as possible)\b/.test(
                   shapeText,
                 )
               ? 'pill'
@@ -3559,6 +3698,14 @@ export function draftAnswer(ctx, env, question) {
         // A link's color comes from its color prop, so no part style
         // reaches it: the accent text token is what a link reads, in every
         // state.
+        // A link's color in one state: the token, scoped to that state.
+        if (on === 'link' && color && f.state)
+          return {
+            text: `the link color${where}: --color-text-accent on links in that state`,
+            options: [
+              [set('--color-text-accent', color, {...f, ...modeOf(c)})],
+            ],
+          };
         if (on === 'link' && color)
           return {
             text: `the link color: --color-text-accent, the token a link reads (it also colors other accent text)${f.state ? `; a link has no color of its own for ${f.state}, so this changes it in every state` : ''}`,

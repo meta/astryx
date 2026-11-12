@@ -1972,7 +1972,7 @@ const QUESTIONS_F = [
   ],
   [
     'hovered links #1d4ed8',
-    {top: /^set q --color-text-accent '#1d4ed8'$/, text: /in every state/},
+    {top: /^set q --color-text-accent '#1d4ed8' --on link --state hover$/},
   ],
   // parts
   [
@@ -3035,6 +3035,135 @@ describe('how answers final-4 questions', () => {
     }
     fs.rmSync(keep, {recursive: true, force: true});
   }, 300_000);
+});
+
+/**
+ * Final-5 questions: number words, superlatives, typed token names, states
+ * worded as actions, part comparisons, "shouldn't … ?" and selector lists.
+ * @type {Array<[string, {top: RegExp | null, adds?: RegExp, text?: RegExp}]>}
+ */
+const QUESTIONS_J = [
+  // numbers written as words
+  [
+    'zero radius everywhere',
+    {top: /^set q corners square$/, adds: /--radius-element=0px/},
+  ],
+  ['twelve pixel corners', {top: /^set q corners 12px$/}],
+  [
+    'a two pixel border on inputs',
+    {top: /^set q border-width 2px --on inputs$/},
+  ],
+  ['buttons forty pixels tall', {top: /^set q min-height 40px --on button$/}],
+  [
+    'one and a half line height for body',
+    {top: /^set q --text-body-leading 1\.5$/},
+  ],
+  // superlatives
+  ['the least spacing possible', {top: /^set q spacing less$/}],
+  ['as little padding as possible', {top: /^set q spacing less$/}],
+  [
+    'barely any shadow on cards',
+    {top: /^set q box-shadow 'var\(--shadow-low\)' --on card$/},
+  ],
+  ['maximum roundness', {top: /^set q corners pill$/}],
+  // a token typed by name is used exactly, or refused by name
+  [
+    '--focus-outline-width: 3px',
+    {
+      top: /^set q --focus-outline-width 3px$/,
+      adds: /--focus-outline-width=3px/,
+    },
+  ],
+  [
+    'change --color-background-card to #fafafa in light mode',
+    {top: /^set q --color-background-card '#fafafa' --mode light$/},
+  ],
+  ['--text-body-size 15px', {top: /^set q --text-body-size 15px$/}],
+  // states worded as actions
+  [
+    'on hover, links turn red',
+    {top: /^set q --color-text-accent '#dc2626' --on link --state hover$/},
+  ],
+  [
+    'when I click a button it should get darker',
+    {top: /--on button --state active$/},
+  ],
+  [
+    'after I check a checkbox it should be green',
+    {top: /^set q background '#16a34a' --on checks --state checked$/},
+  ],
+  [
+    'once a tab is picked make it bold',
+    {top: /^set q font-weight 700 --on tab --state selected$/},
+  ],
+  [
+    'when I tab to a link, show a thick outline',
+    {top: /--on link --state focus-visible$/},
+  ],
+  // part comparisons
+  [
+    'cards the same radius as buttons',
+    {top: /^set q border-radius 'var\(--radius-element\)' --on card$/},
+  ],
+  [
+    'buttons twice as round as inputs',
+    {top: /^set q corners more --on button$/},
+  ],
+  [
+    'focus ring the same color as the danger color',
+    {top: /^set q --focus-outline-color 'var\(--color-error\)'$/},
+  ],
+  // "shouldn't … ?" asks for it
+  [
+    "shouldn't links be underlined?",
+    {top: /^set q text-decoration underline --on link$/},
+  ],
+  // a pasted selector list
+  [
+    'h1, h2, h3 { font-weight: 800 }',
+    {
+      top: /^set q font-weight 800 --on heading --when level:1 && set q font-weight 800 --on heading --when level:2 && set q font-weight 800 --on heading --when level:3$/,
+    },
+  ],
+  // disabled buttons: no command, and why
+  [
+    'disabled buttons 50% opacity',
+    {top: null, text: /attribute, not :disabled/},
+  ],
+];
+
+describe('how answers final-5 questions', () => {
+  for (const [question, want] of QUESTIONS_J)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: any[]}>} */
+      const results = data.results ?? [];
+      const all =
+        results
+          .map(r => `${r.text} ${JSON.stringify(r.refused ?? [])}`)
+          .join('\n') + (data.hint ?? '');
+      if (want.text) expect(all).toMatch(want.text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want.top === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      if (want.adds) expect(await effect(commands)).toMatch(want.adds);
+    });
+
+  it('a token name that does not exist is refused with the nearest names', async () => {
+    const r = await refusal(() =>
+      themeEditHow('--colour-accent: red', {cwd, theme: 'q'}),
+    );
+    expect(r.code).toBe('ERR_INVALID_ARGUMENT');
+    expect(r.message).toMatch(/no token --colour-accent/);
+    expect(r.run.join('\n')).toMatch(/--color-accent/);
+  });
 });
 
 describe('how lookups', () => {
