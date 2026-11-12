@@ -928,6 +928,66 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     }
   }, 120_000);
 
+  it('records nothing for component, template, theme or discover in a project with no integration', () => {
+    const tmp = keptTmp('no-integration');
+    // A project with Core and nothing else: no config, no manifest, no
+    // dependency that ships one.
+    const bare = fs.mkdtempSync(path.join(work, 'projects', 'bare-'));
+    try {
+      fs.mkdirSync(path.join(bare, 'node_modules', '@astryxdesign'), {
+        recursive: true,
+      });
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'packages', 'core'),
+        path.join(bare, 'node_modules', '@astryxdesign', 'core'),
+        'dir',
+      );
+      fs.writeFileSync(
+        path.join(bare, 'package.json'),
+        JSON.stringify({
+          name: 'bare',
+          dependencies: {'@astryxdesign/core': '*'},
+        }),
+      );
+      // A resolver that refuses the options module hooks pass: a run that
+      // installed the recorder's hooks would fail its requires.
+      const strict = path.join(work, 'strict-bare.cjs');
+      fs.writeFileSync(
+        strict,
+        `const Module = require('node:module');
+const resolve = Module._resolveFilename;
+Module._resolveFilename = function (request, parent, isMain, options) {
+  if (options && options.conditions) throw new Error('resolver options are not supported');
+  return resolve.call(this, request, parent, isMain, options);
+};
+`,
+      );
+      const env = {NODE_OPTIONS: `--require ${strict}`};
+      for (const ask of [
+        ['template', '--list'],
+        ['component', 'Button'],
+      ]) {
+        // Stdout and status: a once-a-day notice may go to stderr.
+        const answer = (
+          /** @type {{status: number | null, stdout: string}} */ r,
+        ) => [r.status, r.stdout];
+        const fresh = answer(
+          run(ask, {tmp: freshTmp(), cwd: bare, json: false}),
+        );
+        expect(answer(run(ask, {tmp, cwd: bare, json: false, env}))).toEqual(
+          fresh,
+        );
+        expect(answer(run(ask, {tmp, cwd: bare, json: false, env}))).toEqual(
+          fresh,
+        );
+      }
+      expect(entries(tmp).size).toBe(0);
+      expect(issuesEntries(tmp).size).toBe(0);
+    } finally {
+      fs.rmSync(bare, {recursive: true, force: true});
+    }
+  }, 120_000);
+
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
     const notAFolder = path.join(work, 'tmp', 'file-tmp');
