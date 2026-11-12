@@ -353,7 +353,8 @@ export function runConfigCodemod(
 const parsedOnce = new Map();
 
 /**
- * Whether a codemod cannot change a file, so its transform need not run: the
+ * Whether a codemod cannot change a source file, so its transform need not
+ * run (stylesheets always run, whatever they parse as): the
  * codemod declares every word a file must say for it to act (`mentions`), the
  * file says none of them and holds no backslash (no escape can spell one),
  * and the file parses, so the transform would neither
@@ -432,7 +433,14 @@ export function runCodeCodemod(
         contents?.get(filePath) ?? fs.readFileSync(filePath, 'utf-8');
       const parser = ext === '.tsx' || ext === '.ts' ? 'tsx' : 'babel';
       const j = jscodeshift.withParser(parser);
-      if (cannotChange(codemod, source, filePath, parser, j)) continue;
+      // Only source files: a stylesheet can happen to parse as JavaScript
+      // (`a.b` then `{ color: white; }`), yet its transform still changes it.
+      if (
+        PARSEABLE_EXTENSIONS.includes(ext) &&
+        cannotChange(codemod, source, filePath, parser, j)
+      ) {
+        continue;
+      }
       const api = {
         jscodeshift: markingSourceParseErrors(j, source),
         stats: () => {},

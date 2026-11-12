@@ -43,6 +43,16 @@ import {
   PRESS_SLOP_PX,
 } from './pressGesture';
 import {pointerQuery} from '../gestures/__tests__/pointerQuery';
+import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
+
+/** Gives `surface` a control's box, so it takes the fine-pointer press. */
+function ownBox(surface: HTMLElement): void {
+  const box = document.createElement('span');
+  for (const [name, value] of Object.entries(pressBoxProps)) {
+    box.setAttribute(name, value);
+  }
+  surface.appendChild(box);
+}
 
 let release: () => void = () => undefined;
 let scroller: HTMLElement;
@@ -268,6 +278,94 @@ describe('the press reaches the surface the finger landed on', () => {
     press(rows[0], 'pointerdown', 10, 10, 'mouse');
     vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
     expect(pressedRow()).toBe(-1);
+  });
+
+  it("paints a mouse press at once on a surface that owns a control's box, and fades it on release", () => {
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    ownBox(rows[0]);
+    // No delay, though the row sits in a scroller: a mouse press is not a
+    // scroll.
+    press(rows[0], 'pointerdown', 10, 10, 'mouse');
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(rows[0], 'pointerup', 10, 10, 'mouse');
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    // A surface that declares nothing keeps `:active`.
+    press(rows[1], 'pointerdown', 10, 10, 'mouse');
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it("leaves a mouse press to `:active` on a surface around another pressable surface's box", () => {
+    // A ClickableCard around a checkbox: the box is the checkbox's.
+    const inner = pressable();
+    ownBox(inner);
+    rows[1].appendChild(inner);
+    press(rows[1], 'pointerdown', 10, 10, 'mouse');
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(rows[1], 'pointerup', 10, 10, 'mouse');
+    press(inner, 'pointerdown', 10, 10, 'mouse');
+    expect(inner.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(inner, 'pointerup', 10, 10, 'mouse');
+  });
+
+  it('leaves a right click to CSS on a surface that owns a control’s box', () => {
+    ownBox(rows[0]);
+    const rightClick = new Event('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.assign(rightClick, {
+      button: 2,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: 'mouse',
+    });
+    rows[0].dispatchEvent(rightClick);
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('ends a mouse press on a fine-pointer surface at once on release under Reduce Motion', () => {
+    ownBox(rows[0]);
+    const matchMedia = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+      ...matchMedia(query),
+      matches:
+        query.includes('prefers-reduced-motion: reduce') ||
+        matchMedia(query).matches,
+    });
+    try {
+      press(rows[0], 'pointerdown', 10, 10, 'mouse');
+      expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+      press(rows[0], 'pointerup', 10, 10, 'mouse');
+      expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      window.matchMedia = matchMedia;
+    }
+  });
+
+  it('presses at once for a pen on a fine-pointer surface, in a scroller too, and not for its barrel button', () => {
+    ownBox(rows[0]);
+    // A finger in the scroller waits out its scroll first.
+    press(rows[1], 'pointerdown', 10, 10, 'pen');
+    expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(rows[1], 'pointercancel', 10, 10, 'pen');
+    press(rows[0], 'pointerdown', 10, 10, 'pen');
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(rows[0], 'pointerup', 10, 10, 'pen');
+    vi.advanceTimersByTime(PRESS_FADE_MS * 4);
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    const barrel = new Event('pointerdown', {bubbles: true, cancelable: true});
+    Object.assign(barrel, {
+      button: 2,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      pointerType: 'pen',
+    });
+    rows[0].dispatchEvent(barrel);
+    vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
   it('paints a Space press on a tracked action where the primary pointer is fine: a tracked action takes no `:active` paint', () => {
