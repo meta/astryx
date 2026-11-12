@@ -272,15 +272,17 @@ another implementation helper.
   no keyboard, such as DateRangeInput, FileInput, ComplexSelector, or a touch
   picker field with no input mode, is outside it.
 
-- **FR15 — Members never flag an unfinished entry or drop a rejected one.**
-  DateInput, DateTimeInput, TimeInput, and NumberInput reveal a value rejection
-  once the entry is complete and a text rejection at commit, show every
-  rejection as a visible message with the invalid state and one announcement,
-  and keep rejected text at commit. DateInput shows its message over a caller
-  `status`, and NumberInput and TimeInput show a caller `status` over theirs;
-  NumberInput and TimeInput report each rejection through
+- **FR14 — DateInput, DateTimeInput, TimeInput, and NumberInput never flag an
+  unfinished entry or drop a rejected one.** They reveal a value rejection once
+  the entry is complete and a text rejection at commit, show every rejection in
+  a standalone field as a visible message with the invalid state and one
+  announcement, and keep rejected text at commit. A `warning` or `success`
+  caller status never hides a rejection. DateInput shows its message over a
+  caller `status`, and NumberInput and TimeInput show a caller `error` status
+  over theirs; NumberInput and TimeInput report each rejection through
   `onEntryErrorChange`. `spec:AST-118` owns the rule, including when each kind
-  of entry is complete.
+  of entry is complete. FileInput's rejections are of picked files, which it
+  drops from its value, and stay outside this rule.
 
 ## Allowed component variation
 
@@ -422,9 +424,13 @@ DEC-6 does not require unrelated components to add a new floor.
 - **On-screen keyboard (FR13):** no member meets FR13 on current main. No
   member has keyboard handling, and the keyboard module does not exist
   yet; `spec:AST-099` lists each gap.
-- **Rejected entries (FR15):** NumberInput and TimeInput mark unfinished
-  drafts invalid and announce them on each keystroke with no visible message,
-  and unparsable drafts revert on blur; `spec:AST-118` lists each gap.
+- **Rejected entries (FR14):** NumberInput, TimeInput, and DateTimeInput's
+  time segment mark unfinished drafts invalid and announce them on each
+  keystroke with no visible message, and unparsable drafts revert on blur;
+  DateInput and DateTimeInput do the same for unreadable date text, and a
+  native date or time rejection shows no message. Inside an InputGroup, a
+  member's own rejection shows no visible message. `spec:AST-118` lists each
+  gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
   individual state behavior, but do not yet provide the complete real-browser
   inline-size/end-overlap matrix below. This current record names those
@@ -450,7 +456,7 @@ The exhaustive coverage obligation follows the membership and adoption tables.
 | FR11     | `InputClearButton.test.tsx` tooltip and accessible-name assertions, plus real-Chromium hover captures                                                                                                                                                                                                                    | a long field label; a locale override; light and dark                                                                             | The tooltip repeats the field label, or the accessible name loses the field label                                                                                                                                                                                                                                                          |
 | FR12     | `Typeahead.test.tsx`, `BaseTypeahead.test.tsx`, `Tokenizer.test.tsx`, `Selector.test.tsx`, and `MultiSelector.test.tsx` cases for both attributes, with Enter keeping its member-owned effect; `SearchKeyboard.interaction.browser.spec.ts` on a touch-emulated phone, where the search input a tap focuses carries both | Typeahead; Tokenizer; Selector and MultiSelector search row; a phone viewport with touch emulation                                | A missing attribute, or an Enter whose effect changes with the label, fails                                                                                                                                                                                                                                                                |
 | FR13     | TBD (gap): the per-field keyboard focus tests and simulator evidence `spec:AST-099` FR9 names                                                                                                                                                                                                                            | each member FR13 covers, in the page, a sheet, a docked bar Core moves, a floating bar, and a bar with its own `translate`        | A focused field left under the keyboard in a scroller (including one inside a fixed container FR9 leaves to the app), a Core host, or a docked bar Core moves, or a public prop for the behavior; a field with no scroller between it and a floating, own-`translate`, or full-viewport host is the app's to position and is not a failure |
-| FR15     | TBD (gap): the completeness, commit, and message suites `spec:AST-118` names                                                                                                                                                                                                                                             | DateInput, DateTimeInput, TimeInput, and NumberInput, typed and native, standalone and grouped                                    | An unfinished entry is flagged, a commit drops rejected text, a rejection shows no message, or its signals part                                                                                                                                                                                                                            |
+| FR14     | TBD (gap): the completeness, commit, and message suites `spec:AST-118` names                                                                                                                                                                                                                                             | DateInput, DateTimeInput, TimeInput, and NumberInput, typed and native, standalone and grouped                                    | An unfinished entry is flagged, a commit drops rejected text, a rejection shows no message, or its signals part                                                                                                                                                                                                                            |
 
 ## Decision links
 
