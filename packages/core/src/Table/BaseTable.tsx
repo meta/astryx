@@ -18,6 +18,7 @@ import {
   memo,
   useId,
   useMemo,
+  useSyncExternalStore,
   type ReactElement,
   type ReactNode,
   type Ref,
@@ -52,6 +53,7 @@ import type {
   BodyCellRenderProps,
   ScrollWrapperRenderProps,
   TableRenderContext,
+  TablePluginRenderState,
   TableRowContext,
   TableRowComponentProps,
   TableCellComponentProps,
@@ -684,6 +686,50 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const textOverflow =
     textOverflowProp ?? (windowPlan.isWindowed ? 'truncate' : 'wrap');
 
+  // A loading plugin publishes its request state through `renderState`. Table
+  // reads it before it builds the sections, and only where loading is
+  // admitted: data mode, a flat row model, and the default scroll wrapper.
+  const loadingSource = useMemo(() => {
+    const sources = plugins.flatMap(plugin =>
+      plugin.renderState ? [plugin.renderState] : [],
+    );
+    // The snapshot is a number, so the store compares it by value: bit 0 is
+    // set while a source loads, bit 1 while a source has more rows.
+    const readIsLoading = (
+      read: (source: TablePluginRenderState) => {
+        isLoading: boolean;
+        hasMore?: boolean;
+      },
+    ) =>
+      (sources.some(source => read(source).isLoading) ? 1 : 0) |
+      (sources.some(source => read(source).hasMore === true) ? 2 : 0);
+    return {
+      subscribe(onChange: () => void) {
+        const cleanups = sources.map(source => source.subscribe(onChange));
+        return () => cleanups.forEach(cleanup => cleanup());
+      },
+      getSnapshot: () => readIsLoading(source => source.getSnapshot()),
+      getServerSnapshot: () =>
+        readIsLoading(source => source.getServerSnapshot()),
+    };
+  }, [plugins]);
+  const loadingSnapshot = useSyncExternalStore(
+    loadingSource.subscribe,
+    loadingSource.getSnapshot,
+    loadingSource.getServerSnapshot,
+  );
+  // Table admits loading only with its own scroll wrapper. The loading plugin
+  // reads this admission from the runtime context, so a caller's wrapper gets
+  // the whole loading behavior or none of it.
+  const isLoadingAdmitted =
+    mode === 'data' &&
+    admission.rowModel === 'flat' &&
+    ScrollWrapper != null &&
+    isTableScrollWrapperOwned(ScrollWrapper);
+  const isLoading = isLoadingAdmitted && (loadingSnapshot & 1) === 1;
+  // While any admitted source may load more rows, the total is unknown.
+  const hasMoreRows = isLoadingAdmitted && (loadingSnapshot & 2) === 2;
+
   // Resolve all column widths in a single pass — produces per-column
   // inline styles and the aggregate table min-width.
   // A windowed table widens its row-number columns to the width measured for
@@ -865,7 +911,11 @@ function BaseTableInner<T extends Record<string, unknown>>({
     <table
       ref={useMergedRefs(ref, runtime.setTable)}
       {...(windowPlan.isWindowed
-        ? {'aria-rowcount': headerRowCount + (data?.length ?? 0)}
+        ? {
+            'aria-rowcount': hasMoreRows
+              ? -1
+              : headerRowCount + (data?.length ?? 0),
+          }
         : ariaRowCount != null
           ? {'aria-rowcount': ariaRowCount}
           : null)}
@@ -960,7 +1010,10 @@ function BaseTableInner<T extends Record<string, unknown>>({
                   return rows;
                 })
               : data != null &&
-                emptyState !== false && (
+                emptyState !== false &&
+                // While the first rows load, the default "no data" message
+                // would be wrong. Caller-owned empty content still shows.
+                !(isLoading && emptyState == null) && (
                   <tr>
                     <td colSpan={resolvedColumns.length}>
                       {emptyState ?? (
@@ -1043,8 +1096,14 @@ function BaseTableInner<T extends Record<string, unknown>>({
       viewportHeight: windowPlan.isWindowed
         ? config?.initialViewportHeight
         : undefined,
+      isLoadingAdmitted,
     }),
-    [runtime, windowPlan.isWindowed, config?.initialViewportHeight],
+    [
+      runtime,
+      windowPlan.isWindowed,
+      config?.initialViewportHeight,
+      isLoadingAdmitted,
+    ],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>

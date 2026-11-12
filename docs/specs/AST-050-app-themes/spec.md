@@ -146,7 +146,12 @@ described.
   and its entry, descriptor and export take the build's binding for it
   (`acme-ocean` → `acmeOceanTheme.ts`, `acmeOceanTheme.doc.mjs`,
   `acmeOceanTheme`), so `theme build` and `theme add` read it as that theme.
-  `theme template [path]` leaves an existing file as it is without
+  `theme template [path]` reads `[path]` from the working folder, and with no
+  `[path]` writes `theme.template.ts` at the project root (the nearest folder
+  with a package.json); the path MUST stay inside that folder, and a backslash
+  in it separates folders. With no package.json at or above the working folder,
+  it writes there and warns, naming how to write it at a project root. It leaves an
+  existing file as it is without
   `--overwrite`. Its receipt then says whether `--overwrite` would replace that
   file (`overwritable`), and when it would not, it names a free path for the
   template (`alternative`).
@@ -186,8 +191,13 @@ described.
   header names its source from the project root of the outputs, so a build
   from any folder writes the same outputs. At a path `--out` names, it
   replaces its own earlier outputs. It replaces the output of another theme
-  source that still exists and warns, naming both sources. It warns when that
-  path does not end in `.css`, and the import it prints names the file as
+  source that still exists and warns, naming both sources. Into a folder the
+  theme editor made (folder `<slug>/` holds `<slug>.settings.json`), `--out`
+  for a source outside that folder writes there and warns, naming the build
+  beside the source and another `--out`.
+  `--check` on stale outputs exits 1, and its result carries
+  `code: ERR_THEME_STALE`. It warns when the path `--out` names does not end in
+  `.css`, and the import it prints names the file as
   written. `theme build --watch` rebuilds when the source or any local file it
   imports changes. `--check` and `integration verify` treat CRLF and LF line
   endings as the same text. An import MUST fail and name the build command
