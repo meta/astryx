@@ -77,6 +77,8 @@ import {
 import {
   printBatchTrailer,
   printCompactTrailer,
+  setEditorFolderListener,
+  setPrivateVarErrorListener,
   themeBuild,
   themeBuildFamily,
   themeBuildForReport,
@@ -117,6 +119,7 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
  * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
+ * @property {(options: {targetPath?: string, overwrite?: boolean, cwd?: string}) => import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} [template] - This group's template write, in place of `themeTemplate`.
  */
 
 /** @type {ThemeCommandWords} */
@@ -1130,11 +1133,20 @@ function registerThemeCommands(theme, program, docs, words) {
       const watchChild =
         typeof process.send === 'function' &&
         process.argv0 === WATCH_CHILD_ARGV0;
-      if (watchChild) process.channel?.unref();
+      if (watchChild) {
+        process.channel?.unref();
+        setEditorFolderListener(warning => {
+          // Held open until the message is out, then let go again.
+          process.channel?.ref();
+          process.send?.({type: WATCH_WARNING, text: warning}, () =>
+            process.channel?.unref(),
+          );
+        });
+      }
       let privateVarError = false;
-      const onPrivateVarError = () => {
+      setPrivateVarErrorListener(() => {
         privateVarError = true;
-      };
+      });
 
       const refused = await words.preflight?.(files, {
         cwd: process.cwd(),
@@ -1151,7 +1163,6 @@ function registerThemeCommands(theme, program, docs, words) {
               familyKey: /** @type {string} */ (options.familyKey),
               check: options.check,
               iconsSpecifier: options.iconsSpecifier,
-              __onPrivateVarError: onPrivateVarError,
               __commandWords: words,
             },
             {cwd: process.cwd()},
@@ -1235,19 +1246,9 @@ function registerThemeCommands(theme, program, docs, words) {
             out: options.out,
             check: options.check,
             iconsSpecifier: options.iconsSpecifier,
-            __onPrivateVarError: onPrivateVarError,
             __claimedOutputs: claimedOutputs,
             __deferredWrites: deferred ? writes : undefined,
             __commandWords: words,
-            __onEditorFolder: watchChild
-              ? (/** @type {string} */ warning) => {
-                  // Held open until the message is out, then let go again.
-                  process.channel?.ref();
-                  process.send?.({type: WATCH_WARNING, text: warning}, () =>
-                    process.channel?.unref(),
-                  );
-                }
-              : undefined,
           };
           let result;
           if (report) {
@@ -1577,7 +1578,9 @@ function registerThemeCommands(theme, program, docs, words) {
       /** @type {import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} */
       let result;
       try {
-        result = themeTemplate({
+        // The experimental command passes its own write, which protects
+        // only the editor's own files.
+        result = (words.template ?? themeTemplate)({
           targetPath,
           overwrite: options.overwrite,
           cwd: process.cwd(),

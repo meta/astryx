@@ -9,6 +9,7 @@
  */
 
 import {createRequire} from 'node:module';
+import {wordTable} from './_tables.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -87,8 +88,88 @@ let patched = null;
 /** css-tree's lexer with the current specifications' grammar. */
 const currentLexer = () => (patched ??= csstree().fork(syntaxPatches()).lexer);
 
+/** @type {Map<string, Set<string>>} */
+const longhandCache = new Map();
+
+/**
+ * Every longhand a shorthand sets, through shorthands inside it (border
+ * sets border-color, so border-top-color), as MDN's data lists them; empty
+ * for a property that is no shorthand.
+ * @param {string} prop
+ * @returns {Set<string>}
+ */
+export function longhandsOf(prop) {
+  const cached = longhandCache.get(prop);
+  if (cached) return cached;
+  /** @type {Set<string>} */
+  const out = new Set();
+  longhandCache.set(prop, out);
+  const computed = /** @type {any} */ (mdnProperties()[prop])?.computed;
+  if (Array.isArray(computed))
+    for (const p of computed) {
+      if (typeof p !== 'string' || p === prop) continue;
+      out.add(p);
+      for (const q of longhandsOf(p)) out.add(q);
+    }
+  return out;
+}
+
+/**
+ * Whether setting `a` sets `b` too: `b` is one of `a`'s longhands, or a
+ * shorthand whose every longhand `a` sets (border covers border-top).
+ * overflow-wrap is no part of overflow, nor transform-origin of transform.
+ * @param {string} a
+ * @param {string} b
+ */
+export function coversProperty(a, b) {
+  if (a === b) return false;
+  const of = longhandsOf(a);
+  if (of.has(b)) return true;
+  const sub = longhandsOf(b);
+  return sub.size > 0 && [...sub].every(x => of.has(x));
+}
+
 /** What a var() or env() may stand for while the rest of a value is matched. */
 const VAR_STANDS_FOR = ['0', '1px', '1ms', 'red', 'ease', 'serif', '0 0 red'];
+
+/**
+ * The value as it reads when each variable is unset: every `var(--x, f)`
+ * replaced by its fallback `f`; null when no var() has one.
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function withFallbacks(value) {
+  let any = false;
+  /** @param {string} v @returns {string} */
+  const pass = v => {
+    const at = v.search(/var\(/i);
+    if (at < 0) return v;
+    let depth = 0;
+    let comma = -1;
+    let end = -1;
+    for (let i = at + 4; i < v.length; i++) {
+      const c = v[i];
+      if (c === '(') depth++;
+      else if (c === ')') {
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+        depth--;
+      } else if (c === ',' && depth === 0 && comma < 0) comma = i;
+    }
+    if (end < 0) return v;
+    if (comma < 0) return v.slice(0, end + 1) + pass(v.slice(end + 1));
+    any = true;
+    return (
+      v.slice(0, at) +
+      pass(v.slice(comma + 1, end).trim()) +
+      pass(v.slice(end + 1))
+    );
+  };
+  const out = pass(value);
+  return any ? out : null;
+}
 
 /**
  * Whether a value matches a property's grammar, as css-tree reads it. A
@@ -333,15 +414,17 @@ const UNIT_TYPES = /** @type {Record<string, string>} */ (
   )
 );
 /** A value of each type, to match where a math function stands. */
-const TYPE_SAMPLES = /** @type {Record<string, string>} */ ({
-  number: '1',
-  percent: '1%',
-  length: '1px',
-  time: '1s',
-  angle: '1deg',
-  frequency: '1hz',
-  resolution: '1dppx',
-});
+const TYPE_SAMPLES = wordTable(
+  /** @type {Record<string, string>} */ ({
+    number: '1',
+    percent: '1%',
+    length: '1px',
+    time: '1s',
+    angle: '1deg',
+    frequency: '1hz',
+    resolution: '1dppx',
+  }),
+);
 
 /**
  * The type of a sum (or of the arguments of min(), max(), clamp()):
@@ -604,6 +687,40 @@ export function keywordsOf(prop) {
   return [...words];
 }
 
+/** @type {string[] | null} */
+let generics = null;
+
+/**
+ * The CSS generic font families (serif, math, ui-rounded …), as the
+ * grammar's `<generic-family>` type lists them; non-standard ones left out.
+ * @returns {string[]}
+ */
+export function genericFamilies() {
+  if (generics) return generics;
+  const t = csstree();
+  const seen = new Set();
+  /** @type {Set<string>} */
+  const words = new Set();
+  /** @param {any} syntax */
+  const walk = syntax => {
+    if (!syntax) return;
+    t.definitionSyntax.walk(syntax, (/** @type {any} */ n) => {
+      if (n.type === 'Keyword') {
+        if (!n.name.startsWith('-')) words.add(n.name);
+      } else if (
+        n.type === 'Type' &&
+        !n.name.startsWith('-') &&
+        !seen.has(n.name)
+      ) {
+        seen.add(n.name);
+        walk(currentLexer().types[n.name]?.syntax);
+      }
+    });
+  };
+  walk(currentLexer().types['generic-family']?.syntax);
+  return (generics = [...words]);
+}
+
 /**
  * A value the property takes, to put in a suggestion: its initial value
  * from MDN's data (a shorthand's first longhand's).
@@ -651,7 +768,7 @@ export function cssNumber(value) {
  * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
  * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
  * @param {string} v
- * @param {',' | ' '} sep
+ * @param {',' | ' ' | '/'} sep
  * @returns {string[]}
  */
 export function splitTop(v, sep) {
@@ -672,12 +789,14 @@ export function splitTop(v, sep) {
 }
 
 /** The longhand each type of the `font` grammar sets, where css-tree names a type, not a property. */
-const FONT_TYPE_LONGHAND = /** @type {Record<string, string>} */ ({
-  'font-variant-css2': 'font-variant-caps',
-  'font-width-css3': 'font-stretch',
-  'font-stretch-absolute': 'font-stretch',
-  'system-family-name': 'system',
-});
+const FONT_TYPE_LONGHAND = wordTable(
+  /** @type {Record<string, string>} */ ({
+    'font-variant-css2': 'font-variant-caps',
+    'font-width-css3': 'font-stretch',
+    'font-stretch-absolute': 'font-stretch',
+    'system-family-name': 'system',
+  }),
+);
 
 /**
  * The parts of a CSS `font` value, by the longhand each sets, as written:
@@ -701,6 +820,10 @@ export function fontShorthandParts(value) {
     'font-stretch',
     'font-size',
   ];
+  // A lone generic family (math, fangsong) is a family, though a longhand
+  // may share the word (font-size: math).
+  if (genericFamilies().includes(value.trim().toLowerCase()))
+    return {'font-family': value.trim()};
   if (!value.includes(',')) {
     /** @type {Record<string, string>} */
     const each = {};

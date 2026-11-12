@@ -95,7 +95,8 @@ describe('hunt13', () => {
     expect(fs.readFileSync(at('g', 'g.css'), 'utf8')).toMatch(/#0000ff/i);
     fs.appendFileSync(ts, 'export const oops = {\n');
     const r = await refusal(() => themeEditShow('g', {cwd}));
-    expect(r.message).toMatch(/did not build/);
+    // A source that no longer parses is refused before anything is built.
+    expect(r.message).toMatch(/does not parse|did not build/);
   }, 240_000);
 
   it('F7-3: a later spread that covers an --only setting is named', async () => {
