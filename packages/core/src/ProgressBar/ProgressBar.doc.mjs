@@ -43,7 +43,7 @@ const anatomy = [
 export const docs = {
   name: 'ProgressBar',
   playground: {
-    defaults: {label: 'Progress', value: 60},
+    defaults: {label: 'Uploading files', value: 60},
   },
   displayName: 'Progress Bar',
   category: 'Feedback & Status',
