@@ -396,3 +396,134 @@ describe('theme build output-path failures carry registered codes', () => {
     expect(fs.readdirSync(shared)).toEqual(['theme.mjs']);
   });
 });
+
+describe('astryx theme build --out into a folder the theme editor made', () => {
+  beforeAll(() => {
+    ensureCoreBuilt();
+  }, 200_000);
+
+  /** A project with an editor folder `themes/g/` and a theme outside it. */
+  function project() {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const editor = path.join(tmpDir, 'themes', 'g');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(
+      path.join(editor, 'g.settings.json'),
+      JSON.stringify({like: 'neutral', settings: []}),
+    );
+    writeTheme(path.join(tmpDir, 'src'), 'other');
+    return editor;
+  }
+
+  it('writes a source outside it as released CLIs did, warning in text and silent under --json', async () => {
+    const editor = project();
+    const text = await runCli(
+      ['theme', 'build', 'src/theme.mjs', '--out', 'themes/g/a.css'],
+      {cwd: tmpDir},
+    );
+    expect(text.status).toBe(0);
+    expect(fs.existsSync(path.join(editor, 'a.css'))).toBe(true);
+    expect(text.stderr.match(/theme editor made/g)).toHaveLength(1);
+    expect(text.stderr).toMatch(
+      /Build beside the source, or pick another --out, to keep the editor's folder to its own theme/,
+    );
+
+    const json = await runCli(
+      ['--json', 'theme', 'build', 'src/theme.mjs', '--out', 'themes/g/b.css'],
+      {cwd: tmpDir},
+    );
+    expect(json.status).toBe(0);
+    expect(fs.existsSync(path.join(editor, 'b.css'))).toBe(true);
+    // A text-only warning: silent under --json, with nothing added to meta.
+    expect(json.stderr).not.toMatch(/theme editor made/);
+    expect(JSON.parse(json.stdout).meta?.deprecations).toBeUndefined();
+  });
+
+  it('warns nothing for a source inside it', async () => {
+    const editor = project();
+    writeTheme(editor, 'g');
+    const text = await runCli(
+      ['theme', 'build', 'themes/g/theme.mjs', '--out', 'themes/g/g.css'],
+      {cwd: tmpDir},
+    );
+    expect(text.status).toBe(0);
+    expect(text.stderr).not.toMatch(/theme editor made/);
+    const json = await runCli(
+      [
+        '--json',
+        'theme',
+        'build',
+        'themes/g/theme.mjs',
+        '--out',
+        'themes/g/g.css',
+      ],
+      {cwd: tmpDir},
+    );
+    expect(json.status).toBe(0);
+    expect(JSON.parse(json.stdout).meta?.deprecations).toBeUndefined();
+  });
+});
+
+describe('theme build --check with a missing CSS type stub', () => {
+  beforeAll(() => {
+    ensureCoreBuilt();
+  }, 200_000);
+
+  it.each([[['theme', 'build']], [['experimental', 'theme', 'compile']]])(
+    '%j --check names the stub as checked and warns without failing',
+    async words => {
+      writeTheme(tmpDir, 'stub');
+      const built = await runCli([...words, 'theme.mjs'], {cwd: tmpDir});
+      expect(built.status).toBe(0);
+      fs.rmSync(path.join(tmpDir, 'stub.css.d.ts'));
+
+      const text = await runCli([...words, 'theme.mjs', '--check'], {
+        cwd: tmpDir,
+      });
+      expect(text.status).toBe(0);
+      const warnings = text.stderr
+        .split('\n')
+        .filter(line => line.includes('stub.css.d.ts'));
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('Warning:');
+
+      const json = await runCli(['--json', ...words, 'theme.mjs', '--check'], {
+        cwd: tmpDir,
+      });
+      expect(json.status).toBe(0);
+      expect(json.stderr).toBe('');
+      const {data} = JSON.parse(json.stdout);
+      expect(data.upToDate).toBe(true);
+      expect(data.code).toBeUndefined();
+      expect(data.checked).toContain('stub.css.d.ts');
+      expect(data.stale).toEqual([]);
+    },
+  );
+
+  it.each([
+    [['theme', 'build'], 'stub.css'],
+    [['theme', 'build'], 'stub.d.ts'],
+    [['experimental', 'theme', 'compile'], 'stub.css'],
+    [['experimental', 'theme', 'compile'], 'stub.d.ts'],
+  ])('%j --check still fails on a missing %s', async (words, file) => {
+    writeTheme(tmpDir, 'stub');
+    const built = await runCli([...words, 'theme.mjs'], {cwd: tmpDir});
+    expect(built.status).toBe(0);
+    fs.rmSync(path.join(tmpDir, file));
+
+    const text = await runCli([...words, 'theme.mjs', '--check'], {
+      cwd: tmpDir,
+    });
+    expect(text.status).toBe(1);
+    expect(text.stderr).toContain(`  missing: ${file}`);
+
+    const json = await runCli(['--json', ...words, 'theme.mjs', '--check'], {
+      cwd: tmpDir,
+    });
+    expect(json.status).toBe(1);
+    const {data} = JSON.parse(json.stdout);
+    expect(data.upToDate).toBe(false);
+    expect(data.code).toBe('ERR_THEME_STALE');
+    expect(data.stale).toEqual([{path: file, reason: 'missing'}]);
+  });
+});

@@ -31,7 +31,9 @@
 // The menu press model's arm at a finger's release also cancels that touch's
 // `touchend`, so the browser creates no click and no compatibility mouse
 // events. A busy main thread can otherwise hold that click past the window,
-// when a drill-in has put another row under the finger.
+// when a drill-in has put another row under the finger. When the menu names
+// the touch by its identifier, another finger's `touchend` passes; a touch it
+// could not name keeps the old rule, and the next `touchend` is cancelled.
 //
 // Some clicks always pass:
 // - a click with `detail` 0: a keyboard's, a screen reader's, or one that the
@@ -71,6 +73,13 @@ export interface ClickGuardOptions {
    * @default false
    */
   readonly cancelsTouchEnd?: boolean;
+  /**
+   * With `cancelsTouchEnd`: the `Touch.identifier` of the touch that lifted.
+   * The guard cancels only a `touchend` that ends this touch. Another finger's
+   * `touchend` passes, and the guard stays armed for this touch. Without it,
+   * the next `touchend` counts as this touch's own.
+   */
+  readonly touchIdentifier?: number;
 }
 
 interface Guard {
@@ -115,6 +124,7 @@ export function armClickGuard(
     staysInstalled = false,
     takesLateMouse = false,
     cancelsTouchEnd = false,
+    touchIdentifier,
   }: ClickGuardOptions = {},
 ): void {
   const view = doc.defaultView;
@@ -143,12 +153,17 @@ export function armClickGuard(
     }
   }
   if (cancelsTouchEnd) {
-    // A touch sends its pointerup before its touchend, so the next touchend is
-    // that touch's own. The next pointerdown disarms the guard first.
+    // A touch sends its pointerup before its touchend, so without an
+    // identifier the next touchend counts as that touch's own. The next
+    // pointerdown disarms the guard first.
     const stopTouchEnd = subscribeInput(
       view,
       'touchend',
       event => {
+        if (touchIdentifier != null && !endsTouch(event, touchIdentifier)) {
+          // Another finger lifted: leave its touchend.
+          return;
+        }
         stopTouchEnd();
         // A touchend that the browser took for a scroll is not cancelable.
         // The guard stays armed for a click that may follow it.
@@ -163,6 +178,18 @@ export function armClickGuard(
     guard.unsubscribers.push(stopTouchEnd);
   }
   guard.timer = setTimeout(() => disarmClickGuard(doc), CLICK_GUARD_WINDOW_MS);
+}
+
+/**
+ * Whether `event` ends the touch `identifier`. A `touchend` without
+ * `changedTouches` counts as that touch's own.
+ */
+function endsTouch(event: Event, identifier: number): boolean {
+  const changed = (event as Partial<TouchEvent>).changedTouches;
+  if (changed == null) {
+    return true;
+  }
+  return Array.from(changed).some(touch => touch.identifier === identifier);
 }
 
 /** Stop swallowing on `doc`; idempotent. */

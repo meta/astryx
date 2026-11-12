@@ -40,7 +40,10 @@ import {showcaseRegistry} from '../generated/showcaseRegistry';
 import {externalComponentPreviews} from '../generated/componentPreviewRegistry';
 import {eagerShowcases} from '../components/eagerShowcases';
 import {TEMPLATE_COMPONENTS} from '../components/templateComponents';
-import {exampleRegistry} from '../generated/exampleRegistry';
+import {
+  exampleRegistry,
+  setupExampleRegistry,
+} from '../generated/exampleRegistry';
 import {normalizeComponentCategory} from '../lib/componentCategories';
 import {decompressCode} from '../lib/compress';
 import {buildPlaygroundHref} from '../components/playgroundLink';
@@ -1291,6 +1294,18 @@ describe('exampleRegistry', () => {
         expect(ex.name.length).toBeGreaterThan(0);
         expect(typeof ex.description).toBe('string');
         expect(typeof ex.load).toBe('function');
+      }
+    }
+  });
+
+  it('never gives a setup example a live preview', () => {
+    for (const [component, setup] of Object.entries(setupExampleRegistry)) {
+      const live = new Set(
+        (exampleRegistry[component] ?? []).map(entry => entry.name),
+      );
+      for (const example of setup) {
+        expect(typeof example.code).toBe('string');
+        expect(live.has(example.label)).toBe(false);
       }
     }
   });
