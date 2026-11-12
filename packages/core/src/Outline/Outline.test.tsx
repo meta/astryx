@@ -9,7 +9,13 @@
  * SYNC: When modified, update this header
  */
 
-import {useRef} from 'react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  useRef,
+  type ComponentProps,
+} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -288,6 +294,24 @@ describe('Outline', () => {
     document.body.removeChild(install);
     document.body.removeChild(api);
   });
+
+  it('reports nothing on mount while the first item is still the active one', () => {
+    // Not at the bottom of the page, and no heading has passed the line.
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      value: 4000,
+      configurable: true,
+    });
+    const onActiveIdChange = vi.fn();
+    // The hook resolves the active id from scroll position on mount. Its
+    // comparison starts from the first item, as the active state does.
+    render(<Outline items={items} onActiveIdChange={onActiveIdChange} />);
+    expect(screen.getByRole('link', {name: 'Introduction'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+    expect(onActiveIdChange).not.toHaveBeenCalled();
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight');
+  });
 });
 
 /**
@@ -344,17 +368,28 @@ describe('Outline keyboard navigation', () => {
     vi.restoreAllMocks();
   });
 
-  it('exposes a single tab stop (roving tabindex) instead of one per heading', () => {
-    render(<Outline items={items} />);
+  it('puts every link in the normal Tab order', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">Before</button>
+        <Outline items={items} activeId="api" />
+      </>,
+    );
     const links = screen.getAllByRole('link');
-
-    // A 40-heading TOC must not cost 40 Tab presses: exactly one link is in
-    // the page tab order, the rest are reachable with arrow keys.
     expect(links.map(link => link.getAttribute('tabindex'))).toEqual([
-      '0',
-      '-1',
-      '-1',
+      null,
+      null,
+      null,
     ]);
+
+    screen.getByRole('button', {name: 'Before'}).focus();
+    await user.tab();
+    expect(links[0]).toHaveFocus();
+    await user.tab();
+    expect(links[1]).toHaveFocus();
+    await user.tab();
+    expect(links[2]).toHaveFocus();
   });
 
   it('uses actual DOM focus rather than aria-activedescendant', () => {
@@ -372,77 +407,22 @@ describe('Outline keyboard navigation', () => {
     expect(links[2]).not.toHaveAttribute('aria-current');
   });
 
-  it('seats the tab stop on the active heading, not always the first', () => {
-    // WAI-ARIA roving tabindex: the single tab stop belongs on the *current*
-    // item. Tabbing into a TOC while reading section 3 must land on section 3,
-    // not send the reader back to section 1.
-    render(<Outline items={items} activeId="api" />);
-    const links = screen.getAllByRole('link');
-
-    expect(links.map(link => link.getAttribute('tabindex'))).toEqual([
-      '-1',
-      '-1',
-      '0',
-    ]);
-  });
-
-  it('moves the tab stop as the active heading changes', () => {
-    const {rerender} = render(<Outline items={items} activeId="intro" />);
-    expect(
-      screen.getAllByRole('link').map(l => l.getAttribute('tabindex')),
-    ).toEqual(['0', '-1', '-1']);
-
-    // Scroll-spy advances the active section: the tab stop must follow it.
-    rerender(<Outline items={items} activeId="install" />);
-    expect(
-      screen.getAllByRole('link').map(l => l.getAttribute('tabindex')),
-    ).toEqual(['-1', '0', '-1']);
-  });
-
-  it('does not yank the tab stop away from the item the user arrowed to', async () => {
-    const user = userEvent.setup();
-    const {rerender} = render(<Outline items={items} activeId="intro" />);
-    const links = screen.getAllByRole('link');
-
-    // User arrow-keys down to `api` and keeps focus there.
-    links[0].focus();
-    await user.keyboard('{ArrowDown}{ArrowDown}');
-    expect(links[2]).toHaveFocus();
-    expect(links[2]).toHaveAttribute('tabindex', '0');
-
-    // Scroll-spy moves the active section underneath them. Focus is still
-    // inside the list, so the tab stop must stay where the user put it.
-    rerender(<Outline items={items} activeId="install" />);
-    expect(links[2]).toHaveAttribute('tabindex', '0');
-    expect(links[1]).toHaveAttribute('tabindex', '-1');
-  });
-
-  it('moves focus with ArrowDown / ArrowUp', async () => {
+  it('adds no arrow, Home, or End movement between links', async () => {
     const user = userEvent.setup();
     render(<Outline items={items} />);
-    const [intro, install] = screen.getAllByRole('link');
+    const links = screen.getAllByRole('link');
 
-    intro.focus();
+    links[0].focus();
     await user.keyboard('{ArrowDown}');
-    expect(install).toHaveFocus();
-    expect(install).toHaveAttribute('tabindex', '0');
-    expect(intro).toHaveAttribute('tabindex', '-1');
-
-    await user.keyboard('{ArrowUp}');
-    expect(intro).toHaveFocus();
-  });
-
-  it('jumps to first / last with Home / End', async () => {
-    const user = userEvent.setup();
-    render(<Outline items={items} />);
-    const links = screen.getAllByRole('link');
-
-    links[0].focus();
-    await user.keyboard('{End}');
-    expect(links[2]).toHaveFocus();
-
-    await user.keyboard('{Home}');
     expect(links[0]).toHaveFocus();
+    await user.keyboard('{End}');
+    expect(links[0]).toHaveFocus();
+
+    links[2].focus();
+    await user.keyboard('{ArrowUp}');
+    expect(links[2]).toHaveFocus();
+    await user.keyboard('{Home}');
+    expect(links[2]).toHaveFocus();
   });
 
   it('activates the focused link with Space', async () => {
@@ -517,7 +497,7 @@ describe('Outline keyboard navigation', () => {
     cleanup();
   });
 
-  it('does not treat arrow-key roving focus as a manual scroll', async () => {
+  it('does not treat Tab between links as a manual scroll', async () => {
     const user = userEvent.setup();
     const cleanup = mountHeadings();
     const onNavigateEnd = vi.fn();
@@ -525,15 +505,16 @@ describe('Outline keyboard navigation', () => {
     render(<Outline items={items} onNavigateEnd={onNavigateEnd} />);
     await user.click(screen.getByRole('link', {name: 'Installation'}));
 
-    // Arrow keys inside the outline move focus; they are prevented, so they do
-    // not scroll the page and must not cancel the in-flight navigation.
-    await user.keyboard('{ArrowDown}');
+    // Tab moves focus and does not scroll the page, so it must not end the
+    // navigation that the click started.
+    screen.getByRole('link', {name: 'Installation'}).focus();
+    await user.tab();
     expect(onNavigateEnd).not.toHaveBeenCalled();
 
     cleanup();
   });
 
-  it('does not steal Tab from the page', async () => {
+  it('leaves the list with Tab after its last link', async () => {
     const user = userEvent.setup();
     render(
       <>
@@ -542,18 +523,17 @@ describe('Outline keyboard navigation', () => {
       </>,
     );
 
-    screen.getAllByRole('link')[0].focus();
+    screen.getAllByRole('link')[2].focus();
     await user.tab();
 
-    // The non-tabbable links are skipped, so one Tab leaves the whole outline.
     expect(screen.getByRole('button', {name: 'After'})).toHaveFocus();
   });
 
-  it('keeps a single tab stop with one item, and none with zero items', () => {
+  it('keeps one link in the Tab order with one item, and none with zero items', () => {
     const {rerender} = render(
       <Outline items={[{id: 'only', label: 'Only', level: 2}]} />,
     );
-    expect(screen.getAllByRole('link')[0]).toHaveAttribute('tabindex', '0');
+    expect(screen.getAllByRole('link')[0]).not.toHaveAttribute('tabindex');
 
     rerender(<Outline items={[]} />);
     expect(screen.queryAllByRole('link')).toHaveLength(0);
@@ -568,6 +548,69 @@ describe('Outline navigate callbacks', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it('moves focus to the chosen section, so the next Tab continues there (WCAG 2.4.3)', async () => {
+    const user = userEvent.setup();
+    const cleanup = mountHeadings();
+    const install = document.getElementById('install')!;
+    const focus = vi.spyOn(install, 'focus');
+    render(<Outline items={items} />);
+
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    expect(install).toHaveFocus();
+    // Focusing must not fight Outline's own scroll.
+    expect(focus).toHaveBeenCalledWith({preventScroll: true});
+    // A heading is made programmatically focusable only, never a Tab stop.
+    expect(install).toHaveAttribute('tabindex', '-1');
+
+    // A target that already sets its own tabindex keeps it.
+    install.blur();
+    install.setAttribute('tabindex', '0');
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    expect(install).toHaveFocus();
+    expect(install).toHaveAttribute('tabindex', '0');
+
+    cleanup();
+  });
+
+  it("keeps a target's own tabindex when it cannot take focus", async () => {
+    const user = userEvent.setup();
+    const cleanup = mountHeadings(['intro', 'api']);
+    // A target with its own tab stop that refuses focus right now, as a
+    // hidden panel does in a browser. The test DOM focuses hidden elements,
+    // so the refusal is simulated.
+    const panel = document.createElement('div');
+    panel.id = 'install';
+    panel.setAttribute('tabindex', '0');
+    vi.spyOn(panel, 'focus').mockImplementation(() => {});
+    document.body.appendChild(panel);
+    render(<Outline items={items} />);
+
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    expect(panel).toHaveAttribute('tabindex', '0');
+
+    panel.remove();
+    cleanup();
+  });
+
+  it('focuses a target that is already focusable without taking it out of the Tab order', async () => {
+    const user = userEvent.setup();
+    const cleanup = mountHeadings(['intro', 'api']);
+    // The "install" item points at a link, which is focusable on its own.
+    const link = document.createElement('a');
+    link.id = 'install';
+    link.href = '#install-details';
+    link.textContent = 'Install details';
+    document.body.appendChild(link);
+    render(<Outline items={items} />);
+
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    expect(link).toHaveFocus();
+    expect(link).not.toHaveAttribute('tabindex');
+
+    link.remove();
+    cleanup();
   });
 
   it('fires onNavigateStart on click and onNavigateEnd when the scroll settles', async () => {
@@ -1065,5 +1108,134 @@ describe('useOutlineFromDOM', () => {
     expect(
       screen.getByText('2:intro:Intro|3:details:Details'),
     ).toBeInTheDocument();
+  });
+});
+
+describe('Outline scroll spy, when React discards a render', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+    // At the bottom of the page, a scroll makes the last item active.
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      value: 0,
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight');
+  });
+
+  // A transition that suspends for good: React renders the new props, then
+  // keeps the committed tree and never commits that render.
+  const pending = new Promise<never>(() => {});
+  function Pending(): null {
+    use(pending);
+    return null;
+  }
+  function Screen({
+    isPending,
+    ...props
+  }: ComponentProps<typeof Outline> & {isPending: boolean}) {
+    return (
+      <Suspense fallback={null}>
+        <Outline {...props} />
+        {isPending ? <Pending /> : null}
+      </Suspense>
+    );
+  }
+  async function scrollAndWaitAFrame() {
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'));
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  }
+
+  it('reports a landed navigation to the committed onActiveIdChange', async () => {
+    const user = userEvent.setup();
+    const target = document.createElement('h2');
+    target.id = 'install';
+    document.body.appendChild(target);
+    const committed = vi.fn();
+    const discarded = vi.fn();
+    const {rerender} = render(
+      <Screen items={items} onActiveIdChange={committed} isPending={false} />,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen items={items} onActiveIdChange={discarded} isPending />,
+        );
+      });
+    });
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    await act(async () => {
+      window.dispatchEvent(new Event('scrollend'));
+    });
+    expect(discarded).not.toHaveBeenCalled();
+    expect(committed).toHaveBeenLastCalledWith('install');
+    document.body.removeChild(target);
+  });
+
+  it('resolves a scroll against the committed items', async () => {
+    const onActiveIdChange = vi.fn();
+    const {rerender} = render(
+      <Screen
+        items={items}
+        onActiveIdChange={onActiveIdChange}
+        isPending={false}
+      />,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen
+            items={items.slice(0, 2)}
+            onActiveIdChange={onActiveIdChange}
+            isPending
+          />,
+        );
+      });
+    });
+    await scrollAndWaitAFrame();
+    expect(onActiveIdChange).not.toHaveBeenCalledWith('install');
+    expect(screen.getByRole('link', {name: 'API'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+  });
+
+  it('compares a scroll with the committed active item', async () => {
+    const onActiveIdChange = vi.fn();
+    const {rerender} = render(
+      <Screen
+        items={items}
+        onActiveIdChange={onActiveIdChange}
+        isPending={false}
+      />,
+    );
+    await scrollAndWaitAFrame();
+    expect(screen.getByRole('link', {name: 'API'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+    onActiveIdChange.mockClear();
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen
+            items={items}
+            activeId="intro"
+            onActiveIdChange={onActiveIdChange}
+            isPending
+          />,
+        );
+      });
+    });
+    await scrollAndWaitAFrame();
+    // The committed item is still the active one, so nothing changes.
+    expect(onActiveIdChange).not.toHaveBeenCalled();
   });
 });

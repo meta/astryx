@@ -9,14 +9,16 @@ import {pathToFileURL} from 'node:url';
 import {z} from 'zod';
 import {
   findPresentFiles,
+  importThemeArtifact,
   importUserModule,
   loadModuleWithParser,
 } from './module-loader.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-module-loader-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-module-loader-test-'));
 });
 
 afterEach(() => {
@@ -79,8 +81,13 @@ describe('importUserModule', () => {
     },
   );
 
-  const probeFreshJavaScript = (dir, firstSource, secondSource) => {
-    const file = path.join(dir, 'fresh.js');
+  const probeFreshJavaScript = (
+    dir,
+    firstSource,
+    secondSource,
+    name = 'fresh.js',
+  ) => {
+    const file = path.join(dir, name);
     fs.writeFileSync(file, firstSource);
     const loaderUrl = pathToFileURL(
       path.join(process.cwd(), 'packages/cli/foundation/fs/module-loader.mjs'),
@@ -95,7 +102,8 @@ import {importUserModule} from ${JSON.stringify(loaderUrl)};
 const first = await importUserModule(process.env.TEST_MODULE);
 fs.writeFileSync(process.env.TEST_MODULE, ${JSON.stringify(secondSource)});
 const fresh = await importUserModule(process.env.TEST_MODULE, {fresh: true});
-process.stdout.write(JSON.stringify({first: first.default?.answer, fresh: fresh.default?.answer}));`,
+const sameExports = Object.keys(first).sort().join() === Object.keys(fresh).sort().join();
+process.stdout.write(JSON.stringify({first: first.default?.answer, fresh: fresh.default?.answer, sameExports}));`,
       ],
       {
         encoding: 'utf-8',
@@ -118,7 +126,7 @@ process.stdout.write(JSON.stringify({first: first.default?.answer, fresh: fresh.
         `module.exports = {answer: 1};\n`,
         `module.exports = {answer: 2};\n`,
       ),
-    ).toEqual({first: 1, fresh: 2});
+    ).toEqual({first: 1, fresh: 2, sameExports: true});
   });
 
   it('freshly reloads a changed ESM .js module in a real Node process', () => {
@@ -134,8 +142,105 @@ process.stdout.write(JSON.stringify({first: first.default?.answer, fresh: fresh.
         `export default {answer: 1};\n`,
         `export default {answer: 2};\n`,
       ),
-    ).toEqual({first: 1, fresh: 2});
+    ).toEqual({first: 1, fresh: 2, sameExports: true});
   });
+
+  it('freshly reloads a changed ES module .js in a package without a "type", in a real Node process', () => {
+    const typelessDir = path.join(tmpDir, 'typeless');
+    fs.mkdirSync(typelessDir);
+    fs.writeFileSync(
+      path.join(typelessDir, 'package.json'),
+      JSON.stringify({name: 'typeless'}),
+    );
+    expect(
+      probeFreshJavaScript(
+        typelessDir,
+        `export default {answer: 1};\n`,
+        `export default {answer: 2};\n`,
+      ),
+    ).toEqual({first: 1, fresh: 2, sameExports: true});
+  });
+
+  it.each([
+    [
+      'fresh.cjs',
+      `module.exports = {answer: 1};\n`,
+      `module.exports = {answer: 2};\n`,
+    ],
+    [
+      'fresh.mjs',
+      `export default {answer: 1};\n`,
+      `export default {answer: 2};\n`,
+    ],
+  ])(
+    'freshly reloads a changed %s in a real Node process',
+    (name, firstSource, secondSource) => {
+      const kindDir = path.join(tmpDir, name.replace('.', '-'));
+      fs.mkdirSync(kindDir);
+      fs.writeFileSync(
+        path.join(kindDir, 'package.json'),
+        JSON.stringify({name: 'typeless'}),
+      );
+      expect(
+        probeFreshJavaScript(kindDir, firstSource, secondSource, name),
+      ).toEqual({first: 1, fresh: 2, sameExports: true});
+    },
+  );
+
+  it.each([
+    ['in a CommonJS package', {type: 'commonjs'}],
+    ['in a package without a "type"', {name: 'typeless'}],
+  ])(
+    'reads one CommonJS module in two reads at once, first or fresh, %s, in a real Node process',
+    (_where, packageJson) => {
+      const dir = path.join(tmpDir, 'at-once');
+      fs.mkdirSync(dir);
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify(packageJson),
+      );
+      const file = path.join(dir, 'm.js');
+      const loaderUrl = pathToFileURL(
+        path.join(
+          process.cwd(),
+          'packages/cli/foundation/fs/module-loader.mjs',
+        ),
+      ).href;
+      const output = execFileSync(
+        process.execPath,
+        [
+          '--input-type=module',
+          '-e',
+          `import fs from 'node:fs';
+import {importUserModule} from ${JSON.stringify(loaderUrl)};
+const file = process.env.TEST_MODULE;
+const read = async reads => {
+  try {
+    return (await Promise.all(reads())).map(mod => mod.default.answer).join();
+  } catch (error) {
+    return error.code ?? error.name;
+  }
+};
+fs.writeFileSync(file, 'module.exports = {answer: 1};\\n');
+const firstAndFresh = await read(() => [importUserModule(file), importUserModule(file, {fresh: true})]);
+fs.writeFileSync(file, 'module.exports = {answer: 2};\\n');
+const twoFresh = await read(() => [importUserModule(file, {fresh: true}), importUserModule(file, {fresh: true})]);
+const target = file.replace(/m\\.js$/, 'target.js');
+const link = file.replace(/m\\.js$/, 'link.js');
+fs.writeFileSync(target, 'module.exports = {answer: 3};\\n');
+fs.symlinkSync(target, link);
+const linkAndTarget = await read(() => [importUserModule(link), importUserModule(target, {fresh: true})]);
+process.stdout.write(JSON.stringify({firstAndFresh, twoFresh, linkAndTarget}));`,
+        ],
+        {encoding: 'utf-8', env: {...process.env, TEST_MODULE: file}},
+      );
+      expect(JSON.parse(output)).toEqual({
+        firstAndFresh: '1,1',
+        twoFresh: '2,2',
+        linkAndTarget: '3,3',
+      });
+    },
+  );
 
   it('defaults .js to CommonJS when no package.json exists', () => {
     const noPackageDir = fs.mkdtempSync(
@@ -148,11 +253,204 @@ process.stdout.write(JSON.stringify({first: first.default?.answer, fresh: fresh.
           `module.exports = {answer: 1};\n`,
           `module.exports = {answer: 2};\n`,
         ),
-      ).toEqual({first: 1, fresh: 2});
+      ).toEqual({first: 1, fresh: 2, sameExports: true});
     } finally {
       fs.rmSync(noPackageDir, {recursive: true, force: true});
     }
   });
+});
+
+describe('importThemeArtifact', () => {
+  const STYLESHEET_RAN = '__astryxThemeArtifactStylesheetRan';
+
+  /** @param {string} file @param {string} content */
+  function write(file, content) {
+    const target = path.join(tmpDir, file);
+    fs.mkdirSync(path.dirname(target), {recursive: true});
+    fs.writeFileSync(target, content);
+  }
+
+  beforeEach(() => {
+    write('package.json', JSON.stringify({type: 'module'}));
+    write(
+      'ocean.css',
+      '[data-astryx-theme="ocean"] { --color-text: black; }\n',
+    );
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, STYLESHEET_RAN);
+  });
+
+  it('loads a built module that imports its stylesheet, without running the stylesheet', async () => {
+    // Valid JavaScript, so running this stylesheet would leave a trace.
+    write('ran.css', `globalThis.${STYLESHEET_RAN} = true;\n`);
+    write(
+      'ocean.js',
+      "import './ocean.css';\nimport './ran.css';\nexport const oceanTheme = {name: 'ocean'};\n",
+    );
+
+    const mod = await importThemeArtifact('./ocean.js', tmpDir);
+
+    expect(mod.oceanTheme).toEqual({name: 'ocean'});
+    expect(Reflect.get(globalThis, STYLESHEET_RAN)).toBeUndefined();
+  });
+
+  it('loads a CommonJS built module that requires its stylesheet', async () => {
+    write('commonjs/package.json', JSON.stringify({type: 'commonjs'}));
+    write(
+      'commonjs/ocean.css',
+      '[data-astryx-theme="ocean"] { --color-text: black; }\n',
+    );
+    write(
+      'commonjs/ocean.js',
+      "require('./ocean.css');\nexports.oceanTheme = {name: 'ocean'};\n",
+    );
+
+    const mod = await importThemeArtifact('./commonjs/ocean.js', tmpDir);
+
+    expect(mod.oceanTheme).toEqual({name: 'ocean'});
+  });
+
+  it('loads stylesheets imported by a nested module, through a package export, and dynamically', async () => {
+    const packageDir = 'node_modules/@acme/themes';
+    write(
+      `${packageDir}/package.json`,
+      JSON.stringify({
+        name: '@acme/themes',
+        type: 'module',
+        exports: {
+          './themes/ocean': './dist/ocean.js',
+          './themes/ocean.css': './dist/ocean.css',
+        },
+      }),
+    );
+    write(
+      `${packageDir}/dist/ocean.css`,
+      '[data-astryx-theme="ocean"] { --color-text: black; }\n',
+    );
+    write(
+      `${packageDir}/dist/tokens.js`,
+      "import '@acme/themes/themes/ocean.css';\nexport const tokens = {};\n",
+    );
+    write(
+      `${packageDir}/dist/ocean.js`,
+      "import {tokens} from './tokens.js';\nawait import('./ocean.css');\nexport const oceanTheme = {name: 'ocean', tokens};\n",
+    );
+
+    const mod = await importThemeArtifact('@acme/themes/themes/ocean', tmpDir);
+
+    expect(mod.oceanTheme).toEqual({name: 'ocean', tokens: {}});
+  });
+
+  it('still resolves an extensionless import to its directory index beside a same-named stylesheet', async () => {
+    write('ocean/index.js', "export const oceanTheme = {name: 'ocean'};\n");
+    write(
+      'entry.js',
+      "import './ocean.css';\nexport {oceanTheme} from './ocean';\n",
+    );
+
+    const mod = await importThemeArtifact('./entry.js', tmpDir);
+
+    expect(mod.oceanTheme).toEqual({name: 'ocean'});
+  });
+
+  it('loads a module whose import ends in .css but names a JavaScript file', async () => {
+    write('tokens.css.js', "export const vars = {accent: 'blue'};\n");
+    write(
+      'ocean.js',
+      "import './ocean.css';\nimport {vars} from './tokens.css';\nexport const oceanTheme = {name: 'ocean', vars};\n",
+    );
+
+    const mod = await importThemeArtifact('./ocean.js', tmpDir);
+
+    expect(mod.oceanTheme).toEqual({name: 'ocean', vars: {accent: 'blue'}});
+  });
+
+  it.each([
+    ['a missing file', "import './fonts.css';\n", /fonts\.css/],
+    [
+      'a package that is not installed',
+      "import '@acme/missing-fonts/inter.css';\n",
+      /@acme\/missing-fonts\/inter\.css/,
+    ],
+  ])(
+    'still rejects a stylesheet import of %s',
+    async (_label, stylesheetImport, expected) => {
+      write(
+        'ocean.js',
+        `import './ocean.css';\n${stylesheetImport}export const oceanTheme = {name: 'ocean'};\n`,
+      );
+
+      await expect(importThemeArtifact('./ocean.js', tmpDir)).rejects.toThrow(
+        expected,
+      );
+    },
+  );
+
+  it('still rejects a theme module path that names a stylesheet', async () => {
+    await expect(importThemeArtifact('./ocean.css', tmpDir)).rejects.toThrow(
+      /Unknown file extension "\.css"/,
+    );
+  });
+
+  it('still rejects a stylesheet import that its package does not export', async () => {
+    const packageDir = 'node_modules/@acme/themes';
+    write(
+      `${packageDir}/package.json`,
+      JSON.stringify({
+        name: '@acme/themes',
+        type: 'module',
+        exports: {'./themes/ocean': './dist/ocean.js'},
+      }),
+    );
+    write(
+      `${packageDir}/dist/ocean.css`,
+      '[data-astryx-theme="ocean"] { --color-text: black; }\n',
+    );
+    write(
+      `${packageDir}/dist/ocean.js`,
+      "import '@acme/themes/themes/ocean.css';\nexport const oceanTheme = {name: 'ocean'};\n",
+    );
+
+    await expect(
+      importThemeArtifact('@acme/themes/themes/ocean', tmpDir),
+    ).rejects.toThrow(/not defined by "exports"/);
+  });
+
+  it.each([
+    [
+      'a missing dependency',
+      "import './missing.js';\nexport const oceanTheme = {name: 'ocean'};\n",
+      /missing\.js/,
+    ],
+    [
+      'a syntax error in a module it imports',
+      "import './broken.js';\nexport const oceanTheme = {name: 'ocean'};\n",
+      /ParseError/,
+    ],
+    [
+      'a throwing module',
+      "throw new Error('broken theme module');\n",
+      /broken theme module/,
+    ],
+    [
+      'an asset that is not a stylesheet',
+      "import './logo.svg';\nexport const oceanTheme = {name: 'ocean'};\n",
+      /Unknown file extension "\.svg"/,
+    ],
+  ])(
+    'still rejects a built module that imports its stylesheet and has %s',
+    async (_label, rest, expected) => {
+      write('logo.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>\n');
+      write('broken.js', 'export const broken = ;\n');
+      write('ocean.js', `import './ocean.css';\n${rest}`);
+
+      await expect(importThemeArtifact('./ocean.js', tmpDir)).rejects.toThrow(
+        expected,
+      );
+    },
+  );
 });
 
 describe('loadModuleWithParser', () => {

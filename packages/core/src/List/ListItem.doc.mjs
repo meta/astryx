@@ -89,16 +89,29 @@ export const docs = {
         'Link relationship tokens. noopener noreferrer are merged automatically for target="_blank".',
     },
     {
+      name: 'align',
+      type: "'center' | 'start' | 'first-line'",
+      description:
+        'Vertical alignment of the start and end content against the label, passed through to Item unchanged. `first-line` keeps a small mark (a status dot, an icon) level with the first line of a wrapped label. See Item.align.',
+      default: "'center'",
+    },
+    {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disabled state; sets aria-disabled on the item.',
+      description:
+        'Disabled state; interactive rows stay keyboard-reachable, expose aria-disabled, and cannot activate.',
       default: 'false',
     },
     {
       name: 'isSelected',
       type: 'boolean',
-      description: 'Selected state; sets aria-selected on the item.',
+      description: 'Selected state; marks the item as the current one with aria-current="true" (a list item cannot carry aria-selected).',
       default: 'false',
+    },
+    {
+      name: 'itemKey',
+      type: 'string | number',
+      description: "The row's item key, a string or a number from the data (the shape Table's idKey returns). It is the row's identity for the list's animated layout (List animatedLayout): with a handle, the list matches rows by it to animate inserts, removals and moves, and a row without one changes at once. In a reorderable List (List reorderable), it is the key the reorderable object's onReorder reports and isReorderable is asked about, and a row without one has no reorder handle and keeps its place. Separate from React's key.",
     },
     {
       name: 'swipeActions',
@@ -174,6 +187,13 @@ export const docsZh = {
         '链接关系标记。target="_blank" 会自动合并 noopener noreferrer。',
     },
     {
+      name: 'align',
+      type: "'center' | 'start' | 'first-line'",
+      description:
+        '起始和结束内容相对于标签的垂直对齐方式，原样传递给 Item。`first-line` 让小标记（状态点、图标）与换行标签的第一行保持水平。参见 Item.align。',
+      default: "'center'",
+    },
+    {
       name: 'isDisabled',
       type: 'boolean',
       description: '禁用状态；在项目上设置 aria-disabled。',
@@ -182,8 +202,13 @@ export const docsZh = {
     {
       name: 'isSelected',
       type: 'boolean',
-      description: '选中状态；在项目上设置 aria-selected。',
+      description: '选中状态；在项目上设置 aria-current="true"，将其标为当前项（列表项不能使用 aria-selected）。',
       default: 'false',
+    },
+    {
+      name: 'itemKey',
+      type: 'string | number',
+      description: '行的项目键，取自数据的字符串或数字（与 Table 的 idKey 返回的形状相同）。它是列表动画布局（List animatedLayout）中该行的身份：传入句柄时，列表按它匹配各行，为插入、删除和移动添加动画；没有项目键的行会立即变化。在可重新排序的 List（List reorderable）中，它是可重新排序对象的 onReorder 报告的键，也是 isReorderable 判断的键；没有项目键的行没有重新排序手柄，保持原位。与 React 的 key 相互独立。',
     },
     {
       name: 'swipeActions',
@@ -207,6 +232,8 @@ export const docsDense = {
   description:
     'List item w/ label, description, start/end content slots, interactive patterns.',
   propDescriptions: {
+    align:
+      "Start/end content alignment, passed to Item: 'center' (default), 'start', or 'first-line' (centered on the label's first line).",
     label:
       'Primary content. String auto-truncates; ReactNode renders as given.',
     description: 'Secondary text below label.',
@@ -219,7 +246,9 @@ export const docsDense = {
     target:
       'Link target attribute, only when href provided. target="_blank" auto-adds noopener noreferrer.',
     rel: 'Link relationship tokens. noopener noreferrer are merged for target="_blank".',
-    isDisabled: 'Disabled state; sets aria-disabled.',
-    isSelected: 'Selected state; sets aria-selected.',
+    isDisabled:
+      'Disabled state; interactive rows stay keyboard-reachable and cannot activate.',
+    isSelected: 'Selected state; sets aria-current="true".',
+    itemKey: "The row's identity for List animatedLayout and the key a reorderable List's onReorder reports; a row without one changes at once and has no reorder handle.",
   },
 };

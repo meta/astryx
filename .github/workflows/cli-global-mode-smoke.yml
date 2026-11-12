@@ -1,0 +1,68 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# CLI global mode smoke test, started by hand. Packs the CLI and Core from the
+# commit it runs on, installs the packed CLI for the computer with npm, and
+# runs .github/scripts/cli-global-mode-smoke.mjs on macOS, Windows, and Linux.
+# It covers the rows of AST-081's global and project table that depend on an
+# operating system's own file system (G25, G26), which the in-repo tests check
+# only for their path rules. It never runs on pull requests.
+name: CLI Global Mode Smoke (manual)
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Pack CLI and Core
+        run: |
+          mkdir -p "$RUNNER_TEMP/packs"
+          pnpm -F @astryxdesign/build build
+          pnpm -F @astryxdesign/core pack --pack-destination "$RUNNER_TEMP/packs"
+          pnpm -F @astryxdesign/cli pack --pack-destination "$RUNNER_TEMP/packs"
+          ls -la "$RUNNER_TEMP/packs"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packs
+          path: ${{ runner.temp }}/packs/*.tgz
+          if-no-files-found: error
+
+  smoke:
+    needs: pack
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/scripts/cli-global-mode-smoke.mjs
+            .nvmrc
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@v8
+        with:
+          name: packs
+          path: packs
+      - name: Smoke test
+        run: node .github/scripts/cli-global-mode-smoke.mjs --packs packs --out results-${{ matrix.os }}.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: results-${{ matrix.os }}
+          path: results-${{ matrix.os }}.json

@@ -95,7 +95,8 @@ own ranking and output, and template owners own what each template is.
   next best page templates, at most two, each with its scaffold command.
 - **FR8 — The kit fills the template.** Build MUST list the blocks that fill
   the start before the components, and name the always-on frame and
-  foundation components.
+  foundation components. The order of the listed blocks follows
+  `spec:AST-083`.
 - **FR9 — An existing page is kept.** Build's text output MUST tell a builder
   who is changing a page they already have to keep it and use only the blocks
   and components.
@@ -123,7 +124,10 @@ own ranking and output, and template owners own what each template is.
   inside a comment, a string, or a template literal is text and names nothing. A
   bare specifier names one package, by its scope and name (`@scope/name`) or by
   its first segment; a Node built-in module, a relative or absolute path, a `#`
-  subpath import, and a URL name none.
+  subpath import, and a URL name none. A specifier that starts with `~/` is a
+  path alias and names no package, because an npm package name has no `~`; so
+  does any other specifier that is not an npm package name, such as
+  `@/components`.
 - **FR15 — The project declares what its package.json files list.** The packages
   a project declares MUST be the union of the `dependencies`, `devDependencies`,
   `peerDependencies`, and `optionalDependencies` of every package.json from the
@@ -200,12 +204,20 @@ own ranking and output, and template owners own what each template is.
   `missingPackages`, and `installCommand` carry (which packages, which ranges,
   and whether there is a command), as ranking decides values under FR11;
   `spec:AST-017` classifies a change in those values.
+- **FR23 — Docs and themes point to search.** A build kit has
+  no doc or theme group. With `--type doc` or `--type theme`, build MUST return
+  what it returns without the note: the empty kit for a query, the playbook
+  without one, with the same stdout, JSON response and exit status. In text
+  mode, with or without a query, build MUST also print one stderr note naming
+  `astryx search <query> --type doc` or `--type theme`; JSON mode prints no
+  note.
 
 ### Platform support
 
 - Supported floor: every shell and package manager the CLI already supports.
-  Commands are printed with the project's run prefix in text and without it in
-  JSON, as the CLI does for every command it prints; the install command
+  Commands are printed in text with the command name `spec:AST-081` FR5
+  picks, and without it in JSON, as the CLI does for every command it prints;
+  the install command
   (FR17) is the package manager's own and reads the same in both. The common
   shells an install command runs in as printed (FR18) are sh-compatible shells
   such as bash and zsh, fish, PowerShell (Windows PowerShell 5.1 and PowerShell
@@ -247,7 +259,7 @@ This record changes these surfaces:
 | FR9        | CLI text tests                                  | any page build                                                                                                                                                                                                               | Text without the keep-your-page line                                                                                                                                   |
 | FR10, FR11 | Response type and build tests                   | the canonical response type, the response docs, and existing fields on a page build                                                                                                                                          | A missing recommendation field, or an existing field whose shape changes                                                                                               |
 | FR13       | Playbook and agent docs tests                   | the playbook steps and the generated agent docs block                                                                                                                                                                        | A surface that tells builders to compose a page from primitives before a template                                                                                      |
-| FR14       | Readiness fixture tests                         | every import form, a type-only import, and a scoped subpath; an import inside a comment, a string, and a template literal; a Node built-in, a relative path, and a URL                                                       | An import inside a comment or a string that counts, or a real import that does not                                                                                     |
+| FR14       | Readiness fixture tests                         | every import form, a type-only import, and a scoped subpath; an import inside a comment, a string, and a template literal; a Node built-in, a relative path, a URL, and a `~/` path alias                                    | An import inside a comment or a string that counts, a path alias that counts as a package, or a real import that does not                                              |
 | FR15       | Readiness fixture tests                         | a package declared only at the workspace root; one in each dependency field; a target in a nested package; a package.json above the workspace root; no package.json                                                          | A declared package reported missing, or a package.json above the workspace root that counts                                                                            |
 | FR16       | Readiness fixture tests                         | a source that imports an Astryx package and a framework package the project does not declare                                                                                                                                 | An undeclared package left out of `missingPackages` because of its name                                                                                                |
 | FR17       | Readiness fixture tests                         | a lockfile only at the workspace root; a `packageManager` field beside another lockfile; two lockfiles and a workspace file; no lockfile                                                                                     | A command in a package manager the deciding directory does not name                                                                                                    |
@@ -256,6 +268,7 @@ This record changes these surfaces:
 | FR20       | Readiness fixture tests                         | a source that imports StyleX at run time and one that imports only its types, with and without a declared compiler                                                                                                           | A missing compiler with no note, a note beside a declared compiler or for a type-only import, or a compiler in the install command                                     |
 | FR21       | Build kit and template copy tests               | the start and each alternative against the receipt for the same template and directory; default and `--verbose` text                                                                                                         | A recommended template without the fields, a value the receipt would not carry, an empty `notes` on a build entry, or a field the text never shows                     |
 | FR22       | CLI exit-code and response type tests           | a scaffold and a build with packages and a compiler missing                                                                                                                                                                  | A changed exit status, or an existing field whose name or type changes                                                                                                 |
+| FR23       | CLI text and JSON tests                         | `--type doc` and `--type theme`, with and without a query, in text and JSON mode; `--type component`                                                                                                                         | A note on stdout, a second note, a note in JSON mode or for a kind the kit has, or stdout, JSON or exit status that differs from the same build without the note       |
 
 ## Decision log
 

@@ -25,6 +25,12 @@ import {
 /** @typedef {{recipe: typeof PALETTE_RECIPE, status: 'candidate', request: NormalizedRequest, families: GeneratedFamily[], coordination: TonalPaletteCoordinationDiagnostics[], errors: {familyId: string, message: string}[]}} PaletteGenerationResult */
 
 export const PALETTE_RECIPE = 'astryx-oklch-v1';
+/**
+ * Identity of this generator implementation. `PALETTE_RECIPE` names the
+ * normative algorithm; this names the code that ran it, so a receipt can tell
+ * two implementations of one recipe apart.
+ */
+export const PALETTE_GENERATOR_VERSION = 'palette-generator-v1';
 export const PALETTE_BLACK = '#000000';
 export const PALETTE_WHITE = '#ffffff';
 export const DEFAULT_21_STOPS = Object.freeze([
@@ -97,8 +103,38 @@ export function parseStopList(input) {
   return validateStops(values.map(Number));
 }
 
-/** @param {string} strategy @returns {PaletteMode[]} */
-function modesForStrategy(strategy) {
+/**
+ * The fields the generator reads from a request, a family and an anchor
+ * (see TonalPaletteGenerationInput); any other field changes nothing.
+ */
+export const GENERATION_INPUT_KEYS = Object.freeze([
+  'vibrancy',
+  'neutralProfile',
+  'modeStrategy',
+  'stops',
+  'families',
+]);
+export const FAMILY_INPUT_KEYS = Object.freeze([
+  'id',
+  'name',
+  'seed',
+  'kind',
+  'anchors',
+]);
+export const ANCHOR_INPUT_KEYS = Object.freeze([
+  'mode',
+  'stop',
+  'color',
+  'policy',
+  'maxDeltaE',
+]);
+
+/**
+ * The modes a mode strategy generates.
+ * @param {string} strategy
+ * @returns {PaletteMode[]}
+ */
+export function modesForStrategy(strategy) {
   if (strategy === 'light-only') return ['light'];
   if (strategy === 'dark-only') return ['dark'];
   if (strategy === 'light-and-dark') return ['light', 'dark'];

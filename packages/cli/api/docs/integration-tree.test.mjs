@@ -14,6 +14,7 @@ import {loadDocsCatalog} from './_adapter.mjs';
 import {search} from '../search/search.mjs';
 import {checkDocsTree} from '../doctor/doctor.mjs';
 import {integrationDocConflicts} from '../integration/authoring-checks.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -133,7 +134,7 @@ function scaffold(files) {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-integration-tree-test-'),
+    path.join(REPO_ROOT, '.astryx-integration-tree-test-'),
   );
 });
 
@@ -187,6 +188,28 @@ describe('integration docs in the docs tree', () => {
     expect(
       top.data.slots[0].children.map((/** @type {any} */ c) => c.route),
     ).toEqual(['acme/setup', 'acme/deploy']);
+  }, SLOW);
+
+  it('renders a placed guide summary once, so an escaped token stays written', async () => {
+    scaffold({
+      ...kit(),
+      'deploy.doc.mjs': guide('deploy', {
+        description: 'Show the syntax {@@pm run build} beside {@pm run build}.',
+        placement: {parent: 'namespace:acme', slot: 'guides', order: 2},
+      }),
+    });
+    const top = await docs('acme', undefined, {cwd: tmpDir});
+    const deploy = top.data.slots[0].children.find((/** @type {any} */ c) => c.route === 'acme/deploy');
+    expect(deploy.summary).toMatch(/^Show the syntax \{@pm run build\} beside `\S+ run build`\.$/);
+  }, SLOW);
+
+  it('renders a flat topic summary once, so an escaped token stays written', async () => {
+    scaffold({
+      ...kit(),
+      'notes.doc.mjs': {...kit()['notes.doc.mjs'], description: 'Show the syntax {@@pm run build} beside {@pm run build}.'},
+    });
+    const listed = await docs('guides', undefined, {cwd: tmpDir});
+    expect(JSON.stringify(listed.data)).toContain('Show the syntax {@pm run build} beside `');
   }, SLOW);
 
   it('reads a placed guide one level at a time, with its links resolved', async () => {
@@ -246,7 +269,7 @@ describe('integration docs in the docs tree', () => {
     });
     scaffold({
       ...kit(),
-      'unorganized.doc.mjs': {...NAMESPACE, name: 'unorganized', title: 'Mine', summary: 'Mine.'},
+      'guides.doc.mjs': {...NAMESPACE, name: 'guides', title: 'Mine', summary: 'Mine.'},
       'use-a-theme.doc.mjs': {...NAMESPACE, name: 'use-a-theme', title: 'Acme use-a-theme', summary: 'Acme use-a-theme.'},
       'cli.doc.mjs': flat('cli'),
     });
@@ -254,26 +277,26 @@ describe('integration docs in the docs tree', () => {
     expect(listed.meta.namespaces).toEqual(
       expect.arrayContaining([
         expect.objectContaining({topic: 'cli', package: '@astryxdesign/cli'}),
-        expect.objectContaining({topic: 'unorganized', package: '@astryxdesign/cli'}),
+        expect.objectContaining({topic: 'guides', package: '@astryxdesign/cli'}),
       ]),
     );
-    expect(listed.meta.namespaces.filter(n => ['use-a-theme', 'unorganized'].includes(n.topic) && n.package === '@acme/kit')).toEqual([]);
+    expect(listed.meta.namespaces.filter(n => ['use-a-theme', 'guides'].includes(n.topic) && n.package === '@acme/kit')).toEqual([]);
     expect(listed.data.map(entry => entry.topic)).not.toContain('cli');
     // Each name opens the CLI's doc, and a CLI topic keeps its home.
     expect((await docs('cli', undefined, {cwd: tmpDir})).data).toMatchObject({route: 'cli', package: '@astryxdesign/cli'});
-    expect((await docs('unorganized', undefined, {cwd: tmpDir})).data).toMatchObject({route: 'unorganized', package: '@astryxdesign/cli'});
+    expect((await docs('guides', undefined, {cwd: tmpDir})).data).toMatchObject({route: 'guides', package: '@astryxdesign/cli'});
     const tokens = await docs('use-a-theme', undefined, {cwd: tmpDir});
     expect(tokens.type).toBe('docs.detail');
-    expect(tokens.data.links.up).toBe('astryx docs unorganized');
+    expect(tokens.data.links.up).toBe('astryx docs guides');
     // The project doctor and the package doctor both name the claims.
     const check = await checkDocsTree({docsCatalog: await loadDocsCatalog(tmpDir)});
     expect(check.status).toBe('warn');
-    expect(check.message).toContain('takes the route "unorganized", which the CLI\'s own docs keep');
+    expect(check.message).toContain('takes the route "guides", which the CLI\'s own docs keep');
     expect(check.message).toContain('takes the route "use-a-theme"');
     expect(check.message).toContain('both have the route "cli"');
     const result = await integrationDocConflicts('@acme/kit', {cwd: tmpDir});
     const graph = result.data.issues.filter(issue => issue.code === 'invalid_doc_graph').map(issue => issue.message).join('\n');
-    expect(graph).toContain('takes the route "unorganized"');
+    expect(graph).toContain('takes the route "guides"');
     expect(graph).toContain('takes the route "use-a-theme"');
     expect(graph).toContain('route "cli"');
   }, SLOW);
@@ -294,16 +317,16 @@ describe('integration docs in the docs tree', () => {
     const nested = path.join(tmpDir, 'node_modules', '@acme', 'kit', 'docs', 'nested');
     fs.mkdirSync(nested, {recursive: true});
     fs.writeFileSync(
-      path.join(nested, 'caps-unorganized.doc.mjs'),
-      `export const docs = ${JSON.stringify(flat('Unorganized'), null, 2)};\n`,
+      path.join(nested, 'caps-guides.doc.mjs'),
+      `export const docs = ${JSON.stringify(flat('Guides'), null, 2)};\n`,
     );
     fs.writeFileSync(
       path.join(nested, 'caps-use-a-theme.doc.mjs'),
       `export const docs = ${JSON.stringify(flat('USE-A-THEME'), null, 2)};\n`,
     );
     expect((await docs('cli', undefined, {cwd: tmpDir})).data).toMatchObject({route: 'cli', package: '@astryxdesign/cli'});
-    expect((await docs('unorganized', undefined, {cwd: tmpDir})).data).toMatchObject({route: 'unorganized', package: '@astryxdesign/cli'});
-    expect((await docs('theme', undefined, {cwd: tmpDir, index: true})).data.links.up).toBe('astryx docs unorganized');
+    expect((await docs('guides', undefined, {cwd: tmpDir})).data).toMatchObject({route: 'guides', package: '@astryxdesign/cli'});
+    expect((await docs('theme', undefined, {cwd: tmpDir, index: true})).data.links.up).toBe('astryx docs guides');
     const listed = await docs(undefined, undefined, {cwd: tmpDir});
     expect(listed.data.map(entry => entry.topic.toLowerCase())).not.toContain('cli');
     // Search does not offer a topic whose route another doc owns.
@@ -314,10 +337,10 @@ describe('integration docs in the docs tree', () => {
     const check = await checkDocsTree({docsCatalog: await loadDocsCatalog(tmpDir)});
     expect(check.status).toBe('warn');
     expect(check.message).toContain('route "CLI"');
-    expect(check.message).toContain('takes the route "Unorganized"');
+    expect(check.message).toContain('takes the route "Guides"');
     // `USE-A-THEME` is the CLI's topic `use-a-theme` in another spelling: the CLI's wins.
     const tokens = await docs('USE-A-THEME', undefined, {cwd: tmpDir, index: true});
-    expect(tokens.data).toMatchObject({name: 'use-a-theme', links: {up: 'astryx docs unorganized'}});
+    expect(tokens.data).toMatchObject({name: 'use-a-theme', links: {up: 'astryx docs guides'}});
     expect(tokens.data.title).not.toBe('Acme USE-A-THEME');
     const result = await integrationDocConflicts('@acme/kit', {cwd: tmpDir});
     const graph = result.data.issues
@@ -325,7 +348,7 @@ describe('integration docs in the docs tree', () => {
       .map(issue => issue.message)
       .join('\n');
     expect(graph).toContain('route "CLI"');
-    expect(graph).toContain('takes the route "Unorganized"');
+    expect(graph).toContain('takes the route "Guides"');
   }, SLOW);
 
   it("keeps a replaced name for the topic that replaces it, over another integration's namespace", async () => {
@@ -405,6 +428,39 @@ describe('integration docs in the docs tree', () => {
     expect(check.message).not.toContain('names no doc');
   }, SLOW);
 
+  it("opens the CLI's links to a topic an integration replaces under the same name", async () => {
+    scaffold({
+      ...kit(),
+      'theme.doc.mjs': {
+        type: 'generic',
+        name: 'theme',
+        title: 'Acme theme',
+        description: 'Theming the Acme kit.',
+        replaces: 'theme',
+        sections: [{title: 'One', content: [{type: 'prose', text: 'One.'}]}],
+      },
+      'getting-started.doc.mjs': {
+        type: 'generic',
+        name: 'getting-started',
+        title: 'Acme getting started',
+        description: 'Starting with the Acme kit.',
+        replaces: 'getting-started',
+        sections: [{title: 'One', content: [{type: 'prose', text: 'One.'}]}],
+      },
+    });
+    const check = await checkDocsTree({
+      docsCatalog: await loadDocsCatalog(tmpDir),
+    });
+    expect(check.message).not.toContain('"generic:theme" names no doc');
+    expect(check.message).not.toContain(
+      '"generic:getting-started" names no doc',
+    );
+    expect(check).toMatchObject({id: 'docs-tree', status: 'pass'});
+    expect((await docs('theme', undefined, {cwd: tmpDir})).data.title).toBe(
+      'Acme theme',
+    );
+  }, SLOW);
+
   it("keeps the CLI's routes from a replacement that answers to one, in one package or across a chain", async () => {
     const flat = (/** @type {string} */ name, /** @type {object} */ extra = {}) => ({
       type: 'generic',
@@ -420,9 +476,9 @@ describe('integration docs in the docs tree', () => {
     scaffold({
       ...kit(),
       'a-cli.doc.mjs': flat('cli'),
-      'a-unorganized.doc.mjs': flat('Unorganized'),
+      'a-guides.doc.mjs': flat('Guides'),
       'z-b2.doc.mjs': flat('b2', {replaces: 'cli'}),
-      'z-u2.doc.mjs': flat('u2', {replaces: 'Unorganized'}),
+      'z-u2.doc.mjs': flat('u2', {replaces: 'Guides'}),
     });
     // Another package carries the chain on: c3 replaces b2, which replaced cli.
     const three = path.join(tmpDir, 'node_modules', '@acme', 'three');
@@ -440,8 +496,8 @@ describe('integration docs in the docs tree', () => {
     for (const name of ['cli', 'CLI']) {
       expect((await docs(name, undefined, {cwd: tmpDir})).data).toMatchObject({route: 'cli', package: '@astryxdesign/cli'});
     }
-    for (const name of ['unorganized', 'UNORGANIZED']) {
-      expect((await docs(name, undefined, {cwd: tmpDir})).data).toMatchObject({route: 'unorganized', package: '@astryxdesign/cli'});
+    for (const name of ['guides', 'GUIDES']) {
+      expect((await docs(name, undefined, {cwd: tmpDir})).data).toMatchObject({route: 'guides', package: '@astryxdesign/cli'});
     }
     // The replacement still answers to its own names.
     for (const name of ['b2', 'c3']) {
@@ -456,7 +512,7 @@ describe('integration docs in the docs tree', () => {
     const check = await checkDocsTree({docsCatalog: await loadDocsCatalog(tmpDir)});
     expect(check.status).toBe('warn');
     expect(check.message).toContain('The topic "c3" answers to "cli" through replaces');
-    expect(check.message).toContain('The topic "u2" answers to "unorganized" through replaces');
+    expect(check.message).toContain('The topic "u2" answers to "guides" through replaces');
     const inPackage = await integrationDocConflicts('@acme/kit', {cwd: tmpDir});
     const graph = inPackage.data.issues
       .filter(issue => issue.code === 'invalid_doc_graph')
@@ -519,7 +575,7 @@ describe('integration docs in the docs tree', () => {
     });
     const {data} = await docs('theme', 'acme-theming-notes', {cwd: tmpDir});
     // `generic:integrations` is the extension's own guide, never the CLI's
-    // `cli/integrations`; a provider-qualified link reaches the CLI's topic.
+    // `authoring`; a provider-qualified link reaches the CLI's topic.
     expect(data.content[0].text).toBe(
       'See `astryx docs acme/integrations`, and `astryx docs tokens` for the tokens.',
     );
@@ -568,5 +624,27 @@ describe('integration docs in the docs tree', () => {
     });
     expect(check.status).toBe('warn');
     expect(check.message).toContain('both have the route "cli"');
+  }, SLOW);
+
+  it('says what to write for a link that names a doc by its bare name, and when no doc has that name', async () => {
+    scaffold({
+      ...kit(),
+      'bare.doc.mjs': guide('bare', {
+        sections: [
+          {
+            title: 'Overview',
+            content: [{type: 'prose', text: 'Read {@link deploy}, then {@link nosuchtopic}.'}],
+          },
+        ],
+      }),
+    });
+    const result = await integrationDocConflicts('@acme/kit', {cwd: tmpDir});
+    const graph = result.data.issues.filter(issue => issue.code === 'invalid_doc_graph').map(issue => issue.message);
+    expect(graph).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('"deploy" is a topic: write `{@link generic:deploy}`.'),
+        expect.stringContaining('no topic is named "nosuchtopic"'),
+      ]),
+    );
   }, SLOW);
 });

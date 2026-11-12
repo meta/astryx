@@ -4,14 +4,13 @@ import {afterEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {resolveThemeImports} from './theme-imports.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 /** @type {string[]} */
 const dirs = [];
 
 function project() {
-  const dir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-theme-imports-'),
-  );
+  const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-theme-imports-'));
   dirs.push(dir);
   fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app"}\n');
   return dir;
@@ -148,7 +147,7 @@ describe('resolveThemeImports', () => {
     });
 
     expect(() => resolveThemeImports(theme, {cwd: dir})).toThrow(
-      /astryx theme build src\/themes\/ocean\/oceanTheme\.ts/i,
+      / theme build src\/themes\/ocean\/oceanTheme\.ts`/i,
     );
     fs.writeFileSync(
       path.join(sourceDir, 'ocean.js'),
@@ -166,7 +165,9 @@ describe('resolveThemeImports', () => {
     expect(() => resolveThemeImports(discovered(), {cwd: dir})).toThrow(
       expect.objectContaining({
         name: 'Error',
-        message: expect.stringContaining('npm install @acme/themes'),
+        message: expect.stringMatching(
+          /`(npm install|pnpm add|yarn add|bun add) @acme\/themes`/,
+        ),
       }),
     );
   });

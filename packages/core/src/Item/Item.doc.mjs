@@ -27,7 +27,11 @@ export const docs = {
   },
   theming: {
     targets: [
-      {className: 'astryx-item', visualProps: ['density', 'align']},
+      {
+        className: 'astryx-item',
+        visualProps: ['density', 'align'],
+        states: ['highlighted', 'selected', 'disabled'],
+      },
       {className: 'astryx-item-swipe-panel', visualProps: ['side']},
       {className: 'astryx-item-swipe-action', visualProps: ['variant']},
     ],
@@ -49,7 +53,7 @@ export const docs = {
       {
         name: '--_item-inset-inline',
         description:
-          'Inline inset of the row. Item derives its paddingInline from this variable, and List reads it to cancel the inset when edgeCompensation="inline". Set paddingInline on `item` in a theme and both stay in sync.',
+          'Inline inset of the row. Item derives its paddingInline from this variable, and List reads it to place rows for its edge treatments (edge="flush", "outset", and "bleed"). Set paddingInline on `item` in a theme and both stay in sync.',
         default: 'var(--spacing-2) (var(--spacing-3) for density="spacious")',
         private: true,
       },
@@ -118,8 +122,9 @@ export const docs = {
         },
         {
           name: 'align',
-          type: "'center' | 'start'",
-          description: 'Vertical alignment of start/end content slots.',
+          type: "'center' | 'start' | 'first-line'",
+          description:
+            "Vertical alignment of start/end content slots. 'center' centers each slot on the whole text block; 'start' lines up slot tops with the text's top; 'first-line' centers each slot on the label's first line, so a small mark stays level with the first line of a wrapped label. A slot taller than that line moves the text down. The `item` theme target reflects the value as `align`.",
           default: "'center'",
         },
         {
@@ -191,7 +196,8 @@ export const docs = {
         {
           name: 'isDisabled',
           type: 'boolean',
-          description: 'Disabled state.',
+          description:
+            'Disabled state. Interactive rows stay keyboard-reachable but cannot activate.',
           default: 'false',
         },
         {
@@ -204,19 +210,30 @@ export const docs = {
           name: 'swipeBehavior',
           type: "'reveal' | 'commit'",
           description:
-            'What a swipe does. `reveal` rests the row open with every entry a real button and fires the outermost on a long drag or a fling; `commit` slides the row out and fires the outermost on release, with nothing resting and a presentational panel. `commit` fits one entry per side.',
+            'What a swipe does. `reveal` rests the row open with every entry a real button after a fling or a drag past half the panel. A long drag fires the outermost; on a side with two or more entries, only a drag that starts on the open row fires it. `commit` slides the row out and fires the one entry of a side on a release past the commit point. Nothing rests, and the panel is presentational. On a side with two or more entries, `commit` fires none. A fling never fires an entry.',
           default: "'reveal'",
         },
         {
           name: 'ref',
-          type: 'React.Ref<HTMLDivElement>',
-          description: 'Ref forwarded to the root element.',
+          type: 'React.Ref<HTMLElement>',
+          description:
+            'Ref forwarded to the root element, whose type follows `as`.',
         },
         {
           name: 'xstyle',
           type: 'StyleXStyles',
           description:
-            'StyleX styles for layout customization. Must be a stylex.create() value.',
+            'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'CSS class name(s) for the root element.',
+        },
+        {
+          name: 'style',
+          type: 'React.CSSProperties',
+          description: 'Inline styles for the root element.',
         },
         {
           name: 'data-testid',
@@ -248,7 +265,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use align="start" when start or end content is taller than a single line of text.',
+          'Use align="first-line" when a wrapping label sits beside a small mark (a status dot, a radio, a timestamp) that belongs to its first line. Use align="start" to line up the tops of a tall slot and the text.',
       },
       {
         guidance: true,
@@ -321,7 +338,8 @@ export const docsZh = {
         endContent:
           '在标签/描述区域之后渲染的内容，例如徽章、元数据、时间戳或操作按钮。',
         as: '根元素的 HTML 元素。',
-        align: '起始/结束内容插槽的垂直对齐方式。',
+        align:
+          "起始/结束内容插槽的垂直对齐方式：'center'（默认）、'start'（顶部对齐）或 'first-line'（以标签第一行为中心）。",
         density:
           '间距密度。"compact" 使用 4px 块内距，"balanced" 使用 8px，"spacious" 使用 12px 块内距和内联内距。',
         labelLines: '标签截断前的最大行数。',
@@ -363,7 +381,8 @@ export const docsZh = {
       },
       {
         guidance: true,
-        description: '当起始或结束内容高于单行文本时使用 align="start"。',
+        description:
+          '当换行标签旁边是属于其第一行的小标记（状态点、单选按钮、时间戳）时，使用 align="first-line"。使用 align="start" 让较高插槽与文本顶部对齐。',
       },
       {
         guidance: false,
@@ -426,7 +445,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'align="start" when start/end content is taller than one text line.',
+          'align="first-line" for a small mark beside a wrapping label; align="start" to top-align a tall slot with the text.',
       },
       {
         guidance: false,
@@ -458,7 +477,8 @@ export const docsDense = {
         endContent:
           'Content after label/description: badges, timestamps, actions.',
         as: 'Root HTML element.',
-        align: 'Vertical alignment of start/end content slots.',
+        align:
+          "Start/end slot alignment: 'center' (default), 'start' (tops), or 'first-line' (centered on the label's first line).",
         density:
           'Spacing: "compact" (4px), "balanced" (8px), or "spacious" (12px).',
         labelLines: 'Max label lines before truncation.',

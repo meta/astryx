@@ -38,7 +38,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useEffect,
@@ -53,7 +52,16 @@ import {CheckboxInput} from '../../../CheckboxInput';
 import {mergeRefs} from '../../../utils';
 import type {TablePlugin, TableColumn, BodyRowRenderProps} from '../../types';
 import {pixel} from '../../columnUtils';
-import {useTranslator} from '../../../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/selection/useTableSelection.generated';
+import {createSharedContext} from '../../../utils/sharedContext';
+
+registerEnglishFallback(english);
+import {registerFixedHeightColumn} from '../../tableColumnAdmission';
+import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
 
 // =============================================================================
 // Config Type
@@ -184,7 +192,11 @@ function applyRowSelectionStyle(
 // =============================================================================
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const SelectionStoreContext = createContext<SelectionStore<any> | null>(null);
+const SelectionStoreContext = createSharedContext<SelectionStore<any> | null>(
+  'SelectionStoreContext',
+  1,
+  null,
+);
 SelectionStoreContext.displayName = 'SelectionStoreContext';
 
 // =============================================================================
@@ -235,7 +247,7 @@ function SelectAllCheckboxInner<T extends Record<string, unknown>>({
 }: {
   store: SelectionStore<T>;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const getSnapshot = useCallback(() => {
     const config = store.getConfig();
     const allSelected = config.getIsAllSelected();
@@ -287,7 +299,7 @@ function SelectionCellContentInner<T extends Record<string, unknown>>({
   store: SelectionStore<T>;
   item: T;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const config = store.getConfig();
   const isSelected = useIsItemSelected(store, item);
   const selectable = config.getIsItemSelectable?.(item) ?? true;
@@ -387,8 +399,9 @@ export function useTableSelection<T extends Record<string, unknown>>(
     [],
   );
 
-  return useMemo(
+  const plugin = useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'flat',
       transformTableContext(children: ReactNode) {
         return (
           <SelectionStoreContext value={store}>
@@ -398,6 +411,7 @@ export function useTableSelection<T extends Record<string, unknown>>(
       },
 
       transformColumns(columns: TableColumn<T>[]) {
+        registerFixedHeightColumn(selectionColumn);
         return [selectionColumn, ...columns];
       },
 
@@ -440,4 +454,5 @@ export function useTableSelection<T extends Record<string, unknown>>(
     }),
     [store, selectionColumn],
   );
+  return registerCountIndependentPlugin(plugin);
 }

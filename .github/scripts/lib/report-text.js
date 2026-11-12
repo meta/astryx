@@ -20,7 +20,7 @@ function inline(value) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/[|[\]`*_~]/g, (ch) => `\\${ch}`);
+    .replace(/[|[\]`*_~]/g, ch => `\\${ch}`);
 }
 
 /** A finite number, or the fallback. */
@@ -39,4 +39,65 @@ function safeUrl(value) {
   return /^https?:\/\/[^\s<>"'()\\]+$/.test(url) ? url : null;
 }
 
-module.exports = {inline, num, safeUrl};
+/**
+ * A measured byte count as text (`900B`, `1.5KB`, `2.25MB`), or N/A. Shared by
+ * every size the PR report shows.
+ */
+function sizeText(bytes) {
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return 'N/A';
+  if (Math.abs(bytes) < 1024) return `${bytes} B`;
+  if (Math.abs(bytes) < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} kB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/**
+ * GitHub refuses a comment over 65,536 characters, and the PR report then
+ * posts nothing at all. The report stays under this budget, leaving room for
+ * the markers and footer added around it.
+ */
+const COMMENT_BUDGET = 60000;
+
+/**
+ * Markdown cut at a line boundary to fit `budget` characters: it closes any
+ * disclosure left open, ends a table it cut, and says how many lines did not
+ * fit. Markdown within the budget is returned unchanged.
+ */
+function fitToBudget(markdown, budget) {
+  const text = String(markdown ?? '');
+  if (text.length <= budget) return text;
+  const lines = text.split('\n');
+  // Room for the closing tags and the note.
+  const reserve = 400;
+  const kept = [];
+  let size = 0;
+  for (const line of lines) {
+    if (size + line.length + 1 > budget - reserve) break;
+    kept.push(line);
+    size += line.length + 1;
+  }
+  // A cut inside a disclosure nested in another (one component's issues in
+  // the accessibility section) backs up to before that nested disclosure, so
+  // the note shows in the outer section rather than hidden in a component.
+  const opened = [];
+  kept.forEach((line, index) => {
+    const opens = (line.match(/<details[\s>]/g) || []).length;
+    const closes = (line.match(/<\/details>/g) || []).length;
+    for (let i = 0; i < opens; i++) opened.push(index);
+    for (let i = 0; i < closes; i++) opened.pop();
+  });
+  while (opened.length > 1) kept.length = opened.pop();
+  const omitted = lines
+    .slice(kept.length)
+    .filter(line => line.trim() !== '').length;
+  const keptText = kept.join('\n');
+  const open = opened.length;
+  const tail = [
+    '',
+    `_${num(omitted).toLocaleString('en-US')} more line${omitted === 1 ? '' : 's'} did not fit GitHub's comment limit; the run's full report has them._`,
+    '',
+    ...Array.from({length: Math.max(0, open)}, () => '</details>\n'),
+  ];
+  return `${keptText}\n${tail.join('\n')}\n`;
+}
+
+module.exports = {COMMENT_BUDGET, fitToBudget, inline, num, safeUrl, sizeText};

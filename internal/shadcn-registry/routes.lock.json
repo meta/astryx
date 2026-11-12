@@ -466,6 +466,13 @@
       "aliases": []
     },
     {
+      "name": "component-info-tip",
+      "path": "components/info-tip",
+      "aliases": [
+        "components/lab/info-tip"
+      ]
+    },
+    {
       "name": "component-input-group",
       "path": "components/input-group",
       "aliases": []
@@ -561,6 +568,16 @@
       "aliases": []
     },
     {
+      "name": "component-lab-chat-virtualizer",
+      "path": "components/lab/chat-virtualizer",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-circle-check-indicator",
+      "path": "components/lab/circle-check-indicator",
+      "aliases": []
+    },
+    {
       "name": "component-lab-circular-progress",
       "path": "components/lab/circular-progress",
       "aliases": []
@@ -591,6 +608,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-dialog-hero-header",
+      "path": "components/lab/dialog-hero-header",
+      "aliases": []
+    },
+    {
       "name": "component-lab-diff-viewer",
       "path": "components/lab/diff-viewer",
       "aliases": []
@@ -601,8 +623,8 @@
       "aliases": []
     },
     {
-      "name": "component-lab-info-tip",
-      "path": "components/lab/info-tip",
+      "name": "component-lab-line-clamp",
+      "path": "components/lab/line-clamp",
       "aliases": []
     },
     {
@@ -616,8 +638,18 @@
       "aliases": []
     },
     {
-      "name": "component-lab-mobile-tokenizer",
-      "path": "components/lab/mobile-tokenizer",
+      "name": "component-lab-navigation-screen",
+      "path": "components/lab/navigation-screen",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-navigation-stack",
+      "path": "components/lab/navigation-stack",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-page-control",
+      "path": "components/lab/page-control",
       "aliases": []
     },
     {
@@ -636,6 +668,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-selectable-card-group",
+      "path": "components/lab/selectable-card-group",
+      "aliases": []
+    },
+    {
       "name": "component-lab-stat",
       "path": "components/lab/stat",
       "aliases": []
@@ -643,6 +680,21 @@
     {
       "name": "component-lab-svg-icon",
       "path": "components/lab/svg-icon",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar",
+      "path": "components/lab/tab-bar",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar-item",
+      "path": "components/lab/tab-bar-item",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar-more-list",
+      "path": "components/lab/tab-bar-more-list",
       "aliases": []
     },
     {
@@ -688,6 +740,11 @@
     {
       "name": "component-lab-transfer-list-selector",
       "path": "components/lab/transfer-list-selector",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-weighted-svg-icon",
+      "path": "components/lab/weighted-svg-icon",
       "aliases": []
     },
     {
@@ -858,6 +915,21 @@
     {
       "name": "component-richtext-rich-text-editor",
       "path": "components/richtext/rich-text-editor",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-editor-auto-link-plugin",
+      "path": "components/richtext/rich-text-editor-auto-link-plugin",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-editor-toolbar",
+      "path": "components/richtext/rich-text-editor-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-view",
+      "path": "components/richtext/rich-text-view",
       "aliases": []
     },
     {
@@ -1328,6 +1400,11 @@
     {
       "name": "example-base-typeahead-custom-search-bar",
       "path": "examples/base-typeahead/custom-search-bar",
+      "aliases": []
+    },
+    {
+      "name": "example-base-typeahead-menu",
+      "path": "examples/base-typeahead/menu",
       "aliases": []
     },
     {
@@ -1955,6 +2032,16 @@
       "aliases": []
     },
     {
+      "name": "example-create-animator-playing-cards-in-plain-java-script",
+      "path": "examples/create-animator/playing-cards-in-plain-java-script",
+      "aliases": []
+    },
+    {
+      "name": "example-create-drag-to-snap-points-playing-card-in-plain-java-script",
+      "path": "examples/create-drag-to-snap-points/playing-card-in-plain-java-script",
+      "aliases": []
+    },
+    {
       "name": "example-date-input-clearable",
       "path": "examples/date-input/clearable",
       "aliases": []
@@ -2285,8 +2372,23 @@
       "aliases": []
     },
     {
+      "name": "example-info-tip-metric-definitions",
+      "path": "examples/info-tip/metric-definitions",
+      "aliases": []
+    },
+    {
+      "name": "example-info-tip-permission-notes",
+      "path": "examples/info-tip/permission-notes",
+      "aliases": []
+    },
+    {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-internationalization-provider-calendar",
+      "path": "examples/internationalization-provider/calendar",
       "aliases": []
     },
     {
@@ -2422,6 +2524,21 @@
     {
       "name": "example-link-with-tooltips",
       "path": "examples/link/with-tooltips",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-budget-allocation",
+      "path": "examples/list-input/budget-allocation",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-family-member-declaration",
+      "path": "examples/list-input/family-member-declaration",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-mailing-list",
+      "path": "examples/list-input/mailing-list",
       "aliases": []
     },
     {
@@ -3615,8 +3732,43 @@
       "aliases": []
     },
     {
+      "name": "example-use-animator-playing-cards",
+      "path": "examples/use-animator/playing-cards",
+      "aliases": []
+    },
+    {
+      "name": "example-use-announce-filter-result-count",
+      "path": "examples/use-announce/filter-result-count",
+      "aliases": []
+    },
+    {
       "name": "example-use-app-shell-mobile-custom-mobile-trigger",
       "path": "examples/use-app-shell-mobile/custom-mobile-trigger",
+      "aliases": []
+    },
+    {
+      "name": "example-use-calendar-constraints-hotel-booking-range",
+      "path": "examples/use-calendar-constraints/hotel-booking-range",
+      "aliases": []
+    },
+    {
+      "name": "example-use-calendar-days-month-grid",
+      "path": "examples/use-calendar-days/month-grid",
+      "aliases": []
+    },
+    {
+      "name": "example-use-calendar-navigation-month-pager",
+      "path": "examples/use-calendar-navigation/month-pager",
+      "aliases": []
+    },
+    {
+      "name": "example-use-clickable-container-clickable-project-card",
+      "path": "examples/use-clickable-container/clickable-project-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-clipboard-share-link",
+      "path": "examples/use-clipboard/share-link",
       "aliases": []
     },
     {
@@ -3625,13 +3777,73 @@
       "aliases": []
     },
     {
+      "name": "example-use-collator-locale-aware-name-sort",
+      "path": "examples/use-collator/locale-aware-name-sort",
+      "aliases": []
+    },
+    {
+      "name": "example-use-combobox-assign-to-field",
+      "path": "examples/use-combobox/assign-to-field",
+      "aliases": []
+    },
+    {
       "name": "example-use-container-reveal-reveal-on-hover-row-actions",
       "path": "examples/use-container-reveal/reveal-on-hover-row-actions",
       "aliases": []
     },
     {
+      "name": "example-use-direction-hook-usage",
+      "path": "examples/use-direction/hook-usage",
+      "aliases": []
+    },
+    {
+      "name": "example-use-drag-to-snap-points-playing-card-on-three-places",
+      "path": "examples/use-drag-to-snap-points/playing-card-on-three-places",
+      "aliases": []
+    },
+    {
+      "name": "example-use-focus-trap-quick-edit-panel",
+      "path": "examples/use-focus-trap/quick-edit-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-use-grid-focus-color-swatch-grid",
+      "path": "examples/use-grid-focus/color-swatch-grid",
+      "aliases": []
+    },
+    {
+      "name": "example-use-hotkeys-search-and-help-shortcuts",
+      "path": "examples/use-hotkeys/search-and-help-shortcuts",
+      "aliases": []
+    },
+    {
       "name": "example-use-hover-card-profile-preview",
       "path": "examples/use-hover-card/profile-preview",
+      "aliases": []
+    },
+    {
+      "name": "example-use-icon-status-row",
+      "path": "examples/use-icon/status-row",
+      "aliases": []
+    },
+    {
+      "name": "example-use-image-mode-photo-caption",
+      "path": "examples/use-image-mode/photo-caption",
+      "aliases": []
+    },
+    {
+      "name": "example-use-input-container-search-field-wrapper",
+      "path": "examples/use-input-container/search-field-wrapper",
+      "aliases": []
+    },
+    {
+      "name": "example-use-input-status-icon-coupon-code-status",
+      "path": "examples/use-input-status-icon/coupon-code-status",
+      "aliases": []
+    },
+    {
+      "name": "example-use-interactive-role-one-tile-four-roles",
+      "path": "examples/use-interactive-role/one-tile-four-roles",
       "aliases": []
     },
     {
@@ -3645,8 +3857,98 @@
       "aliases": []
     },
     {
+      "name": "example-use-lightbox-gallery-grid",
+      "path": "examples/use-lightbox/gallery-grid",
+      "aliases": []
+    },
+    {
+      "name": "example-use-link-component-article-cards",
+      "path": "examples/use-link-component/article-cards",
+      "aliases": []
+    },
+    {
+      "name": "example-use-linkify-links-in-a-comment-thread",
+      "path": "examples/use-linkify/links-in-a-comment-thread",
+      "aliases": []
+    },
+    {
+      "name": "example-use-list-focus-recent-files",
+      "path": "examples/use-list-focus/recent-files",
+      "aliases": []
+    },
+    {
+      "name": "example-use-locale-invoice-summary",
+      "path": "examples/use-locale/invoice-summary",
+      "aliases": []
+    },
+    {
+      "name": "example-use-merged-refs-auto-grow-text-area",
+      "path": "examples/use-merged-refs/auto-grow-text-area",
+      "aliases": []
+    },
+    {
+      "name": "example-use-multi-combobox-issue-labels",
+      "path": "examples/use-multi-combobox/issue-labels",
+      "aliases": []
+    },
+    {
+      "name": "example-use-outline-from-markdown-docs-article",
+      "path": "examples/use-outline-from-markdown/docs-article",
+      "aliases": []
+    },
+    {
+      "name": "example-use-overflow-editor-toolbar",
+      "path": "examples/use-overflow/editor-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "example-use-overlay-product-quick-view",
+      "path": "examples/use-overlay/product-quick-view",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-draggable-box",
+      "path": "examples/use-pan-gesture/a-draggable-box",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card-advanced",
+      "path": "examples/use-pan-gesture/a-playing-card-advanced",
+      "aliases": []
+    },
+    {
       "name": "example-use-popover-quick-actions",
       "path": "examples/use-popover/quick-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-power-search-config-filtered-directory-table",
+      "path": "examples/use-power-search-config/filtered-directory-table",
+      "aliases": []
+    },
+    {
+      "name": "example-use-press-feedback-pressable-card",
+      "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scroll-lock-full-screen-mobile-menu",
+      "path": "examples/use-scroll-lock/full-screen-mobile-menu",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scroll-overflow-filter-strip-edge-fades",
+      "path": "examples/use-scroll-overflow/filter-strip-edge-fades",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scrollable-area-activity-log-panel",
+      "path": "examples/use-scrollable-area/activity-log-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-use-snap-paging-onboarding-pages",
+      "path": "examples/use-snap-paging/onboarding-pages",
       "aliases": []
     },
     {
@@ -3660,8 +3962,23 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-column-settings-state-column-visibility-picker",
+      "path": "examples/use-table-column-settings-state/column-visibility-picker",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-columns-virtualization-wide-table",
+      "path": "examples/use-table-columns-virtualization/wide-table",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-grouped-rows-collapsible-groups",
       "path": "examples/use-table-grouped-rows/collapsible-groups",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-infinite-scroll-load-more-products",
+      "path": "examples/use-table-infinite-scroll/load-more-products",
       "aliases": []
     },
     {
@@ -3680,6 +3997,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-rows-virtualization-fixed-height-rows",
+      "path": "examples/use-table-rows-virtualization/fixed-height-rows",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-selection-state-table-selection-in-the-leading-mark",
+      "path": "examples/use-table-selection-state/table-selection-in-the-leading-mark",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-selection-table-bulk-actions",
       "path": "examples/use-table-selection/table-bulk-actions",
       "aliases": []
@@ -3687,6 +4014,11 @@
     {
       "name": "example-use-table-selection-table-floating-bulk-actions",
       "path": "examples/use-table-selection/table-floating-bulk-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-sortable-state-multi-sort-orders",
+      "path": "examples/use-table-sortable-state/multi-sort-orders",
       "aliases": []
     },
     {
@@ -3700,8 +4032,38 @@
       "aliases": []
     },
     {
+      "name": "example-use-theme-name-active-theme",
+      "path": "examples/use-theme-name/active-theme",
+      "aliases": []
+    },
+    {
       "name": "example-use-theme-token-values",
       "path": "examples/use-theme/token-values",
+      "aliases": []
+    },
+    {
+      "name": "example-use-toast-settings-saved",
+      "path": "examples/use-toast/settings-saved",
+      "aliases": []
+    },
+    {
+      "name": "example-use-translator-load-more-footer",
+      "path": "examples/use-translator/load-more-footer",
+      "aliases": []
+    },
+    {
+      "name": "example-use-tree-focus-keyboard-file-tree",
+      "path": "examples/use-tree-focus/keyboard-file-tree",
+      "aliases": []
+    },
+    {
+      "name": "example-use-truncation-tooltip-on-cut-off-text",
+      "path": "examples/use-truncation/tooltip-on-cut-off-text",
+      "aliases": []
+    },
+    {
+      "name": "example-use-typeahead-type-to-focus-a-country",
+      "path": "examples/use-typeahead/type-to-focus-a-country",
       "aliases": []
     },
     {
@@ -3725,6 +4087,36 @@
       "aliases": []
     },
     {
+      "name": "hook-create-animator",
+      "path": "hooks/create-animator",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-drag-to-snap-points",
+      "path": "hooks/create-drag-to-snap-points",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-pan-gesture",
+      "path": "hooks/create-pan-gesture",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-reorderable",
+      "path": "hooks/create-reorderable",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animated-layout",
+      "path": "hooks/use-animated-layout",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animator",
+      "path": "hooks/use-animator",
+      "aliases": []
+    },
+    {
       "name": "hook-use-announce",
       "path": "hooks/use-announce",
       "aliases": []
@@ -3732,6 +4124,21 @@
     {
       "name": "hook-use-app-shell-mobile",
       "path": "hooks/use-app-shell-mobile",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-constraints",
+      "path": "hooks/use-calendar-constraints",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-days",
+      "path": "hooks/use-calendar-days",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-navigation",
+      "path": "hooks/use-calendar-navigation",
       "aliases": []
     },
     {
@@ -3770,6 +4177,16 @@
       "aliases": []
     },
     {
+      "name": "hook-use-direction",
+      "path": "hooks/use-direction",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-drag-to-snap-points",
+      "path": "hooks/use-drag-to-snap-points",
+      "aliases": []
+    },
+    {
       "name": "hook-use-entry-animation",
       "path": "hooks/use-entry-animation",
       "aliases": []
@@ -3792,6 +4209,11 @@
     {
       "name": "hook-use-hover-card",
       "path": "hooks/use-hover-card",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-icon",
+      "path": "hooks/use-icon",
       "aliases": []
     },
     {
@@ -3840,6 +4262,21 @@
       "aliases": []
     },
     {
+      "name": "hook-use-lightbox",
+      "path": "hooks/use-lightbox",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-link-component",
+      "path": "hooks/use-link-component",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-linkify",
+      "path": "hooks/use-linkify",
+      "aliases": []
+    },
+    {
       "name": "hook-use-list-focus",
       "path": "hooks/use-list-focus",
       "aliases": []
@@ -3875,13 +4312,33 @@
       "aliases": []
     },
     {
+      "name": "hook-use-outline-from-markdown",
+      "path": "hooks/use-outline-from-markdown",
+      "aliases": []
+    },
+    {
       "name": "hook-use-overflow",
       "path": "hooks/use-overflow",
       "aliases": []
     },
     {
+      "name": "hook-use-overlay",
+      "path": "hooks/use-overlay",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-pan-gesture",
+      "path": "hooks/use-pan-gesture",
+      "aliases": []
+    },
+    {
       "name": "hook-use-popover",
       "path": "hooks/use-popover",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-power-search-config",
+      "path": "hooks/use-power-search-config",
       "aliases": []
     },
     {
@@ -3910,6 +4367,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-snap-paging",
+      "path": "hooks/use-snap-paging",
+      "aliases": []
+    },
+    {
       "name": "hook-use-streaming-text",
       "path": "hooks/use-streaming-text",
       "aliases": []
@@ -3925,6 +4387,16 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-column-settings-state",
+      "path": "hooks/use-table-column-settings-state",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-columns-virtualization",
+      "path": "hooks/use-table-columns-virtualization",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-filter-state",
       "path": "hooks/use-table-filter-state",
       "aliases": []
@@ -3937,6 +4409,11 @@
     {
       "name": "hook-use-table-grouped-rows",
       "path": "hooks/use-table-grouped-rows",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-infinite-scroll",
+      "path": "hooks/use-table-infinite-scroll",
       "aliases": []
     },
     {
@@ -3960,6 +4437,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-rows-virtualization",
+      "path": "hooks/use-table-rows-virtualization",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-selection",
       "path": "hooks/use-table-selection",
       "aliases": []
@@ -3972,6 +4454,11 @@
     {
       "name": "hook-use-table-sortable",
       "path": "hooks/use-table-sortable",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-sortable-state",
+      "path": "hooks/use-table-sortable-state",
       "aliases": []
     },
     {
@@ -3995,6 +4482,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-theme-name",
+      "path": "hooks/use-theme-name",
+      "aliases": []
+    },
+    {
       "name": "hook-use-toast",
       "path": "hooks/use-toast",
       "aliases": []
@@ -4012,6 +4504,11 @@
     {
       "name": "hook-use-tree-focus",
       "path": "hooks/use-tree-focus",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-truncation",
+      "path": "hooks/use-truncation",
       "aliases": []
     },
     {
@@ -4335,6 +4832,11 @@
       "aliases": []
     },
     {
+      "name": "showcase-dialog-hero-header-default",
+      "path": "showcases/dialog-hero-header/default",
+      "aliases": []
+    },
+    {
       "name": "showcase-dialog-default",
       "path": "showcases/dialog/default",
       "aliases": []
@@ -4445,6 +4947,11 @@
       "aliases": []
     },
     {
+      "name": "showcase-info-tip-default",
+      "path": "showcases/info-tip/default",
+      "aliases": []
+    },
+    {
       "name": "showcase-input-group-default",
       "path": "showcases/input-group/default",
       "aliases": []
@@ -4492,6 +4999,11 @@
     {
       "name": "showcase-link-default",
       "path": "showcases/link/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-list-input-tag-options",
+      "path": "showcases/list-input/tag-options",
       "aliases": []
     },
     {
@@ -4912,6 +5424,11 @@
     {
       "name": "template-contact-form",
       "path": "templates/contact-form",
+      "aliases": []
+    },
+    {
+      "name": "template-course-detail",
+      "path": "templates/course-detail",
       "aliases": []
     },
     {

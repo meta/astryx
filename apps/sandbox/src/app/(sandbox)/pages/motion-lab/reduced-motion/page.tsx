@@ -379,12 +379,17 @@ export default function ReducedMotionPage() {
               label: 'Tokenised --duration-state',
               content: <TintRig mode="after" />,
             },
+            {
+              tone: 'neutral',
+              label: 'No transition',
+              content: <TintRig mode="none" />,
+            },
           ]}
         />
         <DemoBody>
           <Text type="supporting">
             Set the rail to <strong>Degrade</strong> and hover: movement stops
-            across the lab and these rows keep their fade. Colour is not
+            across the lab and the tokenised rows keep their fade. Colour is not
             movement, and this tint is exactly the feedback degrade exists to
             preserve — which is why delete is defensible on a hover tint and
             indefensible on a spinner, where the motion <em>is</em> the message.
@@ -395,14 +400,17 @@ export default function ReducedMotionPage() {
             literal cannot be reached by a switch, a media query or a sweep.
           </Text>
           <Text type="supporting" color="secondary">
-            <strong>Try it: </strong>on <strong>Degrade</strong> the right pane
-            keeps its tint and loses only movement — the state feedback
+            <strong>Try it: </strong>on <strong>Degrade</strong> the tokenised
+            pane keeps its tint and loses only movement — the state feedback
             survives. On <strong>Delete</strong> the tint snaps, and the
             affordance goes with it. That is the whole decision, in one hover.
             (This behaviour was itself a bug in the lab until the policy was
             moved out of the stylesheet: the store writes the duration aliases
             inline, and an inline custom property outranks any selector, so the
-            delete rule looked right and did nothing.)
+            delete rule looked right and did nothing.) With the device set to
+            reduce motion, the tokenised pane changes at once on every rail
+            setting (design:reduced-motion DR3); turn that setting off to see
+            the rail&apos;s policies on it.
           </Text>
         </DemoBody>
       </DemoCard>

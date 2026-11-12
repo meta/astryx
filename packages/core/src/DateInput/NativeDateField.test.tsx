@@ -21,7 +21,15 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import {DateInput} from './DateInput';
+import type {ISODateString} from '../utils';
 import type * as NativeDateSegments from './nativeDateSegments';
 import {
   hasEditableDateSegments,
@@ -102,6 +110,38 @@ function rulesFor(el: Element): string {
     .map(rule => rule.cssText)
     .filter(text => [...classes].some(cls => text.includes(`.${cls}`)))
     .join(' ');
+}
+
+// A transition that suspends for good: React renders its element, then keeps
+// the committed tree and never commits that render.
+const forever = new Promise<never>(() => {});
+function Forever(): null {
+  use(forever);
+  return null;
+}
+function Discardable({
+  children,
+  isPending = false,
+}: {
+  children: ReactNode;
+  isPending?: boolean;
+}) {
+  return (
+    <Suspense fallback={null}>
+      {children}
+      {isPending ? <Forever /> : null}
+    </Suspense>
+  );
+}
+async function discardRender(
+  rerender: (ui: ReactElement) => void,
+  ui: ReactElement,
+): Promise<void> {
+  await act(async () => {
+    startTransition(() => {
+      rerender(<Discardable isPending>{ui}</Discardable>);
+    });
+  });
 }
 
 beforeEach(() => {
@@ -222,7 +262,11 @@ describe('DateInput nativePicker', () => {
     expect(changeAction).toHaveBeenCalledExactlyOnceWith('2026-03-21');
     expect(getInput()).not.toBeDisabled();
     expect(getInput()).toHaveAttribute('aria-busy', 'true');
-    expect(screen.getByRole('status', {name: 'Loading'})).toBeInTheDocument();
+    // The busy Spinner is decorative (spec:AST-086 FR8).
+    expect(document.querySelector('.astryx-spinner')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
     expect(screen.getByText('March 21, 2026')).toBeInTheDocument();
 
     fireEvent.change(getInput(), {target: {value: '2026-03-22'}});
@@ -274,6 +318,48 @@ describe('DateInput nativePicker', () => {
     fireEvent.change(getInput(), {target: {value: '2026-03-09'}});
 
     expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-03-09');
+  });
+
+  it('fires one change when React discards a render between the edit’s two commit paths', async () => {
+    stubPointer(true);
+    const onChange = vi.fn();
+    // The parent keeps its value: the edit is reported, not accepted.
+    const field = (value: ISODateString) => (
+      <DateInput label="Date" value={value} onChange={onChange} />
+    );
+    const {rerender} = render(<Discardable>{field('2026-03-21')}</Discardable>);
+    fireEvent.change(getInput(), {target: {value: '2026-03-09'}});
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-03-09');
+
+    await discardRender(rerender, field('2026-04-01'));
+    // The same edit's native input event, which the control also sends.
+    fireEvent.input(getInput());
+
+    expect(onChange).toHaveBeenCalledOnce();
+  });
+
+  it('keeps a refused date refused when React discards a render with a value', async () => {
+    stubPointer(true);
+    const field = (label: string, value: ISODateString) => (
+      <DateInput
+        label={label}
+        min="2026-03-10"
+        max="2026-03-20"
+        value={value}
+        onChange={() => {}}
+      />
+    );
+    const {rerender} = render(
+      <Discardable>{field('Date', '2026-03-15')}</Discardable>,
+    );
+    fireEvent.change(getInput(), {target: {value: '2026-03-25'}});
+    expect(getInput()).toHaveAttribute('aria-invalid', 'true');
+
+    await discardRender(rerender, field('Date', '2026-03-16'));
+    rerender(<Discardable>{field('Start date', '2026-03-15')}</Discardable>);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Invalid date');
+    expect(getInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('does not write to the control while it has focus', () => {
@@ -597,16 +683,46 @@ describe('DateInput nativePicker', () => {
 
     expect(calls).toEqual(['onChange', 'changeAction']);
     expect(changeAction).toHaveBeenCalledExactlyOnceWith(undefined);
-    expect(screen.getByRole('status', {name: 'Loading'})).toBeInTheDocument();
+    // The busy Spinner is decorative (spec:AST-086 FR8).
+    expect(document.querySelector('.astryx-spinner')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
     await act(async () => resolveAction());
   });
 
-  it('disables the control and its toggle when isDisabled', () => {
+  it('keeps a disabled control focusable and its toggle inert (AST-085 FR1, FR2)', () => {
     stubPointer(true);
     render(<DateInput label="Date" isDisabled onChange={() => {}} />);
 
-    expect(getInput()).toBeDisabled();
-    expect(screen.getByLabelText('Open calendar')).toBeDisabled();
+    const input = getInput();
+    expect(input).not.toHaveAttribute('disabled');
+    expect(input).toHaveAttribute('aria-disabled', 'true');
+    expect(input).toHaveAttribute('readonly');
+    input.focus();
+    expect(input).toHaveFocus();
+    const toggle = screen.getByLabelText('Open calendar');
+    expect(toggle).not.toHaveAttribute('disabled');
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
+    const showPicker = vi.fn();
+    Object.defineProperty(input, 'showPicker', {value: showPicker});
+    fireEvent.click(toggle);
+    expect(showPicker).not.toHaveBeenCalled();
+  });
+
+  it('does not call a caller onClick while disabled (AST-085 FR2)', () => {
+    stubPointer(true);
+    const onClick = vi.fn();
+    render(
+      <DateInput
+        label="Date"
+        isDisabled
+        onClick={onClick}
+        onChange={() => {}}
+      />,
+    );
+    fireEvent.click(getInput());
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('ignores a change while disabled', () => {

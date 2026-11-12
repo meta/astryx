@@ -1,11 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Configure the docsite's routes, response headers, and theme resolution.
+ * @file Configure docsite routes, response headers, theme resolution, and build
+ *   memory.
  * @input Next.js build configuration, the early playground cookie guard, and
  *   staged preview-only static exports.
  * @output Docsite routes plus Storybook and Sandbox at /storybook/ and /sandbox/.
- *   Client main-app chunks start with the preview's cookie compatibility guard.
+ *   Client main-app chunks start with the preview's cookie compatibility guard;
+ *   large Webpack builds run with isolated, memory-optimized compilation.
+ *   Template previews load their images through the image optimizer. The
+ *   experimental DOCSITE_ICON_SET setting draws them with an installed icon
+ *   set, with per-icon imports from the set's library.
  * @position Next.js configuration for the existing Vercel docsite deployment.
  */
 
@@ -31,6 +36,17 @@ const docRedirects = existsSync(docRedirectsPath)
   ? JSON.parse(readFileSync(docRedirectsPath, 'utf8'))
   : {};
 
+// Experimental: the icon set template previews draw with, main set first and
+// backups after it, separated by commas. Unset, previews keep the icons their
+// templates import, and the loader is not added.
+const previewIconSet = process.env.DOCSITE_ICON_SET?.trim() ?? '';
+const templateSources =
+  /packages[\\/]cli[\\/]assets[\\/]templates[\\/](?:pages|blocks)[\\/].+\.tsx$/u;
+// The sources a preview renders: page templates, and the copies of blocks
+// that generate-data.mjs writes.
+const previewSources =
+  /(?:packages[\\/]cli[\\/]assets[\\/]templates[\\/]pages|src[\\/]generated[\\/](?:showcases|examples))[\\/].+\.tsx$/u;
+
 const stagesStaticApps =
   process.env.VERCEL_ENV === 'preview' ||
   process.env.VERCEL_ENV === 'production';
@@ -38,6 +54,40 @@ const stagesStaticApps =
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   cacheComponents: true,
+  // The custom Webpack hook below disables Next's default build worker. The
+  // canary docsite compiles the live workspace, so keep that compilation in a
+  // separate process and use Next's low-risk peak-memory optimization.
+  experimental: {
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
+  },
+  // The search API (app/api/search) ranks with the CLI's own search. The CLI
+  // stays an external module (see webpack below), so its code and dependencies
+  // are traced as installed; these are the files it reads from disk at run
+  // time: its version, and the cards and weights its ranker reads. The
+  // candidates it ranks are in the route's own bundle
+  // (generated/searchIndex.ts), so the function carries no docs, templates or
+  // package sources.
+  outputFileTracingIncludes: {
+    '/api/search': [
+      '../../packages/cli/package.json',
+      '../../packages/cli/api/**/*.json',
+    ],
+  },
+  // Packages the CLI imports for other commands but a search never loads
+  // (bundlers, compilers, browsers, test runners), and built output and Core's
+  // folder, which it never reads: the tracer adds that whole folder for a path
+  // the CLI builds at run time. Leaving them out keeps the search function
+  // small; the parity test and a traced-files-only build hold it to
+  // `astryx search`.
+  outputFileTracingExcludes: {
+    '/api/search': [
+      '../../node_modules/.pnpm/{esbuild,@esbuild+*,typescript,playwright,playwright-core,vite,rolldown,@rolldown+*,flow-parser,esprima,tsx,vitest,@vitest+*,chai,@testing-library+*}@*/**',
+      '../../packages/*/dist/**',
+      '../../packages/core/**',
+      './src/**',
+    ],
+  },
   // Sandbox exports trailing-slash directories; Next's automatic slash
   // redirect runs before rewrites. Vercel deployments preserve those URLs;
   // local builds keep the docsite's existing canonical redirects.
@@ -117,9 +167,31 @@ const nextConfig = {
           },
         ],
       },
+      // The homepage photos and the template preview photos keep their URL
+      // when a file changes, so they are not immutable. A visitor uses the
+      // cached copy for a day, then for 30 more days while the browser
+      // checks for a new one in the background. The image optimizer takes
+      // the same lifetime from these headers for its converted copies.
+      ...['/landing/:path*', '/template-assets/:path*'].map(source => ({
+        source,
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=86400, stale-while-revalidate=2592000',
+          },
+        ],
+      })),
     ];
   },
   webpack: (config, {isServer, webpack}) => {
+    // The search API loads the CLI as installed, never bundled: the CLI reads
+    // its docs, templates and the installed packages from disk.
+    if (isServer) {
+      config.externals = [
+        ...[config.externals ?? []].flat(),
+        {'@astryxdesign/cli/api': 'module @astryxdesign/cli/api'},
+      ];
+    }
     // Webpack's CSS @import resolver doesn't follow package.json "exports".
     // Map each theme's /theme.css subpath to the actual dist file.
     const themesDir = resolve(import.meta.dirname, '../../packages/themes');
@@ -132,6 +204,67 @@ const nextConfig = {
         t,
         'dist/theme.css',
       );
+    }
+
+    config.module.rules.push({
+      test: previewSources,
+      enforce: 'pre',
+      use: [
+        {
+          loader: resolve(
+            import.meta.dirname,
+            'scripts/template-image-loader.mjs',
+          ),
+          options: {publicDir: resolve(import.meta.dirname, 'public')},
+        },
+      ],
+    });
+
+    if (previewIconSet) {
+      // A cached module keeps the icons of the set it was built with, so a
+      // build with another set must not reuse it.
+      if (typeof config.cache?.version === 'string') {
+        config.cache.version += `|DOCSITE_ICON_SET=${previewIconSet}`;
+      }
+      config.module.rules.push({
+        test: templateSources,
+        enforce: 'pre',
+        // The sets are installed in the docsite, but template sources live
+        // outside it, so their rewritten imports also resolve from here.
+        resolve: {
+          modules: [
+            ...(config.resolve.modules ?? ['node_modules']),
+            resolve(import.meta.dirname, 'node_modules'),
+          ],
+        },
+        use: [
+          {
+            loader: resolve(
+              import.meta.dirname,
+              'scripts/template-icon-loader.mjs',
+            ),
+            options: {iconSet: previewIconSet, projectDir: import.meta.dirname},
+          },
+        ],
+      });
+      // A set's module may import from a library that is one huge barrel.
+      // Babel compiles the docsite, so Next's per-package import
+      // optimizations do not run; this loader points those imports at the
+      // icon files, so the compile does not take every icon in the library.
+      config.module.rules.push({
+        test: /\.[cm]?jsx?$/u,
+        include: /[\\/]node_modules[\\/]/u,
+        enforce: 'pre',
+        use: [
+          {
+            loader: resolve(
+              import.meta.dirname,
+              'scripts/icon-library-import-loader.mjs',
+            ),
+            options: {iconSet: previewIconSet, projectDir: import.meta.dirname},
+          },
+        ],
+      });
     }
 
     // Vercel can add Toolbar instrumentation to Next's shared main-app entry.

@@ -30,6 +30,7 @@
  */
 import {ERROR_CODES, isErrorCode} from './error-codes.mjs';
 import {recordEnvelope, setOutcome} from '../debug/index.mjs';
+import {answeredBy} from '../release/run-context.mjs';
 
 export const API_VERSION = 1;
 
@@ -101,7 +102,9 @@ export function jsonOut(response) {
   const envelope = {apiVersion: API_VERSION, type: response.type};
   if (response.package !== undefined) envelope.package = response.package;
   envelope.data = response.data;
-  if (response.meta !== undefined) envelope.meta = response.meta;
+  // Every successful result names the release that answered (spec AST-081
+  // FR5): the CLI, the Core it paired with, and which copy it was.
+  envelope.meta = {...(response.meta ?? {}), answeredBy: answeredBy()};
   // Serialize BEFORE marking handled. If JSON.stringify throws (a circular
   // reference or a BigInt in `data` — an author bug in a command's return
   // value), the `__xdsJsonHandled` flag must stay unset so the bin error
@@ -131,9 +134,13 @@ export function jsonOut(response) {
  * @param {import('./base').Suggestion[]} [suggestions]
  * @param {string} [code] - Explicit stable error code. Overrides any code
  *   carried on a thrown Error.
- * @returns {{apiVersion: number, error: string, code: string, suggestions?: import('./base').Suggestion[]}}
+ * @param {Record<string, unknown>} [receipt] - What the failed command had
+ *   already done, for a command that changes files before it can fail.
+ *   Overrides a `receipt` carried on a thrown Error. Additive: the envelope
+ *   is still an error with its `code`.
+ * @returns {{apiVersion: number, error: string, code: string, suggestions?: import('./base').Suggestion[], receipt?: Record<string, unknown>}}
  */
-export function toErrorEnvelope(err, suggestions, code) {
+export function toErrorEnvelope(err, suggestions, code, receipt) {
   const message =
     err instanceof Error ? err.message : typeof err === 'string' ? err : String(err);
   const carried =
@@ -142,6 +149,12 @@ export function toErrorEnvelope(err, suggestions, code) {
   /** @type {any} */
   const env = {apiVersion: API_VERSION, error: message, code: resolvedCode};
   if (Array.isArray(suggestions) && suggestions.length) env.suggestions = suggestions;
+  const carriedReceipt =
+    err && typeof err === 'object' ? /** @type {any} */ (err).receipt : undefined;
+  const resolvedReceipt = receipt ?? carriedReceipt;
+  if (resolvedReceipt && typeof resolvedReceipt === 'object') {
+    env.receipt = resolvedReceipt;
+  }
   return env;
 }
 
@@ -150,10 +163,12 @@ export function toErrorEnvelope(err, suggestions, code) {
  * @param {string} message
  * @param {import('./base').Suggestion[]} [suggestions]
  * @param {string} [code] - Stable machine-readable error code (error-codes.mjs).
+ * @param {Record<string, unknown>} [receipt] - What the command had already
+ *   done before it failed (see toErrorEnvelope).
  */
-export function jsonError(message, suggestions, code) {
+export function jsonError(message, suggestions, code, receipt) {
   process.__xdsJsonHandled = true;
-  const err = toErrorEnvelope(message, suggestions, code);
+  const err = toErrorEnvelope(message, suggestions, code, receipt);
   // No-op when cliError already classified this failure — first outcome wins.
   setOutcome('error', {exitCode: 1, error: new Error(message), code: err.code});
   console.log(JSON.stringify(err, null, 2));

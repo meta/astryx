@@ -4,6 +4,7 @@
 export const docs = {
   name: 'Code',
   displayName: 'Code',
+  keywords: ['inlinecode', 'monospace'],
   group: 'Code',
   category: 'Content',
   description:
@@ -97,7 +98,7 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-code', visualProps: ['color']}],
+    targets: [{className: 'astryx-code', visualProps: ['color', 'size']}],
   },
 };
 

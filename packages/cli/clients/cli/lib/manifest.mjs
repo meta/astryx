@@ -9,7 +9,8 @@
  *
  * Its per-command facts come from the command's own definitions: names,
  * arguments and options from Commander metadata (program.commands, cmd.options,
- * cmd.registeredArguments, cmd.description()); examples from its CommandDoc;
+ * cmd.registeredArguments, cmd.description()); examples, exit codes, and what
+ * it does outside a project from its CommandDoc;
  * response `type` discriminators from the returns of the FunctionDoc it wraps
  * (both attached by `defineCommand`); `--json` support from the JSON_SUPPORTED
  * allowlist in index.mjs. The hand-kept lists are CLI_LAYER_RESPONSE_TYPES,
@@ -35,9 +36,22 @@
  * @position consumed by the bare `astryx --json` action and the `manifest` command
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {API_VERSION} from '../../../foundation/response/json.mjs';
 import {commandDocsOf} from './define-command.mjs';
 import {doc as manifestDoc} from '../commands/manifest.doc.mjs';
+
+/**
+ * What a run may do beyond the command it was asked for (spec AST-081;
+ * `spec:AST-017` FR14), and where it is explained.
+ */
+export const GLOBAL_MODE = Object.freeze({
+  docs: 'astryx docs global',
+  summary:
+    "In a folder that belongs to a project, the project's own CLI answers: this copy hands the run to it. In a project with no CLI of its own, and outside any project, this copy answers. A copy installed for the computer checks the registry for a newer release once a day in the background, and keeps one agent skill file in the home folder.",
+});
 
 /**
  * Envelopes the CLI layer builds itself, so the wrapped FunctionDoc cannot
@@ -52,6 +66,10 @@ const CLI_LAYER_RESPONSE_TYPES = {
   manifest: ['manifest'],
   'theme build': ['theme.build.batch'],
   'theme add': ['theme.list'],
+  // The experimental theme groups answer a bare --json with their help.
+  'experimental theme': ['help'],
+  'experimental theme editor': ['help'],
+  'experimental theme preview': ['help'],
 };
 
 /**
@@ -194,6 +212,10 @@ function describeCommand(cmd, root, jsonSupported) {
   }));
   if (exitCodes.length > 0) entry.exitCodes = exitCodes;
 
+  // What the command does outside a project (spec AST-081 FR4). Every command
+  // declares it in its CommandDoc; a group that only holds subcommands does not.
+  if (docs?.doc.outsideProject) entry.outsideProject = docs.doc.outsideProject;
+
   // Sort subcommands by name for a stable, agent-facing contract — the same
   // guarantee the top-level command list makes. Otherwise Commander
   // registration order leaks into the manifest and a pure reorder of
@@ -239,6 +261,36 @@ function flattenCommands(commands) {
 }
 
 /**
+ * Where the published package keeps its manifest: the `data` of `astryx
+ * manifest --json` as the fully loaded CLI builds it. `prepack` writes it
+ * (scripts/generate-manifest.mjs), so the published `manifest` needs no other
+ * command loaded. A checkout has none and builds it.
+ */
+export const MANIFEST_FILE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'manifest.generated.json',
+);
+
+/** @type {import('./manifest').CLIManifest | null | undefined} */
+let storedManifestData;
+
+/**
+ * The stored manifest, or null when there is none or it cannot be read.
+ * @returns {import('./manifest').CLIManifest | null}
+ */
+export function storedManifest() {
+  if (storedManifestData === undefined) {
+    try {
+      storedManifestData = JSON.parse(fs.readFileSync(MANIFEST_FILE, 'utf-8'));
+    } catch {
+      storedManifestData = null;
+    }
+  }
+  return storedManifestData ?? null;
+}
+
+/**
  * Build the full capability manifest from a configured Commander program.
  *
  * @param {import('commander').Command} program  the root program
@@ -265,6 +317,7 @@ export function buildManifest(program, opts = {}) {
     globalOptions: describeGlobalOptions(program),
     commands,
     jsonSupported: [...jsonSupported].sort(),
+    globalMode: GLOBAL_MODE,
     // Flat index of every response `type` discriminator the CLI can emit,
     // keyed by command — lets an agent know what to expect back per call.
     responseTypes: Object.fromEntries(

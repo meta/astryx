@@ -63,7 +63,7 @@ export function buildHelp() {
         "Keep the template's page frame, gap, and padding values. Replace its data, copy, and sections.",
         'No <div>/raw HTML for layout — use VStack/HStack/Grid/Stack/Card etc.',
         'No style={{}} — use component props, and design tokens for values.',
-        "Wrap the app in <Theme theme={...}> (import {Theme} from '@astryxdesign/core') and import core reset.css + astryx.css.",
+        "Wrap the app in <Theme theme={...}> (import {Theme} from '@astryxdesign/core/theme') and import core reset.css + astryx.css.",
       ],
       related: [
         {

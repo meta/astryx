@@ -26,8 +26,9 @@ export const doc = {
     {
       flag: '--type <domain>',
       param: 'options.type',
-      choices: ['component', 'hook', 'template'],
-      description: 'Filter the kit to one domain (component|hook|template)',
+      choices: ['component', 'hook', 'doc', 'template', 'theme'],
+      description:
+        'Filter the kit to one domain (component|hook|doc|template|theme); doc and theme give an empty kit',
     },
     {
       flag: '--limit <n>',
@@ -47,6 +48,7 @@ export const doc = {
       cli: 'astryx build "analytics dashboard" --json',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success (including zero matches)'},
     {

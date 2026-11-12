@@ -49,7 +49,8 @@ const HOVER_SCOPES = {
     ':hover:not([data-disabled], [data-readonly], .astryx-input-group *)',
   'multi-selector':
     ':hover:not([data-disabled], [data-readonly], .astryx-input-group *)',
-  'complex-selector': ':hover:not(:has(> :disabled))',
+  'complex-selector':
+    ':hover:not(:has(> :is(:disabled, [aria-disabled="true"])))',
 };
 const GROUPED_TARGETS = new Set(['selector', 'multi-selector']);
 

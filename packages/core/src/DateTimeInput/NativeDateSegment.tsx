@@ -33,7 +33,7 @@ import {hasEditableDateSegments} from '../DateInput/nativeDateSegments';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon} from '../Icon';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {
   focusOutlineStyles,
@@ -47,6 +47,13 @@ import {
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import type {InputStatusType} from '../Field';
 import {nativePickerSegmentStyles as styles} from './nativePickerSegmentStyles';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateTimeInput/NativeDateSegment.generated';
+
+registerEnglishFallback(english);
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -60,7 +67,8 @@ export type NativeDateSegmentProps = {
   max?: ISODateString;
   isDateDisabled: (date: ReturnType<typeof plainDateFromISO>) => boolean;
   isEffectivelyDisabled: boolean;
-  hasDisabledMessage: boolean;
+  /** While disabled, stay focusable: aria-disabled and readOnly, not `disabled`. */
+  isFocusableDisabled: boolean;
   isEffectivelyRequired: boolean;
   isBusy: boolean;
   statusType?: InputStatusType;
@@ -87,7 +95,7 @@ export function NativeDateSegment({
   max,
   isDateDisabled,
   isEffectivelyDisabled,
-  hasDisabledMessage,
+  isFocusableDisabled,
   isEffectivelyRequired,
   isBusy,
   statusType,
@@ -99,7 +107,7 @@ export function NativeDateSegment({
     onBlur: onBlurProp,
     ...inputProps
   } = controlProps ?? {};
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isTouchPointer = useMediaQuery('(pointer: coarse)');
   const internalInputRef = useRef<HTMLInputElement | null>(null);
@@ -109,16 +117,22 @@ export function NativeDateSegment({
   const [isFocused, setIsFocused] = useState(false);
   const [isSegmentEditable, setIsSegmentEditable] = useState(false);
   const valueAtFocusRef = useRef<string | null>(null);
-  const lastCommitRef = useRef<string | null>(null);
+  // The text the control last committed, so a repeated native event does not
+  // commit it twice. Each entry belongs to the commit epoch it was made in.
+  const lastCommitRef = useRef<{text: string; epoch: number} | null>(null);
 
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
+  // The value as last rendered, and an epoch that a value change while the
+  // control is unfocused moves on, retiring the last commit. Both are state:
+  // refs written here would keep a value from a render React discards.
+  const [prevValue, setPrevValue] = useState(value);
+  const [commitEpoch, setCommitEpoch] = useState(0);
+  if (value !== prevValue) {
+    setPrevValue(value);
     // Keep the accepted DOM value cached while a native picker is open. An
     // optimistic rollback changes the prop but leaves the focused control alone;
-    // clearing this cache would replay that rejected edit on blur.
+    // retiring this cache would replay that rejected edit on blur.
     if (!isFocused) {
-      lastCommitRef.current = null;
+      setCommitEpoch(epoch => epoch + 1);
     }
     if (rejectedValue !== null) {
       setRejectedValue(null);
@@ -137,12 +151,17 @@ export function NativeDateSegment({
       if (isEffectivelyDisabled) {
         return;
       }
-      if (lastCommitRef.current === newValue) {
+      const last = lastCommitRef.current;
+      if (
+        last !== null &&
+        last.epoch === commitEpoch &&
+        last.text === newValue
+      ) {
         return;
       }
 
       if (!newValue) {
-        lastCommitRef.current = newValue;
+        lastCommitRef.current = {text: newValue, epoch: commitEpoch};
         setRejectedValue(null);
         if (value !== undefined) {
           onChange(undefined);
@@ -160,13 +179,20 @@ export function NativeDateSegment({
       }
 
       setRejectedValue(null);
-      lastCommitRef.current = newValue;
+      lastCommitRef.current = {text: newValue, epoch: commitEpoch};
       const parsedISO = plainDateToISO(parsed);
       if (parsedISO !== value) {
         onChange(parsedISO);
       }
     },
-    [isDateDisabled, isEffectivelyDisabled, locale, onChange, value],
+    [
+      commitEpoch,
+      isDateDisabled,
+      isEffectivelyDisabled,
+      locale,
+      onChange,
+      value,
+    ],
   );
 
   const handleChange = useCallback(
@@ -262,7 +288,7 @@ export function NativeDateSegment({
       <button
         type="button"
         onClick={openPicker}
-        disabled={isEffectivelyDisabled}
+        aria-disabled={isEffectivelyDisabled || undefined}
         aria-label={t('@astryx.dateInput.openCalendar')}
         tabIndex={-1}
         {...stylex.props(
@@ -290,9 +316,11 @@ export function NativeDateSegment({
           onBlur={chainEventHandlers(handleBlur, onBlurProp)}
           min={min}
           max={max}
-          disabled={isEffectivelyDisabled && !hasDisabledMessage}
-          aria-disabled={hasDisabledMessage ? 'true' : undefined}
-          readOnly={hasDisabledMessage || undefined}
+          disabled={isEffectivelyDisabled && !isFocusableDisabled}
+          aria-disabled={
+            isEffectivelyDisabled && isFocusableDisabled ? 'true' : undefined
+          }
+          readOnly={(isEffectivelyDisabled && isFocusableDisabled) || undefined}
           aria-describedby={ariaDescribedBy}
           aria-required={isEffectivelyRequired ? 'true' : undefined}
           aria-invalid={

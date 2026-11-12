@@ -23,20 +23,37 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {RadioListContext} from './RadioList';
-import {colorVars, radiusVars} from '../theme/tokens.stylex';
-import {mergeProps, isRenderable, rtlStyles} from '../utils';
+import {RadioListReasonContext} from './RadioListReasonContext';
+import {joinAriaIDs} from '../utils/inputAria';
+import {radiusVars} from '../theme/tokens.stylex';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {rtlStyles} from '../utils/rtlStyles';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useIndicator} from '../Indicator';
-import {Item} from '../Item';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
+import {registerBoxHold} from '../utils/boxHold';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {useIndicator} from '../Indicator/useIndicator';
+import {Item, type ItemAlign} from '../Item/Item';
 import {themeProps} from '../utils/themeProps';
+import {
+  indicatorPressPaintStyles,
+  rowPressLayerStyles,
+  rowPressPaintStyles,
+} from '../privateAttributes/press.stylex';
 
-// The touch press's paint, declared by the shared overlay styles on the
-// element the controller writes to (`pressedAlpha`) at the press's strength,
-// 1 while on and 1 → 0 over the release, and inherited resolved by the layer
-// that paints it. See interactionOverlay.stylex.ts.
-const pressedOverlayImage = 'var(--_press-paint-image)';
+// Registered here, not in the press controller, so a page with no box carries
+// none of its code.
+registerBoxHold();
+
+// The paint of a press the controller does not paint, declared on the row
+// (`rowPressPaintStyles.radioRow`) and inherited by the layer over the circle.
+// Internal: not a theme hook.
+const ROW_PRESS = '--_radio-row-press';
 
 const styles = stylex.create({
   radioWrapper: {
@@ -47,15 +64,19 @@ const styles = stylex.create({
     flexShrink: 0,
     isolation: 'isolate',
   },
-  // The row remains the large press target, but nested links and buttons keep
-  // their independent action and do not make the radio appear pressed. This
-  // owner-drawn layer also survives a theme replacing the indicator component.
-  // Two pointers, two press models (see interactionOverlay.stylex.ts): a
-  // mouse keeps `:active`; under a coarse pointer that arm is dropped and the
-  // touch press controller writes `data-astryx-press` on the row, which this layer
-  // reads off the same scope marker as the hover tint. The controller paints
-  // the innermost pressable, so a nested link or button takes the press
-  // itself and the row never carries the attribute for it.
+  // The row remains the large press target. Nested controls keep their own
+  // action and do not make the radio look pressed. The row declares the paint
+  // of a press the controller does not paint (`rowPressPaintStyles.radioRow`),
+  // and this layer reads it. This owner-drawn layer also survives a theme
+  // replacing the indicator component.
+  // The press controller writes its press attribute on the row for every
+  // pointer: a finger, a mouse and a pen. Its image layer
+  // (`indicatorPressPaintStyles.image`) reads it off the same scope marker as
+  // the hover tint. The controller paints the innermost pressable.
+  // A press on a control nested in the row is that control's. The row's
+  // container rule (cancelNestedPress) ends the row's paint at once.
+  // `:active` paints only a press the controller does not paint, and under a
+  // coarse pointer it is dropped.
   indicatorPressOverlay: {
     '::after': {
       content: '""',
@@ -63,32 +84,7 @@ const styles = stylex.create({
       inset: 0,
       borderRadius: radiusVars['--radius-full'],
       pointerEvents: 'none',
-      backgroundColor: {
-        default: 'transparent',
-        [stylex.when.ancestor(
-          ':active:not(:has(a:active,button:active,[role="button"]:active,[role="link"]:active))',
-          indicatorScope,
-        )]: {
-          default: colorVars['--color-overlay-pressed'],
-          '@media (pointer: coarse)': 'transparent',
-        },
-      },
-      // The touch press, as an image layer over the colour: an image change is
-      // discrete, so no transition can delay the onset, and the strength the
-      // row's `pressedAlpha` arms own (1 while on, 1 → 0 over the release) is
-      // what moves. Coarse pointers only, like the drop above.
-      backgroundImage: {
-        default: null,
-        [stylex.when.ancestor('[data-astryx-press="on"]', indicatorScope)]: {
-          default: null,
-          '@media (pointer: coarse)': pressedOverlayImage,
-        },
-        [stylex.when.ancestor('[data-astryx-press="fading"]', indicatorScope)]:
-          {
-            default: null,
-            '@media (pointer: coarse)': pressedOverlayImage,
-          },
-      },
+      backgroundColor: `var(${ROW_PRESS}, transparent)`,
     },
   },
   input: {
@@ -146,16 +142,18 @@ const rowStyles = stylex.create({
     // Suppress Item's interactive hover/press background so the resting and
     // hovered row look identical by default (a theme can restyle either).
     backgroundColor: 'transparent',
-    // ...and the touch press's overlay image, for the same reason: under a
-    // finger only the radio circle paints, as under a mouse. The press's
-    // strength still lands on the row, which is where the layer over the
-    // circle reads it.
-    backgroundImage: 'none',
   },
 });
 
 export interface RadioListItemProps extends BaseProps<HTMLDivElement> {
   ref?: React.Ref<HTMLDivElement>;
+  /**
+   * Vertical alignment of the start and end content against the label,
+   * forwarded to Item. Use `first-line` to keep the radio level with the
+   * first line of a wrapped label.
+   * @default 'center'
+   */
+  align?: ItemAlign;
   /**
    * Primary label for the radio item.
    *
@@ -232,6 +230,7 @@ export function RadioListItem({
   isDisabled: isItemDisabled = false,
   startContent,
   endContent,
+  align,
   xstyle,
   className,
   style,
@@ -244,6 +243,7 @@ export function RadioListItem({
   // the touch press controller (pressableCoverage.test.ts).
   const pressable = usePressFeedback();
   const context = use(RadioListContext);
+  const disabledReasonID = use(RadioListReasonContext);
   if (!context) {
     throw new Error('RadioListItem must be used within an RadioList');
   }
@@ -283,12 +283,24 @@ export function RadioListItem({
   // `<label htmlFor>` would double-fire under delegation.
   const radioRef = useRef<HTMLInputElement>(null);
 
+  // Under a coarse pointer an option's row grows toward 44 px through an
+  // invisible band, and the row keeps its size. A tap on the band lands on
+  // the row, which hands it to the radio. The band's insets stay live while
+  // the row takes taps, and clear when it stops.
+  const watchRowHitArea = useTouchHitArea(!isDisabled);
+  const mergedRowRef = useMergedRefs(ref, watchRowHitArea);
+
   const radioCircle = (
     <div
+      // iOS answers a long hold on the circle with a text selection and no
+      // click. The press controller holds the row's selection for a press on
+      // the marked circle, and picks the option if no click comes.
+      {...(isDisabled ? undefined : pressBoxProps)}
       {...stylex.props(
         styles.radioWrapper,
         wrapperSizeStyles[size],
         !isDisabled && styles.indicatorPressOverlay,
+        !isDisabled && indicatorPressPaintStyles.image,
       )}
       {...focusProps}>
       <input
@@ -305,6 +317,12 @@ export function RadioListItem({
         // from submission, matching a natively disabled control.
         form={keepsFocusableForMessage ? '' : undefined}
         required={context.isRequired}
+        // Chromium reports an unanswered native-required radio invalid before
+        // any interaction; the invalid state follows the group's status
+        // instead (RadioList FR6).
+        aria-invalid={
+          context.isRequired ? context.status?.type === 'error' : undefined
+        }
         onChange={() => {
           if (isDisabled) {
             return;
@@ -313,15 +331,23 @@ export function RadioListItem({
         }}
         // A consumer onClick rides on the radio input itself, so it fires for
         // both direct control clicks and row-surface clicks the row delegates
-        // to the input — the same routing CheckboxListItem uses.
-        onClick={onClick}
+        // to the input — the same routing CheckboxListItem uses. A disabled
+        // radio that stays focusable (`aria-disabled`, not native `disabled`)
+        // is not silenced by the browser, so drop the handler here
+        // (`spec:AST-085` FR2), as CheckboxInput does.
+        onClick={isDisabled ? undefined : onClick}
         // The radio names itself from the visible label element, which works
         // for a rich label as well as a plain string. `aria-label` replaces
         // that name rather than adding to it, so the two are mutually
         // exclusive — aria-labelledby would otherwise win over it.
         aria-label={ariaLabel}
         aria-labelledby={ariaLabel == null ? labelID : undefined}
-        aria-describedby={hasDescription ? descriptionID : undefined}
+        // The item's own description, then the group's disabled reason
+        // (RadioList's disabledMessage), which describes each radio (FR5).
+        aria-describedby={joinAriaIDs(
+          hasDescription ? descriptionID : undefined,
+          disabledReasonID,
+        )}
         {...stylex.props(
           styles.input,
           rtlStyles.centerInline('-50%'),
@@ -351,7 +377,7 @@ export function RadioListItem({
 
   return (
     <Item
-      ref={ref}
+      ref={mergedRowRef}
       {...(isDisabled ? undefined : pressable)}
       startContent={mediaContent}
       // Delegate row-surface clicks (label text, description, and the empty
@@ -366,6 +392,7 @@ export function RadioListItem({
         ) : undefined
       }
       endContent={endContent}
+      align={align}
       xstyle={
         [
           // Hover reaches the radio visual through this ancestor marker rather
@@ -373,11 +400,16 @@ export function RadioListItem({
           // the painting row element (Item), the same element that carries the
           // theme target, so a theme's hover styling stays in step with the tint.
           !isDisabled && indicatorScope,
+          // The row keeps no press paint of its own: the circle paints, and
+          // reads the strength whose release the row keeps.
+          rowPressLayerStyles.cellWithoutLayer,
           // Restore the bare default look: zero Item's padding/radius and its
           // interactive hover/press background. Applied after Item's own base
           // styles so it wins within the base layer; a `radio-list-item` theme
           // still overrides it from the higher `astryx-theme` layer.
           rowStyles.root,
+          !isDisabled && rowPressPaintStyles.radioRow,
+          !isDisabled && touchHitAreaStyles.layer,
           xstyle,
         ] as StyleXStyles
       }

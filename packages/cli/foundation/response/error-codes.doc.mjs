@@ -150,7 +150,8 @@ export const doc = {
     },
     {
       value: 'ERR_CODEMOD_FAILED',
-      description: 'One or more codemods failed during an upgrade run.',
+      description:
+        'A codemod or post-codemod hook failed during an upgrade run; the error carries a `receipt` that lists the files the run already changed.',
     },
     {
       value: 'ERR_CODEMOD_PROTECTED',
@@ -219,6 +220,11 @@ export const doc = {
         'A theme file could not be loaded / parsed into a defineTheme result.',
     },
     {
+      value: 'ERR_THEME_STALE',
+      description:
+        '`theme build --check` found stale or missing outputs: exit 1, in the check result (`code`), not an error.',
+    },
+    {
       value: 'ERR_PALETTE_GENERATION',
       description:
         'A palette generation request or one of its constraints was invalid.',
@@ -276,6 +282,152 @@ export const doc = {
       value: 'ERR_SIGNAL_TERMINATED',
       description:
         'Recorded in the debug log, never printed: the process was ended by a signal (Ctrl-C, SIGTERM) before the command reached a terminal path.',
+    },
+
+    // Global mode
+    {
+      value: 'ERR_VERSIONS_UNAVAILABLE',
+      description:
+        "Nothing could answer this run, and nothing was written: the project's own CLI could not start and nothing else could answer, or the Core a command needs outside a project could not be installed.",
+    },
+    {
+      value: 'ERR_PROJECT_REQUIRED',
+      description:
+        'The command needs a project (an app with Astryx installed, or an integration package) and was run outside one. Nothing was written.',
+    },
+
+    // Render (experimental: may change or be removed in a patch release)
+    {
+      value: 'ERR_RENDER_COMPILE',
+      stability: 'experimental',
+      description:
+        'The page given to render does not compile. A stylesheet the page imports that is not valid CSS is reported this way too, naming the file. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_NO_DEFAULT_EXPORT',
+      stability: 'experimental',
+      description:
+        'The page given to render has no default export to render. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_MISSING_DEPENDENCY',
+      stability: 'experimental',
+      description:
+        'The page imports a package that is not installed where the page is. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_BROWSER_API',
+      stability: 'experimental',
+      description:
+        'The page reads a browser-only API, such as window or document, while rendering. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_ASSET_TOO_LARGE',
+      stability: 'experimental',
+      description:
+        'A local file the page uses is too large to inline into one file. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_TIMEOUT',
+      stability: 'experimental',
+      description:
+        'The page did not finish rendering in time and was stopped. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_FAILED',
+      stability: 'experimental',
+      description:
+        "The page threw while rendering, or Node crashed while it rendered the page. Raised by the experimental render command, which then writes nothing, and by the experimental theme editor when it cannot render a theme's pages (two copies of React, a component that throws, or a render past its time limit; the theme it built is kept, and the refusal says so). A React that is not installed is ERR_RENDER_MISSING_DEPENDENCY.",
+    },
+    {
+      value: 'ERR_RENDER_NOT_ASTRYX',
+      stability: 'experimental',
+      description:
+        '`render --reverse` was given a file that a render did not write, with no embedded source and no Astryx markup. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_SOURCE_DAMAGED',
+      stability: 'experimental',
+      description:
+        '`render --reverse` refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from) or is damaged (not valid, or a file does not match its checksum), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a page module, stylesheet, JSON file or image. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_THEME_BAD_VALUE',
+      stability: 'experimental',
+      description:
+        'A value does not fit what it sets: not a color for a color token, not a size for a size, a step (`more`/`less`) on something that is not a dial, or a word a dial does not take. Nothing was changed. Raised only by the experimental theme command.',
+    },
+    {
+      value: 'ERR_THEME_NO_MODE',
+      stability: 'experimental',
+      description:
+        '`--mode light|dark` was given for something that cannot differ between light and dark: a size, a number, a font, or a property that is not a plain color, or a theme that has only one mode. Nothing was changed. Raised only by the experimental theme command.',
+    },
+    {
+      value: 'ERR_THEME_UNKNOWN_PART',
+      stability: 'experimental',
+      description:
+        '`--on` names something that is not a themeable part or a family. Nothing was changed. Raised only by the experimental theme command.',
+    },
+    {
+      value: 'ERR_THEME_UNKNOWN_VARIANT',
+      stability: 'experimental',
+      description:
+        '`--when` names a prop the part does not have, or a value that prop does not take. Nothing was changed. Raised only by the experimental theme command.',
+    },
+    {
+      value: 'ERR_THEME_UNKNOWN_STATE',
+      stability: 'experimental',
+      description:
+        '`--state` names a state the part does not have. Nothing was changed. Raised only by the experimental theme command.',
+    },
+    {
+      value: 'ERR_THEME_PRIVATE_TOKEN',
+      stability: 'experimental',
+      description:
+        'The setting names a variable private to a component (`--_...`), which a theme cannot set. Nothing was changed. Raised only by the experimental theme command.',
+    },
+    {
+      value: 'ERR_THEME_UNKNOWN_TOKEN',
+      stability: 'experimental',
+      description:
+        'The setting names a design token that does not exist. Nothing was changed. Raised only by the experimental theme command.',
+    },
+    {
+      value: 'ERR_THEME_NO_EFFECT',
+      stability: 'experimental',
+      description:
+        'The change could not take effect: neither the part nor any part inside it reads the token (or, for the whole theme, no part reads it). The suggestions name the token the part really reads and the property that sets it directly. Nothing was changed. Raised only by the experimental theme command.',
+    },
+    {
+      value: 'ERR_THEME_NOT_CHECKED',
+      stability: 'experimental',
+      description:
+        "Not an error and never an exit code: the change is saved, but the components could not be rendered, so it was not checked against what they read and has no preview. The result carries it in `notChecked` with the cause, such as two copies of React (the app's and the one Core resolves). Reported only by the experimental theme command.",
+    },
+    {
+      value: 'ERR_THEME_BUSY',
+      stability: 'experimental',
+      description:
+        'Another command is changing the same theme (or the same preview) and did not finish within 30 seconds. Commands on one theme run one after the other; nothing was changed. Run the command again. Raised only by the experimental theme command.',
+    },
+    {
+      value: 'ERR_THEME_UNKNOWN_THING',
+      stability: 'experimental',
+      description:
+        'The thing to change is not a dial, a design token, or a CSS property. Nothing was changed. Raised only by the experimental theme command.',
+    },
+    {
+      value: 'ERR_THEME_NOT_SET',
+      stability: 'experimental',
+      description:
+        '`editor undo <theme> <thing>` names a setting the theme does not have (with those `--on`, `--when`, `--state` and `--mode`). Nothing was changed. Raised only by the experimental theme command.',
+    },
+    {
+      value: 'ERR_THEME_NOTHING_TO_UNDO',
+      stability: 'experimental',
+      description:
+        '`undo` found no earlier change to step back to. Nothing was changed. Raised only by the experimental theme command.',
     },
   ],
 };

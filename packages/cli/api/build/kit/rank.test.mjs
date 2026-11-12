@@ -9,7 +9,8 @@
 import {describe, it, expect} from 'vitest';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {ideaKind, pickStart, rankPages} from './rank.mjs';
+import {ideaKind} from './kind.mjs';
+import {pickStart, rankPages} from './rank.mjs';
 import {loadComponents, loadPageTemplates} from '../_adapter.mjs';
 
 // api/build/kit/ -> up 5 = repo root (has packages/core and the templates).
@@ -94,6 +95,23 @@ describe('rankPages on the shipped page templates', () => {
     expect(await start('a funnel for a dashboard')).toBe(
       'dashboard-cohort-funnel',
     );
+  });
+
+  it('keeps that variant, and lets a head-named base lead, as the catalog grows', async () => {
+    // More pages raise every word's rarity weight, so a one-word base gains
+    // score with each new template. Matched terms do not grow.
+    const filler = [1, 2, 3].map(n =>
+      page(`filler-${n}`, `Content - Filler ${n}`, `A page about topic${n}.`),
+    );
+    const pages = [...(await loadPageTemplates(REPO)), ...filler];
+    /** @param {string} query */
+    const grownStart = query => pickStart(rankPages(query, pages))?.name;
+    expect(grownStart('a funnel for a dashboard')).toBe(
+      'dashboard-cohort-funnel',
+    );
+    expect(grownStart('a saml for a login')).toBe('login-sso');
+    // The family word in the head is start evidence on its own.
+    expect(grownStart('saml login')).toBe('login');
   });
 
   it('does not start from one rare word', async () => {

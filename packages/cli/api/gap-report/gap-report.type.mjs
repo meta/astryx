@@ -23,12 +23,27 @@
  * @property {string} [package] Explicit owner package for ambiguous routes.
  * @property {boolean} [confirmPublic] Explicit consent for public handlers or GitHub issue creation.
  * @property {boolean} [listCategories] Return the category vocabulary without routing or writing.
+ * @property {string} [to] A destination the person chose: a loaded integration
+ *   whose manifest names an issues URL. The report goes only there.
+ */
+
+/**
+ * Where a report can go. The default entry (`to: null`) is the configured
+ * handlers, or with none the owning package's issues URL.
+ * @typedef {object} GapReportDestination
+ * @property {string|null} to The value to pass as `to`; null for the default.
+ * @property {boolean} default Whether this is the default destination.
+ * @property {string|null} issuesUrl The integration's issues URL; null for the
+ *   default.
  */
 
 /**
  * @typedef {object} GapReportCategoriesResponse
  * @property {'gap-report.categories'} type
  * @property {GapReportCategoryEntry[]} data
+ * @property {{destinations: GapReportDestination[], ask: string}} [meta]
+ *   Present when a destination besides the default exists: every destination,
+ *   and the line telling an agent to ask the person.
  */
 
 /**
@@ -58,6 +73,9 @@
  * @property {GapReportDelivery[]} deliveries Ordered handler outcomes.
  * @property {number} filedCount Count of handlers that filed the report.
  * @property {number} routedOnlyCount Count of handlers that routed only.
+ * @property {GapReportDestination[]} [destinations] For a run without `to`,
+ *   when a destination besides the default exists: every destination.
+ * @property {string} [ask] With `destinations`: ask the person where to file.
  */
 
 /**

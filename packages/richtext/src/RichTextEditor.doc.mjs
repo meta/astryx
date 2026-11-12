@@ -85,7 +85,7 @@ export const docs = {
       name: 'isDisabled',
       type: 'boolean',
       description:
-        'Whether the editor is disabled: non-editable, dimmed, out of the tab order, and announced as disabled. Wins when isReadOnly is also set. Takes effect when changed after mount.',
+        'Whether the editor is disabled: non-editable, dimmed, out of the tab order, and announced as disabled. Its links do not navigate and are not tab stops. Wins when isReadOnly is also set. Takes effect when changed after mount.',
       default: 'false',
     },
     {
@@ -137,6 +137,12 @@ export const docs = {
       type: 'ReadonlyArray<RichTextMarkdownExtension>',
       description:
         'Markdown plugins whose nodes the editor draws, each adopted with createRichTextExtension. A plugin node renders exactly as core Markdown renders it and edits as one unit; a node whose plugin is not given here shows its source. Pass the extensions the content was converted with, and create them in a client module. RichTextView takes the same prop.',
+    },
+    {
+      name: 'codeLanguages',
+      type: 'ReadonlyArray<CodeLanguage>',
+      description:
+        'CodeBlock language values a fence may name, each imported on its own (e.g. graphql from @astryxdesign/core/CodeBlock/languages/graphql) or made with createCodeLanguage. Pass the same list as Markdown codeLanguages so a matched fence paints and labels the same while reading and editing. RichTextView takes the same prop.',
     },
     {
       name: 'transformers',
@@ -230,7 +236,27 @@ export const docs = {
       {
         guidance: true,
         description:
-          'GFM pipe tables import, edit, and export by default. The first row renders as header cells, delimiter-row colons set each column alignment, rows shorter than the widest row gain empty cells, and a wide table scrolls inside its own wrapper. Arrow keys move between cells; Tab keeps its editor meaning, so Escape then Tab still leaves the editor. Tables export in the canonical form: outer pipes and three-dash delimiters. RichTextView renders the same tables. Install @lexical/table with the other lexical peers.',
+          'GFM pipe tables import, edit, and export by default. The first row renders as header cells, delimiter-row colons set each column alignment, rows shorter than the widest row gain empty cells, and a wide table scrolls inside its own wrapper. Arrow keys move between cells; Tab keeps its editor meaning, so Escape then Tab still leaves the editor. Pasting a table into a table fills its cells one by one from the cell holding the caret, or within the selected cells, adding rows and columns as needed; a cell the paste does not fill keeps its text, and a table pasted with other content goes into the cell as text. Tables export in the canonical form: outer pipes and three-dash delimiters. RichTextView renders the same tables. Install @lexical/table with the other lexical peers.',
+      },
+      {
+        guidance: true,
+        description:
+          'In a code block, Tab and Shift+Tab indent and outdent every line the selection touches, by the indent the block already uses: a tab when one of its lines starts with a tab, otherwise the fewest spaces an indented line starts with (2 to 8), otherwise 2 spaces. The selection stays on the same characters, and each press is one undo step. Escape then Tab still moves focus out of the editor.',
+      },
+      {
+        guidance: true,
+        description:
+          'Backspace at the very start of a code block turns it into a paragraph holding its lines, each on its own line, with the caret at its start. The code never merges into the block above, so a heading above keeps its own text. Backspace anywhere else in a code block deletes as usual.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pasting into a code block inserts plain code. Rich content, such as a web page, a word processor document, or blocks copied from another editor, goes in as the plain text on the clipboard; when the clipboard has no plain text, each pasted block goes in as one line of its text. Headings, lists, tables, and formatting never land inside a code block.',
+      },
+      {
+        guidance: true,
+        description:
+          'Cmd+A (Ctrl+A on other platforms) in a code block or a table cell selects the code or the cell text first; pressing it again selects the whole document. Anywhere else it selects the whole document at once.',
       },
       {
         guidance: true,
@@ -266,6 +292,11 @@ export const docs = {
         guidance: true,
         description:
           "The toolbar's glyphs are themeable. Each control resolves its icon from the core icon registry under a stable richtext:* key (see RICHTEXT_ICON_KEYS), falling back to a bundled inline SVG. A theme restyles any glyph without forking the toolbar by naming its key: defineTheme({icons: {'richtext:bold': <MyBoldIcon />}}). Undo and redo mirror under right-to-left direction, whichever glyph draws them.",
+      },
+      {
+        guidance: true,
+        description:
+          "To switch between reading (Markdown or RichTextView) and editing the same document in place, give the editor's field its inset and border outside the reading width, so every paragraph keeps its line count across the switch. Define the frame with stylex.create, for example const inPlace = stylex.create({editorFrame: {marginInline: `calc(-1 * (${spacingVars['--spacing-2']} + ${borderVars['--border-width']}))`}}), with spacingVars and borderVars from @astryxdesign/core/theme/tokens.stylex, and pass xstyle={inPlace.editorFrame} to the RichTextEditor. The recipe assumes no status: a status icon reserves another spacing-6 at the inline end. The field then extends past the column on both sides; leave room for it in the surrounding padding. A standalone editor in a form keeps its default width, so its border lines up with the fields around it.",
       },
       {
         guidance: false,

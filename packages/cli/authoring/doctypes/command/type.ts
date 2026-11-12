@@ -40,6 +40,18 @@ export interface CommandOptionDoc {
   cliOnly?: boolean;
 }
 
+/**
+ * What a command does in a folder outside any project:
+ * - `same`: it gives the answer it gives in a new project, reading the Core
+ *   the answering release carries.
+ * - `refuse`: it writes nothing and fails before doing any work, naming the app
+ *   project or integration package it needs.
+ * - `own`: it does something else.
+ * Every `refuse` and `own` command also carries an `In global mode:` note
+ * in its `notes`, for readers.
+ */
+export type CommandOutsideProject = 'same' | 'refuse' | 'own';
+
 export interface CommandExampleDoc {
   label?: string;
   /** A full terminal invocation, e.g. 'astryx search button --json'. */
@@ -81,8 +93,13 @@ export interface CommandDoc extends AuthoredDocGraphFields {
   examples?: CommandExampleDoc[];
   /** Documented exit codes. */
   exitCodes?: {code: number; when: string}[];
+  /** What the command does outside a project: `same`, `refuse`, or `own`. Every command and subcommand declares one, and `astryx manifest` publishes it; a command that only groups subcommands declares none. */
+  outsideProject?: CommandOutsideProject;
   /** Deprecation notice — a DEP-* id and the replacement. */
   deprecated?: string;
+  /** The commands this command is meant to replace, by command path (`theme build`). Help shows them as one line ("Will replace: astryx theme build"), and a later deprecation of those commands reads this list. It marks nothing as deprecated.
+   *  @experimental May change or be removed in a patch release. */
+  replaces?: string[];
   /** Related command names; the CLI links each to its doc. */
   related?: string[];
   /** Freeform prose/notes. */

@@ -14,8 +14,10 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSubMenu,
+  type DropdownMenuProps,
 } from '@astryxdesign/core/DropdownMenu';
 import {Button} from '@astryxdesign/core/Button';
+import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {
@@ -80,6 +82,8 @@ const meta: Meta<typeof DropdownMenu> = {
 
 export default meta;
 type Story = StoryObj<typeof DropdownMenu>;
+// Story args the tooltip regression spec drives through the URL.
+type StoryArgs = Omit<DropdownMenuProps, 'items' | 'children'>;
 
 const readinessStyles = stylex.create({
   viewportStoryCanvas: {
@@ -121,11 +125,12 @@ const PROJECT_ACTIONS = [
   },
 ] as const;
 
-function CompactDrillInActionSheet() {
+function CompactDrillInActionSheet(args: StoryArgs) {
   return (
     <DropdownMenu
       button={{label: 'Project actions'}}
       presentation="bottom-sheet"
+      {...args}
       items={[
         {label: 'Rename project', icon: PencilIcon},
         {
@@ -158,9 +163,10 @@ const PROJECT_DESTINATIONS = [
 
 // Basic usage
 export const Default: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Actions'}}
+      {...args}
       items={[
         {label: 'Edit', onClick: () => console.log('Edit clicked')},
         {label: 'Duplicate', onClick: () => console.log('Duplicate clicked')},
@@ -172,9 +178,10 @@ export const Default: Story = {
 
 // With icons
 export const WithIcons: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Actions', variant: 'primary'}}
+      {...args}
       items={[
         {label: 'Edit', icon: PencilIcon, onClick: () => console.log('Edit')},
         {
@@ -199,9 +206,10 @@ export const WithIcons: Story = {
 
 // With sections
 export const WithSections: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'File', variant: 'ghost'}}
+      {...args}
       items={[
         {
           type: 'section',
@@ -242,9 +250,10 @@ export const WithSections: Story = {
 
 // With dividers
 export const WithDividers: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Actions'}}
+      {...args}
       items={[
         {label: 'Edit', onClick: () => console.log('Edit')},
         {label: 'Duplicate', onClick: () => console.log('Duplicate')},
@@ -257,9 +266,10 @@ export const WithDividers: Story = {
 
 // With disabled items
 export const WithDisabledItems: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Actions'}}
+      {...args}
       items={[
         {label: 'Edit', onClick: () => console.log('Edit')},
         {label: 'Duplicate', onClick: () => console.log('Duplicate')},
@@ -271,9 +281,10 @@ export const WithDisabledItems: Story = {
 
 export const DestructiveItem: Story = {
   name: 'Destructive item',
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Actions'}}
+      {...args}
       items={[
         {label: 'Edit', onClick: () => console.log('Edit')},
         {
@@ -295,7 +306,7 @@ export const DestructiveItem: Story = {
 
 // Controlled mode
 export const Controlled: Story = {
-  render: () => {
+  render: (args: StoryArgs) => {
     const [isOpen, setIsOpen] = useState(false);
     return (
       <div
@@ -308,6 +319,7 @@ export const Controlled: Story = {
         <div>Menu is {isOpen ? 'open' : 'closed'}</div>
         <DropdownMenu
           button={{label: 'Controlled Menu'}}
+          {...args}
           isMenuOpen={isOpen}
           onOpenChange={setIsOpen}
           items={[
@@ -325,11 +337,12 @@ export const Controlled: Story = {
 // where it was. Only an open the user initiates moves focus into the first
 // item; from the focused trigger, ArrowDown walks into the open menu (#5976).
 export const MountedOpen: Story = {
-  render: function MountedOpenStory() {
+  render: function MountedOpenStory({presentation: _, ...args}: StoryArgs) {
     const [isOpen, setIsOpen] = useState(true);
     return (
       <DropdownMenu
         button={{label: 'Sort'}}
+        {...args}
         isMenuOpen={isOpen}
         onOpenChange={setIsOpen}>
         <DropdownMenuItem label="Newest" />
@@ -349,10 +362,11 @@ export const MountedOpen: Story = {
 
 // Custom menu width
 export const CustomWidth: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Wide Menu'}}
       menuWidth={300}
+      {...args}
       items={[
         {
           label: 'This is a longer option that needs more space',
@@ -370,22 +384,26 @@ export const CustomWidth: Story = {
 
 // Button variants
 export const ButtonVariants: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <div style={{display: 'flex', gap: 16, flexWrap: 'wrap'}}>
       <DropdownMenu
         button={{label: 'Secondary', variant: 'secondary'}}
+        {...args}
         items={[{label: 'Option 1'}, {label: 'Option 2'}]}
       />
       <DropdownMenu
         button={{label: 'Primary', variant: 'primary'}}
+        {...args}
         items={[{label: 'Option 1'}, {label: 'Option 2'}]}
       />
       <DropdownMenu
         button={{label: 'Ghost', variant: 'ghost'}}
+        {...args}
         items={[{label: 'Option 1'}, {label: 'Option 2'}]}
       />
       <DropdownMenu
         button={{label: 'Destructive', variant: 'destructive'}}
+        {...args}
         items={[{label: 'Option 1'}, {label: 'Option 2'}]}
       />
     </div>
@@ -394,18 +412,21 @@ export const ButtonVariants: Story = {
 
 // Button sizes
 export const ButtonSizes: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <div style={{display: 'flex', gap: 16, alignItems: 'center'}}>
       <DropdownMenu
         button={{label: 'Small', size: 'sm'}}
+        {...args}
         items={[{label: 'Option 1'}, {label: 'Option 2'}]}
       />
       <DropdownMenu
         button={{label: 'Medium', size: 'md'}}
+        {...args}
         items={[{label: 'Option 1'}, {label: 'Option 2'}]}
       />
       <DropdownMenu
         button={{label: 'Large', size: 'lg'}}
+        {...args}
         items={[{label: 'Option 1'}, {label: 'Option 2'}]}
       />
     </div>
@@ -414,7 +435,7 @@ export const ButtonSizes: Story = {
 
 // With onClick callback
 export const WithOnClick: Story = {
-  render: () => {
+  render: (args: StoryArgs) => {
     const [clickCount, setClickCount] = useState(0);
     return (
       <div
@@ -427,6 +448,7 @@ export const WithOnClick: Story = {
         <div>Button clicked {clickCount} times</div>
         <DropdownMenu
           button={{label: 'Click Me'}}
+          {...args}
           onClick={() => setClickCount(c => c + 1)}
           items={[
             {label: 'Menu Item', onClick: () => console.log('Item clicked')},
@@ -438,11 +460,12 @@ export const WithOnClick: Story = {
 };
 
 export const StaysOpenOnSelect: Story = {
-  render: () => {
+  render: (args: StoryArgs) => {
     const [copied, setCopied] = useState(false);
     return (
       <DropdownMenu
         button={{label: 'Session'}}
+        {...args}
         items={[
           {
             label: copied ? 'Copied' : 'Copy session ID',
@@ -465,8 +488,8 @@ export const StaysOpenOnSelect: Story = {
 
 // Custom item rendering with compound mode
 export const CustomItemRender: Story = {
-  render: () => (
-    <DropdownMenu button={{label: 'Select User'}} menuWidth={280}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'Select User'}} menuWidth={280} {...args}>
       <DropdownMenuItem
         icon={UserIcon}
         label="Alice Johnson"
@@ -491,7 +514,7 @@ export const CustomItemRender: Story = {
 
 // Icon-only trigger — renders as a square icon button (e.g., "⋯" menu)
 export const IconOnly: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <div style={{display: 'flex', gap: 16, alignItems: 'center'}}>
       <DropdownMenu
         button={{
@@ -500,6 +523,7 @@ export const IconOnly: Story = {
           variant: 'ghost',
           isIconOnly: true,
         }}
+        {...args}
         items={[
           {label: 'Edit', icon: PencilIcon, onClick: () => console.log('Edit')},
           {
@@ -516,6 +540,7 @@ export const IconOnly: Story = {
           variant: 'secondary',
           isIconOnly: true,
         }}
+        {...args}
         items={[
           {label: 'Preferences', onClick: () => console.log('Preferences')},
           {label: 'Account', onClick: () => console.log('Account')},
@@ -527,7 +552,7 @@ export const IconOnly: Story = {
 
 // Icon + label together — pass children on button to get visible text with icon
 export const IconWithLabel: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{
         label: 'Settings',
@@ -535,6 +560,7 @@ export const IconWithLabel: Story = {
         variant: 'ghost',
         children: 'Settings',
       }}
+      {...args}
       items={[
         {label: 'Preferences', onClick: () => console.log('Preferences')},
         {label: 'Account', onClick: () => console.log('Account')},
@@ -545,10 +571,11 @@ export const IconWithLabel: Story = {
 
 // No chevron — label-only trigger without dropdown indicator
 export const NoChevron: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Sort by: Name', variant: 'ghost'}}
       hasChevron={false}
+      {...args}
       items={[
         {label: 'Name', onClick: () => console.log('Name')},
         {label: 'Date', onClick: () => console.log('Date')},
@@ -560,8 +587,8 @@ export const NoChevron: Story = {
 
 // Compound-component mode — JSX children with interactive items
 export const CompoundBasic: Story = {
-  render: () => (
-    <DropdownMenu button={{label: 'Actions'}}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'Actions'}} {...args}>
       <DropdownMenuItem
         icon={PencilIcon}
         label="Edit"
@@ -584,8 +611,8 @@ export const CompoundBasic: Story = {
 
 // Compound mode with disabled items
 export const CompoundWithDisabled: Story = {
-  render: () => (
-    <DropdownMenu button={{label: 'File Actions'}}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'File Actions'}} {...args}>
       <DropdownMenuItem
         icon={PencilIcon}
         label="Edit"
@@ -608,7 +635,7 @@ export const CompoundWithDisabled: Story = {
 
 // Compound mode with conditional items
 export const CompoundConditional: Story = {
-  render: () => {
+  render: ({presentation: _, ...args}: StoryArgs) => {
     const [canDelete, setCanDelete] = useState(false);
     return (
       <div
@@ -626,7 +653,7 @@ export const CompoundConditional: Story = {
           />
           Show delete option
         </label>
-        <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenu button={{label: 'Actions'}} {...args}>
           <DropdownMenuItem
             icon={PencilIcon}
             label="Edit"
@@ -655,8 +682,8 @@ export const CompoundConditional: Story = {
 
 // Compound mode with descriptions
 export const CompoundWithDescriptions: Story = {
-  render: () => (
-    <DropdownMenu button={{label: 'Select User'}} menuWidth={280}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'Select User'}} menuWidth={280} {...args}>
       <DropdownMenuItem
         icon={UserIcon}
         label="Alice Johnson"
@@ -680,8 +707,8 @@ export const CompoundWithDescriptions: Story = {
 };
 
 export const CompoundWithGroups: Story = {
-  render: () => (
-    <DropdownMenu button={{label: 'Version'}}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'Version'}} {...args}>
       <DropdownMenuGroup title="Version history">
         <DropdownMenuItem
           icon={ArrowDownTrayIcon}
@@ -712,10 +739,11 @@ export const CompoundWithGroups: Story = {
 };
 
 export const PlacementAbove: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Bottom toolbar menu'}}
       placement="above"
+      {...args}
       items={[
         {label: 'Edit', onClick: () => console.log('Edit')},
         {label: 'Duplicate', onClick: () => console.log('Duplicate')},
@@ -726,11 +754,12 @@ export const PlacementAbove: Story = {
 };
 
 export const AlignmentEnd: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Row actions'}}
       alignment="end"
       menuWidth={220}
+      {...args}
       items={[
         {label: 'Edit', onClick: () => console.log('Edit')},
         {label: 'Duplicate', onClick: () => console.log('Duplicate')},
@@ -749,10 +778,11 @@ export const AlignmentEnd: Story = {
 };
 
 export const RTL: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <div style={{direction: 'rtl', display: 'flex', gap: '16px'}}>
       <DropdownMenu
         button={{label: 'CSS direction: rtl'}}
+        {...args}
         items={[
           {label: 'Edit', onClick: () => console.log('Edit')},
           {label: 'Duplicate', onClick: () => console.log('Duplicate')},
@@ -763,6 +793,7 @@ export const RTL: Story = {
         <div dir="rtl">
           <DropdownMenu
             button={{label: 'dir="rtl" attribute'}}
+            {...args}
             items={[
               {label: 'Edit', onClick: () => console.log('Edit')},
               {label: 'Duplicate', onClick: () => console.log('Duplicate')},
@@ -788,12 +819,15 @@ export const RTL: Story = {
 // =============================================================================
 
 export const LabCheckboxItems: Story = {
-  render: function LabCheckboxItemsStory() {
+  render: function LabCheckboxItemsStory({
+    presentation: _,
+    ...args
+  }: StoryArgs) {
     const [showArchived, setShowArchived] = useState(false);
     const [showDrafts, setShowDrafts] = useState(true);
     const [syncFolders, setSyncFolders] = useState(true);
     return (
-      <DropdownMenu button={{label: 'View'}}>
+      <DropdownMenu button={{label: 'View'}} {...args}>
         <DropdownMenuCheckboxItem
           label="Show archived"
           value={showArchived}
@@ -842,10 +876,10 @@ export const LabCheckboxItems: Story = {
 };
 
 export const LabRadioGroup: Story = {
-  render: function LabRadioGroupStory() {
+  render: function LabRadioGroupStory({presentation: _, ...args}: StoryArgs) {
     const [sort, setSort] = useState('newest');
     return (
-      <DropdownMenu button={{label: 'Sort'}}>
+      <DropdownMenu button={{label: 'Sort'}} {...args}>
         <DropdownMenuRadioGroup value={sort} onChange={setSort} label="Sort by">
           <DropdownMenuRadioItem value="newest" label="Newest" />
           <DropdownMenuRadioItem value="oldest" label="Oldest" />
@@ -869,18 +903,21 @@ export const LabRadioGroup: Story = {
 };
 
 export const LabSelectableSizes: Story = {
-  render: function LabSelectableSizesStory() {
+  render: function LabSelectableSizesStory({
+    presentation: _,
+    ...args
+  }: StoryArgs) {
     const [sm, setSm] = useState('a');
     const [lg, setLg] = useState('a');
     return (
       <div style={{display: 'flex', gap: 24}}>
-        <DropdownMenu button={{label: 'Small menu', size: 'sm'}}>
+        <DropdownMenu button={{label: 'Small menu', size: 'sm'}} {...args}>
           <DropdownMenuRadioGroup value={sm} onChange={setSm} label="Small">
             <DropdownMenuRadioItem value="a" label="Option A" />
             <DropdownMenuRadioItem value="b" label="Option B" />
           </DropdownMenuRadioGroup>
         </DropdownMenu>
-        <DropdownMenu button={{label: 'Large menu', size: 'lg'}}>
+        <DropdownMenu button={{label: 'Large menu', size: 'lg'}} {...args}>
           <DropdownMenuRadioGroup value={lg} onChange={setLg} label="Large">
             <DropdownMenuRadioItem value="a" label="Option A" />
             <DropdownMenuRadioItem value="b" label="Option B" />
@@ -900,8 +937,8 @@ export const LabSelectableSizes: Story = {
 };
 
 export const Submenu: Story = {
-  render: () => (
-    <DropdownMenu button={{label: 'Actions'}}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'Actions'}} {...args}>
       <DropdownMenuItem icon={PencilIcon} label="Rename" onClick={() => {}} />
       <DropdownMenuSubMenu icon={FolderPlusIcon} label="Move to">
         <DropdownMenuItem label="Folder A" onClick={() => {}} />
@@ -922,8 +959,8 @@ export const Submenu: Story = {
 };
 
 export const NestedSubmenu: Story = {
-  render: () => (
-    <DropdownMenu button={{label: 'Share'}}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'Share'}} {...args}>
       <DropdownMenuItem icon={ShareIcon} label="Copy link" onClick={() => {}} />
       <DropdownMenuSubMenu label="Share to">
         <DropdownMenuItem label="Email" onClick={() => {}} />
@@ -945,8 +982,8 @@ export const NestedSubmenu: Story = {
 };
 
 export const SubmenuAsyncSpinner: Story = {
-  render: () => (
-    <DropdownMenu button={{label: 'Actions'}}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'Actions'}} {...args}>
       <DropdownMenuItem label="Rename" onClick={() => {}} />
       <DropdownMenuSubMenu label="Move to" hasSpinner>
         <DropdownMenuItem label="Loading…" isDisabled onClick={() => {}} />
@@ -964,9 +1001,10 @@ export const SubmenuAsyncSpinner: Story = {
 };
 
 export const SubmenuDataDriven: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Actions'}}
+      {...args}
       items={[
         {label: 'Rename', onClick: () => {}},
         {
@@ -997,11 +1035,13 @@ export const SubmenuDataDriven: Story = {
 // compound mode had no divider component.
 export const ModeParity: Story = {
   parameters: {layout: 'padded'},
-  render: () => (
+  render: ({presentation, ...args}: StoryArgs) => (
     <div style={{display: 'flex', gap: 160, justifyContent: 'center'}}>
       <DropdownMenu
         button={{label: 'Data mode'}}
         menuWidth={220}
+        {...args}
+        presentation={presentation}
         items={[
           {
             label: 'Search',
@@ -1017,7 +1057,7 @@ export const ModeParity: Story = {
           {label: 'Delete', icon: TrashIcon, variant: 'destructive'},
         ]}
       />
-      <DropdownMenu button={{label: 'Compound mode'}} menuWidth={220}>
+      <DropdownMenu button={{label: 'Compound mode'}} menuWidth={220} {...args}>
         <DropdownMenuItem
           icon={MagnifyingGlassIcon}
           label="Search"
@@ -1056,11 +1096,12 @@ export const ActionSheetPresentation: Story = {
     },
   },
   globals: {viewport: {value: 'mobile1', isRotated: false}},
-  render: () => (
+  render: (args: StoryArgs) => (
     <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
       <DropdownMenu
         presentation="bottom-sheet"
         button={{label: 'Project actions'}}
+        {...args}
         items={PROJECT_ACTIONS.map(action => ({
           ...action,
           onClick: () => console.log(`${action.label} selected`),
@@ -1089,10 +1130,11 @@ export const ActionSheetCustomTrigger: Story = {
     },
   },
   globals: {viewport: {value: 'mobile1', isRotated: false}},
-  render: () => (
+  render: (args: StoryArgs) => (
     <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
       <DropdownMenu
         presentation="bottom-sheet"
+        {...args}
         renderTrigger={props => (
           <IconButton
             icon={<EllipsisHorizontalIcon />}
@@ -1123,11 +1165,12 @@ export const SectionedActionSheetPresentation: Story = {
     },
   },
   globals: {viewport: {value: 'mobile1', isRotated: false}},
-  render: () => (
+  render: (args: StoryArgs) => (
     <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
       <DropdownMenu
         presentation="bottom-sheet"
         button={{label: 'File actions'}}
+        {...args}
         items={[
           {
             type: 'section',
@@ -1164,11 +1207,12 @@ export const AdaptiveActionPresentation: Story = {
     },
   },
   globals: {viewport: {value: 'mobile1', isRotated: false}},
-  render: () => (
+  render: (args: StoryArgs) => (
     <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
       <DropdownMenu
         presentation="adaptive"
         button={{label: 'Project actions'}}
+        {...args}
         items={PROJECT_ACTIONS.map(action => ({
           ...action,
           onClick: () => console.log(`${action.label} selected`),
@@ -1197,9 +1241,9 @@ export const CompactDrillInPresentation: Story = {
     },
   },
   globals: {viewport: {value: 'mobile1', isRotated: false}},
-  render: () => (
+  render: (args: StoryArgs) => (
     <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
-      <CompactDrillInActionSheet />
+      <CompactDrillInActionSheet {...args} />
     </div>
   ),
   play: async ({canvasElement}) => {
@@ -1238,13 +1282,14 @@ export const ViewportFit: Story = {
     },
   },
   globals: {viewport: {value: 'mobile1', isRotated: false}},
-  render: () => (
+  render: (args: StoryArgs) => (
     <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
       <div {...stylex.props(readinessStyles.edgeAnchorRow)}>
         <DropdownMenu
           button={{label: 'Project actions'}}
           alignment="end"
           menuWidth={640}
+          {...args}
           items={[
             {label: 'Rename project', onClick: () => {}},
             {label: 'Duplicate project', onClick: () => {}},
@@ -1279,9 +1324,12 @@ export const TallContentOverflow: Story = {
     },
   },
   globals: {viewport: {value: 'mobile1', isRotated: false}},
-  render: () => (
+  render: ({presentation: _, ...args}: StoryArgs) => (
     <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
-      <DropdownMenu button={{label: 'Move to project'}} menuWidth={280}>
+      <DropdownMenu
+        button={{label: 'Move to project'}}
+        menuWidth={280}
+        {...args}>
         {PROJECT_DESTINATIONS.map(([label, team]) => (
           <DropdownMenuItem
             key={label}
@@ -1313,13 +1361,14 @@ export const SubmenuViewportFit: Story = {
     },
   },
   globals: {viewport: {value: 'mobile1', isRotated: false}},
-  render: () => (
+  render: ({presentation: _, ...args}: StoryArgs) => (
     <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
       <div {...stylex.props(readinessStyles.edgeAnchorRow)}>
         <DropdownMenu
           button={{label: 'Project actions'}}
           alignment="end"
-          menuWidth={140}>
+          menuWidth={140}
+          {...args}>
           <DropdownMenuItem label="Rename" onClick={() => {}} />
           <DropdownMenuSubMenu label="Move to" menuWidth={140}>
             <DropdownMenuItem label="Research" onClick={() => {}} />
@@ -1367,8 +1416,9 @@ export const SubmenuViewportFit: Story = {
 
 export const CustomTrigger: Story = {
   name: 'Custom trigger (any control)',
-  render: () => (
+  render: ({presentation: _, ...args}: StoryArgs) => (
     <DropdownMenu
+      {...args}
       renderTrigger={props => (
         <IconButton
           icon={<EllipsisHorizontalIcon />}
@@ -1403,8 +1453,8 @@ export const CustomTrigger: Story = {
 
 export const LinkRows: Story = {
   name: 'Rows that navigate (href)',
-  render: () => (
-    <DropdownMenu button={{label: 'Places'}}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'Places'}} {...args}>
       <DropdownMenuItem icon={UserIcon} label="Profile" href="/profile" />
       <DropdownMenuItem
         icon={Cog6ToothIcon}
@@ -1449,8 +1499,8 @@ export const SubmenuDrillIn: Story = {
       },
     },
   },
-  render: () => (
-    <DropdownMenu button={{label: 'Actions'}}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'Actions'}} {...args}>
       <DropdownMenuItem icon={PencilIcon} label="Rename" onClick={() => {}} />
       <DropdownMenuSubMenu
         icon={FolderPlusIcon}
@@ -1471,9 +1521,9 @@ export const SubmenuDrillIn: Story = {
 export const SubmenuAdaptiveFixture: Story = {
   name: 'Submenu / adaptive fixture',
   parameters: {docs: {disable: true}},
-  render: () => (
+  render: ({presentation: _, ...args}: StoryArgs) => (
     <div data-testid="drill-in-fixture" style={{padding: 16}}>
-      <DropdownMenu button={{label: 'Actions'}}>
+      <DropdownMenu button={{label: 'Actions'}} {...args}>
         <DropdownMenuItem icon={PencilIcon} label="Rename" onClick={() => {}} />
         <DropdownMenuSubMenu icon={FolderPlusIcon} label="Move to">
           <DropdownMenuItem label="Folder A" onClick={() => {}} />
@@ -1498,7 +1548,7 @@ const LABELS = ['Bug', 'Feature', 'Documentation', 'Design', 'Performance'];
  * Tab walks field, menu, button and wraps at either end; Escape closes.
  */
 export const HeaderAndFooter: Story = {
-  render: () => {
+  render: ({presentation: _, ...args}: StoryArgs) => {
     const [query, setQuery] = useState('');
     const [created, setCreated] = useState(0);
     const visible = LABELS.filter(label =>
@@ -1508,6 +1558,7 @@ export const HeaderAndFooter: Story = {
       <>
         <DropdownMenu
           button={{label: 'Labels'}}
+          {...args}
           header={
             <TextInput
               label="Filter labels"
@@ -1534,6 +1585,122 @@ export const HeaderAndFooter: Story = {
         </DropdownMenu>
         <output data-testid="created">{created}</output>
       </>
+    );
+  },
+};
+
+/**
+ * A sub-menu with its own filter field and "Create" button: the Labels level
+ * of a session menu. Its surface (the flyout, or the drilled-in view on a
+ * phone) is a modal dialog named by its row, beside the menu rather than
+ * inside it: Tab walks field, rows, button and wraps; Escape returns to the
+ * row. The picks are checkbox rows, so the sub-menu stays open while several
+ * are chosen.
+ */
+export const SubMenuHeaderAndFooter: Story = {
+  name: 'Submenu / header and footer',
+  render: ({presentation: _, ...args}: StoryArgs) => {
+    const [query, setQuery] = useState('');
+    const [picked, setPicked] = useState<ReadonlyArray<string>>(['Bug']);
+    const [created, setCreated] = useState(0);
+    const visible = LABELS.filter(label =>
+      label.toLowerCase().includes(query.trim().toLowerCase()),
+    );
+    return (
+      <div data-testid="submenu-regions-fixture" style={{padding: 16}}>
+        <DropdownMenu button={{label: 'Session'}} {...args}>
+          <DropdownMenuItem
+            icon={PencilIcon}
+            label="Rename"
+            onClick={() => {}}
+          />
+          <DropdownMenuSubMenu
+            label="Labels"
+            header={
+              <TextInput
+                label="Filter labels"
+                isLabelHidden
+                placeholder="Filter labels"
+                value={query}
+                onChange={setQuery}
+              />
+            }
+            footer={
+              <Button
+                label="Create label"
+                variant="ghost"
+                onClick={() => setCreated(count => count + 1)}
+              />
+            }>
+            {visible.map(label => (
+              <DropdownMenuCheckboxItem
+                key={label}
+                label={label}
+                value={picked.includes(label)}
+                onChange={isChecked =>
+                  setPicked(current =>
+                    isChecked
+                      ? [...current, label]
+                      : current.filter(item => item !== label),
+                  )
+                }
+              />
+            ))}
+          </DropdownMenuSubMenu>
+          <DropdownMenuItem
+            icon={TrashIcon}
+            label="Delete"
+            onClick={() => {}}
+          />
+        </DropdownMenu>
+        <output data-testid="picked">{picked.join(', ')}</output>
+        <output data-testid="created">{created}</output>
+      </div>
+    );
+  },
+};
+
+/**
+ * A sub-menu whose header holds a choice rather than a field: whether the
+ * picked labels must all match. The radio group keeps its own arrow keys, and
+ * a flyout the pointer has left stays open while focus is inside it, so the
+ * choice can still be changed from the keyboard.
+ */
+export const SubMenuHeaderChoice: Story = {
+  name: 'Submenu / header with a choice',
+  render: ({presentation: _, ...args}: StoryArgs) => {
+    const [match, setMatch] = useState('any');
+    const [picked, setPicked] = useState<ReadonlyArray<string>>(['Bug']);
+    return (
+      <div data-testid="submenu-choice-fixture" style={{padding: 16}}>
+        <DropdownMenu button={{label: 'Filters'}} {...args}>
+          <DropdownMenuItem label="Reset" onClick={() => {}} />
+          <DropdownMenuSubMenu
+            label="Labels"
+            header={
+              <RadioList label="Match" value={match} onChange={setMatch}>
+                <RadioListItem label="Any label" value="any" />
+                <RadioListItem label="All labels" value="all" />
+              </RadioList>
+            }>
+            {LABELS.map(label => (
+              <DropdownMenuCheckboxItem
+                key={label}
+                label={label}
+                value={picked.includes(label)}
+                onChange={isChecked =>
+                  setPicked(current =>
+                    isChecked
+                      ? [...current, label]
+                      : current.filter(item => item !== label),
+                  )
+                }
+              />
+            ))}
+          </DropdownMenuSubMenu>
+        </DropdownMenu>
+        <output data-testid="match">{match}</output>
+      </div>
     );
   },
 };

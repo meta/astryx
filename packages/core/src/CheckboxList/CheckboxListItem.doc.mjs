@@ -8,7 +8,7 @@ export const docs = {
   displayName: 'Checkbox List Item',
   isHiddenFromOverview: true,
   description:
-    'Individual checkbox item with label, description, and end content slot. Works in collection mode (inside a CheckboxList with a value array) or standalone mode (inside List, or inside a CheckboxList without value, such as a select-all item).',
+    'Individual checkbox item with label, description, and end content slot. Works in collection mode (inside a CheckboxList with a value array) or standalone mode (inside List, or inside a CheckboxList without value, such as a select-all item). On a touch screen (a coarse primary pointer), a toggleable row is one press target: a touch on the label, the description or the box itself shows the pressed state on the row and its checkbox together. Where the primary pointer is fine, the box keeps its own press.',
   props: [
     {
       name: 'label',
@@ -56,6 +56,13 @@ export const docs = {
       ],
     },
     {
+      name: 'align',
+      type: "'center' | 'start' | 'first-line'",
+      description:
+        'Vertical alignment of the start and end content against the label, passed through to Item unchanged. `first-line` keeps a small mark (a checkbox) level with the first line of a wrapped label. See Item.align.',
+      default: "'center'",
+    },
+    {
       name: 'isDisabled',
       type: 'boolean',
       description: 'Whether this individual item is disabled.',
@@ -98,7 +105,7 @@ export const docsZh = {
   isHiddenFromOverview: true,
   displayName: 'Checkbox List Item',
   description:
-    '单个复选框选项，包含标签、描述和尾部内容插槽。可在集合模式（位于带 value 数组的 CheckboxList 内）或独立模式（位于 List 内，或位于不带 value 的 CheckboxList 内，例如“全选”选项）下使用。',
+    '单个复选框选项，包含标签、描述和尾部内容插槽。可在集合模式（位于带 value 数组的 CheckboxList 内）或独立模式（位于 List 内，或位于不带 value 的 CheckboxList 内，例如“全选”选项）下使用。在触摸屏上，可切换的行是一个整体的按压目标：手指按在标签、描述或复选框本身上，行与其复选框会一起显示按下状态。主指针为精细指针时，复选框保留自己的按下效果。',
   props: [
     {
       name: 'label',
@@ -129,6 +136,13 @@ export const docsZh = {
       name: 'endContent',
       type: 'ReactNode',
       description: '在标签区域后渲染的内容。',
+    },
+    {
+      name: 'align',
+      type: "'center' | 'start' | 'first-line'",
+      description:
+        '起始和结束内容相对于标签的垂直对齐方式，原样传递给 Item。`first-line` 让小标记（复选框）与换行标签的第一行保持水平。参见 Item.align。',
+      default: "'center'",
     },
     {
       name: 'isDisabled',
@@ -163,8 +177,10 @@ export const docsDense = {
   isHiddenFromOverview: true,
   displayName: 'Checkbox List Item',
   description:
-    'Individual checkbox item w/ label, description, end content slot. Collection mode inside CheckboxList with value; standalone inside List or CheckboxList without value.',
+    'Individual checkbox item w/ label, description, end content slot. Collection mode inside CheckboxList with value; standalone inside List or CheckboxList without value. On a touch screen a toggleable row presses as one target, box included; with a fine primary pointer the box keeps its own press.',
   propDescriptions: {
+    align:
+      "Start/end content alignment, passed to Item: 'center' (default), 'start', or 'first-line' (centered on the label's first line).",
     label:
       'Primary label. String or ReactNode; nested controls keep their behavior. A ReactNode names the checkbox from its visible text.',
     'aria-label':

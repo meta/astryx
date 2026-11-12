@@ -13,8 +13,7 @@ export type CoreStatusMessageBinding =
   | 'Toast announcement channel'
   | 'Toast card'
   | 'FieldStatus announcement channel'
-  | 'Spinner'
-  | 'ChatSystemMessage'
+  | 'Spinner announcement channel'
   | 'ProgressBar';
 
 export interface CoreStatusMessageBindingDefinition {
@@ -83,6 +82,34 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
       semanticTransitions: ['show', 'replace', 'repeat'],
     }),
     storyId: 'a11y-status-message-pattern--toast-error-announcement',
+  },
+  {
+    id: 'toast-info-announcement-top-layer',
+    binding: 'Toast announcement channel',
+    summary:
+      'a top-layer viewport outside a modal announces an info toast once through the shared polite region, and adds no region of its own',
+    facts: liveFacts({
+      role: 'status',
+      politeness: 'polite',
+      message: 'Changes saved',
+      replacement: 'Profile updated',
+      semanticTransitions: ['show', 'replace', 'repeat'],
+    }),
+    storyId: 'a11y-status-message-pattern--toast-info-announcement-top-layer',
+  },
+  {
+    id: 'toast-error-announcement-top-layer',
+    binding: 'Toast announcement channel',
+    summary:
+      'a top-layer viewport outside a modal announces an error toast once through the shared assertive region, and adds no region of its own',
+    facts: liveFacts({
+      role: 'alert',
+      politeness: 'assertive',
+      message: 'Upload failed',
+      replacement: 'Connection failed',
+      semanticTransitions: ['show', 'replace', 'repeat'],
+    }),
+    storyId: 'a11y-status-message-pattern--toast-error-announcement-top-layer',
   },
   {
     id: 'toast-info-card-mounted',
@@ -158,14 +185,13 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
   },
   {
     id: 'spinner-default-label-mounted',
-    binding: 'Spinner',
+    binding: 'Spinner announcement channel',
     summary:
-      'a loading spinner is mounted with its default accessible status name',
+      'a mounted spinner sends its default label and updates through the persistent polite channel',
     facts: liveFacts({
       role: 'status',
       politeness: 'polite',
       initialMessage: 'Loading',
-      messageSource: 'accessible-name',
       message: 'Loading',
       replacement: 'Saving',
       semanticTransitions: ['replace'],
@@ -174,33 +200,18 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
   },
   {
     id: 'spinner-visible-label-mounted',
-    binding: 'Spinner',
+    binding: 'Spinner announcement channel',
     summary:
-      'a loading spinner is mounted with a visible label that names its status role',
+      'a mounted spinner sends its visible label and updates through the persistent polite channel',
     facts: liveFacts({
       role: 'status',
       politeness: 'polite',
       initialMessage: 'Fetching data',
-      messageSource: 'accessible-name',
       message: 'Fetching data',
       replacement: 'Saving data',
       semanticTransitions: ['replace'],
     }),
     storyId: 'a11y-status-message-pattern--spinner-visible-label-mounted',
-  },
-  {
-    id: 'chat-system-status-mounted',
-    binding: 'ChatSystemMessage',
-    summary: 'a chat status notice is mounted with its live-region content',
-    facts: liveFacts({
-      role: 'status',
-      politeness: 'polite',
-      initialMessage: 'Conversation started',
-      message: 'Conversation started',
-      replacement: 'A file was shared',
-      semanticTransitions: ['replace', 'clear'],
-    }),
-    storyId: 'a11y-status-message-pattern--chat-system-status-mounted',
   },
   {
     id: 'progress-loading-to-complete',
@@ -279,10 +290,10 @@ export const CORE_STATUS_MESSAGE_EXCLUSIONS = [
       'A composing control that marks Spinner aria-hidden owns the surrounding busy semantics; the decorative ring is not another status message.',
   },
   {
-    owner: 'ChatSystemMessage divider',
-    part: 'date or section separator',
+    owner: 'ChatSystemMessage',
+    part: 'chat notice or date separator',
     reason:
-      'A divider does not report success, results, waiting, progress, or an error. Its current forced status role is tracked as a separate ownership mismatch rather than adopted here.',
+      'spec:AST-086 FR4: a notice added to a chat log is delivered by the log, so neither the notice row nor the divider carries its own live role; a date or section separator is ordinary transcript content.',
   },
   {
     owner: 'ChatMessageList and streaming logs',

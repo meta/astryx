@@ -4,10 +4,14 @@
  * @file RichTextEditor.markdownParity.tsx
  * @input Core Markdown for the read surface; RichTextEditor with its toolbar and
  *   the Lexical plugins available today for the edit surface; the parity
- *   fixture; the Storybook demo Markdown plugins.
+ *   fixture; the Storybook demo Markdown plugins; 16px wide-counter fixtures
+ *   with ordered, unordered and pure-task ancestry.
  * @output `MarkdownParitySandbox`: one Markdown document rendered by both
  *   surfaces side by side, swapped in place, or overlaid, with diagnostic
  *   per-block geometry and the scroll anchor across a mode switch.
+ *   `WideNumberMarkerParity`, `MixedNumberMarkerParity` and
+ *   `TaskParentNumberMarkerParity` compare short and wide outside counters on
+ *   Markdown, RichTextView, and RichTextEditor.
  * @position Storybook-only diagnostic for RichTextEditor.stories.tsx. It shows
  *   current behavior and fixes nothing: every difference it reports is a
  *   finding, and none of its numbers is a target.
@@ -33,9 +37,16 @@ import {Banner} from '@astryxdesign/core/Banner';
 import {Markdown} from '@astryxdesign/core/Markdown';
 import {Text} from '@astryxdesign/core/Text';
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
-import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {defineTheme, Theme, useTheme} from '@astryxdesign/core/theme';
+import {
+  borderVars,
+  colorVars,
+  spacingVars,
+  typeScaleVars,
+} from '@astryxdesign/core/theme/tokens.stylex';
 import {
   RichTextEditor,
+  RichTextView,
   RichTextEditorAutoLinkPlugin,
   RichTextEditorToolbar,
   markdownToEditorStateJSON,
@@ -374,11 +385,29 @@ function MarkdownRead({content}: {content: ParityContent}) {
   );
 }
 
-function RichTextEdit({content}: {content: ParityContent}) {
+/**
+ * The in-place editing frame the RichTextEditor docs describe: the field's
+ * inset and border sit outside the reading width, so the document wraps at the
+ * same width in read and edit mode (spec:AST-061 FR9).
+ */
+const inPlaceStyles = stylex.create({
+  editorFrame: {
+    marginInline: `calc(-1 * (${spacingVars['--spacing-2']} + ${borderVars['--border-width']}))`,
+  },
+});
+
+function RichTextEdit({
+  content,
+  isInPlace = false,
+}: {
+  content: ParityContent;
+  isInPlace?: boolean;
+}) {
   return (
     <RichTextEditor
       label="Document"
       isLabelHidden
+      xstyle={isInPlace ? inPlaceStyles.editorFrame : undefined}
       defaultValue={content.editorState}
       toolbar={<RichTextEditorToolbar />}
       plugins={
@@ -393,7 +422,8 @@ interface SurfaceDefinition {
   readonly label: string;
   /** The element whose children are the document's top-level blocks. */
   readonly contentRoot: (body: HTMLElement) => Element | null;
-  readonly render: (content: ParityContent) => ReactNode;
+  /** `isInPlace` is set when the surface replaces the other one in place. */
+  readonly render: (content: ParityContent, isInPlace?: boolean) => ReactNode;
 }
 
 /**
@@ -410,7 +440,9 @@ const SURFACES = {
   richtext: {
     label: 'RichText, edit mode',
     contentRoot: body => body.querySelector('[contenteditable]'),
-    render: content => <RichTextEdit content={content} />,
+    render: (content: ParityContent, isInPlace?: boolean) => (
+      <RichTextEdit content={content} isInPlace={isInPlace} />
+    ),
   },
 } satisfies Record<string, SurfaceDefinition>;
 
@@ -744,7 +776,7 @@ function ToggleView({
         label={SURFACES[surface].label}
         bodyRef={bodyRef}
         isHosted={hostWidth === '680px'}>
-        {SURFACES[surface].render(content)}
+        {SURFACES[surface].render(content, true)}
       </SurfaceSection>
       <Measurements
         left={{label: 'Read (last measured)', geometry: read}}
@@ -802,5 +834,134 @@ export function MarkdownParitySandbox({
         />
       )}
     </div>
+  );
+}
+
+// A real Theme override, not a font-size declaration on the story wrapper:
+// both document text and generated counters must resolve to 16px.
+const wideMarkerTheme = defineTheme({
+  name: 'wide-number-marker-parity',
+  typography: {scale: {base: 16, ratio: 1.2}},
+});
+
+const WIDE_MARKER_SOURCE = [
+  'Reference paragraph.',
+  '',
+  '9. Short decimal',
+  '',
+  'A paragraph separates lists.',
+  '',
+  '999. Before four digits',
+  '1000. Four digits',
+  '      1. Nested under four digits',
+  '1001. Sibling after four digits',
+  '',
+  'Another separate list.',
+  '',
+  '2024. Year counter',
+  '',
+  'The widest decimal supported by Markdown source syntax.',
+  '',
+  '999999999. Nine digits',
+  '',
+  'Nested counters resolve from their parent text line.',
+  '',
+  '1. Outer parent',
+  '   1. Middle parent',
+  '      1. Short roman',
+  '2. Other outer parent',
+  '   1. Other middle parent',
+  '',
+  '      27. Before long roman',
+  '      28. Long roman',
+  '      29. After long roman',
+  '',
+  'A still wider roman counter.',
+  '',
+  '1. Last outer parent',
+  '   1. Last middle parent',
+  '',
+  '      1888. Much wider roman',
+].join('\n');
+
+const wideMarkerStyles = stylex.create({
+  columns: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
+    gap: spacingVars['--spacing-4'],
+  },
+  surface: {
+    minWidth: 0,
+    // Space to photograph outside ink, including nine-digit counters, without
+    // the viewport cropping it. The document's ordinary list inset is unchanged.
+    paddingInline: 96,
+    fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
+  },
+});
+
+const MIXED_MARKER_SOURCE = [
+  'Reference paragraph.',
+  '',
+  '- Outer bullet',
+  '  - Inner bullet',
+  '',
+  '    388. Mixed roman counter',
+  '    389. Roman sibling',
+].join('\n');
+
+const TASK_PARENT_MARKER_SOURCE = [
+  'Reference paragraph.',
+  '',
+  '- [ ] Outer task',
+  '  - [x] Inner task',
+  '',
+  '    388. Task roman counter',
+  '    389. Task roman sibling',
+].join('\n');
+
+/** Reusable comparison for a numbered list below two pure task ancestors. */
+export function TaskParentNumberMarkerParity() {
+  return <NumberMarkerParity source={TASK_PARENT_MARKER_SOURCE} />;
+}
+
+/** Reusable comparison for a numbered list below two unordered ancestors. */
+export function MixedNumberMarkerParity() {
+  return <NumberMarkerParity source={MIXED_MARKER_SOURCE} />;
+}
+
+/** Reusable short/wide-counter comparison in read and edit mode at 16px. */
+export function WideNumberMarkerParity() {
+  return <NumberMarkerParity source={WIDE_MARKER_SOURCE} />;
+}
+
+function NumberMarkerParity({source}: {source: string}) {
+  const {mode} = useTheme();
+  const state = useMemo(() => markdownToEditorStateJSON(source), [source]);
+  return (
+    <Theme theme={wideMarkerTheme} mode={mode}>
+      <div {...stylex.props(wideMarkerStyles.columns)}>
+        <div
+          data-wide-marker-surface="markdown"
+          {...stylex.props(wideMarkerStyles.surface)}>
+          <Markdown>{source}</Markdown>
+        </div>
+        <div
+          data-wide-marker-surface="view"
+          {...stylex.props(wideMarkerStyles.surface)}>
+          <RichTextView value={state} />
+        </div>
+        <div
+          data-wide-marker-surface="editor"
+          {...stylex.props(wideMarkerStyles.surface)}>
+          <RichTextEditor
+            label="Wide counters"
+            isLabelHidden
+            defaultValue={state}
+            xstyle={inPlaceStyles.editorFrame}
+          />
+        </div>
+      </div>
+    </Theme>
   );
 }

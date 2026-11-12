@@ -38,13 +38,14 @@ describe('code block headers (spec:AST-061 FR8)', () => {
     const {container} = render(
       <RichTextView value={markdownToEditorStateJSON('```\nplain\n```\n')} />,
     );
-    const header = await waitFor(() => {
-      const element = container.querySelector('[data-richtext-code-header]');
-      expect(element).not.toBeNull();
-      return element as HTMLElement;
-    });
-    // The button's accessible name is all the header holds.
-    expect(header.textContent).toBe('Copy code');
+    // The header's text ends with the copy button's tooltip, which its layer
+    // draws in a later render than the header itself: wait for the text, not
+    // only for the header.
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-richtext-code-header]')?.textContent,
+      ).toBe('Copy code'),
+    );
     expect(screen.getByRole('button', {name: 'Copy code'})).toBeTruthy();
   });
 
@@ -56,19 +57,16 @@ describe('code block headers (spec:AST-061 FR8)', () => {
         )}
       />,
     );
+    // Exactly `plaintext` names nothing; core compares it case-sensitively.
+    // Each header's text ends with its copy button's tooltip, drawn in a later
+    // render than the header: wait for the text.
     await waitFor(() =>
       expect(
-        container.querySelectorAll('[data-richtext-code-header]'),
-      ).toHaveLength(2),
+        [...container.querySelectorAll('[data-richtext-code-header]')].map(
+          header => header.textContent,
+        ),
+      ).toEqual(['Copy code', 'PlaintextCopy code']),
     );
-    const headers = [
-      ...container.querySelectorAll('[data-richtext-code-header]'),
-    ];
-    // Exactly `plaintext` names nothing; core compares it case-sensitively.
-    expect(headers.map(header => header.textContent)).toEqual([
-      'Copy code',
-      'PlaintextCopy code',
-    ]);
   });
 
   it('draws one header per code block in the editor, outside the editable text', async () => {
@@ -80,19 +78,18 @@ describe('code block headers (spec:AST-061 FR8)', () => {
         )}
       />,
     );
+    // Each header: its language label, then the copy button's tooltip, which
+    // its layer draws in a later render than the header: wait for the text.
     await waitFor(() =>
       expect(
-        container.querySelectorAll('[data-richtext-code-header]'),
-      ).toHaveLength(2),
+        [...container.querySelectorAll('[data-richtext-code-header]')].map(
+          header => header.textContent,
+        ),
+      ).toEqual(['tsCopy code', 'jsCopy code']),
     );
     const headers = [
       ...container.querySelectorAll('[data-richtext-code-header]'),
     ];
-    // Each header: its language label, then the copy button's name.
-    expect(headers.map(header => header.textContent)).toEqual([
-      'tsCopy code',
-      'jsCopy code',
-    ]);
     for (const header of headers) {
       expect(header.closest('[contenteditable]')).toBeNull();
     }

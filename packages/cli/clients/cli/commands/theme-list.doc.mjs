@@ -33,11 +33,12 @@ export const doc = {
       cli: 'astryx theme list --package @acme/themes',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
     {
       code: 1,
-      when: 'a bundled or installed theme descriptor cannot be read',
+      when: 'a bundled or installed theme descriptor cannot be read, or the generated theme module exists and its record cannot be read',
     },
   ],
   related: ['theme add', 'theme build'],

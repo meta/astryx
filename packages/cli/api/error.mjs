@@ -78,3 +78,28 @@ export function writeFailed(target, cwd, cause, unrestored = []) {
     ERROR_CODES.ERR_WRITE_FAILED,
   );
 }
+
+/**
+ * Locate the Core a command answers from (`requireCoreDir` in
+ * foundation/fs/paths.mjs), raising its coded failure as an AstryxError:
+ * ERR_CORE_NOT_FOUND with no Core to answer from, ERR_VERSIONS_UNAVAILABLE
+ * when the carried Core is needed and cannot be installed.
+ * @param {(cwd: string) => string} lookup the foundation lookup
+ * @param {string} cwd
+ * @returns {string}
+ */
+export function coreDirOrThrow(lookup, cwd) {
+  try {
+    return lookup(cwd);
+  } catch (error) {
+    const code = /** @type {any} */ (error)?.code;
+    if (typeof code === 'string' && code.startsWith('ERR_')) {
+      throw new AstryxError(
+        error instanceof Error ? error.message : String(error),
+        undefined,
+        code,
+      );
+    }
+    throw error;
+  }
+}

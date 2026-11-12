@@ -12,5 +12,12 @@
       "default": false,
       "source": "package"
     }
-  ]
+  ],
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
+  }
 }
