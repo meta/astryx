@@ -890,7 +890,7 @@ export function colorsPageSource({slug, module, seeds, uses}) {
     "          <h2 style={{margin: 0, fontSize: 20, textTransform: 'capitalize'}}>",
     '            {name}',
     '            {SEEDS[name] ? (',
-    "              <span style={{marginLeft: 8, fontSize: 14, fontWeight: 400, color: 'var(--color-text-secondary)'}}>",
+    "              <span style={{marginLeft: 8, fontSize: 14, fontWeight: 400, textTransform: 'none', color: 'var(--color-text-secondary)'}}>",
     '                from {SEEDS[name]}',
     '              </span>',
     '            ) : null}',

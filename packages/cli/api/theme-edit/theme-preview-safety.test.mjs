@@ -10,6 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
 import {
   afterAll,
@@ -566,16 +567,13 @@ describe('preview add', () => {
     const r = await refusal(() =>
       themeEditPreviewAdd('zzzz', {cwd, path: "src/app/$(id)'x"}),
     );
-    // The folder name is no plain URL segment: the way on is a slugged
-    // one, and nothing in it reaches a shell unquoted.
-    expect(r.code).toBe('ERR_INVALID_ARGUMENT');
-    expect(r.run).toEqual([
-      'astryx experimental theme preview add zzzz --path src/app/id-x',
-    ]);
-    const ok = await refusal(() => themeEditPreviewAdd('zzzz', {cwd}));
-    expect(ok.code).toBe('ERR_NOT_FOUND');
-    expect(ok.run.at(-1)).toBe('astryx template --list --type page');
-    expect(ok.run.join(' ')).not.toContain('shell-top-nav');
+    // $ ( ) ' make a folder Next serves; nothing in it reaches a shell
+    // unquoted.
+    expect(r.code).toBe('ERR_NOT_FOUND');
+    expect(r.run.at(-1)).toBe('astryx template --list --type page');
+    for (const cmd of r.run.slice(0, -1))
+      expect(cmd).toContain(`--path 'src/app/$(id)'\\''x'`);
+    expect(r.run.join(' ')).not.toContain('shell-top-nav');
   }, 60_000);
 
   it('takes every word of an unquoted description, and refuses extra arguments to list and remove', async () => {
@@ -2150,4 +2148,75 @@ describe('final pass 5', () => {
       rm('src/app/(m)');
     }
   });
+
+  it('suggests a free slugged folder, serves what Next serves, and refuses a case twin', async () => {
+    fs.mkdirSync(path.join(cwd, 'src/app/a-b'), {recursive: true});
+    try {
+      const taken = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/app/a b'}),
+      );
+      expect(taken.run[0]).toContain('--path src/app/a-b-2');
+    } finally {
+      rm('src/app/a-b');
+    }
+    const both = await refusal(() =>
+      themeEditPreviewAdd(undefined, {cwd, path: 'src/app/é/á'}),
+    );
+    expect(both.run[0]).toContain('--path src/app/e/a');
+    const sub = await themeEditPreviewAdd(undefined, {
+      cwd,
+      path: 'src/app/a+b~c!(x)@y',
+    });
+    expect(sub.data.folder).toBe('src/app/a+b~c!(x)@y');
+    rm('src/app/a+b~c!(x)@y');
+    write('src/app/Foo/page.tsx', 'export default 1;\n');
+    try {
+      const twin = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/app/foo'}),
+      );
+      expect(twin.code).toBe('ERR_INVALID_ARGUMENT');
+      expect(twin.message).toContain('differs from it only in case');
+      expect(twin.run[0]).toContain('--path src/app/foo-2');
+      expect(exists('src/app/foo')).toBe(false);
+    } finally {
+      rm('src/app/Foo');
+    }
+  }, 120_000);
+
+  it('names what TypeScript the app needs: none installed, or a strict flag the templates may not pass', async () => {
+    const hasTs = (() => {
+      try {
+        createRequire(path.join(cwd, 'package.json')).resolve('typescript');
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    const plain = await themeEditPreviewAdd(undefined, {
+      cwd,
+      path: 'src/app/ts1',
+    });
+    const note = plain.data.notes.join(' ');
+    if (hasTs) expect(note).not.toContain('the app has no TypeScript');
+    else expect(note).toContain('the app has no TypeScript');
+    rm('src/app/ts1');
+    write(
+      'tsconfig.json',
+      '{\n  // strict, as create-t3-app writes it\n  "compilerOptions": {"strict": true, "noUncheckedIndexedAccess": true,},\n}\n',
+    );
+    try {
+      const r = await themeEditPreviewAdd(undefined, {
+        cwd,
+        path: 'src/app/ts2',
+        template: 'login',
+      });
+      expect(r.data.notes.join(' ')).toContain(
+        "the app's tsconfig.json turns on noUncheckedIndexedAccess, and src/app/ts2/_pages/login.tsx is written as the page template ships",
+      );
+      expect(r.data.notes.join(' ')).not.toContain('the app has no TypeScript');
+    } finally {
+      rm('tsconfig.json');
+      rm('src/app/ts2');
+    }
+  }, 120_000);
 });

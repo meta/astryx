@@ -13,6 +13,7 @@
 import {parse as parseModule} from '@babel/parser';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
@@ -480,6 +481,101 @@ function reservedFolder(cwd, dir) {
 }
 
 /**
+ * The app's tsconfig.json compiler options (comments and trailing commas
+ * allowed), or null when there is none.
+ * @param {string} cwd
+ * @returns {Record<string, unknown> | null}
+ */
+function appCompilerOptions(cwd) {
+  /** @type {string} */
+  let text;
+  try {
+    text = fs.readFileSync(path.join(cwd, 'tsconfig.json'), 'utf8');
+  } catch {
+    return null;
+  }
+  try {
+    const json = text
+      .replace(
+        /("(?:[^"\\]|\\.)*")|\/\*[\s\S]*?\*\/|\/\/.*$/gm,
+        (m, str) => str ?? '',
+      )
+      .replace(/,(\s*[}\]])/g, '$1');
+    const o = JSON.parse(json)?.compilerOptions;
+    return o && typeof o === 'object' ? o : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Notes on what the preview's TypeScript files need from the app: an app
+ * with no TypeScript gets the install line (Next sets it up on the next
+ * build otherwise), and an app whose tsconfig turns on
+ * `noUncheckedIndexedAccess` is told which template pages were written as
+ * their template ships them, which may not pass it.
+ * @param {string} cwd
+ * @param {string} dir
+ * @param {string[]} added page ids added by this command
+ * @returns {string[]}
+ */
+function typeScriptNotes(cwd, dir, added) {
+  const options = appCompilerOptions(cwd);
+  if (!options) {
+    const hasTs = (() => {
+      try {
+        return Boolean(
+          createRequire(path.join(cwd, 'package.json')).resolve('typescript'),
+        );
+      } catch {
+        return false;
+      }
+    })();
+    return hasTs
+      ? []
+      : [
+          `the app has no TypeScript, and the preview's files are .tsx, so the next build sets it up; to do it now: ${installLine(cwd, ['typescript', '@types/react', '@types/node']).replace(/ (add|install) /, ' $1 -D ')}`,
+        ];
+  }
+  const templates = added.filter(
+    id => !['overview', 'components', COLORS_PAGE.id].includes(id),
+  );
+  if (options.noUncheckedIndexedAccess !== true || !templates.length) return [];
+  const files = templates.map(id =>
+    shown(cwd, path.join(dir, PAGES_DIR, `${id}.tsx`)),
+  );
+  return [
+    `the app's tsconfig.json turns on noUncheckedIndexedAccess, and ${files.join(', ')} ${files.length > 1 ? 'are' : 'is'} written as the page template ships, which may not pass it; if the build stops there, fix the reported lines or remove the page with ${PREVIEW} remove ${templates[0]}`,
+  ];
+}
+
+/**
+ * A folder beside `dir`, or beside one of its parents, whose name differs
+ * only in case, or null.
+ * @param {string} dir
+ * @returns {string | null}
+ */
+function sameCaseSibling(dir) {
+  for (let at = dir; path.dirname(at) !== at; at = path.dirname(at)) {
+    const parent = path.dirname(at);
+    const name = path.basename(at);
+    /** @type {string[]} */
+    let names;
+    try {
+      names = fs.readdirSync(parent);
+    } catch {
+      continue;
+    }
+    const twin = names.find(
+      n => n !== name && n.toLowerCase() === name.toLowerCase(),
+    );
+    if (twin) return path.join(parent, twin);
+    if (fs.existsSync(path.join(parent, 'package.json'))) break;
+  }
+  return null;
+}
+
+/**
  * Why Next does not serve a folder inside the routes folder at its own
  * URL, or null: a `_private` folder is never routed, an `@slot` folder is a
  * parallel route slot, and a `[param]` folder is a dynamic segment.
@@ -688,19 +784,15 @@ function checkPlacement(cwd, dir, where, retry) {
       {run: [fallback]},
     );
   // A folder name that is not a plain URL segment (a space, an accent,
-  // ?, #, %) is not served at the URL it seems to have.
-  const odd = app
-    ? path
-        .relative(app, dir)
-        .split(path.sep)
-        .find(
-          seg =>
-            seg &&
-            !/^\(.+\)$|^\[.+\]$/.test(seg) &&
-            !/^[A-Za-z0-9._-]+$/.test(seg),
-        )
-    : undefined;
-  if (app && odd) {
+  // ?, #, %) is not served at the URL it seems to have. The characters a
+  // URL path takes as they are (RFC 3986 unreserved and sub-delims, @, ~)
+  // are served.
+  const PLAIN = /^[A-Za-z0-9._~!$&'()+,;=@-]+$/;
+  const segs = app ? path.relative(app, dir).split(path.sep) : [];
+  const odd = segs.filter(
+    seg => seg && !/^\(.+\)$|^\[.+\]$/.test(seg) && !PLAIN.test(seg),
+  );
+  if (app && odd.length) {
     const slug = (/** @type {string} */ seg) =>
       seg
         .normalize('NFD')
@@ -708,17 +800,37 @@ function checkPlacement(cwd, dir, where, retry) {
         .replace(/[^A-Za-z0-9._-]+/g, '-')
         .replace(/^-+|-+$/g, '')
         .toLowerCase() || 'theme-preview';
-    const fixed = path.join(
+    // Every odd segment slugged, then the first free folder from it.
+    const base = path.join(
       app,
-      ...path
-        .relative(app, dir)
-        .split(path.sep)
-        .map(seg => (seg === odd ? slug(seg) : seg)),
+      ...segs.map(seg => (odd.includes(seg) ? slug(seg) : seg)),
     );
+    let fixed = base;
+    for (
+      let n = 2;
+      fs.existsSync(fixed) ||
+      sameCaseSibling(fixed) ||
+      sameUrlPage(cwd, app, fixed);
+      n++
+    )
+      fixed = `${base}-${n}`;
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `${where} is no place for the preview: Next does not serve the folder "${odd}" at the URL its name seems to give (only letters, digits, dot, dash and underscore make a plain URL segment).`,
+      `${where} is no place for the preview: Next does not serve the folder "${odd[0]}" at the URL its name seems to give (a space, a letter outside A-Z, %, # or ? are no plain URL segment).`,
       {run: [retry(shown(cwd, fixed))]},
+    );
+  }
+  // A folder whose name differs from a folder beside it only in case is the
+  // same folder on macOS and Windows: one of them is lost in a checkout.
+  const twin = app && sameCaseSibling(dir);
+  if (twin) {
+    let free = `${dir}-2`;
+    for (let n = 3; fs.existsSync(free) || sameCaseSibling(free); n++)
+      free = `${dir}-${n}`;
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `${where} is no place for the preview: ${shownDir(cwd, twin)}/ differs from it only in case, and on macOS and Windows they are one folder, so the project could not be checked out there.`,
+      {run: [retry(shown(cwd, free))]},
     );
   }
   if (!app) return;
@@ -3467,6 +3579,7 @@ async function addPreview(description, options, box) {
     notes.push(
       `a default page's id brings back the default pages that are missing, as ${PREVIEW} add does`,
     );
+  notes.push(...typeScriptNotes(cwd, at.dir, added));
   if (
     askedId === COLORS_PAGE.id &&
     !data.pages.some(p => p.id === COLORS_PAGE.id)

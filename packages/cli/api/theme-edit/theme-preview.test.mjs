@@ -191,6 +191,8 @@ describe('preview add', () => {
       'import {palette} from "../../../../themes/brand/tokens/brand.palette";',
     );
     expect(source).toContain('"--color-accent"');
+    // The seed reads as it is stored, never capitalized with the color name.
+    expect(source).toContain("textTransform: 'none'");
     expect(read('src/app/theme-preview/page.tsx')).toContain('label: "Colors"');
     expect(typeErrors(dir)).toEqual([]);
     // Strict flags common in Next apps (create-t3-app, @tsconfig/strictest).
