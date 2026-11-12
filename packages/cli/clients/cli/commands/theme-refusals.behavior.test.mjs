@@ -94,4 +94,28 @@ describe('theme refusals name a command that works', () => {
     const {suggestions} = JSON.parse(refused.stdout);
     expect(suggestions[0].name).toMatch(/ theme build ocean\.mjs reef\.mjs$/);
   }, 120_000);
+
+  it.each([
+    [['theme', 'bild'], / theme build$/],
+    [['theme', 'editor', 'new', 'x'], / experimental theme editor$/],
+    [['experimental', 'themes', 'list'], / experimental theme$/],
+    [['experimental', 'editor', 'new', 'x'], / experimental theme editor$/],
+  ])(
+    'ranks whole commands for the unknown subcommand %j',
+    async (args, first) => {
+      for (const json of [true, false]) {
+        const r = await runCli([...(json ? ['--json'] : []), ...args], dir);
+        expect(r.status).toBe(1);
+        if (json) {
+          expect(JSON.parse(r.stdout).suggestions[0].name).toMatch(first);
+        } else {
+          const line = r.stderr
+            .split('\n')
+            .find(l => /^\s+\S/.test(l) && l.includes('('));
+          expect(line?.replace(/\s+\(.*$/, '')).toMatch(first);
+        }
+      }
+    },
+    120_000,
+  );
 });

@@ -315,6 +315,13 @@ const RUNNERS = {
     runs: 'the command modules, to register each command',
     sites: ['import(<computed>)'],
   },
+  'clients/cli/lib/cli-error.mjs': {
+    runs: 'the experimental theme editor and preview command docs, for the subcommand names an unknown-command refusal suggests',
+    sites: [
+      'import ../commands/experimental-theme-editor.doc.mjs',
+      'import ../commands/experimental-theme-preview.doc.mjs',
+    ],
+  },
   'clients/cli/lib/manifest.mjs': {
     runs: 'the manifest command doc, for the exit codes the manifest reports',
     sites: ['import ../commands/manifest.doc.mjs'],
