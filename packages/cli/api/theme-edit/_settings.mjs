@@ -92,7 +92,7 @@ import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>}}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -634,6 +634,19 @@ export function partsOf(ctx, s) {
 
 export {modesOf};
 
+/**
+ * A length in pixels: px as given, rem and em at 16px; null for anything
+ * else (a percentage, calc(), a word).
+ * @param {string} v
+ * @returns {number | null}
+ */
+export function lengthPx(v) {
+  const m = /^\s*(-?\d+(?:\.\d+)?|-?\.\d+)\s*(px|rem|em)?\s*$/i.exec(String(v));
+  if (!m) return null;
+  const n = Number(m[1]);
+  return (m[2] ?? 'px').toLowerCase() === 'px' ? n : n * 16;
+}
+
 /** @param {string} v */
 export const cornerPx = v =>
   CORNERS.find(([n]) => n === v)?.[1] ?? parseFloat(v);
@@ -813,7 +826,11 @@ export function compileTheme(ctx, data, base) {
       // colors only, so never inherit).
       const other =
         prev ??
+        baseComponent(base, ctx, target, prop, s) ??
         partDefault(ctx, target, prop, s.when, s.state) ??
+        (s.state
+          ? baseComponent(base, ctx, target, prop, {...s, state: undefined})
+          : null) ??
         partDefault(ctx, target, prop, s.when) ??
         (/^background/.test(kebab(prop)) ? 'transparent' : 'currentcolor');
       const split = (/** @type {string} */ x, /** @type {1 | 2} */ side) =>
@@ -882,39 +899,8 @@ export function compileTheme(ctx, data, base) {
         const px = cornerPx(s.value) >= 1000 ? 9999 : cornerPx(s.value);
         const pill = px >= 9999;
         const rung = CORNERS.some(([n]) => n === s.value);
-        // The derived radii keep the base theme's own proportions to the
-        // element radius (matcha's page is 3.5 times it), so a bigger
-        // element radius never makes them smaller.
-        /** @param {string | undefined} v */
-        const basePx = v => {
-          const m = /^\s*(\d*\.?\d+)(px|rem|em)?\s*$/.exec(String(v ?? ''));
-          return m ? Number(m[1]) * (m[2] === 'px' || !m[2] ? 1 : 16) : null;
-        };
-        const el = basePx(base.light['--radius-element']);
-        /** @param {string} token @param {number} fallback */
-        const ratio = (token, fallback) => {
-          const v = basePx(base.light[token]);
-          return el && v != null ? v / el : fallback;
-        };
-        const roundPx = CORNERS.find(([n]) => n === 'round')?.[1] ?? 16;
-        /**
-         * The radius a rung gives each radius token, the same on a part as
-         * on the whole theme: a checkbox stays a rounded square, and a
-         * container or page is at least as round as `round`'s.
-         * @param {string} token
-         */
-        const derived = token =>
-          token === '--radius-inner'
-            ? pill
-              ? '6px'
-              : `${Math.round(px * Math.min(1, ratio('--radius-inner', 0.6)))}px`
-            : token === '--radius-container'
-              ? `${Math.round(pill ? Math.max(24, roundPx * ratio(token, 1.25)) : px * ratio(token, 1.25))}px`
-              : token === '--radius-page'
-                ? `${Math.round(pill ? Math.max(32, roundPx * ratio(token, 2.5)) : px * ratio(token, 2.5))}px`
-                : pill
-                  ? '9999px'
-                  : `${px}px`;
+        /** @param {string} token */
+        const derived = token => `${radiusAt(base, s.value, token)}px`;
         if (parts.length)
           for (const t of parts) {
             // A rung on a part gives what the whole-theme rung gives the
@@ -1667,10 +1653,38 @@ export async function contrastProblems(ctx, data, res) {
     return ref ? res[/** @type {'light' | 'dark'} */ (m)][ref[1]] : v;
   };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
+  const ofBase = (p, side, m) => {
+    const target = p[side].target;
+    if (!target) return null;
+    const own =
+      baseComponent(
+        base,
+        ctx,
+        target,
+        side === 'fg' ? 'color' : 'backgroundColor',
+        {
+          when: /** @type {any} */ (p).when,
+        },
+      ) ??
+      (side === 'bg'
+        ? baseComponent(base, ctx, target, 'background', {
+            when: /** @type {any} */ (p).when,
+          })
+        : null);
+    if (!own) return null;
+    const ref = /^var\((--[\w-]+)\)$/.exec(own.trim());
+    return ref
+      ? (res[/** @type {'light' | 'dark'} */ (m)][ref[1]] ?? null)
+      : own;
+  };
+  /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const value = (p, side, m) => {
     const s = p[side];
     return (
       override(s, side, m, /** @type {any} */ (p).when) ??
+      // The base theme's own part style (neutral's destructive button),
+      // which Core's reads do not know.
+      ofBase(p, side, m) ??
       (side === 'fg' ? onTint(p, m) : null) ??
       (s.tokens.length
         ? res[/** @type {'light' | 'dark'} */ (m)][s.tokens[0]]
@@ -1802,6 +1816,71 @@ function hashDir(dir) {
   for (const p of ownFiles(dir))
     out.set(p, createHash('sha256').update(fs.readFileSync(p)).digest('hex'));
   return out;
+}
+
+/**
+ * The value the base theme itself gives a part's property where a setting
+ * applies (its variant and state), as the build keys part styles; null
+ * when the base theme leaves it to Core.
+ * @param {{light: Record<string, string>, components?: Record<string, any>}} base
+ * @param {Ctx} ctx
+ * @param {string} target
+ * @param {string} prop camelCase
+ * @param {{when?: string, state?: string}} s
+ * @returns {string | null}
+ */
+export function baseComponent(base, ctx, target, prop, s) {
+  const t = base.components?.[target];
+  if (!t) return null;
+  let b = t[s.when ?? 'base'];
+  if (s.state) {
+    const states = ctx.project.target.get(target)?.states ?? [];
+    b = states.includes(s.state)
+      ? t[s.when == null ? s.state : `${s.when}+${s.state}`]
+      : b?.[`:${s.state}`];
+  }
+  const v = b?.[prop];
+  return typeof v === 'string' ? v : null;
+}
+
+/**
+ * The radius, in px, the build writes for a radius token at a corners value
+ * (a rung, or a size). The derived radii keep the base theme's own
+ * proportions to the element radius (matcha's page is 3.5 times it), so a
+ * bigger element radius never makes them smaller; a checkbox stays a
+ * rounded square at pill, and a container or page at pill is half again as
+ * round as at `round` (a fully round card is a capsule). Past 1000px a
+ * radius is fully round.
+ * @param {{light: Record<string, string>}} base the base theme's tokens
+ * @param {string} value
+ * @param {string} token
+ * @returns {number}
+ */
+export function radiusAt(base, value, token) {
+  const px = cornerPx(value) >= 1000 ? 9999 : cornerPx(value);
+  const pill = px >= 9999;
+  const el = lengthPx(base.light['--radius-element'] ?? '');
+  /** @param {string} t @param {number} fallback */
+  const ratio = (t, fallback) => {
+    const v = lengthPx(base.light[t] ?? '');
+    return el && v != null ? v / el : fallback;
+  };
+  const roundPx = CORNERS.find(([n]) => n === 'round')?.[1] ?? 16;
+  if (token === '--radius-inner')
+    return pill ? 6 : Math.round(px * Math.min(1, ratio(token, 0.6)));
+  if (token === '--radius-container')
+    return Math.round(
+      pill
+        ? Math.max(24, 1.5 * roundPx * ratio(token, 1.25))
+        : px * ratio(token, 1.25),
+    );
+  if (token === '--radius-page')
+    return Math.round(
+      pill
+        ? Math.max(32, 1.5 * roundPx * ratio(token, 2.5))
+        : px * ratio(token, 2.5),
+    );
+  return pill ? 9999 : px;
 }
 
 /**

@@ -78,11 +78,14 @@ export async function context(cwd) {
   let parts;
   /** @type {string | null} */
   let unchecked = null;
+  /** @type {string | null} the render error's code */
+  let uncheckedCode = null;
   try {
     parts = await partData(project);
   } catch (e) {
     if (!isRenderFailure(e)) throw e;
     unchecked = renderCause(project, /** @type {Error} */ (e).message);
+    uncheckedCode = /** @type {any} */ (e).code ?? null;
     parts = {
       version: 0,
       coreKey: project.coreKey,
@@ -92,7 +95,13 @@ export async function context(cwd) {
       items: 0,
     };
   }
-  return {project, C: makeCompiler(project, parts), parts, unchecked};
+  return {
+    project,
+    C: makeCompiler(project, parts),
+    parts,
+    unchecked,
+    uncheckedCode,
+  };
 }
 
 /** @param {unknown} e */

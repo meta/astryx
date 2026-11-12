@@ -17,6 +17,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {isAlive} from '../../foundation/release/cache.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {importPathOf, installLine} from './_project.mjs';
@@ -119,12 +120,7 @@ function sweepRenders(themes) {
   for (const n of names) {
     const m = /^\.astryx-render-(\d+)-[a-z0-9]+$/.exec(n);
     if (!m || Number(m[1]) === process.pid) continue;
-    try {
-      process.kill(Number(m[1]), 0);
-      continue;
-    } catch (e) {
-      if (/** @type {any} */ (e)?.code !== 'ESRCH') continue;
-    }
+    if (isAlive(Number(m[1]))) continue;
     const p = path.join(themes, n);
     try {
       if (fs.lstatSync(p).isDirectory())

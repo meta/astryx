@@ -14,6 +14,7 @@ import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {
   AUTO_SPREAD,
+  CORNERS,
   DIALS,
   FAMILIES,
   KEY_TOKENS,
@@ -27,6 +28,7 @@ import {
   commitTheme,
   compileTheme,
   cornerPx,
+  radiusAt,
   contrastProblems,
   describe,
   keyOf,
@@ -52,7 +54,7 @@ import {
   themeSource,
   themeSourceProblem,
 } from './_settings.mjs';
-import {checkSetting, exampleOf, storedTokenProblem} from './_check.mjs';
+import {checkSetting, exampleOf, storedProblems} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {
   PALETTE_DIALS,
@@ -440,22 +442,30 @@ export async function themeEditSet(theme, thing, value, options = {}) {
  * @param {string} [skip]
  */
 function refuseStoredTokens(ctx, slug, data, skip) {
-  const bad = storedTokenProblem(ctx, slug, data, skip);
-  if (bad)
-    refuse(
-      E.ERR_THEME_INVALID,
-      `themes/${slug}/${slug}.settings.json: ${describe(bad.setting)} ${bad.scope ? 'applies where the editor does not accept it' : 'holds a value the editor no longer accepts'} (${bad.why}).`,
-      {
-        run: [
-          `${P} undo ${slug} ${undoArgs(bad.setting)}`,
-          ...(bad.scope
-            ? []
-            : [
-                `${P} set ${slug} ${bad.setting.thing} ${quoteCommandArgument(exampleOf(ctx.C.typeOf(bad.setting.thing), bad.setting.thing))}`,
-              ]),
-        ],
-      },
-    );
+  const bad = storedProblems(ctx, slug, data, skip);
+  if (!bad.length) return;
+  const one = bad.length === 1 ? bad[0] : null;
+  refuse(
+    E.ERR_THEME_INVALID,
+    `themes/${slug}/${slug}.settings.json: ${bad
+      .map(
+        b =>
+          `${describe(b.setting)} ${b.scope ? 'applies where the editor does not accept it' : 'holds a value the editor no longer accepts'} (${b.why})`,
+      )
+      .join('; ')}.`,
+    {
+      // Each undo runs while the others are still saved: an undo of one
+      // setting is never refused for another.
+      run: [
+        ...bad.slice(0, 5).map(b => `${P} undo ${slug} ${undoArgs(b.setting)}`),
+        ...(one && !one.scope
+          ? [
+              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(exampleOf(ctx.C.typeOf(one.setting.thing), one.setting.thing))}`,
+            ]
+          : []),
+      ],
+    },
+  );
 }
 
 /**
@@ -518,7 +528,9 @@ async function change(sub, slug, thing, value, options) {
     }
   }
   const ctx = await context(cwd);
-  refuseStoredTokens(ctx, slug, data, thing);
+  // An undo of one setting only removes it, so it never waits on the
+  // others being fixed.
+  if (sub !== 'undo') refuseStoredTokens(ctx, slug, data, thing);
   const flags = {
     on: options.on,
     when: options.when,
@@ -1020,9 +1032,12 @@ export async function themeEditShow(theme, options = {}) {
       E.ERR_RENDER_FAILED,
       `${theme} cannot be shown: ${ctx.unchecked} Nothing was written.`,
       {
-        run: /react/i.test(ctx.unchecked)
-          ? [installLine(cwd, ['react', 'react-dom'])]
-          : [`${P} show ${theme}`],
+        // Only a missing React is fixed by installing it; two copies or a
+        // component that throws are named in the message.
+        run:
+          ctx.uncheckedCode === 'ERR_RENDER_MISSING_DEPENDENCY'
+            ? [installLine(cwd, ['react', 'react-dom'])]
+            : [`${P} show ${theme}`],
       },
     );
   const f = themeFiles(cwd, theme);
@@ -1113,7 +1128,12 @@ export async function themeEditShow(theme, options = {}) {
             : (res[modes[0]][k] ?? null),
         ]),
       ),
-      partValues: partValues(ctx, data, res, modes[0]),
+      partValues: partValues(
+        Object.assign(ctx, {base: await baseResolved(ctx.project, data.like)}),
+        data,
+        res,
+        modes[0],
+      ),
       ...colorsReport(pal, data),
       problems,
       preview,
@@ -1248,7 +1268,21 @@ function partValues(ctx, data, res, mode) {
               `${token === 'unknown' ? 'unknown' : `${token} ${res[mode][token] ?? 'unset'}`}${byToken.size > 1 ? ` for ${ts.join(', ')}` : ''}`,
           )
           .join('; ');
-        return `${describe(s)} -> border-radius ${px >= 9999 ? 'fully round' : `${px}px`} on ${listed} (whole theme: ${whole})`;
+        // What the build writes on each part: a rung by the radius token
+        // the part reads, an exact size as given.
+        const rung = CORNERS.some(([n]) => n === s.value) || px >= 1000;
+        const built = [...byToken]
+          .map(([token, ts]) => {
+            const v =
+              rung && token !== 'unknown' && ctx.base
+                ? radiusAt(ctx.base, s.value, token)
+                : px >= 1000
+                  ? 9999
+                  : px;
+            return `${v >= 9999 ? 'fully round' : `${v}px`}${byToken.size > 1 ? ` on ${ts.join(', ')}` : ''}`;
+          })
+          .join('; ');
+        return `${describe(s)} -> border-radius ${built}${byToken.size > 1 ? '' : ` on ${listed}`} (whole theme: ${whole})`;
       }
       const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
       return `${describe(s)} -> spacing x${f} inside ${listed} (whole theme: --spacing-4 ${res[mode]['--spacing-4'] ?? 'unset'})`;

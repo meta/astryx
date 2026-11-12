@@ -75,8 +75,9 @@ describe('corners', () => {
 
   it('a part steps from its own radius, and a size between rungs to the next rung', async () => {
     const card = await themeEditSet('z', 'corners', 'more', {cwd, on: 'card'});
-    // The card reads the container radius (12px on no base): more is round.
-    expect(card.data.setting.value).toBe('round');
+    // The card reads the container radius (12px on no base): the next rung
+    // that shows it rounder is medium (15px on a card).
+    expect(card.data.setting.value).toBe('medium');
     await themeEditUndo('z', {cwd});
     await themeEditSet('z', 'corners', '6px', {cwd});
     expect(

@@ -315,7 +315,7 @@ export function baseThemeFile(project, like) {
  * Resolved tokens of the base theme in both modes.
  * @param {ThemeProject} project
  * @param {string | undefined} like
- * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>}>}
+ * @returns {Promise<{light: Record<string, string>, dark: Record<string, string>, components: Record<string, any>}>}
  */
 export async function baseResolved(project, like) {
   const {core} = project;
@@ -331,5 +331,8 @@ export async function baseResolved(project, like) {
   return {
     light: core.resolveThemeTokens(theme, {mode: 'light'}),
     dark: core.resolveThemeTokens(theme, {mode: 'dark'}),
+    // The base theme's own part styles (neutral's pale destructive button),
+    // which a one-mode setting keeps in the other mode.
+    components: theme.components ?? {},
   };
 }

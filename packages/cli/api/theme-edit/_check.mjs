@@ -9,6 +9,7 @@
  * @position api/theme-edit — checks over the part data
  */
 
+import {createRequire} from 'node:module';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {CSS_PROPERTIES} from './_css-properties.mjs';
@@ -57,8 +58,32 @@ import {
   partDefault,
   partsOf,
   refuse,
+  lengthPx,
+  radiusAt,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+
+export {lengthPx};
+
+/**
+ * A token's value in px, following var() references through the tokens.
+ * @param {{light: Record<string, string>}} base
+ * @param {string} token
+ * @returns {number | null}
+ */
+function tokenPx(base, token) {
+  let v = base.light[token] ?? '';
+  for (let i = 0; i < 5; i++) {
+    const ref = /^\s*var\((--[\w-]+)\)\s*$/.exec(v);
+    if (!ref) break;
+    v = base.light[ref[1]] ?? '';
+  }
+  return lengthPx(v);
+}
+
+/** @param {string} v */
+const cornerPxOf = v =>
+  CORNERS.find(([n]) => n === v)?.[1] ?? lengthPx(v) ?? Number.NaN;
 
 const E = ERROR_CODES;
 
@@ -132,9 +157,11 @@ const COLOR_DIAL_WORDS = (() => {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {string} [skip]
- * @returns {{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean} | null}
+ * @returns {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean}>} every saved setting the editor no longer accepts
  */
-export function storedTokenProblem(ctx, slug, data, skip = '') {
+export function storedProblems(ctx, slug, data, skip = '') {
+  /** @type {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean}>} */
+  const found = [];
   const TOKENS = ctx.project.core.tokenDefaults;
   // Where each saved setting applies names a real part, group, state and
   // variant of this Core, as `set` checks them.
@@ -153,22 +180,26 @@ export function storedTokenProblem(ctx, slug, data, skip = '') {
     if (s.thing === skip) continue;
     /** @param {string} why */
     const scope = why => ({setting: s, why, scope: true});
-    const t = s.on ? ctx.project.target.get(s.on) : null;
-    if (s.on && !t && !FAMILIES[s.on])
-      return scope(`there is no part or group "${s.on}"`);
-    if (s.source === 'dial' && s.on && WHOLE_ONLY.includes(s.thing))
-      return scope(`${s.thing} applies to the whole theme, not to ${s.on}`);
-    if (s.mode && s.source === 'dial' && !PALETTE_DIALS.includes(s.thing))
-      return scope(`${s.thing} is the same in light and dark`);
-    if (t && s.state && ![...t.states, ...COMMON_STATES].includes(s.state))
-      return scope(`"${s.state}" is not a state of ${s.on}`);
-    if (t && s.when) {
-      const [prop, value] = String(s.when).split(':');
-      const values = ctx.C.variantValues(/** @type {string} */ (s.on));
-      if (!(prop in values)) return scope(`${s.on} has no prop "${prop}"`);
-      if (values[prop].length && !values[prop].includes(value))
-        return scope(`${s.on} has no ${prop} "${value}"`);
-    }
+    const problem = (() => {
+      const t = s.on ? ctx.project.target.get(s.on) : null;
+      if (s.on && !t && !FAMILIES[s.on])
+        return scope(`there is no part or group "${s.on}"`);
+      if (s.source === 'dial' && s.on && WHOLE_ONLY.includes(s.thing))
+        return scope(`${s.thing} applies to the whole theme, not to ${s.on}`);
+      if (s.mode && s.source === 'dial' && !PALETTE_DIALS.includes(s.thing))
+        return scope(`${s.thing} is the same in light and dark`);
+      if (t && s.state && ![...t.states, ...COMMON_STATES].includes(s.state))
+        return scope(`"${s.state}" is not a state of ${s.on}`);
+      if (t && s.when) {
+        const [prop, value] = String(s.when).split(':');
+        const values = ctx.C.variantValues(/** @type {string} */ (s.on));
+        if (!(prop in values)) return scope(`${s.on} has no prop "${prop}"`);
+        if (values[prop].length && !values[prop].includes(value))
+          return scope(`${s.on} has no ${prop} "${value}"`);
+      }
+      return null;
+    })();
+    if (problem) found.push(problem);
   }
   for (const s of data.settings) {
     if (s.source !== 'token' || s.thing === skip || !(s.thing in TOKENS))
@@ -184,16 +215,16 @@ export function storedTokenProblem(ctx, slug, data, skip = '') {
       );
       checkCycle(s.thing, s.value, TOKENS, data);
     } catch (e) {
-      return {
+      found.push({
         setting: s,
         why:
           e instanceof Error
             ? e.message.replace(/ Nothing was changed\.$/, '')
             : String(e),
-      };
+      });
     }
   }
-  return null;
+  return found;
 }
 
 /**
@@ -533,120 +564,117 @@ function checkCycle(thing, value, TOKENS, data) {
     );
 }
 
-/** Values every property takes. */
-const GLOBAL_VALUES = /^(inherit|initial|unset|revert|revert-layer)$/i;
-const LENGTH = String.raw`(?:0|-?(?:\d+\.?\d*|\.\d+)(?:px|rem|em|%|vh|vw|vmin|vmax|ch|ex|lh|rlh|svh|lvh|dvh|cqw|cqh|cqi|cqb)|(?:calc|min|max|clamp|var)\(.*\))`;
-const NONNEG = String.raw`(?:0|(?:\d+\.?\d*|\.\d+)(?:px|rem|em|%|vh|vw|vmin|vmax|ch|ex|lh|rlh|svh|lvh|dvh|cqw|cqh|cqi|cqb)|(?:calc|min|max|clamp|var)\(.*\))`;
+const require = createRequire(import.meta.url);
+/** @type {any} */
+let tree = null;
+/** css-tree, loaded on first use. */
+const csstree = () => (tree ??= require('css-tree'));
+
+/** What a var() or env() may stand for while the rest of a value is matched. */
+const VAR_STANDS_FOR = ['0', '1px', '1ms', 'red', 'ease', 'serif', '0 0 red'];
 
 /**
- * The value grammar of the properties people set most, as the browser
- * reads them; a value outside it would be dropped by the browser.
- * @type {Record<string, {takes: string, test: (v: string) => boolean, words?: string[]}>}
+ * Whether a value matches a property's grammar as css-tree reads it (the
+ * browser's grammar, from MDN's data). A var() or env() can hold anything,
+ * so the value matches when some ordinary value in its place does.
+ * @param {string} prop
+ * @param {string} value
  */
-const PROPERTY_GRAMMAR = {
-  display: {
-    takes:
-      'a display keyword (block, inline, inline-block, flex, inline-flex, grid, inline-grid, contents, none, flow-root)',
-    words: [
-      'block',
-      'inline',
-      'inline-block',
-      'flex',
-      'inline-flex',
-      'grid',
-      'inline-grid',
-      'contents',
-      'none',
-      'flow-root',
-      'table',
-      'list-item',
-    ],
-    test: v => PROPERTY_GRAMMAR.display.words?.includes(v) ?? false,
-  },
-  'text-transform': {
-    takes: 'none, uppercase, lowercase, capitalize or full-width',
-    words: ['none', 'uppercase', 'lowercase', 'capitalize', 'full-width'],
-    test: v => PROPERTY_GRAMMAR['text-transform'].words?.includes(v) ?? false,
-  },
-  'font-weight': {
-    takes:
-      'a number from 1 to 1000 (400 is regular, 700 bold), normal, bold, bolder or lighter',
-    words: ['normal', 'bold', 'bolder', 'lighter'],
-    test: v =>
-      ['normal', 'bold', 'bolder', 'lighter'].includes(v) ||
-      (/^\d+(\.\d+)?$/.test(v) && Number(v) >= 1 && Number(v) <= 1000) ||
-      /^var\(/.test(v),
-  },
-  opacity: {
-    takes: 'a number from 0 to 1, or a percentage',
-    test: v => /^(\d*\.?\d+)%?$/.test(v) || /^(calc|var)\(/.test(v),
-  },
-  'z-index': {
-    takes: 'a whole number, or auto',
-    test: v => v === 'auto' || /^-?\d+$/.test(v) || /^(calc|var)\(/.test(v),
-  },
-  padding: {
-    takes: 'one to four lengths of 0 or more (auto is not a padding)',
-    test: v => new RegExp(`^${NONNEG}(\\s+${NONNEG}){0,3}$`).test(v),
-  },
-  margin: {
-    takes: 'one to four lengths or auto',
-    test: v =>
-      new RegExp(`^(?:${LENGTH}|auto)(\\s+(?:${LENGTH}|auto)){0,3}$`).test(v),
-  },
-  'border-radius': {
-    takes: 'one to four lengths of 0 or more (and a / for elliptical corners)',
-    test: v =>
-      new RegExp(
-        `^${NONNEG}(\\s+${NONNEG}){0,3}(\\s*/\\s*${NONNEG}(\\s+${NONNEG}){0,3})?$`,
-      ).test(v),
-  },
-  gap: {
-    takes: 'one or two lengths of 0 or more',
-    test: v => new RegExp(`^${NONNEG}(\\s+${NONNEG})?$`).test(v),
-  },
-  width: {
-    takes: 'a length of 0 or more, auto, or a sizing keyword',
-    test: v =>
-      new RegExp(`^${NONNEG}$`).test(v) ||
-      ['auto', 'min-content', 'max-content', 'fit-content'].includes(v),
-  },
-  height: {
-    takes: 'a length of 0 or more, auto, or a sizing keyword',
-    test: v =>
-      new RegExp(`^${NONNEG}$`).test(v) ||
-      ['auto', 'min-content', 'max-content', 'fit-content'].includes(v),
-  },
-};
-for (const k of [
-  'padding-top',
-  'padding-right',
-  'padding-bottom',
-  'padding-left',
-  'padding-inline',
-  'padding-block',
-])
-  PROPERTY_GRAMMAR[k] = PROPERTY_GRAMMAR.padding;
-for (const k of ['max-width', 'min-width'])
-  PROPERTY_GRAMMAR[k] = {
-    ...PROPERTY_GRAMMAR.width,
-    takes: 'a length of 0 or more, none, or a sizing keyword',
-    test: v => PROPERTY_GRAMMAR.width.test(v) || v === 'none',
+function matchesProperty(prop, value) {
+  const {lexer, parse} = csstree();
+  const vars =
+    value.match(/(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi) ?? [];
+  /** @param {string} v */
+  const tryOne = v => {
+    try {
+      return !lexer.matchProperty(prop, parse(v, {context: 'value'})).error;
+    } catch {
+      return false;
+    }
   };
+  if (vars.length > 3) return false;
+  /** @param {string} v @param {number} i @returns {boolean} */
+  const fill = (v, i) =>
+    i === vars.length
+      ? tryOne(v)
+      : VAR_STANDS_FOR.some(stand => fill(v.replace(vars[i], stand), i + 1));
+  return fill(value, 0);
+}
 
 /**
- * Why a value is not one the property takes, or null (a property with no
- * grammar here is not checked).
+ * The keywords a property's grammar takes, through the types it names.
+ * @param {string} prop
+ * @returns {string[]}
+ */
+function keywordsOf(prop) {
+  const t = csstree();
+  const seen = new Set();
+  /** @type {Set<string>} */
+  const words = new Set();
+  /** @param {any} syntax */
+  const walk = syntax => {
+    if (!syntax) return;
+    t.definitionSyntax.walk(syntax, (/** @type {any} */ n) => {
+      if (n.type === 'Keyword') {
+        if (!n.name.startsWith('-')) words.add(n.name);
+      } else if (n.type === 'Type' && !seen.has(n.name)) {
+        seen.add(n.name);
+        walk(t.lexer.types[n.name]?.syntax);
+      }
+    });
+  };
+  walk(t.lexer.properties[prop]?.syntax);
+  return [...words];
+}
+
+/**
+ * A value the property takes, to put in a suggestion: its initial value
+ * from MDN's data (a shorthand's first longhand's).
+ * @param {string} prop
+ * @returns {string | null}
+ */
+function initialOf(prop) {
+  const mdn = /** @type {Record<string, {initial?: string | string[]}>} */ (
+    createRequire(require.resolve('css-tree/package.json'))(
+      'mdn-data/css/properties.json',
+    )
+  );
+  const initial = mdn[prop]?.initial;
+  if (Array.isArray(initial)) return initial[0] ? initialOf(initial[0]) : null;
+  return typeof initial === 'string' && matchesProperty(prop, initial)
+    ? initial
+    : null;
+}
+
+/**
+ * A property's grammar as text, cut at a whole term when it is long.
+ * @param {any} syntax
+ */
+function grammarText(syntax) {
+  const text = csstree().definitionSyntax.generate(syntax);
+  if (text.length <= 120) return text;
+  return `${text.slice(0, 120).replace(/\s*\|[^|]*$/, '')} | …`;
+}
+
+/**
+ * Why a value is not one the property takes, or null. Colors are checked
+ * by the editor's own color check; a property css-tree has no grammar for
+ * is not checked.
  * @param {string} prop
  * @param {string} value
  * @returns {{takes: string, near: string | null} | null}
  */
 function propertyProblem(prop, value) {
-  const g = PROPERTY_GRAMMAR[prop];
-  const v = value.trim().toLowerCase();
-  if (!g || GLOBAL_VALUES.test(v) || /^var\(/.test(v) || g.test(v)) return null;
-  const near = g.words ? (nearest(v, g.words)[0] ?? null) : null;
-  return {takes: g.takes, near};
+  const v = value.trim();
+  const known = csstree().lexer.properties[prop];
+  if (!known || COLOR_PROPS.test(prop) || matchesProperty(prop, v)) return null;
+  const near = /^[a-z-]+$/i.test(v)
+    ? (nearest(v.toLowerCase(), keywordsOf(prop))[0] ?? null)
+    : null;
+  return {
+    takes: `a value its CSS grammar takes (${grammarText(known.syntax)})`,
+    near: near ?? initialOf(prop),
+  };
 }
 
 /** Words people use for a dial's values, by dial. */
@@ -691,19 +719,6 @@ const DIAL_WORDS = /** @type {Record<string, Record<string, string>>} */ ({
     dark: 'dark-only',
   },
 });
-
-/**
- * A length in pixels: px as given, rem and em at 16px; null for anything
- * else (a percentage, calc(), a word).
- * @param {string} v
- * @returns {number | null}
- */
-export function lengthPx(v) {
-  const m = /^\s*(-?\d+(?:\.\d+)?|-?\.\d+)\s*(px|rem|em)?\s*$/i.exec(String(v));
-  if (!m) return null;
-  const n = Number(m[1]);
-  return (m[2] ?? 'px').toLowerCase() === 'px' ? n : n * 16;
-}
 
 /**
  * Check one setting and give it back ready to store, or refuse.
@@ -848,6 +863,19 @@ export function checkSetting(
   if (s.on && !isRole && !FAMILIES[s.on]) {
     const t = TARGET.get(s.on);
     if (!t) {
+      // Another case of a part or group: that one, as a working command.
+      const lower = s.on.toLowerCase();
+      if (TARGET.has(lower) || FAMILIES[lower])
+        refuse(
+          E.ERR_THEME_UNKNOWN_PART,
+          `"${s.on}" is not a part you can style; part names are lower case: ${lower}.`,
+          {
+            didYouMean: [lower],
+            run: [
+              `${P} ${unset ? 'undo' : 'set'} ${slug} ${thing}${v ? ` ${quoteCommandArgument(v)}` : ''} --on ${lower}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+            ],
+          },
+        );
       refuse(
         E.ERR_THEME_UNKNOWN_PART,
         `"${s.on}" is not a part you can style.`,
@@ -1107,34 +1135,70 @@ export function checkSetting(
       // With no corners setting yet, a step starts from the base theme's
       // own radius.
       if (step) {
-        // The base theme's radius may be in rem or em (0.625rem is 10px). A
-        // part starts from its own radius (a card reads the container
-        // radius), scaled by a whole-theme corners setting.
-        const baseEl = lengthPx(ctx.base?.light['--radius-element'] ?? '');
-        const token = s.on
-          ? /^var\((--[\w-]+)\)$/.exec(
-              partDefault(
-                ctx,
-                partsOf(ctx, s)[0] ?? s.on,
-                'borderRadius',
-                s.when,
-              ) ?? '',
-            )?.[1]
-          : null;
-        const partBase = token ? lengthPx(ctx.base?.light[token] ?? '') : null;
+        // A step moves to the next rung the part SHOWS bigger or smaller:
+        // each rung is measured as the build writes it for the radius token
+        // the part reads (a card reads the container radius), and so is
+        // what the part shows now.
+        const base = ctx.base ?? {
+          light: /** @type {Record<string, string>} */ ({}),
+          dark: /** @type {Record<string, string>} */ ({}),
+        };
+        const token =
+          (s.on
+            ? /^var\((--radius-[\w-]+)\)$/.exec(
+                partDefault(
+                  ctx,
+                  partsOf(ctx, s)[0] ?? s.on,
+                  'borderRadius',
+                  s.when,
+                ) ?? '',
+              )?.[1]
+            : null) ?? '--radius-element';
+        // What the part shows: a setting on it or on its group (the later
+        // one wins), else a whole-theme setting, else the base theme.
+        const fam = s.on ? familyOf(s.on) : null;
+        const onPart = s.on
+          ? [...data.settings].reverse().find(
+              x =>
+                x.thing === 'corners' &&
+                (x.when ?? '') === (s.when ?? '') &&
+                (x.state ?? '') === (s.state ?? '') &&
+                // A member set alone shows that value too.
+                (x.on === s.on ||
+                  (fam && fam !== s.on && x.on === fam && !x.only)),
+            )
+          : undefined;
+        // A step on a member set alone stays on that member alone.
+        if (onPart && onPart.on === s.on && onPart.only && !s.only)
+          s.only = true;
         const whole = [...data.settings]
           .reverse()
-          .find(x => x.thing === 'corners' && !x.on)?.value;
-        const wholePx = whole
-          ? (CORNERS.find(([n]) => n === whole)?.[1] ?? lengthPx(whole))
-          : null;
-        const px =
-          partBase != null
-            ? wholePx != null && baseEl
-              ? (wholePx * partBase) / baseEl
-              : partBase
-            : (wholePx ?? baseEl);
-        s.value = ladder(CORNERS, px ?? 'medium');
+          .find(x => x.thing === 'corners' && !x.on);
+        const isRung = (/** @type {string} */ x) =>
+          CORNERS.some(([n]) => n === x);
+        const shown = onPart
+          ? isRung(onPart.value) || cornerPxOf(onPart.value) >= 1000
+            ? radiusAt(base, onPart.value, token)
+            : cornerPxOf(onPart.value)
+          : whole
+            ? radiusAt(base, whole.value, token)
+            : // The base theme's radius; one it does not give in px (a var()
+              // chain) counts as medium's.
+              (tokenPx(base, token) ?? radiusAt(base, 'medium', token));
+        const rungs = CORNERS.map(
+          ([n]) => /** @type {const} */ ([n, radiusAt(base, n, token)]),
+        );
+        const next =
+          v === 'more'
+            ? rungs.find(([, n]) => n > shown + 0.01)
+            : [...rungs].reverse().find(([, n]) => n < shown - 0.01);
+        s.value =
+          (next ??
+            (Number.isNaN(shown)
+              ? rungs.find(([n]) => n === 'medium')
+              : v === 'more'
+                ? rungs[rungs.length - 1]
+                : rungs[0]))?.[0] ?? 'medium';
       } else {
         // A rung in any case, a size in px written any way: the plain form.
         const lower = v.toLowerCase();
@@ -1713,7 +1777,9 @@ export function checkSetting(
         E.ERR_THEME_BAD_VALUE,
         `${prop} takes ${grammar.takes}; "${v}" is not one.`,
         {
-          ...(grammar.near ? {didYouMean: [grammar.near]} : {}),
+          ...(grammar.near && /^[a-z-]+$/i.test(v)
+            ? {didYouMean: [grammar.near]}
+            : {}),
           run: grammar.near
             ? [
                 `${P} set ${slug} ${prop} ${quoteCommandArgument(grammar.near)} --on ${s.on}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
@@ -1849,7 +1915,8 @@ export function checkSetting(
               .replace(/<part>/g, 'card')
               .replace(/"([^"]*)"/g, (_, q) => quoteCommandArgument(q)),
           )
-        : [`${HOW} "${thing}${s.on ? ` on ${s.on}` : ''}"`],
+        : // A list that answers, not a question the parser may not match.
+          [`${HOW} --list properties`, `${HOW} --list dials`],
       didYouMean: hint
         ? []
         : nearest(prop, [...Object.keys(DIALS), ...CSS_PROPERTIES]),

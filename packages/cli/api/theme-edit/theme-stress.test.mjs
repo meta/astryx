@@ -514,7 +514,9 @@ describe('round 4', () => {
     await themeEditSet('s', 'corners', 'large', {cwd, on: 'containers'});
     const show = await themeEditShow('s', {cwd});
     expect(show.data.partValues[0]).toMatch(
-      /^corners = large on containers -> border-radius 12px on card, .*\(whole theme: --radius-container \d+px\)$/,
+      // What the build writes on a container (large, by the container
+      // radius), not the element's 12px.
+      /^corners = large on containers -> border-radius \d+px.*card.*\(whole theme: --radius-container \d+px\)$/,
     );
     const r = await themeEditUndo('s', {
       cwd,

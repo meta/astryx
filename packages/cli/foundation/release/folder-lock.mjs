@@ -83,15 +83,20 @@ const readOwner = file => {
  */
 export async function withFolderLock(lockDir, fn, {waitMs = 30_000, onBusy}) {
   const ownerFile = path.join(lockDir, 'owner.json');
-  /** @returns {number | null} seconds since the lock was taken or renewed */
-  const age = () => {
-    try {
-      return Math.round((Date.now() - fs.statSync(lockDir).mtimeMs) / 1000);
-    } catch {
-      return null;
-    }
+  /** @returns {number | null} seconds since the holder took the lock */
+  const held = () => {
+    const at = readOwner(ownerFile)?.at;
+    return typeof at === 'number'
+      ? Math.max(0, Math.round((Date.now() - at) / 1000))
+      : null;
   };
-  let holder = JSON.stringify(readOwner(ownerFile)?.pid ?? null);
+  // A holder is its process, computer and the moment it took the lock: a
+  // new holder with the same process id (another container) is a new one.
+  const holderOf = () => {
+    const o = readOwner(ownerFile);
+    return JSON.stringify([o?.pid ?? null, o?.host ?? null, o?.at ?? null]);
+  };
+  let holder = holderOf();
   // A holder renews its record every LEASE_RENEW_MS. One whose record has
   // not changed for three of those, as this run sees it, has stopped,
   // whatever computer or process id it names (pid 1 in a container, a
@@ -108,12 +113,12 @@ export async function withFolderLock(lockDir, fn, {waitMs = 30_000, onBusy}) {
       since = Date.now();
       continue;
     }
-    const now = JSON.stringify(readOwner(ownerFile)?.pid ?? null);
+    const now = holderOf();
     if (now !== holder) {
       holder = now;
       waited = 0;
     }
-    if (waited > waitMs) onBusy(readOwner(ownerFile), age());
+    if (waited > waitMs) onBusy(readOwner(ownerFile), held());
     await sleep(50);
   }
   HELD.add(lockDir);

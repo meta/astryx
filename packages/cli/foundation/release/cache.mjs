@@ -654,7 +654,7 @@ const UNOWNED_LOCK_MS = 10_000;
  * @param {number} pid
  * @returns {boolean}
  */
-function isAlive(pid) {
+export function isAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;

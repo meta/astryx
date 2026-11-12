@@ -120,8 +120,10 @@ describe('corners', () => {
       cwd,
       on: 'text-input',
     });
-    expect(r.data.setting.value).not.toBe('pill');
-    await themeEditUndo('t', {cwd});
+    // It stays on the member alone, at the roundest rung it already shows.
+    expect(r.data.setting.only).toBe(true);
+    expect(r.data.setting.value).toBe('pill');
+    // The step changed nothing, so one undo removes the first setting.
     await themeEditUndo('t', {cwd});
   }, 240_000);
 

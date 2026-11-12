@@ -18,6 +18,7 @@
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {isAlive} from '../../foundation/release/cache.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -92,12 +93,7 @@ function sweepTemps(dir) {
     try {
       const st = fs.lstatSync(p);
       if (!st.isFile() || Date.now() - st.mtimeMs < 10 * 60_000) continue;
-      try {
-        process.kill(Number(m[1]), 0);
-        continue;
-      } catch (e) {
-        if (/** @type {any} */ (e)?.code !== 'ESRCH') continue;
-      }
+      if (isAlive(Number(m[1]))) continue;
       fs.rmSync(p, {force: true});
     } catch {
       // Gone already, or not ours to judge.
