@@ -1218,8 +1218,12 @@ describe('color settings, refused well', () => {
     ]) {
       const r = await refusal(() => themeEditSet('p', thing, '#64748b', {cwd}));
       expect(r.code, thing).toBe('ERR_THEME_UNKNOWN_THING');
+      // p sets no color, so `vibrancy 60` would be refused: it is left
+      // out, and the dial is named.
       expect(r.run[0], thing).toBe(
-        `astryx experimental theme editor set p ${rest}`,
+        rest === 'vibrancy 60'
+          ? 'vibrancy'
+          : `astryx experimental theme editor set p ${rest}`,
       );
     }
     expect(

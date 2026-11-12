@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
+import {vetSuggestions} from './_vet.mjs';
 import {
   AUTO_SPREAD,
   CORNERS,
@@ -528,7 +529,14 @@ function applyNewSettings(
       try {
         s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
       } catch (e) {
-        throw asNewRefusal(e, slug, settings, likeFlag, png, {thing, index});
+        throw asNewRefusal(
+          vetSuggestions(e, ctx, slug, data),
+          slug,
+          settings,
+          likeFlag,
+          png,
+          {thing, index},
+        );
       }
       if (thing === 'mode')
         data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (
@@ -814,6 +822,27 @@ function extremeSteps(res) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 async function change(sub, slug, thing, value, options) {
+  /** @type {{ctx?: import('./_settings.mjs').Ctx, data?: import('./_settings.mjs').ThemeData}} */
+  const seen = {};
+  try {
+    return await changeOnce(sub, slug, thing, value, options, seen);
+  } catch (e) {
+    // Every `set` the refusal suggests is checked as `set` checks it.
+    throw vetSuggestions(e, seen.ctx, slug, seen.data);
+  }
+}
+
+/**
+ * @param {'set' | 'undo'} sub
+ * @param {string} slug
+ * @param {string} thing
+ * @param {string | undefined} value
+ * @param {ChangeOptions} options
+ * @param {{ctx?: import('./_settings.mjs').Ctx, data?: import('./_settings.mjs').ThemeData}} seen
+ *   the context and the theme as loaded, for checking a refusal's suggestions
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
+ */
+async function changeOnce(sub, slug, thing, value, options, seen) {
   const {cwd = process.cwd(), png = false} = options;
   requireProject(cwd);
   // The setting this command changes or removes may be the bad one; any
@@ -867,6 +896,8 @@ async function change(sub, slug, thing, value, options) {
     );
   }
   /** @type {import('./_settings.mjs').Ctx} */ (ctx).base = base;
+  seen.ctx = ctx;
+  seen.data = structuredClone(data);
   /** @type {import('./_settings.mjs').Setting} */
   let s;
   try {

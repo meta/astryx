@@ -911,7 +911,8 @@ function aspectsOf(text) {
     return a;
   }
   if (
-    /\b(faded|fade|opacity|see-through|washed out)\b/.test(c) ||
+    // Washed-out colors are a vibrancy ask, not an opacity one.
+    /\b(faded|fade|opacity|see-through|washed out(?! colou?rs?\b))\b/.test(c) ||
     // A percent is an opacity only beside an opacity word, never inside a
     // function or after a color ("#2563eb 0%" is a gradient stop).
     (/\d+%/.test(withoutFunctions(c)) &&
@@ -5006,10 +5007,14 @@ export function draftAnswer(ctx, env, question) {
     }
     if (vib) {
       seenAspect('colors');
+      // "More" goes with the word after it: more washed out, more muted
+      // and more pastel are less vibrant; less muted is more.
+      const dim =
+        /\b(desaturat\w*|muted|dull|washed|pastel|gr[ae]yer|calm\w*|softer)\b/;
       const less =
-        /\b(less|desaturat\w*|muted|dull|washed|pastel|gr[ae]yer|calm\w*|softer)\b/.test(
-          t,
-        ) && !/\bmore\b/.test(t);
+        /\bless (desaturat\w*|muted|dull|washed|pastel|gr[ae]y\w*)\b/.test(t)
+          ? false
+          : dim.test(t) || (/\bless\b/.test(t) && !/\bmore\b/.test(t));
       const step = set('vibrancy', less ? 'less' : 'more');
       const colored = (/** @type {string} */ v) => !isGraySeed(seedOf(v));
       const hasColor = env.data.settings.some(

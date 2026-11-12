@@ -54,6 +54,7 @@ import {
   SPACING,
   TEXT_SIZE,
   THING_HINTS,
+  TYPE_STYLES,
   familyOf,
 } from './_tables.mjs';
 import {
@@ -108,6 +109,21 @@ function tokenPx(base, token) {
     v = base.light[ref[1]] ?? '';
   }
   return lengthPx(v);
+}
+
+/**
+ * The `type` preset nearest a scale ratio typed as a number (1.3 is
+ * editorial), or null for a number that is no ratio (16).
+ * @param {string} v
+ * @returns {string | null}
+ */
+function ratioPreset(v) {
+  if (!/^\d+(\.\d+)?$/.test(v)) return null;
+  const r = Number(v);
+  if (!(r > 1 && r <= 2)) return null;
+  return Object.entries(TYPE_STYLES).reduce((a, b) =>
+    Math.abs(b[1].ratio - r) < Math.abs(a[1].ratio - r) ? b : a,
+  )[0];
 }
 
 /**
@@ -238,6 +254,7 @@ function sizeMeant(v, ok) {
     t.replace(/(\d)\.(?=[a-z%]|$)/gi, '$1'),
     t.replace(/\s+/g, ''),
     t.replace(/^([+-]?\d+),(\d+)/, '$1.$2').replace(/\s+/g, ''),
+    mathSpaced(t),
   ];
   const m = /^([+-]?\d*\.?\d+)\s*([a-z%]+)$/i.exec(
     t.replace(/^([+-]?\d+),(\d+)/, '$1.$2'),
@@ -248,6 +265,41 @@ function sizeMeant(v, ok) {
       .sort((a, b) => b.length - a.length)
       .find(u => m[2].toLowerCase().startsWith(u));
     if (unit) tries.push(`${m[1]}${unit}`);
+  }
+  return tries.find(x => x !== t && ok(x)) ?? null;
+}
+
+/**
+ * A math function with the spaces CSS needs around `+` and `-` put back
+ * (`calc(1rem+2px)` is `calc(1rem + 2px)`); the value as it is otherwise.
+ * @param {string} v
+ */
+function mathSpaced(v) {
+  if (!/^(calc|min|max|clamp)\(/i.test(v) || /\bvar\(/i.test(v)) return v;
+  return v.replace(/(\d(?<![\d.]e)|[%a-z)])([+-])(?=[\d.(])/gi, '$1 $2 ');
+}
+
+/**
+ * The number meant by a value one slip away from one: a unit on a number
+ * (`700px`), a decimal comma (`1,5`), letter O for zero (`7OO`), a weight
+ * past the range (`1001` is 1000), a math function with no spaces around
+ * `+` or `-`; null when none reads.
+ * @param {string} v
+ * @param {string} name the token
+ * @param {(x: string) => boolean} ok
+ */
+function numberMeant(v, name, ok) {
+  const t = v.trim();
+  const comma = t.replace(/^([+-]?\d+),(\d+)/, '$1.$2');
+  const tries = [
+    /^[\doO.]+$/.test(t) && /\d/.test(t) ? t.replace(/[oO]/g, '0') : t,
+    comma.replace(/^([+-]?\d*\.?\d+)\s*[a-z]+$/i, '$1'),
+    comma,
+    mathSpaced(t),
+  ];
+  if (/weight/.test(name)) {
+    const n = Number(tries[1]);
+    if (Number.isFinite(n)) tries.push(String(Math.min(1000, Math.max(1, n))));
   }
   return tries.find(x => x !== t && ok(x)) ?? null;
 }
@@ -634,7 +686,11 @@ function checkTypedValue(
       );
   }
   if (type === 'number' && !isNumber(value, name))
-    bad('a number', /weight/.test(name) ? '600' : '1.4');
+    bad(
+      'a number',
+      numberMeant(value, name, x => isNumber(x, name)) ??
+        (/weight/.test(name) ? '600' : '1.4'),
+    );
   // A token Core's stylesheet multiplies by a size inside calc() (the line
   // heights) takes a number with no unit: there a length, a percentage or
   // normal is invalid.
@@ -1587,21 +1643,32 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             didYouMean: near,
             run: near[0]
               ? [`${P} set ${slug} ${thing} ${near[0]}`]
-              : // A corner word or a size is the corners dial: on the
-                // buttons for `buttons`, for the whole theme otherwise.
-                CORNERS.some(([n]) => lower.replace(/s$/, '') === n) ||
-                  lengthPx(lower) != null
-                ? [
-                    setLine(
-                      slug,
-                      'corners',
-                      CORNERS.find(
-                        ([n]) => lower.replace(/s$/, '') === n,
-                      )?.[0] ?? lower,
-                      thing === 'buttons' ? {on: 'button'} : {},
-                    ),
-                  ]
-                : [`${HOW} ${thing}`],
+              : // A type-scale ratio (1.25) is the nearest type preset.
+                thing === 'type' && ratioPreset(lower)
+                ? [`${P} set ${slug} type ${ratioPreset(lower)}`]
+                : // A corner word or a size with a unit is the corners dial:
+                  // on the buttons for `buttons`, for the whole theme
+                  // otherwise. A bare number is no size: the dial's own
+                  // words.
+                  CORNERS.some(([n]) => lower.replace(/s$/, '') === n) ||
+                    (/[a-z%]$/.test(lower) && lengthPx(lower) != null)
+                  ? [
+                      setLine(
+                        slug,
+                        'corners',
+                        CORNERS.find(
+                          ([n]) => lower.replace(/s$/, '') === n,
+                        )?.[0] ?? lower,
+                        thing === 'buttons' ? {on: 'button'} : {},
+                      ),
+                    ]
+                  : [
+                      ...(/^[+-]?\d*\.?\d+$/.test(lower) ? ok : [])
+                        .filter(w => /^[a-z-]+$/.test(w))
+                        .slice(0, 4)
+                        .map(w => `${P} set ${slug} ${thing} ${w}`),
+                      `${HOW} ${thing}`,
+                    ],
           },
         );
       }
@@ -1613,9 +1680,24 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           E.ERR_THEME_BAD_VALUE,
           'headings applies to every heading; drop --on. For one heading level use font-weight or letter-spacing --on heading --when level:<1-6>.',
           {
-            run: [
-              `${P} set ${slug} font-weight 700 --on heading --when level:1`,
-            ],
+            // The dial without --on, then the asked weight or tracking on
+            // one level; a word with no meaning here gets neither.
+            run: (() => {
+              const w = String(v ?? '')
+                .trim()
+                .toLowerCase();
+              if (HEADING_WEIGHTS[w] !== undefined)
+                return [
+                  `${P} set ${slug} headings ${w}`,
+                  `${P} set ${slug} font-weight ${HEADING_WEIGHTS[w]} --on heading --when level:1`,
+                ];
+              if (HEADING_TRACKING[w] !== undefined)
+                return [
+                  `${P} set ${slug} headings ${w}`,
+                  `${P} set ${slug} letter-spacing ${quoteCommandArgument(HEADING_TRACKING[w])} --on heading --when level:1`,
+                ];
+              return [`${HOW} headings`];
+            })(),
           },
         );
       if (s.mode)
@@ -2068,7 +2150,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         refuse(
           E.ERR_THEME_BAD_VALUE,
           'text-size applies to the whole theme; for one part use font-size.',
-          {run: [`${P} set ${slug} font-size 13px --on ${s.on}`]},
+          {
+            // The asked size on the part: a rung's px (large is 15px), a
+            // number as px; a step (more, less) has no size to carry.
+            run: (() => {
+              const w = String(v ?? '')
+                .trim()
+                .toLowerCase();
+              const rung = TEXT_SIZE.find(([n]) => n === w)?.[1];
+              const px =
+                rung ?? (/^\d+(\.\d+)?(px)?$/.test(w) ? parseFloat(w) : null);
+              return px != null && px > 0
+                ? [setLine(slug, 'font-size', `${px}px`, s)]
+                : [`${HOW} font-size`];
+            })(),
+          },
         );
       if (step) s.value = ladder(TEXT_SIZE, 'medium');
       else if (
@@ -2649,16 +2745,22 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     ) {
       if (partsOf(ctx, s).every(t => textParts.includes(t))) {
         const named = /^color:([\w-]+)$/.exec(s.when ?? '')?.[1];
+        // The typed value goes into the token only when it is a plain color;
+        // else the nearest color name, else an example.
+        const color =
+          v && isColorValue(v) && isFixedColor(v) && !/\bvar\(/i.test(v)
+            ? v
+            : (nearestColorName(v) ?? '#1f2937');
         refuse(
           E.ERR_THEME_NO_EFFECT,
           `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the text color token instead.`,
           {
             run: [
-              `${P} set ${slug} --color-text-${named ?? 'primary'} ${quoteCommandArgument(v || '#1f2937')}${s.mode ? ` --mode ${s.mode}` : ''}`,
+              `${P} set ${slug} --color-text-${named ?? 'primary'} ${quoteCommandArgument(color)}${s.mode ? ` --mode ${s.mode}` : ''}`,
               ...(named
                 ? []
                 : [
-                    `${P} set ${slug} --color-text-secondary ${quoteCommandArgument(v || '#1f2937')}${s.mode ? ` --mode ${s.mode}` : ''}`,
+                    `${P} set ${slug} --color-text-secondary ${quoteCommandArgument(color)}${s.mode ? ` --mode ${s.mode}` : ''}`,
                   ]),
             ],
           },
@@ -2771,6 +2873,27 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         },
       );
     }
+    // A var() inside a color (color-mix(in srgb, var(--x, 12px), red)) shows
+    // its fallback when the variable is unset: that must be a color too,
+    // except in a color's channels (rgb(var(--r, 0) 0 0)).
+    if (COLOR_PROPS.test(prop) || (prop === 'background' && isColorValue(v)))
+      for (const {fallback, within} of innerVarFallbacks(v)) {
+        if (
+          within.some(f =>
+            /^(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)$/i.test(f),
+          ) ||
+          /\bvar\(/i.test(fallback)
+        )
+          continue;
+        if (fallback === '' || !isColorValue(fallback))
+          refuse(
+            E.ERR_THEME_BAD_VALUE,
+            fallback === ''
+              ? `${prop} takes a color; the var() in "${v}" has an empty fallback, which leaves it with no color when the variable is unset.`
+              : `${prop} takes a color; "${fallback}", a var() fallback in "${v}", is not one, so the ${prop} is lost when the variable is unset.`,
+            {run: [setLine(slug, prop, exampleOf('color', prop), s)]},
+          );
+      }
     // Every scope flag but --mode carries into the runs.
     const whenFlag = `${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.only ? ' --only' : ''}`;
     if (

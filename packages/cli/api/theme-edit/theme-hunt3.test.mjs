@@ -236,9 +236,12 @@ describe('set', () => {
       const r = await refusal(() =>
         themeEditSet('h', 'background_color', value, {cwd, on: 'card'}),
       );
-      expect(r.run[0]).toContain(
-        `background-color ${quoteCommandArgument(value)} --on card`,
-      );
+      // None of these is a color, so the set `background-color` would
+      // refuse is left out; no line carries the value unquoted.
+      for (const line of r.run)
+        expect(line.replace(quoteCommandArgument(value), '')).not.toContain(
+          value,
+        );
       expect(quoteCommandArgument(value)).toMatch(/^'/);
     }
   });
