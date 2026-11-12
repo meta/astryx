@@ -82,6 +82,7 @@ import {
 } from '../DropdownMenu/menuItemRoles';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import {useInternalListFocus} from '../hooks/useListFocus';
 import {useLongPress} from '../hooks/useLongPress';
 import {pressableProps} from '../utils/pressFeedback';
@@ -207,8 +208,7 @@ const styles = stylex.create({
     transitionTimingFunction: easeVars['--ease-standard'],
     userSelect: 'none',
     WebkitTouchCallout: 'none',
-    // A touch open focuses the menu itself, so no row is lit until the finger
-    // moves onto one, as with DropdownMenu's held finger. The menu is an
+    // A touch open focuses the menu itself, so no row is lit. The menu is an
     // internal focus target, not a control, so it shows no browser ring.
     // Keyboard focus moves to an item instead.
     outline: 'none',
@@ -569,7 +569,11 @@ export function ContextMenu({
     focusFollowsLastInput: true,
   });
   focusFirstRef.current = focusFirst;
-  focusMenuRef.current = () => listRef.current?.focus({preventScroll: true});
+  const focusMenu = useCallback(
+    () => listRef.current?.focus({preventScroll: true}),
+    [listRef],
+  );
+  useCommittedRefInto(focusMenuRef, focusMenu);
 
   // Join the shared stack so an Escape press dismisses exactly one top-most
   // surface. BottomSheet owns its own dismissal path.
@@ -599,7 +603,7 @@ export function ContextMenu({
   // closes it as it begins to pan, or at its lift, and the page stays free to
   // scroll. Otherwise a touch closes it at its compatibility mousedown. The
   // press that opened the menu keeps it open.
-  watchOutsideRef.current = () => {
+  const watchOutside = useCallback(() => {
     const trigger = triggerRef.current;
     if (trigger == null) {
       return;
@@ -622,7 +626,8 @@ export function ContextMenu({
         root: shadowHostOf(root) != null ? root : null,
       },
     );
-  };
+  }, [closeMenu, listRef, outsidePress, touchModes]);
+  useCommittedRefInto(watchOutsideRef, watchOutside);
 
   const listKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

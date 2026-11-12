@@ -18,6 +18,7 @@ import {flushSync} from 'react-dom';
 import {isTerminal} from '../gestures/GestureRecognizer';
 import {playHaptic} from '../gestures/haptics';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {contextMenu} from '../motion/uikit/contextMenu';
 import {isElement} from '../utils/nodeType';
 import {ContextMenuPressRecognizer} from './contextMenuPress';
@@ -83,12 +84,7 @@ export function ContextMenuTouchLayer({
   );
   const feedbackRef = useRef(feedback);
   feedbackRef.current = feedback;
-  const onOpenRef = useRef(onOpen);
-  onOpenRef.current = onOpen;
-  const onCommitRef = useRef(onCommit);
-  onCommitRef.current = onCommit;
-  const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
+  const onCancelRef = useCommittedRef(onCancel);
   const hasPressOpenedRef = useRef(false);
 
   // The gesture hook follows the element behind the ref, so a `triggerAs`
@@ -124,7 +120,7 @@ export function ContextMenuTouchLayer({
         hasPressOpenedRef.current = true;
         // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the menu shows in the task that decides it, as UIKit shows it at its moment, not a scheduled task later
         flushSync(() => {
-          onOpenRef.current(press.press ?? press.location());
+          onOpen(press.press ?? press.location());
         });
       };
       switch (press.state) {
@@ -135,7 +131,7 @@ export function ContextMenuTouchLayer({
           playHaptic(contextMenu.commitHaptic);
           // The menu shows at its moment or at the lift. Mounted now, its
           // content costs that show nothing.
-          onCommitRef.current?.();
+          onCommit?.();
           break;
         case 'changed':
           if (press.isMenuDue && !hasPressOpenedRef.current) {
