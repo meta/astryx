@@ -193,18 +193,33 @@ function panDirection(direction: ToastGestureDirection): 'down' | 'up' {
 }
 
 /**
- * Turns the card's stylesheet transitions off before a Reduce Motion fade:
- * WebKit restarts the opacity transition when the fade hands the opacity back.
- * Otherwise the transitions stay, so an entrance runs on under a finger. The
- * layer moves the card by `translate`, which they do not animate.
+ * Whether the animator plays the card's next move as a Reduce Motion fade.
+ * Around one, the layer turns the card's stylesheet transitions off: WebKit
+ * restarts the opacity transition when the fade hands the opacity back.
+ * Otherwise they stay, so an entrance runs on under a finger. The layer moves
+ * the card by `translate`, which they do not animate.
  */
-function stillTransitionsBeforeFade(
+function fadesUnderReducedMotion(
   animator: Animator,
   touchRelease: boolean,
-): void {
+): boolean {
+  return animator.reducedMotion({touchRelease}) !== 'off';
+}
+
+function stillTransitions(animator: Animator): void {
   const root = animator.element;
-  if (root != null && animator.reducedMotion({touchRelease}) !== 'off') {
-    root.style.setProperty('transition-property', 'none');
+  if (root == null) {
+    return;
+  }
+  root.style.setProperty('transition-property', 'none');
+  // WebKit keeps a running transition when `transition-property` becomes
+  // `none` while an animation drives that property.
+  if (typeof root.getAnimations === 'function') {
+    for (const animation of root.getAnimations()) {
+      if ((animation as CSSTransition).transitionProperty === 'opacity') {
+        animation.cancel();
+      }
+    }
   }
 }
 
@@ -316,8 +331,9 @@ export function useToastBannerSwipe(
         return;
       }
       // Under reduced motion the animator replaces the slide with a
-      // cross-fade: the card fades out where it is.
-      stillTransitionsBeforeFade(animator, touchRelease);
+      // cross-fade: the card fades out where it is, from the opacity on
+      // screen. The call reads that opacity, so the transitions go off after.
+      const fades = fadesUnderReducedMotion(animator, touchRelease);
       const handle = animator.play(
         {
           y: retractCurve(
@@ -332,6 +348,9 @@ export function useToastBannerSwipe(
         },
         {crossfadeAs: 'exit', touchRelease},
       );
+      if (fades) {
+        stillTransitions(animator);
+      }
       exitHandleRef.current = handle;
       void handle.finished.then(isFinished => {
         if (exitHandleRef.current === handle) {
@@ -411,9 +430,11 @@ export function useToastBannerSwipe(
             to === 'ended' ? fingerVelocity * toast.followRatio : 0;
           // Under reduced motion the animator replaces the spring with a
           // cross-fade (a touch release): the card lands at rest and fades in.
+          // It fades to the stylesheet's opacity, read once the transitions
+          // are off.
           const settler = cardAnimator();
-          if (settler != null) {
-            stillTransitionsBeforeFade(settler, true);
+          if (settler != null && fadesUnderReducedMotion(settler, true)) {
+            stillTransitions(settler);
           }
           const handle = settler?.animate(
             {y: 0},

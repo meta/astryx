@@ -8,8 +8,9 @@
  *   out, or dismissed during a drag, leaves at the lift. Under reduced motion
  *   a spring-back fades once. A dragging or catching finger starts no text
  *   selection; a still hold on a resting card can. A tap, a drag or a
- *   dismissal during the entrance leaves it running. A lost lift ends at the
- *   next touch
+ *   dismissal during the entrance leaves it running. Under reduced motion
+ *   the dismissal fades from there, and a spring-back or a catch then shows
+ *   the card at full opacity. A lost lift ends at the next touch
  * @position Toast's interaction proofs that its motion is interruptible
  */
 
@@ -719,7 +720,7 @@ async function showEnteringToast(page: Page): Promise<Locator> {
 async function recordOpacity(page: Page): Promise<void> {
   await page.evaluate(() => {
     const recorder = window as unknown as {
-      __shown: {t: number; opacity: number; y: number}[];
+      __shown: {t: number; opacity: number; y: number; inView: boolean}[];
     };
     recorder.__shown = [];
     const tick = (t: number) => {
@@ -728,10 +729,16 @@ async function recordOpacity(page: Page): Promise<void> {
         const style = getComputedStyle(element);
         const [, ty = '0px'] =
           style.translate === 'none' ? [] : style.translate.split(' ');
+        const rect = element.getBoundingClientRect();
         recorder.__shown.push({
           t,
           opacity: Number.parseFloat(style.opacity),
           y: Number.parseFloat(ty),
+          inView:
+            rect.bottom > 0 &&
+            rect.top < innerHeight &&
+            rect.right > 0 &&
+            rect.left < innerWidth,
         });
         requestAnimationFrame(tick);
       }
@@ -742,12 +749,12 @@ async function recordOpacity(page: Page): Promise<void> {
 
 async function readOpacity(
   page: Page,
-): Promise<{t: number; opacity: number; y: number}[]> {
+): Promise<{t: number; opacity: number; y: number; inView: boolean}[]> {
   return page.evaluate(
     () =>
       (
         window as unknown as {
-          __shown: {t: number; opacity: number; y: number}[];
+          __shown: {t: number; opacity: number; y: number; inView: boolean}[];
         }
       ).__shown,
   );
@@ -810,4 +817,128 @@ test('a dismissal during the entrance slides the card out from where it shows', 
     Math.max(...leaving.map(frame => frame.opacity)),
     'the card still fades in',
   ).toBeLessThan(0.9);
+});
+
+test('under reduced motion, a dismissal during the entrance fades the card out from where it shows', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const card = await showEnteringToast(page);
+  await recordOpacity(page);
+  const before = await card.evaluate(element =>
+    Number.parseFloat(getComputedStyle(element).opacity),
+  );
+  expect(before, 'the card still fades in').toBeLessThan(0.9);
+  const t0 = await page.evaluate(() => performance.now());
+  await page
+    .getByRole('button', {name: 'Dismiss notification'})
+    .evaluate(element => (element as HTMLElement).click());
+  await expect(page.locator('.astryx-toast')).toHaveCount(0, {timeout: 3000});
+  // The fade runs in place; then the card lands past its edge, out of view.
+  // Only frames that show the card count.
+  const leaving = (await readOpacity(page)).filter(
+    frame => frame.t >= t0 && frame.inView,
+  );
+  expect(leaving.length, 'frames while it fades out').toBeGreaterThan(2);
+  expect(leaving.at(-1)?.opacity ?? 1, 'the card fades').toBeLessThan(
+    leaving[0].opacity,
+  );
+  // The fade starts from the opacity on screen, with no step up first.
+  expect(Math.max(...leaving.map(frame => frame.opacity))).toBeLessThan(
+    before + 0.1,
+  );
+});
+
+test('under reduced motion, a spring-back during the entrance ends at full opacity', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const card = await showEnteringToast(page);
+  const box = await card.boundingBox();
+  if (box == null) {
+    throw new Error('no toast');
+  }
+  const driver = await touchDriver(page);
+  // The finger drags the bottom toast 30 px toward its edge, rests and lifts
+  // short of dismissing: the card fades back to rest.
+  const start = {
+    x: Math.round(box.x + box.width * 0.3),
+    y: Math.round(box.y + box.height / 2),
+  };
+  const out = {x: start.x, y: start.y + 30};
+  const frames: TouchFrame[] = [
+    {t: 0, fingers: [{id: 0, ...start}]},
+    ...move(0, start, out, 0, 200),
+    ...hold(0, out, 200 + FRAME_MS, 100),
+  ];
+  await driver.play([
+    ...frames,
+    {t: +(frames[frames.length - 1].t + FRAME_MS).toFixed(3), fingers: []},
+  ]);
+  await page.waitForTimeout(700);
+  await expect(card).toBeVisible();
+  expect(
+    await card.evaluate(element =>
+      Number.parseFloat(getComputedStyle(element).opacity),
+    ),
+  ).toBeGreaterThan(0.99);
+});
+
+test('under reduced motion, a finger that catches a dismissal during the entrance holds the card at full opacity', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const card = await showEnteringToast(page);
+  const box = await card.boundingBox();
+  if (box == null) {
+    throw new Error('no toast');
+  }
+  const driver = await touchDriver(page);
+  await recordOpacity(page);
+  await page.evaluate(() => {
+    const touches = window as unknown as {__touchTimes: number[]};
+    touches.__touchTimes = [];
+    for (const type of ['touchstart', 'touchend']) {
+      window.addEventListener(
+        type,
+        () => touches.__touchTimes.push(performance.now()),
+        {capture: true, passive: true},
+      );
+    }
+  });
+  // The close button starts the fade. A finger lands on the card while it
+  // fades, holds still, then lifts.
+  await page
+    .getByRole('button', {name: 'Dismiss notification'})
+    .evaluate(element => (element as HTMLElement).click());
+  const at = {
+    x: Math.round(box.x + box.width * 0.3),
+    y: Math.round(box.y + box.height / 2),
+  };
+  const held = hold(0, at, 40, 300);
+  await driver.play([
+    ...held,
+    {t: +(held[held.length - 1].t + FRAME_MS).toFixed(3), fingers: []},
+  ]);
+  const [down, up] = await page.evaluate(
+    () => (window as unknown as {__touchTimes: number[]}).__touchTimes,
+  );
+  if (down == null || up == null) {
+    throw new Error('the touch did not land and lift');
+  }
+  const whileHeld = (await readOpacity(page)).filter(
+    frame => frame.t >= down + 2 * FRAME_MS && frame.t <= up - FRAME_MS,
+  );
+  expect(whileHeld.length, 'frames while the finger holds').toBeGreaterThan(4);
+  expect(
+    whileHeld.every(frame => frame.inView),
+    'the card stays in view under the finger',
+  ).toBe(true);
+  // A caught fade finishes, and the card shows at its own opacity.
+  expect(
+    Math.min(...whileHeld.map(frame => frame.opacity)),
+    'the card under the finger',
+  ).toBeGreaterThan(0.99);
+  // Its toast is dismissed, so the card leaves when the finger lifts.
+  await expect(page.locator('.astryx-toast')).toHaveCount(0, {timeout: 3000});
 });
