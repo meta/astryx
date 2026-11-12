@@ -8,6 +8,7 @@
  * upgrade, another project or another environment, and after random changes.
  */
 
+import {COMPONENT_REPLACES_CLI} from '../foundation/integrations/cli-requirement.mjs';
 import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -1074,6 +1075,71 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       expect(again).toEqual(edited);
     } finally {
       fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('gives doctor its own answer after an everyday command kept the issue list', () => {
+    const tmp = keptTmp('doctor-core');
+    // A project with no installed Core, and an opted-in integration whose
+    // component replaces a Core one: everyday commands read the Core the CLI
+    // carries, doctor only the project's (none), so their lists differ.
+    const dir = fs.mkdtempSync(path.join(work, 'projects', 'no-core-'));
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify({
+          name: 'no-core',
+          dependencies: {'@astryxdesign/cli': '*', '@acme/nav': '1.0.0'},
+        }),
+      );
+      const nav = path.join(dir, 'node_modules', '@acme', 'nav');
+      fs.mkdirSync(path.join(nav, 'components'), {recursive: true});
+      fs.writeFileSync(
+        path.join(nav, 'package.json'),
+        JSON.stringify({
+          name: '@acme/nav',
+          version: '1.0.0',
+          exports: {'./components/*': './components/*.tsx'},
+          peerDependencies: {
+            '@astryxdesign/cli': `>=${COMPONENT_REPLACES_CLI}`,
+          },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(nav, 'astryx.integration.mjs'),
+        "export default {components: './components'};\n",
+      );
+      fs.writeFileSync(
+        path.join(nav, 'components', 'AcmeSideNav.doc.mjs'),
+        `export default ${JSON.stringify({
+          type: 'component',
+          name: 'AcmeSideNav',
+          displayName: 'AcmeSideNav',
+          import: '@acme/nav/components/AcmeSideNav',
+          replaces: 'SideNav',
+          keywords: ['acme'],
+          usage: {description: 'AcmeSideNav for Acme apps.'},
+          props: [],
+        })};\n`,
+      );
+      fs.writeFileSync(
+        path.join(nav, 'components', 'AcmeSideNav.tsx'),
+        'export function AcmeSideNav() { return null; }\n',
+      );
+      const check = (/** @type {{stdout: string}} */ r) =>
+        JSON.parse(r.stdout).data.checks.find(
+          (/** @type {{id: string}} */ c) => c.id === 'integration-issues',
+        );
+      const fresh = check(run(['doctor'], {tmp: freshTmp(), cwd: dir}));
+      expect(fresh).toBeDefined();
+      run(['template', '--list'], {tmp, cwd: dir, json: false});
+      run(['template', '--list'], {tmp, cwd: dir, json: false});
+      // The everyday command kept its lists (the integration's and the
+      // project's); doctor still answers as a fresh doctor does.
+      expect(issuesEntries(tmp).size).toBe(2);
+      expect(check(run(['doctor'], {tmp, cwd: dir}))).toEqual(fresh);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 120_000);
 

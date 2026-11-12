@@ -1363,6 +1363,10 @@ export class Project {
         [
           'project-issues',
           this.#cwd,
+          // The Core the replacement pass reads: a carried Core for everyday
+          // commands, the project's own for doctor.
+          this.#core,
+          this.coreDir() ?? null,
           this.#loadedIntegrations.map(
             integration => integration.__packageDir ?? integration.name ?? null,
           ),
