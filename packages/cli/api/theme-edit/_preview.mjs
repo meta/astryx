@@ -460,11 +460,11 @@ function componentTable(project, trees) {
 const SAFE = [
   '/** Shows a short note for a component that throws, so the rest of the page renders. */',
   'class Safe extends React.Component<{name: string, children: React.ReactNode}, {failed: boolean}> {',
-  '  state = {failed: false};',
+  '  override state = {failed: false};',
   '  static getDerivedStateFromError() {',
   '    return {failed: true};',
   '  }',
-  '  render() {',
+  '  override render() {',
   '    return this.state.failed ? <div className="tp-note">{this.props.name} could not render here</div> : this.props.children;',
   '  }',
   '}',
@@ -786,7 +786,7 @@ export function overviewPageSource(project, {theme = null} = {}) {
     '  React.useEffect(() => {',
     '    if (!ref.current) return;',
     '    const style = getComputedStyle(ref.current);',
-    "    const first = (token: string) => style.getPropertyValue(token).split(',')[0].replace(/[\"']/g, '').trim() || 'default';",
+    "    const first = (token: string) => (style.getPropertyValue(token).split(',')[0] ?? '').replace(/[\"']/g, '').trim() || 'default';",
     "    setFonts(`Body: ${first('--font-family-body')}. Headings: ${first('--font-family-heading')}.`);",
     '  }, []);',
     '  return (',
@@ -839,7 +839,6 @@ export function colorsPageSource({slug, module, seeds, uses}) {
     '// `astryx experimental theme editor set` rewrites it with every change.',
     "'use client';",
     '',
-    "import * as React from 'react';",
   ];
   const text = {color: 'var(--color-text-primary)'};
   const page = {
@@ -1039,7 +1038,8 @@ export function previewRouteSource({
             : "  const [mode, setMode] = React.useState<Mode>('system');",
         ]
       : []),
-    '  const current = PAGES.find(p => p.id === page) ?? PAGES[0];',
+    // The route always has a page; the cast keeps noUncheckedIndexedAccess apps building.
+    '  const current = (PAGES.find(p => p.id === page) ?? PAGES[0]) as (typeof PAGES)[number];',
     '  return (',
     ...(theme
       ? ['    <Theme theme={theme} mode={mode}>', ...shell, '    </Theme>']

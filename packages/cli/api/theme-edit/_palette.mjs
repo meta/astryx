@@ -172,6 +172,15 @@ export function removeEmptyFolder(dir, opts = {}) {
 }
 
 /**
+ * Whether a file name is one of the editor's own temp files: a whole-file
+ * write's `.<name>.astryx-<pid>-<random>.tmp`, or a build's
+ * `.<name>.tmp-<id>`. A command stopped part way can leave one behind.
+ * @param {string} name
+ */
+export const isEditorTemp = name =>
+  /^\..+\.(astryx-\d+-[a-z0-9]+\.tmp|tmp-[\w-]+)$/.test(name);
+
+/**
  * A temp file beside `file` for a whole write, named so only the editor
  * makes such names: `.<name>.astryx-<pid>-<random>.tmp`. The write that
  * makes one removes it.

@@ -114,12 +114,17 @@ export const slugOk = s =>
   !windowsReserved(s);
 
 /**
- * A name Windows reserves for a device (con, nul, com1…): a folder named
- * so cannot be checked out there.
+ * A name Windows does not allow for a file or folder, so it cannot be
+ * checked out there: a device name (con, nul, com1, com¹…), a character
+ * Windows reserves (`<>:"|?*` and control characters), or a dot or space
+ * at the end.
  * @param {string} s
  */
 export const windowsReserved = s =>
-  /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i.test(s);
+  /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$/i.test(s) ||
+  // eslint-disable-next-line no-control-regex
+  /[<>:"|?*\u0000-\u001f]/.test(s) ||
+  /[. ]$/.test(s);
 /**
  * The theme name closest to what was typed: spaces and accents dropped,
  * lower case, anything else a dash.

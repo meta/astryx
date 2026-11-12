@@ -43,6 +43,7 @@ import {
   themeImports,
 } from './_preview.mjs';
 import {
+  isEditorTemp,
   PALETTE_STAND_IN,
   paletteFiles,
   paletteMapping,
@@ -686,6 +687,40 @@ function checkPlacement(cwd, dir, where, retry) {
       `${where} is no place for the preview: ${why}.`,
       {run: [fallback]},
     );
+  // A folder name that is not a plain URL segment (a space, an accent,
+  // ?, #, %) is not served at the URL it seems to have.
+  const odd = app
+    ? path
+        .relative(app, dir)
+        .split(path.sep)
+        .find(
+          seg =>
+            seg &&
+            !/^\(.+\)$|^\[.+\]$/.test(seg) &&
+            !/^[A-Za-z0-9._-]+$/.test(seg),
+        )
+    : undefined;
+  if (app && odd) {
+    const slug = (/** @type {string} */ seg) =>
+      seg
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Za-z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase() || 'theme-preview';
+    const fixed = path.join(
+      app,
+      ...path
+        .relative(app, dir)
+        .split(path.sep)
+        .map(seg => (seg === odd ? slug(seg) : seg)),
+    );
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `${where} is no place for the preview: Next does not serve the folder "${odd}" at the URL its name seems to give (only letters, digits, dot, dash and underscore make a plain URL segment).`,
+      {run: [retry(shown(cwd, fixed))]},
+    );
+  }
   if (!app) return;
   if (served && app !== served)
     refuse(
@@ -747,8 +782,12 @@ function checkPlacement(cwd, dir, where, retry) {
     );
   const clash = sameUrlPage(cwd, app, dir);
   if (clash) {
-    let free = `${dir}-2`;
-    for (let n = 3; fs.existsSync(free); n++) free = `${dir}-${n}`;
+    // The first free name from the base name, whose URL no other page
+    // serves either.
+    const base = dir.replace(/-\d+$/, '');
+    let free = `${base}-2`;
+    for (let n = 3; fs.existsSync(free) || sameUrlPage(cwd, app, free); n++)
+      free = `${base}-${n}`;
     refuse(
       E.ERR_FILE_EXISTS,
       `${shown(cwd, clash)} already serves /${urlSegments(app, dir).join('/')} or the URLs under it, so a preview in ${where} would stop the app from building, or take that URL from it.`,
@@ -3543,7 +3582,12 @@ export async function themeEditPreviewApp(dir, options = {}) {
       })) {
         const sub = path.join(rel, entry.name);
         if (entry.isDirectory()) copyDir(sub);
-        else if (entry.isFile() && !(rel === '' && skip.has(entry.name)))
+        else if (
+          entry.isFile() &&
+          !(rel === '' && skip.has(entry.name)) &&
+          // A temp file a stopped command left is no part of the theme.
+          !isEditorTemp(entry.name)
+        )
           themeCopy.push({
             rel: path.join(to.dir, sub),
             text: fs.readFileSync(path.join(from.dir, sub)),

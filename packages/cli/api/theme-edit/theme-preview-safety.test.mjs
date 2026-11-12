@@ -213,12 +213,12 @@ describe('where the pages go', () => {
     expect(tree()).toBe(before);
   }, 120_000);
 
-  it('opens a route group folder at its real URL, encoded', async () => {
+  it('opens a route group folder at its real URL', async () => {
     const group = await themeEditPreviewAdd(undefined, {
       cwd,
-      path: 'src/app/(tools)/my preview',
+      path: 'src/app/(tools)/my-preview',
     });
-    expect(group.data.open).toBe('open /my%20preview in the running app');
+    expect(group.data.open).toBe('open /my-preview in the running app');
   }, 120_000);
 
   it('finds a preview recorded with --path when no --path is given', async () => {
@@ -566,11 +566,16 @@ describe('preview add', () => {
     const r = await refusal(() =>
       themeEditPreviewAdd('zzzz', {cwd, path: "src/app/$(id)'x"}),
     );
-    expect(r.code).toBe('ERR_NOT_FOUND');
-    expect(r.run.at(-1)).toBe('astryx template --list --type page');
-    for (const cmd of r.run.slice(0, -1))
-      expect(cmd).toContain(`--path 'src/app/$(id)'\\''x'`);
-    expect(r.run.join(' ')).not.toContain('shell-top-nav');
+    // The folder name is no plain URL segment: the way on is a slugged
+    // one, and nothing in it reaches a shell unquoted.
+    expect(r.code).toBe('ERR_INVALID_ARGUMENT');
+    expect(r.run).toEqual([
+      'astryx experimental theme preview add zzzz --path src/app/id-x',
+    ]);
+    const ok = await refusal(() => themeEditPreviewAdd('zzzz', {cwd}));
+    expect(ok.code).toBe('ERR_NOT_FOUND');
+    expect(ok.run.at(-1)).toBe('astryx template --list --type page');
+    expect(ok.run.join(' ')).not.toContain('shell-top-nav');
   }, 60_000);
 
   it('takes every word of an unquoted description, and refuses extra arguments to list and remove', async () => {
@@ -2108,4 +2113,41 @@ describe('final pass 5', () => {
       }
     }
   }, 180_000);
+
+  it('refuses a folder name that is no plain URL segment, or Windows does not allow', async () => {
+    for (const [where, fixed] of [
+      ['src/app/a b', 'src/app/a-b'],
+      ['src/app/ünï', 'src/app/uni'],
+      ['src/app/a#b', 'src/app/a-b'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: where}),
+      );
+      expect(r.code, where).toBe('ERR_INVALID_ARGUMENT');
+      expect(r.run[0], where).toContain(`--path ${fixed}`);
+      expect(exists(where), where).toBe(false);
+    }
+    for (const dir of ['q?', 'x.', 'x /y', 'com¹'])
+      expect(
+        (await refusal(() => themeEditPreviewApp(dir, {cwd}))).message,
+        dir,
+      ).toContain('Windows does not allow');
+  });
+
+  it('suggests a free folder whose URL no route group serves either', async () => {
+    write('src/app/(m)/tp/page.tsx', 'export default 1;\n');
+    write('src/app/(m)/tp-2/page.tsx', 'export default 1;\n');
+    try {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/app/tp'}),
+      );
+      expect(r.run[0]).toContain('--path src/app/tp-3');
+      const again = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/app/tp-2'}),
+      );
+      expect(again.run[0]).toContain('--path src/app/tp-3');
+    } finally {
+      rm('src/app/(m)');
+    }
+  });
 });

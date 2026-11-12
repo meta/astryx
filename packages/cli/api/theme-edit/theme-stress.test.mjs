@@ -603,7 +603,11 @@ describe('round 4 follow-ups', () => {
         path: 'src/app/my preview',
       }),
     );
-    expect(r.run[0]).toMatch(/--theme s --path 'src\/app\/my preview'$/);
+    // The folder name is no plain URL segment: the way on names one that is,
+    // with the description quoted.
+    expect(r.run[0]).toMatch(
+      /add 'a weather widget' --theme s --path src\/app\/my-preview$/,
+    );
   }, 120_000);
 });
 
