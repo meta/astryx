@@ -452,3 +452,71 @@ describe('themeEject (api/theme/eject)', () => {
     }
   }, 240_000);
 });
+
+describe('a fork renames the theme wherever its name sits', () => {
+  /**
+   * An app with an integration theme whose entry is written `source`.
+   * @param {string} source
+   */
+  const withIntegrationTheme = source => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: 'app', dependencies: {'@acme/themes': '^1.0.0'}}),
+    );
+    const pkg = path.join(tmpDir, 'node_modules', '@acme', 'themes');
+    const dir = path.join(pkg, 'themes', 'ocean');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(pkg, 'package.json'),
+      JSON.stringify({name: '@acme/themes', version: '1.0.0'}),
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'astryx.integration.mjs'),
+      "export default {themes: './themes'};\n",
+    );
+    fs.writeFileSync(
+      path.join(dir, 'oceanTheme.doc.mjs'),
+      `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'ocean', displayName: 'Ocean', description: 'An ocean theme.', maintained: true};\n`,
+    );
+    fs.writeFileSync(path.join(dir, 'oceanTheme.ts'), source);
+  };
+
+  it.each([
+    [
+      'after extends',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {neutralTheme} from '@astryxdesign/theme-neutral';\n\nexport const oceanTheme = defineTheme({\n  extends: neutralTheme,\n  name: 'ocean',\n});\n`,
+    ],
+    [
+      'under a comment',
+      `import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const oceanTheme = defineTheme({\n  // The theme's name, which the build names its files after.\n  name: "ocean",\n});\n`,
+    ],
+  ])('%s', async (_, source) => {
+    withIntegrationTheme(source);
+    await themeEject('ocean', {
+      cwd: tmpDir,
+      package: '@acme/themes',
+      targetPath: 'src/themes/acme-ocean',
+    });
+    const entry = fs.readFileSync(
+      path.join(tmpDir, 'src/themes/acme-ocean/acmeOceanTheme.ts'),
+      'utf-8',
+    );
+    expect(entry).toMatch(/export const acmeOceanTheme = defineTheme/);
+    expect(entry).toMatch(/name: (['"])acme-ocean\1/);
+    expect(entry).not.toMatch(/name: (['"])ocean\1/);
+  });
+
+  it('refuses a fork under another name when the entry names no theme', async () => {
+    withIntegrationTheme('export const oceanTheme = {};\n');
+    await expect(
+      themeEject('ocean', {
+        cwd: tmpDir,
+        package: '@acme/themes',
+        targetPath: 'src/themes/acme-ocean',
+      }),
+    ).rejects.toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
+    expect(fs.existsSync(path.join(tmpDir, 'src/themes/acme-ocean'))).toBe(
+      false,
+    );
+  });
+});

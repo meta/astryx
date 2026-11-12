@@ -52,6 +52,7 @@ import {stripCopyrightHeader} from '../../foundation/text/copyright-header.mjs';
 import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
 import {importThemeArtifact} from '../../foundation/fs/module-loader.mjs';
 import {applyWrites} from '../integration/add-helpers.mjs';
+import {forkFileNames, renamedEntry} from './_fork.mjs';
 import {
   formatCliCommand,
   quoteCommandArgument,
@@ -465,56 +466,6 @@ export default {
 }
 
 /**
- * The binding a theme named `name` exports, as `theme build` names it.
- * @param {string} name
- */
-function themeBinding(name) {
-  return `${name.replace(/-+([a-z0-9])/g, (_, c) => c.toUpperCase())}Theme`;
-}
-
-/**
- * The file names of a fork: the theme's own, except that a fork named other
- * than the theme names its entry and descriptor after its binding
- * (`acmeOceanTheme.ts`, `acmeOceanTheme.doc.mjs`), as discovery reads them.
- * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
- * @param {string} forkName
- * @returns {string[]} in the order of theme.files
- */
-function forkFileNames(theme, forkName) {
-  if (forkName === theme.slug) return [...theme.files];
-  const docName = path.basename(theme.docPath);
-  const stem = docName.slice(0, -'.doc.mjs'.length);
-  const binding = themeBinding(forkName);
-  return theme.files.map(name =>
-    name === docName
-      ? `${binding}.doc.mjs`
-      : name === theme.files[0] && path.basename(name).startsWith(`${stem}.`)
-        ? path.join(path.dirname(name), binding + path.extname(name))
-        : name,
-  );
-}
-
-/**
- * The theme entry renamed for a fork: its `defineTheme` name is the fork's,
- * so the build writes `<fork>.css` and `<fork>.js`, and its export binding is
- * the build's (`acmeOceanTheme`), the name discovery and `theme add` read.
- * @param {string | Buffer} contents
- * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
- * @param {string} to
- */
-function renamedEntry(contents, theme, to) {
-  if (typeof contents !== 'string') return contents;
-  const from = theme.slug;
-  const stem = path.basename(theme.docPath).slice(0, -'.doc.mjs'.length);
-  return contents
-    .replace(
-      new RegExp(`(defineTheme\\(\\s*\\{\\s*name:\\s*)(['"])${from}\\2`),
-      `$1$2${to}$2`,
-    )
-    .replace(new RegExp(`\\b${stem}\\b`, 'g'), themeBinding(to));
-}
-
-/**
  * Refuse a fork folder that already belongs to something else. `--overwrite`
  * replaces the files of a re-fork of the SAME theme. It never writes into a
  * theme that the theme editor made (its `palette.config.json` is the editor's
@@ -834,6 +785,17 @@ export function ejectThemeFiles(
     }
   }
 
+  // A fork under another name renames its entry first, so an entry that
+  // names no theme is refused before any folder is made.
+  const entrySrc = path.resolve(theme.sourceDir, theme.files[0]);
+  const renamed =
+    forkName !== theme.slug
+      ? renamedEntry(
+          String(scaffoldContents(fs.readFileSync(entrySrc))),
+          theme,
+          forkName,
+        )
+      : null;
   try {
     fs.mkdirSync(resolvedDir, {recursive: true});
     const plans = writes.map(write => {
@@ -846,14 +808,8 @@ export function ejectThemeFiles(
         contents:
           path.resolve(write.src) === path.resolve(theme.docPath)
             ? localThemeDescriptor(theme, forkName)
-            : forkName !== theme.slug &&
-                path.resolve(write.src) ===
-                  path.resolve(theme.sourceDir, theme.files[0])
-              ? renamedEntry(
-                  scaffoldContents(fs.readFileSync(write.src)),
-                  theme,
-                  forkName,
-                )
+            : renamed != null && path.resolve(write.src) === entrySrc
+              ? renamed
               : scaffoldContents(fs.readFileSync(write.src)),
         createOnly: !overwrite,
       };
