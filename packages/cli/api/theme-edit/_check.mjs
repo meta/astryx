@@ -331,6 +331,16 @@ export function storedProblems(ctx, slug, data, skip = '') {
         !cssProperties().has(s.thing)
       )
         return {setting: s, why: `${s.thing} is not a CSS property`};
+      // A value its CSS grammar does not take (a hand edit: padding
+      // banana) is dropped by the browser: reported by name, never built.
+      if (s.source === 'property' && !s.thing.startsWith('--')) {
+        const bad = propertyProblem(s.thing, String(s.value ?? ''));
+        if (bad)
+          return {
+            setting: s,
+            why: `${s.thing} takes ${bad.takes}, not "${String(s.value ?? '').slice(0, 60)}"`,
+          };
+      }
       if (s.source === 'dial' && s.on && WHOLE_ONLY.includes(s.thing))
         return scope(`${s.thing} applies to the whole theme, not to ${s.on}`);
       if (s.mode && s.source === 'dial' && !PALETTE_DIALS.includes(s.thing))

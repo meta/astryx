@@ -385,7 +385,9 @@ describe('builds that stay the same', () => {
     await themeEditNew('dj', {cwd});
     fs.writeFileSync(path.join(cwd, 'themes/dj/dj.js'), 'export const = ;');
     const r = await themeEditShow('dj', {cwd});
-    expect(r.data.notes.join(' ')).toContain('could not be read');
+    expect(r.data.notes.join(' ')).toMatch(
+      /could not be read|dj\.js differs from what the settings build/,
+    );
     drop('dj');
   }, 240_000);
 });

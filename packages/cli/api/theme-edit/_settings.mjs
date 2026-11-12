@@ -10,6 +10,7 @@
  * @position api/theme-edit — storage and compile for the theme commands
  */
 
+import {parse as parseModule} from '@babel/parser';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import postcss from 'postcss';
@@ -392,6 +393,36 @@ export function loadTheme(
           : `themes/${slug} has lost its settings (${slug}.settings.json is gone), but the editor made it. Run new to make it again: your own files there are kept${fs.existsSync(f.history) ? `, and \`undo ${slug}\` then steps back to the settings from before the last change (the last change itself is not kept)` : ''}.`,
         {run: [`${P} new ${slug}`]},
       );
+    // A folder copied or renamed by hand from an editor theme: its files
+    // still carry the old name (t.settings.json in themes/t2).
+    const copied =
+      !same && fs.existsSync(f.dir)
+        ? fs
+            .readdirSync(f.dir)
+            .map(n => /^(.+)\.settings\.json$/.exec(n)?.[1])
+            .find(n => n && n !== slug)
+        : undefined;
+    if (copied) {
+      const files = fs
+        .readdirSync(f.dir)
+        .filter(n => n.startsWith(`${copied}.`))
+        .sort();
+      const original = fs.existsSync(themeFiles(cwd, copied).settings);
+      refuse(
+        ERROR_CODES.ERR_UNKNOWN_THEME,
+        `themes/${slug} holds the editor files of a theme named ${copied} (${files.slice(0, 4).join(', ')}${files.length > 4 ? ', …' : ''}): it looks like a copy or rename of ${copied}. The editor reads a theme's files by its folder's name, so to edit it as ${slug}, rename each ${copied}.* file there to ${slug}.* (${files
+          .slice(0, 2)
+          .map(n => `${n} to ${slug}${n.slice(copied.length)}`)
+          .join(
+            ', ',
+          )}${files.length > 2 ? ', and so on' : ''})${original ? `; ${copied} itself is still in themes/${copied}` : ''}.`,
+        {
+          run: original
+            ? [`${P} show ${copied}`, `ls -la themes/${slug}`]
+            : [`ls -la themes/${slug}`],
+        },
+      );
+    }
     if (!same && (other || LIKE.includes(slug)))
       refuse(
         ERROR_CODES.ERR_UNKNOWN_THEME,
@@ -1913,12 +1944,59 @@ export function themeSourceProblem(cwd, slug) {
 }
 
 /**
+ * Why the person's own theme source does not parse (its line and the
+ * parser's message), or null when it parses or is not there.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+export function themeSourceParseError(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  let code;
+  try {
+    code = fs.readFileSync(f.ts, 'utf8');
+  } catch {
+    return null;
+  }
+  try {
+    parseModule(code, {sourceType: 'module', plugins: ['typescript']});
+    return null;
+  } catch (e) {
+    const err = /** @type {any} */ (e);
+    return `${slug}.theme.ts does not parse${err?.loc?.line ? ` (line ${err.loc.line})` : ''}: ${String(err?.message ?? e).replace(/\s*\(\d+:\d+\)\s*$/, '')}`;
+  }
+}
+
+/**
+ * Refuse, before anything is written or removed, a command whose build
+ * would load the person's own theme source when it does not parse: the
+ * build would fail part way.
+ * @param {string} cwd
+ * @param {string} slug
+ */
+export function refuseThemeParse(cwd, slug) {
+  const why = themeSourceParseError(cwd, slug);
+  if (why)
+    throw new AstryxError(
+      `${why}, so the theme cannot build. It is your own file: fix it, then run the command again. Nothing was changed.`,
+      [
+        {
+          name: `cat ${path.posix.join('themes', slug, `${slug}.theme.ts`)}`,
+          reason: 'see the file',
+        },
+      ],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+}
+
+/**
  * Refuse a build whose theme source cannot carry the settings, naming the
  * lines that put it back.
  * @param {string} cwd
  * @param {string} slug
  */
 export function refuseThemeSource(cwd, slug) {
+  refuseThemeParse(cwd, slug);
   const why = themeSourceProblem(cwd, slug);
   if (why)
     throw new AstryxError(
@@ -2049,6 +2127,40 @@ async function runBuild(ctx, slug) {
       {compact: true},
     );
     return receipt;
+  } finally {
+    logger.setSilent(silent);
+  }
+}
+
+/**
+ * Why the built outputs differ from what the theme builds now: one that is
+ * missing or changed by hand, found the way `compile --check` finds it
+ * (the same build, compared and not written), or null when they match.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @returns {Promise<string | null>}
+ */
+export async function outputsDrift(ctx, slug) {
+  const {cwd} = ctx.project;
+  const f = themeFiles(cwd, slug);
+  const silent = logger.silent;
+  logger.setSilent(true);
+  try {
+    const {receipt} = await themeBuildForReport(
+      shown(cwd, f.ts),
+      {check: true},
+      {cwd},
+      {compact: true},
+    );
+    const first = /** @type {any} */ (receipt)?.data?.stale?.[0];
+    if (!first) return null;
+    const name = path.basename(String(first.path));
+    return first.reason === 'missing'
+      ? `${name} was missing`
+      : `${name} differs from what the settings build, after an edit by hand or by another tool`;
+  } catch {
+    // A source that does not build is named by its own check.
+    return null;
   } finally {
     logger.setSilent(silent);
   }
@@ -2806,8 +2918,12 @@ function restoreWritten(was, wrote) {
         continue;
       }
       const old = was.get(p);
-      if (old) writeWhole(p, old);
-      else fs.rmSync(p, {force: true});
+      if (old) {
+        // A folder the change removed (tokens/ once its palette went) comes
+        // back with the file.
+        fs.mkdirSync(path.dirname(p), {recursive: true});
+        writeWhole(p, old);
+      } else fs.rmSync(p, {force: true});
     } catch {
       failed.push(path.basename(p));
     }

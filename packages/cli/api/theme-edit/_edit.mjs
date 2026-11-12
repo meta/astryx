@@ -56,6 +56,7 @@ import {
   staleBuild,
   EDITOR_SUFFIXES,
   madeByEditor,
+  outputsDrift,
   kebab,
   camel,
   NEW_MARKER,
@@ -65,6 +66,7 @@ import {
   slugFor,
   themeSource,
   themeSourceProblem,
+  refuseThemeParse,
 } from './_settings.mjs';
 import {checkSetting, exampleOf, storedProblems} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
@@ -1143,6 +1145,9 @@ async function change(sub, slug, thing, value, options) {
             ),
         )
       : [];
+  // They go, as the note says: Core writes each side to its own variable,
+  // where a later shorthand would not win over them (undo brings them back).
+  data.settings = data.settings.filter(x => !longhands.includes(x));
   // A group setting covers part settings made before it for its members.
   const covers =
     sub === 'set' && s.source === 'dial' && s.on && FAMILIES[s.on]
@@ -1552,8 +1557,15 @@ export async function themeEditShow(theme, options = {}) {
   const f = themeFiles(cwd, theme);
   // A build that does not match the settings (a command stopped mid-build,
   // a hand edit, another CLI) is made again from the settings, and said.
-  const stale = staleBuild(cwd, theme, data);
+  // An own source that does not parse is refused before anything is
+  // built, written or removed (the build would fail part way).
+  if (!readOnly) refuseThemeParse(cwd, theme);
   const brokenSource = themeSourceProblem(cwd, theme);
+  // Every output, as `compile --check` reads them: one missing or edited by
+  // hand is built again too.
+  const stale =
+    staleBuild(cwd, theme, data) ||
+    (brokenSource ? null : await outputsDrift(ctx, theme));
   // Every file the build may rewrite or remove (the settings module, the
   // built outputs, the variants types, section sheets, pictures), so a
   // theme source that does not build, or builds a value that is not text,
@@ -2157,14 +2169,24 @@ export async function themeEditUndo(theme, options = {}) {
     }
     const of = (/** @type {any} */ d) =>
       thing === 'base' ? (d?.like ?? 'none') : (d?.mode ?? 'both');
+    // A step in between that had another value: changed and changed back.
+    const changedBack = steps.some(step => {
+      try {
+        return of(JSON.parse(step.replace(/^\uFEFF/, ''))) !== of(now);
+      } catch {
+        return false;
+      }
+    });
     if (of(made) === of(now))
       refuse(
         E.ERR_THEME_NOT_SET,
-        reachesStart
-          ? `${thing} was never changed: it is ${of(now)}, as ${theme} was made.`
-          : noHistory
-            ? `${thing} is ${of(now)}, and ${theme} has no saved change (it has had none since it was made, or its history was deleted), so there is no earlier ${thing} to go back to.`
-            : `${thing} is ${of(now)}, and ${theme}'s history does not reach back to how it was made, so there is no earlier ${thing} to go back to. Set the ${thing} you want with \`${P} set ${theme} ${thing} …\` instead.`,
+        reachesStart && changedBack
+          ? `${thing} is back at ${of(now)}, the ${thing} ${theme} was made with (it was changed and changed back), so there is nothing to undo for it.`
+          : reachesStart
+            ? `${thing} was never changed: it is ${of(now)}, as ${theme} was made.`
+            : noHistory
+              ? `${thing} is ${of(now)}, and ${theme} has no saved change (it has had none since it was made, or its history was deleted), so there is no earlier ${thing} to go back to.`
+              : `${thing} is ${of(now)}, and ${theme}'s history does not reach back to how it was made, so there is no earlier ${thing} to go back to. Set the ${thing} you want with \`${P} set ${theme} ${thing} …\` instead.`,
         {run: [`${P} show ${theme}`]},
       );
     return change('set', theme, thing, of(made), options);

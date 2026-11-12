@@ -102,6 +102,8 @@ const cmd = line => {
     .map(part => part.split(PREFIX).join(stem))
     .join(stem);
 };
+/** The project's invocation of a command line (cmd, under a name an action's own `cmd` parameter does not hide). */
+const cliLine = (/** @type {string} */ line) => cmd(line);
 
 /**
  * Print blocks, a blank line between them, with this project's run prefix
@@ -791,7 +793,7 @@ export function registerExperimentalTheme(group, program) {
   const editor = defineGroup(theme, editorDoc);
   explained(editor, editorDoc);
 
-  explained(
+  const newCli = explained(
     defineCommand(editor, newDoc, {
       fn: newFn,
       action: (
@@ -802,6 +804,33 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () => {
+            // An option new does not take (--force, --dry-run, -t) is refused
+            // with new's help, as every editor command's unknown option is.
+            const takes = new Set(
+              (newDoc.options ?? []).flatMap(opt =>
+                String(opt.flag)
+                  .split(/[\s,]+/)
+                  .filter(w => w.startsWith('-'))
+                  .map(w => w.replace(/[<[].*$/, '')),
+              ),
+            );
+            const stray = (cmd?.args ?? [])
+              .slice(1)
+              .map(String)
+              .find(
+                (/** @type {string} */ w) =>
+                  /^-/.test(w) && !takes.has(w.split('=')[0]),
+              );
+            if (stray)
+              return cliError(`unknown option '${stray}'.`, {
+                suggestions: [
+                  {
+                    name: cliLine(`${EDITOR} new --help`),
+                    reason: 'every option it takes',
+                  },
+                ],
+                code: ERROR_CODES.ERR_INVALID_OPTION,
+              });
             // A word after the name is never dropped without a word.
             const extra = (cmd?.args ?? []).slice(1);
             if (extra.length) {
@@ -860,6 +889,8 @@ export function registerExperimentalTheme(group, program) {
     }),
     newDoc,
   );
+  // new refuses an option it does not take itself, naming its help.
+  newCli.allowUnknownOption();
 
   explained(
     defineCommand(editor, setDoc, {

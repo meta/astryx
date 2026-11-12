@@ -114,7 +114,8 @@ const STARTED_AT = Date.now() - process.uptime() * 1000;
 /**
  * Remove the editor's own temp files a stopped command left in a folder:
  * only names the editor makes (`.<name>.astryx-<pid>-<random>.tmp`) whose
- * process is gone, or that are older than ten minutes. Links are never
+ * process is gone, or that are older than ten minutes, and a build's
+ * `.<name>.tmp-<id>` older than ten minutes. Links are never
  * followed. A theme folder holds a few files, so every write looks.
  * @param {string} dir
  */
@@ -126,6 +127,20 @@ function sweepTemps(dir) {
     return;
   }
   for (const n of names) {
+    // A build's own temp (`.<name>.tmp-<id>`) names no process: one older
+    // than ten minutes is a leftover of a command stopped mid-build (a
+    // build renames it in moments).
+    if (/^\..+\.tmp-[\w-]+$/.test(n)) {
+      const p = path.join(dir, n);
+      try {
+        const st = fs.lstatSync(p);
+        if (st.isFile() && Date.now() - st.mtimeMs >= 10 * 60_000)
+          fs.rmSync(p, {force: true});
+      } catch {
+        // Gone already.
+      }
+      continue;
+    }
     const m = /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(n);
     if (!m) continue;
     const p = path.join(dir, n);
