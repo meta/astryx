@@ -1366,6 +1366,89 @@ describe('themeBuild() — outputs it may replace', () => {
     expect(error.suggestions[0].name).toMatch(/theme build ocean\.mjs$/);
   });
 
+  it.each(['ocean.css', 'ocean.d.ts', 'ocean.css.d.ts'])(
+    'refuses its output %s as input before loading it, and names the source',
+    async output => {
+      await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
+      let error;
+      try {
+        await themeBuild(output, {}, {cwd: tmpDir});
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toMatchObject({code: 'ERR_THEME_INVALID'});
+      expect(error.message).toBe(
+        `${output} is an output of \`theme build\`, not a theme source. It was built from ocean.mjs.`,
+      );
+      expect(error.suggestions[0].name).toMatch(/theme build ocean\.mjs$/);
+    },
+  );
+
+  it('refuses a file of a kind no theme module has, and names a theme source beside it', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'site.css'), 'body {}\n');
+    fs.writeFileSync(path.join(tmpDir, 'ocean.theme.ts'), theme);
+    let error;
+    try {
+      await themeBuild('site.css', {}, {cwd: tmpDir});
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({code: 'ERR_THEME_LOAD'});
+    expect(error.message).toMatch(/^site\.css is not a theme module\./);
+    expect(error.message).not.toContain(tmpDir);
+    expect(error.suggestions[0].name).toMatch(/theme build ocean\.theme\.ts$/);
+  });
+
+  it('builds a .jsx theme source, as discovery accepts it', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'jxTheme.jsx'),
+      "export const jxTheme = {name: 'jx', tokens: {'--color-bg': '#0a0a0a'}};\n",
+    );
+    await expect(
+      themeBuild('jxTheme.jsx', {}, {cwd: tmpDir}),
+    ).resolves.toMatchObject({
+      type: 'theme.build',
+      data: {name: 'jx'},
+    });
+  });
+
+  it.each(['.jsx', '.tsx', '.ts', '.mts', '.cts'])(
+    'loads a %s theme through the build loader in a folder that resolves Core',
+    async extension => {
+      // Core resolves from this folder, so the build loads the theme without
+      // interception; Node's own loader cannot load every one of these.
+      const dir = makeLinkedFixture('astryx-theme-ext-', ['@astryxdesign']);
+      const file = `extTheme${extension}`;
+      const source =
+        extension === '.cts'
+          ? "module.exports = {name: 'ext', tokens: {'--color-bg': '#0a0a0a'}};\n"
+          : "export const extTheme = {name: 'ext', tokens: {'--color-bg': '#0a0a0a'}};\n";
+      fs.writeFileSync(path.join(dir, file), source);
+      try {
+        await expect(themeBuild(file, {}, {cwd: dir})).resolves.toMatchObject({
+          type: 'theme.build',
+          data: {name: 'ext'},
+        });
+      } finally {
+        removeLinkedFixture(dir);
+      }
+    },
+  );
+
+  it('suggests the theme source for a bare name, and never a build output', async () => {
+    await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
+    let error;
+    try {
+      await themeBuild('ocean', {}, {cwd: tmpDir});
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({code: 'ERR_FILE_NOT_FOUND'});
+    expect(error.suggestions.map(x => x.name)).toEqual([
+      expect.stringMatching(/ theme build ocean\.mjs$/),
+    ]);
+  });
+
   it('refuses a folder as its input', async () => {
     fs.mkdirSync(path.join(tmpDir, 'themes'));
     await expect(themeBuild('themes', {}, {cwd: tmpDir})).rejects.toMatchObject(

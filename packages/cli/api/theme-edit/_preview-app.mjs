@@ -11,6 +11,7 @@
  */
 
 import {createHash} from 'node:crypto';
+import {parse as parseModule} from '@babel/parser';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -20,7 +21,7 @@ import {
   assertWithin,
   PathSafetyError,
 } from '../../foundation/fs/path-safety.mjs';
-import {baseResolved, openProject} from './_project.mjs';
+import {baseResolved, installLine, openProject} from './_project.mjs';
 import {
   buildTheme,
   editedThemes,
@@ -56,10 +57,7 @@ import {
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {requireProject, context} from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {
-  detectPackageManager,
-  quoteCommandArgument,
-} from '../../foundation/env/package-manager.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 const E = ERROR_CODES;
 
@@ -1029,7 +1027,145 @@ function formatterNeutral(text) {
  * change by hand while an edit inside a string does.
  * @param {string | Buffer} text
  */
-const contentHash = text => `v2:${digest(formatterNeutral(String(text)))}`;
+const formatterHash = text => `v2:${digest(formatterNeutral(String(text)))}`;
+
+/** Fields of a syntax tree node that say where or how it was written. */
+const LAYOUT = new Set([
+  'start',
+  'end',
+  'loc',
+  'range',
+  'extra',
+  'leadingComments',
+  'trailingComments',
+  'innerComments',
+  'comments',
+  'tokens',
+  'errors',
+]);
+
+/**
+ * The text a run of JSX text renders, as JSX reads it: lines trimmed where
+ * they meet a line break, blank lines dropped, the rest joined by a space.
+ * @param {string} value
+ */
+function jsxText(value) {
+  const lines = value.split(/\r\n|\n|\r/);
+  let last = 0;
+  lines.forEach((l, i) => {
+    if (/[^ \t]/.test(l)) last = i;
+  });
+  let out = '';
+  lines.forEach((line, i) => {
+    let t = line.replace(/\t/g, ' ');
+    if (i !== 0) t = t.replace(/^ +/, '');
+    if (i !== lines.length - 1) t = t.replace(/ +$/, '');
+    if (t) out += i === last ? t : `${t} `;
+  });
+  return out;
+}
+
+/**
+ * JSX children as they render: text and string expressions (`{" "}`) are
+ * one run of text, and runs that render nothing are dropped, so a
+ * formatter's line breaks and `{" "}` change nothing.
+ * @param {any[]} children
+ * @param {(node: any) => any} walk
+ */
+function jsxChildren(children, walk) {
+  /** @type {any[]} */
+  const out = [];
+  for (const c of children ?? []) {
+    const text =
+      c.type === 'JSXText'
+        ? jsxText(c.value)
+        : c.type === 'JSXExpressionContainer' &&
+            c.expression?.type === 'StringLiteral'
+          ? c.expression.value
+          : null;
+    if (text == null) out.push(walk(c));
+    else if (out.at(-1)?.type === 'Text') out.at(-1).value += text;
+    else out.push({type: 'Text', value: text});
+  }
+  return out.filter(c => !(c.type === 'Text' && c.value === ''));
+}
+
+/**
+ * A file's code in a form no formatter changes: its syntax tree, without
+ * positions, parentheses, quote kinds, trailing commas or semicolons, with
+ * object keys written the same quoted or bare, white space in JSX text
+ * collapsed, and its comments by text. Null when it does not parse.
+ * @param {string} text
+ * @returns {string | null}
+ */
+function canonicalCode(text) {
+  /** @type {any} */
+  let file;
+  try {
+    file = parseModule(text, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript'],
+      errorRecovery: false,
+    });
+  } catch {
+    return null;
+  }
+  /** @param {any} node @returns {any} */
+  const walk = node => {
+    if (Array.isArray(node)) return node.map(walk);
+    if (!node || typeof node !== 'object') return node;
+    /** @type {Record<string, any>} */
+    const out = {};
+    for (const [k, v] of Object.entries(node)) {
+      if (LAYOUT.has(k)) continue;
+      out[k] = walk(v);
+    }
+    // A key written "a" or a is the same key.
+    if (
+      (node.type === 'ObjectProperty' ||
+        node.type === 'ObjectMethod' ||
+        node.type === 'TSPropertySignature' ||
+        node.type === 'ClassProperty') &&
+      !node.computed &&
+      node.key?.type === 'StringLiteral' &&
+      /^[A-Za-z_$][\w$]*$/.test(node.key.value)
+    )
+      out.key = {type: 'Identifier', name: node.key.value};
+    if (node.type === 'JSXElement' || node.type === 'JSXFragment')
+      out.children = jsxChildren(node.children, walk);
+    return out;
+  };
+  const comments = (file.comments ?? []).map((/** @type {any} */ c) =>
+    c.value.replace(/\s+/g, ' ').trim(),
+  );
+  return JSON.stringify([walk(file.program), comments]);
+}
+
+/**
+ * The hash recorded for a file the preview writes, of its code in a form no
+ * formatter changes ({@link canonicalCode}), so prettier or eslint --fix
+ * with any options does not count as a change by hand, while an edit to
+ * code, a string or a comment does. A file that does not parse falls back
+ * to the text form ({@link formatterNeutral}).
+ * @param {string | Buffer} text
+ */
+const contentHash = text => {
+  const code = canonicalCode(String(text));
+  return code == null ? formatterHash(text) : `v3:${digest(code)}`;
+};
+
+/**
+ * Whether a file's text matches a recorded hash of any kind a release
+ * wrote: v3 (syntax tree), v2 (text outside strings), or older.
+ * @param {string | Buffer} text
+ * @param {string} h
+ */
+const sameAsRecorded = (text, h) =>
+  h.startsWith('v3:')
+    ? contentHash(text) === h
+    : h.startsWith('v2:')
+      ? formatterHash(text) === h
+      : oldContentHash(text) === h || digest(text) === h;
 
 /**
  * The normalized hash of an earlier release (white space, semicolons,
@@ -1057,7 +1193,8 @@ function editedByHand(dir, data, rel) {
   if (!was) return false;
   try {
     const text = fs.readFileSync(path.join(dir, rel));
-    if (was.startsWith('v2:')) return contentHash(text) !== was;
+    if (was.startsWith('v2:') || was.startsWith('v3:'))
+      return !sameAsRecorded(text, was);
     // Older records hold the exact or the earlier normalized hash.
     return oldContentHash(text) !== was && digest(text) !== was;
   } catch {
@@ -1477,7 +1614,7 @@ function recoverPreview(cwd, dir) {
   );
   fs.rmSync(pendingFile, {force: true});
   tidyPageFolders(dir);
-  return `finished a preview change that was stopped part way (${shown(cwd, dir) || '.'}/${PENDING})${left.length ? `; kept ${left.join(', ')}, which changed after the change began: delete ${left.length > 1 ? 'them' : 'it'} yourself if ${left.length > 1 ? 'they are' : 'it is'} the preview's` : ''}`;
+  return `finished a preview change that was stopped part way (${shown(cwd, dir) || '.'}/${PENDING})${left.length ? `; kept ${left.join(', ')}: ${left.length > 1 ? 'they' : 'it'} changed after the change began, so ${left.length > 1 ? 'they' : 'it'} may hold your changes and ${left.length > 1 ? 'stay' : 'stays'} until you remove ${left.length > 1 ? 'them' : 'it'}` : ''}`;
 }
 
 /**
@@ -1487,12 +1624,7 @@ function recoverPreview(cwd, dir) {
  * @param {string | undefined} h
  */
 function hashMatches(text, h) {
-  return (
-    !!h &&
-    (h.startsWith('v2:')
-      ? contentHash(text) === h
-      : oldContentHash(text) === h || digest(text) === h)
-  );
+  return !!h && sameAsRecorded(text, h);
 }
 
 /**
@@ -2172,27 +2304,6 @@ function installed(cwd, pkg) {
 }
 
 /**
- * The package-manager command that adds packages to the app.
- * @param {string} cwd
- * @param {string[]} pkgs
- */
-function addCommandOf(cwd, pkgs) {
-  const pm = packageManagerOf(cwd);
-  return `${pm === 'npm' ? 'npm install' : `${pm} add`} ${pkgs.join(' ')}`;
-}
-
-/**
- * The package manager the app uses, as every command finds it (workspaces,
- * the packageManager field, lock files); npm when nothing says (the finder
- * gives `npx` then, which is not a package manager).
- * @param {string} cwd
- */
-function packageManagerOf(cwd) {
-  const pm = detectPackageManager(cwd);
-  return pm === 'npx' ? 'npm' : pm;
-}
-
-/**
  * What a template page needs that the app lacks, from its real imports:
  * packages the app's package.json does not name (with the command that
  * adds them), packages it names that are not installed (with the install
@@ -2232,7 +2343,7 @@ function pageNeeds(cwd, source) {
     ...(needs.installCommand
       ? [[needs.installCommand, ...undeclared].join(' ')]
       : undeclared.length
-        ? [addCommandOf(cwd, undeclared)]
+        ? [installLine(cwd, undeclared)]
         : []),
     ...(notInstalled.length ? [installCommandOf(cwd)] : []),
   ];
@@ -2249,7 +2360,8 @@ function pageNeeds(cwd, source) {
 
 /** The command that installs what the package.json names. @param {string} cwd */
 function installCommandOf(cwd) {
-  return `${packageManagerOf(cwd)} install`;
+  // The package manager `installLine` names, with its install verb.
+  return installLine(cwd, []).trim().replace(/ add$/, ' install');
 }
 
 /**
@@ -2286,7 +2398,7 @@ function wornTheme(cwd, slug, again, without) {
             again(null),
             ...(missing
               ? [
-                  `${addCommandOf(cwd, [`@astryxdesign/theme-${name}`])}  # then a theme of your own can start from it`,
+                  `${installLine(cwd, [`@astryxdesign/theme-${name}`])}  # then a theme of your own can start from it`,
                 ]
               : []),
             `${EDITOR} new my-${name} --like ${name}  # a theme of your own that starts from it`,

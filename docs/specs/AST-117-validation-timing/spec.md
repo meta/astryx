@@ -145,7 +145,11 @@ type ValidationBehavior = 'complete' | 'commit';
   rejection of its own. At Enter or blur, it reveals the rejection that the
   entry has at that moment, with every signal its record gives that rejection
   appearing together and the announcement made once. A value that a native date
-  or time control reports is held to the next Enter or blur in the same way.
+  or time control reports is held to the next Enter or blur in the same way. A
+  member that reports its rejections to the caller, as DateInput and
+  DateTimeInput do through `onEntryErrorChange`, reports a rejection when it
+  reveals it, so a caller `error` status that the report drives appears at the
+  same commit; it reports a cleared rejection at once (FR5).
   When the member's record drops the rejected entry at that commit, the member
   announces the rejection once at that commit and then drops the entry as its
   record states.
@@ -259,7 +263,7 @@ on the form, and those that also take it per field let the field win.
 ### DEC-3 — The name follows the behavior-prop rule
 
 **Reference:** `spec:AST-117/DEC-3`
-**Decider:** pending
+**Decider:** `nynexman4464`, `2026-11-11`
 
 A prop that chooses how a component responds to input is named
 `<thing>Behavior` (`architecture:public-component-api` INV2), so the option is
@@ -307,13 +311,6 @@ keep `'complete'` and take no prop (FR7).
   - (b) `PowerSearch` and Table filtering take a validation behavior prop and
     pass it to their editors.
   - (c) The editors follow a `FormLayout` around the composition.
-- **OQ3 — Is the name `validationBehavior`?** (`human-api`) This record uses
-  option (a).
-  - (a) `validationBehavior`, `defaultValidationBehavior`, and
-    `ValidationBehavior`, under the `<thing>Behavior` rule, with the React Aria
-    difference stated in FR1 and the docs.
-  - (b) `validationTiming`, `defaultValidationTiming`, and `ValidationTiming`,
-    as a recorded exception to the rule that avoids the clash with React Aria.
 - **OQ4 — Under `'commit'`, does a revealed rejection stay while an edit leaves
   the entry rejected?** (`human-design`) FR5 states option (a).
   - (a) It stays, without a new announcement, until the entry is valid or
