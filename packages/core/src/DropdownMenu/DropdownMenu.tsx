@@ -50,7 +50,6 @@ import * as stylex from '@stylexjs/stylex';
 import {usePopoverInternal} from '../Popover/usePopover';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {reducedMotionFade} from '../motion/reducedMotion';
-import {createRectMorphSurfaceMotion} from '../Popover/popoverSurfaceMotion';
 import {usePopoverSurfaceMotion} from '../Popover/usePopoverSurfaceMotion';
 import {
   claimPress,
@@ -130,11 +129,8 @@ import english from '../i18n/generated-english/DropdownMenu/DropdownMenu.generat
 
 registerEnglishFallback(english);
 
-/** The touch grow plays on the shared rect morph, with taps held until it shows. */
-const MENU_SURFACE_MOTION = {
-  createMotion: createRectMorphSurfaceMotion,
-  holdUntilFirstFrame: true,
-};
+/** Taps stay held from the open until the touch grow shows. */
+const MENU_SURFACE_MOTION = {holdUntilFirstFrame: true};
 
 // The menu's own lower cap on the placement axis; the viewport cap underneath
 // it is the layer runtime's (spec:AST-059 FR3).
@@ -1024,7 +1020,7 @@ function DropdownMenuPopover({
   }, []);
 
   // The touch presentation's grow out of the trigger and shrink back into
-  // it, on the shared rect morph (Popover/usePopoverSurfaceMotion.ts).
+  // it, on Popover's own surface motion (Popover/usePopoverSurfaceMotion.ts).
   const surfaceMotion = usePopoverSurfaceMotion(MENU_SURFACE_MOTION);
   // Whether a finger or a pen opened the menu, a tap's open at its lift
   // included, until the layer shows.

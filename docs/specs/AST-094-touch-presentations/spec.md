@@ -663,7 +663,8 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   progress to a rect. `motion/rectMorph.ts` grows a touch presentation out of
   its source rect along that path and shrinks it back, each continuing the
   other, so every grow-out presentation shares one path, timing and
-  interruption.
+  interruption. Tap-opened layers (Popover, DropdownMenu, MoreMenu) grow on
+  Popover's surface motion instead (see above).
 - **FR32 — A pan outside dismisses.** Under a finger, an open anchored menu MUST close as a touch outside it
   begins to pan, and at the lift of a tap or hold outside it. A Popover's
   dismissal is unchanged. A pinch stays available over it: its surface

@@ -22,11 +22,10 @@
  * motion is created for the surface the first time the popover opens and
  * follows it if the surface is replaced.
  *
- * DropdownMenu passes options Popover does not: `createMotion`, its grow on
- * the shared rect morph; `holdUntilFirstFrame`, which holds taps from the
- * open until the grow's first frame; and a `present` call's `isTouch`, which
- * decides from the open's own input on any device. A Popover page never
- * bundles the rect morph.
+ * DropdownMenu plays the same motion, with options Popover does not pass:
+ * `holdUntilFirstFrame`, which holds taps from the open until the grow's
+ * first frame, and a `present` call's `isTouch`, which decides from the
+ * open's own input on any device.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Popover/Popover.tsx
@@ -75,8 +74,6 @@ export interface PopoverSurfaceMotionCalls {
 }
 
 export interface PopoverSurfaceMotionOptions {
-  /** Makes the motion for a surface, in place of Popover's own. */
-  createMotion?: (surface: HTMLElement) => PopoverSurfaceMotion;
   /**
    * Holds taps from the open until the grow's first frame, where the grow's
    * own hold takes over.
@@ -106,7 +103,6 @@ function holdUntilNextFrame(surface: HTMLElement): () => void {
 }
 
 export function usePopoverSurfaceMotion({
-  createMotion,
   holdUntilFirstFrame = false,
 }: PopoverSurfaceMotionOptions = {}): PopoverSurfaceMotionCalls {
   const motionRef = useRef<{
@@ -135,13 +131,11 @@ export function usePopoverSurfaceMotion({
         return current.motion;
       }
       current?.motion.dispose();
-      const motion =
-        createMotion?.(element) ??
-        createPopoverSurfaceMotion(element, {entrance});
+      const motion = createPopoverSurfaceMotion(element, {entrance});
       motionRef.current = {element, entrance, motion};
       return motion;
     },
-    [createMotion],
+    [],
   );
 
   // Effect: releases the motion's compositor animations, any exit copy still

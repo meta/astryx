@@ -7,7 +7,7 @@
  *   pen's open grows it, a tap's open at its lift included. A mouse's open,
  *   the keyboard's and a menu pinned to the pointer presentation do not.
  * @position Unit coverage of DropdownMenu's touch grow decision
- *   (Popover/usePopoverSurfaceMotion.ts with `rectMorph`). The browser spec
+ *   (Popover/usePopoverSurfaceMotion.ts). The browser spec
  *   covers the frames.
  */
 
@@ -30,7 +30,7 @@ const motion = vi.hoisted(() => ({
 }));
 vi.mock('../Popover/popoverSurfaceMotion', async importOriginal => ({
   ...(await importOriginal<typeof PopoverSurfaceMotion>()),
-  createRectMorphSurfaceMotion: vi.fn(() => motion),
+  createPopoverSurfaceMotion: vi.fn(() => motion),
 }));
 const entranceHold = vi.hoisted(() => vi.fn(() => null));
 vi.mock('../Layer/holdEntranceInput', () => ({
