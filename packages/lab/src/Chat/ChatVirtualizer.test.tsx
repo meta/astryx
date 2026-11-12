@@ -936,4 +936,51 @@ describe('ChatVirtualizer', () => {
     expect(screen.queryByText('message 59')).toBeNull();
     el.remove();
   });
+
+  it('announces a reply that arrives in history once, also when the reader scrolls down to it', async () => {
+    const el = tallScroller();
+    const list = (n: number) => <div role="log">{attachedTo(rows(n), el)}</div>;
+    const {container, rerender} = render(list(60));
+    await settled();
+    const log = container.querySelector('[role="log"]')!;
+    const block = log.firstElementChild as HTMLElement;
+    // A polite log reads out a row that is added while its block is not busy.
+    let announced = 0;
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (
+            node.textContent?.includes('message 60') === true &&
+            !block.hasAttribute('aria-busy')
+          ) {
+            announced++;
+          }
+        }
+      }
+    });
+    observer.observe(log, {childList: true, subtree: true});
+    const flush = async () => {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    };
+    // The reader scrolls up into history.
+    scrollEvent(el, 0);
+    await settled();
+    await waitFor(() => expect(block.hasAttribute('aria-busy')).toBe(false));
+    // The reply arrives at the tail and is read out.
+    act(() => rerender(list(61)));
+    await flush();
+    expect(announced).toBe(1);
+    // The reader scrolls down through history to the reply.
+    for (const at of [1500, 3000, 4500, 5800, 6100]) {
+      scrollEvent(el, at);
+      await flush();
+      await settled();
+    }
+    expect(screen.getByText('message 60')).toBeInTheDocument();
+    expect(announced).toBe(1);
+    observer.disconnect();
+    el.remove();
+  });
 });
