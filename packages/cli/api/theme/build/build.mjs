@@ -1095,8 +1095,9 @@ function assertThemeSourceFile(filePath, cwd) {
 }
 
 /**
- * Who takes the editor-folder warning instead of the logger: the watcher's
- * child build hands it to its parent, which warns once per session. Set
+ * Who takes the theme editor warnings (an editor folder, an editor-made
+ * theme) instead of the logger: the watcher's child build hands each to its
+ * parent, which prints it once per session. Set
  * only by the CLI (not part of the public API), and never by an option of
  * themeBuild.
  * @type {((warning: string) => void) | null}
@@ -1104,7 +1105,7 @@ function assertThemeSourceFile(filePath, cwd) {
 let editorFolderListener = null;
 
 /**
- * Hand the editor-folder warning of the builds in this process to
+ * Hand the theme editor warnings of the builds in this process to
  * `listener` instead of the logger. CLI-internal: the watch child's
  * hand-off to its parent.
  * @param {((warning: string) => void) | null} listener
@@ -1160,6 +1161,7 @@ function assertOutputsReplaceable(
   const rel = (/** @type {string} */ file) => path.relative(cwd, file);
   const sourceKey = outputKey(filePath);
   const seen = new Set();
+  /** @type {string | false} */
   let warnedOtherSource = false;
   // The same build without --out, with its other options.
   const beside = {
@@ -1236,11 +1238,10 @@ function assertOutputsReplaceable(
       : null;
     if (otherSource && !OUT_REFUSES_OTHER_SOURCE) {
       // One warning per build: every output of that source goes together.
+      // It is printed after every output passes, so it names a replacement
+      // that happens.
       if (warnedOtherSource) continue;
-      warnedOtherSource = true;
-      logger.warn(
-        `Warning: ${rel(write.dest)} was built from ${otherSource}; this build of ${rel(filePath)} replaces it.`,
-      );
+      warnedOtherSource = `Warning: ${rel(write.dest)} was built from ${otherSource}; this build of ${rel(filePath)} replaces it.`;
     } else if (otherSource) {
       throw new AstryxError(
         `${rel(write.dest)} is the build output of another theme source, ${otherSource}, so this build does not replace it. Pick another ${elsewhere}.`,
@@ -1277,6 +1278,7 @@ function assertOutputsReplaceable(
   }
   // Warned only once nothing refuses the build, so it names a write that
   // happens.
+  if (warnedOtherSource) logger.warn(warnedOtherSource);
   if (editorFolder) {
     const dir = path.dirname(writes[0].dest);
     const warning = `Warning: ${rel(dir) || '.'} is a folder the theme editor made, and ${rel(filePath)} is outside it; the build writes there anyway. Build beside the source, or pick another ${elsewhere}, to keep the editor's folder to its own theme.`;
@@ -3662,6 +3664,10 @@ async function themeBuildInternal(
   {cwd = process.cwd(), projectCore = false} = {},
   /** @type {{compact?: boolean, trailers?: ThemeBuildTrailer[]}} */ report = {},
 ) {
+  // A backslash in --out separates folders on every platform, as it does in
+  // the other theme paths (a Windows path copied into a POSIX shell).
+  if (typeof options.out === 'string' && options.out.includes('\\'))
+    options = {...options, out: options.out.replace(/\\/g, '/')};
   const filePath = path.resolve(cwd, file);
 
   if (!fs.existsSync(filePath)) {
@@ -3673,6 +3679,22 @@ async function themeBuildInternal(
       })),
       ERROR_CODES.ERR_FILE_NOT_FOUND,
     );
+  }
+
+  // A theme the theme editor made is built from its settings by the editor;
+  // a plain build reads its settings module as last written (released CLIs
+  // built it, so it still does, and says so).
+  {
+    const dir = path.dirname(filePath);
+    const slug = path.basename(dir);
+    if (
+      (!options.__commandWords || options.__commandWords.group === 'theme') &&
+      path.basename(filePath) === `${slug}.theme.ts` &&
+      editorThemeRecord(dir)
+    )
+      (editorFolderListener ?? (w => logger.warn(w)))(
+        `Warning: ${path.relative(cwd, filePath)} is a theme the theme editor made (${slug}.settings.json is beside it). This build reads ${slug}.settings.ts as last written; to build it from its settings, run ${formatCliCommand(`experimental theme editor show ${shellWord(slug)}`, cwd)}.`,
+      );
   }
 
   if (fs.statSync(filePath).isDirectory()) {
@@ -3753,9 +3775,64 @@ async function themeBuildInternal(
   } catch (e) {
     const err = /** @type {Error} */ (e);
     const shown = path.relative(cwd, filePath) || filePath;
+    // A theme file that is a link and does not load: named with the file it
+    // points to (some loaders read its relative imports from the link's
+    // folder, others from the file's own), never with Node's require stack.
+    // Only an unresolved relative import is about the link; any other
+    // failure (a package not installed) keeps its own remedy.
+    let link = null;
+    try {
+      if (
+        fs.lstatSync(filePath).isSymbolicLink() &&
+        /Cannot find (?:module|package) '\.\.?\//.test(err.message)
+      )
+        link = fs.realpathSync(filePath);
+    } catch {
+      link = null;
+    }
+    const message = err.message
+      .replace(/\n+Require stack:(?:\n- [^\n]*)*/, '')
+      .split(filePath)
+      .join(shown);
     throw new AstryxError(
-      err.message.split(filePath).join(shown),
-      themeLoadSuggestions(err, shown, cwd),
+      link
+        ? `${shown} is a link to ${path.relative(cwd, link) || link}, and it could not be loaded (a relative import may be read from the link's folder or from the file's own, depending on the loader); build the file itself: ${message}`
+        : message,
+      link
+        ? [
+            {
+              // The file itself, with its outputs kept inside the working
+              // folder (beside the link) when the file is outside it.
+              name: formatCliCommand(
+                [
+                  'theme',
+                  'build',
+                  path.relative(cwd, link) || link,
+                  ...(path.relative(cwd, link).startsWith('..') ||
+                  path.isAbsolute(path.relative(cwd, link))
+                    ? [
+                        '--out',
+                        path
+                          .relative(
+                            cwd,
+                            path.join(
+                              path.dirname(filePath),
+                              `${path.basename(filePath).replace(/\.[^.]+$/, '')}.css`,
+                            ),
+                          )
+                          .split(path.sep)
+                          .join('/'),
+                      ]
+                    : []),
+                ]
+                  .map(shellWord)
+                  .join(' '),
+                cwd,
+              ),
+              reason: 'build the file itself',
+            },
+          ]
+        : themeLoadSuggestions(err, shown, cwd),
       ERROR_CODES.ERR_THEME_LOAD,
     );
   }
@@ -4206,7 +4283,20 @@ async function themeBuildInternal(
   // Source path relative to cwd — used in @generated headers
   const sourceRelative = path.relative(cwd, filePath);
   // What `--check` prints to rebuild, from the working folder.
-  const rebuildCommand = `astryx theme build ${sourceRelative}${options.out ? ' --out ' + path.relative(cwd, path.resolve(cwd, options.out)) : ''}`;
+  // The project's own invocation, each path quoted for the shell.
+  const rebuildCommand = formatCliCommand(
+    [
+      'theme',
+      'build',
+      sourceRelative,
+      ...(options.out
+        ? ['--out', path.relative(cwd, path.resolve(cwd, options.out))]
+        : []),
+    ]
+      .map(shellWord)
+      .join(' '),
+    cwd,
+  );
   // Stable provenance recorded in @generated headers — versions, not a
   // timestamp, so identical inputs produce byte-identical output.
   const versions = resolveToolVersions(cwd);
