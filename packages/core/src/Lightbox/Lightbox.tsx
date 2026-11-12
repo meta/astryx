@@ -387,10 +387,6 @@ const styles = stylex.create({
   navButton: {
     position: 'absolute',
     top: '50%',
-    // The individual `translate` property, not `transform`. This style lands
-    // on the Button root, or on its backing with zoom. A `transform` on the
-    // Button root would replace its own transform rules: measured, the
-    // `scale(0.98)` press feedback stops firing. `translate` composes with them.
     translate: '0 -50%',
     zIndex: 1,
   },
@@ -413,7 +409,6 @@ const styles = stylex.create({
     pointerEvents: 'auto',
   },
   controlButton: {
-    color: colorVars['--color-on-dark'],
     pointerEvents: 'auto',
   },
   // The controls sit in layers over the viewer that pass clicks through. A
@@ -429,9 +424,9 @@ const styles = stylex.create({
     zIndex: 2,
     pointerEvents: 'none',
   },
-  // With zoom a photo can lie under the controls. Lightbox's own translucent
-  // backing keeps them readable over any photo: 3:1 for the buttons, 4.5:1
-  // for the counter's text. A theme restyles the buttons, not the backing.
+  // A photo can lie under the controls. Lightbox's own translucent backing
+  // keeps them readable over any photo: 3:1 for the buttons, 4.5:1 for the
+  // counter's text. A theme restyles the buttons, not the backing.
   controlBacking: {
     display: 'inline-flex',
     backgroundColor: `color-mix(in srgb, ${colorVars['--color-on-light']} 75%, transparent)`,
@@ -1300,9 +1295,9 @@ export function Lightbox({
     return null;
   }
 
-  // A control of the viewer. With zoom it sits on Lightbox's own backing,
-  // which takes the control's place. Its icon keeps the on-dark colour. So a
-  // theme's restyling of the button can't remove its contrast.
+  // A control of the viewer, on Lightbox's own backing, which takes the
+  // control's place. Its icon keeps the on-dark colour, so a theme's restyling
+  // of the button can't remove its contrast.
   const control = (
     place: StyleXStyles,
     {
@@ -1318,33 +1313,25 @@ export function Lightbox({
       onClick: () => void;
       isMirrored?: boolean;
     },
-  ) => {
-    const button = (
+  ) => (
+    <span {...stylex.props(place, styles.controlBacking)}>
       <IconButton
         icon={
           <Icon
             icon={icon}
             size="sm"
             color="inherit"
-            xstyle={[
-              isMirrored && rtlStyles.mirror,
-              hasZoom && styles.controlIcon,
-            ]}
+            xstyle={[isMirrored && rtlStyles.mirror, styles.controlIcon]}
           />
         }
         label={label}
         variant="ghost"
         isDisabled={isDisabled}
         onClick={onClick}
-        xstyle={[!hasZoom && place, styles.controlButton]}
+        xstyle={styles.controlButton}
       />
-    );
-    return hasZoom ? (
-      <span {...stylex.props(place, styles.controlBacking)}>{button}</span>
-    ) : (
-      button
-    );
-  };
+    </span>
+  );
 
   const renderMedia = (
     {src, alt, type: kind = 'image'}: LightboxMedia,
@@ -1576,11 +1563,7 @@ export function Lightbox({
 
                 {/* Gallery counter */}
                 {isGallery && mediaArray.length > 1 && (
-                  <div
-                    {...stylex.props(
-                      styles.counter,
-                      hasZoom && styles.counterBacking,
-                    )}>
+                  <div {...stylex.props(styles.counter, styles.counterBacking)}>
                     {index + 1} / {mediaArray.length}
                   </div>
                 )}

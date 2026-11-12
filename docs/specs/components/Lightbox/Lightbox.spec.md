@@ -253,14 +253,13 @@ under `spec:AST-020` FR1; reduced motion cites `design:reduced-motion`.
   never covers it.
 - **AR8 — The page keeps its own zoom (WCAG 2.2 1.4.4).** A pinch on the
   controls or the caption zooms the page, so their text stays resizable (FR6).
-- **AR9 — The controls keep their contrast over a zoomed photo (WCAG 2.2
-  1.4.3, 1.4.11).** With `hasZoom`, a photo can lie under Close, Previous,
-  Next, and the Counter, so each sits on a translucent backing: the buttons
-  keep 3:1 and the Counter's text 4.5:1 over any photo content beneath them.
-  In a zoomable Lightbox, Close, Previous, Next and the Counter sit on
-  Lightbox's own backing, and their icons and text use the on-dark colour, so
-  a theme's restyling of these controls can't remove their contrast over a
-  photo. Without `hasZoom`, the controls have no backing.
+- **AR9 — The controls keep their contrast over a photo (WCAG 2.2 1.4.3,
+  1.4.11).** A photo can lie under Close, Previous, Next and the Counter, so
+  each sits on Lightbox's own translucent backing, with or without `hasZoom`,
+  in a gallery and for a single photo: the buttons keep 3:1 and the Counter's
+  text 4.5:1 over any photo content beneath them, and their icons and text use
+  the on-dark colour, so a theme's restyling of these controls can't remove
+  their contrast.
 
 ## Design relationships
 
@@ -360,7 +359,7 @@ a decision that they must remain unthemeable.
 | AR5, AR7            | Browser tests with the controls hidden                                                                                                                                  | Tab, assistive-technology focus, a key press, keyboard zoom                                                                                             | A hidden control that is unfocusable, absent from the tree, or still hidden when focused fails.                                                                                                                                                       | `audit:Lightbox/accessibility` |
 | AR6                 | Reduced-motion tests under a coarse and a fine pointer                                                                                                                  | Transition, page settle, dismiss, pinch close, controls fade                                                                                            | Travel, scaling, or a cross-fade over 200 ms under reduced motion fails.                                                                                                                                                                              | `audit:Lightbox/accessibility` |
 | AR8                 | Touch test pinching on the controls and on the caption                                                                                                                  | Single image, gallery                                                                                                                                   | A pinch on the controls or caption that does not zoom the page fails.                                                                                                                                                                                 | `audit:Lightbox/accessibility` |
-| AR9                 | Touch test zooming a white photo under the controls and measuring their contrast in every shipped theme, butter's recoloured buttons and gothic's hovered Next included | Gallery with zoom: Close, Previous, Next, and the Counter, in each shipped theme                                                                        | A control under 3:1, or the Counter's text under 4.5:1, over the zoomed light photo fails.                                                                                                                                                            | `audit:Lightbox/accessibility` |
+| AR9                 | Touch tests laying a white photo under the controls and measuring their contrast in every shipped theme, butter's recoloured buttons and gothic's hovered Next included | Gallery and single photo, each with and without zoom: Close, Previous, Next, and the Counter, in each shipped theme                                     | A control under 3:1, or the Counter's text under 4.5:1, over the light photo fails.                                                                                                                                                                   | `audit:Lightbox/accessibility` |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                           | Canonical anatomy and current target                                                                                                                    | Missing, extra, prefixed, stale, or multiply assigned mappings fail repository validation.                                                                                                                                                            | `audit:Lightbox/theming`       |
 
 ## Decision log
@@ -403,6 +402,19 @@ the landing stay inside `experimental` (FR12), so their API can still change.
 `hasZoom={false}` turns off the zoom-related touch behaviors, and the other
 gestures only add to existing controls, so Lightbox needs no `presentation`
 prop (FR13).
+
+### DEC-5 — The controls sit on Lightbox's backing in every viewer
+
+**Reference:** `component:Lightbox/DEC-5`
+**Decider:** cixzhang, 2026-11-10
+
+Close, Previous, Next and the Counter sit on Lightbox's own backing with or
+without `hasZoom` (AR9), so the controls look the same in every viewer. (Owner
+direction, Nov 10 2026 (Cindy): "Always use it why wouldnt this just be
+cinsistent", and "This should clean up code that resulted in forked
+behavior".)
+
+Rejected: a backing only when the photo can zoom.
 
 ## Open questions
 
