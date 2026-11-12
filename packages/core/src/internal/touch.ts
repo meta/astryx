@@ -60,9 +60,11 @@ export {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 // only the theme's state-change motion.
 export {createMotionEngine} from '../motion/animator';
 export type {
+  AnimateOptions,
   Animator as MotionEngine,
   AnimatorOptions as MotionEngineOptions,
   MotionCurve,
+  MotionHandle,
 } from '../motion/animator';
 export {cubicBezier} from '../motion/bezier';
 export {mapProgress} from '../motion/progress';
@@ -87,6 +89,7 @@ export {resolveMotion} from '../motion/resolveMotion';
 export {solveSpring, toSpring} from '../motion/spring';
 export type {SpringDescription} from '../motion/spring';
 export {navigation} from '../motion/uikit/navigation';
+export {timing} from '../motion/uikit/timing';
 export {
   NAVIGATION_BAR_ELEMENTS_SPRING,
   NAVIGATION_INTERACTIVE_POP_FINISH_SPRING,

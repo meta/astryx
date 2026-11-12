@@ -9,7 +9,7 @@
 
 import {NO_RESULT_SET} from '../../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
-import {cliError} from '../../lib/cli-error.mjs';
+import {cliError, themeGroupUnknownSubcommand} from '../../lib/cli-error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {doc as experimentalGroup} from '../experimental.doc.mjs';
 import {registerExperimentalIcon} from './icon.mjs';
@@ -26,16 +26,16 @@ export function registerExperimental(program) {
     ) => {
       const extras = cmd?.args ?? [];
       if (extras.length > 0) {
-        return cliError(
-          `unknown subcommand 'experimental ${String(extras[0])}'`,
-          {
-            suggestions: (experimental.commands ?? []).map(command => ({
-              name: command.name(),
-              reason: 'available subcommand',
-            })),
-            code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
-          },
+        const {message, suggestions} = themeGroupUnknownSubcommand(
+          'experimental',
+          String(extras[0]),
+          (experimental.commands ?? []).map(command => command.name()),
+          experimental,
         );
+        return cliError(message, {
+          suggestions,
+          code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+        });
       }
       experimental.help();
       return NO_RESULT_SET;
