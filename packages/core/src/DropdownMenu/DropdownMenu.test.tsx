@@ -3205,6 +3205,39 @@ describe('DropdownMenu entrance under a finger', () => {
     expect(isInHeldLayer(item('Edit'))).toBe(true);
   });
 
+  it('takes no touch while it enters, when the commit that opens it also unpins it from a popover', () => {
+    stubPointer('coarse');
+    stubEntrance();
+    function Screen({
+      presentation,
+      isMenuOpen,
+    }: {
+      presentation?: 'popover';
+      isMenuOpen: boolean;
+    }) {
+      return (
+        <DropdownMenu
+          button={{label: 'Actions'}}
+          presentation={presentation}
+          isMenuOpen={isMenuOpen}
+          onOpenChange={() => {}}
+          items={[
+            {label: 'Edit', onClick: () => {}},
+            {label: 'Delete', onClick: () => {}},
+          ]}
+        />
+      );
+    }
+    const {rerender} = render(<Screen presentation="popover" isMenuOpen />);
+    rerender(<Screen presentation="popover" isMenuOpen={false} />);
+
+    // One commit unpins the menu and opens it. A layout effect shows it in
+    // that commit, and the show starts this commit's entrance hold.
+    rerender(<Screen isMenuOpen />);
+
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
+  });
+
   it('lets go at once when it closes during its entrance', async () => {
     stubPointer('coarse');
     stubEntrance();

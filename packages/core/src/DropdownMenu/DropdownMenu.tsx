@@ -40,12 +40,12 @@ import React, {
   useCallback,
   useEffect,
   useId,
-  useInsertionEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import {readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
 import {usePopoverInternal} from '../Popover/usePopover';
@@ -1260,11 +1260,9 @@ function DropdownMenuPopover({
             entrance: popover.contentRef.current ?? layer,
           });
   }, [listRef, pressTouchModel, popover.contentRef]);
-  // Syncs the show's entrance hold with the committed one, ahead of the
-  // controlled-open layout effect above, which can show the menu then.
-  useInsertionEffect(() => {
-    holdEntranceRef.current = holdEntrance;
-  });
+  // The show's entrance hold, written at commit before any layout effect. The
+  // controlled-open layout effect above can show the menu then.
+  useCommittedRefInto(holdEntranceRef, holdEntrance);
   // The layer runtime's input hold: an unmount during the entrance releases it.
   useEffect(
     () => () => {
@@ -1423,11 +1421,9 @@ function DropdownMenuPopover({
       holdInvokerThroughPress(buttonRef.current, popover.id);
     }
   }, [popover.id]);
-  // Syncs the show's trigger hold with the committed one, ahead of the
-  // controlled-open layout effect above, which can show the menu then.
-  useInsertionEffect(() => {
-    holdOpeningPressRef.current = holdOpeningPress;
-  });
+  // The show's trigger hold, written at commit before any layout effect. The
+  // controlled-open layout effect above can show the menu then.
+  useCommittedRefInto(holdOpeningPressRef, holdOpeningPress);
 
   // A mouse opens on press-down; a finger held on the trigger opens after
   // the long-press delay. Pressing the trigger of an open menu closes it, and
@@ -1497,11 +1493,9 @@ function DropdownMenuPopover({
     longPressDelayMs:
       pressTouchModel === 'pointer' ? MENU_PRESS_LONG_PRESS_MS : undefined,
   });
-  // Syncs the hide's gesture cancel with the committed one, ahead of the
-  // controlled-open layout effect above, which can hide the menu then.
-  useInsertionEffect(() => {
-    cancelMenuPressRef.current = menuPress.cancel;
-  });
+  // The hide's gesture cancel, written at commit before any layout effect.
+  // The controlled-open layout effect above can hide the menu then.
+  useCommittedRefInto(cancelMenuPressRef, menuPress.cancel);
 
   const handleButtonClick = useCallback(
     (e: React.MouseEvent<HTMLElement>) => {
