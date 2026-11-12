@@ -646,8 +646,10 @@ function themeDescriptorName(file) {
  * @param {{cwd: string, targetPath?: string, overwrite?: boolean, takenSlugs?: Set<string>}} options
  *   `takenSlugs`: the slugs of the themes the project can use, which a fork's
  *   new folder name may not take
- * @returns {{outputDir: string, files: string[]}} the project-relative output
- *   directory and the files written, named as the fork names them
+ * @returns {{outputDir: string, files: string[], editorFolder: string | null}}
+ *   the output directory relative to the working folder, the files written,
+ *   named as the fork names them, and the folder the theme editor made that
+ *   holds the fork, relative to the working folder, or null
  */
 export function ejectThemeFiles(
   theme,
@@ -833,7 +835,33 @@ export function ejectThemeFiles(
     throw new AstryxError(message, undefined, ERROR_CODES.ERR_WRITE_FAILED);
   }
 
-  return {outputDir: path.relative(cwd, resolvedDir) || '.', files: names};
+  const editorDir = enclosingEditorFolder(resolvedDir, projectDir);
+  return {
+    outputDir: path.relative(cwd, resolvedDir) || '.',
+    files: names,
+    editorFolder:
+      editorDir == null ? null : path.relative(cwd, editorDir) || '.',
+  };
+}
+
+/**
+ * The nearest folder above `dir`, up to the project root, that the theme
+ * editor made, or null. Eject refuses the editor's folder itself; a subfolder
+ * of it is written as released CLIs did, with a warning.
+ * @param {string} dir
+ * @param {string} projectDir
+ * @returns {string | null}
+ */
+function enclosingEditorFolder(dir, projectDir) {
+  const root = path.resolve(projectDir);
+  let current = path.resolve(dir);
+  while (current !== root) {
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+    if (editorThemeRecord(current)) return current;
+  }
+  return null;
 }
 
 /**
