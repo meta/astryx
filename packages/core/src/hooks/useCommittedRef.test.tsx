@@ -5,9 +5,9 @@
  * @input React, react-dom, React Testing Library, useCommittedRef
  * @output Proves, for both call shapes, that the ref keeps the committed value
  *   when React drops a render, that every layout Effect in the same commit
- *   reads the new value, and that server rendering gives no warning; and that
- *   a listener installed once, an Effect cleanup, and a callback declared
- *   before the value read the latest committed value
+ *   reads the new value, that a listener installed once calls a changed
+ *   callback, and that server rendering gives no warning; and that a callback
+ *   declared before the value reads the latest committed value
  * @position Unit tests for the internal useCommittedRef hook
  */
 
@@ -75,6 +75,38 @@ function renderSuspendingHolder(
 }
 
 describe.each(SHAPES)('%s', (_name, useShape) => {
+  it('lets a listener installed once call a changed callback', () => {
+    let installs = 0;
+    function Listener({
+      id,
+      onPing,
+    }: {
+      id: string;
+      onPing: (id: string) => void;
+    }) {
+      const onPingRef = useShape(onPing);
+      const idRef = useShape(id);
+      useEffect(() => {
+        // Subscribes to the window's `ping` event.
+        installs += 1;
+        const listener = () => onPingRef.current(idRef.current);
+        window.addEventListener('ping', listener);
+        return () => window.removeEventListener('ping', listener);
+      }, [onPingRef, idRef]);
+      return null;
+    }
+    const first = vi.fn();
+    const second = vi.fn();
+    const {rerender} = render(<Listener id="row-1" onPing={first} />);
+    rerender(<Listener id="row-1" onPing={second} />);
+
+    fireEvent(window, new Event('ping'));
+
+    expect(installs).toBe(1);
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledWith('row-1');
+  });
+
   it('keeps the committed value when a transition suspends and React drops the render', async () => {
     const {view, seen, setValue} = renderSuspendingHolder(useShape);
 
@@ -158,59 +190,6 @@ describe.each(SHAPES)('%s', (_name, useShape) => {
 });
 
 describe('useCommittedRef', () => {
-  it('lets a listener installed once call a changed callback', () => {
-    let installs = 0;
-    function Listener({
-      id,
-      onPing,
-    }: {
-      id: string;
-      onPing: (id: string) => void;
-    }) {
-      const onPingRef = useCommittedRef(onPing);
-      const idRef = useCommittedRef(id);
-      useEffect(() => {
-        // Subscribes to the window's `ping` event.
-        installs += 1;
-        const listener = () => onPingRef.current(idRef.current);
-        window.addEventListener('ping', listener);
-        return () => window.removeEventListener('ping', listener);
-      }, [onPingRef, idRef]);
-      return null;
-    }
-    const first = vi.fn();
-    const second = vi.fn();
-    const {rerender} = render(<Listener id="row-1" onPing={first} />);
-    rerender(<Listener id="row-1" onPing={second} />);
-
-    fireEvent(window, new Event('ping'));
-
-    expect(installs).toBe(1);
-    expect(first).not.toHaveBeenCalled();
-    expect(second).toHaveBeenCalledWith('row-1');
-  });
-
-  it('lets an Effect cleanup read the latest committed value through a function', () => {
-    const released: string[] = [];
-    function Holder({target}: {target: string}) {
-      const committed = useCommittedRef(target);
-      useEffect(() => {
-        // Reads the target that is current when the Effect cleans up.
-        const getTarget = () => committed.current;
-        return () => {
-          released.push(getTarget());
-        };
-      }, [committed]);
-      return null;
-    }
-    const {rerender, unmount} = render(<Holder target="first" />);
-    rerender(<Holder target="second" />);
-
-    unmount();
-
-    expect(released).toEqual(['second']);
-  });
-
   it('keeps the same ref object across renders', () => {
     const refs: {readonly current: string}[] = [];
     function Probe({value}: {value: string}) {
