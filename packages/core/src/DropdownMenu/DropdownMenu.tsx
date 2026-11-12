@@ -23,9 +23,11 @@
  * A sub-menu drills in on a phone through the view stack useMenuDrillIn
  * keeps; the root shows the drilled view in place of its rows.
  *
- * Initial focus on open follows the menu-button pattern: every open focuses
- * the first enabled item (or the last one for ArrowUp). Pointer opens use the
- * shared focus helper so the item does not paint a keyboard focus ring.
+ * Initial focus on open follows the menu-button pattern: keyboard opens focus
+ * the first enabled item (or the last one for ArrowUp), while pointer opens
+ * preserve a row already reached by the pointer and otherwise focus the first
+ * enabled item. The shared focus helper keeps pointer focus from painting a
+ * keyboard focus ring.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/DropdownMenu/DropdownMenu.doc.mjs
@@ -1206,10 +1208,11 @@ function DropdownMenuPopover({
     }
   }, [controlledIsOpen, isControlled, popover]);
 
-  // Move focus into the menu only after the layer has committed open. Every
-  // open lands on the first enabled item per the APG menu-button pattern;
-  // pointer opens use the last-input focus helper so the focus indication
-  // follows pointer modality instead of looking like a keyboard selection.
+  // Move focus into the menu only after the layer has committed open. Keyboard
+  // opens use the APG menu-button pattern; pointer opens preserve a row that
+  // was already reached and otherwise focus the first enabled item. The
+  // last-input focus helper keeps pointer focus from looking like a keyboard
+  // selection.
   // A row that the pointer reached before this frame keeps focus, so a held
   // press continues to act on the row under the pointer. The menu remains the
   // fallback when no item is focusable (e.g. all disabled), mirroring the
@@ -1774,8 +1777,8 @@ function DropdownMenuPopover({
             }}
             id={menuId}
             role="menu"
-            // The menu remains a focusable fallback for overflow and regions;
-            // normal opens focus a row instead.
+            // The menu remains a focusable fallback for overflow and regions
+            // when no row can take focus.
             // An overflowing menu joins the Tab order so its scrollable region is
             // keyboard-accessible; Tab still dismisses through listKeyDown. With
             // a header or footer the menu is one Tab stop between them.
