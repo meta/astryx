@@ -48,6 +48,16 @@ const STRONG_LTR = new RegExp(String.raw`[\p{Letter}\p{Nl}\u200E]`, 'u');
  */
 const COMBINING_MARK = new RegExp(String.raw`\p{Mark}`, 'u');
 
+/** Whether the text holds a strongly right-to-left character anywhere. */
+export function hasStrongRightToLeft(text: string): boolean {
+  for (const character of text) {
+    if (STRONG_RTL.test(character)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Rules P2 and P3 of the Unicode Bidirectional Algorithm: the direction of
  * the first strongly directional character, or null when there is none. The

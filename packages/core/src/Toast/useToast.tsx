@@ -16,10 +16,16 @@ import type {
   ShowToastFn,
   ToastEntry,
 } from './types';
+import {sharedForReact} from '../utils/sharedForReact';
+import {sharedSequence} from '../utils/sharedRealm';
 
-// Fallback singleton
-let fallbackContext: ToastContextValue | null = null;
-let fallbackRoot: ReturnType<typeof createRoot> | null = null;
+// One fallback viewport per React for every copy of Core, so toasts from a
+// swizzled copy and from the package show in one stack. It holds a React
+// root, so a second React keeps its own.
+const fallback = sharedForReact('toast/use-toast/fallback', 1, () => ({
+  context: null as ToastContextValue | null,
+  root: null as ReturnType<typeof createRoot> | null,
+}));
 
 const ROOT_THEME_ATTRS = ['data-theme', dataAttr('theme')] as const;
 
@@ -61,14 +67,14 @@ function syncRootThemeAttrs(container: HTMLElement): void {
 }
 
 function getFallbackContext(): ToastContextValue {
-  if (fallbackContext) {
-    return fallbackContext;
+  if (fallback.context) {
+    return fallback.context;
   }
 
   if (typeof document === 'undefined') {
     throw new Error(
       'useToast: Cannot create fallback viewport during SSR. ' +
-        'Wrap your app with <LayerProvider> or <AppShell>.',
+        'Wrap your app with <LayerProvider>.',
     );
   }
 
@@ -76,7 +82,7 @@ function getFallbackContext(): ToastContextValue {
     'toast-fallback-viewport',
     'useToast',
     'No LayerProvider found. Using fallback viewport. ' +
-      'Wrap your app with <LayerProvider> or <AppShell> for full control.',
+      'Wrap your app with <LayerProvider> for full control.',
   );
 
   const container = document.createElement('div');
@@ -86,10 +92,10 @@ function getFallbackContext(): ToastContextValue {
 
   // Toasts wait in the queue until the fallback viewport's context connects.
   const queue = createToastQueue();
-  fallbackRoot = createRoot(container);
+  fallback.root = createRoot(container);
   // This root sits inside the app, so a <Theme> in toast content is nested:
   // it themes its own subtree and leaves the app's <html> sync alone.
-  fallbackRoot.render(
+  fallback.root.render(
     <ThemeNestingContext value={true}>
       <ToastViewport>
         <ToastQueueConnector queue={queue} />
@@ -97,13 +103,15 @@ function getFallbackContext(): ToastContextValue {
     </ThemeNestingContext>,
   );
 
-  fallbackContext = queue.context;
+  fallback.context = queue.context;
   return queue.context;
 }
 
-let toastIdCounter = 0;
+// One sequence for every copy of Core: toasts from a swizzled copy share the
+// package's queue, so their ids must not repeat.
+const nextToastId = sharedSequence('toast/use-toast/toast-id', 1);
 function generateToastId(): string {
-  return `astryx-toast-${++toastIdCounter}`;
+  return `astryx-toast-${nextToastId()}`;
 }
 
 /**

@@ -1,0 +1,37 @@
+{
+  "$comment": "What a release spec visits when its story id or page names no component (spec:AST-030 FR32). `stories`: an `a11y-*` story id prefix, to the component folders that pattern tests. `pages`: a page a spec opens on the served Storybook outside a story, to the component folders it renders. An `a11y-*` id or a page missing from this file runs the spec on every pull request the plan applies to.",
+  "stories": {
+    "a11y-breadcrumb-pattern": ["packages/core/src/Breadcrumbs/"],
+    "a11y-button-pattern": [
+      "packages/core/src/Button/",
+      "packages/core/src/Chat/",
+      "packages/core/src/ClickableCard/",
+      "packages/core/src/IconButton/",
+      "packages/core/src/SideNav/"
+    ],
+    "a11y-collapsible-disclosure": ["packages/core/src/Collapsible/"],
+    "a11y-dialog-modal-pattern": ["packages/core/src/Dialog/"],
+    "a11y-listbox-pattern": [
+      "packages/core/src/MultiSelector/",
+      "packages/core/src/Selector/"
+    ],
+    "a11y-popover-in-a-second-document": ["packages/core/src/Popover/"],
+    "a11y-radio-group-pattern": [
+      "packages/core/src/DropdownMenu/",
+      "packages/core/src/RadioList/",
+      "packages/core/src/SegmentedControl/"
+    ],
+    "a11y-spinbutton-pattern": ["packages/core/src/NumberInput/"],
+    "a11y-status-message-pattern": [
+      "packages/core/src/FieldStatus/",
+      "packages/lab/src/Chat/"
+    ],
+    "a11y-tabs-pattern": ["packages/core/src/TabList/"],
+    "a11y-text-input-pattern": ["packages/core/src/TextInput/"],
+    "a11y-tooltip-focus-return": ["packages/core/src/Tooltip/"]
+  },
+  "pages": {
+    "TableVirtualization.release.html": ["packages/core/src/Table/"],
+    "navigation-destination": []
+  }
+}

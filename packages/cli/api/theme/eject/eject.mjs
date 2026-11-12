@@ -7,7 +7,13 @@
 
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {ejectThemeFiles, findTheme, listAvailableThemes} from '../_adapter.mjs';
+import {
+  ejectThemeFiles,
+  findTheme,
+  forkNeeds,
+  listAvailableThemes,
+  themeCommandsFor,
+} from '../_adapter.mjs';
 
 /**
  * Copy a bundled or installed theme's complete source inventory into the
@@ -29,17 +35,20 @@ export async function themeEject(slug, options = {}) {
     cwd,
     package: packageName,
     includeLocal: false,
+    command: 'theme eject',
   });
   if (!match) {
     const available = await listAvailableThemes(cwd, {includeLocal: false});
     throw new AstryxError(
       `Unknown theme "${slug}"${packageName ? ` in package "${packageName}"` : ''}`,
-      available.map(theme => ({
-        name: `${theme.slug} --package ${theme.package}`,
-        reason: theme.bundled
-          ? 'bundled theme'
-          : `provided by ${theme.package}`,
-      })),
+      themeCommandsFor('theme eject', slug, available, cwd).map(
+        ({theme, name}) => ({
+          name,
+          reason: theme.bundled
+            ? 'bundled theme'
+            : `provided by ${theme.package}`,
+        }),
+      ),
       ERROR_CODES.ERR_UNKNOWN_THEME,
     );
   }
@@ -49,6 +58,11 @@ export async function themeEject(slug, options = {}) {
     targetPath,
     overwrite,
   });
+  const {missingPackages, installCommand} = forkNeeds(
+    outputDir,
+    match.files,
+    cwd,
+  );
   return {
     type: 'theme.eject',
     data: {
@@ -60,6 +74,8 @@ export async function themeEject(slug, options = {}) {
       entry: match.entry,
       exportName: match.exportName,
       files: match.files,
+      missingPackages,
+      installCommand,
     },
   };
 }

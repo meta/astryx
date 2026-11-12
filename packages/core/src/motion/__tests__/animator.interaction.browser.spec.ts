@@ -29,8 +29,10 @@ import {
   CONTROL_RGB,
   controlClock,
   countBetween,
+  frameStats,
   markElement,
   pageTimesOnControls,
+  requireFrames,
   startBusyControl,
   startScreencast,
   traceRendering,
@@ -907,21 +909,28 @@ for (const how of ['in a task', 'in a frame callback of the page'] as const) {
       ahead: second,
       controlStarts: [controlStart, secondStart],
     });
-    const timed = tracked.flatMap(f => {
+    const dated = tracked.flatMap(f => {
       const at = pageTime.get(f.t);
       if (f.box == null || at == null) {
         return [];
       }
-      return at >= run.call - 50 && at <= run.end + 150
-        ? [{x: f.box.x - MARKER_INSET, at}]
-        : [];
+      return [{x: f.box.x - MARKER_INSET, at}];
     });
+    const timed = dated.filter(
+      ({at}) => at >= run.call - 50 && at <= run.end + 150,
+    );
+    // The run's frame interval: the median gap between its frames before
+    // the call, where the page runs freely.
+    const interval = frameStats(
+      dated.map(({x, at}) => ({t: at, value: x})),
+      {from: -Infinity, to: run.call},
+    ).medianFrameMs;
     // The frames fit the first curve up to a start at or after the block's
     // end. After that start, they fit a spring from the value and the velocity
     // on screen there. `skip` fits the same frames to the call's own clock
     // instead.
     const fit = await page.evaluate(
-      ({spring, back, travel, times, frames: judged}) => {
+      ({spring, back, travel, times, frames: judged, interval: frameMs}) => {
         const first = Motion.solveSpring(Motion.toSpring(spring), {
           from: 0,
           to: travel,
@@ -935,21 +944,60 @@ for (const how of ['in a task', 'in a frame callback of the page'] as const) {
             to: 0,
             velocity: firstVelocity(at),
           });
-        const worstFor = (curve: (at: number) => number) =>
-          Math.max(...judged.map(({x, at}) => Math.abs(x - curve(at))));
+        type Held = {at: number; lead: number; predicted: number};
+        // The worst miss of the frames from the first curve up to `commit`
+        // and from `curve` after it. The compositor shows the frame that
+        // commits the retarget at a frame time up to one frame before the
+        // restart's performance.now() date. So the box shows the retarget's
+        // first value there. With `hold`, the last frame dated within one
+        // frame interval before the switch may show that value instead.
+        const worstAround = (
+          commit: number,
+          curve: (elapsedMs: number) => number,
+          hold: boolean,
+        ) => {
+          const handOff = hold
+            ? judged
+                .filter(({at}) => at < commit && at >= commit - frameMs)
+                .reduce<(typeof judged)[number] | null>(
+                  (last, frame) =>
+                    last == null || frame.at > last.at ? frame : last,
+                  null,
+                )
+            : null;
+          let worst = 0;
+          let held: Held | null = null;
+          for (const frame of judged) {
+            const {x, at} = frame;
+            let miss = Math.abs(
+              x - (at < commit ? firstAt(at) : curve(at - commit)),
+            );
+            if (frame === handOff) {
+              const holdMiss = Math.abs(x - firstAt(commit));
+              if (holdMiss < miss) {
+                miss = holdMiss;
+                held = {
+                  at: at - times.end,
+                  lead: x - firstAt(at),
+                  predicted: firstAt(commit) - firstAt(at),
+                };
+              }
+            }
+            worst = Math.max(worst, miss);
+          }
+          return {worst, held};
+        };
         // The best switch from the first curve to `next(commit)`, at or after
         // the block's end.
         const bestFit = (
           next: (commit: number) => (elapsedMs: number) => number,
+          hold: boolean,
         ) => {
-          let best = {commit: NaN, worst: Infinity};
+          let best = {commit: NaN, worst: Infinity, held: null as Held | null};
           for (let commit = times.end; commit <= times.end + 60; commit += 1) {
-            const curve = next(commit);
-            const worst = worstFor(at =>
-              at < commit ? firstAt(at) : curve(at - commit),
-            );
+            const {worst, held} = worstAround(commit, next(commit), hold);
             if (worst < best.worst) {
-              best = {commit, worst};
+              best = {commit, worst, held};
             }
           }
           return best;
@@ -957,22 +1005,32 @@ for (const how of ['in a task', 'in a frame callback of the page'] as const) {
         const fromScreen = bestFit(commit => {
           const next = from(commit);
           return elapsed => next.value(elapsed / 1000);
-        });
+        }, true);
         const ownClock = from(times.call);
         const onOwnClock = bestFit(
           commit => elapsed =>
             ownClock.value((elapsed + commit - times.call) / 1000),
+          false,
         );
         return {
           commitAfterBlock: fromScreen.commit - times.end,
           worst: fromScreen.worst,
           skip: onOwnClock.worst,
+          held: fromScreen.held,
         };
       },
-      {spring: out, back: SLOW, travel: TRAVEL, times: run, frames: timed},
+      {
+        spring: out,
+        back: SLOW,
+        travel: TRAVEL,
+        times: run,
+        frames: timed,
+        interval,
+      },
     );
     const read = {
       ...fit,
+      frameMs: interval,
       inBlock: timed.filter(({at}) => at > run.call && at < run.end).length,
       after: timed.filter(({at}) => at > run.end + 20).length,
     };
@@ -981,15 +1039,33 @@ for (const how of ['in a task', 'in a frame callback of the page'] as const) {
       description: JSON.stringify({read, timed}),
     });
     // The compositor showed the first curve through the block, and the frames
-    // after it show the call.
-    expect(read.inBlock, JSON.stringify(read)).toBeGreaterThanOrEqual(3);
-    expect(read.after, JSON.stringify(read)).toBeGreaterThanOrEqual(3);
+    // after it show the call. A loaded runner can present no frame for over
+    // 100 ms after the block. Too few frames there cannot tell the call's
+    // clock from the screen's, so such a run fails by name, with its gaps.
+    // The gaps are read on the controls' clock, past the window's edges too.
+    const onClock = dated.map(({x, at}) => ({t: at, x}));
+    requireFrames(onClock, {
+      min: 3,
+      during: 'the first curve played through the block',
+      where: frame => frame.t > run.call && frame.t < run.end,
+    });
+    requireFrames(onClock, {
+      min: 3,
+      during: 'the call played in the 130 ms after the block',
+      where: frame => frame.t > run.end + 20 && frame.t <= run.end + 150,
+    });
     // Within 4 px everywhere: the marker and the controls are read at whole
     // px, so each read adds up to a px.
-    expect(read.worst, JSON.stringify(read)).toBeLessThanOrEqual(4);
+    expect(
+      read.worst,
+      `the frames miss the call, started at a frame after the block from the value and the velocity on screen there, by ${read.worst.toFixed(1)} px (at most 4 px): ${JSON.stringify(read)}`,
+    ).toBeLessThanOrEqual(4);
     // The call's own clock misses the same frames by far more, so the case
     // tells the two apart.
-    expect(read.skip, JSON.stringify(read)).toBeGreaterThan(20);
+    expect(
+      read.skip,
+      `the call's own clock fits the same frames within ${read.skip.toFixed(1)} px, so the case cannot tell the two apart (it needs over 20 px): ${JSON.stringify(read)}`,
+    ).toBeGreaterThan(20);
   });
 }
 

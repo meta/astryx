@@ -101,8 +101,12 @@ const styles = stylex.create({
     borderStyle: 'solid',
     borderColor: colorVars['--color-border'],
     borderRadius: radiusVars['--radius-container'],
-    paddingBlock: spacingVars['--spacing-2'],
-    paddingInline: spacingVars['--spacing-3'],
+    // Longhands match the Layer host's padding reset, so the card padding
+    // still wins when each package ships its own prebuilt stylesheet.
+    paddingBlockStart: spacingVars['--spacing-2'],
+    paddingBlockEnd: spacingVars['--spacing-2'],
+    paddingInlineStart: spacingVars['--spacing-3'],
+    paddingInlineEnd: spacingVars['--spacing-3'],
     boxShadow: shadowVars['--shadow-med'],
     pointerEvents: 'none',
     whiteSpace: 'nowrap',

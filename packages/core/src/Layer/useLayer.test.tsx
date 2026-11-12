@@ -52,6 +52,7 @@ import type {
 } from './useLayer';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {observeBrowserHide} from './popoverOperations';
+import {watchOutsidePans} from './outsidePanClaim';
 
 vi.mock('./preserveAnimations', async importOriginal => {
   const actual: {preserveAnimations: typeof preserveAnimations} =
@@ -2918,17 +2919,9 @@ describe('useLayer public return types', () => {
     const fixedHasKeepOpenProps: 'keepOpenProps' extends keyof FixedLayerReturn
       ? true
       : false = false;
-    const contextHasGuard: 'wasJustDismissed' extends keyof ContextLayerReturn
-      ? true
-      : false = false;
-    const fixedHasGuard: 'wasJustDismissed' extends keyof FixedLayerReturn
-      ? true
-      : false = false;
 
     expect(contextHasKeepOpenProps).toBe(false);
     expect(fixedHasKeepOpenProps).toBe(false);
-    expect(contextHasGuard).toBe(false);
-    expect(fixedHasGuard).toBe(false);
   });
 });
 
@@ -3140,8 +3133,9 @@ describe('internal keep-open props (controls on the trigger, #5004)', () => {
   });
 });
 
-describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => {
-  function GuardedTriggerHarness() {
+describe('light dismiss vs. the trigger click', () => {
+  /** A trigger that calls show()/hide() directly, checking nothing. */
+  function TriggerHarness() {
     const layer = useLayerInternal({mode: 'context'});
     return (
       <>
@@ -3149,9 +3143,6 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
           type="button"
           ref={layer.ref}
           onClick={() => {
-            if (layer.wasJustDismissed()) {
-              return;
-            }
             if (layer.isOpen) {
               layer.hide();
             } else {
@@ -3185,9 +3176,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('absorbs the trigger click that follows a light dismiss', async () => {
     const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(
-      <GuardedTriggerHarness />,
-    );
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     await user.click(trigger);
@@ -3203,9 +3192,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('acts on a deliberate second press', async () => {
     const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(
-      <GuardedTriggerHarness />,
-    );
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     await user.click(trigger);
@@ -3220,7 +3207,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('leaves a programmatic hide unguarded', async () => {
     const user = userEvent.setup();
-    const {getByRole, getByTestId} = render(<GuardedTriggerHarness />);
+    const {getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     // Three presses with no browser-initiated close between them.
@@ -3233,9 +3220,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('acts on a synthesized click after a stopped click-first dismissal', async () => {
     const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(
-      <GuardedTriggerHarness />,
-    );
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     await user.click(trigger);
@@ -3254,38 +3239,6 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
     });
 
     expect(getByTestId('state')).toHaveTextContent('open');
-  });
-
-  /** A trigger that calls show()/hide() directly, checking nothing. */
-  function PlainTriggerHarness() {
-    const layer = useLayerInternal({mode: 'context'});
-    return (
-      <>
-        <button
-          type="button"
-          ref={layer.ref}
-          onClick={() => (layer.isOpen ? layer.hide() : layer.show())}>
-          Trigger
-        </button>
-        <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
-        {layer.render(<span>Layer content</span>, {placement: 'below'})}
-      </>
-    );
-  }
-
-  it('absorbs the click for a trigger that never calls wasJustDismissed', async () => {
-    const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(<PlainTriggerHarness />);
-    const trigger = getByRole('button', {name: 'Trigger'});
-
-    await user.click(trigger);
-    expect(getByTestId('state')).toHaveTextContent('open');
-
-    fireEvent.pointerDown(trigger);
-    lightDismiss(container);
-    fireEvent.click(trigger);
-
-    expect(getByTestId('state')).toHaveTextContent('closed');
   });
 });
 
@@ -3419,6 +3372,82 @@ describe('a light-dismiss layer opened by a context-menu press', () => {
   });
 });
 
+describe('a touch that pans outside an open light-dismiss layer', () => {
+  function PanHarness({ownsOutsidePan}: {ownsOutsidePan: boolean}) {
+    const layer = useLayerInternal({
+      mode: 'context',
+      lightDismiss: true,
+      watchesOutsidePans: ownsOutsidePan ? undefined : watchOutsidePans,
+    });
+    return (
+      <>
+        <button type="button" ref={layer.ref} onClick={() => layer.show()}>
+          Trigger
+        </button>
+        <button type="button" onClick={() => layer.hide()}>
+          Close
+        </button>
+        <div data-testid="page" />
+        {layer.render(<span>Layer content</span>, {placement: 'below'})}
+      </>
+    );
+  }
+
+  const touch = (pointerId: number, y: number) => ({
+    pointerType: 'touch',
+    pointerId,
+    isPrimary: true,
+    clientX: 10,
+    clientY: y,
+  });
+
+  let captured: {element: Element; pointerId: number}[] = [];
+  beforeEach(() => {
+    captured = [];
+    HTMLElement.prototype.setPointerCapture = function (pointerId: number) {
+      captured.push({element: this, pointerId});
+    };
+  });
+  afterEach(() => {
+    delete (HTMLElement.prototype as Partial<HTMLElement>).setPointerCapture;
+  });
+
+  /** A finger that presses the page and pans 20 px, then lifts. */
+  function panOnPage(page: Element, pointerId: number) {
+    fireEvent.pointerDown(page, touch(pointerId, 300));
+    fireEvent.pointerMove(page, touch(pointerId, 280));
+    fireEvent.pointerUp(page, touch(pointerId, 280));
+  }
+
+  it('claims the pan for a layer given the watch, so its release lands on the layer', () => {
+    const {container, getByRole, getByTestId} = render(
+      <PanHarness ownsOutsidePan={false} />,
+    );
+    fireEvent.click(getByRole('button', {name: 'Trigger'}));
+    panOnPage(getByTestId('page'), 5);
+    expect(captured).toEqual([
+      {element: container.querySelector('[popover]'), pointerId: 5},
+    ]);
+  });
+
+  it('claims nothing once the layer is closed', () => {
+    const {getByRole, getByTestId} = render(
+      <PanHarness ownsOutsidePan={false} />,
+    );
+    fireEvent.click(getByRole('button', {name: 'Trigger'}));
+    fireEvent.click(getByRole('button', {name: 'Close'}));
+    panOnPage(getByTestId('page'), 5);
+    expect(captured).toEqual([]);
+  });
+
+  it('watches no pans for a layer given no watch (an anchored menu)', () => {
+    const {getByRole, getByTestId} = render(<PanHarness ownsOutsidePan />);
+    fireEvent.click(getByRole('button', {name: 'Trigger'}));
+    panOnPage(getByTestId('page'), 5);
+    expect(captured).toEqual([]);
+  });
+});
+
 describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
   function ClearHarness({placement}: {placement?: LayerPlacement}) {
     const layer = useLayerInternal({mode: 'context', keepsAnchorClear: true});
@@ -3489,6 +3518,47 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('reads its box once when it shows, and gives the entrance its side from that read', async () => {
+    const user = userEvent.setup();
+    viewport720();
+    // Directly below the trigger and clear of it, so it is not placed afresh.
+    const reads = placeBoxes(TRIGGER, rect(330, 400, 100, 200));
+    const {container} = render(<ClearHarness />);
+    const layer = container.querySelector<HTMLElement>('[popover]')!;
+    reads.mockClear();
+    await user.click(container.querySelector('button')!);
+    const layerReads = reads.mock.contexts.filter(context => context === layer);
+    expect(layerReads).toHaveLength(1);
+    expect(layer.style.getPropertyValue('--_astryx-layer-enter-y')).toBe('-1');
+  });
+
+  it('leaves the entrance side to a component that writes it after its own commit', async () => {
+    function WritesSideHarness() {
+      const layer = useLayerInternal({
+        mode: 'context',
+        writesEntranceSide: true,
+      });
+      return (
+        <>
+          <button type="button" ref={layer.ref} onClick={layer.show}>
+            Trigger
+          </button>
+          {layer.render(<span>Layer content</span>)}
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    const reads = placeBoxes(TRIGGER, rect(330, 400, 100, 200));
+    const {container} = render(<WritesSideHarness />);
+    const layer = container.querySelector<HTMLElement>('[popover]')!;
+    reads.mockClear();
+    await user.click(container.querySelector('button')!);
+    expect(
+      reads.mock.contexts.filter(context => context === layer),
+    ).toHaveLength(0);
+    expect(layer.style.getPropertyValue('--_astryx-layer-enter-y')).toBe('');
   });
 
   it('lists the other block side at its own size, then beside the trigger, and only then each block side sized to its room', () => {

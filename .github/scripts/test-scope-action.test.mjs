@@ -40,6 +40,7 @@ const CLASSIFIER_FILES = new Set([
   '.github/scripts/knowledge-paths.cjs',
   'scripts/component-packages.cjs',
 ]);
+const RELEASE_PATHS_FILE = 'scripts/release/release-paths.mjs';
 const AUDIT_FILE = '.github/scripts/component-audit-scope.cjs';
 const OFFICIAL_PACKAGES = 'packages/cli/assets/discover/official-packages.json';
 
@@ -104,6 +105,7 @@ async function decide({
         contentCalls.push({file, ref});
         const known =
           CLASSIFIER_FILES.has(file) ||
+          file === RELEASE_PATHS_FILE ||
           file === AUDIT_FILE ||
           file === OFFICIAL_PACKAGES;
         const text = ref === BASE_SHA && known ? policyText(file) : null;
@@ -206,15 +208,71 @@ describe('per-job scope step', () => {
     expect(skipped.outputs.applies).toBe('false');
   });
 
-  it('marks a release-branch pull request as the generated version bump', async () => {
+  it('keeps a generated release-branch pull request on the narrow bump lane', async () => {
     const {outputs} = await decide({
       context: pullRequestContext('release/v1.2.3'),
+      files: changed(
+        '.changeset/frozen.md',
+        'packages/core/CHANGELOG.md',
+        'packages/core/package.json',
+        'packages/cli/assets/codemods/__tests__/registry.test.mjs',
+        'packages/cli/assets/codemods/transforms/v1.2.3/__tests__/upgrade.test.mjs',
+      ),
     });
     expect(outputs).toMatchObject({
       release_bump: 'true',
       spec_only: 'true',
       tooling_only: 'true',
       applies: 'false',
+    });
+  });
+
+  it('runs every lane for a release-branch test-repair candidate', async () => {
+    const {outputs} = await decide({
+      context: pullRequestContext('release/v1.2.3'),
+      files: changed(
+        'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts',
+      ),
+      inputs: {'component-audit': 'true'},
+    });
+    expect(outputs).toMatchObject({
+      release_bump: 'true',
+      spec_only: 'false',
+      tooling_only: 'false',
+      full_suite: 'true',
+      vitest_full_suite: 'true',
+      has_components: 'true',
+      force_full_component_audits: 'true',
+      applies: 'true',
+    });
+    expect(fs.readFileSync(outputs.changed_files_path, 'utf8')).toBe(
+      'packages/core/src/BottomSheet/__tests__/BottomSheetRelease.a11y.chromium.spec.ts\n',
+    );
+  });
+
+  it.each([
+    ['an empty file list', []],
+    ['an API failure', new Error('unavailable')],
+    [
+      'a truncated file list',
+      Array.from({length: 3000}, (_, index) => ({
+        filename: `packages/core/src/Test${index}.test.ts`,
+        status: 'modified',
+      })),
+    ],
+  ])('runs every lane when release scope has %s', async (_, files) => {
+    const {outputs} = await decide({
+      context: pullRequestContext('release/v1.2.3'),
+      files,
+      inputs: {'component-audit': 'true'},
+    });
+    expect(outputs).toMatchObject({
+      release_bump: 'true',
+      decided: 'false',
+      full_suite: 'true',
+      vitest_full_suite: 'true',
+      force_full_component_audits: 'true',
+      applies: 'true',
     });
   });
 
@@ -598,9 +656,14 @@ describe('per-job scope step', () => {
       expect(contentCalls).toContainEqual({file: AUDIT_FILE, ref: BASE_SHA});
     });
 
-    it('applies no audit to a release-branch pull request', async () => {
+    it('applies no audit to the generated release-branch pull request', async () => {
       const {outputs} = await decide({
         context: pullRequestContext('release/v1.2.3'),
+        files: changed(
+          '.changeset/frozen.md',
+          'packages/core/CHANGELOG.md',
+          'packages/core/package.json',
+        ),
         inputs,
       });
       expect(outputs).toMatchObject({
