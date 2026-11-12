@@ -64,6 +64,7 @@ import {
   type UIEvent as ReactUIEvent,
 } from 'react';
 
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {TAP_WOBBLE} from '../gestures/tapWobble';
 import {VelocityTracker} from '../gestures/VelocityTracker';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
@@ -710,14 +711,9 @@ export function useSheetGestures({
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
 
-  // Syncs the resolver for the drag's callbacks. It is a layout effect
-  // declared before the re-anchor effect, so the re-anchor reads the new
-  // stops; a passive effect would run after it. A write during render would
-  // keep a resolver from a render React discards.
-  const snapHeightsRef = useRef(snapHeights);
-  useLayoutEffect(() => {
-    snapHeightsRef.current = snapHeights;
-  }, [snapHeights]);
+  // The committed resolver, for the drag's callbacks and the re-anchor. It is
+  // current before any layout effect, so the re-anchor reads the new stops.
+  const snapHeightsRef = useCommittedRef(snapHeights);
   const onTravelStartRef = useRef(onTravelStart);
   onTravelStartRef.current = onTravelStart;
 
@@ -886,18 +882,21 @@ export function useSheetGestures({
   // viewport before comparing the candidate visible heights; otherwise every
   // snap point lands that many px too low. Snap heights are resolved lazily so
   // they track the viewport.
-  const resolveDetents = useCallback((height: number): SheetDetents => {
-    const visibleSheetHeight = visibleHeightForOffset(
-      height,
-      0,
-      offscreenBlockEndInsetRef.current,
-    );
-    const offsets = computeDetentOffsets(
-      visibleSheetHeight,
-      snapHeightsRef.current?.() ?? [],
-    );
-    return {offsets, peekOffset: peekOffsetFor(offsets, visibleSheetHeight)};
-  }, []);
+  const resolveDetents = useCallback(
+    (height: number): SheetDetents => {
+      const visibleSheetHeight = visibleHeightForOffset(
+        height,
+        0,
+        offscreenBlockEndInsetRef.current,
+      );
+      const offsets = computeDetentOffsets(
+        visibleSheetHeight,
+        snapHeightsRef.current?.() ?? [],
+      );
+      return {offsets, peekOffset: peekOffsetFor(offsets, visibleSheetHeight)};
+    },
+    [snapHeightsRef],
+  );
 
   // The fully open height right now. At a resizing detent the element has a
   // stale pixel height. So drop the inline height, measure, and put it back in
