@@ -15,7 +15,7 @@ import userEvent from '@testing-library/user-event';
 import React, {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
-import {TimeInput} from './TimeInput';
+import {TimeInput, type TimeInputEntryError} from './TimeInput';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {InternationalizationProvider} from '../i18n';
 import type {ISOTimeString} from '../utils';
@@ -266,7 +266,7 @@ describe('TimeInput', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('reverts to previous value on blur when input is invalid', async () => {
+  it('keeps an invalid draft on blur without calling onChange', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
@@ -279,19 +279,21 @@ describe('TimeInput', () => {
 
     const input = screen.getByRole('textbox');
     await user.clear(input);
+    onChange.mockClear();
     await user.type(input, 'not a time');
     await user.tab(); // blur
 
-    // Should revert to the original value, not call onChange
-    expect(screen.getByDisplayValue('2:30 PM')).toBeInTheDocument();
+    expect(input).toHaveValue('not a time');
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('sets aria-invalid="true" when typed input is out of range', () => {
+  it('sets aria-invalid="true" when blur keeps a typed time that does not parse', () => {
     render(<TimeInput label="Time" onChange={() => {}} />);
 
     const input = screen.getByRole('textbox');
     fireEvent.change(input, {target: {value: '25:99'}});
+    expect(input).not.toHaveAttribute('aria-invalid');
+    fireEvent.blur(input);
 
     expect(input).toHaveAttribute('aria-invalid', 'true');
   });
@@ -305,13 +307,16 @@ describe('TimeInput', () => {
     expect(input).not.toHaveAttribute('aria-invalid');
   });
 
-  it('announces an alert message when typed input is invalid', () => {
-    render(<TimeInput label="Time" onChange={() => {}} />);
+  it('shows the invalid-time message when blur keeps a typed time that does not parse', () => {
+    const {container} = render(<TimeInput label="Time" onChange={() => {}} />);
 
     const input = screen.getByRole('textbox');
     fireEvent.change(input, {target: {value: '25:99'}});
+    fireEvent.blur(input);
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Invalid time');
+    expect(container.querySelector('.astryx-field-status')).toHaveTextContent(
+      'Invalid time',
+    );
   });
 
   it('does not announce an alert message when input is valid', () => {
@@ -324,8 +329,8 @@ describe('TimeInput', () => {
     expect(screen.queryByText('Invalid time')).not.toBeInTheDocument();
   });
 
-  it('resolves the invalid-time announcement from the i18n catalog', () => {
-    render(
+  it('resolves the invalid-time message from the i18n catalog', () => {
+    const {container} = render(
       <InternationalizationProvider
         locale="en"
         overrides={{en: {'@astryx.timeInput.invalidTime': 'Ungültige Zeit'}}}>
@@ -334,8 +339,11 @@ describe('TimeInput', () => {
     );
 
     fireEvent.change(screen.getByRole('textbox'), {target: {value: '25:99'}});
+    fireEvent.blur(screen.getByRole('textbox'));
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Ungültige Zeit');
+    expect(container.querySelector('.astryx-field-status')).toHaveTextContent(
+      'Ungültige Zeit',
+    );
   });
 
   // Arrow-key stepping mutates a plain textbox programmatically, and screen
@@ -940,5 +948,353 @@ describe('TimeInput locale time text (issue 8992)', () => {
       'placeholder',
       'e.g., 14:30',
     );
+  });
+});
+
+describe('TimeInput rejected entries', () => {
+  let announced: string[] = [];
+  let stopRecording = () => {};
+  beforeEach(() => {
+    // Records each text that the shared assertive live region shows.
+    const texts: string[] = [];
+    let last = '';
+    const observer = new MutationObserver(() => {
+      const text = assertiveRegion()?.textContent ?? '';
+      if (text !== last && (last = text)) {
+        texts.push(text);
+      }
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    announced = texts;
+    stopRecording = () => observer.disconnect();
+  });
+  afterEach(() => stopRecording());
+
+  /** Settles queued announcements, then checks the full list. */
+  async function expectAnnounced(expected: string[]) {
+    await waitFor(() => expect(announced).toEqual(expected));
+    await act(async () => new Promise(resolve => setTimeout(resolve, 50)));
+    expect(announced).toEqual(expected);
+  }
+  const statusText = (container: HTMLElement) =>
+    container.querySelector('.astryx-field-status')?.textContent ?? null;
+  const fieldAlert = (container: HTMLElement) =>
+    container.querySelector('.astryx-time-input [role="alert"]');
+  type Props = Partial<React.ComponentProps<typeof TimeInput>>;
+  const field = (props: Props = {}) => (
+    <TimeInput label="Time" onChange={() => {}} {...props} />
+  );
+  function type(text: string, commit?: 'blur' | 'Enter') {
+    const input = screen.getByRole('textbox');
+    fireEvent.change(input, {target: {value: text}});
+    if (commit === 'blur') {
+      fireEvent.blur(input);
+    } else if (commit === 'Enter') {
+      fireEvent.keyDown(input, {key: 'Enter'});
+    }
+    return input;
+  }
+
+  it('shows nothing for 1, 1:3, and 1:30 in a 12-hour field, and shows 1:30 PM before a 2 PM minimum at once', async () => {
+    const onChange = vi.fn();
+    const min = '14:00' as ISOTimeString;
+    const {container} = render(field({hourFormat: '12h', min, onChange}));
+    for (const text of ['1', '1:3', '1:30']) {
+      expect(type(text)).not.toHaveAttribute('aria-invalid');
+      expect(statusText(container)).toBeNull();
+      expect(fieldAlert(container)).toHaveTextContent('');
+    }
+    const input = type('1:30 PM');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe('Invalid time');
+    const described = (input.getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .map(id => document.getElementById(id)?.textContent);
+    expect(described).toContain('Invalid time');
+    expect(fieldAlert(container)).toHaveTextContent('');
+    expect(onChange).not.toHaveBeenCalled();
+    await expectAnnounced(['Invalid time']);
+  });
+
+  it('shows 1:30 before a 2 PM minimum at once in a 24-hour field, 1:3 only at blur, and 13:30:0 only with both second digits', () => {
+    const min = '14:00' as ISOTimeString;
+    const {container, rerender} = render(field({hourFormat: '24h', min}));
+    expect(type('1:3')).not.toHaveAttribute('aria-invalid');
+    expect(type('1:30')).toHaveAttribute('aria-invalid', 'true');
+    type('');
+    expect(type('1:3')).not.toHaveAttribute('aria-invalid');
+    expect(type('1:3', 'blur')).toHaveValue('1:3');
+    expect(statusText(container)).toBe('Invalid time');
+
+    const max = '12:00:00' as ISOTimeString;
+    rerender(field({hourFormat: '24h', hasSeconds: true, max}));
+    type('');
+    type('13:30:0');
+    expect(statusText(container)).toBeNull();
+    type('13:30:05');
+    expect(statusText(container)).toBe('Invalid time');
+  });
+
+  it('shows a lone - and other unreadable text only at blur or Enter, keeps it, does not prevent Enter, and announces it once', async () => {
+    const onChange = vi.fn();
+    const value = '09:00' as ISOTimeString;
+    const {container} = render(field({value, onChange}));
+    type('-');
+    const input = type('25:99');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+    expect(fireEvent.keyDown(input, {key: 'Enter'})).toBe(true);
+    expect(statusText(container)).toBe('Invalid time');
+    fireEvent.blur(input);
+    expect(input).toHaveValue('25:99');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(onChange).not.toHaveBeenCalled();
+    await expectAnnounced(['Invalid time']);
+  });
+
+  it('keeps a shown rejection through edits that leave the draft wrong, announces it once, and clears it when an edit fixes or empties the draft', async () => {
+    const onChange = vi.fn();
+    const max = '17:00' as ISOTimeString;
+    const {container} = render(field({hourFormat: '24h', max, onChange}));
+    type('25:99', 'blur');
+    for (const text of ['25:9', '18:30', '18:3', '19:45', 'x']) {
+      expect(type(text)).toHaveAttribute('aria-invalid', 'true');
+      expect(statusText(container)).toBe('Invalid time');
+    }
+    await expectAnnounced(['Invalid time']);
+    expect(type('14:30')).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+    expect(onChange).toHaveBeenLastCalledWith('14:30');
+    type('25:99', 'Enter');
+    expect(type('')).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+  });
+
+  it('drops the draft and its rejection for a new value, and keeps typing through the echo of a typed commit', () => {
+    const {container, rerender} = render(
+      field({value: '09:00' as ISOTimeString}),
+    );
+    type('25:99', 'blur');
+    rerender(field({value: '10:15' as ISOTimeString}));
+    expect(screen.getByRole('textbox')).toHaveValue('10:15 AM');
+    expect(statusText(container)).toBeNull();
+
+    function Controlled() {
+      const [time, setTime] = useState<ISOTimeString | undefined>();
+      return field({value: time, onChange: setTime});
+    }
+    rerender(<Controlled />);
+    type('2');
+    expect(type('2:3')).toHaveValue('2:3');
+  });
+
+  it('drops a shown rejection with the draft when the field becomes disabled, and it does not return', () => {
+    const value = '09:00' as ISOTimeString;
+    const {container, rerender} = render(field({value}));
+    type('25:99', 'blur');
+    rerender(field({value, isDisabled: true}));
+    rerender(field({value}));
+    expect(screen.getByRole('textbox')).toHaveValue('9:00 AM');
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+  });
+
+  it('inside an InputGroup, sets aria-invalid and announces through the alert with no message of its own', () => {
+    const {container} = render(
+      <InputGroup label="Schedule">
+        <InputGroupText>Starts</InputGroupText>
+        {field({label: 'Start time', isLabelHidden: true})}
+      </InputGroup>,
+    );
+    expect(type('25:99', 'blur')).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBeNull();
+    expect(fieldAlert(container)).toHaveTextContent('Invalid time');
+  });
+
+  describe('in a form', () => {
+    const named = {name: 'start'} as object;
+    function renderInForm(props: Props) {
+      const posted: FormDataEntryValue[] = [];
+      const view = render(
+        <form
+          onSubmit={event => {
+            event.preventDefault();
+            posted.push(new FormData(event.currentTarget).get('start') ?? '');
+          }}>
+          {field({...named, ...props})}
+        </form>,
+      );
+      const form = view.container.querySelector('form') as HTMLFormElement;
+      const formValue = () => new FormData(form).get('start');
+      return {...view, posted, formValue};
+    }
+
+    it('Enter commits and submits with a valid draft, no draft, or a rejected draft, which posts its typed text', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const {container, posted} = renderInForm({onChange});
+      const input = screen.getByRole('textbox');
+      await user.type(input, '2:30 PM{Enter}');
+      expect(onChange).toHaveBeenLastCalledWith('14:30');
+      await user.tab();
+      await user.click(input);
+      await user.keyboard('{Enter}');
+      await user.clear(input);
+      await user.type(input, '25:99{Enter}');
+      expect(statusText(container)).toBe('Invalid time');
+      // The caller keeps no value, so the field shows none after blur.
+      expect(posted).toEqual(['2:30 PM', '', '25:99']);
+    });
+
+    it('posts the committed time from a hidden input while blur keeps a rejected draft, until an edit or a new value', () => {
+      const value = '14:30' as ISOTimeString;
+      const {container, rerender, formValue} = renderInForm({value});
+      const input = type('25:99');
+      expect(formValue()).toBe('25:99');
+      fireEvent.blur(input);
+      expect(input).not.toHaveAttribute('name');
+      expect(formValue()).toBe('2:30 PM');
+      expect(container.querySelectorAll('[name="start"]')).toHaveLength(1);
+      type('25:9');
+      expect(input).toHaveAttribute('name', 'start');
+      expect(formValue()).toBe('25:9');
+
+      fireEvent.blur(input);
+      rerender(
+        <form>{field({...named, value: '16:00' as ISOTimeString})}</form>,
+      );
+      expect(input).toHaveAttribute('name', 'start');
+      expect(formValue()).toBe('4:00 PM');
+    });
+
+    it('carries the caller form attribute on the hidden input', () => {
+      render(
+        <>
+          <form id="schedule" />
+          {field({
+            value: '14:30' as ISOTimeString,
+            ...({name: 'start', form: 'schedule'} as object),
+          })}
+        </>,
+      );
+      type('25:99', 'blur');
+      const form = document.getElementById('schedule') as HTMLFormElement;
+      expect(new FormData(form).get('start')).toBe('2:30 PM');
+    });
+  });
+
+  describe('with a caller status', () => {
+    it('shows a caller error with a message in place of the field message, and the alert announces the rejection once', async () => {
+      const status = {type: 'error', message: 'Required'} as const;
+      const {container} = render(field({status}));
+      // The caller status announces itself once, when it appears.
+      await expectAnnounced(['Required']);
+      const input = type('25:99', 'blur');
+      expect(statusText(container)).toBe('Required');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(fieldAlert(container)).toHaveTextContent('Invalid time');
+      type('25:9');
+      expect(fieldAlert(container)).toHaveTextContent('Invalid time');
+      await expectAnnounced(['Required']);
+    });
+
+    it.each([
+      ['warning', {type: 'warning', message: 'Outside office hours'}],
+      ['success', {type: 'success', message: 'Looks good'}],
+      ['error without a message', {type: 'error'}],
+    ] as const)(
+      'never lets a caller %s status hide a rejection',
+      async (_label, status) => {
+        const {container} = render(field({status}));
+        expect(type('25:99', 'blur')).toHaveAttribute('aria-invalid', 'true');
+        expect(statusText(container)).toBe('Invalid time');
+        expect(fieldAlert(container)).toHaveTextContent('');
+        await expectAnnounced(['Invalid time']);
+      },
+    );
+
+    it('with the callback, shows and announces an app error once in place of the field message', async () => {
+      function WordedField() {
+        const [error, setError] = useState<TimeInputEntryError | null>(null);
+        return field({
+          onEntryErrorChange: setError,
+          status:
+            error?.kind === 'unreadable'
+              ? {type: 'error', message: 'Type a time like 2:30 PM'}
+              : undefined,
+        });
+      }
+      const {container} = render(<WordedField />);
+      expect(type('25:99', 'blur')).toHaveAttribute('aria-invalid', 'true');
+      expect(statusText(container)).toBe('Type a time like 2:30 PM');
+      expect(fieldAlert(container)).toHaveTextContent('');
+      await expectAnnounced(['Type a time like 2:30 PM']);
+    });
+
+    it('with the callback, announces an unchanged app error once through the alert when a rejection starts', () => {
+      const {container} = render(
+        field({
+          onEntryErrorChange: () => {},
+          status: {type: 'error', message: 'Required'},
+        }),
+      );
+      expect(fieldAlert(container)).toHaveTextContent('');
+      type('25:99', 'blur');
+      expect(statusText(container)).toBe('Required');
+      expect(fieldAlert(container)).toHaveTextContent('Required');
+    });
+  });
+
+  describe('onEntryErrorChange', () => {
+    const max = '17:00' as ISOTimeString;
+    const outOfRange = {kind: 'outOfRange', text: '18:30', value: '18:30'};
+
+    it('reports each kind once, with the time for a time out of range, and null when the draft is fixed', () => {
+      const onEntryErrorChange = vi.fn();
+      render(field({hourFormat: '24h', max, onEntryErrorChange}));
+      for (const text of ['18:3', '18:30', '18:3']) {
+        type(text);
+      }
+      type('25:99', 'blur');
+      type('25:99', 'Enter');
+      type('16:30');
+      expect(onEntryErrorChange.mock.calls).toEqual([
+        [outOfRange],
+        [{kind: 'unreadable', text: '25:99'}],
+        [null],
+      ]);
+      expect(screen.getByRole('textbox')).not.toHaveAttribute(
+        'onentryerrorchange',
+      );
+    });
+
+    it('reports the end of a rejection that a new max, a new value, disabling, or unmounting causes', () => {
+      const onEntryErrorChange = vi.fn();
+      const props = {hourFormat: '24h', max, onEntryErrorChange} as const;
+      const {rerender, unmount} = render(field(props));
+      type('18:30');
+      rerender(field({...props, max: '19:00' as ISOTimeString}));
+      rerender(field(props));
+      rerender(field({...props, value: '09:00' as ISOTimeString}));
+      type('18:30');
+      rerender(field({...props, isDisabled: true}));
+      rerender(field(props));
+      type('18:30');
+      unmount();
+      expect(onEntryErrorChange.mock.calls).toEqual([
+        [outOfRange],
+        [null],
+        [outOfRange],
+        [null],
+        [outOfRange],
+        [null],
+        [outOfRange],
+        [null],
+      ]);
+    });
   });
 });

@@ -377,28 +377,24 @@ behavior made for accessibility conformance to FR53.
 Requirement gaps, each a WCAG 2.2 Level A mismatch that FR53 fixes unless it
 says otherwise:
 
-- FR1–FR3 gap: `NumberInput`, `TimeInput`, and `DateTimeInput`'s time segment
-  mark every draft that is not an accepted value invalid and announce it on
-  each keystroke, unfinished drafts included, such as `-`, or `1` with
-  `min={10}`. `DateInput` and `DateTimeInput` do the same for unreadable date
-  text and for each partial year a native date control reports.
+- FR1–FR3 gap: `NumberInput` marks every draft that is not an accepted value
+  invalid and announces it on each keystroke, unfinished drafts included, such
+  as `-`, or `1` with `min={10}`. `DateInput` and `DateTimeInput` do the same
+  for unreadable date text and for each partial year a native date control
+  reports.
 - FR4 gap (WCAG 2.2 3.3.1): unreadable date text reverts on Enter and blur; a
-  `TimeInput` or `DateTimeInput` time draft that does not parse, or is out of
-  range, reverts on blur; a `NumberInput` draft that does not parse reverts on
-  blur; a native date control restores its committed value at blur and drops
-  its rejection. None of these says so on screen.
-- FR5 gap (WCAG 2.2 1.4.1, 3.3.1): in a standalone field, `NumberInput`,
-  `TimeInput`, `DateTimeInput`'s time segment, the native date and time
-  controls, and unreadable date text set `aria-invalid` and announce through a
-  visually hidden region with no visible message; the text only turns
-  secondary.
+  `NumberInput` draft that does not parse reverts on blur; a native date
+  control restores its committed value at blur and drops its rejection. None
+  of these says so on screen.
+- FR5 gap (WCAG 2.2 1.4.1, 3.3.1): in a standalone field, `NumberInput`, the
+  native date control, and unreadable date text set `aria-invalid` and
+  announce through a visually hidden region with no visible message; the text
+  only turns secondary.
 - FR6 gap: an edit that leaves date text incomplete hides a shown rejection.
-- FR7 gap: with a caller `status`, `NumberInput` and `TimeInput` announce the
-  rejection on every keystroke rather than once, and a `warning` or `success`
-  status stays shown over a rejection.
-- FR8 gap: `NumberInput` and `TimeInput` have no `onEntryErrorChange`.
-- FR9 gap: `TimeInput` takes no commit on Enter, and `DateTimeInput`'s time
-  segment commits on Enter only while its preset-time list is open.
+- FR7 gap: with a caller `status`, `NumberInput` announces the rejection on
+  every keystroke rather than once, and a `warning` or `success` status stays
+  shown over its rejection.
+- FR8 gap: `NumberInput` has no `onEntryErrorChange`.
 - AR3 gap (WCAG 2.2 3.3.1), outside this fix: inside an InputGroup, a member's
   own rejection is announced and sets `aria-invalid` but shows no visible
   message.

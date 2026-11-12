@@ -341,3 +341,117 @@ describe('TimeInput nativePicker', () => {
     expect(showPicker).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('TimeInput native rejected entries', () => {
+  function nativeField(
+    props: Partial<React.ComponentProps<typeof TimeInput>> = {},
+  ) {
+    return (
+      <TimeInput
+        label="Start time"
+        presentation="native"
+        value={'09:00' as ISOTimeString}
+        onChange={() => {}}
+        min={'08:00' as ISOTimeString}
+        max={'17:00' as ISOTimeString}
+        {...props}
+      />
+    );
+  }
+
+  function statusText(container: HTMLElement): string | null {
+    return container.querySelector('.astryx-field-status')?.textContent ?? null;
+  }
+
+  function fieldAlert(container: HTMLElement): HTMLElement | null {
+    return container.querySelector('.astryx-time-input [role="alert"]');
+  }
+
+  it('shows an edit outside min/max as a message when the control reports it', () => {
+    const {container} = render(nativeField());
+    const input = getNativeTimeInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '18:00'}});
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe('Invalid time');
+    expect(fieldAlert(container)).toHaveTextContent('');
+  });
+
+  it('restores the committed time at blur, not at Enter, and keeps the rejection shown', () => {
+    const onChange = vi.fn();
+    const {container} = render(nativeField({onChange}));
+    const input = getNativeTimeInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '18:00'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(input.value).toBe('18:00');
+    fireEvent.blur(input);
+    expect(input.value).toBe('09:00');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe('Invalid time');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('clears the rejection for an accepted edit or a new value', () => {
+    const onChange = vi.fn();
+    const {container, rerender} = render(nativeField({onChange}));
+    const input = getNativeTimeInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '18:00'}});
+    fireEvent.change(input, {target: {value: '10:30'}});
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('10:30');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+
+    fireEvent.change(input, {target: {value: '18:00'}});
+    fireEvent.blur(input);
+    rerender(nativeField({onChange, value: '11:00' as ISOTimeString}));
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBeNull();
+  });
+
+  it('inside an InputGroup, announces the rejection through the alert', () => {
+    const {container} = render(
+      <InputGroup label="Schedule">
+        <InputGroupText>Starts</InputGroupText>
+        {nativeField()}
+      </InputGroup>,
+    );
+    const input = getNativeTimeInput();
+    fireEvent.change(input, {target: {value: '18:00'}});
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBeNull();
+    expect(fieldAlert(container)).toHaveTextContent('Invalid time');
+  });
+
+  it('never reports a native rejection through onEntryErrorChange, and keeps the prop and the name on the native input', () => {
+    const onEntryErrorChange = vi.fn();
+    render(
+      nativeField({
+        onEntryErrorChange,
+        ...({name: 'start'} as object),
+      }),
+    );
+    const input = getNativeTimeInput();
+    fireEvent.change(input, {target: {value: '18:00'}});
+    fireEvent.blur(input);
+    expect(onEntryErrorChange).not.toHaveBeenCalled();
+    expect(input).toHaveAttribute('name', 'start');
+    expect(input).not.toHaveAttribute('onentryerrorchange');
+  });
+
+  it('never reports from the bottom sheet', () => {
+    const onEntryErrorChange = vi.fn();
+    render(
+      <TimeInput
+        label="Start time"
+        presentation="bottom-sheet"
+        value={'09:00' as ISOTimeString}
+        onChange={() => {}}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    expect(onEntryErrorChange).not.toHaveBeenCalled();
+    expect(document.querySelector('[onentryerrorchange]')).toBeNull();
+  });
+});
