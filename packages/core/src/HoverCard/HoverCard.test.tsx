@@ -1740,6 +1740,27 @@ describe('HoverCard', () => {
       });
     });
 
+    it('opens on a tap on a text field inside its trigger when touchTrigger is "tap"', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <HoverCard
+          content={<span>Card content</span>}
+          onOpenChange={onOpenChange}
+          touchTrigger="tap"
+          delay={0}>
+          <span>
+            Name <input aria-label="Name" />
+          </span>
+        </HoverCard>,
+      );
+
+      tap(screen.getByRole('textbox', {name: 'Name'}));
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
     it('survives a tap on its own content', async () => {
       const onOpenChange = vi.fn();
       render(

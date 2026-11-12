@@ -107,12 +107,15 @@ afterAll(() => {
   if (work && !runFolder()) fs.rmSync(work, {recursive: true, force: true});
 });
 
+/** This file's own user config folder (settings and state), in its work folder. */
+const userConfig = () => path.join(work, 'config');
+
 /**
  * Run the packed CLI with `tmp` as the system temp folder.
  * @param {string[]} args
- * @param {{tmp: string, cwd?: string, env?: Record<string, string>}} options
+ * @param {{tmp: string, cwd?: string, env?: Record<string, string>, json?: boolean}} options
  */
-function run(args, {tmp, cwd = project, env = {}}) {
+function run(args, {tmp, cwd = project, env = {}, json = true}) {
   fs.mkdirSync(tmp, {recursive: true});
   const base = {...process.env};
   delete base.CI;
@@ -121,7 +124,7 @@ function run(args, {tmp, cwd = project, env = {}}) {
     [
       path.join(packed, 'clients', 'cli', 'bin', 'astryx.mjs'),
       ...args,
-      '--json',
+      ...(json ? ['--json'] : []),
     ],
     {
       cwd,
@@ -137,6 +140,10 @@ function run(args, {tmp, cwd = project, env = {}}) {
         NODE_DISABLE_COMPILE_CACHE: '1',
         // The kept catalogs live in the user's cache folder.
         XDG_CACHE_HOME: tmp,
+        // A gather reads the user's settings and state files: they are this
+        // file's own, never the run's shared folder, where every other
+        // test's CLI run records its notices (a kept catalog would miss).
+        XDG_CONFIG_HOME: userConfig(),
         ...env,
       },
     },
@@ -148,10 +155,10 @@ function run(args, {tmp, cwd = project, env = {}}) {
  * run(), without blocking: the kept and the fresh runs of a query go side by
  * side.
  * @param {string[]} args
- * @param {{tmp: string, cwd?: string, env?: Record<string, string>}} options
+ * @param {{tmp: string, cwd?: string, env?: Record<string, string>, json?: boolean}} options
  * @returns {Promise<{status: number | null, stdout: string, stderr: string}>}
  */
-function runAsync(args, {tmp, cwd = project, env = {}}) {
+function runAsync(args, {tmp, cwd = project, env = {}, json = true}) {
   fs.mkdirSync(tmp, {recursive: true});
   const base = {...process.env};
   delete base.CI;
@@ -161,7 +168,7 @@ function runAsync(args, {tmp, cwd = project, env = {}}) {
       [
         path.join(packed, 'clients', 'cli', 'bin', 'astryx.mjs'),
         ...args,
-        '--json',
+        ...(json ? ['--json'] : []),
       ],
       {
         cwd,
@@ -173,6 +180,7 @@ function runAsync(args, {tmp, cwd = project, env = {}}) {
           NO_UPDATE_NOTIFIER: '1',
           NODE_DISABLE_COMPILE_CACHE: '1',
           XDG_CACHE_HOME: tmp,
+          XDG_CONFIG_HOME: userConfig(),
           ...env,
         },
       },
@@ -209,7 +217,64 @@ let fresh = 0;
 const freshTmp = () => path.join(work, 'tmp', `fresh-${fresh++}`);
 
 /**
- * The kept entries in a temp folder's cache: each file's inode and time.
+ * @param {string} file
+ * @returns {boolean} whether a cache file holds a derived value
+ */
+function derivedEntry(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8')).derived === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a kept file holds an integration's contribution-check results (a
+ * list), not a catalog.
+ * @param {string} file
+ * @returns {boolean}
+ */
+function issuesEntry(file) {
+  try {
+    const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return entry.derived !== true && Array.isArray(entry.value);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The integrations' kept contribution-check results in a temp folder's cache
+ * folder.
+ * @param {string} tmp
+ * @returns {Map<string, number>} name to inode
+ */
+function issuesEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    if (issuesEntry(file)) out.set(name, fs.statSync(file).ino);
+  }
+  return out;
+}
+
+/**
+ * The derived values kept in a temp folder's cache folder.
+ * @param {string} tmp
+ * @returns {string[]}
+ */
+function derivedEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter(name => derivedEntry(path.join(dir, name)));
+}
+
+/**
+ * The kept catalogs in a temp folder's cache: each file's inode and time
+ * (a value derived from a catalog, search's entry table, is not a catalog).
  * @param {string} tmp
  * @returns {Map<string, {ino: number, mtimeMs: number}>}
  */
@@ -219,7 +284,9 @@ function entries(tmp) {
   const out = new Map();
   if (!fs.existsSync(dir)) return out;
   for (const name of fs.readdirSync(dir)) {
-    const {ino, mtimeMs} = fs.statSync(path.join(dir, name));
+    const file = path.join(dir, name);
+    if (derivedEntry(file) || issuesEntry(file)) continue;
+    const {ino, mtimeMs} = fs.statSync(file);
     out.set(name, {ino, mtimeMs});
   }
   return out;
@@ -459,7 +526,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     try {
       // The integration's manifest in TypeScript, importing a helper: jiti
       // compiles both on the first load and writes them to its cache in the
-      // temp folder.
+      // per-user cache folder, beside the catalogs.
       fs.rmSync(path.join(other.widgets, 'astryx.integration.mjs'));
       fs.writeFileSync(
         path.join(other.widgets, 'helper.ts'),
@@ -480,7 +547,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
           before.get(name)?.ino === after.get(name)?.ino ? 'hit' : 'miss',
         );
       }
-      expect(fs.existsSync(path.join(tmp, 'jiti'))).toBe(true);
+      expect(fs.readdirSync(path.join(tmp, 'astryx', 'jiti')).length).toBe(2);
       expect(outcomes).toEqual(['miss', 'hit', 'hit']);
     } finally {
       fs.rmSync(other.dir, {recursive: true, force: true});
@@ -511,12 +578,79 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     fs.chmodSync(path.join(refused, CACHE_NAME), 0o755);
     expect(run(QUERIES[0], {tmp: refused, env: strictEnv})).toEqual(fresh);
     expect(entries(refused).size).toBe(0);
+
+    expect(derivedEntries(refused)).toEqual([]);
     // Plug'n'Play with a usable folder: no hook, no catalog, the same answer.
     const pnp = keptTmp('pnp');
     const asPnp = {...strictEnv, AS_PNP: '1'};
     expect(run(QUERIES[0], {tmp: pnp, env: asPnp})).toEqual(fresh);
     expect(run(QUERIES[0], {tmp: pnp, env: asPnp})).toEqual(fresh);
     expect(entries(pnp).size).toBe(0);
+    expect(derivedEntries(pnp)).toEqual([]);
+    // Nor does it read one a plain run kept: an entry whose value is altered,
+    // so a read would show, gives the fresh answer under Plug'n'Play.
+    const kept = keptTmp('pnp-read');
+    run(QUERIES[0], {tmp: kept});
+    const [name] = [...entries(kept).keys()];
+    const file = path.join(kept, CACHE_NAME, name);
+    const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+    entry.value.all = [];
+    fs.writeFileSync(file, JSON.stringify(entry));
+    expect(run(QUERIES[0], {tmp: kept}).stdout).not.toBe(fresh.stdout);
+    expect(run(QUERIES[0], {tmp: kept, env: asPnp})).toEqual(fresh);
+  }, 120_000);
+
+  it("is not used when another entry is copied over this one's name", () => {
+    const tmp = keptTmp('copied');
+    const other = makeProject();
+    try {
+      fs.mkdirSync(path.join(other.widgets, 'templates'), {recursive: true});
+      fs.writeFileSync(
+        path.join(other.widgets, 'templates', 'tally.doc.mjs'),
+        `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(other.widgets, 'templates', 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      run(QUERIES[0], {tmp, cwd: project});
+      const [mine] = [...entries(tmp).keys()];
+      run(QUERIES[0], {tmp, cwd: other.dir});
+      const [theirs] = [...entries(tmp).keys()].filter(name => name !== mine);
+      const dir = path.join(tmp, CACHE_NAME);
+      fs.copyFileSync(path.join(dir, theirs), path.join(dir, mine));
+      // Only the other project has the tally template.
+      const ask = ['search', 'tally'];
+      const fresh = run(ask, {tmp: freshTmp(), cwd: project});
+      expect(run(ask, {tmp: freshTmp(), cwd: other.dir}).stdout).not.toBe(
+        fresh.stdout,
+      );
+      expect(run(ask, {tmp, cwd: project})).toEqual(fresh);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it("is listed by doctor, with the runs under Plug'n'Play that keep none", () => {
+    const tmp = keptTmp('doctor');
+    /** @param {Record<string, string>} [env] */
+    const row = env => {
+      const {stdout} = run(['doctor'], {tmp, env});
+      return JSON.parse(stdout).data.checks.find(
+        (/** @type {{id: string}} */ check) => check.id === 'gather-cache',
+      );
+    };
+    const plain = row().message;
+    expect(plain).toContain(path.join(tmp, CACHE_NAME));
+    expect(plain).not.toContain("Plug'n'Play");
+    const pnp = path.join(work, 'as-pnp.cjs');
+    fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
+    const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;
+    // The folder and its size, and that this run keeps none.
+    expect(underPnp).toContain(path.join(tmp, CACHE_NAME));
+    expect(underPnp).toContain(
+      "but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`",
+    );
   }, 120_000);
 
   it('is never kept by a checkout, even one a pack left a build id in', () => {
@@ -542,6 +676,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
           ...process.env,
           TMPDIR: tmp,
           XDG_CACHE_HOME: tmp,
+          XDG_CONFIG_HOME: userConfig(),
           NO_UPDATE_NOTIFIER: '1',
           NODE_DISABLE_COMPILE_CACHE: '1',
         },
@@ -554,6 +689,8 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(first.status, first.stderr).toBe(0);
     expect(second.stdout).toBe(first.stdout);
     expect(entries(tmp).size).toBe(0);
+
+    expect(derivedEntries(tmp)).toEqual([]);
   }, 120_000);
 
   it('keeps no catalog gathered while Core could not be had', () => {
@@ -573,6 +710,8 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(JSON.parse(first.stdout).data).toBeTruthy();
     run(['search', 'button'], {tmp, cwd: outside, env: offline});
     expect(entries(tmp).size).toBe(0);
+
+    expect(derivedEntries(tmp)).toEqual([]);
   }, 180_000);
 
   it('keeps a digest of each environment value it read, never the value', () => {
@@ -596,6 +735,308 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(states).toBeGreaterThan(0);
   }, 120_000);
 
+  it("keeps search's entry table beside the catalog, and reads it back the same", () => {
+    const tmp = keptTmp('table');
+    const fresh = run(QUERIES[0], {tmp: freshTmp()});
+    expect(run(QUERIES[0], {tmp})).toEqual(fresh);
+    expect(derivedEntries(tmp)).toHaveLength(1);
+    const [table] = derivedEntries(tmp);
+    const {ino} = fs.statSync(path.join(tmp, CACHE_NAME, table));
+    // Read back, not rebuilt: the same file, and the same answer.
+    expect(run(QUERIES[0], {tmp})).toEqual(fresh);
+    expect(run(QUERIES[1], {tmp})).toEqual(run(QUERIES[1], {tmp: freshTmp()}));
+    expect(fs.statSync(path.join(tmp, CACHE_NAME, table)).ino).toBe(ino);
+  }, 120_000);
+
+  it("is not used after an edit to the installed CLI's table-building code or cards", async () => {
+    // As patch-package or a hand edit leaves it: same build id, other code.
+    const tmp = keptTmp('code-edit');
+    const asks = ['color picker', 'menu button', 'date picker', 'tab list'].map(
+      q => ['search', q],
+    );
+    for (const ask of asks) run(ask, {tmp});
+    const before = asks.map(ask => run(ask, {tmp}).stdout);
+    const file = path.join(packed, 'api', 'search', '_entries.mjs');
+    const source = fs.readFileSync(file, 'utf8');
+    const edited = source.replace(
+      'const nw = nameWords(name).map(fold);',
+      'const nw = nameWords(name).map(fold).slice(0, 1);',
+    );
+    expect(edited).not.toBe(source);
+    try {
+      fs.writeFileSync(file, edited);
+      let changed = 0;
+      for (const [i, ask] of asks.entries()) {
+        const [kept, fresh] = await Promise.all([
+          runAsync(ask, {tmp}),
+          runAsync(ask, {tmp: freshTmp()}),
+        ]);
+        expect(kept, ask.join(' ')).toEqual(fresh);
+        if (fresh.stdout !== before[i]) changed++;
+      }
+      // The edit changes answers, so a stale table would have shown.
+      expect(changed).toBeGreaterThan(0);
+    } finally {
+      fs.writeFileSync(file, source);
+    }
+    // The cards the table is built from: every card emptied.
+    const ask = ['search', 'color picker'];
+    run(ask, {tmp});
+    const was = run(ask, {tmp}).stdout;
+    const cardsFile = path.join(packed, 'api', 'search', '_cards.json');
+    const cardsText = fs.readFileSync(cardsFile, 'utf8');
+    const cards = Object.fromEntries(
+      Object.keys(JSON.parse(cardsText)).map(name => [
+        name,
+        {what: '', synonyms: [], props: []},
+      ]),
+    );
+    try {
+      fs.writeFileSync(cardsFile, JSON.stringify(cards));
+      const [kept, fresh] = await Promise.all([
+        runAsync(ask, {tmp}),
+        runAsync(ask, {tmp: freshTmp()}),
+      ]);
+      expect(fresh.stdout).not.toBe(was);
+      expect(kept).toEqual(fresh);
+    } finally {
+      fs.writeFileSync(cardsFile, cardsText);
+    }
+  }, 180_000);
+  it("keeps build's block catalog beside the search catalog, and reads it back the same", () => {
+    const tmp = keptTmp('blocks');
+    // A request that picks blocks.
+    const ask = ['build', 'a dashboard with a chart and a table'];
+    const fresh = run(ask, {tmp: freshTmp()});
+    expect(run(ask, {tmp})).toEqual(fresh);
+    const dir = path.join(tmp, CACHE_NAME);
+    const blocks = derivedEntries(tmp).filter(
+      name =>
+        'blocks' in
+        JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')).value,
+    );
+    expect(blocks).toHaveLength(1);
+    const {ino} = fs.statSync(path.join(dir, blocks[0]));
+    // Read back, not worked out again: the same file, and the same answer.
+    expect(run(ask, {tmp})).toEqual(fresh);
+    expect(fs.statSync(path.join(dir, blocks[0])).ino).toBe(ino);
+  }, 120_000);
+
+  it("is not used after an edit to the installed CLI's block weights or stopwords", async () => {
+    const tmp = keptTmp('weights-edit');
+    const asks = [
+      ['build', 'a dashboard with a chart and a table'],
+      ['build', 'a settings page with a form'],
+      ['build', 'a kanban board with cards'],
+    ];
+    for (const ask of asks) run(ask, {tmp});
+    const before = asks.map(ask => run(ask, {tmp}).stdout);
+    const file = path.join(
+      packed,
+      'api',
+      'build',
+      'blocks',
+      'blocks.weights.json',
+    );
+    const source = fs.readFileSync(file, 'utf8');
+    const weights = JSON.parse(source);
+    // Every term weighs the same, which moves every block's vector while
+    // the requests keep weighted words.
+    weights.idf = weights.idf.map(() => 1024);
+    try {
+      fs.writeFileSync(file, JSON.stringify(weights));
+      let changed = 0;
+      for (const [i, ask] of asks.entries()) {
+        const [kept, fresh] = await Promise.all([
+          runAsync(ask, {tmp}),
+          runAsync(ask, {tmp: freshTmp()}),
+        ]);
+        expect(kept, ask.join(' ')).toEqual(fresh);
+        if (fresh.stdout !== before[i]) changed++;
+      }
+      expect(changed).toBeGreaterThan(0);
+    } finally {
+      fs.writeFileSync(file, source);
+    }
+    // The stopwords the picker drops, from search's word rules: seeded again
+    // on the restored weights, so only the stopword edit can miss.
+    for (const ask of asks) run(ask, {tmp});
+    const seeded = asks.map(ask => run(ask, {tmp}).stdout);
+    const query = path.join(packed, 'api', 'search', '_query.mjs');
+    const querySource = fs.readFileSync(query, 'utf8');
+    const editedQuery = querySource.replace(
+      'export const STOPWORDS = new Set([',
+      // Words of block docs the requests do not use.
+      "export const STOPWORDS = new Set([\n  'list',\n  'grid',\n  'header',\n  'summary',\n  'metric',\n  'metrics',\n  'stats',\n  'navigation',\n  'sidebar',\n  'row',\n  'rows',\n  'column',\n  'columns',\n  'section',\n  'filter',\n  'filters',\n  'toolbar',\n  'actions',",
+    );
+    expect(editedQuery).not.toBe(querySource);
+    try {
+      fs.writeFileSync(query, editedQuery);
+      let changed = 0;
+      for (const [i, ask] of asks.entries()) {
+        const [kept, fresh] = await Promise.all([
+          runAsync(ask, {tmp}),
+          runAsync(ask, {tmp: freshTmp()}),
+        ]);
+        expect(kept, ask.join(' ')).toEqual(fresh);
+        if (fresh.stdout !== seeded[i]) changed++;
+      }
+      expect(changed).toBeGreaterThan(0);
+    } finally {
+      fs.writeFileSync(query, querySource);
+    }
+  }, 240_000);
+
+  it("keeps each integration's check results, and checks again after an edit", async () => {
+    const tmp = keptTmp('issues');
+    const other = makeProject();
+    try {
+      const templates = path.join(other.widgets, 'templates');
+      fs.mkdirSync(templates, {recursive: true});
+      const doc = path.join(templates, 'tally.doc.mjs');
+      fs.writeFileSync(
+        doc,
+        `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(templates, 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = ['template', '--list'];
+      const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      const kept = issuesEntries(tmp);
+      expect(kept.size).toBe(1);
+      // Read back, not checked again: the same file, and the same answer.
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      expect(issuesEntries(tmp)).toEqual(kept);
+      // A template doc edited in place so that the checks find a problem.
+      fs.writeFileSync(
+        doc,
+        `export default {type: 'page', name: 'tally', description: 42, category: 'Widget - Tally'};\n`,
+      );
+      const [again, edited] = await Promise.all([
+        runAsync(ask, {tmp, cwd: other.dir, json: false}),
+        runAsync(ask, {tmp: freshTmp(), cwd: other.dir, json: false}),
+      ]);
+      // The checks find the problem: a warning names the integration.
+      expect(edited.stderr).toContain('@acme/widgets');
+      expect(fresh.stderr).not.toContain('@acme/widgets');
+      expect(again).toEqual(edited);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('records nothing for component, template, theme or discover in a project with no integration', () => {
+    const tmp = keptTmp('no-integration');
+    // A project with Core and nothing else: no config, no manifest, no
+    // dependency that ships one.
+    const bare = fs.mkdtempSync(path.join(work, 'projects', 'bare-'));
+    try {
+      fs.mkdirSync(path.join(bare, 'node_modules', '@astryxdesign'), {
+        recursive: true,
+      });
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'packages', 'core'),
+        path.join(bare, 'node_modules', '@astryxdesign', 'core'),
+        'dir',
+      );
+      fs.writeFileSync(
+        path.join(bare, 'package.json'),
+        JSON.stringify({
+          name: 'bare',
+          dependencies: {'@astryxdesign/core': '*'},
+        }),
+      );
+      // A resolver that refuses the options module hooks pass: a run that
+      // installed the recorder's hooks would fail its requires.
+      const strict = path.join(work, 'strict-bare.cjs');
+      fs.writeFileSync(
+        strict,
+        `const Module = require('node:module');
+const resolve = Module._resolveFilename;
+Module._resolveFilename = function (request, parent, isMain, options) {
+  if (options && options.conditions) throw new Error('resolver options are not supported');
+  return resolve.call(this, request, parent, isMain, options);
+};
+`,
+      );
+      const env = {NODE_OPTIONS: `--require ${strict}`};
+      for (const ask of [
+        ['template', '--list'],
+        ['component', 'Button'],
+        ['theme', 'list'],
+        ['discover'],
+      ]) {
+        // Stdout and status: a once-a-day notice may go to stderr.
+        const answer = (
+          /** @type {{status: number | null, stdout: string}} */ r,
+        ) => [r.status, r.stdout];
+        const fresh = answer(
+          run(ask, {tmp: freshTmp(), cwd: bare, json: false}),
+        );
+        expect(answer(run(ask, {tmp, cwd: bare, json: false, env}))).toEqual(
+          fresh,
+        );
+        expect(answer(run(ask, {tmp, cwd: bare, json: false, env}))).toEqual(
+          fresh,
+        );
+      }
+      expect(entries(tmp).size).toBe(0);
+      expect(issuesEntries(tmp).size).toBe(0);
+    } finally {
+      fs.rmSync(bare, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('keeps the check results of an integration installed beside the CLI, run outside a project', () => {
+    const tmp = keptTmp('computer');
+    // A computer-level integration: installed in the CLI's own install root.
+    const beside = path.join(
+      work,
+      'install',
+      'node_modules',
+      '@acme',
+      'beside',
+    );
+    const outside = fs.mkdtempSync(path.join(work, 'outside-'));
+    try {
+      fs.mkdirSync(path.join(beside, 'templates'), {recursive: true});
+      fs.writeFileSync(
+        path.join(beside, 'package.json'),
+        JSON.stringify({name: '@acme/beside', version: '1.0.0'}),
+      );
+      fs.writeFileSync(
+        path.join(beside, 'astryx.integration.mjs'),
+        `export default { templates: './templates' };\n`,
+      );
+      fs.writeFileSync(
+        path.join(beside, 'templates', 'tally.doc.mjs'),
+        `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(beside, 'templates', 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = ['template', '--list'];
+      const answer = (
+        /** @type {{status: number | null, stdout: string}} */ r,
+      ) => [r.status, r.stdout];
+      const fresh = answer(
+        run(ask, {tmp: freshTmp(), cwd: outside, json: false}),
+      );
+      expect(answer(run(ask, {tmp, cwd: outside, json: false}))).toEqual(fresh);
+      const kept = issuesEntries(tmp);
+      expect(kept.size).toBe(1);
+      expect(answer(run(ask, {tmp, cwd: outside, json: false}))).toEqual(fresh);
+      expect(issuesEntries(tmp)).toEqual(kept);
+    } finally {
+      fs.rmSync(beside, {recursive: true, force: true});
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
+  }, 120_000);
+
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
     const notAFolder = path.join(work, 'tmp', 'file-tmp');
@@ -607,6 +1048,8 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     const expected = run(QUERIES[0], {tmp: freshTmp()});
     expect(run(QUERIES[0], {tmp: shared})).toEqual(expected);
     expect(entries(shared).size).toBe(0);
+
+    expect(derivedEntries(shared)).toEqual([]);
     const broken = spawnSync(
       process.execPath,
       [
@@ -621,6 +1064,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
           ...process.env,
           TMPDIR: notAFolder,
           XDG_CACHE_HOME: notAFolder,
+          XDG_CONFIG_HOME: userConfig(),
           NO_UPDATE_NOTIFIER: '1',
           NODE_DISABLE_COMPILE_CACHE: '1',
         },

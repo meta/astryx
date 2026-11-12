@@ -56,6 +56,21 @@ export function Providers({children}) {
 
 `LinkProvider` wires up Next.js client-side navigation for all Astryx link-based components (Link, Button with href, TopNav, SideNav, Breadcrumbs, TabList).
 
+### 4. Next.js config (webpack builds)
+
+```js
+// next.config.mjs
+const nextConfig = {
+  experimental: {
+    optimizePackageImports: ['@astryxdesign/core'],
+  },
+};
+
+export default nextConfig;
+```
+
+With webpack (`next build --webpack`), a Server Component that imports from the package root would otherwise ship every client component; this keeps first load to what the page uses. In Server Components, also import from the component's own entry, such as `@astryxdesign/core/Button`. Turbopack needs no change.
+
 ## Gotchas
 
 | Issue                         | Symptom                                     | Fix                                         |
