@@ -811,9 +811,6 @@ importers:
 
   packages/cli:
     dependencies:
-      '@csstools/css-syntax-patches-for-csstree':
-        specifier: 1.1.6
-        version: 1.1.6(css-tree@3.2.1)
       '@babel/core':
         specifier: 7.29.7
         version: 7.29.7
@@ -826,6 +823,9 @@ importers:
       '@babel/types':
         specifier: 7.29.8
         version: 7.29.8
+      '@csstools/css-syntax-patches-for-csstree':
+        specifier: 1.1.6
+        version: 1.1.6(css-tree@3.2.1)
       '@stylexjs/babel-plugin':
         specifier: 'catalog:'
         version: 0.19.1
