@@ -907,7 +907,7 @@ describe('Pagination', () => {
       expect(onChange).toHaveBeenCalledWith(5);
     });
 
-    it('reverts to the current page on an invalid or empty entry', async () => {
+    it('keeps an invalid entry with its message and reverts an empty one', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
       render(
@@ -920,13 +920,14 @@ describe('Pagination', () => {
         />,
       );
       const box = screen.getByRole('spinbutton', {name: 'Go to page'});
-      // A number input rejects non-numeric characters, so an invalid entry
-      // never navigates and reverts to the committed page on blur.
+      // An invalid entry never navigates. Blur keeps it with its message.
       await user.clear(box);
       await user.type(box, 'abc');
       await user.tab();
       expect(onChange).not.toHaveBeenCalled();
-      expect(box).toHaveValue('3');
+      expect(box).toHaveValue('abc');
+      expect(box).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.getByText('Invalid number')).toBeInTheDocument();
 
       // Emptying the box and blurring reverts to the committed page too.
       await user.clear(box);
