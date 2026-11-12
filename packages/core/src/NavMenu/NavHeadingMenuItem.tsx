@@ -14,8 +14,8 @@
 
 import React, {useCallback, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {renderIconSlot, type IconType} from '../Icon';
-import {Text} from '../Text';
+import {renderIconSlot, type IconType} from '../Icon/Icon';
+import {Text} from '../Text/Text';
 import {
   colorVars,
   spacingVars,
@@ -91,6 +91,10 @@ const sizeStyles = stylex.create({
   },
 });
 
+function getMenuItemFromContent(node: HTMLSpanElement) {
+  return node.closest<HTMLElement>('[role="menuitem"]');
+}
+
 export interface NavHeadingMenuItemProps extends Omit<
   BaseProps<HTMLElement>,
   'onClick'
@@ -158,10 +162,27 @@ export function NavHeadingMenuItem({
   // missing destination. A plain anchor keeps the row's element shape.
   // (Mirrors the disabled paths of Link, Tab, and TopNavItem.)
   const Element = href ? (isDisabled ? 'a' : LinkComponent) : 'div';
+  // Observe owned content, not a router's ref. Focus follows the replacement
+  // when availability changes (spec:AST-085 FR4).
+  const contentRef = useFocusAcrossSwap<HTMLSpanElement>(undefined, {
+    isDisabled,
+    getFocusTarget: getMenuItemFromContent,
+  });
 
-  // The element type above changes when `isDisabled` flips, so React replaces
-  // the row; focus follows to the replacement (spec:AST-085 FR4).
-  const itemRef = useFocusAcrossSwap<HTMLElement>(ref);
+  // Filter only this item's consumers, leaving nonactivation keys, parent
+  // routing, and child-owned events intact.
+  const guardActivationKeyCallback = (
+    handler: React.KeyboardEventHandler<HTMLElement> | undefined,
+  ): React.KeyboardEventHandler<HTMLElement> | undefined => {
+    if (!isDisabled || !handler) {
+      return handler;
+    }
+    return event => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        handler(event);
+      }
+    };
+  };
 
   return (
     <Element
@@ -170,7 +191,7 @@ export function NavHeadingMenuItem({
         restProps.onMouseDown,
         isDisabled ? keepDisabledRowUnfocused : undefined,
       )}
-      ref={itemRef}
+      ref={ref}
       role="menuitem"
       // Every row, disabled included, takes focus but is not a Tab stop.
       tabIndex={-1}
@@ -180,6 +201,21 @@ export function NavHeadingMenuItem({
       // another row would start a drag and cancel the press.
       draggable={href != null ? false : undefined}
       onClick={handleClick}
+      onClickCapture={isDisabled ? undefined : restProps.onClickCapture}
+      onAuxClick={isDisabled ? undefined : restProps.onAuxClick}
+      onAuxClickCapture={isDisabled ? undefined : restProps.onAuxClickCapture}
+      onDoubleClick={isDisabled ? undefined : restProps.onDoubleClick}
+      onDoubleClickCapture={
+        isDisabled ? undefined : restProps.onDoubleClickCapture
+      }
+      onKeyDownCapture={guardActivationKeyCallback(restProps.onKeyDownCapture)}
+      onKeyDown={guardActivationKeyCallback(restProps.onKeyDown)}
+      onKeyPressCapture={guardActivationKeyCallback(
+        restProps.onKeyPressCapture,
+      )}
+      onKeyPress={guardActivationKeyCallback(restProps.onKeyPress)}
+      onKeyUpCapture={guardActivationKeyCallback(restProps.onKeyUpCapture)}
+      onKeyUp={guardActivationKeyCallback(restProps.onKeyUp)}
       data-testid={testId}
       {...mergeProps(
         themeProps('nav-heading-menu-item', {size}),
@@ -193,7 +229,7 @@ export function NavHeadingMenuItem({
         style,
       )}>
       {icon && renderIconSlot(icon, {size: 'sm', color: 'secondary'})}
-      <span {...stylex.props(styles.content)}>
+      <span ref={contentRef} {...stylex.props(styles.content)}>
         {typeof label === 'string' ? (
           <Text type="body" maxLines={1}>
             {label}
