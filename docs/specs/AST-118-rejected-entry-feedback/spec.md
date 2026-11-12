@@ -64,7 +64,7 @@ it too.
   keep their meaning; FR7 states which message shows when a caller status and a
   rejection meet.
 - Native constraint validation in the browser, such as `required` and
-  `:invalid`.
+  `:invalid`; `spec:AST-120` adds a member's rejected entry to it.
 - Rejection wording. Each member's record and `spec:AST-111` AR3 own the
   messages; `spec:AST-086` owns their delivery.
 - What a commit does with an entry the member accepts: commit, clamp, or clear
@@ -226,17 +226,13 @@ interface TimeInputEntryError {
   `warning` or `success` caller status never replaces a rejection's message, on
   any member, with or without `onEntryErrorChange`, and a caller `error` status
   without a message keeps the field's message. A caller `error` status with a
-  message shows in place of the field's message on `NumberInput`, `TimeInput`,
-  and `DateTimeInput`'s time segment, with or without the callback. On
-  `DateInput` and `DateTimeInput`'s date segment, it shows in place of the
-  field's message only with `onEntryErrorChange`; without the callback, the
-  field's message shows in place of any caller `status` while the rejected text
-  stays, as their records state. While a caller `error` status shows in place
-  of the field's message, `aria-invalid` stays set while the rejection stands.
-  Without the callback, the field's alert announces the rejection's own message
-  once; with it, the caller's message is the one announced, and a rejection
-  that starts under an unchanged caller error message changes no status, so the
-  field's alert announces that message once.
+  message shows in place of the field's message on every member, with or without
+  the callback (`spec:AST-120` FR5). While a caller `error` status shows in
+  place of the field's message, `aria-invalid` stays set while the rejection
+  stands. Without the callback, the field's alert announces the rejection's own
+  message once; with it, the caller's message is the one announced, and a
+  rejection that starts under an unchanged caller error message changes no
+  status, so the field's alert announces that message once.
 - **FR8 — `NumberInput` and `TimeInput` report their rejections.** Each takes an
   optional `onEntryErrorChange`, which receives a `NumberInputEntryError` or a
   `TimeInputEntryError` each time the rejection the field reveals changes, and
@@ -466,6 +462,8 @@ member inside an InputGroup.
 
 **Reference:** `spec:AST-118/DEC-5`
 **Decider:** `nynexman4464`, `2026-11-11`
+**Superseded in part by:** `spec:AST-120/DEC-5` (a caller `error` status with a
+message also wins on `DateInput`)
 
 `NumberInput`, `TimeInput`, and `DateTimeInput`'s time segment show a caller
 `error` status over their own message, and `DateInput` shows its message over
