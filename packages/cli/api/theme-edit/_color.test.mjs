@@ -112,10 +112,18 @@ describe('parseColor', () => {
     expect(isColorValue('rgb(var(--r) 0 0 / 0.5)')).toBe(true);
   });
 
+  it('works out a color-mix() of two fixed colors', () => {
+    expect(parseColor('color-mix(in srgb, red, blue)')).toEqual([
+      127.5, 0, 127.5,
+    ]);
+  });
+
   it('returns null for a value with no fixed color', () => {
     for (const v of [
       'var(--color-accent)',
-      'color-mix(in srgb, red, blue)',
+      // A mix with no fixed color, or in a space the reader does not mix in.
+      'color-mix(in srgb, var(--x), blue)',
+      'color-mix(in hsl, red, blue)',
       'light-dark(red, blue)',
       'transparent',
       'banana',

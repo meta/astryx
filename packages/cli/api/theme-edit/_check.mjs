@@ -1757,24 +1757,28 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       if (s.on && !isRole) {
         // A CSS font shorthand goes to its longhands, each a command that
         // works; a value that is neither gets a family that works.
-        const parts = matchValue('font-family', v)
-          ? null
-          : fontShorthandParts(v);
-        const runs = matchValue('font-family', v)
-          ? [
-              `${P} set ${slug} font-family ${quoteCommandArgument(v)} --on ${s.on}`,
-            ]
-          : parts
-            ? Object.entries(parts).map(
+        // Every part of a font shorthand (or a lone keyword: bold) goes to
+        // its own longhand; a family list is a family list.
+        const parts = fontShorthandParts(v);
+        const family = !parts && matchValue('font-family', v);
+        const example = `${P} set ${slug} font-family ${quoteCommandArgument(exampleOf('font', 'font-family'))} --on ${s.on}`;
+        const runs = parts
+          ? parts.system
+            ? [example]
+            : Object.entries(parts).map(
                 ([k, x]) =>
                   `${P} set ${slug} ${k} ${quoteCommandArgument(x)} --on ${s.on}`,
               )
-            : [
-                `${P} set ${slug} font-family ${quoteCommandArgument(exampleOf('font', 'font-family'))} --on ${s.on}`,
-              ];
+          : family
+            ? [
+                `${P} set ${slug} font-family ${quoteCommandArgument(v)} --on ${s.on}`,
+              ]
+            : [example];
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `font --on takes body, heading, or code. For one part's font use font-family${parts ? ', and the other parts of the font shorthand one by one' : ''}.`,
+          parts?.system
+            ? `font --on takes body, heading, or code, and "${v}" is a system font keyword of the CSS font shorthand, which sets every part of the font at once. For one part's font use font-family with a family.`
+            : `font --on takes body, heading, or code. For one part's font use font-family${parts ? ', and the other parts of the font shorthand one by one' : ''}.`,
           {run: runs},
         );
       }

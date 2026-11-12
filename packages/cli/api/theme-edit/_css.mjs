@@ -583,14 +583,34 @@ export function initialOf(prop) {
     : null;
 }
 
+/** The longhand each type of the `font` grammar sets, where css-tree names a type, not a property. */
+const FONT_TYPE_LONGHAND = /** @type {Record<string, string>} */ ({
+  'font-variant-css2': 'font-variant-caps',
+  'font-width-css3': 'font-stretch',
+  'font-stretch-absolute': 'font-stretch',
+  'system-family-name': 'system',
+});
+
 /**
- * The parts of a `font` shorthand (`bold 16px/1.5 Georgia, serif`), by
- * longhand, as written; null when the value is not one.
+ * The parts of a CSS `font` value, by the longhand each sets, as written:
+ * `italic small-caps 700 1rem/1 Arial` gives font-style, font-variant-caps,
+ * font-weight, font-size, line-height and font-family. A system font
+ * keyword (`caption`) is `system`. A single keyword of one longhand
+ * (`bold`) is that longhand. Null for anything else.
  * @param {string} value
  * @returns {Record<string, string> | null}
  */
 export function fontShorthandParts(value) {
   const {lexer, parse, generate} = csstree();
+  const word = value.trim().toLowerCase();
+  if (/^[a-z-]+$/.test(word))
+    for (const prop of [
+      'font-weight',
+      'font-style',
+      'font-variant-caps',
+      'font-stretch',
+    ])
+      if (keywordsOf(prop).includes(word)) return {[prop]: word};
   /** @type {any} */
   let ast;
   try {
@@ -604,7 +624,17 @@ export function fontShorthandParts(value) {
   const parts = {};
   /** @param {any} m @param {string | null} under */
   const visit = (m, under) => {
-    const name = m.syntax?.type === 'Property' ? String(m.syntax.name) : under;
+    const syntax = m.syntax;
+    const name =
+      under === 'font-family'
+        ? under
+        : syntax?.type === 'Property' && syntax.name !== 'font'
+          ? String(syntax.name)
+          : syntax?.type === 'Type' && FONT_TYPE_LONGHAND[syntax.name]
+            ? FONT_TYPE_LONGHAND[syntax.name]
+            : syntax?.type === 'Type' && /family/.test(syntax.name)
+              ? 'font-family'
+              : under;
     if (m.node && name) (parts[name] ??= []).push(m.node);
     for (const c of m.match ?? []) visit(c, name);
   };
@@ -612,7 +642,6 @@ export function fontShorthandParts(value) {
   /** @type {Record<string, string>} */
   const out = {};
   for (const [k, nodes] of Object.entries(parts)) {
-    if (k === 'font') continue;
     // The family list is the rest of the value, as written.
     out[k] =
       k === 'font-family'

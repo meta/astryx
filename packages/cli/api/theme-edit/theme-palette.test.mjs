@@ -2198,3 +2198,65 @@ describe('colors12', () => {
     }
   });
 });
+
+describe('colors13', () => {
+  it('maps every part of a font shorthand on a part to its longhand, and never a keyword to a family', async () => {
+    /** @param {string} v */
+    const runs = async v =>
+      (await refusal(() => themeEditSet('p', 'font', v, {cwd, on: 'card'})))
+        .run;
+    const caps = await runs('italic small-caps 700 1rem/1 Arial');
+    for (const want of [
+      /font-style italic --on card$/,
+      /font-variant-caps small-caps --on card$/,
+      /font-weight 700 --on card$/,
+      /font-size 1rem --on card$/,
+      /line-height 1 --on card$/,
+      /font-family Arial --on card$/,
+    ])
+      expect(
+        caps.some(x => want.test(x)),
+        String(want),
+      ).toBe(true);
+    expect(
+      (await runs('oblique 10deg 200 condensed 2em sans-serif')).some(x =>
+        /font-stretch condensed --on card$/.test(x),
+      ),
+    ).toBe(true);
+    const bold = await runs('bold');
+    expect(bold.some(x => /font-weight bold --on card$/.test(x))).toBe(true);
+    expect(bold.join(' ')).not.toMatch(/font-family bold/);
+    expect((await runs('caption')).join(' ')).not.toMatch(
+      /font-family caption/,
+    );
+    for (const run of caps) {
+      const [, prop, value] = / set p (\S+) (.+) --on card$/.exec(run) ?? [];
+      await themeEditSet('p', prop, value.replace(/^'(.*)'$/, '$1'), {
+        cwd,
+        on: 'card',
+      });
+      await themeEditUndo('p', {cwd, thing: prop, on: 'card'});
+    }
+  });
+
+  it('works out a color-mix() of two fixed colors', async () => {
+    const {parseColor, hex} = await import('./_color.mjs');
+    expect(
+      hex(/** @type {any} */ (parseColor('color-mix(in srgb, red, blue)'))),
+    ).toBe('#800080');
+    await themeEditSet('p', 'accent', 'color-mix(in srgb, red, blue)', {cwd});
+    await themeEditSet(
+      'p',
+      'accent',
+      'color-mix(in oklch, #e11d48 60%, white)',
+      {
+        cwd,
+      },
+    );
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+    const odd = await refusal(() =>
+      themeEditSet('p', 'accent', 'color-mix(in hsl, red, blue)', {cwd}),
+    );
+    expect(odd.message).toContain('give the mixed color itself');
+  });
+});

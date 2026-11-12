@@ -468,6 +468,141 @@ export function compositeOver(over, alpha, under) {
   );
 }
 
+/** The color-mix() spaces this reader mixes in. */
+const MIX_SPACES = ['srgb', 'srgb-linear', 'xyz', 'xyz-d65', 'oklab', 'oklch'];
+
+/** An sRGB channel (0..255) in linear light. @param {number} c */
+const toLinear = c => {
+  const v = c / 255;
+  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+};
+
+/** Linear sRGB to OKLab. @param {number[]} lin @returns {number[]} */
+function linearToOklab([r, g, b]) {
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
+}
+
+/**
+ * The fixed color a color-mix() of two fixed colors gives, as CSS Color 5
+ * mixes them (shares that do not add up to 100% are scaled, and a total
+ * under 100% makes the result see-through), or null when it is not one: a
+ * color with no fixed value, a space this reader does not mix in, or
+ * shares that add up to 0.
+ * @param {string} inner the arguments
+ * @returns {{rgb: Rgb, alpha: number} | null}
+ */
+function mixColor(inner) {
+  /** @type {string[]} */
+  const args = [];
+  let depth = 0;
+  let cur = '';
+  for (const c of inner) {
+    if (c === '(') depth++;
+    if (c === ')') depth--;
+    if (c === ',' && depth === 0) {
+      args.push(cur.trim());
+      cur = '';
+    } else cur += c;
+  }
+  args.push(cur.trim());
+  if (args.length !== 3) return null;
+  const sp =
+    /^in\s+([a-z0-9-]+)(?:\s+(shorter|longer|increasing|decreasing)\s+hue)?$/i.exec(
+      args[0],
+    );
+  const space = sp?.[1].toLowerCase() ?? '';
+  if (!MIX_SPACES.includes(space)) return null;
+  const hueWay = (sp?.[2] ?? 'shorter').toLowerCase();
+  const sides = args.slice(1).map(a => {
+    const m =
+      /^(.*?)\s+(\d*\.?\d+)%$/.exec(a) ?? /^(\d*\.?\d+)%\s+(.*)$/.exec(a);
+    const color = m
+      ? /%$/.test(m[0]) && m[1] && !/%/.test(m[1])
+        ? m[1]
+        : m[2]
+      : a;
+    const pct = m ? Number(/^\d/.test(m[1]) ? m[1] : m[2]) : null;
+    return {read: readColor(color.trim()), pct};
+  });
+  if (sides.some(x => !x.read)) return null;
+  let [p1, p2] = sides.map(x => x.pct);
+  if (p1 == null && p2 == null) [p1, p2] = [50, 50];
+  else if (p1 == null) p1 = 100 - /** @type {number} */ (p2);
+  else if (p2 == null) p2 = 100 - p1;
+  const total = /** @type {number} */ (p1) + /** @type {number} */ (p2);
+  if (!(total > 0)) return null;
+  const w2 = /** @type {number} */ (p2) / total;
+  const w1 = 1 - w2;
+  const [a, b] = sides.map(
+    x => /** @type {{rgb: Rgb, alpha: number}} */ (x.read),
+  );
+  /** @param {Rgb} rgb @returns {number[]} */
+  const into = rgb => {
+    if (space === 'srgb') return rgb.map(c => c / 255);
+    const lin = rgb.map(toLinear);
+    if (space === 'srgb-linear') return lin;
+    if (space === 'xyz' || space === 'xyz-d65')
+      return [
+        0.41239079926595934 * lin[0] +
+          0.357584339383878 * lin[1] +
+          0.1804807884018343 * lin[2],
+        0.21263900587151027 * lin[0] +
+          0.715168678767756 * lin[1] +
+          0.07219231536073371 * lin[2],
+        0.01933081871559182 * lin[0] +
+          0.11919477979462598 * lin[1] +
+          0.9505321522496607 * lin[2],
+      ];
+    const lab = linearToOklab(lin);
+    if (space === 'oklab') return lab;
+    const c = Math.hypot(lab[1], lab[2]);
+    return [
+      lab[0],
+      c,
+      c < 1e-6 ? NaN : (Math.atan2(lab[2], lab[1]) * 180) / Math.PI,
+    ];
+  };
+  /** @param {number[]} v @returns {Rgb} */
+  const back = v => {
+    if (space === 'srgb')
+      return /** @type {Rgb} */ (v.map(c => clamp(c, 0, 1) * 255));
+    if (space === 'srgb-linear') return fromLinear(v);
+    if (space === 'xyz' || space === 'xyz-d65')
+      return colorSpaceToRgb('xyz-d65', v);
+    if (space === 'oklab') return oklabToRgb(v[0], v[1], v[2]);
+    const h = (v[2] * Math.PI) / 180;
+    return oklabToRgb(v[0], v[1] * Math.cos(h), v[1] * Math.sin(h));
+  };
+  const x = into(a.rgb);
+  const y = into(b.rgb);
+  // Premultiplied by alpha, as CSS mixes; a missing hue takes the other's.
+  const alpha = a.alpha * w1 + b.alpha * w2;
+  const out = x.map((_, i) => {
+    if (space === 'oklch' && i === 2) {
+      let h1 = Number.isNaN(x[2]) ? y[2] : x[2];
+      let h2 = Number.isNaN(y[2]) ? x[2] : y[2];
+      if (Number.isNaN(h1)) return 0;
+      const d = h2 - h1;
+      if (hueWay === 'shorter' && Math.abs(d) > 180) h2 += d > 0 ? -360 : 360;
+      if (hueWay === 'longer' && Math.abs(d) < 180 && d !== 0)
+        h2 += d > 0 ? -360 : 360;
+      if (hueWay === 'increasing' && h2 < h1) h2 += 360;
+      if (hueWay === 'decreasing' && h2 > h1) h2 -= 360;
+      return h1 * w1 + h2 * w2;
+    }
+    const mixed = x[i] * a.alpha * w1 + y[i] * b.alpha * w2;
+    return alpha > 0 ? mixed / alpha : 0;
+  });
+  return {rgb: back(out), alpha: alpha * Math.min(1, total / 100)};
+}
+
 /**
  * A fixed CSS color read as CSS Color 4 reads it: hues wrap, saturation,
  * whiteness, blackness and lightness clamp to their range, and chroma
@@ -491,6 +626,7 @@ function readColor(s) {
   const named = NAMED[s.toLowerCase()];
   if (named) return readColor(named);
   const fn = /^([a-z-]+)\((.*)\)$/i.exec(s);
+  if (fn && fn[1].toLowerCase() === 'color-mix') return mixColor(fn[2]);
   if (!fn || !FIXED.test(fn[1])) return null;
   const name = fn[1].toLowerCase();
   if (name === 'color') {
@@ -629,6 +765,13 @@ export function colorProblem(value) {
   }
   if (fn && FIXED.test(fn[1]) && !/var\(|calc\(|env\(|\bfrom\b/i.test(fn[2]))
     return {kind: 'malformed', message: 'is not a valid CSS color'};
+  // A mix this reader cannot work out (another space, a color with no
+  // fixed value) says so, rather than calling the mix unfixed.
+  if (fn && fn[1].toLowerCase() === 'color-mix' && !/var\(|env\(/i.test(fn[2]))
+    return {
+      kind: 'unfixed',
+      message: `is a color-mix() this editor cannot work out (it mixes in ${MIX_SPACES.join(', ')}, from colors with fixed values); give the mixed color itself`,
+    };
   if (isColorValue(s))
     return {
       kind: 'unfixed',
