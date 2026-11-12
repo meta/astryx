@@ -25,6 +25,7 @@ import {
   type ScrollAxis,
   type ScrollOverscroll,
   type ScrollStickyContainment,
+  type ScrollUnrequestedOverflow,
 } from './useScrollableArea';
 import {
   findNearestScrollOwner,
@@ -43,6 +44,7 @@ interface FixtureProps {
   chaining?: ScrollOverscroll;
   keyboardOwner?: 'viewport' | 'contentOrViewport';
   stickyContainment?: ScrollStickyContainment;
+  unrequestedOverflow?: ScrollUnrequestedOverflow;
   externalRef?: Ref<HTMLDivElement>;
   onScroll?: React.UIEventHandler<HTMLDivElement>;
 }
@@ -52,6 +54,7 @@ function Fixture({
   chaining = 'allow',
   keyboardOwner = 'viewport',
   stickyContainment,
+  unrequestedOverflow,
   externalRef,
   onScroll,
 }: FixtureProps) {
@@ -64,6 +67,7 @@ function Fixture({
     },
     overscroll: chaining,
     stickyContainment,
+    unrequestedOverflow,
   });
 
   return (
@@ -472,6 +476,14 @@ describe('useScrollableArea', () => {
     rerender(<Fixture stickyContainment="always" />);
     expect(viewport.getAttribute('style')).toContain('--x-overflowX: auto');
     expect(viewport.getAttribute('style')).toContain('--x-overflowY: hidden');
+  });
+
+  it('allows a Sticky adopter to clip the non-scrolling axis', () => {
+    render(<Fixture stickyContainment="always" unrequestedOverflow="clip" />);
+    const viewport = screen.getByTestId('viewport');
+
+    expect(viewport.getAttribute('style')).toContain('--x-overflowX: auto');
+    expect(viewport.getAttribute('style')).toContain('--x-overflowY: clip');
   });
 
   it('activates only the overflowing physical axis when both are requested', () => {

@@ -54,6 +54,8 @@ export type ScrollAxis = 'inline' | 'block' | 'both';
 export type ScrollOverscroll = 'allow' | 'contain';
 /** Whether a fitting viewport deliberately remains a Sticky containing boundary. */
 export type ScrollStickyContainment = 'whenScrollable' | 'always';
+/** Overflow for a non-scrolling physical axis while Sticky containment is active. */
+export type ScrollUnrequestedOverflow = 'hidden' | 'clip';
 
 /**
  * Where keyboard scrolling is reached: caller-owned content, a named viewport,
@@ -90,6 +92,8 @@ export interface UseScrollableAreaOptions {
   overscroll?: ScrollOverscroll;
   /** Sticky containment while fitting. @default 'whenScrollable' */
   stickyContainment?: ScrollStickyContainment;
+  /** Overflow on a non-scrolling axis while Sticky containment is active. @default 'hidden' */
+  unrequestedOverflow?: ScrollUnrequestedOverflow;
 }
 
 export type ScrollableElementProps<E extends HTMLElement> = BaseProps<E> &
@@ -285,6 +289,7 @@ export function useScrollableArea({
   keyboardAccess,
   overscroll = 'allow',
   stickyContainment = 'whenScrollable',
+  unrequestedOverflow = 'hidden',
 }: UseScrollableAreaOptions): UseScrollableAreaResult {
   const [viewport, setViewport] = useState<HTMLElement | null>(null);
   const [content, setContent] = useState<HTMLElement | null>(null);
@@ -700,8 +705,16 @@ export function useScrollableArea({
         stylex.props(
           xstyle,
           styles.overflow(
-            containsSticky ? (scrollsOnX ? 'auto' : 'hidden') : 'clip',
-            containsSticky ? (scrollsOnY ? 'auto' : 'hidden') : 'clip',
+            containsSticky
+              ? scrollsOnX
+                ? 'auto'
+                : unrequestedOverflow
+              : 'clip',
+            containsSticky
+              ? scrollsOnY
+                ? 'auto'
+                : unrequestedOverflow
+              : 'clip',
           ),
         ),
       ) as ScrollableElementProps<E>;
@@ -767,6 +780,7 @@ export function useScrollableArea({
       overscroll,
       state,
       stickyContainment,
+      unrequestedOverflow,
     ],
   );
 

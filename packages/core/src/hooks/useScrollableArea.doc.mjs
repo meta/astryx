@@ -107,7 +107,7 @@ export const docsDense = {
     'Composes logical-axis scrolling into caller-owned viewport/content elements with stable effective-axis and edge state.',
   paramDescriptions: {
     options:
-      'axis, fixed/automatic keyboard owner, allow/contain overscroll policy, and fitting Sticky containment.',
+      'axis, fixed/automatic keyboard owner, allow/contain overscroll policy, fitting Sticky containment, and the non-scrolling overflow mode used while Sticky containment is active.',
   },
   returnDescriptions: {
     getViewportProps:
