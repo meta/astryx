@@ -854,17 +854,32 @@ function checkPlacement(cwd, dir, where, retry) {
   if (twin) {
     // A twin of a folder on the way: the same path through the folder that
     // is there. A twin of the folder itself: the first free name beside it.
-    const rel = path.relative(path.dirname(twin), dir).split(path.sep);
+    const base = path.dirname(twin);
+    const rel = path.relative(base, dir).split(path.sep);
+    // Both spellings are folders already: no path through either is free,
+    // so the way on is a new folder beside them.
+    const bothThere = rel.length > 1 && fs.existsSync(path.join(base, rel[0]));
     let free = path.join(twin, ...rel.slice(1));
-    if (rel.length === 1) {
-      free = `${dir}-2`;
-      for (let n = 3; fs.existsSync(free) || twinBeside(free); n++)
-        free = `${dir}-${n}`;
+    if (rel.length === 1 || bothThere) {
+      const start = rel.length === 1 ? dir : path.join(base, 'theme-preview');
+      free = start;
+      for (let n = 2; fs.existsSync(free) || twinBeside(free); n++)
+        free = `${start}-${n}`;
     }
+    const existing = fs.existsSync(path.join(dir, PREVIEW_DATA));
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `${where} is no place for the preview: ${shownDir(cwd, twin)}/ differs from it only in case, and on macOS and Windows they are one folder, so the project could not be checked out there.`,
-      {run: [retry(shown(cwd, free))]},
+      `${where} is no place for the preview: ${shownDir(cwd, twin)}/ differs from it only in case, and on macOS and Windows they are one folder, so the project could not be checked out there.${existing ? ` The preview already there can still be removed.` : ''}`,
+      {
+        run: [
+          retry(shown(cwd, free)),
+          ...(existing
+            ? [
+                `${PREVIEW} remove --path ${quoteCommandArgument(shownDir(cwd, dir))}`,
+              ]
+            : []),
+        ],
+      },
     );
   }
   if (!app) return;
@@ -1116,9 +1131,11 @@ const STARTER = path.join(CLI_PACKAGE, 'assets', 'preview-app');
  * @param {string} file absolute
  * @param {string} root absolute
  * @param {string} what what the path is, for the refusal
+ * @param {{cwd?: string, pf?: string}} [opts] `cwd`: paths in the refusal
+ *   are shown from it; `pf`: the caller's --path flag, for the suggestion
  * @returns {string}
  */
-function confined(file, root, what) {
+function confined(file, root, what, opts = {}) {
   try {
     return assertWithin(file, root, {allowAbsolute: true, label: what});
   } catch (e) {
@@ -1137,12 +1154,14 @@ function confined(file, root, what) {
         } catch {
           // Not there: look at its folder.
         }
+      const at = (/** @type {string} */ f) =>
+        opts.cwd ? shown(opts.cwd, f) || '.' : f;
       refuse(
         E.ERR_PATH_TRAVERSAL,
         link == null
-          ? `${what} names ${file}, which is outside ${root}.`
-          : `${link.at} is a link to ${link.to}, outside ${root}; the preview never writes through a link.`,
-        {run: [`${PREVIEW} list`]},
+          ? `${what} names ${at(file)}, which is outside ${at(root)}.`
+          : `${at(link.at)} is a link to ${link.to}, outside ${at(root)}; the preview never writes through a link.`,
+        {run: [`${PREVIEW} list${opts.pf ?? ''}`]},
       );
     }
     throw e;
@@ -1454,6 +1473,8 @@ function previewProblem(d) {
       f.split('/').some(x => x === '' || x === '.')
     )
       return `"files" holds ${JSON.stringify(f)}, which is not a file path relative to the folder`;
+    else if (f.split('/').includes('..'))
+      return `"files" holds ${JSON.stringify(f)}, which leads outside the folder (${OUTSIDE_FIX})`;
   if (
     d.hashes != null &&
     (typeof d.hashes !== 'object' ||
@@ -1506,15 +1527,21 @@ function holdsApp(cwd, dir) {
   );
 }
 
+/** What a record entry that leads outside the folder takes. */
+const OUTSIDE_FIX = `${PREVIEW} remove drops it and deletes nothing outside`;
+
 /**
  * The preview's data, null when the folder has none; a refusal when the
  * file is there but unreadable or of the wrong shape.
  * @param {string} cwd
  * @param {string} dir
  * @param {string} [pf] the caller's --path flag, for the refusal
+ * @param {{dropped?: string[]}} [opts] `dropped`: entries of "files" that
+ *   lead outside the folder are taken out and collected here, as `remove`
+ *   does
  * @returns {PreviewData | null}
  */
-function readPreview(cwd, dir, pf = '') {
+function readPreview(cwd, dir, pf = '', opts = {}) {
   /** @type {string} */
   let text;
   try {
@@ -1538,6 +1565,14 @@ function readPreview(cwd, dir, pf = '') {
       `it is not valid JSON (${/** @type {Error} */ (e).message})`,
       pf,
     );
+  }
+  // `remove` drops an entry that leads outside the folder, and deletes
+  // nothing there.
+  if (opts.dropped && data && Array.isArray(data.files)) {
+    const outside = (/** @type {unknown} */ f) =>
+      typeof f === 'string' && f.split('/').includes('..');
+    for (const f of data.files) if (outside(f)) opts.dropped.push(f);
+    data.files = data.files.filter((/** @type {unknown} */ f) => !outside(f));
   }
   const problem = previewProblem(data);
   if (problem) damagedPreview(cwd, dir, problem, pf);
@@ -4033,7 +4068,9 @@ async function removePreview(page, options, box) {
   }
   const recovered = recoverPreview(cwd, at.dir);
   box.note = recovered;
-  const data = readPreview(cwd, at.dir, pf);
+  /** @type {string[]} */
+  const dropped = [];
+  const data = readPreview(cwd, at.dir, pf, {dropped});
   if (!data) {
     // A folder that holds the app takes no preview: the way on is the
     // preview elsewhere, or a new one in its own folder.
@@ -4065,11 +4102,15 @@ async function removePreview(page, options, box) {
   // theme-preview.json is a file anyone can edit: every path in it must
   // stay in the route folder before anything is removed.
   const inside = (/** @type {string} */ rel) =>
-    confined(path.join(at.dir, rel), at.dir, `${PREVIEW_DATA} names`);
+    confined(path.join(at.dir, rel), at.dir, PREVIEW_DATA, {cwd, pf});
   for (const rel of data.files) inside(rel);
   for (const p of data.pages) inside(`${p.file}.tsx`);
   /** @type {string[]} */
   const notes = recovered ? [recovered] : [];
+  if (dropped.length)
+    notes.push(
+      `dropped ${dropped.map(f => JSON.stringify(f)).join(', ')} from ${PREVIEW_DATA}: ${dropped.length > 1 ? 'they lead' : 'it leads'} outside the folder, so nothing there was deleted`,
+    );
   /** @type {string[]} */
   const kept = [];
   /** @type {string[]} */

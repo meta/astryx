@@ -552,7 +552,7 @@ describe('preview remove', () => {
     expect((await themeEditPreviewList({cwd})).data.folder).toBe(null);
   }, 120_000);
 
-  it('refuses a theme-preview.json path that leads outside the route folder, deleting nothing', async () => {
+  it('drops a theme-preview.json path that leads outside the route folder, deleting nothing there', async () => {
     const dir = path.join(cwd, 'src/app/escape');
     fs.mkdirSync(path.join(dir, 'pages'), {recursive: true});
     fs.writeFileSync(path.join(cwd, 'keep-me.txt'), 'keep\n');
@@ -566,10 +566,13 @@ describe('preview remove', () => {
         files: ['page.tsx', '../../../keep-me.txt', 'theme-preview.json'],
       }),
     );
-    const r = await refusal(() =>
-      themeEditPreviewRemove(undefined, {cwd, path: 'src/app/escape'}),
+    const r = await themeEditPreviewRemove(undefined, {
+      cwd,
+      path: 'src/app/escape',
+    });
+    expect(r.data.notes.join(' ')).toContain(
+      'dropped "../../../keep-me.txt" from theme-preview.json',
     );
-    expect(r.code).toBe('ERR_PATH_TRAVERSAL');
     expect(read('keep-me.txt')).toBe('keep\n');
     expect(fs.existsSync(path.join(dir, 'page.tsx'))).toBe(true);
     fs.rmSync(dir, {recursive: true, force: true});

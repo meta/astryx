@@ -2289,4 +2289,69 @@ describe('final pass 5', () => {
       rm('src/app/ur');
     }
   }, 120_000);
+
+  it('suggests a free folder when both spellings of a folder are there, and remove for a preview there', async () => {
+    fs.mkdirSync(path.join(cwd, 'src/app/blog'), {recursive: true});
+    fs.mkdirSync(path.join(cwd, 'src/app/Blog'), {recursive: true});
+    try {
+      for (const where of ['src/app/blog/tp', 'src/app/Blog/tp']) {
+        const r = await refusal(() =>
+          themeEditPreviewAdd(undefined, {cwd, path: where}),
+        );
+        expect(r.run[0], where).toContain('--path src/app/theme-preview');
+      }
+      write('src/app/blog/tp/theme-preview.json', '{}');
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/app/blog/tp'}),
+      );
+      expect(r.message).toContain(
+        'The preview already there can still be removed',
+      );
+      expect(r.run).toContain(
+        'astryx experimental theme preview remove --path src/app/blog/tp',
+      );
+    } finally {
+      rm('src/app/blog');
+      rm('src/app/Blog');
+    }
+  });
+
+  it('calls a record entry that leads outside damaged, and remove drops it, deleting nothing there', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/p',
+    });
+    try {
+      const file = 'src/app/p/theme-preview.json';
+      const data = JSON.parse(read(file));
+      data.files.push('../layout.tsx');
+      write(file, JSON.stringify(data));
+      for (const call of [
+        () => themeEditPreviewList({cwd, path: 'src/app/p'}),
+        () =>
+          themeEditPreviewAdd(undefined, {
+            cwd,
+            path: 'src/app/p',
+            template: 'login',
+          }),
+      ]) {
+        const r = await refusal(call);
+        expect(r.code).toBe('ERR_THEME_INVALID');
+        expect(r.message).toContain(
+          '"files" holds "../layout.tsx", which leads outside the folder',
+        );
+      }
+      const r = await themeEditPreviewRemove(undefined, {
+        cwd,
+        path: 'src/app/p',
+      });
+      expect(r.data.notes.join(' ')).toContain(
+        'dropped "../layout.tsx" from theme-preview.json: it leads outside the folder, so nothing there was deleted',
+      );
+      expect(exists('src/app/layout.tsx')).toBe(true);
+    } finally {
+      rm('src/app/p');
+    }
+  }, 120_000);
 });
