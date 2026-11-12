@@ -9,11 +9,12 @@
  * @position api/theme-edit — checks over the part data
  */
 
+import {AstryxError} from '../error.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {partForWord} from './_how-question.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {baseInstalled, baseThemeFile} from './_project.mjs';
+import {baseInstalled, baseThemeFile, installLine} from './_project.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   withFallbacks,
@@ -22,6 +23,7 @@ import {
   belowRange,
   fontShorthandParts,
   cssProperties,
+  familyListMeant,
   grammarText,
   initialOf,
   keywordsOf,
@@ -93,6 +95,9 @@ import {
   partComponentDocs,
   themeFiles,
   ownSourceTokenValues,
+  baseTopTokens,
+  baseComponentReads,
+  partRuleTokens,
   cssFamily,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
@@ -257,6 +262,30 @@ function typedPlain(v) {
 }
 
 /**
+ * A font pasted as a declaration (`font-family: Georgia, serif;`, from
+ * devtools or a stylesheet), as the family list it names; a `font:`
+ * shorthand gives its family. Null when the value is not a pasted
+ * declaration.
+ * @param {string} v
+ * @returns {string | null}
+ */
+export function pastedFont(v) {
+  const plain = typedPlain(v);
+  const m = /^(font-family|font)\s*:\s*(.*)$/i.exec(plain);
+  if (!m) return null;
+  const rest = m[2]
+    .replace(/;+\s*$/, '')
+    .replace(/\s*!\s*important\s*$/i, '')
+    .replace(/;+\s*$/, '')
+    .trim();
+  if (m[1].toLowerCase() === 'font-family') return rest || null;
+  const parts = fontShorthandParts(rest);
+  return parts && typeof parts['font-family'] === 'string'
+    ? parts['font-family']
+    : null;
+}
+
+/**
  * The values a value may have meant, when what is wrong is how it was
  * typed: plain (full-width characters, comments and a trailing `;` gone,
  * quotes around a whole non-font value dropped), and for a font list each
@@ -266,20 +295,52 @@ function typedPlain(v) {
  * @param {string} value
  */
 function valueMeant(type, value) {
-  let p = typedPlain(value)
+  // `!important` is not part of a token's value (the theme places its
+  // rules itself): the value without it.
+  /** @type {string} */
+  let p = (
+    type === 'font' || type === 'font-family'
+      ? (pastedFont(value) ?? value)
+      : typedPlain(value)
+  )
+    .replace(/;+\s*$/, '')
+    .replace(/\s*!\s*important\s*$/i, '')
     .replace(/;+\s*$/, '')
     .trim();
   const q = /^(["'])(.*)\1$/.exec(p);
   if (q && type !== 'font') p = q[2].trim();
   const out = [p];
-  if (type === 'font' || type === 'font-family')
-    out.push(
-      p
-        .split(',')
-        .map(f => cssFamily(f.trim().replace(/^["']|["']$/g, ''), true))
-        .join(', '),
-    );
+  if (type === 'font' || type === 'font-family') {
+    // A comma left out between families (`"Open Sans" serif`), read with
+    // css-tree.
+    const listed = familyListMeant(p);
+    if (listed) out.push(listed);
+    // Each family quoted as CSS needs it, only when no family holds a
+    // quote inside (the pieces are whole names).
+    const pieces = p.split(',').map(f => f.trim().replace(/^["']|["']$/g, ''));
+    if (!listed && pieces.every(f => !/["'\\]/.test(f)))
+      out.push(pieces.map(f => cssFamily(f, true)).join(', '));
+  }
   return [...new Set(out)].filter(x => x && x !== value.trim());
+}
+
+/**
+ * Whether a value is one length that works inside calc(): a length with a
+ * unit, a variable (with a fallback that is one too), or calc(), min(),
+ * max() or clamp() giving a length; never several values, a bare number
+ * (calc() cannot add one to a length, 0 included), a percentage or a
+ * keyword.
+ * @param {string} v
+ * @returns {boolean}
+ */
+function oneLength(v) {
+  const t = v.trim();
+  if (splitTop(t, ' ').length !== 1) return false;
+  const ref = /^var\(\s*--[a-z0-9-]+\s*(?:,(.*))?\)$/i.exec(t);
+  if (ref) return ref[1] == null || oneLength(ref[1]);
+  if (MATH_FUNCTION.test(t)) return matchType('length', t) != null;
+  const n = cssNumber(t);
+  return !!n && !!n.unit && n.unit !== '%';
 }
 
 /** The size units a typo is read against. */
@@ -518,6 +579,13 @@ export function storedProblems(ctx, slug, data, skip = '') {
   for (const s of data.settings) {
     if (s.source !== 'token' || s.thing === skip || !(s.thing in TOKENS))
       continue;
+    // A var() a hand edit put in that names no design token reads nothing,
+    // as set refuses it.
+    const bad = unknownVarRef(String(s.value ?? ''), TOKENS, s.thing);
+    if (bad) {
+      found.push({setting: s, why: bad.message});
+      continue;
+    }
     try {
       checkTypedValue(
         ctx.C.typeOf(s.thing),
@@ -629,7 +697,7 @@ function checkTypedValue(
   if (!isSafeValue(value))
     refuse(
       E.ERR_THEME_BAD_VALUE,
-      `"${value}" cannot be a CSS value: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote.`,
+      `"${value}" cannot be a CSS value: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote.${/!\s*important/i.test(value) ? ' !important is not used: the theme places its own rules.' : ''}`,
       {
         run: [
           `${P} set ${slug} ${name} ${quoteCommandArgument(meant() ?? exampleOf(type, name))}`,
@@ -951,6 +1019,9 @@ function isShadow(value) {
  */
 function checkCycle(thing, value, TOKENS, data, cwd, scope = {}) {
   const own = cwd ? ownSourceTokenValues(cwd, data.name) : {};
+  // The base theme's own values come under the settings: a base that maps
+  // one token to another closes a loop too.
+  const baseTokens = cwd ? baseTopTokens(cwd, data.like) : new Map();
   const on = scope.on ?? null;
   const settings = [...data.settings].reverse();
   /**
@@ -968,14 +1039,29 @@ function checkCycle(thing, value, TOKENS, data, cwd, scope = {}) {
         (s.state ?? null) === (scope.state ?? null) &&
         (s.when ?? null) === (scope.when ?? null),
     );
-    return (same ?? onPart.find(s => s.state == null && s.when == null))?.value;
+    const set = (same ?? onPart.find(s => s.state == null && s.when == null))
+      ?.value;
+    if (set !== undefined) return set;
+    // Else what the part's plain rule holds as built: the own source's and
+    // the base theme's part rules (neutral's progress-bar reads
+    // --color-border-emphasized).
+    if (scope.state || scope.when || !cwd) return undefined;
+    const rule = partRule().get(t);
+    return rule ?? undefined;
   };
+  /** @type {Map<string, string | null> | null} */
+  let rule = null;
+  const partRule = () =>
+    (rule ??= on
+      ? partRuleTokens(/** @type {string} */ (cwd), data.name, data.like, on)
+      : new Map());
   /** @param {string} t */
   const globalValue = t =>
     String(
       (Object.hasOwn(own, t) ? own[t] : null) ??
         settings.find(s => s.source === 'token' && s.thing === t && !s.on)
           ?.value ??
+        baseTokens.get(t) ??
         TOKENS[t] ??
         '',
     );
@@ -1212,6 +1298,94 @@ export function checkSetting(
   flags,
   unset = false,
 ) {
+  // The font dial's value as pasted from a stylesheet (`Georgia, serif;`,
+  // a comment, `!important`): a refusal suggests the font it names, when
+  // set takes that.
+  // A font pasted with its property name is the family list it names.
+  if (
+    !unset &&
+    typeof value === 'string' &&
+    (thing === 'font' ||
+      (thing.startsWith('--') && ctx.C.typeOf(thing) === 'font'))
+  ) {
+    const pasted = pastedFont(value);
+    if (pasted) value = pasted;
+  }
+  if (thing === 'font' && !unset && typeof value === 'string') {
+    const meant = typedPlain(value)
+      .replace(/;+\s*$/, '')
+      .replace(/\s*!\s*important\s*$/i, '')
+      .replace(/;+\s*$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (meant && meant !== value.trim())
+      try {
+        return checkSettingAsTyped(ctx, slug, data, thing, value, flags);
+      } catch (e) {
+        try {
+          checkSettingAsTyped(ctx, slug, data, thing, meant, flags);
+        } catch {
+          throw e;
+        }
+        if (e instanceof AstryxError)
+          e.suggestions = [
+            {
+              name: `${P} set ${slug} font ${quoteCommandArgument(meant)}${flags.on ? ` --on ${quoteCommandArgument(flags.on)}` : ''}`,
+              reason: 'do this instead',
+            },
+          ];
+        throw e;
+      }
+  }
+  const s = checkSettingAsTyped(ctx, slug, data, thing, value, flags, unset);
+  // A var() with a fallback always gives a value; a name one slip from a
+  // design token is noted as a likely typo, and the setting stands.
+  if (!unset && typeof value === 'string' && !s.note) {
+    const typo = fallbackVarTypo(value, ctx.project.core.tokenDefaults ?? {});
+    if (typo) s.note = typo;
+  }
+  return s;
+}
+
+/**
+ * A note for a var() with a fallback whose name is a letter or two off a
+ * design token (`var(--spacing-xl, 2rem)` when the token is `--spacing-x1`):
+ * the fallback shows until it is fixed. Null when there is none.
+ * @param {string} v
+ * @param {Record<string, unknown>} TOKENS
+ */
+function fallbackVarTypo(v, TOKENS) {
+  for (const [, name] of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*,/gi)) {
+    if (name in TOKENS || name.startsWith('--_')) continue;
+    const near = nearest(name, Object.keys(TOKENS)).filter(
+      n => levenshteinDistance(n, name) <= 2,
+    );
+    if (near.length)
+      return `${name} is not a design token, so its fallback always shows; did you mean ${near[0]}?`;
+  }
+  return null;
+}
+
+/**
+ * checkSetting for the value as typed.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} thing
+ * @param {string | undefined} value
+ * @param {SetFlags} flags
+ * @param {boolean} [unset]
+ * @returns {import('./_settings.mjs').Setting}
+ */
+function checkSettingAsTyped(
+  ctx,
+  slug,
+  data,
+  thing,
+  value,
+  flags,
+  unset = false,
+) {
   const s = checkOne(ctx, slug, data, thing, value, flags, unset);
   const why = unset ? null : valueProblem(s);
   if (why)
@@ -1275,42 +1449,20 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         run: [`${P} ${unset ? 'undo' : 'set'} --help`],
       });
   // A value pasted over several lines is one value.
-  const v = (value ?? '')
-    .replace(/\s*[\r\n]+\s*/g, ' ')
-    .replace(/\t+/g, ' ')
-    .trim();
+  const v = normalValue(thing, value ?? '');
   // A var() that misspells a design token would read nothing.
-  if (!unset)
-    for (const [, name, comma] of v.matchAll(
-      /var\(\s*(--[a-z0-9-]+)\s*(,)?/gi,
-    )) {
-      if (name in TOKENS || name.startsWith('--_')) continue;
-      const near = nearest(name, Object.keys(TOKENS)).filter(
-        n => levenshteinDistance(n, name) <= 2,
-      );
-      // Without a fallback, a variable no design token names reads
-      // nothing; var(--x, <value>) falls back to the value.
-      if (!near.length && !comma && !DIALS[thing])
-        refuse(
-          E.ERR_THEME_UNKNOWN_TOKEN,
-          `${name} is not a design token, so var(${name}) would read nothing. Give a fallback (var(${name}, <value>)) for a variable your app sets, or use a design token.`,
-          {
-            didYouMean: nearest(name, Object.keys(TOKENS)).slice(0, 3),
-            run: [`${HOW} --list tokens`],
-          },
-        );
-      if (near.length)
-        refuse(
-          E.ERR_THEME_UNKNOWN_TOKEN,
-          `${name} is not a design token, so var(${name}) would read nothing.`,
-          {
-            didYouMean: near,
-            run: [
-              `${HOW} --list tokens ${near[0].replace(/^--/, '').split('-')[0]}`,
-            ],
-          },
-        );
-    }
+  if (!unset) {
+    const bad = unknownVarRef(v, TOKENS, thing);
+    if (bad)
+      refuse(E.ERR_THEME_UNKNOWN_TOKEN, bad.message, {
+        didYouMean: bad.near,
+        run: [
+          bad.close
+            ? `${HOW} --list tokens ${bad.near[0].replace(/^--/, '').split('-')[0]}`
+            : `${HOW} --list tokens`,
+        ],
+      });
+  }
   // A placeholder copied from a suggestion is not a value.
   if (!unset && /<[a-z][\w -]*>/i.test(v))
     refuse(
@@ -2653,7 +2805,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         const meant = v
           .toLowerCase()
           .replace(/^base\s*[=:]\s*/, '')
-          .trim();
+          .trim()
+          .replace(/^@astryxdesign\/theme-/, '')
+          .replace(/^theme-/, '');
         // Only a base this project has installed is suggested; a theme
         // made here is never a base.
         const bases = [
@@ -2662,7 +2816,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         ];
         // The base named in other letters is the one meant; a guess is
         // only among installed bases.
-        const near = bases.includes(meant) ? [meant] : nearest(meant, bases);
+        const near =
+          bases.includes(meant) || LIKE.includes(meant)
+            ? [meant]
+            : nearest(meant, bases);
+        // A built-in base named that is not installed: install it, then the
+        // same set.
+        const install =
+          LIKE.includes(meant) && !baseInstalled(ctx.project, meant)
+            ? [installLine(ctx.project.cwd, [`@astryxdesign/theme-${meant}`])]
+            : [];
         const madeHere = fs.existsSync(themeFiles(ctx.project.cwd, v).settings);
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -2671,7 +2834,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             didYouMean: near,
             // With nothing near, every base that works here, none first.
             run: near[0]
-              ? [`${P} set ${slug} base ${near[0]}`]
+              ? [...install, `${P} set ${slug} base ${near[0]}`]
               : [
                   'none',
                   ...LIKE.filter(b => baseInstalled(ctx.project, b)),
@@ -2763,11 +2926,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     if (ctx.unchecked) return s;
     const parts = partsOf(ctx, s);
     if (parts.length) {
+      // A part the base theme's own rule makes read the token reads it.
       const results = parts.map(
         t =>
           /** @type {[string, import('./_compiler.mjs').CheckFailure | null]} */ ([
             t,
-            C.checkTokenOn(slug, t, thing, v, P),
+            baseComponentReads(ctx.project.cwd, data.like, t).has(thing)
+              ? null
+              : C.checkTokenOn(slug, t, thing, v, P),
           ]),
       );
       const recorded = results.filter(([, r]) => !r?.soft);
@@ -2902,6 +3068,28 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         !/radius/.test(prop);
       const side = /^padding-/.test(prop);
       const density = prop === 'padding' && /^density:/.test(s.when ?? '');
+      // Core reads the composer's padding inside calc() (the send button's
+      // radius, the status row), as its own default var(--spacing-3) is:
+      // one length works there, whether a length, a variable, or calc(),
+      // min(), max() or clamp() giving one.
+      if (prop === 'padding' && !density && !oneLength(v)) {
+        const first = splitTop(v.trim(), ' ')[0] ?? '';
+        const n = cssNumber(first);
+        const fix = oneLength(first)
+          ? first
+          : n && !n.unit
+            ? `${n.value}px`
+            : '12px';
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `${s.on} reads its padding inside calc() (the send button's corners, the status row), where only one length works: a length, a variable, or calc(), min(), max() or clamp() giving one; not "${v.trim()}".`,
+          {
+            run: [
+              `${P} set ${slug} padding ${quoteCommandArgument(fix)} --on ${s.on}`,
+            ],
+          },
+        );
+      }
       if (surface || side || density)
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -3312,3 +3500,53 @@ const dialWrites = token =>
 
 /** The aspects `how` answers at the whole-theme level. */
 export const ASPECTS = [...Object.keys(GROUPS), 'colors'];
+
+/**
+ * A setting's value as set reads it: one line, and tabs as spaces; in a font
+ * value every run of spaces or tabs is one space, so `'Open  Sans'` and
+ * `'Open\tSans'` both name Open Sans.
+ * @param {string} thing
+ * @param {string} value
+ */
+export function normalValue(thing, value) {
+  const one = value.replace(/\s*[\r\n]+\s*/g, ' ');
+  return (
+    thing === 'font' ? one.replace(/[ \t]+/g, ' ') : one.replace(/\t+/g, ' ')
+  ).trim();
+}
+
+/**
+ * The first var() in a value that names no design token and would read
+ * nothing (no fallback), or one a letter or two off a token, else null.
+ * Dials take their own words, so a dial's var() with no near token passes.
+ * @param {string} v
+ * @param {Record<string, unknown>} TOKENS
+ * @param {string} thing
+ * @returns {{message: string, near: string[], close: boolean} | null}
+ */
+export function unknownVarRef(v, TOKENS, thing) {
+  for (const [, name, comma] of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/gi)) {
+    if (name in TOKENS || name.startsWith('--_')) continue;
+    // A fallback always gives a value: never "reads nothing" (a likely
+    // typo is noted when the setting is made).
+    if (comma) continue;
+    const near = nearest(name, Object.keys(TOKENS)).filter(
+      n => levenshteinDistance(n, name) <= 2,
+    );
+    if (near.length)
+      return {
+        message: `${name} is not a design token, so var(${name}) would read nothing.`,
+        near,
+        close: true,
+      };
+    // Without a fallback, a variable no design token names reads nothing;
+    // var(--x, <value>) falls back to the value.
+    if (!comma && !DIALS[thing])
+      return {
+        message: `${name} is not a design token, so var(${name}) would read nothing. Give a fallback (var(${name}, <value>)) for a variable your app sets, or use a design token.`,
+        near: nearest(name, Object.keys(TOKENS)).slice(0, 3),
+        close: false,
+      };
+  }
+  return null;
+}

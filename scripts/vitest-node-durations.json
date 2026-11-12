@@ -952,7 +952,7 @@
     "packages/cli/test/inv28-package-provenance.test.mjs": 8.4,
     "packages/cli/test/invalid-component-metadata.regression.test.mjs": 3.7,
     "packages/cli/test/packed-command-list.test.mjs": 6.1,
-    "packages/cli/test/packed-gather-cache.changes.test.mjs": 177.8,
+    "packages/cli/test/packed-gather-cache.changes.test.mjs": 207.8,
     "packages/cli/test/packed-gather-cache.fresh.test.mjs": 165.7,
     "packages/cli/test/packed-gather-cache.installed.test.mjs": 160.9,
     "packages/cli/test/packed-gather-cache.records.test.mjs": 144.4,

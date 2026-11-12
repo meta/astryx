@@ -50,6 +50,7 @@ import {
   editorCompileProblem,
   editorThemeHold,
   editorThemeRefusal,
+  editorMissingSource,
   editorThemeTemplate,
   showSections,
 } from '../../../../api/theme-edit/_adapter.mjs';
@@ -1274,6 +1275,7 @@ export function registerExperimentalTheme(group, program) {
       build: 'compile',
       explain: editorThemeRefusal,
       preflight: editorCompileProblem,
+      missingSource: editorMissingSource,
       template: editorThemeTemplate,
       hold: editorThemeHold,
     },

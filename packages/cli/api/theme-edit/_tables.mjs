@@ -732,6 +732,12 @@ export const DESIGN = wordTable(
 );
 
 /**
+ * Parts drawn by a Card (their class sits on the Card's own element), so
+ * their padding is the card's padding variables.
+ */
+export const CARD_LIKE = ['clickable-card', 'selectable-card'];
+
+/**
  * Parts whose theme class sits on a transparent wrapper while Core draws the
  * visible box on an inner element with no class of its own (see
  * /core-gaps: the composer body). Padding reaches the box only through the
