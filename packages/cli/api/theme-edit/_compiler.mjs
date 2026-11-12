@@ -85,6 +85,8 @@ export function makeCompiler(project, parts) {
   }
   /** @param {string} tok */
   const typeOf = tok => TYPE[tok] ?? 'other';
+  /** Whether Core defines the token. @param {string} tok */
+  const isToken = tok => Object.hasOwn(TYPE, tok);
 
   /** @param {string} p */
   const groupOfProp = p =>
@@ -539,6 +541,7 @@ export function makeCompiler(project, parts) {
   return {
     MAP,
     typeOf,
+    isToken,
     propsReading,
     feeds,
     fmtFeeds,

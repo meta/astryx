@@ -54,14 +54,18 @@ describe('astryx theme template', () => {
   it('replaces it with --overwrite', async () => {
     fs.writeFileSync(path.join(tmpDir, 'theme.template.ts'), '// mine\n');
 
-    const {status} = await runCli(['theme', 'template', '--overwrite'], {cwd: tmpDir});
+    const {status} = await runCli(['theme', 'template', '--overwrite'], {
+      cwd: tmpDir,
+    });
 
     expect(status).toBe(0);
     expect(read('theme.template.ts')).toMatch(/defineTheme/);
   });
 
   it('returns a theme.template envelope under --json', async () => {
-    const {status, stdout} = await runCli(['--json', 'theme', 'template'], {cwd: tmpDir});
+    const {status, stdout} = await runCli(['--json', 'theme', 'template'], {
+      cwd: tmpDir,
+    });
 
     expect(status).toBe(0);
     const payload = JSON.parse(stdout);
@@ -74,13 +78,18 @@ describe('astryx theme template', () => {
   });
 
   it('refuses a path that escapes the project', async () => {
-    const {status, stderr} = await runCli(['theme', 'template', '../escaped.ts'], {
-      cwd: tmpDir,
-    });
+    const {status, stderr} = await runCli(
+      ['theme', 'template', '../escaped.ts'],
+      {
+        cwd: tmpDir,
+      },
+    );
 
     expect(status).toBe(1);
     expect(stderr).toMatch(/outside the project root/);
-    expect(fs.existsSync(path.join(path.dirname(tmpDir), 'escaped.ts'))).toBe(false);
+    expect(fs.existsSync(path.join(path.dirname(tmpDir), 'escaped.ts'))).toBe(
+      false,
+    );
   });
 
   it('fails a write with ERR_WRITE_FAILED under --json', async () => {
@@ -136,5 +145,49 @@ describe('theme template and eject next steps', () => {
       cwd: tmpDir,
     });
     expect(stdout).toContain(` theme build 'it'\\''s/neutralTheme.ts'.`);
+  });
+});
+
+describe('astryx theme template outside a project', () => {
+  it('writes in the current folder, as released CLIs did, and warns how to write it at a project root', async () => {
+    const bare = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-template-bare-'),
+    );
+    try {
+      const text = await runCli(['theme', 'template'], {cwd: bare});
+      expect(text.status).toBe(0);
+      expect(text.stdout).toMatch(/Wrote theme\.template\.ts/);
+      expect(text.stderr).toMatch(
+        /no package\.json is in this folder or above it, so the template is written here/,
+      );
+      expect(text.stderr).not.toMatch(/DEP-|deprecated|next minor|refuse/);
+      expect(fs.existsSync(path.join(bare, 'theme.template.ts'))).toBe(true);
+
+      const json = await runCli(['--json', 'theme', 'template', 'x.ts'], {
+        cwd: bare,
+      });
+      expect(json.status).toBe(0);
+      expect(JSON.parse(json.stdout).data).toEqual({
+        path: 'x.ts',
+        written: true,
+        reason: null,
+      });
+      // A text-only warning: silent under --json, with nothing added to meta.
+      expect(json.stderr).not.toMatch(/no package\.json/);
+      expect(JSON.parse(json.stdout).meta?.deprecations).toBeUndefined();
+      expect(text.stderr).toMatch(
+        /run `npm init -y` here first, to write it at a project root/,
+      );
+      // A file left as it is gets no warning.
+      const again = await runCli(['theme', 'template'], {cwd: bare});
+      expect(again.stderr).not.toMatch(/no package\.json/);
+    } finally {
+      fs.rmSync(bare, {recursive: true, force: true});
+    }
+  });
+
+  it('warns nothing inside a project', async () => {
+    const {stderr} = await runCli(['theme', 'template'], {cwd: tmpDir});
+    expect(stderr).not.toMatch(/no package\.json/);
   });
 });

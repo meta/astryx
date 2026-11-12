@@ -16,6 +16,7 @@ import {createRequire} from 'node:module';
 import {
   findCarriedCoreDir,
   findPackageRoot,
+  projectWritePath,
   requireCoreDir,
 } from '../../foundation/fs/paths.mjs';
 import {tryLock, userCacheDir} from '../../foundation/release/cache.mjs';
@@ -655,15 +656,17 @@ export function ejectThemeFiles(
   // The fork lands in the project, as list and add read it: the default root
   // is the project's, and a relative [path] is read from the working folder
   // but must stay inside the project.
-  const projectDir = findPackageRoot(cwd) ?? path.resolve(cwd);
-  // A Windows-style path names the same folders on every platform, as
-  // compile reads it; a folder name with a backslash in it is never meant.
-  const targetPath = typedPath?.replace(/\\/g, '/');
-  const target = !targetPath
-    ? defaultEjectTarget(theme.slug)
-    : path.isAbsolute(targetPath)
-      ? targetPath
-      : path.relative(projectDir, path.resolve(cwd, targetPath)) || '.';
+  // Read as every theme command reads a path it writes; a backslash
+  // separates folders on every platform.
+  const {
+    projectDir,
+    typed: targetPath,
+    relative: target,
+  } = projectWritePath(
+    cwd,
+    typedPath || undefined,
+    defaultEjectTarget(theme.slug),
+  );
   let resolvedDir;
   try {
     resolvedDir = assertWithin(target, projectDir, {

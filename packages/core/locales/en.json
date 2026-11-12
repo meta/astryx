@@ -1035,6 +1035,10 @@
     "defaultMessage": "Table",
     "description": "Fallback screen-reader-only accessible name for a data-table region when the consumer provides none. Noun (\"a table\"), not the verb \"to table\"."
   },
+  "@astryx.table.loadMore": {
+    "defaultMessage": "Load more",
+    "description": "Button that requests another batch of table rows. Verb phrase; shown while additional rows are available."
+  },
   "@astryx.table.noData": {
     "defaultMessage": "No data",
     "description": "Fallback empty-state text in the table body when there are zero rows. Neutral tone (not error-y); consumers commonly override with something specific like \"No results\"."

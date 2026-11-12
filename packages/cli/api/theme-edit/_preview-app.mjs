@@ -204,11 +204,12 @@ function readNextConfig(cwd) {
     basePath: undefined,
     distDir: undefined,
   };
+  // The order Next loads them in; it refuses next.config.cjs.
   for (const name of [
-    'next.config.mjs',
     'next.config.js',
+    'next.config.mjs',
     'next.config.ts',
-    'next.config.cjs',
+    'next.config.mts',
   ]) {
     /** @type {string} */
     let text;
@@ -270,6 +271,11 @@ function readNextConfig(cwd) {
     let exported = null;
     for (const st of body) {
       if (st.type === 'ExportDefaultDeclaration') exported = st.declaration;
+      // export {config as default}
+      if (st.type === 'ExportNamedDeclaration' && !st.source)
+        for (const sp of st.specifiers ?? [])
+          if ((sp.exported?.name ?? sp.exported?.value) === 'default')
+            exported = sp.local;
       if (
         st.type === 'ExpressionStatement' &&
         st.expression.type === 'AssignmentExpression' &&
@@ -281,6 +287,66 @@ function readNextConfig(cwd) {
     }
     const config = exported && configOf(exported);
     if (!config) return exported ? unknown : none;
+    const wrapped = resolve(exported)?.type === 'CallExpression';
+    // Changes to the config after it is made: `config.key = value` sets a
+    // key (the last one counts), and anything else (Object.assign, a
+    // computed key) makes every key unknown.
+    const names = new Set(
+      [...consts]
+        .filter(([, init]) => resolve(init) === config)
+        .map(([n]) => n),
+    );
+    /** @type {Map<string, any>} */
+    const later = new Map();
+    let changed = false;
+    // Only a statement at the top of the file surely runs: a key set inside
+    // an `if` or a function, or deleted, is known only by running it.
+    const UNSURE = Symbol('unsure');
+    const topLevel = new Set(
+      body
+        .filter(st => st.type === 'ExpressionStatement')
+        .map(st => st.expression),
+    );
+    /** @param {any} n */
+    const visit = n => {
+      if (!n || typeof n !== 'object') return;
+      if (Array.isArray(n)) return n.forEach(visit);
+      if (
+        n.type === 'AssignmentExpression' &&
+        n.left?.type === 'MemberExpression' &&
+        names.has(n.left.object?.name)
+      ) {
+        if (n.left.computed) changed = true;
+        else
+          later.set(
+            n.left.property.name,
+            topLevel.has(n) && n.operator === '=' ? n.right : UNSURE,
+          );
+      }
+      if (
+        n.type === 'UnaryExpression' &&
+        n.operator === 'delete' &&
+        n.argument?.type === 'MemberExpression' &&
+        names.has(n.argument.object?.name)
+      ) {
+        if (n.argument.computed) changed = true;
+        else later.set(n.argument.property.name, UNSURE);
+      }
+      if (
+        n.type === 'CallExpression' &&
+        n.arguments?.some(
+          (/** @type {any} */ a) =>
+            a.type === 'Identifier' && names.has(a.name),
+        ) &&
+        n.callee?.type === 'MemberExpression' &&
+        n.callee.object?.name === 'Object'
+      )
+        changed = true;
+      for (const [k, v] of Object.entries(n))
+        if (k !== 'loc' && k !== 'start' && k !== 'end') visit(v);
+    };
+    visit(body);
+    if (changed) return unknown;
     // The config's keys in order, with a spread of a constant object read
     // in place; a spread of anything else may set any key (`null`).
     /** @type {Array<{key: string, value: any} | null>} */
@@ -302,8 +368,10 @@ function readNextConfig(cwd) {
       }
     };
     flatten(config, 0);
-    /** The entry that sets a key last; null when an unreadable spread may; undefined when nothing does. @param {string} key */
+    /** The entry that sets a key last: a later assignment, else the last key; null when an unreadable spread may; undefined when nothing does. @param {string} key */
     const prop = key => {
+      if (later.has(key))
+        return later.get(key) === UNSURE ? null : {key, value: later.get(key)};
       for (let i = entries.length - 1; i >= 0; i--) {
         const e = entries[i];
         if (e === null) return null;
@@ -332,10 +400,13 @@ function readNextConfig(cwd) {
         const out = n.elements.map((/** @type {any} */ e) => str(e));
         return out.every((/** @type {any} */ e) => e != null) ? out : null;
       }),
-      basePath: value('basePath', n => {
-        const v = str(n);
-        return v == null ? null : v.replace(/\/+$/, '');
-      }),
+      // A wrapper such as withX(config) may add a basePath of its own.
+      basePath: wrapped
+        ? null
+        : value('basePath', n => {
+            const v = str(n);
+            return v == null ? null : v.replace(/\/+$/, '');
+          }),
       distDir: value('distDir', n => {
         const v = str(n);
         return v == null
@@ -3008,6 +3079,25 @@ async function addPreview(description, options, box) {
     options.theme != null
       ? ` --theme ${quoteCommandArgument(options.theme)}`
       : '';
+  // A default page's id (overview, components, colors), as `remove` takes
+  // it, asks for the default pages back: the same as a bare add.
+  const DEFAULT_IDS = ['overview', 'components', COLORS_PAGE.id];
+  const isDefault = (/** @type {unknown} */ v) =>
+    typeof v === 'string' && DEFAULT_IDS.includes(v.trim().toLowerCase());
+  // Beside another page asked for, it is refused below (drop one).
+  const blank = (/** @type {unknown} */ v) => v == null || !String(v).trim();
+  const askedId = [description, options.template]
+    .find(isDefault)
+    ?.trim()
+    .toLowerCase();
+  const again =
+    askedId != null &&
+    (blank(description) || isDefault(description)) &&
+    (blank(options.template) || isDefault(options.template));
+  if (again) {
+    description = undefined;
+    options = {...options, template: undefined};
+  }
   const said = (description ?? '').trim();
   const named =
     options.template == null ? null : String(options.template).trim();
@@ -3243,7 +3333,13 @@ async function addPreview(description, options, box) {
     writes.set(rel, w);
     if (!data.files.includes(rel)) data.files.push(rel);
     const had = data.pages.find(x => x.id === page.id);
-    if (!had) {
+    // A recorded page whose file is gone is added back, not refreshed.
+    if (!had || !fs.existsSync(path.join(at.dir, rel))) {
+      if (had) {
+        had.label = page.label;
+        added.push(page.id);
+        continue;
+      }
       data.pages.push({
         id: page.id,
         label: page.label,
@@ -3328,6 +3424,19 @@ async function addPreview(description, options, box) {
   const worn = data.theme;
   if (worn)
     await themeLocked(options, worn, () => recordPreview(cwd, worn, at.dir));
+  if (again)
+    notes.push(
+      `a default page's id brings back the default pages that are missing, as ${PREVIEW} add does`,
+    );
+  if (
+    askedId === COLORS_PAGE.id &&
+    !data.pages.some(p => p.id === COLORS_PAGE.id)
+  )
+    notes.push(
+      data.theme
+        ? `the Colors page shows a theme's generated colors, and ${data.theme} has none yet; it appears once it does: ${EDITOR} set ${data.theme} accent <color>`
+        : `the Colors page shows a theme's generated colors, and the preview wears the app's own theme; it appears with an editor theme that has colors: ${PREVIEW} add --theme <theme>`,
+    );
   return {
     type: 'themeEdit.previewAdd',
     data: {
@@ -3611,6 +3720,20 @@ export async function themeEditPreviewList(options = {}) {
   const themeMissing = Boolean(
     data?.theme && !fs.existsSync(themeFiles(cwd, data.theme).dir),
   );
+  if (at && fs.existsSync(path.join(at.dir, PENDING)))
+    notes.push(
+      `a preview change was stopped part way, so this list may be out of date; ${PREVIEW} add${pf} finishes it`,
+    );
+  // A page whose file is gone breaks the route, which still imports it.
+  const missing = new Set(
+    (data?.pages ?? [])
+      .filter(p => at && !fs.existsSync(path.join(at.dir, `${p.file}.tsx`)))
+      .map(p => p.id),
+  );
+  if (at && missing.size)
+    notes.push(
+      `${[...missing].join(', ')} ${missing.size > 1 ? 'are' : 'is'} listed, but ${missing.size > 1 ? 'their files are' : 'its file is'} gone, so the route does not build; ${PREVIEW} add${pf} writes ${missing.size > 1 ? 'them' : 'it'} again`,
+    );
   if (data?.theme && themeMissing) {
     const themes = editedThemes(cwd);
     notes.push(
@@ -3623,7 +3746,11 @@ export async function themeEditPreviewList(options = {}) {
       folder: at && data ? shownDir(cwd, at.dir) : null,
       theme: data?.theme ?? null,
       themeMissing,
-      pages: (data?.pages ?? []).map(x => ({id: x.id, label: x.label})),
+      pages: (data?.pages ?? []).map(x => ({
+        id: x.id,
+        label: x.label,
+        ...(missing.has(x.id) ? {missing: true} : {}),
+      })),
       notes,
     },
   };
@@ -3658,6 +3785,24 @@ async function removePreview(page, options, box) {
   const retry = (/** @type {string | null} */ p) =>
     `${PREVIEW} remove${page != null ? ` ${quoteCommandArgument(page)}` : ''}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
   const at = previewDir(cwd, options.path, {retry});
+  // The pages a stopped change was removing, read before it is finished.
+  /** @type {string[]} */
+  let removing = [];
+  try {
+    const pend = JSON.parse(
+      fs.readFileSync(path.join(at.dir, PENDING), 'utf8'),
+    );
+    const ids = (/** @type {any} */ r) =>
+      Array.isArray(r?.pages)
+        ? r.pages.map((/** @type {any} */ x) => String(x?.id))
+        : [];
+    const after = ids(pend?.record);
+    removing = ids(pend?.old).filter(
+      (/** @type {string} */ id) => !after.includes(id),
+    );
+  } catch {
+    // No stopped change, or a damaged one.
+  }
   const recovered = recoverPreview(cwd, at.dir);
   box.note = recovered;
   const data = readPreview(cwd, at.dir, pf);
@@ -3709,6 +3854,28 @@ async function removePreview(page, options, box) {
     one =
       data.pages.find(x => x.id === key) ??
       data.pages.find(x => x.id.toLowerCase() === key.toLowerCase());
+    // The same remove run again after it was stopped: the change just
+    // finished removed the page.
+    if (
+      !one &&
+      recovered &&
+      removing.some(id => id.toLowerCase() === key.toLowerCase())
+    )
+      return {
+        type: 'themeEdit.previewRemove',
+        data: {
+          folder,
+          removed: [],
+          kept: [],
+          missing: [],
+          rewritten: [],
+          notes: [
+            ...notes,
+            `${key} is no longer in the preview: the change that was stopped removed it`,
+          ],
+          pages: data.pages.map(x => x.id),
+        },
+      };
     if (!one)
       refuse(E.ERR_NOT_FOUND, `The preview has no page "${page}".`, {
         didYouMean: nearest(
