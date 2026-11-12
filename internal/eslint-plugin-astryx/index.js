@@ -11,6 +11,7 @@
  * - no-raw-paragraph: Disallows components from rendering a <p> by default (render <div> so any content composes)
  * - no-style-only-wrapper: Disallows div/span wrappers that only style a single Astryx component (use xstyle)
  * - no-nullish-jsx-guard: Flags `!= null` JSX render guards for rendered values (use isRenderable so false/''/true slots don't leak an empty element)
+ * - no-truthy-jsx-guard: Flags a truthiness guard on a ReactNode value in front of JSX (a 0 slot renders a stray "0" or is dropped; use isRenderable). Reads types, so it is not in the presets
  * - no-raw-intl-locale: Forbids raw Intl formatting/comparison outside the approved i18n infrastructure boundary, navigator.language(s) as a locale source, and date-helper calls without provider locale
  * - no-unguarded-ime-keydown: Flags an onKeyDown on an editable surface that branches on command keys without an IME composition guard (isImeKeyEvent/isComposing)
  * - no-physical-properties: Flags physical left/right CSS properties and unsafe logical-centering transform pairs
@@ -23,6 +24,9 @@
  * - no-light-dark-outside-theme: Flags CSS light-dark() in component source (a light/dark decision belongs to the theme layer, where a token pair reaches both schemes in every theme)
  * - no-core-internal-import: Keeps Core's internal subpaths (@astryxdesign/core/internal/*) inside Core and Lab
  * - no-internal-barrel-import: Flags a package-internal relative import that resolves to a folder's index (a barrel) instead of the defining module
+ * - no-prevent-default-in-passive-react-handler: Flags preventDefault() on the event in a React onWheel/onTouchStart/onTouchMove handler (React attaches those listeners as passive, so the call is ignored)
+ * - no-raw-private-attribute: Flags a private data-astryx-* attribute written by hand outside its owner module in packages/<package>/src/privateAttributes (INV23 lists the public ones)
+ * - no-comment-provenance: Flags record and claim ids, pull request and issue references, date stamps, and quoted MUST/SHALL text in source comments (the record links the code; `pnpm specs:for <path>` finds it)
  * - no-raw-color: Flags a raw colour value (hex, rgb(), hsl(), oklch(), …) anywhere in component source, including inside light-dark()/color-mix(), behind a const, in a template literal, or as a var() fallback — the shapes no-hardcoded-styles cannot see
  *
  * Philosophy: Strict for agents (CI), lenient for humans (local dev)
@@ -41,6 +45,8 @@ import noClassnameClobberRule from './no-classname-clobber.js';
 import noHardcodedAnchorRule from './no-hardcoded-anchor.js';
 import noRawParagraphRule from './no-raw-paragraph.js';
 import noNullishJsxGuardRule from './no-nullish-jsx-guard.js';
+import noTruthyJsxGuardRule from './no-truthy-jsx-guard.js';
+import noCommentProvenanceRule from './no-comment-provenance.js';
 import noRawIntlLocaleRule from './no-raw-intl-locale.js';
 import noUnguardedImeKeydownRule from './no-unguarded-ime-keydown.js';
 import noBorderShorthandRule from './no-border-shorthand.js';
@@ -64,6 +70,8 @@ import i18nKeyFormatRule from './i18n-key-format.js';
 import requireTableSectionRule from './require-table-section.js';
 import noLightDarkOutsideThemeRule from './no-light-dark-outside-theme.js';
 import noRawColorRule from './no-raw-color.js';
+import noRawPrivateAttributeRule from './no-raw-private-attribute.js';
+import noPreventDefaultInPassiveReactHandlerRule from './no-prevent-default-in-passive-react-handler.js';
 
 // =============================================================================
 // Rule: no-hardcoded-styles
@@ -345,6 +353,7 @@ const plugin = {
     'no-hardcoded-anchor': noHardcodedAnchorRule,
     'no-raw-paragraph': noRawParagraphRule,
     'no-nullish-jsx-guard': noNullishJsxGuardRule,
+    'no-truthy-jsx-guard': noTruthyJsxGuardRule,
     'no-raw-intl-locale': noRawIntlLocaleRule,
     'no-unguarded-ime-keydown': noUnguardedImeKeydownRule,
     'no-border-shorthand': noBorderShorthandRule,
@@ -368,6 +377,10 @@ const plugin = {
     'require-table-section': requireTableSectionRule,
     'no-light-dark-outside-theme': noLightDarkOutsideThemeRule,
     'no-raw-color': noRawColorRule,
+    'no-raw-private-attribute': noRawPrivateAttributeRule,
+    'no-prevent-default-in-passive-react-handler':
+      noPreventDefaultInPassiveReactHandlerRule,
+    'no-comment-provenance': noCommentProvenanceRule,
   },
   configs: {},
 };

@@ -10,7 +10,12 @@
  * the story's router component records, and new tabs the page opens.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   LINK_PATTERN,
   blockingResults,
@@ -32,7 +37,6 @@ import {
 import {LINK_A11Y_STATES, type LinkA11yRow} from './Link.a11y.states';
 
 const SUBJECT_SELECTOR = '[data-a11y-link]';
-const NEW_TAB_SETTLE_MS = 500;
 let storybook: StaticServer;
 
 interface NavigationWindow extends Window {
@@ -53,11 +57,17 @@ function storyUrl(id: string): string {
 
 async function countNavigations(
   page: Page,
-  opensNewTab: boolean,
+  cdp: CDPSession,
 ): Promise<() => Promise<number>> {
+  // The page reports each new tab as it opens one (`Page.windowOpen`), on
+  // this DevTools session. The tab's own page reaches the test later, once it
+  // starts, which can be seconds on a loaded runner: it is only closed.
   let newTabs = 0;
-  page.context().on('page', opened => {
+  await cdp.send('Page.enable');
+  cdp.on('Page.windowOpen', () => {
     newTabs += 1;
+  });
+  page.context().on('page', opened => {
     void opened.close();
   });
   await page.evaluate(() => {
@@ -71,16 +81,14 @@ async function countNavigations(
     });
   });
   return async () => {
-    // A new tab reaches the test through the browser's target events, after
-    // the click or key that opened it has returned. Give it time to arrive so
-    // a later reading cannot miss a navigation an earlier one started.
-    if (opensNewTab) {
-      await page.waitForTimeout(NEW_TAB_SETTLE_MS);
-    }
-    const inPage = await page.evaluate(
-      () => (window as NavigationWindow).__a11yLinkNavigations ?? 0,
-    );
-    return inPage + newTabs;
+    // Read on the same session as the tab reports. The session delivers each
+    // report before this reading's answer, so the count holds every tab that
+    // an earlier click or key opened.
+    const {result} = (await cdp.send('Runtime.evaluate', {
+      expression: 'window.__a11yLinkNavigations ?? 0',
+      returnByValue: true,
+    })) as {result: {value?: number}};
+    return (result.value ?? 0) + newTabs;
   };
 }
 
@@ -103,10 +111,7 @@ async function runState(
       const subject = page.locator(SUBJECT_SELECTOR);
       await subject.waitFor({state: 'visible'});
       await expect(subject).toHaveCount(1);
-      navigations = await countNavigations(
-        page,
-        state.id === 'external-new-tab',
-      );
+      navigations = await countNavigations(page, cdp);
       return createChromiumHarness({page, cdp, subject});
     },
     activations: async () => navigations(),

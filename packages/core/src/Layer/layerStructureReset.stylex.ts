@@ -27,5 +27,10 @@ export const layerStructureReset = stylex.create({
     // fallback. A value set on the inner Stepper, through its `stepper` theme
     // target, or by a caller style on this layer root still applies.
     '--step-connector-gap': 'initial',
+    // A container that wraps with `overflow-wrap: anywhere` passes it to the
+    // Text inside it (Text and Heading FR3). Text in a layer opened from such
+    // a container keeps its own `break-word`: `initial` makes the variable
+    // invalid, so Text falls back.
+    '--_astryx-text-overflow-wrap': 'initial',
   },
 });

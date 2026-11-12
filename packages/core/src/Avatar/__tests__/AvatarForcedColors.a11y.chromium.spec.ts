@@ -14,7 +14,7 @@
  *   Playwright's WebKit matches the forced-colors query but forces nothing)
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

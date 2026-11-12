@@ -27,7 +27,11 @@ export const docs = {
   },
   theming: {
     targets: [
-      {className: 'astryx-item', visualProps: ['density', 'align']},
+      {
+        className: 'astryx-item',
+        visualProps: ['density', 'align'],
+        states: ['highlighted', 'selected', 'disabled'],
+      },
       {className: 'astryx-item-swipe-panel', visualProps: ['side']},
       {className: 'astryx-item-swipe-action', visualProps: ['variant']},
     ],
@@ -192,7 +196,8 @@ export const docs = {
         {
           name: 'isDisabled',
           type: 'boolean',
-          description: 'Disabled state.',
+          description:
+            'Disabled state. Interactive rows stay keyboard-reachable but cannot activate.',
           default: 'false',
         },
         {
@@ -205,19 +210,30 @@ export const docs = {
           name: 'swipeBehavior',
           type: "'reveal' | 'commit'",
           description:
-            'What a swipe does. `reveal` rests the row open with every entry a real button and fires the outermost on a long drag or a fling; `commit` slides the row out and fires the outermost on release, with nothing resting and a presentational panel. `commit` fits one entry per side.',
+            'What a swipe does. `reveal` rests the row open with every entry a real button after a fling or a drag past half the panel. A long drag fires the outermost; on a side with two or more entries, only a drag that starts on the open row fires it. `commit` slides the row out and fires the one entry of a side on a release past the commit point. Nothing rests, and the panel is presentational. On a side with two or more entries, `commit` fires none. A fling never fires an entry.',
           default: "'reveal'",
         },
         {
           name: 'ref',
-          type: 'React.Ref<HTMLDivElement>',
-          description: 'Ref forwarded to the root element.',
+          type: 'React.Ref<HTMLElement>',
+          description:
+            'Ref forwarded to the root element, whose type follows `as`.',
         },
         {
           name: 'xstyle',
           type: 'StyleXStyles',
           description:
-            'StyleX styles for layout customization. Must be a stylex.create() value.',
+            'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'CSS class name(s) for the root element.',
+        },
+        {
+          name: 'style',
+          type: 'React.CSSProperties',
+          description: 'Inline styles for the root element.',
         },
         {
           name: 'data-testid',

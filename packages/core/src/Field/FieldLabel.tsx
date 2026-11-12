@@ -4,7 +4,7 @@
 
 /**
  * @file FieldLabel.tsx
- * @input Uses React, Icon, IconType, useTranslator, FormLayoutContext
+ * @input Uses React, Icon, IconType, InfoTip, useComponentTranslator, useResolvedOptionality
  * @output Exports FieldLabel component, FieldLabelProps
  * @position Core label implementation; used by Field, CheckboxInput, Switch
  *
@@ -13,10 +13,10 @@
  * - /packages/core/src/Field/index.ts (exports if types change)
  * - /packages/core/src/FormLayout/FormLayoutContext.ts (defaultOptionality drives the indicator)
  * - /packages/cli/assets/templates/blocks/components/Field/ (showcase blocks)
- * - /packages/core/locales/en.json (@astryx.field.required / @astryx.field.optional)
+ * - /packages/core/locales/en.json (@astryx.field.required / @astryx.field.optional / @astryx.field.labelTooltip)
  */
 
-import {use, useMemo, useRef, type ReactNode, type RefObject} from 'react';
+import {useMemo, useRef, type ReactNode, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils/mergeProps';
@@ -28,13 +28,19 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import {Icon, renderIconSlot} from '../Icon/Icon';
+import {renderIconSlot} from '../Icon/Icon';
 import type {IconType} from '../Icon';
-import {Tooltip} from '../Tooltip/Tooltip';
-import {useTranslator} from '../i18n/useTranslator';
+import {InfoTip} from '../InfoTip/InfoTip';
 import {themeProps} from '../utils/themeProps';
 import {useInputContainer} from '../hooks/useInputContainer';
-import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
+import {useResolvedOptionality} from '../hooks/useResolvedRequired';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Field/FieldLabel.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   // The label and its description read as a single block, with no space
@@ -70,6 +76,31 @@ const styles = stylex.create({
   labelDisabled: {
     color: colorVars['--color-text-disabled'],
     cursor: 'default',
+  },
+  // A button inside a label also activates the label's control, so the info
+  // button sits outside it, in one row with the label.
+  labelRow: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    // In a block label cell, keep the row's top on the cell's top, not on a
+    // text baseline.
+    verticalAlign: 'top',
+    gap: spacingVars['--spacing-1'],
+  },
+  // With a hidden label the row takes no slot in the caller's layout.
+  labelRowHidden: {
+    display: 'contents',
+  },
+  // A hidden label's info button takes no layout slot. While it has keyboard
+  // focus, it moves into flow above the control. There nothing covers or clips
+  // it. It stays positioned, because InfoTip's touch band needs a positioned
+  // host.
+  infoTipHidden: {
+    position: {default: 'absolute', ':focus-visible': 'relative'},
+    alignSelf: 'flex-start',
+    clip: {default: 'rect(0, 0, 0, 0)', ':focus-visible': 'auto'},
+    overflow: {default: 'hidden', ':focus-visible': 'visible'},
+    whiteSpace: 'nowrap',
   },
   srOnly: {
     borderStyle: 'none',
@@ -166,7 +197,7 @@ export interface FieldLabelProps extends BaseProps<HTMLLabelElement> {
    */
   labelIcon?: ReactNode | IconType;
   /**
-   * Tooltip text to display in an info icon at the end of the label.
+   * Help text for an info button after the label, named "About {label}".
    */
   labelTooltip?: string;
   /**
@@ -212,21 +243,11 @@ export function FieldLabel({
   ref,
   ...rest
 }: FieldLabelProps) {
-  const t = useTranslator();
-  const {defaultOptionality} = use(FormLayoutContext);
-
-  // A form-level `defaultOptionality` means "only the exception is marked": a
-  // field that merely restates the form's default shows no indicator, and only
-  // a deviation from it does. This is the *visible indicator* only; the
-  // matching `aria-required` is resolved on each control (see
-  // useResolvedRequired) so the unmarked majority is still announced.
-  //
-  //   defaultOptionality  isRequired            isOptional
-  //   'optional'          → required indicator  → (matches default, hidden)
-  //   'required'          → (matches, hidden)   → optional indicator
-  //   unset               → required indicator  → optional indicator
-  const showRequired = isRequired && defaultOptionality !== 'required';
-  const showOptional = isOptional && defaultOptionality !== 'optional';
+  const t = useComponentTranslator();
+  // The visible indicator only; each control resolves its own `aria-required`
+  // so the unmarked majority is still announced.
+  const {showsRequiredMarker: showRequired, showsOptionalMarker: showOptional} =
+    useResolvedOptionality({isRequired, isOptional});
   const statusText = showOptional
     ? t('@astryx.field.optional')
     : showRequired
@@ -284,11 +305,6 @@ export function FieldLabel({
           {statusText}
         </span>
       )}
-      {labelTooltip && (
-        <Tooltip content={labelTooltip} placement="above">
-          <Icon icon="info" size="sm" color="inherit" />
-        </Tooltip>
-      )}
     </>
   );
 
@@ -322,10 +338,27 @@ export function FieldLabel({
     </LabelElement>
   );
 
+  const labelWithHelp = labelTooltip ? (
+    <span
+      {...stylex.props(
+        styles.labelRow,
+        isLabelHidden && styles.labelRowHidden,
+      )}>
+      {labelElement}
+      <InfoTip
+        content={labelTooltip}
+        label={t('@astryx.field.labelTooltip', {label})}
+        xstyle={isLabelHidden ? styles.infoTipHidden : undefined}
+      />
+    </span>
+  ) : (
+    labelElement
+  );
+
   // Without a description, preserve the original public DOM: the label itself
   // remains the caller's flex/grid item and its layout overrides apply there.
   if (!description) {
-    return labelElement;
+    return labelWithHelp;
   }
 
   return (
@@ -334,7 +367,7 @@ export function FieldLabel({
         styles.labelGroup,
         isLabelHidden && styles.labelGroupHidden,
       )}>
-      {labelElement}
+      {labelWithHelp}
       <span
         ref={forwardsDescriptionClick ? descriptionRef : undefined}
         id={descriptionID}

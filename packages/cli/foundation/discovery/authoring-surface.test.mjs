@@ -14,6 +14,7 @@ import {
   tracePublicAuthoringTypes,
 } from './authoring-surface.mjs';
 import {docs} from '../../api/docs/docs.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -35,7 +36,7 @@ afterEach(() => {
  * @returns {string}
  */
 function tree(files) {
-  const root = fs.mkdtempSync(path.join(process.cwd(), '.astryx-surface-'));
+  const root = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-surface-'));
   roots.push(root);
   for (const [rel, content] of Object.entries(files)) {
     const abs = path.join(root, rel);

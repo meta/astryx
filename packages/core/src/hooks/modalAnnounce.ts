@@ -4,23 +4,11 @@
 
 /**
  * @file modalAnnounce.ts
- * @input Uses the live-region internals of useAnnounce and DOM dialog state
+ * @input The live-region internals of useAnnounce and DOM dialog state
  * @output Installs the modal route into useAnnounce as it loads, and exports
- *   the presentation bookkeeping ModalAnnounceProvider drives
- * @position Core a11y internal (spec:AST-086 FR14): where a message from
- *   inside an Astryx modal is heard. A dialog is exposed when it is open as
- *   a modal and neither inert nor aria-hidden; the top-layer order is kept
- *   by `open` alone; a message a dialog holds when it stops being exposed is
- *   handed to the channel exposed then, or held while an exiting modal still
- *   covers everything, and released at its real close; a covered modal is
- *   not written to; a caller inside a modal being presented in this commit
- *   waits one frame for the route. Words move with their announcers'
- *   receipts, one delivery per announcer, so an announcer can take back its
- *   own share while it waits wherever it went: a `hasReplace` instance's
- *   next message (FR9), a busy start overtaken by its outcome (FR8). Loaded
- *   only by ModalAnnounceProvider, so
- *   a component that calls useAnnounce and renders no modal does not carry
- *   it.
+ *   the presentation bookkeeping that ModalAnnounceProvider drives
+ * @position Core a11y internal (AST-086 FR14) that decides where a message
+ *   from inside an Astryx modal is heard. Only ModalAnnounceProvider loads it.
  *
  * SYNC: not exported from /packages/core/src/hooks/index.ts.
  */
@@ -42,6 +30,7 @@ import {
   type WaitingWords,
   type WithdrawAnnouncement,
 } from './useAnnounce';
+import {sharedMap, sharedState, sharedWeakMap} from '../utils/sharedRealm';
 
 /**
  * Whether what is written inside `dialog` reaches assistive technology: open
@@ -78,7 +67,13 @@ function enclosingOpenModal(
 // presented. `showModal()` sets `open` as it is called, so the order of the
 // attribute records is the top-layer order, and the last one still open as a
 // modal is the modal on top.
-const presented: HTMLDialogElement[] = [];
+// Every copy of Core on the page keeps one list, one hold and one deferral
+// map, so a package component and a copy route to the same open modal.
+const presented = sharedState(
+  'hooks/modal-announce/presented',
+  1,
+  (): HTMLDialogElement[] => [],
+);
 
 export function notePresented(dialog: HTMLDialogElement): void {
   const at = presented.indexOf(dialog);
@@ -157,21 +152,18 @@ function isAnyModalOpen(): boolean {
   return false;
 }
 
-// Words waiting for an exiting modal's real close: their dialog has left
-// the accessibility tree for its exit but is still an open native modal, or
-// such a dialog covers the channel they would go to, so nothing is exposed
-// yet. They are delivered when a dialog closes (or theirs is exposed again).
-// Each text keeps its announcers' receipts, so one taking its share back
-// leaves it for the others, and a receipt follows the words when they are
-// released; an entry is gone once delivered, so a receipt never reaches
-// equal words held later.
+// Words that wait for an exiting modal's real close. Their dialog left the
+// accessibility tree for its exit but is still an open native modal, or such
+// a dialog covers their channel. They are delivered when a dialog closes or
+// theirs is exposed again. Each text keeps its announcers' receipts. An entry
+// is gone once delivered, so a receipt never reaches equal words held later.
 interface HeldWords extends WaitingWords {
   readonly receipts: AnnounceReceipt[];
 }
-const held = new Map<
+const held = sharedMap<
   HTMLDialogElement,
   Record<AnnouncePoliteness, HeldWords[]>
->();
+>('hooks/modal-announce/held', 1);
 
 /** Hold `message` for `dialog`, for the announcer `receipt` stands for. */
 function hold(
@@ -285,7 +277,7 @@ function deliverBeyond(
  * Move whatever `dialog`'s containers hold that assistive technology has not
  * had yet to the channel exposed now. Called when the dialog stops being
  * exposed — closed, taken inert or `aria-hidden` for its exit, or unmounted
- * while open — so a message sent just before is not lost (FR14).
+ * while open — so a message sent just before is not lost.
  */
 export function handOffUnexposed(dialog: HTMLDialogElement): void {
   for (const politeness of ['polite', 'assertive'] as const) {
@@ -352,17 +344,19 @@ function announceInModalRouted(
   });
 }
 
-// Messages from callers whose enclosing modal is being presented in this
-// commit, waiting one frame for the route; an empty message among them
-// withdraws the earlier ones of its urgency, as it would on a channel.
-// Each message keeps a receipt per announcer: before the frame, taking it
-// back drops that announcer's share; the frame points it at its write.
+// Messages from callers whose modal is presented in this commit wait one
+// frame for the route. An empty message among them withdraws the earlier
+// ones of its urgency. Before the frame, a receipt drops its announcer's
+// share. The frame points the receipt at its write.
 interface Deferred {
   frame: number;
   words: Record<AnnouncePoliteness, HeldWords[]>;
   clears: Record<AnnouncePoliteness, boolean>;
 }
-const deferredByScope = new WeakMap<ModalAnnounceScope, Deferred>();
+const deferredByScope = sharedWeakMap<ModalAnnounceScope, Deferred>(
+  'hooks/modal-announce/deferred-by-scope',
+  1,
+);
 
 function deferUntilPresented(
   scope: ModalAnnounceScope,
@@ -462,15 +456,12 @@ function announceFromScope(
   politeness: AnnouncePoliteness,
 ): WithdrawAnnouncement | null {
   if (isBeingPresented(scope)) {
-    // Announced in the commit that opens the enclosing modal — a field error
-    // inside `{isOpen && <Dialog isOpen>}`, alone or inside an already-open
-    // Dialog — before the Dialog's own Effect, which runs after its
-    // content's, has called showModal(). Choose the route a frame later,
-    // when it has, rather than the modal beneath, which the new one is about
-    // to cover; an empty message in the same commit withdraws what waits
-    // (FR9). A caller inside a modal that is meant to be closed (its content
-    // stays mounted) is not waiting for anything: it takes the route of
-    // where it is now, joined with the frame's other messages.
+    // The message comes in the commit that opens its modal, before the
+    // Dialog's Effect calls showModal(), because that Effect runs after its
+    // content's. Choose the route a frame later, not the modal beneath that
+    // the new one will cover. An empty message in the same commit withdraws
+    // what waits. A caller in a modal that is meant to be closed waits for
+    // nothing: it takes the route of where it is now.
     return deferUntilPresented(scope, message, politeness);
   }
   const dialog = enclosingOpenModal(scope);

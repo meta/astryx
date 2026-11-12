@@ -121,6 +121,32 @@ function resolveReviewApprovals({
   };
 }
 
+// A pull request the review app opens is the app's own work, which it cannot
+// approve: its code review is a trainer pass, an engineering owner's approval
+// of its exact head. Other bots stay exempt.
+// The success text an engineering owner's exact-head approval leaves. It is
+// review-clear's own, so review-clear re-gates it when that approval is
+// withdrawn or dismissed.
+const OWNER_CLEARED_TEXT = 'Cleared by code-owner approval.';
+const TRAINER_WAITING_TEXT =
+  "Waiting on code review: a trainer pass, an engineering owner's approval of this exact head.";
+
+/** Whether a pull request's author is the review app named in `REVIEW_APP`. */
+function needsTrainerPass({author, reviewApp}) {
+  const app = normalizeReviewApp(reviewApp);
+  return app !== '' && String(author ?? '').toLowerCase() === app;
+}
+
+/** Whether an engineering owner's latest exact-head review approves. */
+function trainerPassed({reviews, headSha, engOwners}) {
+  return resolveReviewApprovals({
+    reviews,
+    headSha,
+    engOwners,
+    designOwners: [],
+  }).codeApproved;
+}
+
 // One review gate (architecture:knowledge-contracts DEC-14, spec:AST-030
 // FR15): every writer of `review-required` composes code review and the spec
 // half that `spec-owner-approval` mirrors.
@@ -138,6 +164,10 @@ const SPEC_WAITING_TEXT = {
 };
 const SPEC_MIRROR_PREFIX = 'Mirrors review-required · spec ';
 const SPEC_CHECKING_TEXT = '⏳ Checking for spec changes…';
+// A run over the spec-owner job's request budget decides nothing; a
+// maintainer's dispatch decides (spec:AST-030 FR15).
+const SPEC_TOO_LARGE_TEXT =
+  '⏳ Too large to reconcile automatically: a maintainer can run the Review signal workflow for this PR';
 const CODE_WAITING_PREFIX = 'Waiting on code review';
 const REVIEW_COMPLETE = 'Review complete.';
 
@@ -174,6 +204,9 @@ function readSpecStatus(status) {
         satisfied: false,
         text: SPEC_WAITING_TEXT.held(holder),
       };
+    }
+    if (rest.startsWith('too large')) {
+      return {known: true, satisfied: false, text: SPEC_TOO_LARGE_TEXT};
     }
     if (rest.startsWith('waiting (design)')) {
       return {known: true, satisfied: false, text: SPEC_WAITING_TEXT.design};
@@ -274,13 +307,18 @@ module.exports = {
   REVIEW_GATE_CONTEXT,
   SPEC_GATE_CONTEXT,
   SPEC_MIRROR_PREFIX,
+  SPEC_TOO_LARGE_TEXT,
   SPEC_WAITING_TEXT,
+  OWNER_CLEARED_TEXT,
+  TRAINER_WAITING_TEXT,
   classifyReviewSignalPaths,
   composeReviewGate,
   readCodeGate,
   readSpecGate,
   hasWritePermission,
   isSafeSpace,
+  needsTrainerPass,
   normalizeReviewApp,
   resolveReviewApprovals,
+  trainerPassed,
 };

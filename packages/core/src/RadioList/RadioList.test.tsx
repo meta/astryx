@@ -24,6 +24,7 @@ import {
 import {RadioList} from './RadioList';
 import {RadioListItem} from './RadioListItem';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
@@ -52,7 +53,93 @@ beforeEach(() => {
   };
 });
 
+/** A pointer press on `target`, as the press controller and React read it. */
+function pointerDown(
+  target: Element,
+  init: {pointerType: string; button: number; ctrlKey?: boolean},
+): void {
+  fireEvent.pointerDown(target, {pointerId: 1, ...init});
+  fireEvent.pointerUp(target, {pointerId: 1, ...init});
+}
+
+/** Runs `check` on macOS, where a ctrl-click is the context click. */
+function onApplePlatform(check: () => void): void {
+  Object.defineProperty(navigator, 'platform', {
+    configurable: true,
+    get: () => 'MacIntel',
+  });
+  try {
+    check();
+  } finally {
+    Reflect.deleteProperty(navigator, 'platform');
+  }
+}
+
 describe('RadioList', () => {
+  it("paints a primary mouse press on an option at once, and none for a macOS ctrl-click or a pen's barrel button", () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}}>
+        <RadioListItem label="Free" value="free" />
+        <RadioListItem label="Pro" value="pro" />
+      </RadioList>,
+    );
+    const target = screen.getByText('Pro');
+    const row = target.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    onApplePlatform(() =>
+      pointerDown(target, {pointerType: 'mouse', button: 0, ctrlKey: true}),
+    );
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    pointerDown(target, {pointerType: 'pen', button: 2});
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+  });
+
+  it('paints no row press for a mouse, pen or finger press on a select in end content, and one for a press on the label', () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}}>
+        <RadioListItem label="Free" value="free" />
+        <RadioListItem
+          label="Pro"
+          value="pro"
+          endContent={
+            <select aria-label="Billing">
+              <option>Monthly</option>
+              <option>Yearly</option>
+            </select>
+          }
+        />
+      </RadioList>,
+    );
+    const select = screen.getByRole('combobox', {name: 'Billing'});
+    const row = select.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    for (const pointerType of ['mouse', 'pen', 'touch']) {
+      fireEvent.pointerDown(select, {pointerId: 1, pointerType, button: 0});
+      expect(row).not.toHaveAttribute('data-astryx-press');
+      fireEvent.pointerUp(select, {pointerId: 1, pointerType, button: 0});
+    }
+    const label = screen.getByText('Pro');
+    const mouse = {pointerId: 1, pointerType: 'mouse', button: 0};
+    fireEvent.pointerDown(label, mouse);
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(label, mouse);
+  });
+
   it('renders with label', () => {
     render(
       <RadioList label="Preference" value="" onChange={() => {}}>
@@ -468,6 +555,96 @@ describe('RadioList', () => {
       const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+    });
+
+    it('describes each radio with the reason, as well as the radiogroup', () => {
+      renderGroup();
+      const tooltip = screen.getByRole('tooltip', h);
+      for (const name of ['Free', 'Pro']) {
+        const radio = screen.getByRole('radio', {name});
+        expect(radio.getAttribute('aria-describedby')?.split(' ')).toContain(
+          tooltip.id,
+        );
+        expect(radio).toHaveAccessibleDescription(
+          'Upgrade your account to change plans',
+        );
+      }
+      expect(
+        screen
+          .getByRole('radiogroup')
+          .getAttribute('aria-describedby')
+          ?.split(' '),
+      ).toContain(tooltip.id);
+    });
+
+    it("keeps a radio's own description ahead of the reason", () => {
+      render(
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem
+            label="Free"
+            value="free"
+            description="Up to 3 projects"
+          />
+        </RadioList>,
+      );
+      const tooltip = screen.getByRole('tooltip', h);
+      const radio = screen.getByRole('radio', {name: 'Free'});
+      const ids = radio.getAttribute('aria-describedby')!.split(' ');
+      expect(ids).toHaveLength(2);
+      expect(ids[1]).toBe(tooltip.id);
+      expect(radio).toHaveAccessibleDescription(
+        'Up to 3 projects Upgrade your account to change plans',
+      );
+    });
+
+    // spec:AST-085 FR5: a keyboard user hears the reason on the radio that
+    // takes focus.
+    it('describes the focused radio with the reason when Tab enters the group', async () => {
+      const user = userEvent.setup();
+      renderGroup();
+      await user.tab();
+      const free = screen.getByRole('radio', {name: 'Free'});
+      expect(free).toHaveFocus();
+      expect(free).toHaveAccessibleDescription(
+        'Upgrade your account to change plans',
+      );
+    });
+
+    it('opens the reason on a tap and selects nothing', async () => {
+      __resetInteractionModalityForTest();
+      const onChange = vi.fn();
+      renderGroup({onChange});
+      const tooltip = screen.getByRole('tooltip', h);
+      const pro = screen.getByRole('radio', {name: 'Pro'});
+      // A tap, in the order a browser dispatches it.
+      fireEvent.pointerEnter(pro, {pointerType: 'touch'});
+      fireEvent.pointerDown(pro, {pointerType: 'touch'});
+      fireEvent.pointerUp(pro, {pointerType: 'touch'});
+      fireEvent.mouseEnter(pro);
+      fireEvent.click(pro);
+      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      expect(onChange).not.toHaveBeenCalled();
+      expect(pro).not.toBeChecked();
+    });
+
+    it('adds no reason to the radios of a group that is not disabled', () => {
+      render(
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem label="Free" value="free" />
+        </RadioList>,
+      );
+      expect(screen.getByRole('radio', {name: 'Free'})).not.toHaveAttribute(
+        'aria-describedby',
+      );
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -978,14 +1155,14 @@ function readsRowPress(el: Element): boolean {
 
 /**
  * Does the row declare the mouse press's paint while pressed, but not while a
- * nested link or button is the pressed one?
+ * nested control is the pressed one?
  */
 function declaresRowPress(el: Element): boolean {
   return rulesWithSelector(el, ':active').some(
     rule =>
       rule.includes('--_radio-row-press:') &&
       rule.includes('var(--color-overlay-pressed)') &&
-      /:not\(:has\(a:active, ?button:active/.test(rule),
+      rule.includes(':not(:has(button:not([aria-readonly="true"]):active'),
   );
 }
 
@@ -1047,5 +1224,46 @@ describe('pressed state', () => {
     // The row itself paints nothing under a finger, as under a mouse: only
     // the circle answers.
     expect(readsPressStrength(row, '[data-astryx-press="on"]')).toBe(false);
+  });
+});
+
+describe('RadioList group disabled state', () => {
+  it('marks a disabled radiogroup aria-disabled', () => {
+    render(
+      <RadioList label="Size" isDisabled value="small" onChange={() => {}}>
+        <RadioListItem value="small" label="Small" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup', {name: 'Size'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('leaves an enabled radiogroup without aria-disabled', () => {
+    render(
+      <RadioList label="Size" value="small" onChange={() => {}}>
+        <RadioListItem value="small" label="Small" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup', {name: 'Size'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+
+  it("keeps a caller's own aria-disabled on an enabled radiogroup (FR8)", () => {
+    render(
+      <RadioList
+        label="Size"
+        value="small"
+        onChange={() => {}}
+        aria-disabled="true">
+        <RadioListItem value="small" label="Small" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup', {name: 'Size'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 });

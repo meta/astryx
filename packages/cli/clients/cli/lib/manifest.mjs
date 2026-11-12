@@ -36,6 +36,9 @@
  * @position consumed by the bare `astryx --json` action and the `manifest` command
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {API_VERSION} from '../../../foundation/response/json.mjs';
 import {commandDocsOf} from './define-command.mjs';
 import {doc as manifestDoc} from '../commands/manifest.doc.mjs';
@@ -63,6 +66,10 @@ const CLI_LAYER_RESPONSE_TYPES = {
   manifest: ['manifest'],
   'theme build': ['theme.build.batch'],
   'theme add': ['theme.list'],
+  // The experimental theme groups answer a bare --json with their help.
+  'experimental theme': ['help'],
+  'experimental theme editor': ['help'],
+  'experimental theme preview': ['help'],
 };
 
 /**
@@ -251,6 +258,36 @@ function describeGlobalOptions(program) {
  */
 function flattenCommands(commands) {
   return commands.flatMap(c => [c, ...flattenCommands(c.subcommands || [])]);
+}
+
+/**
+ * Where the published package keeps its manifest: the `data` of `astryx
+ * manifest --json` as the fully loaded CLI builds it. `prepack` writes it
+ * (scripts/generate-manifest.mjs), so the published `manifest` needs no other
+ * command loaded. A checkout has none and builds it.
+ */
+export const MANIFEST_FILE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'manifest.generated.json',
+);
+
+/** @type {import('./manifest').CLIManifest | null | undefined} */
+let storedManifestData;
+
+/**
+ * The stored manifest, or null when there is none or it cannot be read.
+ * @returns {import('./manifest').CLIManifest | null}
+ */
+export function storedManifest() {
+  if (storedManifestData === undefined) {
+    try {
+      storedManifestData = JSON.parse(fs.readFileSync(MANIFEST_FILE, 'utf-8'));
+    } catch {
+      storedManifestData = null;
+    }
+  }
+  return storedManifestData ?? null;
 }
 
 /**

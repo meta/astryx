@@ -27,6 +27,7 @@ on:
       - '.github/scripts/api-cli-parity-test.mjs'
       - '.github/scripts/cdn-template-smoke-test.mjs'
       - '.github/scripts/lib/cdn-*.mjs'
+      - '.github/scripts/vitest.browser-scripts.config.mjs'
       - '.github/workflows/cli-smoke-test.yml'
   merge_group:
 
@@ -106,6 +107,18 @@ jobs:
       - name: Install Playwright
         if: steps.scope.outputs.spec_only != 'true'
         run: npx playwright install chromium
+
+      # cdn-page-render's real-browser half: a page whose module request hangs
+      # never goes idle, and renderPage reports that timeout. With
+      # ASTRYX_CDN_SMOKE_BROWSER set, a missing browser fails the cases.
+      # ci-browser-gated-tests.test.mjs keeps this step after the install.
+      - name: CDN page render in a real browser
+        if: steps.scope.outputs.spec_only != 'true'
+        env:
+          ASTRYX_CDN_SMOKE_BROWSER: '1'
+        # Its own config: the workspace's global setup builds Core, which this
+        # test never imports.
+        run: pnpm exec vitest run --config .github/scripts/vitest.browser-scripts.config.mjs .github/scripts/lib/cdn-page-render.browser.test.mjs --maxWorkers=1
 
       - name: CDN starter page smoke test
         if: steps.scope.outputs.spec_only != 'true'

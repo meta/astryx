@@ -73,6 +73,7 @@ import {
   findCoreDir,
   findInstalledPackage,
   findProjectCoreDir,
+  findPackageRoot,
 } from '../../../foundation/fs/paths.mjs';
 import {isGlobalCopy} from '../../../foundation/release/choose.mjs';
 import {isInReleaseCache} from '../../../foundation/release/cache.mjs';
@@ -88,6 +89,7 @@ import {AstryxError} from '../../error.mjs';
 import {applyWrites} from '../../integration/add-helpers.mjs';
 import {logger} from '../../logger.mjs';
 import {loadComponentDoc} from '../../../foundation/discovery/component-loader.mjs';
+import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
 import {
   collectThemingTargets,
   targetsByKey,
@@ -98,6 +100,10 @@ import {
   formatFontLoadingHelp,
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
+import {
+  installCommandFor,
+  parsedSpecifiers,
+} from '../../../foundation/discovery/template-needs.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
 
@@ -132,12 +138,13 @@ import {resolveIconImports} from './icon-imports.mjs';
  */
 /** @type {any} */ let _coreThemeModule = null;
 /**
- * The `@astryxdesign/core` ROOT namespace, imported separately because it
+ * The `@astryxdesign/core` ROOT namespace, loaded separately because it
  * exports far more than the theme subpath. Interception must hand a theme file
  * that imports a component from the root the root's own exports, not the theme
- * namespace wearing its name.
+ * namespace wearing its name. It loads on first use: see lazyRootModule.
+ * @type {(() => any) | null}
  */
-/** @type {any} */ let _coreRootModule = null;
+let _coreRootModule = null;
 /** @type {any} */ let _coreImportError = null;
 
 /**
@@ -145,7 +152,7 @@ import {resolveIconImports} from './icon-imports.mjs';
  * functions the build calls, and why the import failed, if it did.
  * @typedef {{
  *   themeModule: any,
- *   rootModule: any,
+ *   rootModule: (() => any) | null,
  *   importError: any,
  *   defineTheme: any,
  *   generateThemeRulesSplit: any,
@@ -153,6 +160,47 @@ import {resolveIconImports} from './icon-imports.mjs';
  *   generateAdaptationCSS: any,
  * }} CoreBindings
  */
+
+/**
+ * A Core's root namespace, loaded on first use. The root entry loads all of
+ * Core and React, and only a theme that imports the root specifier needs it.
+ * Requiring the file an import resolves to returns the namespace `import()`
+ * gives. A root that cannot be loaded gives null, and interception then hands
+ * the theme namespace in its place. A root that only `import()` can load
+ * throws instead: one that awaits at its top level, or any root when Node runs
+ * without require(esm).
+ * @param {() => string | null} resolveFile
+ * @returns {() => any}
+ */
+export function lazyRootModule(resolveFile) {
+  /** @type {{namespace: any} | null} */
+  let loaded = null;
+  return () => {
+    if (loaded) return loaded.namespace;
+    let namespace = null;
+    let file = null;
+    try {
+      file = resolveFile();
+    } catch {
+      // A Core whose root entry does not resolve falls back below.
+    }
+    try {
+      if (file) namespace = createRequire(import.meta.url)(file);
+    } catch (error) {
+      const code = /** @type {any} */ (error)?.code;
+      // The theme namespace would stand in for the root's own exports here.
+      if (code === 'ERR_REQUIRE_ASYNC_MODULE' || code === 'ERR_REQUIRE_ESM') {
+        throw new Error(
+          `The @astryxdesign/core root entry at ${file} cannot be loaded with require() (${code}), so a theme that imports it cannot be built.`,
+          {cause: error},
+        );
+      }
+      // A Core without a usable root entry still builds themes.
+    }
+    loaded = {namespace};
+    return namespace;
+  };
+}
 
 /**
  * Import the CLI's own Core: the `@astryxdesign/core` this module resolves.
@@ -178,12 +226,9 @@ async function importCliCore() {
     core.generateThemeRulesSplit = coreTheme.generateThemeRulesSplit;
     core.generateOnMediaCSS = coreTheme.generateOnMediaCSS;
     core.generateAdaptationCSS = coreTheme.generateAdaptationCSS;
-    try {
-      core.rootModule = await import('@astryxdesign/core');
-    } catch {
-      // A core without a usable root entry still builds themes; interception
-      // falls back to the theme namespace for the root specifier.
-    }
+    core.rootModule = lazyRootModule(() =>
+      fileURLToPath(import.meta.resolve('@astryxdesign/core')),
+    );
   } catch (e) {
     // Capture the reason so the theme action can surface a precise, actionable
     // error. The hard failure happens when `theme build` runs.
@@ -350,18 +395,10 @@ async function loadProjectCore(cwd, cliCore, {projectOnly = false} = {}) {
       ERROR_CODES.ERR_CORE_INCOMPATIBLE,
     );
   }
-  let rootModule = null;
   const rootFile = importTarget(dir, '.');
-  if (rootFile) {
-    try {
-      rootModule = await import(pathToFileURL(rootFile).href);
-    } catch {
-      // As with the CLI's own import, the theme namespace stands in for it.
-    }
-  }
   return {
     themeModule,
-    rootModule,
+    rootModule: lazyRootModule(() => rootFile),
     importError: null,
     defineTheme: themeModule.defineTheme,
     generateThemeRulesSplit: themeModule.generateThemeRulesSplit,
@@ -548,6 +585,83 @@ function resolveToolVersions(cwd) {
 }
 
 /**
+ * The command a stale check names, in the words of the group that ran it
+ * (`experimental theme compile`); the generated headers keep `theme build`.
+ * @param {string} command
+ * @param {{group: string, build: string}} [words]
+ */
+function rebuildLine(command, words) {
+  if (!words || words.group === 'theme') return command;
+  return command.replace(/\btheme build\b/, `${words.group} ${words.build}`);
+}
+
+/**
+ * The folder a build header names paths from: the project root (nearest
+ * package.json) of the outputs' folder, or `cwd` outside any project.
+ * @param {string} outDir
+ * @param {string} cwd
+ */
+function headerRoot(outDir, cwd) {
+  return findPackageRoot(outDir) ?? path.resolve(cwd);
+}
+
+/**
+ * Whether a build refuses to replace, at a path `--out` names, the output of
+ * another theme source that still exists. False makes it warn and replace.
+ */
+const OUT_REFUSES_OTHER_SOURCE = false;
+
+/**
+ * Where a source name in a build header may point. A header names its source
+ * from the outputs' project root; older CLIs named it from the folder the
+ * build ran in, which is the output's folder or one above it, up to a
+ * monorepo root above the project. The project root comes first, then the
+ * output's folder and each folder above it.
+ * @param {string} outputFile absolute file the header is in
+ * @param {string} name the name the header gives
+ * @param {string} cwd
+ * @returns {string[]} absolute candidates, without repeats
+ */
+function headerSourceCandidates(outputFile, name, cwd) {
+  const outDir = path.dirname(path.resolve(outputFile));
+  const candidates = [path.resolve(headerRoot(outDir, cwd), name)];
+  for (let dir = outDir; ; dir = path.dirname(dir)) {
+    candidates.push(path.resolve(dir, name));
+    if (path.dirname(dir) === dir) break;
+  }
+  return [...new Set(candidates)];
+}
+
+/**
+ * The file a build header's source name points at: the first candidate that
+ * exists, or the one from the project root when none does.
+ * @param {string} outputFile
+ * @param {string} name
+ * @param {string} cwd
+ */
+function headerSourceFile(outputFile, name, cwd) {
+  const candidates = headerSourceCandidates(outputFile, name, cwd);
+  return (
+    candidates.find(file => {
+      try {
+        return fs.statSync(file).isFile();
+      } catch {
+        return false;
+      }
+    }) ?? candidates[0]
+  );
+}
+
+/**
+ * A path as a build header names it: relative to `base`, with `/`.
+ * @param {string} base
+ * @param {string} file absolute
+ */
+function headerPath(base, file) {
+  return path.relative(base, file).split(path.sep).join('/');
+}
+
+/**
  * Build a @generated attribution header for generated files.
  * @param {string} sourceFile - Relative path to the source theme file
  * @param {'css'|'js'|'ts'} lang - File language (determines comment syntax)
@@ -579,12 +693,15 @@ function generatedHeader(sourceFile, lang = 'js', command, versions) {
  * the header and all real content — is compared verbatim. Used only by
  * `--check`: a differing command must NOT report a file as stale, but any real
  * content drift must. The `CLI:`/`Core:` provenance lines are deterministic
- * for a given toolchain, so they compare verbatim like real content.
+ * for a given toolchain, so they compare verbatim like real content. CRLF
+ * line endings read as LF.
  * @param {string} content
  * @returns {string}
  */
 export function normalizeThemeBuildForCompare(content) {
+  // A checkout may turn line endings into CRLF; the text is the same.
   return content
+    .replace(/\r\n/g, '\n')
     .split('\n')
     .filter(line => {
       const t = line.replace(/^\s*\*?\s?/, '');
@@ -744,6 +861,367 @@ function outsideCheckRemedy(writes, sources, root, args) {
   ];
 }
 
+/** The first words of every file a build writes. */
+const GENERATED_MARKER = '@generated by `astryx theme build`';
+
+/** @param {string} file @returns {boolean} */
+function isDirectorySync(file) {
+  try {
+    return fs.statSync(file).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/** @param {string} file @returns {string} the start of a file, or '' when it cannot be read */
+function fileHead(file) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const head = Buffer.alloc(600);
+      const n = fs.readSync(fd, head, 0, head.length, 0);
+      return head.subarray(0, n).toString('utf-8');
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return '';
+  }
+}
+
+/** @param {string} file @returns {string} one key per real location, whatever the spelling */
+function outputKey(file) {
+  const resolved = realLocation(path.resolve(file));
+  return process.platform === 'win32' || process.platform === 'darwin'
+    ? resolved.toLowerCase()
+    : resolved;
+}
+
+/**
+ * Theme sources a folder holds, for a hint when a folder is passed.
+ * @param {string} dir
+ * @returns {string[]}
+ */
+function themeFilesIn(dir) {
+  try {
+    return fs
+      .readdirSync(dir)
+      .filter(
+        name =>
+          /(?:\.theme|Theme)\.[^.]+$/.test(name) &&
+          THEME_SOURCE_EXTENSIONS.includes(path.extname(name)) &&
+          !fileHead(path.join(dir, name)).includes(GENERATED_MARKER),
+      )
+      .sort()
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The files a theme source is made of: the source and every local file it
+ * imports, directly or through other local files, read from their import
+ * statements. A watch rebuilds when any of them changes. Package imports and
+ * files that cannot be read are left out.
+ * @param {string} filePath absolute theme source
+ * @returns {string[]} absolute paths, the source first
+ */
+export function themeSourceFiles(filePath) {
+  const seen = new Set([path.resolve(filePath)]);
+  const queue = [path.resolve(filePath)];
+  while (queue.length > 0 && seen.size < 500) {
+    const file = /** @type {string} */ (queue.shift());
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const spec of parsedSpecifiers(source)) {
+      // Only relative and absolute imports are the theme's own files. A bare
+      // specifier names a package, which a workspace link can resolve to a
+      // real path outside node_modules.
+      if (!spec.startsWith('.') && !path.isAbsolute(spec)) continue;
+      // Resolved as the build resolves it.
+      let target;
+      try {
+        target = path.resolve(resolveThemeModule(spec, file));
+      } catch {
+        continue;
+      }
+      if (
+        target.split(path.sep).includes('node_modules') ||
+        seen.has(target) ||
+        !fs.existsSync(target)
+      )
+        continue;
+      seen.add(target);
+      queue.push(target);
+    }
+  }
+  return [...seen];
+}
+
+/**
+ * Theme sources a missing build input probably meant, relative to `cwd`: the
+ * same path with `/` for `\`; or, for a bare theme name, the theme sources in
+ * `themes/<name>/` and `src/themes/<name>/` of the project, and `<name>` with a
+ * theme source extension. A build output is never offered.
+ * @param {string} file the input as given
+ * @param {string} cwd
+ * @returns {string[]} at most three paths
+ */
+export function themeSourceGuesses(file, cwd) {
+  const shown = (/** @type {string} */ absolute) =>
+    path.relative(cwd, absolute).split(path.sep).join('/');
+  const isSource = (/** @type {string} */ absolute) =>
+    fs.existsSync(absolute) &&
+    !fs.statSync(absolute).isDirectory() &&
+    !fileHead(absolute).includes(GENERATED_MARKER);
+  if (file.includes('\\')) {
+    const forward = path.resolve(cwd, file.replace(/\\/g, '/'));
+    return isSource(forward) ? [shown(forward)] : [];
+  }
+  if (/[/.]/.test(file)) return [];
+  const root = findPackageRoot(cwd) ?? cwd;
+  const guesses = [
+    path.join(root, 'themes', file),
+    path.join(root, 'src', 'themes', file),
+  ].flatMap(folder =>
+    themeFilesIn(folder).map(name => shown(path.join(folder, name))),
+  );
+  for (const extension of THEME_SOURCE_EXTENSIONS) {
+    const candidate = path.resolve(cwd, file + extension);
+    if (isSource(candidate)) guesses.push(shown(candidate));
+  }
+  return guesses.slice(0, 3);
+}
+
+/**
+ * Refuse a file that is not a theme source before loading it: an output of a
+ * build (it carries the `@generated` header, whatever its extension, and
+ * names the source it was built from), or a file whose extension no theme
+ * source has, such as `.css` or `.json` (THEME_SOURCE_EXTENSIONS).
+ * @param {string} filePath
+ * @param {string} cwd
+ */
+function assertThemeSourceFile(filePath, cwd) {
+  const rel = (/** @type {string} */ file) => path.relative(cwd, file);
+  const sourceHead = fileHead(filePath);
+  if (sourceHead.includes(GENERATED_MARKER)) {
+    const line = /Source: (.+)/.exec(sourceHead)?.[1]?.trim();
+    // The header names its sources from the outputs' project root; the
+    // command to build them names them from the working folder.
+    const sources = line
+      ? line.split(', ').map(name =>
+          rel(headerSourceFile(filePath, name.trim(), cwd))
+            .split(path.sep)
+            .join('/'),
+        )
+      : [];
+    const familyKey = /Command: .*--family-key (\S+)/.exec(sourceHead)?.[1];
+    const build =
+      sources.length > 1 && familyKey
+        ? `theme build --family ${sources.map(shellWord).join(' ')} --family-key ${shellWord(familyKey)}`
+        : sources.length > 0
+          ? `theme build ${shellWord(sources[0])}`
+          : null;
+    throw new AstryxError(
+      `${rel(filePath)} is an output of \`theme build\`, not a theme source.${sources.length > 0 ? ` It was built from ${sources.join(', ')}.` : ''}`,
+      build
+        ? [
+            {
+              name: formatCliCommand(build, cwd),
+              reason: 'build the theme source',
+            },
+          ]
+        : undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+  if (!THEME_SOURCE_EXTENSIONS.includes(path.extname(filePath).toLowerCase())) {
+    throw new AstryxError(
+      `${rel(filePath)} is not a theme module. A theme source is a ${THEME_SOURCE_EXTENSIONS.join(', ')} file that exports defineTheme(...).`,
+      themeFilesIn(path.dirname(filePath)).map(name => ({
+        name: formatCliCommand(
+          `theme build ${shellWord(
+            rel(path.join(path.dirname(filePath), name))
+              .split(path.sep)
+              .join('/'),
+          )}`,
+          cwd,
+        ),
+        reason: 'a theme source in that folder',
+      })),
+      ERROR_CODES.ERR_THEME_LOAD,
+    );
+  }
+}
+
+/**
+ * Refuse a build that would replace a file it does not own. A build never
+ * writes over its input, two of its own outputs at one path, or an output
+ * another theme in the same run already wrote. With `refuseUnmarked` (a path
+ * --out names), it also replaces only its own earlier outputs (their header
+ * names this source, or a source that is gone) and empty files, never another
+ * source's output or another file such as `package.json` or app source.
+ * @param {Array<{dest: string}>} writes
+ * @param {string} filePath the theme source
+ * @param {string} cwd
+ * @param {{claimed?: Map<string, string>, rerun?: string, refuseUnmarked?: boolean, elsewhere?: string}} [options]
+ *   `claimed`: outputs written earlier in this run, by the source that wrote
+ *   them; `rerun`: this build's command, to run again once the file is gone;
+ *   `elsewhere`: the option that moves the outputs
+ */
+function assertOutputsReplaceable(
+  writes,
+  filePath,
+  cwd,
+  {claimed, rerun, refuseUnmarked = false, elsewhere = '--out'} = {},
+) {
+  const rel = (/** @type {string} */ file) => path.relative(cwd, file);
+  const sourceKey = outputKey(filePath);
+  const seen = new Set();
+  let warnedOtherSource = false;
+  for (const write of writes) {
+    const key = outputKey(write.dest);
+    if (key === sourceKey) {
+      throw new AstryxError(
+        `The output ${rel(write.dest)} is the theme source itself. Pick another --out.`,
+        [
+          {
+            name: formatCliCommand(
+              `theme build ${shellWord(rel(filePath))}`,
+              cwd,
+            ),
+            reason: 'write the outputs beside the source',
+          },
+        ],
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+    }
+    if (seen.has(key)) {
+      throw new AstryxError(
+        `Two outputs of this build have the same path, ${rel(write.dest)}. --out must name the .css file, not the theme's .js or .d.ts.`,
+        undefined,
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+    }
+    seen.add(key);
+    const earlier = claimed?.get(key);
+    if (earlier !== undefined) {
+      const collision = new AstryxError(
+        `${earlier} and ${rel(filePath)} both build ${rel(write.dest)}. Give each theme its own name; nothing was written.`,
+        undefined,
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+      /** @type {any} */ (collision).outputCollision = true;
+      throw collision;
+    }
+    let stat;
+    try {
+      stat = fs.statSync(write.dest);
+    } catch {
+      continue;
+    }
+    if (stat.isDirectory()) {
+      throw new AstryxError(
+        `The output ${rel(write.dest)} is a folder. Move the folder, or pick another ${elsewhere}.`,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+    // Only a path --out names is checked: at the default paths beside the
+    // source, a build replaces what is there, as it always has.
+    const otherSource = refuseUnmarked
+      ? builtFromOtherSource(write.dest, filePath, cwd)
+      : null;
+    if (otherSource && !OUT_REFUSES_OTHER_SOURCE) {
+      // One warning per build: every output of that source goes together.
+      if (warnedOtherSource) continue;
+      warnedOtherSource = true;
+      logger.warn(
+        `Warning: ${rel(write.dest)} was built from ${otherSource}; this build of ${rel(filePath)} replaces it.`,
+      );
+    } else if (otherSource) {
+      throw new AstryxError(
+        `${rel(write.dest)} is the build output of another theme source, ${otherSource}, so this build does not replace it. Pick another ${elsewhere}.`,
+        [
+          {
+            name: formatCliCommand(
+              `theme build ${shellWord(rel(filePath))}`,
+              cwd,
+            ),
+            reason: 'write the outputs beside this source',
+          },
+        ],
+        ERROR_CODES.ERR_FILE_EXISTS,
+      );
+    }
+    // Outputs from CLIs before 0.6.7 have no header, so they read as files
+    // the build did not write; only the user can say they may go.
+    if (
+      refuseUnmarked &&
+      stat.size > 0 &&
+      !fileHead(write.dest).includes(GENERATED_MARKER)
+    ) {
+      throw new AstryxError(
+        `${rel(write.dest)} was written by an older CLI (before 0.6.7) or by hand, so the build does not replace it. Delete that file and run the same build again, or pick another ${elsewhere}.`,
+        rerun
+          ? [
+              {
+                name: rerun,
+                reason: 'run the same build again once the file is deleted',
+              },
+            ]
+          : undefined,
+        ERROR_CODES.ERR_FILE_EXISTS,
+      );
+    }
+  }
+}
+
+/**
+ * The other theme source a build output names in its `Source:` header, when
+ * that source still exists and is not `source`. The name is resolved as
+ * headerSourceCandidates says; a match is exact. A family output names
+ * every member, and is this source's when any of them is. Null when the output is this source's,
+ * names no source, or names one that is gone (an orphan a build may replace).
+ * @param {string} dest
+ * @param {string} source absolute theme source
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+function builtFromOtherSource(dest, source, cwd) {
+  const head = fileHead(dest);
+  if (!head.includes(GENERATED_MARKER)) return null;
+  const line = /Source: (.+)/.exec(head)?.[1]?.trim();
+  if (!line) return null;
+  const names = line.split(', ').map(name => name.trim());
+  const own = path.resolve(source);
+  const candidates = names.flatMap(name =>
+    headerSourceCandidates(dest, name, cwd),
+  );
+  if (candidates.includes(own)) return null;
+  const existing = candidates.find(file => {
+    try {
+      return fs.statSync(file).isFile();
+    } catch {
+      return false;
+    }
+  });
+  return existing ? path.relative(cwd, existing) || existing : null;
+}
+
+/**
+ * Publish the outputs a batch deferred, one theme at a time, in build order.
+ * @param {Array<Array<{dest: string, content: string}>>} deferred
+ */
+export function writeDeferredBuildOutputs(deferred) {
+  for (const writes of deferred.splice(0)) writeBuildOutputs(writes);
+}
+
 /** @param {Array<{dest: string, content: string}>} writes */
 function writeBuildOutputs(writes) {
   if (writes.length === 0) return;
@@ -894,17 +1372,28 @@ async function loadKnownValuesIndex() {
     return result;
   };
 
+  // A component can appear in more than one doc: its own doc declares its
+  // props, and a parent doc can list it by name only. Merge every entry, so
+  // the result does not depend on the order the docs load in.
   /** @type {Record<string, Record<string, Set<string>>>} */
   const valuesByOwner = {};
+  /**
+   * @param {string} name
+   * @param {any[]} props
+   */
+  const addOwnerValues = (name, props) => {
+    const owner = (valuesByOwner[targetName(name)] ??= {});
+    for (const [prop, values] of Object.entries(valuesFromProps(props))) {
+      owner[prop] = new Set([...(owner[prop] ?? []), ...values]);
+    }
+  };
   for (const doc of docs) {
     if (typeof doc?.name === 'string') {
-      valuesByOwner[targetName(doc.name)] = valuesFromProps(doc.props);
+      addOwnerValues(doc.name, doc.props);
     }
     for (const component of /** @type {any[]} */ (doc?.components ?? [])) {
       if (typeof component?.name === 'string') {
-        valuesByOwner[targetName(component.name)] = valuesFromProps(
-          component.props,
-        );
+        addOwnerValues(component.name, component.props);
       }
     }
   }
@@ -982,31 +1471,44 @@ function resolveCoreRoot() {
 const _componentDeclCache = new Map();
 /**
  * @param {string} pascalName
+ * @param {{includeTypes?: boolean}} [options]
  * @returns {string}
  */
-function readComponentDeclarations(pascalName) {
-  if (_componentDeclCache.has(pascalName)) {
-    return _componentDeclCache.get(pascalName) ?? '';
+function readComponentDeclarations(pascalName, options = {}) {
+  const includeTypes = options.includeTypes === true;
+  const cacheKey = `${pascalName}:${includeTypes ? 'with-types' : 'index-only'}`;
+  if (_componentDeclCache.has(cacheKey)) {
+    return _componentDeclCache.get(cacheKey) ?? '';
   }
   let contents = '';
   const coreRoot = resolveCoreRoot();
   if (coreRoot) {
-    const candidates = [
-      path.join(coreRoot, 'dist', pascalName, 'index.d.ts'),
-      path.join(coreRoot, 'src', pascalName, 'index.ts'),
+    const candidateSets = [
+      [path.join(coreRoot, 'dist', pascalName, 'index.d.ts')],
+      [path.join(coreRoot, 'src', pascalName, 'index.ts')],
     ];
-    for (const file of candidates) {
-      try {
-        if (fs.existsSync(file)) {
-          contents = fs.readFileSync(file, 'utf-8');
-          break;
+    if (includeTypes) {
+      candidateSets[0].push(
+        path.join(coreRoot, 'dist', pascalName, 'types.d.ts'),
+      );
+      candidateSets[1].push(path.join(coreRoot, 'src', pascalName, 'types.ts'));
+    }
+    for (const files of candidateSets) {
+      if (fs.existsSync(files[0])) {
+        for (const file of files) {
+          try {
+            if (fs.existsSync(file)) {
+              contents += fs.readFileSync(file, 'utf-8') + '\n';
+            }
+          } catch {
+            // ignore
+          }
         }
-      } catch {
-        // ignore and try the next candidate
+        if (contents) break;
       }
     }
   }
-  _componentDeclCache.set(pascalName, contents);
+  _componentDeclCache.set(cacheKey, contents);
   return contents;
 }
 
@@ -1132,10 +1634,11 @@ async function resolveAugmentationTargetCandidates(componentName) {
  * re-exported) as a type/interface.
  * @param {string} pascalName
  * @param {string} interfaceName
+ * @param {{includeTypes?: boolean}} [options]
  * @returns {boolean}
  */
-function componentHasAugmentableInterface(pascalName, interfaceName) {
-  const decl = readComponentDeclarations(pascalName);
+function componentHasAugmentableInterface(pascalName, interfaceName, options) {
+  const decl = readComponentDeclarations(pascalName, options);
   if (!decl) return false;
   // Require an actual interface declaration in this public subpath, not just a
   // type re-export. Module augmentation only widens consumers that import the
@@ -1166,6 +1669,56 @@ function isComponentValueAugmentationPoint(pascalName, interfaceName) {
     !ARTWORK_REQUEST_MAPS.has(interfaceName) &&
     componentHasAugmentableInterface(pascalName, interfaceName)
   );
+}
+
+/**
+ * Extension points whose public module and interface do not follow the usual
+ * `<Component><Prop>Map` convention. TextType reads CustomTextTypes from the
+ * theme module, so both classification and declaration emission must resolve
+ * this same public augmentation point.
+ *
+ * @type {Record<string, {moduleName: string, interfaceName: string, includeTypes?: boolean}>}
+ */
+const AUGMENTATION_OVERRIDES = {
+  'text.type': {
+    moduleName: 'theme',
+    interfaceName: 'CustomTextTypes',
+    includeTypes: true,
+  },
+};
+
+/**
+ * Resolve the public module/interface that can widen a component prop value.
+ * @param {string} component
+ * @param {string} prop
+ * @returns {Promise<{moduleName: string, interfaceName: string}|null>}
+ */
+async function resolveAugmentationTarget(component, prop) {
+  const override = AUGMENTATION_OVERRIDES[`${component}.${prop}`];
+  if (override) {
+    return componentHasAugmentableInterface(
+      override.moduleName,
+      override.interfaceName,
+      {includeTypes: override.includeTypes},
+    )
+      ? {moduleName: override.moduleName, interfaceName: override.interfaceName}
+      : null;
+  }
+
+  const propPascal = prop.charAt(0).toUpperCase() + prop.slice(1);
+  const target = (await resolveAugmentationTargetCandidates(component)).find(
+    candidate =>
+      isComponentValueAugmentationPoint(
+        candidate.moduleName,
+        `${candidate.interfacePrefix}${propPascal}Map`,
+      ),
+  );
+  return target
+    ? {
+        moduleName: target.moduleName,
+        interfaceName: `${target.interfacePrefix}${propPascal}Map`,
+      }
+    : null;
 }
 
 /**
@@ -1472,14 +2025,7 @@ async function classifyComponentValue(component, prop, value) {
     return 'builtin';
   }
 
-  const propPascal = prop.charAt(0).toUpperCase() + prop.slice(1);
-  const target = (await resolveAugmentationTargetCandidates(component)).find(
-    candidate =>
-      isComponentValueAugmentationPoint(
-        candidate.moduleName,
-        `${candidate.interfacePrefix}${propPascal}Map`,
-      ),
-  );
+  const target = await resolveAugmentationTarget(component, prop);
   return target ? 'enrollment' : 'unresolved';
 }
 
@@ -1637,15 +2183,7 @@ async function generateVariantDeclarationsAsync(themeDef) {
     for (const [prop, values] of Object.entries(props)) {
       if (values.size === 0) continue;
 
-      const propPascal = prop.charAt(0).toUpperCase() + prop.slice(1);
-      const target = (
-        await resolveAugmentationTargetCandidates(component)
-      ).find(candidate =>
-        isComponentValueAugmentationPoint(
-          candidate.moduleName,
-          `${candidate.interfacePrefix}${propPascal}Map`,
-        ),
-      );
+      const target = await resolveAugmentationTarget(component, prop);
 
       // Resolve the augmentation point again to name it. Classification has
       // already established that one exists (that is what `enrollment` means),
@@ -1656,7 +2194,7 @@ async function generateVariantDeclarationsAsync(themeDef) {
       if (!target) continue;
 
       const modulePath = `@astryxdesign/core/${target.moduleName}`;
-      const interfaceName = `${target.interfacePrefix}${propPascal}Map`;
+      const {interfaceName} = target;
 
       sections.push(`declare module '${modulePath}' {`);
       sections.push(`  interface ${interfaceName} {`);
@@ -1720,17 +2258,24 @@ const THEME_SCOPE_TO = `[data-astryx-theme]`;
  * the author's TypeScript sees, which is the point: the CSS the build emits
  * matches the theme they type-checked.
  */
+// Every theme source extension is in this list: jiti hands a file whose
+// extension it does not list to Node's own loader, which cannot load `.jsx`
+// or, on some Node versions, TypeScript.
 const THEME_MODULE_EXTENSIONS = [
-  '.ts',
-  '.tsx',
-  '.mts',
-  '.cts',
-  '.mtsx',
-  '.ctsx',
-  '.mjs',
-  '.cjs',
-  '.js',
-  '.json',
+  ...new Set([
+    '.ts',
+    '.tsx',
+    '.mts',
+    '.cts',
+    '.mtsx',
+    '.ctsx',
+    '.mjs',
+    '.cjs',
+    '.js',
+    '.jsx',
+    '.json',
+    ...THEME_SOURCE_EXTENSIONS,
+  ]),
 ];
 // prettier-ignore
 const registryGraphError = (/** @type {string} */ message) => new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
@@ -1879,6 +2424,9 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     loader ??
     createJiti(import.meta.url, {
       moduleCache: false,
+      // No transpile cache: it is written to the system temp folder, named
+      // for the theme, and never removed, so every edit added files there.
+      fsCache: false,
       jsx: true,
       extensions: THEME_MODULE_EXTENSIONS,
       ...(interception ? {virtualModules: interception.modules} : {}),
@@ -1893,7 +2441,6 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     // A frozen require(esm) namespace cannot be patched, so retain that gap and
     // let the selected lineage decide whether it matters.
     const commonJsPatch = interception.patchCommonJs(filePath);
-    degraded.commonJs = !commonJsPatch.covered;
     try {
       try {
         mod = jiti(filePath);
@@ -1915,6 +2462,8 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
         });
       }
     } finally {
+      // Read after the load: the root is wrapped when the load requires it.
+      degraded.commonJs = !commonJsPatch.covered;
       commonJsPatch.undo();
     }
   } else {
@@ -1938,6 +2487,20 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
       if (isThemeObject(value)) return {theme: value, exportName, degraded};
     }
   }
+  // The loader's interop answers a null default with the module itself, so
+  // read the export as the module wrote it.
+  const ownDefault = hasDefault
+    ? Object.getOwnPropertyDescriptor(mod, 'default')?.value
+    : undefined;
+  if (
+    hasDefault &&
+    (ownDefault === null ||
+      (typeof ownDefault !== 'object' && typeof ownDefault !== 'function'))
+  ) {
+    throw new ThemeShapeError(
+      `The default export is ${ownDefault === null ? 'null' : `a ${typeof ownDefault}`}, not a theme object.`,
+    );
+  }
   // A plain-object default export is the module's theme even when it has
   // no tokens of its own (local tokens, typography or component styles may
   // be all it defines), or no name: the build's validation says what it
@@ -1956,9 +2519,8 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     }
   }
 
-  throw new Error(
-    `Could not find a defineTheme() result in ${filePath}.\n` +
-      `Expected an export like: export const myTheme = defineTheme({ name: '...', tokens: {...} })`,
+  throw new ThemeShapeError(
+    `Could not find a defineTheme() result in ${filePath}.`,
   );
 }
 
@@ -2031,11 +2593,99 @@ async function extractThemeDefinition(filePath, interception, /** @type {any} */
   } catch (jitiError) {
     const je = /** @type {Error} */ (jitiError);
     throw new Error(
-      `Failed to load theme from ${filePath}: ${je.message}\n` +
-        `Make sure all imports in the theme file are resolvable.`,
+      `Failed to load theme from ${filePath}: ${themeLoadReason(je)}`,
       {cause: jitiError},
     );
   }
+}
+
+/** Names a theme module's exports must take; ends a shape failure. */
+const THEME_EXPORT_FIX =
+  "Export the theme object: `export default defineTheme({name: 'my-theme', tokens: {...}})`, or a plain `export default {name: 'my-theme', tokens: {...}}`.";
+
+/**
+ * Why a theme module did not load, with the step that fixes it. A module
+ * whose default export is null or a primitive trips the loader's interop
+ * before the build reads it; that is a theme shape failure, not an import one.
+ * @param {Error} error
+ * @returns {string}
+ */
+function themeLoadReason(error) {
+  const message = error.message;
+  if (error instanceof ThemeShapeError)
+    return `${message}\n${THEME_EXPORT_FIX}`;
+  if (
+    error instanceof TypeError &&
+    /^Cannot read properties of (?:null|undefined)/.test(message) &&
+    /jiti/.test(String(error.stack).split('\n')[1] ?? '')
+  ) {
+    return `its default export is null or not an object.\n${THEME_EXPORT_FIX}`;
+  }
+  const missing = missingThemePackage(error);
+  if (missing) {
+    // Node's "Require stack" names absolute paths; the package is the fact.
+    return `Cannot find module '${missing}'.\nThe theme imports ${missing}, which is not installed. Install it, then build again.`;
+  }
+  return `${message}\nMake sure all imports in the theme file are resolvable.`;
+}
+
+/** A theme module that loaded but exports no theme object. */
+class ThemeShapeError extends Error {}
+
+/**
+ * The command that moves a failed theme load forward: the install for a
+ * package the theme imports and the app lacks, the same build for a file that
+ * changed while it loaded, else the annotated template, which shows a theme
+ * source that loads.
+ * @param {Error} error
+ * @param {string} shown the theme file as the message names it
+ * @param {string} cwd
+ * @returns {import('../../../foundation/response/base').Suggestion[]}
+ */
+function themeLoadSuggestions(error, shown, cwd) {
+  const missing = missingThemePackage(error.cause ?? error);
+  if (missing) {
+    const {installCommand} = installCommandFor(
+      [missing],
+      findPackageRoot(cwd) ?? cwd,
+    );
+    if (installCommand) {
+      return [
+        {
+          name: installCommand,
+          reason: `install ${missing}, which the theme imports`,
+        },
+      ];
+    }
+  }
+  if (/changed while it was loading/.test(error.message)) {
+    return [
+      {
+        name: formatCliCommand(`theme build ${shellWord(shown)}`, cwd),
+        reason: 'build again once the file is saved',
+      },
+    ];
+  }
+  return [
+    {
+      name: formatCliCommand('theme template theme.template.ts', cwd),
+      reason: 'an annotated theme source that loads, to compare with',
+    },
+  ];
+}
+
+/**
+ * The package a theme load failed on because it is not installed.
+ * @param {unknown} error
+ * @returns {string | null}
+ */
+export function missingThemePackage(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /Cannot find (?:module|package) '((?:@[^/']+\/)?[^/'.][^/']*)/.exec(
+      message,
+    )?.[1] ?? null
+  );
 }
 
 /**
@@ -2089,7 +2739,7 @@ export async function validateThemePrivateInputs(
  *   import { defaultIconRegistry } from './icons';
  *   icons: defaultIconRegistry,
  * @param {string} filePath
- * @param {'icons' | 'indicators'} field
+ * @param {'icons' | 'indicators' | 'componentIcons'} field
  * @returns {{exportName: string, importPath: string} | null}
  */
 function extractRegistryInfo(filePath, field) {
@@ -2168,6 +2818,83 @@ function iconNodesExpression(entries, entriesName, nodesName) {
 }
 
 /**
+ * A theme's component icon slot values: a theme from defineTheme keeps them
+ * in `__componentIcons` when any is a function (its `componentIcons` is the
+ * static view); otherwise `componentIcons` holds them.
+ * @param {any} theme
+ * @returns {Record<string, unknown> | undefined}
+ */
+function themeComponentIcons(theme) {
+  return theme?.__componentIcons ?? theme?.componentIcons;
+}
+
+/**
+ * The generated function that merges a theme's own slot values over its
+ * base's, as `defineTheme` does: an own slot replaces the inherited one whole,
+ * and an `undefined` own slot leaves it in place. It reads no global.
+ * @param {string} name - A reserved function name.
+ * @returns {string}
+ */
+function componentIconMergeFunction(name) {
+  return `function ${name}(base, own) {
+  const merged = {...base};
+  for (const slot in own) {
+    if (own[slot] !== undefined) merged[slot] = own[slot];
+  }
+  return merged;
+}
+`;
+}
+
+/**
+ * The generated code that reads the static view of a theme's slot values:
+ * every slot without a function. Like the icon node view, it reads no global
+ * and declares only reserved local names.
+ * @param {string} valuesName - A reserved local name bound to the values.
+ * @param {string} viewName - A reserved local name.
+ * @returns {string}
+ */
+function componentIconViewExpression(valuesName, viewName) {
+  return `(() => {
+  const ${viewName} = {};
+  for (const slot in ${valuesName}) {
+    const value = ${valuesName}[slot];
+    if (value !== undefined && typeof value !== 'function') ${viewName}[slot] = value;
+  }
+  return ${viewName};
+})()`;
+}
+
+/**
+ * One import statement for a carried registry or slot binding. Ordinary named
+ * imports stay byte-compatible; paths with quotes or escapes are encoded, and
+ * default, namespace, and aliased bindings are kept.
+ * @param {{importPath: string, importedName: string, localName: string}} binding
+ * @param {string} [specifier] - Replaces the import path when given.
+ * @returns {string}
+ */
+function importStatement({importPath, importedName, localName}, specifier) {
+  const source =
+    specifier !== undefined
+      ? JSON.stringify(specifier)
+      : /['\\\r\n]/u.test(importPath)
+        ? JSON.stringify(importPath)
+        : `'${importPath}'`;
+  const imported = /^[$\p{ID_Start}][$\u200c\u200d\p{ID_Continue}]*$/u.test(
+    importedName,
+  )
+    ? importedName
+    : JSON.stringify(importedName);
+  const binding =
+    importedName === 'default'
+      ? localName
+      : importedName === '*'
+        ? `* as ${localName}`
+        : `{ ${imported}${importedName === localName ? '' : ` as ${localName}`} }`;
+  return `import ${binding} from ${source};\n`;
+}
+
+/**
  * Generate a minimal JS module for a built theme.
  * Includes the theme name, marker, and re-exports the icon registry.
  * All styling is in the CSS file.
@@ -2193,10 +2920,15 @@ function iconNodesExpression(entries, entriesName, nodesName) {
  * renders, and the theme's `icons` and the re-exported registry are the node
  * view, each function read at `{size: 'md'}` as `DefinedTheme['icons']` is.
  *
+ * Component icon slots without a function are written as JSON. When a slot
+ * value is a function, the module keeps the values, carried through
+ * `componentIconInfo`'s imports, as `__componentIcons`, and the theme's
+ * `componentIcons` is the static view, as `DefinedTheme['componentIcons']` is.
+ *
  * @param {any} themeDef
  * @param {import('./icon-imports.mjs').IconImports | null} iconInfo
  * @param {string} [iconsSpecifier] - Overrides the selected registry specifier.
- * @param {{themeBinding?: string, iconsExpression?: string, indicatorsExpression?: string, artifactBaseName?: string, exportIcons?: boolean}} [moduleOptions]
+ * @param {{themeBinding?: string, iconsExpression?: string, indicatorsExpression?: string, artifactBaseName?: string, cssFileName?: string, exportIcons?: boolean, componentIconInfo?: {imports: import('./icon-imports.mjs').IconImports['imports'], expression: string, mergeName?: string} | null}} [moduleOptions]
  * @returns {string}
  */
 function generateBuiltModule(
@@ -2208,33 +2940,19 @@ function generateBuiltModule(
   const themeBinding =
     moduleOptions.themeBinding ?? `${toIdentifier(themeDef.name)}Theme`;
   const artifactBaseName = moduleOptions.artifactBaseName ?? themeDef.name;
+  const cssFileName = moduleOptions.cssFileName ?? `${artifactBaseName}.css`;
   const exportIcons = moduleOptions.exportIcons ?? true;
-  // Keep ordinary direct named imports byte-compatible, while encoding paths
-  // with quotes/escapes and retaining default, namespace, and aliased bindings.
   const iconImport = (iconInfo?.imports ?? [])
-    .map(({importPath, importedName, localName}) => {
-      const overridden =
+    .map(binding =>
+      importStatement(
+        binding,
         iconsSpecifier !== undefined &&
-        importPath === iconInfo?.iconsSpecifierImportPath &&
-        localName === iconInfo?.iconsSpecifierLocalName;
-      const specifier = overridden
-        ? JSON.stringify(iconsSpecifier)
-        : /['\\\r\n]/u.test(importPath)
-          ? JSON.stringify(importPath)
-          : `'${importPath}'`;
-      const imported = /^[$\p{ID_Start}][$\u200c\u200d\p{ID_Continue}]*$/u.test(
-        importedName,
-      )
-        ? importedName
-        : JSON.stringify(importedName);
-      const binding =
-        importedName === 'default'
-          ? localName
-          : importedName === '*'
-            ? `* as ${localName}`
-            : `{ ${imported}${importedName === localName ? '' : ` as ${localName}`} }`;
-      return `import ${binding} from ${specifier};\n`;
-    })
+          binding.importPath === iconInfo?.iconsSpecifierImportPath &&
+          binding.localName === iconInfo?.iconsSpecifierLocalName
+          ? iconsSpecifier
+          : undefined,
+      ),
+    )
     .join('');
   const iconDeclaration =
     iconInfo && iconInfo.expression !== iconInfo.exportName
@@ -2262,6 +2980,29 @@ function generateBuiltModule(
       ? iconNodes
         ? `\nexport { ${iconNodes} as ${iconInfo.exportName} };\n`
         : `\nexport { ${iconInfo.exportName} };\n`
+      : '';
+
+  const componentIconValues = themeComponentIcons(themeDef);
+  const componentIconInfo = moduleOptions.componentIconInfo ?? null;
+  const carriesSlotFunctions = hasFunctionIconEntry(componentIconValues);
+  if (carriesSlotFunctions && !componentIconInfo) {
+    throw new AstryxError(
+      `Theme "${themeDef.name}" has componentIcons slot functions that the build cannot carry. ` +
+        'Import the slot functions from their own module into the theme file.',
+      undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+  const componentIconValuesName = `${themeBinding}ComponentIconValues`;
+  const componentIconPrelude =
+    carriesSlotFunctions && componentIconInfo
+      ? componentIconInfo.imports
+          .map(binding => importStatement(binding))
+          .join('') +
+        (componentIconInfo.mergeName
+          ? componentIconMergeFunction(componentIconInfo.mergeName)
+          : '') +
+        `const ${componentIconValuesName} = ${componentIconInfo.expression};\n`
       : '';
 
   // Resolve token values — tuples become light-dark() strings
@@ -2334,14 +3075,23 @@ function generateBuiltModule(
             list ?? [],
           ]),
         ),
-    );
+    ) +
+    (carriesSlotFunctions
+      ? `  componentIcons: ${componentIconViewExpression(
+          componentIconValuesName,
+          `${themeBinding}ComponentIconView`,
+        )
+          .split('\n')
+          .map((line, i) => (i === 0 ? line : '  ' + line))
+          .join('\n')},\n  __componentIcons: ${componentIconValuesName},\n`
+      : serializeField('componentIcons', componentIconValues, true));
 
-  return `${iconImport}${iconDeclaration}${iconNodesDeclaration}/**
+  return `${iconImport}${componentIconPrelude}${iconDeclaration}${iconNodesDeclaration}/**
  * ${themeDef.name} theme — built by \`${getCliInvocation()} theme build\`
  * Import the CSS file alongside this module:
  *
  *   import { ${themeBinding} } from './${artifactBaseName}';
- *   import './${artifactBaseName}.css';
+ *   import './${cssFileName}';
  */
 export const ${themeBinding} = {
   name: '${themeDef.name}',
@@ -2754,9 +3504,12 @@ function validateHeadingTypeAugmentationSupport(themeDef) {
  * `logger` (silent by default).
  *
  * @param {string} file - Theme file path, resolved against `cwd`.
- * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string}} [options] -
- *   `out` overrides the output CSS path; `check` compares against on-disk outputs
- *   instead of writing. `__writeRoot` replaces `cwd` as the directory every
+ * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __deferredWrites?: Array<Array<{dest: string, content: string}>>, __commandWords?: {group: string, build: string}}} [options] -
+ *   `out` overrides the output CSS path, or names the folder for it; `check` compares against on-disk outputs
+ *   instead of writing. `__claimedOutputs` records the outputs earlier builds
+ *   in one run wrote, so a later theme cannot replace them; with
+ *   `__deferredWrites` the build adds its outputs to that list instead of
+ *   writing them, for writeDeferredBuildOutputs. `__writeRoot` replaces `cwd` as the directory every
  *   output must stay inside, for a CLI-internal scratch build. `iconsSpecifier` overrides the icon registry import
  *   specifier in the generated module (e.g. `./icons.mjs`); when omitted, the
  *   direct registry specifiers from the theme source are emitted unchanged.
@@ -2775,10 +3528,29 @@ async function themeBuildInternal(
   if (!fs.existsSync(filePath)) {
     throw new AstryxError(
       `File not found: ${filePath}`,
-      undefined,
+      themeSourceGuesses(file, cwd).map(guess => ({
+        name: formatCliCommand(`theme build ${shellWord(guess)}`, cwd),
+        reason: 'a theme source that exists',
+      })),
       ERROR_CODES.ERR_FILE_NOT_FOUND,
     );
   }
+
+  if (fs.statSync(filePath).isDirectory()) {
+    throw new AstryxError(
+      `${path.relative(cwd, filePath) || '.'} is a folder. Pass the theme file inside it.`,
+      themeFilesIn(filePath).map(name => ({
+        name: formatCliCommand(
+          `theme build ${shellWord(path.relative(cwd, path.join(filePath, name)).split(path.sep).join('/'))}`,
+          cwd,
+        ),
+        reason: 'a theme source in that folder',
+      })),
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+
+  assertThemeSourceFile(filePath, cwd);
 
   if (!report.compact) {
     logger.log(`\nBuilding theme from ${path.relative(cwd, filePath)}...`);
@@ -2813,18 +3585,40 @@ async function themeBuildInternal(
   let themeExportName;
   /** Paths through the load that interception could not fully observe. */
   let loadDegradation;
+  /**
+   * The theme file's bytes as loaded: read before and after the load, and the
+   * registry scan below reads these rather than the file again. An editor's
+   * in-place save truncates before it writes, so a later read can find an
+   * empty file the load never saw; a file that changed while it loaded is not
+   * built from.
+   * @type {string}
+   */
+  let themeSource;
   try {
+    const before = fs.readFileSync(filePath, 'utf8');
     const loaded = await extractThemeDefinition(
       filePath,
       interception,
       options.__familyLoader,
     );
+    const after = fs.readFileSync(filePath, 'utf8');
+    if (before !== after || before === '') {
+      throw new Error(
+        `${filePath} changed while it was loading. Build again once it is saved.`,
+      );
+    }
+    themeSource = before;
     themeDef = loaded.theme;
     themeExportName = loaded.exportName;
     loadDegradation = loaded.degraded;
   } catch (e) {
     const err = /** @type {Error} */ (e);
-    throw new AstryxError(err.message, undefined, ERROR_CODES.ERR_THEME_LOAD);
+    const shown = path.relative(cwd, filePath) || filePath;
+    throw new AstryxError(
+      err.message.split(filePath).join(shown),
+      themeLoadSuggestions(err, shown, cwd),
+      ERROR_CODES.ERR_THEME_LOAD,
+    );
   }
 
   // The marker is scoped to that isolated load: drop it before the theme
@@ -2854,9 +3648,15 @@ async function themeBuildInternal(
     interception && hasCoverageGap ? interception.unobservedIn(themeDef) : [];
   if (interception) interception.strip(themeDef);
   if (!ancestryObserved) {
+    const shown = path.relative(cwd, filePath);
     throw new AstryxError(
-      `Theme "${themeDef.name ?? path.basename(filePath)}" exact family ancestry could not be observed during CLI loading.`,
-      undefined,
+      `Theme "${themeDef.name ?? path.basename(filePath)}" in ${shown} is a plain object, so a family build cannot see which theme it extends. A family member is made with defineTheme(...) from @astryxdesign/core/theme; build a plain-object theme on its own.`,
+      [
+        {
+          name: formatCliCommand(`theme build ${shellWord(shown)}`, cwd),
+          reason: 'build this theme on its own',
+        },
+      ],
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
@@ -2907,10 +3707,20 @@ async function themeBuildInternal(
         ]
       : []),
   ];
+  // Names the slot values, their static view, and their merge function take
+  // in the built module.
+  const componentIconNames = [
+    `${toIdentifier(themeDef.name)}ThemeComponentIconValues`,
+    `${toIdentifier(themeDef.name)}ThemeComponentIconView`,
+    `${toIdentifier(themeDef.name)}ThemeMergeComponentIcons`,
+  ];
   const iconResolution = {
-    readSource: (/** @type {string} */ file) => fs.readFileSync(file, 'utf8'),
+    readSource: (/** @type {string} */ file) =>
+      path.resolve(file) === path.resolve(filePath)
+        ? themeSource
+        : fs.readFileSync(file, 'utf8'),
     resolveModule: resolveThemeModule,
-    reservedNames: reservedNames(functionEntries),
+    reservedNames: [...reservedNames(functionEntries), ...componentIconNames],
     functionEntries,
     rawInput: 'extends' in themeDef,
     hasIcons:
@@ -2920,6 +3730,8 @@ async function themeBuildInternal(
   let iconInfo = standaloneIcons
     ? await resolveIconImports(filePath, themeExportName, iconResolution)
     : null;
+  /** @type {import('./icon-imports.mjs').IconImports | null} */
+  let componentIconInfo = null;
 
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
@@ -3042,7 +3854,10 @@ async function themeBuildInternal(
         ...iconResolution,
         hasIcons: true,
         functionEntries: resolvedFunctionEntries,
-        reservedNames: reservedNames(resolvedFunctionEntries),
+        reservedNames: [
+          ...reservedNames(resolvedFunctionEntries),
+          ...componentIconNames,
+        ],
       });
     }
     // An opaque package base can legitimately have no icons. Its .icons
@@ -3065,6 +3880,27 @@ async function themeBuildInternal(
         undefined,
         ERROR_CODES.ERR_THEME_INVALID,
       );
+    }
+
+    // A slot function cannot be serialized, so the module imports it from
+    // where the theme source does. Static slot values are written as JSON.
+    if (
+      standaloneIcons &&
+      hasFunctionIconEntry(themeComponentIcons(resolvedTheme))
+    ) {
+      componentIconInfo = await resolveIconImports(filePath, themeExportName, {
+        ...iconResolution,
+        field: 'componentIcons',
+        mergeName: `${toIdentifier(themeDef.name)}ThemeMergeComponentIcons`,
+        hasIcons: true,
+        functionEntries: true,
+        reservedNames: [
+          ...reservedNames(true),
+          ...componentIconNames,
+          ...(iconInfo?.imports.map(binding => binding.localName) ?? []),
+          ...(iconInfo ? [iconInfo.exportName] : []),
+        ],
+      });
     }
 
     // Cores that predate adaptations can still resolve typography, color,
@@ -3230,7 +4066,8 @@ async function themeBuildInternal(
 
   // Source path relative to cwd — used in @generated headers
   const sourceRelative = path.relative(cwd, filePath);
-  const buildCommand = `astryx theme build ${sourceRelative}${options.out ? ' --out ' + path.relative(cwd, path.resolve(cwd, options.out)) : ''}`;
+  // What `--check` prints to rebuild, from the working folder.
+  const rebuildCommand = `astryx theme build ${sourceRelative}${options.out ? ' --out ' + path.relative(cwd, path.resolve(cwd, options.out)) : ''}`;
   // Stable provenance recorded in @generated headers — versions, not a
   // timestamp, so identical inputs produce byte-identical output.
   const versions = resolveToolVersions(cwd);
@@ -3244,6 +4081,23 @@ async function themeBuildInternal(
   let outPath;
   if (options.out) {
     outPath = path.resolve(cwd, options.out);
+    // A folder, or a path that ends in a separator, names where the outputs
+    // go: write `<folder>/<name>.css`, never a file named like the folder.
+    if (/[\\/]$/.test(options.out) || isDirectorySync(outPath)) {
+      outPath = path.join(outPath, `${baseName}.css`);
+    }
+    // The stylesheet is CSS whatever its name; a name that does not end in
+    // .css still builds, and the module's import names the file as written.
+    if (path.extname(outPath).toLowerCase() !== '.css') {
+      const stem = path.basename(outPath).replace(/(?:\.d)?\.[^.]+$/, '');
+      const fixed = path
+        .join(path.dirname(options.out), `${stem}.css`)
+        .split(path.sep)
+        .join('/');
+      logger.warn(
+        `Warning: --out names the stylesheet, which is CSS; give it a .css name such as ${fixed}.`,
+      );
+    }
     // A build keeps the explicit output inside the write root, relative or
     // absolute. Check mode writes nothing, so it refuses only a relative path
     // that escapes cwd.
@@ -3253,6 +4107,12 @@ async function themeBuildInternal(
   } else {
     outPath = path.join(path.dirname(filePath), `${baseName}.css`);
   }
+  // The header names the source and command from the project root of the
+  // outputs, so a build from any folder writes the same bytes, `--check`
+  // agrees with it, and a later build reads the source back exactly.
+  const headerBase = headerRoot(path.dirname(outPath), cwd);
+  const headerSource = headerPath(headerBase, filePath);
+  const buildCommand = `astryx theme build ${headerSource}${options.out ? ' --out ' + headerPath(headerBase, outPath) : ''}`;
 
   const displayTheme = resolvedTheme || themeDef;
   const tokenCount =
@@ -3284,27 +4144,38 @@ async function themeBuildInternal(
       ? path.join(outDir, variantsFileName)
       : null;
   const variantContent = variantDecl
-    ? generatedHeader(sourceRelative, 'ts', buildCommand, versions) +
-      variantDecl
+    ? generatedHeader(headerSource, 'ts', buildCommand, versions) + variantDecl
     : null;
 
   // Generate all file contents in memory first. The main .d.ts references
   // the variants file (when present) via a triple-slash directive so
   // importing the theme also loads the custom-variant augmentations.
   const cssContent =
-    generatedHeader(sourceRelative, 'css', buildCommand, versions) + css;
+    generatedHeader(headerSource, 'css', buildCommand, versions) + css;
   const cssDtsContent =
-    generatedHeader(sourceRelative, 'ts', buildCommand, versions) +
+    generatedHeader(headerSource, 'ts', buildCommand, versions) +
     'export {};\n';
-  const jsContent =
-    generatedHeader(sourceRelative, 'js', buildCommand, versions) +
-    generateBuiltModule(
-      resolvedTheme || themeDef,
-      iconInfo,
-      options.iconsSpecifier,
-    );
+  // A family member's module is generated by themeBuildFamily, which carries
+  // its registries and slot functions through the family's own imports.
+  const jsContent = options.__prepareFamily
+    ? ''
+    : generatedHeader(headerSource, 'js', buildCommand, versions) +
+      generateBuiltModule(
+        resolvedTheme || themeDef,
+        iconInfo,
+        options.iconsSpecifier,
+        {
+          componentIconInfo,
+          // A stylesheet named other than `.css` is named as written. A
+          // `.css` name keeps the theme's own name in the module, so the
+          // module is the same whatever `--out` names the stylesheet.
+          ...(path.extname(outPath).toLowerCase() === '.css'
+            ? {}
+            : {cssFileName: path.basename(outPath)}),
+        },
+      );
   const dtsContent =
-    generatedHeader(sourceRelative, 'ts', buildCommand, versions) +
+    generatedHeader(headerSource, 'ts', buildCommand, versions) +
     generateBuiltTypes(resolvedTheme || themeDef, iconInfo, variantsFileName);
 
   const unloadedFonts = [
@@ -3325,6 +4196,7 @@ async function themeBuildInternal(
       sourceParent,
       iconInfo: extractRegistryInfo(filePath, 'icons'),
       indicatorInfo: extractRegistryInfo(filePath, 'indicators'),
+      componentIconInfo: extractRegistryInfo(filePath, 'componentIcons'),
       variantDecl,
       css: cssPlan,
       versions,
@@ -3350,6 +4222,16 @@ async function themeBuildInternal(
   // outside cwd read-only.
   if (!options.check) {
     confineOutputs(writes, writeRoot, options.out ? OUT_REMEDY : SOURCE_REMEDY);
+    // prettier-ignore
+    const rerun = formatCliCommand(['theme', 'build', path.relative(cwd, filePath), ...(options.out ? ['--out', options.out] : []), ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])].map(shellWord).join(' '), cwd);
+    // A header-less file at the default paths beside the source is an output
+    // of a CLI before 0.6.7, which the build has always replaced. A path that
+    // --out names may hold anything, so there only build outputs are replaced.
+    assertOutputsReplaceable(writes, filePath, cwd, {
+      claimed: options.__claimedOutputs,
+      rerun,
+      refuseUnmarked: Boolean(options.out),
+    });
   }
 
   // Check mode: compare generated content against what's on disk instead of
@@ -3359,12 +4241,15 @@ async function themeBuildInternal(
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);
     const upToDate = stale.length === 0;
+    const checkedLine = `  checked: ${checkedBuildOutputs(writes, cwd).join(', ')}`;
     if (upToDate) {
       logger.log(`\n[ok] Theme outputs are up to date with ${sourceRelative}.`);
+      logger.log(checkedLine);
     } else {
       logger.error(
         `\n[fail] ${stale.length} theme output(s) are out of date with ${sourceRelative}:`,
       );
+      logger.error(checkedLine);
       for (const s of stale) {
         logger.error(
           `  ${s.reason === 'missing' ? 'missing' : 'stale'}: ${s.path}`,
@@ -3373,7 +4258,10 @@ async function themeBuildInternal(
       // prettier-ignore
       const remedy = outsideCheckRemedy(writes, [filePath], writeRoot, relative => [relative(filePath), ...(options.out ? ['--out', relative(outPath)] : []), ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])]);
       if (remedy) logger.error(`\n  ${remedy.join('\n  ')}`);
-      else logger.error(`\n  Rebuild with: ${buildCommand}`);
+      else
+        logger.error(
+          `\n  Rebuild with: ${rebuildLine(rebuildCommand, options.__commandWords)}`,
+        );
     }
     return {
       type: 'theme.build.check',
@@ -3386,7 +4274,13 @@ async function themeBuildInternal(
     };
   }
 
-  writeBuildOutputs(writes);
+  // A batch publishes every theme's outputs after all of them are built, so
+  // two themes that build the same files are refused before either writes.
+  if (options.__deferredWrites) options.__deferredWrites.push(writes);
+  else writeBuildOutputs(writes);
+  for (const write of writes) {
+    options.__claimedOutputs?.set(outputKey(write.dest), sourceRelative);
+  }
 
   if (!report.compact) {
     logger.log(`\n[ok] ${path.relative(cwd, outPath)}`);
@@ -3406,9 +4300,8 @@ async function themeBuildInternal(
   }
 
   const relOutDir = path.relative(cwd, outDir) || '.';
-  const cssBase = path.basename(outPath, '.css');
   const jsImport = importSpecifier(relOutDir, baseName);
-  const cssImport = importSpecifier(relOutDir, cssBase) + '.css';
+  const cssImport = importSpecifier(relOutDir, path.basename(outPath));
   const exportName = `${toIdentifier(baseName)}Theme`;
 
   // Fonts the theme names but nothing loads (#5015). Resolved tokens and
@@ -3644,6 +4537,81 @@ function allocateFamilyBindings(members) {
   const used = new Map();
   return new Map(members.map(member => { const base = familyThemeBinding(member.theme.name), count = used.get(base) ?? 0; used.set(base, count + 1); return [member.theme.name, count === 0 ? base : `${base}${count + 1}`]; }));
 }
+/**
+ * How a family member's module carries slot functions: its parent's values,
+ * then its own. A member supplies its own slot functions through a named
+ * import of its whole `componentIcons` map, merged as `defineTheme` merges;
+ * own static values are written as JSON. Null when the member has no slot
+ * function, so its static values are written as JSON alone.
+ * @param {any} member
+ * @param {any} parent - The member's parent in the family, if any.
+ * @param {{themeBinding: string | undefined, parentBinding: string | null | undefined, outDir: string, registryImports: Array<{specifier: string, exportName: string}>, expression: (own: string | null, inherited: string | null) => string | undefined}} context
+ * @returns {{imports: Array<{importPath: string, importedName: string, localName: string}>, expression: string, mergeName?: string} | null}
+ */
+function familyComponentIcons(member, parent, context) {
+  const values = themeComponentIcons(member.theme);
+  if (!hasFunctionIconEntry(values)) return null;
+  const inheritedValues = themeComponentIcons(parent?.theme);
+  const inherited =
+    context.parentBinding && inheritedValues
+      ? `${context.parentBinding}.${hasFunctionIconEntry(inheritedValues) ? '__componentIcons' : 'componentIcons'}`
+      : null;
+  /** @type {Array<{importPath: string, importedName: string, localName: string}>} */
+  const imports = [];
+  let own = null;
+  const binding =
+    context.themeBinding ?? `${toIdentifier(member.theme.name)}Theme`;
+  const info = member.componentIconInfo;
+  if (info) {
+    const input = familyRegistryInput(
+      info,
+      member.filePath,
+      context.outDir,
+      undefined,
+    );
+    const importPath = input.specifier ?? info.importPath;
+    own = `${binding}ComponentIconSource`;
+    imports.push({importPath, importedName: info.exportName, localName: own});
+    context.registryImports.push({
+      specifier: importPath,
+      exportName: info.exportName,
+    });
+  } else {
+    // Without an import, a member's own slots are the ones that differ from
+    // its parent's; they must all be static.
+    /** @type {Record<string, unknown>} */
+    const ownValues = {};
+    for (const [slot, value] of Object.entries(values ?? {})) {
+      if (
+        inheritedValues &&
+        Object.hasOwn(inheritedValues, slot) &&
+        inheritedValues[slot] === value
+      )
+        continue;
+      if (typeof value === 'function') {
+        throw new AstryxError(
+          `Theme "${member.theme.name}" must supply its componentIcons slot functions through a named import of its whole componentIcons map for family output.`,
+          undefined,
+          ERROR_CODES.ERR_THEME_INVALID,
+        );
+      }
+      ownValues[slot] = value;
+    }
+    if (Object.keys(ownValues).length > 0) own = JSON.stringify(ownValues);
+  }
+  if (info) {
+    // An imported map can hold an `undefined` slot: it keeps the parent's,
+    // and a root drops it, as `defineTheme` does.
+    const mergeName = `${binding}MergeComponentIcons`;
+    return {
+      imports,
+      expression: `${mergeName}(${inherited ?? '{}'}, ${own})`,
+      mergeName,
+    };
+  }
+  const expression = context.expression(own, inherited);
+  return expression ? {imports, expression} : null;
+}
 /** Rebase a scraped relative registry import to the aggregate module. @param {any} info @param {string} filePath @param {string} outDir @param {string | undefined} override */
 // prettier-ignore
 function familyRegistryInput(info, filePath, outDir, override) {
@@ -3692,7 +4660,7 @@ async function preloadFamilySource(filePath, loader, interception) {
   finally { patch.undo(); }
 }
 
-/** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string, __onPrivateVarError?: () => void}} options @param {{cwd?: string}} [ctx] */
+/** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string, __onPrivateVarError?: () => void, __commandWords?: {group: string, build: string}}} options @param {{cwd?: string}} [ctx] */
 export async function themeBuildFamily(
   files,
   options,
@@ -3715,7 +4683,7 @@ export async function themeBuildFamily(
   await selectCore(cwd);
   const familyInterception = interceptCore(_coreThemeModule, _coreRootModule);
   // prettier-ignore
-  const familyLoader = createJiti(import.meta.url, {moduleCache: true, interopDefault: false, jsx: true, extensions: THEME_MODULE_EXTENSIONS, virtualModules: familyInterception.modules});
+  const familyLoader = createJiti(import.meta.url, {moduleCache: true, fsCache: false, interopDefault: false, jsx: true, extensions: THEME_MODULE_EXTENSIONS, virtualModules: familyInterception.modules});
   /** @type {any[]} */
   const prepared = [];
   for (const source of planFamilySources(files, cwd)) {
@@ -3812,9 +4780,15 @@ export async function themeBuildFamily(
   const sourceRelative = members
     .map(member => member.sourceRelative)
     .join(', ');
-  const buildCommand = `${getCliInvocation()} theme build --family ${members
+  const rebuildCommand = `${getCliInvocation()} theme build --family ${members
     .map(member => member.sourceRelative)
     .join(' ')} --family-key ${baseName}`;
+  const headerBase = headerRoot(outDir, cwd);
+  const headerSources = members.map(member =>
+    headerPath(headerBase, member.filePath),
+  );
+  const headerSource = headerSources.join(', ');
+  const buildCommand = `astryx theme build --family ${headerSources.join(' ')} --family-key ${baseName}`;
   const bindings = allocateFamilyBindings(members);
   const css = generateFamilyCSS(members);
   /** @type {Array<{specifier: string, exportName: string}>} */
@@ -3856,6 +4830,13 @@ export async function themeBuildFamily(
       // rebased or overridden specifier replaces the scraped one.
       // prettier-ignore
       const iconImports = icon.info && ownIcons ? {imports: [{importPath: icon.info.importPath, importedName: icon.info.exportName, localName: ownIcons}], expression: ownIcons, exportName: ownIcons, iconsSpecifierImportPath: icon.info.importPath, iconsSpecifierLocalName: ownIcons} : null;
+      const componentIconInfo = familyComponentIcons(member, parent, {
+        themeBinding,
+        parentBinding,
+        outDir,
+        registryImports,
+        expression,
+      });
       return (
         indicatorImport +
         generateBuiltModule(member.theme, iconImports, icon.specifier, {
@@ -3864,6 +4845,7 @@ export async function themeBuildFamily(
           indicatorsExpression: expression(ownIndicators, inheritedIndicators),
           artifactBaseName: baseName,
           exportIcons: false,
+          componentIconInfo,
         })
       );
     })
@@ -3885,25 +4867,24 @@ export async function themeBuildFamily(
     {
       dest: outPath,
       content:
-        generatedHeader(sourceRelative, 'css', buildCommand, root.versions) +
-        css,
+        generatedHeader(headerSource, 'css', buildCommand, root.versions) + css,
     },
     {
       dest: cssDtsPath,
       allowMissingInCheck: true,
       content:
-        generatedHeader(sourceRelative, 'ts', buildCommand, root.versions) +
+        generatedHeader(headerSource, 'ts', buildCommand, root.versions) +
         'export {};\n',
     },
     {
       dest: jsPath,
       content:
-        generatedHeader(sourceRelative, 'js', buildCommand, root.versions) + js,
+        generatedHeader(headerSource, 'js', buildCommand, root.versions) + js,
     },
     {
       dest: dtsPath,
       content:
-        generatedHeader(sourceRelative, 'ts', buildCommand, root.versions) +
+        generatedHeader(headerSource, 'ts', buildCommand, root.versions) +
         declarations +
         (augmentations ? `\n${augmentations}` : ''),
     },
@@ -3915,18 +4896,28 @@ export async function themeBuildFamily(
     dts: path.relative(cwd, dtsPath),
   };
   // A family build's outputs stay inside cwd too; check mode only reads them.
-  if (!options.check) confineOutputs(writes, cwd, FAMILY_REMEDY);
+  if (!options.check) {
+    confineOutputs(writes, cwd, FAMILY_REMEDY);
+    // Family outputs always go to the family's default paths, where a
+    // header-less file is an output of a CLI before 0.6.7: it is replaced.
+    assertOutputsReplaceable(writes, root.filePath, cwd, {
+      elsewhere: '--family-key',
+    });
+  }
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);
     const upToDate = stale.length === 0;
+    const checkedLine = `  checked: ${checkedBuildOutputs(writes, cwd).join(', ')}`;
     if (upToDate) {
       logger.log(
         `\n[ok] Theme family outputs are up to date with ${sourceRelative}.`,
       );
+      logger.log(checkedLine);
     } else {
       logger.error(
         `\n[fail] ${stale.length} theme family output(s) are out of date:`,
       );
+      logger.error(checkedLine);
       for (const entry of stale) {
         logger.error(
           `  ${entry.reason === 'missing' ? 'missing' : 'stale'}: ${entry.path}`,
@@ -3935,7 +4926,10 @@ export async function themeBuildFamily(
       // prettier-ignore
       const remedy = outsideCheckRemedy(writes, members.map(member => member.filePath), cwd, relative => ['--family', ...members.map(member => relative(member.filePath)), '--family-key', baseName, ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])]);
       if (remedy) logger.error(`\n  ${remedy.join('\n  ')}`);
-      else logger.error(`\n  Rebuild with: ${buildCommand}`);
+      else
+        logger.error(
+          `\n  Rebuild with: ${rebuildLine(rebuildCommand, options.__commandWords)}`,
+        );
     }
     return {
       type: 'theme.build.check',

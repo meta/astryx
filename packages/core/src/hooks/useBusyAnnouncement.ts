@@ -8,23 +8,18 @@
  *   to an element inside the control
  * @output Announces each busy start once, through the shared polite channel
  *   or a persistent region inside the open modal dialog holding the control
- * @position Core a11y hook for controls that show a decorative busy Spinner
- *
- * The busy Spinner inside a control is decorative (hidden, no live role); the
- * control announces its busy state instead (`spec:AST-086` FR8), once per busy
- * start (FR6): rerenders and StrictMode replay do not repeat it, and settling
- * re-arms it. The returned function is called by an owner announcing the
- * busy operation's outcome: a busy start not yet announced is dropped, so it
- * never follows its own outcome (FR8). While a native modal is open, the body-level channel is not
- * exposed, so a control inside it announces through that dialog's polite
- * container, the one `useAnnounce` uses for every message from inside the
- * modal (FR14), inserted empty and filled a frame later (FR3); the control's
- * own element locates the modal, so a busy start inside a native modal an app
- * renders without Astryx is heard inside it too.
- *
- * SYNC: deliberately NOT exported from /packages/core/src/hooks/index.ts —
- * this is a shared implementation detail of Astryx's busy controls.
+ * @position Core a11y hook for controls that show a decorative busy Spinner.
+ *   It is a shared detail of the busy controls, so it is not in hooks/index.ts.
  */
+
+// The busy Spinner is decorative, so the control announces its busy state,
+// once for each busy start (AST-086). A re-render or a StrictMode replay does
+// not repeat it, and the settle re-arms it. An owner calls the returned function
+// when it announces the outcome. A busy start that is not yet announced is
+// then dropped, so it never follows its own outcome. While a native modal is
+// open, the page-body channel is not exposed. So a control in a modal
+// announces through that dialog's polite region, also in a modal that an app
+// renders without Astryx.
 
 import {useCallback, useEffect, useRef, type RefObject} from 'react';
 import {
@@ -50,6 +45,8 @@ export function useBusyAnnouncement(
   // Or how to take back its write inside a modal, wherever the modal moves
   // it, until it settles.
   const modalMessageRef = useRef<WithdrawAnnouncement | null>(null);
+  // Syncs the live region with `isBusy`. When it becomes true, the busy message
+  // is announced one frame later.
   useEffect(() => {
     if (!isBusy) {
       hasAnnouncedRef.current = false;
@@ -65,10 +62,8 @@ export function useBusyAnnouncement(
     const frame = requestAnimationFrame(() => {
       frameRef.current = null;
       hasAnnouncedRef.current = true;
-      // The nearest open native modal around the control's own element,
-      // Astryx or app-rendered, so a busy start inside a modal an app renders
-      // without Astryx is still heard inside it (`spec:AST-086` FR14); the
-      // shared `useAnnounce` route otherwise, which itself follows the
+      // The nearest open native modal around the control's element, Astryx or
+      // app-rendered. Else the shared `useAnnounce` route, which follows the
       // nearest Astryx modal around this hook's caller.
       const dialog = enclosingModalDialog(elementRef.current);
       if (dialog != null) {

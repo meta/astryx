@@ -32,6 +32,7 @@ runs:
           if (login.endsWith('[bot]')) return;
 
           // Agent lanes share one login: each branch prefix counts as an author.
+          // The same list as SHARED_AGENT_LOGINS (.github/scripts/ci-pr-gate.mjs).
           const shared = ['cixzhang'].includes(login);
           const lane = ref => (shared ? ref.split('/')[0] : '');
           const mine = ref => lane(ref) === lane(pr.head.ref);

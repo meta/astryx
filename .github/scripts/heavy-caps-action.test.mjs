@@ -402,6 +402,7 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
     );
     expect(heavyJobs.map(([id]) => id).sort()).toEqual([
       'pr-interaction',
+      'pr-interaction-webkit',
       'test-build',
     ]);
     for (const [id, job] of heavyJobs) {

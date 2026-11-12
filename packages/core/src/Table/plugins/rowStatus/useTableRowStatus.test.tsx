@@ -200,7 +200,8 @@ describe('useTableRowStatus', () => {
 
     expect(indicator).toContainElement(glyph);
     expect(screen.queryByTestId('semantic-warning')).not.toBeInTheDocument();
-    expect(indicator.getAttribute('style')).not.toContain('--color-icon');
+    // A closed tooltip leaves its trigger with no inline style at all.
+    expect(indicator.getAttribute('style') ?? '').not.toContain('--color-icon');
     expect(glyph.parentElement).toHaveAttribute('data-color', 'warning');
   });
 

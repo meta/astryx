@@ -19,7 +19,9 @@ import {
   expectTypeOf,
   vi,
   beforeAll,
+  beforeEach,
   afterEach,
+  onTestFinished,
 } from 'vitest';
 import {
   cleanup,
@@ -30,7 +32,15 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import React, {useRef} from 'react';
+import React, {
+  Suspense,
+  startTransition,
+  use,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {createPortal} from 'react-dom';
 import {readFileSync} from 'node:fs';
 import {type AnnounceFn, __resetLiveRegionsForTest} from '../hooks/useAnnounce';
@@ -39,6 +49,16 @@ import type {ToastProps} from './Toast';
 import {ToastViewport} from './ToastViewport';
 import {useToast} from './useToast';
 import type {ToastOptions} from './types';
+
+// jsdom reports no window focus until an element is focused, but a test page
+// stands for a focused window: a toast raised while the window is blurred
+// starts held (FR2), which the blur tests set up on purpose.
+beforeEach(() => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+});
+afterEach(() => {
+  vi.mocked(document.hasFocus).mockRestore?.();
+});
 
 // Spy on the announcement sink so tests can prove a toast is announced exactly
 // once. The mock wraps the real useAnnounce, so the singleton live regions are
@@ -194,7 +214,7 @@ describe('Toast responsive layout', () => {
       'calc(var(--text-body-size) * var(--text-body-leading))',
     );
     expect(getComputedStyle(actionControl).height).toBe(
-      'var(--size-element-lg)',
+      'max(var(--size-element-lg),1lh)',
     );
     expect(getComputedStyle(dismissControl).height).toBe(
       'var(--size-element-sm)',
@@ -443,6 +463,219 @@ describe('ToastViewport visible limit', () => {
   });
 });
 
+describe('ToastViewport and a descendant committing together', () => {
+  it('keeps a toast a descendant raises in a layout effect, for a repeat in that commit', () => {
+    function Raiser({isOn}: {isOn: boolean}) {
+      const toast = useToast();
+      // Raised as the descendant commits, then repeated after the commit.
+      useLayoutEffect(() => {
+        if (isOn) {
+          toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+        }
+      }, [isOn, toast]);
+      useEffect(() => {
+        if (isOn) {
+          toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+        }
+      }, [isOn, toast]);
+      return null;
+    }
+    function Controls() {
+      const toast = useToast();
+      const [isOn, setIsOn] = useState(false);
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              toast({isAutoHide: false, body: 'Toast A'});
+              setIsOn(true);
+            }}>
+            Raise
+          </button>
+          <Raiser isOn={isOn} />
+        </>
+      );
+    }
+    render(
+      <ToastViewport isTopLayer={false}>
+        <Controls />
+      </ToastViewport>,
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByText('Raise'));
+    });
+
+    // The repeat finds the first 'b' and does not add a second one.
+    const rows = [...document.querySelectorAll('[data-toast-id]')];
+    expect(
+      rows.filter(row => row.textContent?.includes('Toast B')),
+    ).toHaveLength(1);
+  });
+});
+
+describe('ToastViewport and a descendant cleanup in the same commit', () => {
+  it("keeps a toast a descendant's layout-effect cleanup raises, for a repeat in that commit", () => {
+    function Raiser({step}: {step: number}) {
+      const toast = useToast();
+      // The cleanup runs as the next step commits; the passive effect after.
+      useLayoutEffect(
+        () => () => {
+          toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+        },
+        [step, toast],
+      );
+      useEffect(() => {
+        if (step > 0) {
+          toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+        }
+      }, [step, toast]);
+      return null;
+    }
+    function Controls() {
+      const toast = useToast();
+      const [step, setStep] = useState(0);
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              toast({isAutoHide: false, body: 'Toast A'});
+              setStep(1);
+            }}>
+            Raise
+          </button>
+          <Raiser step={step} />
+        </>
+      );
+    }
+    render(
+      <ToastViewport isTopLayer={false}>
+        <Controls />
+      </ToastViewport>,
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByText('Raise'));
+    });
+
+    // Toast.spec.md FR8: the repeat replaces the first 'b'.
+    const rows = [...document.querySelectorAll('[data-toast-id]')];
+    expect(
+      rows.filter(row => row.textContent?.includes('Toast B')),
+    ).toHaveLength(1);
+  });
+
+  it('keeps a toast an unmounting direct child raises in its cleanup, for a repeat in that commit', () => {
+    function Leaving() {
+      const toast = useToast();
+      useLayoutEffect(
+        () => () => {
+          toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+        },
+        [toast],
+      );
+      return null;
+    }
+    function Arriving() {
+      const toast = useToast();
+      useEffect(() => {
+        toast({uniqueID: 'b', isAutoHide: false, body: 'Toast B'});
+      }, [toast]);
+      return null;
+    }
+    function App({isSwapped}: {isSwapped: boolean}) {
+      // The swap is a direct child of the viewport, as an app root can be.
+      return (
+        <ToastViewport isTopLayer={false}>
+          {isSwapped ? <Arriving /> : <Leaving />}
+        </ToastViewport>
+      );
+    }
+    const {rerender} = render(<App isSwapped={false} />);
+
+    act(() => {
+      rerender(<App isSwapped />);
+    });
+
+    const rows = [...document.querySelectorAll('[data-toast-id]')];
+    expect(
+      rows.filter(row => row.textContent?.includes('Toast B')),
+    ).toHaveLength(1);
+  });
+
+  it('reports onHide once when a layout cleanup and a passive cleanup dismiss a toast pushed out in that commit', () => {
+    const onHide = vi.fn();
+    let dismissFirst: (() => void) | null = null;
+    function Dismisser({step}: {step: number}) {
+      useLayoutEffect(
+        () => () => {
+          if (step > 0) {
+            dismissFirst?.();
+          }
+        },
+        [step],
+      );
+      useEffect(
+        () => () => {
+          if (step > 0) {
+            dismissFirst?.();
+          }
+        },
+        [step],
+      );
+      return null;
+    }
+    function Controls() {
+      const toast = useToast();
+      const [step, setStep] = useState(0);
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              dismissFirst = toast({
+                isAutoHide: false,
+                body: 'First',
+                onHide,
+              });
+              setStep(1);
+            }}>
+            Show first
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              toast({isAutoHide: false, body: 'Second'});
+              setStep(2);
+            }}>
+            Show second
+          </button>
+          <Dismisser step={step} />
+        </>
+      );
+    }
+    render(
+      <ToastViewport isTopLayer={false} maxVisible={1}>
+        <Controls />
+      </ToastViewport>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show first'));
+    });
+
+    // The second pushes the first out of the one visible slot, and both
+    // cleanups of the step it sets dismiss the first.
+    act(() => {
+      fireEvent.click(screen.getByText('Show second'));
+    });
+
+    // Toast.spec.md FR3: one dismissal reports once.
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('dismissing a toast that has no mounted row', () => {
   function ShowAndKeepDismiss({
     options,
@@ -603,7 +836,7 @@ describe('ToastViewport keyboard reach + focus', () => {
     expect(document.activeElement).toBe(dismiss);
   });
 
-  it('moves focus to the neighbour when a control inside a toast raises its repeat and dismisses it', () => {
+  it('keeps focus in the replacement when a control inside a toast raises its repeat and dismisses it', () => {
     function OfflineFlow() {
       const toast = useToast();
       const dismissOfflineRef = useRef<(() => void) | null>(null);
@@ -662,12 +895,13 @@ describe('ToastViewport keyboard reach + focus', () => {
     act(() => {
       fireEvent.click(retry);
     });
-    // Toast.spec.md FR10: focus moves to a control in a remaining toast, the
-    // neighbour of the dismissed one, not to the hidden oldest toast or the
-    // region.
-    expect(
-      getToastWrapperByText('Bravo').contains(document.activeElement),
-    ).toBe(true);
+    // Toast.spec.md FR8: the repeat updates the card in place, so the pressed
+    // Retry stays focused in it; dismissing the replaced toast leaves the row
+    // to the replacement, and focus does not jump to a neighbour.
+    const replacement = getToastWrapperByText('Still offline');
+    expect(document.activeElement).toBe(retry);
+    expect(replacement.contains(retry)).toBe(true);
+    expect(screen.queryByText('Offline')).toBeNull();
   });
 
   it('moves focus into the replacement when a control inside the only toast raises its repeat and dismisses it', () => {
@@ -872,6 +1106,310 @@ describe('ToastViewport keyboard reach + focus', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  // FR8: an overwrite updates the card in place under the same key, so focus
+  // inside it stays on the same control.
+  it('keeps focus on a control inside a toast that an overwrite updates', () => {
+    const upload = (percent: number): ToastOptions => ({
+      body: `Uploading ${percent}%`,
+      uniqueID: 'upload',
+      collisionBehavior: 'overwrite',
+      isAutoHide: false,
+      endContent: <button type="button">Cancel upload</button>,
+    });
+    renderViewport(
+      <>
+        <ShowToastButton options={upload(10)} triggerLabel="Start" />
+        <ShowToastButton options={upload(60)} triggerLabel="Progress" />
+      </>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Start'));
+    });
+    const cancel = screen.getByRole('button', {name: 'Cancel upload'});
+    act(() => {
+      cancel.focus();
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByText('Progress'));
+    });
+
+    const viewport = screen.getByRole('region', {name: 'Notifications'});
+    expect(within(viewport).getByText('Uploading 60%')).toBeInTheDocument();
+    expect(cancel).toBeInTheDocument();
+    expect(document.activeElement).toBe(cancel);
+  });
+
+  // FR2, FR8: an overwrite that turns the card into one that auto-hides keeps
+  // the timer held while focus is inside it.
+  it('keeps an overwritten toast held while focus is inside when it starts auto-hiding', () => {
+    vi.useFakeTimers();
+    const onHide = vi.fn();
+    try {
+      renderViewport(
+        <>
+          <ShowToastButton
+            options={{
+              body: 'Uploading',
+              uniqueID: 'upload',
+              isAutoHide: false,
+              endContent: <button type="button">Cancel upload</button>,
+            }}
+            triggerLabel="Start"
+          />
+          <ShowToastButton
+            options={{
+              body: 'Upload done',
+              uniqueID: 'upload',
+              autoHideDuration: 2000,
+              onHide,
+              endContent: <button type="button">Cancel upload</button>,
+            }}
+            triggerLabel="Finish"
+          />
+        </>,
+      );
+      act(() => {
+        fireEvent.click(screen.getByText('Start'));
+      });
+      const cancel = screen.getByRole('button', {name: 'Cancel upload'});
+      act(() => {
+        cancel.focus();
+      });
+
+      act(() => {
+        fireEvent.click(screen.getByText('Finish'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      expect(onHide).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(cancel);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // FR2: an update that removes the focused control drops its focus hold, so
+  // a control-free, auto-hiding replacement still hides on time.
+  it('auto-hides a control-free replacement after the update removes the focused control', () => {
+    vi.useFakeTimers();
+    const onHide = vi.fn();
+    try {
+      renderViewport(
+        <>
+          <ShowToastButton
+            options={{
+              body: 'Uploading',
+              uniqueID: 'upload',
+              isAutoHide: false,
+              endContent: <button type="button">Cancel upload</button>,
+            }}
+            triggerLabel="Start"
+          />
+          <ShowToastButton
+            options={{
+              body: 'Uploaded',
+              uniqueID: 'upload',
+              autoHideDuration: 2000,
+              renderContent: () => <span>Uploaded</span>,
+              onHide,
+            }}
+            triggerLabel="Finish"
+          />
+        </>,
+      );
+      const start = screen.getByText('Start');
+      act(() => {
+        start.focus();
+        fireEvent.click(start);
+      });
+      act(() => {
+        screen.getByRole('button', {name: 'Cancel upload'}).focus();
+      });
+
+      act(() => {
+        fireEvent.click(screen.getByText('Finish'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(2500);
+      });
+
+      expect(onHide).toHaveBeenCalledWith('auto');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // FR2: a window hold taken while the toast auto-hid does not outlive the
+  // listeners an update that turns auto-hide off removes.
+  it('auto-hides again after an update turns auto-hide off and on across a window blur', () => {
+    vi.useFakeTimers();
+    const onHide = vi.fn();
+    try {
+      const status = (body: string, options: Partial<ToastOptions>) => ({
+        body,
+        uniqueID: 'network',
+        ...options,
+      });
+      renderViewport(
+        <>
+          <ShowToastButton
+            options={status('Syncing', {autoHideDuration: 2000})}
+            triggerLabel="Sync"
+          />
+          <ShowToastButton
+            options={status('Offline', {type: 'error'})}
+            triggerLabel="Lose network"
+          />
+          <ShowToastButton
+            options={status('Back online', {autoHideDuration: 2000, onHide})}
+            triggerLabel="Reconnect"
+          />
+        </>,
+      );
+      act(() => {
+        fireEvent.click(screen.getByText('Sync'));
+      });
+      act(() => {
+        fireEvent.blur(window);
+      });
+      act(() => {
+        fireEvent.click(screen.getByText('Lose network'));
+      });
+      act(() => {
+        fireEvent.focus(window);
+      });
+      act(() => {
+        fireEvent.click(screen.getByText('Reconnect'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(2500);
+      });
+
+      expect(onHide).toHaveBeenCalledWith('auto');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // FR9: the viewport is the one announcement owner, so a card updated in
+  // place carries no live region of its own and is announced once.
+  it('announces an overwrite once, through the viewport only', () => {
+    const upload = (percent: number): ToastOptions => ({
+      body: `Uploading ${percent}%`,
+      uniqueID: 'upload',
+      isAutoHide: false,
+    });
+    renderViewport(
+      <>
+        <ShowToastButton options={upload(10)} triggerLabel="Start" />
+        <ShowToastButton options={upload(60)} triggerLabel="Progress" />
+      </>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Start'));
+    });
+    act(() => {
+      fireEvent.click(screen.getByText('Progress'));
+    });
+
+    // The toast's text sits in no live region inside its row: only the
+    // viewport's own announcer speaks it.
+    const row = getToastWrapperByText('Uploading 60%');
+    const liveAncestor = within(row)
+      .getByText('Uploading 60%')
+      .closest('[aria-live], [role="status"], [role="alert"]');
+    expect(liveAncestor == null || !row.contains(liveAncestor)).toBe(true);
+  });
+
+  // FR8, FR10: when the overwrite removes the focused control, focus moves as
+  // FR10 hands it off, never to the page body.
+  it('hands focus off when an overwrite removes the focused control', () => {
+    renderViewport(
+      <>
+        <ShowToastButton
+          options={{
+            body: 'Uploading',
+            uniqueID: 'upload',
+            isAutoHide: false,
+            endContent: <button type="button">Cancel upload</button>,
+          }}
+          triggerLabel="Start"
+        />
+        <ShowToastButton
+          options={{
+            body: 'Uploaded',
+            uniqueID: 'upload',
+            isAutoHide: false,
+            renderContent: () => <span>Uploaded</span>,
+          }}
+          triggerLabel="Finish"
+        />
+      </>,
+    );
+    const start = screen.getByText('Start');
+    act(() => {
+      start.focus();
+      fireEvent.click(start);
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Cancel upload'}).focus();
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByText('Finish'));
+    });
+
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(start);
+  });
+
+  // FR10: dismissing a focused toast beside a control-free one never drops
+  // focus to the page body; with no control to take it, the remembered
+  // element does.
+  it('restores the remembered element when only a control-free toast remains', () => {
+    renderViewport(
+      <>
+        <ShowToastButton
+          options={{
+            body: 'Synced',
+            isAutoHide: false,
+            renderContent: () => <span>Synced</span>,
+          }}
+          triggerLabel="Trigger quiet"
+        />
+        <ShowToastButton options={INFO_B} triggerLabel="Trigger B" />
+      </>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Trigger quiet'));
+    });
+    const trigger = screen.getByText('Trigger B');
+    act(() => {
+      trigger.focus();
+      fireEvent.click(trigger);
+    });
+    const dismiss = screen.getByRole('button', {name: 'Dismiss notification'});
+    act(() => {
+      dismiss.focus();
+    });
+    const toastId = dismiss
+      .closest('[data-toast-id]')!
+      .getAttribute('data-toast-id')!;
+
+    act(() => {
+      fireEvent.click(dismiss);
+    });
+    act(() => {
+      completeExit(toastId);
+    });
+
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('keeps the return target while focus visits portaled toast content', () => {
     renderViewport(
       <ShowToastButton
@@ -972,6 +1510,59 @@ describe('Toast blur timer pause', () => {
   });
 });
 
+describe('Toast raised while the window is blurred', () => {
+  // FR2: a toast raised while the document does not have focus starts held,
+  // so it cannot expire before the user returns to the window.
+  it('starts its auto-hide timer held until the window regains focus', () => {
+    vi.useFakeTimers();
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    try {
+      renderViewport(
+        <ShowToastButton options={AUTO_TOAST} triggerLabel="Trigger Auto" />,
+      );
+      act(() => {
+        fireEvent.click(screen.getByText('Trigger Auto'));
+      });
+      const viewport = screen.getByRole('region', {name: 'Notifications'});
+      const heldId = document
+        .querySelector('[data-toast-id]')
+        ?.getAttribute('data-toast-id');
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      // An exit that had started would finish here and remove the toast.
+      if (heldId) {
+        act(() => {
+          completeExit(heldId);
+        });
+      }
+      expect(within(viewport).getByText('Auto toast')).toBeInTheDocument();
+
+      hasFocus.mockReturnValue(true);
+      act(() => {
+        window.dispatchEvent(new Event('focus'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(10_000);
+      });
+      const toastId = document
+        .querySelector('[data-toast-id]')
+        ?.getAttribute('data-toast-id');
+      if (toastId) {
+        act(() => {
+          completeExit(toastId);
+        });
+      }
+      expect(
+        within(viewport).queryByText('Auto toast'),
+      ).not.toBeInTheDocument();
+    } finally {
+      hasFocus.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('Toast native motion contract', () => {
   function renderMotionToast(
     position: React.ComponentProps<typeof ToastViewport>['position'],
@@ -1063,13 +1654,10 @@ describe('Toast native motion contract', () => {
     expect(getComputedStyle(wrapper).pointerEvents).toBe('auto');
   });
 
-  it('settles a toast that replaced another through uniqueID', () => {
-    // An overwrite unmounts the replaced row and mounts a new one with a new
-    // id, so the new row runs its own entry transition and has to release the
-    // clip on its own. The replaced id is dropped at the same time: nothing
-    // dismisses it, so neither removeToast nor handleExited would ever prune
-    // it, and a viewport overwriting one uniqueID on a schedule would collect
-    // a dead id per update for as long as it lives.
+  it('updates a settled toast in place when an overwrite replaces it through uniqueID', () => {
+    // FR8: an overwrite keeps the replaced toast's row, so the card updates in
+    // place: the row stays settled (no second entry transition) and carries
+    // the new toast's id.
     render(
       <ToastViewport isTopLayer={false} position="bottomEnd" maxVisible={3}>
         <ShowToastButton
@@ -1099,19 +1687,12 @@ describe('Toast native motion contract', () => {
       fireEvent.click(screen.getByText('Show v2'));
     });
     const second = getToastWrapperByText('Changes saved');
-    // A different row, so the settled state of the one it replaced says
-    // nothing about it: it starts clipped.
+    expect(second).toBe(first);
     expect(second.getAttribute('data-toast-id')).not.toBe(firstId);
     expect(
       getComputedStyle(second.firstElementChild as HTMLElement).overflow,
-    ).toBe('hidden');
-
-    act(() => {
-      fireEvent.transitionEnd(second, {propertyName: 'grid-template-rows'});
-    });
-    expect(
-      getComputedStyle(second.firstElementChild as HTMLElement).overflow,
     ).toBe('visible');
+    expect(document.querySelectorAll('[data-toast-id]')).toHaveLength(1);
   });
 
   it('drops settled state when a toast is evicted and later resurfaces', () => {
@@ -1316,6 +1897,27 @@ describe('Toast native motion contract', () => {
 });
 
 describe('Toast swipe dismissal', () => {
+  /**
+   * A phone's coarse pointer, under which the gesture host listens for
+   * fingers. Returns the restore.
+   */
+  function onTouchScreen(): () => void {
+    const original = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    return () => {
+      window.matchMedia = original;
+    };
+  }
+
   function renderSwipeToast(
     options: ToastOptions = SWIPE_TOAST,
     position: React.ComponentProps<
@@ -1434,37 +2036,240 @@ describe('Toast swipe dismissal', () => {
     }
   });
 
+  // A one-line toast is 56 px tall, and 40% of that is below the 48 px floor.
+  // A short swipe dismisses it only as a flick.
+  function mockClock(start = 1_000) {
+    let time = start;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => time);
+    return {
+      advance(ms: number) {
+        time += ms;
+      },
+      restore() {
+        spy.mockRestore();
+      },
+    };
+  }
+
+  it('dismisses a quick pen flick on a one-line toast', () => {
+    const clock = mockClock();
+    try {
+      const {visualToast, onHide} = renderSwipeToast(
+        SWIPE_TOAST,
+        'bottomEnd',
+        'Swipe toast',
+        56,
+      );
+
+      act(() => {
+        fireEvent.pointerDown(visualToast, {
+          pointerId: 9,
+          pointerType: 'pen',
+          button: 0,
+          clientX: 0,
+          clientY: 0,
+        });
+      });
+      clock.advance(30);
+      act(() => {
+        fireEvent.pointerMove(visualToast, {
+          pointerId: 9,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 40,
+        });
+        fireEvent.pointerUp(visualToast, {
+          pointerId: 9,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 40,
+        });
+      });
+
+      expect(onHide).toHaveBeenCalledWith('manual');
+      expect(onHide).toHaveBeenCalledTimes(1);
+    } finally {
+      clock.restore();
+    }
+  });
+
+  it('dismisses a quick touch flick on a one-line toast at the top', () => {
+    const clock = mockClock();
+    const restorePointer = onTouchScreen();
+    try {
+      const {visualToast, onHide} = renderSwipeToast(
+        SWIPE_TOAST,
+        'topEnd',
+        'Swipe toast',
+        56,
+      );
+      const touchEvent = (
+        type: 'touchstart' | 'touchmove' | 'touchend',
+        clientY: number,
+      ) => {
+        const event = new Event(type, {bubbles: true, cancelable: true});
+        const touch = {identifier: 32, clientX: 10, clientY};
+        Object.defineProperty(event, 'touches', {
+          value: type === 'touchend' ? [] : [touch],
+        });
+        Object.defineProperty(event, 'changedTouches', {value: [touch]});
+        visualToast.dispatchEvent(event);
+        return event;
+      };
+
+      act(() => {
+        touchEvent('touchstart', 100);
+      });
+      clock.advance(15);
+      let move: Event;
+      act(() => {
+        move = touchEvent('touchmove', 80);
+      });
+      clock.advance(15);
+      act(() => {
+        touchEvent('touchmove', 60);
+        touchEvent('touchend', 60);
+      });
+
+      expect(move!.defaultPrevented).toBe(true);
+      expect(onHide).toHaveBeenCalledWith('manual');
+      expect(onHide).toHaveBeenCalledTimes(1);
+    } finally {
+      restorePointer();
+      clock.restore();
+    }
+  });
+
+  it('times a flick by its input events, not by when the handlers run', () => {
+    // Browsers can run move handlers well after the finger moved. Here the
+    // 40 px flick takes 30 ms, and the page handles its moves and lift 60 ms
+    // after touch-down.
+    const clock = mockClock();
+    try {
+      const {visualToast, onHide} = renderSwipeToast(
+        SWIPE_TOAST,
+        'topEnd',
+        'Swipe toast',
+        56,
+      );
+      const touchEvent = (
+        type: 'touchstart' | 'touchmove' | 'touchend',
+        clientY: number,
+      ) => {
+        const event = new Event(type, {bubbles: true, cancelable: true});
+        const touch = {identifier: 33, clientX: 10, clientY};
+        Object.defineProperty(event, 'touches', {
+          value: type === 'touchend' ? [] : [touch],
+        });
+        Object.defineProperty(event, 'changedTouches', {value: [touch]});
+        return event;
+      };
+
+      act(() => {
+        visualToast.dispatchEvent(touchEvent('touchstart', 100));
+      });
+      clock.advance(15);
+      const firstMove = touchEvent('touchmove', 80);
+      clock.advance(15);
+      const secondMove = touchEvent('touchmove', 60);
+      const lift = touchEvent('touchend', 60);
+      clock.advance(30);
+      act(() => {
+        visualToast.dispatchEvent(firstMove);
+        visualToast.dispatchEvent(secondMove);
+        visualToast.dispatchEvent(lift);
+      });
+
+      expect(onHide).toHaveBeenCalledWith('manual');
+    } finally {
+      clock.restore();
+    }
+  });
+
+  it('snaps back after a slow short drag on a one-line toast', () => {
+    const clock = mockClock();
+    try {
+      const {visualToast, onHide} = renderSwipeToast(
+        SWIPE_TOAST,
+        'bottomEnd',
+        'Swipe toast',
+        56,
+      );
+
+      act(() => {
+        fireEvent.pointerDown(visualToast, {
+          pointerId: 10,
+          pointerType: 'pen',
+          button: 0,
+          clientX: 0,
+          clientY: 0,
+        });
+      });
+      clock.advance(400);
+      act(() => {
+        fireEvent.pointerMove(visualToast, {
+          pointerId: 10,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 40,
+        });
+        fireEvent.pointerUp(visualToast, {
+          pointerId: 10,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 40,
+        });
+      });
+
+      expect(onHide).not.toHaveBeenCalled();
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
+    } finally {
+      clock.restore();
+    }
+  });
+
   it('snaps back without dismissing after a short drag', () => {
-    const {visualToast, onHide} = renderSwipeToast();
+    // A slow drag: 24 px over 400 ms is far below flick speed.
+    const clock = mockClock();
+    try {
+      const {visualToast, onHide} = renderSwipeToast();
 
-    act(() => {
-      fireEvent.pointerDown(visualToast, {
-        pointerId: 7,
-        pointerType: 'pen',
-        button: 0,
-        clientX: 0,
-        clientY: 0,
+      act(() => {
+        fireEvent.pointerDown(visualToast, {
+          pointerId: 7,
+          pointerType: 'pen',
+          button: 0,
+          clientX: 0,
+          clientY: 0,
+        });
       });
-      fireEvent.pointerMove(visualToast, {
-        pointerId: 7,
-        pointerType: 'pen',
-        clientX: 0,
-        clientY: 24,
+      clock.advance(400);
+      act(() => {
+        fireEvent.pointerMove(visualToast, {
+          pointerId: 7,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 24,
+        });
+        fireEvent.pointerUp(visualToast, {
+          pointerId: 7,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 24,
+        });
       });
-      fireEvent.pointerUp(visualToast, {
-        pointerId: 7,
-        pointerType: 'pen',
-        clientX: 0,
-        clientY: 24,
-      });
-    });
 
-    expect(onHide).not.toHaveBeenCalled();
-    expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
-    expect(visualToast.style.getPropertyValue('--_toast-swipe-opacity')).toBe(
-      '',
-    );
-    expect(visualToast.style.getPropertyValue('--_toast-swipe-scale')).toBe('');
+      expect(onHide).not.toHaveBeenCalled();
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-opacity')).toBe(
+        '',
+      );
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-scale')).toBe(
+        '',
+      );
+    } finally {
+      clock.restore();
+    }
   });
 
   it('fades and subtly scales only after accepted vertical edge swipe intent', () => {
@@ -1751,6 +2556,8 @@ describe('Toast swipe dismissal', () => {
   });
 
   it('allows native page scrolling until touch intent matches the dismiss edge', () => {
+    const restorePointer = onTouchScreen();
+    onTestFinished(restorePointer);
     const {visualToast, onHide} = renderSwipeToast(
       SWIPE_TOAST,
       'topEnd',
@@ -1788,6 +2595,10 @@ describe('Toast swipe dismissal', () => {
       'changedTouches',
       {value: [{identifier: 31, clientX: 80, clientY: 104}]},
     );
+    // A real touchmove lists the finger in `touches` too.
+    Object.defineProperty(move, 'touches', {
+      value: [{identifier: 31, clientX: 80, clientY: 104}],
+    });
     act(() => {
       visualToast.dispatchEvent(move);
     });
@@ -1806,7 +2617,111 @@ describe('Toast swipe dismissal', () => {
     expect(onHide).toHaveBeenCalledWith('manual');
   });
 
+  it("ends the swipe when the gesture host leaves the touch to the page, in Chromium's pointer-before-touch order", () => {
+    const restorePointer = onTouchScreen();
+    onTestFinished(restorePointer);
+    const {visualToast, onHide} = renderSwipeToast();
+    const touchEvent = (
+      type: 'touchstart' | 'touchmove' | 'touchend',
+      clientY: number,
+    ) => {
+      const event = new Event(type, {bubbles: true, cancelable: true});
+      const touch = {identifier: 33, clientX: 10, clientY, target: visualToast};
+      Object.defineProperty(event, 'touches', {
+        value: type === 'touchend' ? [] : [touch],
+      });
+      Object.defineProperty(event, 'changedTouches', {value: [touch]});
+      visualToast.dispatchEvent(event);
+      return event;
+    };
+    const finger = {pointerId: 9, pointerType: 'touch', isPrimary: true};
+
+    act(() => {
+      fireEvent.pointerDown(visualToast, {
+        ...finger,
+        clientX: 10,
+        clientY: 100,
+      });
+      touchEvent('touchstart', 100);
+    });
+    // Chromium sends the finger's pointermoves inside its touch slop and holds
+    // back the touchmoves. The first sample goes 1 px away from the edge.
+    act(() => {
+      fireEvent.pointerMove(visualToast, {...finger, clientX: 10, clientY: 99});
+    });
+    let move: Event;
+    act(() => {
+      move = touchEvent('touchmove', 117);
+    });
+    expect(move!.defaultPrevented).toBe(false);
+    act(() => {
+      fireEvent.pointerMove(visualToast, {
+        ...finger,
+        clientX: 10,
+        clientY: 160,
+      });
+      touchEvent('touchmove', 160);
+    });
+    expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
+    act(() => {
+      touchEvent('touchend', 160);
+    });
+    expect(onHide).not.toHaveBeenCalled();
+  });
+
+  it('swipes normally on the next touch after a first touch the page took', () => {
+    const restorePointer = onTouchScreen();
+    onTestFinished(restorePointer);
+    const {visualToast, onHide} = renderSwipeToast();
+    const touchEvent = (
+      type: 'touchstart' | 'touchmove' | 'touchend',
+      identifier: number,
+      clientX: number,
+      clientY: number,
+    ) => {
+      const event = new Event(type, {bubbles: true, cancelable: true});
+      const touch = {identifier, clientX, clientY, target: visualToast};
+      Object.defineProperty(event, 'touches', {
+        value: type === 'touchend' ? [] : [touch],
+      });
+      Object.defineProperty(event, 'changedTouches', {value: [touch]});
+      visualToast.dispatchEvent(event);
+      return event;
+    };
+
+    // The first touch moves sideways first, so the page keeps it.
+    act(() => {
+      touchEvent('touchstart', 35, 10, 100);
+    });
+    let move: Event;
+    act(() => {
+      move = touchEvent('touchmove', 35, 13, 100);
+    });
+    expect(move!.defaultPrevented).toBe(false);
+    act(() => {
+      touchEvent('touchmove', 35, 13, 160);
+      touchEvent('touchend', 35, 13, 160);
+    });
+    expect(onHide).not.toHaveBeenCalled();
+
+    // The next touch moves toward the edge first, so the swipe owns it.
+    act(() => {
+      touchEvent('touchstart', 36, 10, 100);
+    });
+    act(() => {
+      move = touchEvent('touchmove', 36, 10, 101);
+    });
+    expect(move!.defaultPrevented).toBe(true);
+    act(() => {
+      touchEvent('touchmove', 36, 10, 160);
+      touchEvent('touchend', 36, 10, 160);
+    });
+    expect(onHide).toHaveBeenCalledWith('manual');
+  });
+
   it('resets an accepted touch gesture on native touchcancel', () => {
+    const restorePointer = onTouchScreen();
+    onTestFinished(restorePointer);
     const {visualToast, onHide} = renderSwipeToast();
     const touch = (type: 'touchstart' | 'touchmove', clientY: number) => {
       const event = new Event(type, {bubbles: true, cancelable: true});
@@ -1951,14 +2866,32 @@ describe('Toast swipe dismissal', () => {
     });
   });
 
-  it('removes native touch listeners when a Toast unmounts', () => {
-    const {visualToast, unmount} = renderSwipeToast();
-    const removeListener = vi.spyOn(visualToast, 'removeEventListener');
-
-    unmount();
-
-    for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
-      expect(removeListener).toHaveBeenCalledWith(type, expect.any(Function));
+  it('leaves no touch listener on the card once a Toast unmounts', () => {
+    const addListener = vi.spyOn(HTMLElement.prototype, 'addEventListener');
+    const removeListener = vi.spyOn(
+      HTMLElement.prototype,
+      'removeEventListener',
+    );
+    try {
+      const {visualToast, unmount} = renderSwipeToast();
+      unmount();
+      const touchListeners = (spy: typeof addListener) =>
+        spy.mock.calls
+          .filter(
+            ([type], call) =>
+              spy.mock.contexts[call] === visualToast &&
+              type.startsWith('touch'),
+          )
+          .map(([type, listener]) => [type, listener]);
+      const added = touchListeners(addListener);
+      const removed = touchListeners(removeListener);
+      // The gesture host's own listener shows that the spies see the card.
+      expect(added.length).toBeGreaterThan(0);
+      expect(removed).toHaveLength(added.length);
+      expect(removed).toEqual(expect.arrayContaining(added));
+    } finally {
+      addListener.mockRestore();
+      removeListener.mockRestore();
     }
   });
 
@@ -2112,6 +3045,37 @@ describe('Toast swipe dismissal', () => {
     });
 
     expect(onHide).toHaveBeenCalledWith('manual');
+  });
+});
+
+describe('ToastViewport with no toasts', () => {
+  // iOS Safari keeps a toolbar color that it took from the viewport while
+  // the viewport has a box.
+  it('has no box once its last toast has left, and a box for the next toast', () => {
+    renderViewport(<ShowToastButton options={SWIPE_TOAST} />);
+    act(() => {
+      fireEvent.click(screen.getByText('Trigger'));
+    });
+    const viewport = screen.getByRole('region', {name: 'Notifications'});
+    expect(getComputedStyle(viewport).display).toBe('flex');
+
+    const wrapper = getToastWrapperByText('Swipe toast');
+    act(() => {
+      fireEvent.click(
+        within(wrapper).getByRole('button', {name: 'Dismiss notification'}),
+      );
+    });
+    // The leaving toast keeps the box until its exit ends.
+    expect(getComputedStyle(viewport).display).toBe('flex');
+    act(() => {
+      completeExit(wrapper.dataset.toastId ?? '');
+    });
+    expect(getComputedStyle(viewport).display).toBe('none');
+
+    act(() => {
+      fireEvent.click(screen.getByText('Trigger'));
+    });
+    expect(getComputedStyle(viewport).display).toBe('flex');
   });
 });
 
@@ -2681,6 +3645,55 @@ describe('toast announcements via singleton live regions', () => {
     expect(rows[0].textContent).toContain('Still offline');
   });
 
+  it('reports nothing for a toast only a discarded render showed, when a repeat replaces and dismisses it', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    let toast: ReturnType<typeof useToast> | null = null;
+    function Capture(): null {
+      toast = useToast();
+      return null;
+    }
+    function Screen({isPending = false}: {isPending?: boolean}) {
+      return (
+        <ToastViewport isTopLayer={false}>
+          <Capture />
+          <Suspense fallback={null}>{isPending ? <Forever /> : null}</Suspense>
+        </ToastViewport>
+      );
+    }
+    const onHide = vi.fn();
+    let dismissFirst: (() => void) | null = null;
+    const {rerender} = render(<Screen />);
+    // Raised in a transition React renders and never commits.
+    await act(async () => {
+      startTransition(() => {
+        dismissFirst =
+          toast?.({
+            uniqueID: 'offline',
+            isAutoHide: false,
+            body: 'Offline',
+            onHide,
+          }) ?? null;
+        rerender(<Screen isPending />);
+      });
+    });
+    expect(screen.queryByText('Offline')).toBeNull();
+
+    act(() => {
+      toast?.({uniqueID: 'offline', isAutoHide: false, body: 'Still offline'});
+      dismissFirst?.();
+    });
+
+    // Toast.spec.md FR3: it never rendered, so its replacement reports no
+    // onHide for it.
+    expect(onHide).not.toHaveBeenCalled();
+  });
+
   it('replaces a leaving namesake in place under overwrite and announces it again', () => {
     renderViewport(
       <>
@@ -2755,7 +3768,9 @@ describe('toast timer lifecycle (#3589)', () => {
       fireEvent.click(screen.getByText('Show held'));
     });
     const viewport = screen.getByRole('region', {name: 'Notifications'});
-    const card = within(viewport).getByText('Held').closest('[role="status"]');
+    // The row's wrapper holds the clip, which holds the card.
+    const card =
+      getToastWrapperByText('Held').firstElementChild?.firstElementChild;
     if (!(card instanceof HTMLElement)) {
       throw new Error('toast card not found');
     }
@@ -3126,5 +4141,119 @@ describe('toast timer lifecycle (#3589)', () => {
       });
       expect(announceSpy).toHaveBeenCalledWith('Toast A', 'polite');
     });
+  });
+});
+
+describe('ToastViewport committed list, read by a cleanup in the commit that shows a toast', () => {
+  it('reports onHide for a toast shown in that commit, when an unmounting child replaces and dismisses it', () => {
+    const onHideA = vi.fn();
+    let dismissA: (() => void) | null = null;
+    function Leaving() {
+      const toast = useToast();
+      // Runs as the commit that shows toast A unmounts this child.
+      useLayoutEffect(
+        () => () => {
+          toast({uniqueID: 'u', isAutoHide: false, body: 'Toast B'});
+          dismissA?.();
+        },
+        [toast],
+      );
+      return null;
+    }
+    function Controls({onLeave}: {onLeave: () => void}) {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            dismissA = toast({
+              uniqueID: 'u',
+              isAutoHide: false,
+              body: 'Toast A',
+              onHide: onHideA,
+            });
+            onLeave();
+          }}>
+          Show and leave
+        </button>
+      );
+    }
+    function App() {
+      const [isShown, setIsShown] = useState(true);
+      return (
+        <ToastViewport isTopLayer={false}>
+          {isShown ? <Leaving /> : null}
+          <Controls onLeave={() => setIsShown(false)} />
+        </ToastViewport>
+      );
+    }
+    render(<App />);
+
+    act(() => {
+      fireEvent.click(screen.getByText('Show and leave'));
+    });
+
+    // Toast A is in the list this commit applies, so the cleanup's repeat
+    // keeps it findable, and its dismissal reports it (Toast.spec.md FR3).
+    expect(onHideA).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports onHide for a shown toast, when a child hidden by an Activity replaces and dismisses it', () => {
+    const onHideA = vi.fn();
+    let dismissA: (() => void) | null = null;
+    function Hiding() {
+      const toast = useToast();
+      // Runs as the Activity hides the tree, after toast A has shown.
+      useLayoutEffect(
+        () => () => {
+          if (dismissA != null) {
+            toast({uniqueID: 'u', isAutoHide: false, body: 'Toast B'});
+            dismissA();
+          }
+        },
+        [toast],
+      );
+      return null;
+    }
+    function App({mode}: {mode: 'visible' | 'hidden'}) {
+      return (
+        <React.Activity mode={mode}>
+          <ToastViewport isTopLayer={false}>
+            <Hiding />
+            <Shower />
+          </ToastViewport>
+        </React.Activity>
+      );
+    }
+    function Shower() {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            dismissA = toast({
+              uniqueID: 'u',
+              isAutoHide: false,
+              body: 'Toast A',
+              onHide: onHideA,
+            });
+          }}>
+          Show
+        </button>
+      );
+    }
+    const {rerender} = render(<App mode="visible" />);
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+    expect(
+      [...document.querySelectorAll('[data-toast-id]')].some(row =>
+        row.textContent?.includes('Toast A'),
+      ),
+    ).toBe(true);
+
+    rerender(<App mode="hidden" />);
+
+    expect(onHideA).toHaveBeenCalledTimes(1);
   });
 });

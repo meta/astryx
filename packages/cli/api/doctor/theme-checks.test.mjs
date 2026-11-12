@@ -7,7 +7,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {checkAppThemes, checkThemes} from './theme-checks.mjs';
+import {
+  checkAppThemes,
+  checkThemes,
+  themeImportWiring,
+} from './theme-checks.mjs';
 import {runChecks} from './doctor.mjs';
 import {themeAdd} from '../theme/add/add.mjs';
 import {themeEject} from '../theme/eject/eject.mjs';
@@ -33,7 +37,7 @@ function write(file, content) {
  */
 async function fixture(themeSpecs = [{slug: 'ocean'}], options = {}) {
   const dir = fs.mkdtempSync(
-    path.join(options.root ?? process.cwd(), '.astryx-doctor-themes-'),
+    path.join(options.root ?? REPO_ROOT, '.astryx-doctor-themes-'),
   );
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, 'src'), {recursive: true});
@@ -149,7 +153,7 @@ describe('the released themes check', () => {
   /** @param {string} name */
   function emptyApp(name) {
     const dir = fs.mkdtempSync(
-      path.join(process.cwd(), `.astryx-doctor-${name}-`),
+      path.join(REPO_ROOT, `.astryx-doctor-${name}-`),
     );
     dirs.push(dir);
     write(path.join(dir, 'package.json'), '{"name":"app","private":true}\n');
@@ -269,6 +273,356 @@ describe('the released themes check', () => {
     });
     expect(checkThemes(process.cwd(), passing)).toMatchObject({
       status: 'pass',
+    });
+  });
+
+  /**
+   * An app with installed single-theme packages that export their built module
+   * and stylesheet, as the published `@astryxdesign/theme-*` packages do.
+   * @param {string} name @param {string[]} slugs
+   */
+  function appWithBuiltThemes(name, slugs) {
+    const dir = emptyApp(name);
+    write(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'app',
+        private: true,
+        dependencies: Object.fromEntries(
+          slugs.map(slug => [`@astryxdesign/theme-${slug}`, CLI_VERSION]),
+        ),
+      }),
+    );
+    write(
+      path.join(dir, 'node_modules/@astryxdesign/core/package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
+    );
+    for (const slug of slugs) {
+      const packageDir = path.join(
+        dir,
+        'node_modules/@astryxdesign',
+        `theme-${slug}`,
+      );
+      write(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({
+          name: `@astryxdesign/theme-${slug}`,
+          version: CLI_VERSION,
+          type: 'module',
+          exports: {
+            '.': './dist/index.js',
+            './built': `./dist/${slug}.js`,
+            './theme.css': './dist/theme.css',
+          },
+        }),
+      );
+      write(
+        path.join(packageDir, `dist/${slug}.js`),
+        `export const ${slug}Theme = {name: '${slug}', tokens: {}};\n`,
+      );
+      write(
+        path.join(packageDir, 'dist/index.js'),
+        `export {${slug}Theme} from './${slug}.js';\n`,
+      );
+      write(
+        path.join(packageDir, 'dist/theme.css'),
+        `[data-astryx-theme="${slug}"] { --color-text: black; }\n`,
+      );
+    }
+    return dir;
+  }
+
+  /** @param {string} dir */
+  async function themesCheck(dir) {
+    return checkThemes(
+      dir,
+      await checkAppThemes(dir),
+      await themeImportWiring(dir),
+    );
+  }
+
+  it('counts themes the app imports by their built module or stylesheet as wired, naming the file', async () => {
+    // The shape of an internal app template: a layout that imports each
+    // theme stylesheet and a provider that imports each built theme.
+    const dir = appWithBuiltThemes('themes-imported', ['neutral', 'butter']);
+    write(
+      path.join(dir, 'app/layout.tsx'),
+      "import '@astryxdesign/core/astryx.css';\nimport '@astryxdesign/theme-neutral/theme.css';\nimport '@astryxdesign/theme-butter/theme.css';\nexport default function Layout() { return null; }\n",
+    );
+    write(
+      path.join(dir, 'app/themes/ThemeProvider.tsx'),
+      "import {butterTheme} from '@astryxdesign/theme-butter/built';\nimport {neutralTheme} from '@astryxdesign/theme-neutral/built';\nexport const themes = {butterTheme, neutralTheme};\n",
+    );
+
+    expect((await themeImportWiring(dir)).wired).toEqual([
+      {
+        slug: 'butter',
+        owner: '@astryxdesign/theme-butter',
+        file: 'app/layout.tsx',
+      },
+      {
+        slug: 'neutral',
+        owner: '@astryxdesign/theme-neutral',
+        file: 'app/layout.tsx',
+      },
+    ]);
+    expect(await themesCheck(dir)).toEqual({
+      id: 'themes',
+      label: 'Theme packages',
+      status: 'pass',
+      message:
+        'Theme package(s) installed (@astryxdesign/theme-butter, @astryxdesign/theme-neutral); wired by import: butter (app/layout.tsx), neutral (app/layout.tsx).',
+    });
+    const report = await runChecks({cwd: dir});
+    expect(report.checks.find(item => item.id === 'themes')).toMatchObject({
+      status: 'pass',
+      message: expect.stringContaining(
+        'wired by import: butter (app/layout.tsx)',
+      ),
+    });
+  }, 30_000);
+
+  it('counts a built module import alone, and a stylesheet @import', async () => {
+    const dir = appWithBuiltThemes('themes-module-only', ['neutral', 'stone']);
+    write(
+      path.join(dir, 'src/theme.ts'),
+      "export {neutralTheme} from '@astryxdesign/theme-neutral/built';\n",
+    );
+    write(
+      path.join(dir, 'src/globals.css'),
+      '@import "@astryxdesign/theme-stone/theme.css";\n',
+    );
+
+    expect((await themeImportWiring(dir)).wired).toEqual([
+      {
+        slug: 'neutral',
+        owner: '@astryxdesign/theme-neutral',
+        file: 'src/theme.ts',
+      },
+      {
+        slug: 'stone',
+        owner: '@astryxdesign/theme-stone',
+        file: 'src/globals.css',
+      },
+    ]);
+  });
+
+  it('reads a stylesheet @import in url() without quotes, in any case', async () => {
+    const dir = appWithBuiltThemes('themes-css-url', ['stone']);
+    write(
+      path.join(dir, 'src/globals.css'),
+      '@IMPORT url(@astryxdesign/theme-stone/theme.css);\n',
+    );
+
+    expect((await themeImportWiring(dir)).wired).toEqual([
+      {
+        slug: 'stone',
+        owner: '@astryxdesign/theme-stone',
+        file: 'src/globals.css',
+      },
+    ]);
+  });
+
+  it('keeps the warning when the app only installs a theme, imports its types, or imports it from outside its own source', async () => {
+    const dir = appWithBuiltThemes('themes-not-imported', ['neutral']);
+    const warning = {
+      id: 'themes',
+      label: 'Theme packages',
+      status: 'warn',
+      message:
+        'Theme package(s) installed (@astryxdesign/theme-neutral) but no theme appears wired.',
+      fix: expect.stringContaining('theme add <slug>`.'),
+    };
+    expect(await themesCheck(dir)).toEqual(warning);
+
+    write(
+      path.join(dir, 'src/types.ts'),
+      "import type {neutralTheme} from '@astryxdesign/theme-neutral/built';\nexport type T = typeof neutralTheme;\n",
+    );
+    write(
+      path.join(dir, 'dist/app.js'),
+      "import '@astryxdesign/theme-neutral/theme.css';\n",
+    );
+    write(
+      path.join(dir, 'node_modules/some-lib/index.js'),
+      "import '@astryxdesign/theme-neutral/theme.css';\n",
+    );
+    // Any other subpath of the package is not the theme's built import.
+    write(
+      path.join(dir, 'src/source.ts'),
+      "import {neutralTheme} from '@astryxdesign/theme-neutral';\nvoid neutralTheme;\n",
+    );
+    expect(await themeImportWiring(dir)).toEqual({wired: [], unconfirmed: []});
+    expect(await themesCheck(dir)).toEqual(warning);
+  });
+
+  it('follows a theme passed to Theme through a variable to its package', async () => {
+    // A provider that picks the theme into a variable, from the package root.
+    const dir = appWithBuiltThemes('themes-variable', ['matcha']);
+    write(
+      path.join(dir, 'app/providers.tsx'),
+      [
+        "import {Theme} from '@astryxdesign/core/theme';",
+        "import {matchaTheme} from '@astryxdesign/theme-matcha';",
+        'const appTheme = matchaTheme;',
+        'export function Providers({children}: {children: React.ReactNode}) {',
+        '  return <Theme theme={appTheme} mode="system">{children}</Theme>;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    expect(await themeImportWiring(dir)).toEqual({
+      wired: [
+        {
+          slug: 'matcha',
+          owner: '@astryxdesign/theme-matcha',
+          file: 'app/providers.tsx',
+        },
+      ],
+      unconfirmed: [],
+    });
+    expect(await themesCheck(dir)).toMatchObject({
+      status: 'pass',
+      message: expect.stringContaining(
+        'wired by import: matcha (app/providers.tsx)',
+      ),
+    });
+  });
+
+  it('follows an aliased Theme, defineTheme extends and a relative re-export', async () => {
+    const dir = appWithBuiltThemes('themes-traced', ['neutral', 'stone']);
+    write(
+      path.join(dir, 'src/brand.ts'),
+      [
+        "import {defineTheme} from '@astryxdesign/core';",
+        "import {neutralTheme as base} from '@astryxdesign/theme-neutral';",
+        "export const brandTheme = defineTheme({name: 'brand', extends: base});",
+        "export {stoneTheme as quietTheme} from '@astryxdesign/theme-stone';",
+        '',
+      ].join('\n'),
+    );
+    write(
+      path.join(dir, 'src/App.tsx'),
+      [
+        "import {Theme as AppTheme} from '@astryxdesign/core';",
+        "import {brandTheme, quietTheme} from './brand';",
+        'export const App = () => (',
+        '  <AppTheme theme={brandTheme}><AppTheme theme={quietTheme as never} /></AppTheme>',
+        ');',
+        '',
+      ].join('\n'),
+    );
+
+    expect((await themeImportWiring(dir)).wired).toEqual([
+      {
+        slug: 'neutral',
+        owner: '@astryxdesign/theme-neutral',
+        file: 'src/App.tsx',
+      },
+      {slug: 'stone', owner: '@astryxdesign/theme-stone', file: 'src/App.tsx'},
+    ]);
+  });
+
+  it('never counts a theme whose package is not installed', async () => {
+    // The CLI bundles a descriptor for every official theme; that is not the
+    // package being installed.
+    const dir = emptyApp('themes-not-installed');
+    write(
+      path.join(dir, 'package.json'),
+      JSON.stringify({name: 'app', private: true}),
+    );
+    write(
+      path.join(dir, 'node_modules/@astryxdesign/core/package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
+    );
+    write(
+      path.join(dir, 'app/providers.tsx'),
+      [
+        "import {Theme} from '@astryxdesign/core/theme';",
+        "import {neutralTheme} from '@astryxdesign/theme-neutral/built';",
+        "import '@astryxdesign/theme-neutral/theme.css';",
+        'export const Providers = ({children}: any) => (',
+        '  <Theme theme={neutralTheme}>{children}</Theme>',
+        ');',
+        '',
+      ].join('\n'),
+    );
+
+    expect((await themeImportWiring(dir)).wired).toEqual([]);
+    expect(await themesCheck(dir)).toMatchObject({
+      status: 'warn',
+      message: 'No @astryxdesign/theme-* packages are installed.',
+    });
+  });
+
+  it('leaves a theme declared inside a component unconfirmed, like other module readers', async () => {
+    const dir = appWithBuiltThemes('themes-inner-scope', ['matcha']);
+    write(
+      path.join(dir, 'app/providers.tsx'),
+      [
+        "import {Theme} from '@astryxdesign/core/theme';",
+        "import {matchaTheme} from '@astryxdesign/theme-matcha';",
+        'export function Providers({children}: any) {',
+        '  const theme = matchaTheme;',
+        '  return <Theme theme={theme}>{children}</Theme>;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    expect(await themeImportWiring(dir)).toEqual({
+      wired: [],
+      unconfirmed: [{file: 'app/providers.tsx'}],
+    });
+  });
+
+  it('says it could not confirm a theme passed to Theme that it cannot trace', async () => {
+    const dir = appWithBuiltThemes('themes-untraced', ['matcha']);
+    write(
+      path.join(dir, 'app/providers.tsx'),
+      [
+        "import {Theme} from '@astryxdesign/core/theme';",
+        'export function Providers({theme, children}: any) {',
+        '  return <Theme theme={theme}>{children}</Theme>;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+
+    expect(await themeImportWiring(dir)).toEqual({
+      wired: [],
+      unconfirmed: [{file: 'app/providers.tsx'}],
+    });
+    expect(await themesCheck(dir)).toEqual({
+      id: 'themes',
+      label: 'Theme packages',
+      status: 'info',
+      message:
+        'Theme package(s) installed (@astryxdesign/theme-matcha); app/providers.tsx passes a theme to Theme that doctor could not trace to a theme import, so it could not confirm which theme is wired.',
+      fix: expect.stringContaining('theme add <slug>`.'),
+    });
+  });
+
+  it('leaves package.json astryx.theme deciding the result, without scanning', async () => {
+    const dir = appWithBuiltThemes('themes-astryx-theme', ['neutral']);
+    write(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'app',
+        private: true,
+        astryx: {theme: '@astryxdesign/theme-neutral'},
+      }),
+    );
+    write(
+      path.join(dir, 'app/layout.tsx'),
+      "import '@astryxdesign/theme-neutral/theme.css';\n",
+    );
+    expect(await themeImportWiring(dir)).toEqual({wired: [], unconfirmed: []});
+    expect(await themesCheck(dir)).toMatchObject({
+      status: 'pass',
+      message:
+        'Theme package(s) installed (@astryxdesign/theme-neutral); wired via package.json astryx.theme.',
     });
   });
 
@@ -596,6 +950,66 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 5 names a package a local theme imports and the app lacks, with the install command', async () => {
+    const {dir} = await fixture();
+    await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+    const localDir = path.join(dir, 'src/themes/ocean');
+    const sourceFile = path.join(localDir, 'oceanTheme.ts');
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('ocean', {cwd: dir, import: true});
+    fs.writeFileSync(
+      sourceFile,
+      "import 'not-installed-icons';\nconst oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+
+    expect(
+      check(await checkAppThemes(dir), 'theme-local-builds'),
+    ).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining('not-installed-icons (ocean)'),
+      fix: expect.stringMatching(
+        /^(npm install|pnpm add|yarn add|bun add) not-installed-icons$/,
+      ),
+    });
+  });
+
+  it('check 5 names the install command and then the rebuild of another stale local theme', async () => {
+    const {dir} = await fixture([{slug: 'ocean'}, {slug: 'reef'}]);
+    for (const slug of ['ocean', 'reef']) {
+      await themeEject(slug, {cwd: dir, package: '@acme/themes'});
+      const sourceFile = path.join(dir, `src/themes/${slug}/${slug}Theme.ts`);
+      fs.writeFileSync(
+        sourceFile,
+        `const ${slug}Theme = {name: '${slug}', tokens: {'--color-bg': '#000'}};\nexport {${slug}Theme};\nexport default ${slug}Theme;\n`,
+      );
+      await themeBuild(sourceFile, {}, {cwd: dir});
+      await themeAdd(slug, {cwd: dir, import: true});
+    }
+    fs.writeFileSync(
+      path.join(dir, 'src/themes/ocean/oceanTheme.ts'),
+      "import 'not-installed-icons';\nconst oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    fs.appendFileSync(
+      path.join(dir, 'src/themes/reef/reef.css'),
+      '\n.injected {}\n',
+    );
+
+    const result = check(await checkAppThemes(dir), 'theme-local-builds');
+    expect(result).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining(
+        'Local theme outputs are also missing or stale: reef.',
+      ),
+    });
+    expect(result.fix).toMatch(
+      /^(npm install|pnpm add|yarn add|bun add) not-installed-icons .*theme build .*reef/,
+    );
+  });
+
   it("check 5 is info, and builds nothing, when the project's Core is not installed (spec AST-081 FR3)", async () => {
     // Outside this repository, whose own installed Core would be found above.
     const {dir} = await fixture(undefined, {root: os.tmpdir()});
@@ -797,7 +1211,7 @@ describe('app-theme doctor checks', () => {
 
   it('reports one information check when the CLI manages no themes', async () => {
     const dir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-doctor-empty-'),
+      path.join(REPO_ROOT, '.astryx-doctor-empty-'),
     );
     dirs.push(dir);
     write(path.join(dir, 'package.json'), '{"name":"empty"}\n');
@@ -816,7 +1230,7 @@ describe('app-theme doctor checks', () => {
 
   it('reads astryx.theme from the app package when node_modules is hoisted to a workspace root', async () => {
     const root = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-doctor-monorepo-'),
+      path.join(REPO_ROOT, '.astryx-doctor-monorepo-'),
     );
     dirs.push(root);
     write(
@@ -859,7 +1273,7 @@ describe('app-theme doctor checks', () => {
 
   it('names an unmigrated copy without failing a project that has no module', async () => {
     const dir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-doctor-unmigrated-'),
+      path.join(REPO_ROOT, '.astryx-doctor-unmigrated-'),
     );
     dirs.push(dir);
     write(path.join(dir, 'package.json'), '{"name":"empty"}\n');

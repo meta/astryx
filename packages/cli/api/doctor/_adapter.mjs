@@ -39,6 +39,11 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
+import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
+export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
+export {unlistedIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
+import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
+import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import * as path from 'node:path';
 import {
   Project,
@@ -61,9 +66,22 @@ export {
   readThemeState,
   resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
-export {themeBuild, validateThemePrivateInputs} from '../theme/build/build.mjs';
+export {
+  missingThemePackage,
+  themeBuild,
+  validateThemePrivateInputs,
+} from '../theme/build/build.mjs';
+export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+
+// What the authoring-docs check reads (./_authoring-audit.mjs), reached only
+// through this adapter.
+export {
+  AUTHORING_AUDIT,
+  authoringAudit,
+  authoringAuditData,
+} from './_authoring-audit.mjs';
 
 /**
  * Package written to the generated app record for one discovered theme.
@@ -113,8 +131,9 @@ export function readTextFileIfExists(file) {
  * links. The doctor parses the returned bytes without executing app code.
  * @param {string} root
  * @param {string} generatedModule
+ * @param {{stylesheets?: boolean}} [options] - also list `.css` files
  */
-export function listProjectSourceFiles(root, generatedModule) {
+export function listProjectSourceFiles(root, generatedModule, options = {}) {
   /** @type {string[]} */
   const files = [];
   /** @type {string[]} */
@@ -137,13 +156,51 @@ export function listProjectSourceFiles(root, generatedModule) {
       } else if (
         entry.isFile() &&
         file !== generatedModule &&
-        SOURCE_EXTENSIONS.has(path.extname(entry.name))
+        (SOURCE_EXTENSIONS.has(path.extname(entry.name)) ||
+          (options.stylesheets === true && path.extname(entry.name) === '.css'))
       ) {
         files.push(file);
       }
     }
   }
   return files;
+}
+
+/**
+ * Each file in the project's own source that still uses the placeholder
+ * component the CLI writes for a missing icon: the file, the component's
+ * name, the meanings its uses name (null when none names one), and how many
+ * uses it has. A file reads only as a syntax tree, so a commented-out or
+ * quoted copy never counts. Read without executing app code.
+ * @param {string} projectDir
+ * @returns {Array<{file: string, local: string, meanings: string[] | null, uses: number}>}
+ */
+export function findIconPlaceholders(projectDir) {
+  /** @type {Array<{file: string, local: string, meanings: string[] | null, uses: number}>} */
+  const found = [];
+  for (const file of listProjectSourceFiles(projectDir, '')) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    // Only a file with the placeholder's dash pattern is parsed.
+    if (!source.includes('3 2.33')) continue;
+    const uses = placeholderUses(source);
+    if (!uses || uses.length === 0) continue;
+    const shown = path.relative(projectDir, file).split(path.sep).join('/');
+    const meanings = [
+      ...new Set(uses.flatMap(each => each.meanings ?? [])),
+    ].sort();
+    found.push({
+      file: shown,
+      local: uses[0].local,
+      meanings: meanings.length > 0 ? meanings : null,
+      uses: uses.length,
+    });
+  }
+  return found.sort((a, b) => a.file.localeCompare(b.file));
 }
 
 /** @param {string} projectDir */
@@ -164,6 +221,39 @@ export function resolveDoctorThemeImports(theme, options) {
 /** @param {string} projectDir */
 export function discoverDoctorUnmigratedCopies(projectDir) {
   return discoverUnmigratedThemeCopies(projectDir);
+}
+
+/**
+ * The real path of a file, links resolved; null when it does not exist.
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function realDoctorFile(file) {
+  try {
+    return fs.realpathSync(file);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where each `<Name prop={value}>` value of a module is declared (see
+ * `elementPropOrigins`).
+ * @param {string} file
+ * @param {Parameters<typeof elementPropOrigins>[1]} element
+ */
+export function doctorElementPropOrigins(file, element) {
+  return elementPropOrigins(file, element);
+}
+
+/**
+ * The `@import` specifiers of a stylesheet, quoted or in `url()`, in any case
+ * (see `cssImports`); empty for CSS that does not parse.
+ * @param {string} css
+ * @returns {Set<string>}
+ */
+export function doctorStylesheetImports(css) {
+  return new Set(cssImports(css));
 }
 
 /** @param {string} projectDir */
@@ -468,11 +558,13 @@ export function resolveBuiltPath(cwd, target) {
  * path relative to the folder (a file's own name when the path is one file),
  * whether it sits in build output, and a reader that returns its text, or
  * null when it cannot be read or is over 5 MB. Installs and version control
- * are skipped; at most BUILT_FILE_LIMIT files are listed.
+ * are skipped; at most `fileLimit` files are listed.
  * @param {string} target an existing absolute path
+ * @param {{fileLimit?: number}} [options] `fileLimit`: BUILT_FILE_LIMIT
+ *   unless the caller reads fewer
  * @returns {{files: {rel: string, built: boolean, read: () => string | null}[], truncated: boolean, missing?: number}}
  */
-export function readBuiltPath(target) {
+export function readBuiltPath(target, {fileLimit = BUILT_FILE_LIMIT} = {}) {
   /** @param {string} file */
   const reader = file => () => {
     try {
@@ -568,7 +660,7 @@ export function readBuiltPath(target) {
           built: built || BUILD_OUTPUT_DIRS.has(entry.name),
         });
       } else if (entry.isFile()) {
-        if (files.length >= BUILT_FILE_LIMIT) return {files, truncated: true};
+        if (files.length >= fileLimit) return {files, truncated: true};
         files.push({
           rel: path.relative(target, full).split(path.sep).join('/'),
           built,

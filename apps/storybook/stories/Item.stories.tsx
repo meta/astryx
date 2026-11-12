@@ -342,6 +342,37 @@ export const Disabled: Story = {
   ),
 };
 
+/**
+ * Each row state on one interactive row: rest, highlighted (the active row of
+ * a menu or a picker), selected, disabled, and selected while disabled. The
+ * row reflects each state on its `item` theme target.
+ */
+export const States: Story = {
+  render: () => (
+    <Stack gap={0}>
+      {(
+        [
+          ['Rest', {}],
+          ['Highlighted', {isHighlighted: true}],
+          ['Selected', {isSelected: true}],
+          ['Disabled', {isDisabled: true}],
+          ['Selected and disabled', {isSelected: true, isDisabled: true}],
+        ] as const
+      ).map(([label, state]) => (
+        <Item
+          key={label}
+          {...state}
+          startContent={<Icon icon={DocumentIcon} size="sm" />}
+          label={label}
+          description="Edited 2 hours ago"
+          endContent={<Badge label="Draft" />}
+          onClick={() => {}}
+        />
+      ))}
+    </Stack>
+  ),
+};
+
 /** Top-aligned layout for multi-line content. */
 export const AlignStart: Story = {
   render: () => (
@@ -540,13 +571,14 @@ export const AlignFirstLine: Story = {
 };
 
 /**
- * Swipe actions, as a mail list uses them: on a touch screen a drag toward
- * the inline start uncovers Archive and Delete (Delete outermost, so a long
- * drag or a fling fires it); a drag toward the inline end uncovers a
- * read/unread toggle. Under `reveal` (the default) the row rests open with
- * every entry a real button. Every verb is also in the row's own content, so
- * a mouse and a keyboard reach it without the gesture. `List` clips the rows
- * in the inline axis for the slide.
+ * Swipe actions, as a mail list uses them. On a touch screen a drag toward
+ * the inline start uncovers Archive and Delete, with Delete outermost. Under
+ * `reveal` (the default), a fling or a long drag rests that side open with
+ * every entry a real button. A drag that starts on the open row fires Delete.
+ * A drag toward the inline end uncovers a read/unread toggle, which a long
+ * drag fires. Every verb is also in the row's own content, so a mouse and a
+ * keyboard reach it without the gesture. `List` clips the rows in the inline
+ * axis for the slide.
  */
 export const SwipeActions: Story = {
   render: () => {
