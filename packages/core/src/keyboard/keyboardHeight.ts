@@ -127,9 +127,11 @@ interface KeyboardStore {
   detachFocus: (() => void) | null;
 }
 
+// The store holds the layout viewport's height. A copy of Core with another
+// store shape keeps its own store under another version.
 const stores = sharedWeakMap<Window, KeyboardStore>(
   'keyboard/keyboard-height/stores',
-  1,
+  4,
 );
 
 function storeOf(win: Window): KeyboardStore {
