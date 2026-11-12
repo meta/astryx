@@ -224,6 +224,32 @@ describe('useMonthYearToggle: inert and focus', () => {
     expect(calendar.hasAttribute('inert')).toBe(false);
   });
 
+  it('waits for the opacity fade when the warm-up cancels the wheels\u2019 visibility transition mid-fade', async () => {
+    const view = render(<Panels isWheelOpen />);
+    const calendar = view.getByTestId('calendar');
+    const wheels = view.getByTestId('wheels');
+    fading(calendar, wheels);
+    view.rerender(<Panels isWheelOpen={false} />);
+    // The wheels fade out: their opacity and their visibility transitions run.
+    transitionRun(wheels, 'opacity');
+    transitionRun(wheels, 'visibility');
+    // The warm-up shows them again mid-fade, which cancels the visibility
+    // transition while the opacity one still runs: the fade goes on.
+    const cancel = new Event('transitioncancel', {bubbles: true});
+    Object.assign(cancel, {propertyName: 'visibility'});
+    act(() => {
+      wheels.dispatchEvent(cancel);
+    });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(wheels.hasAttribute('inert')).toBe(false);
+    expect(calendar.hasAttribute('inert')).toBe(true);
+    await fadeEnd(wheels);
+    expect(wheels.hasAttribute('inert')).toBe(true);
+    expect(calendar.hasAttribute('inert')).toBe(false);
+  });
+
   it('swaps inert with the toggle with a mouse, fade or not', () => {
     const view = render(<Panels isWheelOpen={false} isTouch={false} />);
     fading(view.getByTestId('calendar'), view.getByTestId('wheels'));

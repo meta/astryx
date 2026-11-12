@@ -268,17 +268,18 @@ export function useMonthYearToggle({
         started.add(key);
       }
     };
-    // A cancel whose property runs again at once is a replacement, not an
-    // end: the replacement's own end ends the fade.
-    const isReplaced = (event: Event) =>
+    // A cancel while an exit transition still runs on the panel is not an
+    // end. The property may run again at once, as a replacement. Or the
+    // warm-up shows the wheels mid-fade, which cancels only their
+    // `visibility`. The transition that still runs ends the fade.
+    const isStillExiting = (event: Event) =>
       event.type === 'transitioncancel' &&
-      isRunning(
-        event.target as Element,
-        (event as TransitionEvent).propertyName,
+      [...EXIT_PROPERTIES].some(property =>
+        isRunning(event.target as Element, property),
       );
     const onEnd = (event: Event) => {
       const key = keyOf(event);
-      if (key != null && started.has(key) && !isReplaced(event)) {
+      if (key != null && started.has(key) && !isStillExiting(event)) {
         settle();
       }
     };
