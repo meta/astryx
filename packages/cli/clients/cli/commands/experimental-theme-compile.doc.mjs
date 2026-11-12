@@ -39,7 +39,7 @@ export const doc = {
       flag: '-o, --out <path>',
       param: 'options.out',
       description:
-        'Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)',
+        'Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A folder, or a path ending in /, writes <theme name>.css into it. A build never replaces the theme source (ERR_THEME_INVALID). At a path --out names, it replaces only its own earlier outputs: any other existing file fails with ERR_FILE_EXISTS and nothing is written. A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)',
     },
     {
       flag: '--icons-specifier <specifier>',
@@ -89,7 +89,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'a build or validation error, or --check finds stale or missing outputs',
+      when: 'a build or validation error (an error envelope), or --check finds stale or missing outputs (the check result, with upToDate false and the stale files, is still printed: it is a result, not an error)',
     },
   ],
   related: ['experimental theme add', 'experimental theme list'],

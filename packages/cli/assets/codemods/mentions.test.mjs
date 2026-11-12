@@ -46,9 +46,11 @@ function runOver(files, mentions) {
       package: 'core',
       codemod: {
         title: 'Rename oldProp',
+        fileExtensions: ['.tsx', '.css'],
         ...(mentions ? {mentions} : {}),
         transform(file, api) {
           seen.push(path.basename(file.path));
+          if (file.path.endsWith('.css')) return undefined;
           const root = api.jscodeshift(file.source);
           const attrs = root.find(api.jscodeshift.JSXAttribute, {
             name: {name: 'oldProp'},
@@ -109,5 +111,12 @@ describe('a codemod that declares the words a file must say', () => {
       'plain.tsx',
       'uses.tsx',
     ]);
+  });
+
+  it('always runs on a stylesheet, even one that parses as JavaScript', () => {
+    // `button.primary` then a `{ … }` block on the next line is a valid
+    // JavaScript expression and block, yet a stylesheet transform changes it.
+    const css = {'theme.css': 'button.primary\n{\n  color: white;\n}\n'};
+    expect(runOver(css, ['oldProp']).seen).toEqual(['theme.css']);
   });
 });
