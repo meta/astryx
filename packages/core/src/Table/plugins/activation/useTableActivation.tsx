@@ -597,9 +597,8 @@ export function useTableActivation<T extends Record<string, unknown>>(
         context?: TableRowContext,
       ): BodyRowRenderProps {
         const {getIsItemActivatable} = store.getConfig();
-        // Eligibility resolves once per row update; the first subscriber
-        // apply below reuses this result rather than re-invoking the caller
-        // predicate, while later applies and every press re-resolve it live.
+        // The first apply reuses this result. Later applies and every press
+        // call the predicate again.
         const eligible = getIsItemActivatable?.(item) ?? true;
         // Identity and admission come from the row context: no usable key
         // without an explicit idKey, and only flat product rows admit

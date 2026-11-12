@@ -4072,6 +4072,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-activation-master-detail-rows",
+      "path": "examples/use-table-activation/master-detail-rows",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-column-resize-draggable-columns",
       "path": "examples/use-table-column-resize/draggable-columns",
       "aliases": []
