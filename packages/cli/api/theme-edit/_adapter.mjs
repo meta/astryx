@@ -50,7 +50,8 @@ import {
   getCliInvocation,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
-import {DIALS, LIKE} from './_tables.mjs';
+import {DIALS, LIKE, P} from './_tables.mjs';
+import {setLine} from './_check.mjs';
 import {colorProblem} from './_color.mjs';
 import {SHOWCASE_GROUPS} from './_preview.mjs';
 import {camel, typedThemeName} from './_settings.mjs';
@@ -234,6 +235,9 @@ function lockDir(root) {
  * @returns {Promise<T>}
  */
 async function withLock(root, name, fn, bestEffort = false, again = null) {
+  // A preview command, which holds the preview lock, suggests the list of
+  // previews (what the other command may be changing).
+  again ??= name === 'preview' ? 'experimental theme preview list' : null;
   /** @type {string | null} */
   let dir;
   try {
@@ -475,22 +479,14 @@ const withThemeLock = o => ({
 });
 
 /**
- * A command's own words, from what it was called with: the editor command,
- * its arguments and the scope flags it took.
- * @param {string} sub
- * @param {unknown[]} args
- * @param {Record<string, unknown>} [options]
+ * A command's own words after the CLI name, from what it was called with,
+ * every option kept: set and undo as `set` writes them (scope flags and
+ * --only), new with --like and each dial, --png where given.
+ * @param {string} line a command as the editor writes one (`astryx …`)
+ * @param {{png?: boolean}} [o]
  */
-const again = (sub, args, options = {}) =>
-  [
-    `experimental theme editor ${sub}`,
-    ...args
-      .filter(a => a != null && a !== '')
-      .map(a => quoteCommandArgument(String(a))),
-    ...['on', 'when', 'state', 'mode']
-      .filter(k => options[k] != null)
-      .map(k => `--${k} ${quoteCommandArgument(String(options[k]))}`),
-  ].join(' ');
+const words = (line, o = {}) =>
+  `${line.replace(/^astryx /, '').trimEnd()}${o.png ? ' --png' : ''}`;
 
 /** @type {typeof edit.themeEditNew} */
 export const themeEditNew = (name, options = {}) =>
@@ -499,7 +495,15 @@ export const themeEditNew = (name, options = {}) =>
     lockName(name),
     o => edit.themeEditNew(name, o),
     false,
-    again('new', [name]),
+    words(
+      `${P} new ${quoteCommandArgument(name)} ${edit
+        .newFlagList(
+          options.like,
+          options.settings ?? {},
+          /** @type {boolean} */ (options.png),
+        )
+        .join(' ')}`,
+    ),
   );
 /** @type {typeof edit.themeEditSet} */
 export const themeEditSet = (theme, thing, value, options = {}) =>
@@ -508,7 +512,7 @@ export const themeEditSet = (theme, thing, value, options = {}) =>
     lockName(theme),
     o => edit.themeEditSet(theme, thing, value, o),
     false,
-    again('set', [theme, thing, value], options),
+    words(setLine(theme, thing, value, options), options),
   );
 /** @type {typeof edit.themeEditUndo} */
 export const themeEditUndo = (theme, options = {}) =>
@@ -517,10 +521,17 @@ export const themeEditUndo = (theme, options = {}) =>
     lockName(theme),
     o => edit.themeEditUndo(theme, o),
     false,
-    again(
-      'undo',
-      [theme, options.thing, options.value],
-      /** @type {any} */ (options),
+    words(
+      options.thing
+        ? setLine(
+            theme,
+            options.thing,
+            /** @type {string} */ (options.value ?? ''),
+            options,
+            true,
+          )
+        : `${P} undo ${theme}`,
+      options,
     ),
   );
 /** @type {typeof edit.themeEditShow} */
@@ -530,7 +541,7 @@ export const themeEditShow = (theme, options = {}) =>
     lockName(theme),
     o => edit.themeEditShow(theme, o),
     true,
-    again('show', [theme]),
+    words(`${P} show ${theme}`, options),
   );
 /** @type {typeof preview.themeEditPreviewAdd} */
 export const themeEditPreviewAdd = (description, options = {}) =>

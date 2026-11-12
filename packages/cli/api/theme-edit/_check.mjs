@@ -138,7 +138,7 @@ function ratioPreset(v) {
  * @param {{on?: string, when?: string, state?: string, mode?: string, only?: boolean}} s
  * @param {boolean} [unset]
  */
-const setLine = (slug, thing, value, s, unset = false) =>
+export const setLine = (slug, thing, value, s, unset = false) =>
   `${P} ${unset ? 'undo' : 'set'} ${slug} ${thing}${value ? ` ${quoteCommandArgument(value)}` : ''}${s.on ? ` --on ${s.on}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`;
 
 /** @param {string} v */

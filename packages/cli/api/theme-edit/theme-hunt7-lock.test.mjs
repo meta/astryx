@@ -9,7 +9,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {
+  themeEditNew,
+  themeEditPreviewAdd,
+  themeEditSet,
+  themeEditUndo,
+} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -118,22 +123,79 @@ describe('a busy lock through the API', () => {
     );
     /** @type {any} */ (globalThis).__lockWait = 50;
     try {
-      let err;
+      /** @param {() => Promise<unknown>} call */
+      const busy = async call => {
+        let err;
+        try {
+          await call();
+        } catch (e) {
+          err = /** @type {any} */ (e);
+        }
+        expect(err?.code).toBe('ERR_THEME_BUSY');
+        return (err.suggestions ?? [])
+          .map((/** @type {any} */ x) => x.name)
+          .join('\n');
+      };
+      expect(
+        await busy(() =>
+          themeEditSet('t', 'corners', 'pill', {cwd, on: 'card'}),
+        ),
+      ).toMatch(/experimental theme editor set t corners pill --on card$/m);
+      // Every option the call got is in the command to run again.
+      expect(
+        await busy(() =>
+          themeEditSet('t', 'padding', '12px', {
+            cwd,
+            on: 'text-area',
+            only: true,
+          }),
+        ),
+      ).toMatch(
+        /experimental theme editor set t padding 12px --on text-area --only$/m,
+      );
+      expect(
+        await busy(() =>
+          themeEditUndo('t', {
+            cwd,
+            thing: 'padding',
+            on: 'text-area',
+            only: true,
+          }),
+        ),
+      ).toMatch(
+        /experimental theme editor undo t padding --on text-area --only$/m,
+      );
+      expect(
+        await busy(() =>
+          themeEditNew('t', {
+            cwd,
+            like: 'neutral',
+            settings: {corners: 'round'},
+          }),
+        ),
+      ).toMatch(
+        /experimental theme editor new t --like neutral --corners round$/m,
+      );
+      expect(
+        await busy(() => themeEditSet('t', 'corners', 'pill', {cwd})),
+      ).not.toContain(process.argv.slice(2).join(' ') || 'never');
+      // A preview command busy on the preview lock names the list.
+      const plock = path.join(
+        path.dirname(lock),
+        path.basename(lock).replace(/theme-t\.lock$/, 'preview.lock'),
+      );
+      fs.mkdirSync(plock, {recursive: true});
+      fs.writeFileSync(
+        path.join(plock, 'owner.json'),
+        JSON.stringify({pid: 999999, host: 'other', at: Date.now()}),
+      );
       try {
-        await themeEditSet('t', 'corners', 'pill', {cwd, on: 'card'});
-      } catch (e) {
-        err = /** @type {any} */ (e);
+        expect(await busy(() => themeEditPreviewAdd(undefined, {cwd}))).toMatch(
+          /experimental theme preview list$/m,
+        );
+      } finally {
+        fs.rmSync(plock, {recursive: true, force: true});
       }
-      expect(err?.code).toBe('ERR_THEME_BUSY');
-      const names = (err.suggestions ?? []).map(
-        (/** @type {any} */ x) => x.name,
-      );
-      expect(names.join('\n')).toMatch(
-        /experimental theme editor set t corners pill --on card$/m,
-      );
-      expect(names.join('\n')).not.toContain(
-        process.argv.slice(2).join(' ') || 'never',
-      );
     } finally {
       /** @type {any} */ (globalThis).__lockWait = undefined;
       fs.rmSync(lock, {recursive: true, force: true});

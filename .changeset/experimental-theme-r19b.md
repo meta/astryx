@@ -6,6 +6,6 @@
 
 - A card `padding-left` or `padding-right` set beside another side, as a keyword (`initial`) or as math (`calc()`), is written as that side.
 - `show` whose render fails leaves a folder you put in `tokens/` alone.
-- When another command holds the theme, the suggestion to run again names the call's own command, never the arguments of the process the API runs in.
+- When another command holds the theme, the suggestion to run again names the call's own command with every option it got (`--only`, `--like` and each dial of `new`, `--png`), never the arguments of the process the API runs in; a preview command waiting on another names `preview list`.
 
 @josephfarina
