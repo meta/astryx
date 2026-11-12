@@ -26,7 +26,11 @@
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-import {webInputDriver, WHEEL_SKIP} from '@astryxdesign/interaction-harness';
+import {
+  webInputDriver,
+  WHEEL_SCROLL_END_MS,
+  WHEEL_SKIP,
+} from '@astryxdesign/interaction-harness';
 
 /**
  * Chromium's driver sends each wheel as one notch, `wheelDeltaY` -120
@@ -349,6 +353,45 @@ async function logTouchMoves(page: Page): Promise<void> {
 async function readTouchMoves(page: Page): Promise<boolean[]> {
   return page.evaluate(
     () => (window as unknown as {__moves: boolean[]}).__moves,
+  );
+}
+
+/**
+ * Record each touchmove's travel from its touch's start along y, px, and
+ * whether it reached the page cancelled.
+ */
+async function logTouchTravel(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const moves: {travel: number; cancelled: boolean}[] = [];
+    (window as unknown as {__travel: typeof moves}).__travel = moves;
+    let startY = 0;
+    window.addEventListener(
+      'touchstart',
+      event => {
+        startY = event.touches[0]?.clientY ?? 0;
+      },
+      {passive: true},
+    );
+    window.addEventListener(
+      'touchmove',
+      event => {
+        moves.push({
+          travel: Math.round((event.touches[0]?.clientY ?? 0) - startY),
+          cancelled: event.defaultPrevented,
+        });
+      },
+      {passive: true},
+    );
+  });
+}
+
+async function readTouchTravel(
+  page: Page,
+): Promise<{travel: number; cancelled: boolean}[]> {
+  return page.evaluate(
+    () =>
+      (window as unknown as {__travel: {travel: number; cancelled: boolean}[]})
+        .__travel,
   );
 }
 
@@ -1289,23 +1332,47 @@ test('scroll edge: at the top the pull is the sheet’s at once', async ({
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
 });
 
-test("scroll edge: at the top the sheet cancels the pull's moves from the first one, before it begins (spec:AST-094 FR19, DEC-18)", async ({
+test("scroll edge: at the top the sheet leaves a tap's wobble to the browser, then cancels the pull's moves from the one that reaches 5 px, before it begins (spec:AST-094 FR19, DEC-30)", async ({
   page,
   browserName,
 }) => {
   const driver = await open(page, browserName);
-  await logTouchMoves(page);
+  await logTouchTravel(page);
   const start = await center(page, 'sheetBody');
   await driver.play(drag(start, {x: start.x, y: start.y + 24}));
-  const moves = await readTouchMoves(page);
+  const moves = await readTouchTravel(page);
   // WebKit sends the first move at 2 px, well before the sheet's 10 px begin;
-  // Chromium sends none inside its own 15 px slop. Every move the page sees
-  // is cancelled, the first one included.
+  // Chromium sends none inside its own 15 px slop. A move under 5 px stays
+  // the browser's, so a tap keeps its click. Every move from 5 px is
+  // cancelled, before Mobile Safari could commit its native pan.
   expect(moves.length).toBeGreaterThan(0);
-  expect(moves).toEqual(moves.map(() => true));
+  expect(moves).toEqual(
+    moves.map(({travel}) => ({travel, cancelled: travel >= 5})),
+  );
   const sheet = (await log(page)).filter(entry => entry.name === 'sheet');
   expect(sheet[0]?.state).toBe('began');
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
+});
+
+test('scroll edge: at the top a tap that wobbles under 5 px keeps every move, so WebKit keeps its click (spec:AST-094 FR19, DEC-30)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await logTouchTravel(page);
+  const at = await center(page, 'sheetBody');
+  await driver.play([
+    {t: 0, down: [{id: 1, x: at.x, y: at.y}]},
+    {t: 30, down: [{id: 1, x: at.x, y: at.y + 2}]},
+    {t: 60, down: [{id: 1, x: at.x, y: at.y + 4}]},
+    {t: 90, down: []},
+  ]);
+  // WebKit ends a touch's click when one of its moves is cancelled.
+  expect(
+    (await readTouchTravel(page)).filter(({cancelled}) => cancelled),
+  ).toEqual([]);
+  const sheet = (await log(page)).filter(entry => entry.name === 'sheet');
+  expect(sheet.some(entry => entry.state === 'began')).toBe(false);
 });
 
 test('a drag that began as a scroll stays the browser’s (AST-094 FR14): the content scrolls to its top and the sheet never begins', async ({
@@ -2144,17 +2211,32 @@ test.describe('where the primary pointer is fine', () => {
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     const card = await center(page, 'card');
-    // Six 16 px steps at a still cursor: the card leaves it after two.
-    for (let step = 0; step < 6; step += 1) {
-      await driver.wheel({...card, dx: 16});
-    }
+    // One trackpad scroll at a still cursor, a step a frame. Its first 48 px
+    // step takes the card off the cursor at once. The three 16 px steps after
+    // it land off the card, merged or not, so only the latch carries them.
+    // Awaited steps land a round trip apart, which a loaded runner stretches
+    // past the scroll's end. The burst keeps a frame between steps and fails
+    // a split by name.
+    const {receivedSteps} = await driver.wheelBurst({
+      ...card,
+      steps: [{dx: 48}, {dx: 16}, {dx: 16}, {dx: 16}],
+      maxGapMs: WHEEL_SCROLL_END_MS.horizontal,
+    });
     await page.waitForTimeout(250);
     const pan = await page.evaluate(() =>
       window.__wheelLog.filter(entry => entry.startsWith('pan:')),
     );
     const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
     // Every step after the first moved the card, and none scrolled the page.
-    expect(moved).toHaveLength(5);
+    // WebKit merges the steps it holds while the page is busy, as it does a
+    // trackpad's. So the count is of the steps the page received. The card
+    // took all 96 px past the 10 px hysteresis.
+    expect(moved).toHaveLength(receivedSteps - 1);
+    const shown = pan.filter(entry => /^pan:(began|changed):/.test(entry));
+    expect(shown.at(-1)?.split(':')[2]).toBe('-86');
+    // The card had left the cursor, half its 60 px width, before the last
+    // wheel reached the page. So the latch carried that wheel.
+    expect(Number(shown.at(-2)?.split(':')[2])).toBeLessThan(-30);
     expect(pan.slice(-2).map(entry => entry.split(':')[1])).toEqual([
       'ended',
       'possible',
@@ -2334,9 +2416,15 @@ test.describe('where the primary pointer is fine', () => {
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     const strip = await center(page, 'strip');
-    for (let step = 0; step < 6; step += 1) {
-      await driver.wheel({...strip, dx: 8});
-    }
+    // Six 8 px steps a frame apart. WebKit reads them as one trackpad scroll,
+    // whose first step stays under the pan's 10 px hysteresis, so a split
+    // fails the burst by name. Chromium's notches are no trackpad scroll.
+    await driver.wheelBurst({
+      ...strip,
+      steps: Array.from({length: 6}, () => ({dx: 8})),
+      maxGapMs:
+        browserName === 'webkit' ? WHEEL_SCROLL_END_MS.horizontal : undefined,
+    });
     await page.waitForTimeout(250);
     const pan = await page.evaluate(() =>
       window.__wheelLog.filter(entry => entry.startsWith('pan:')),
@@ -2352,9 +2440,10 @@ test.describe('where the primary pointer is fine', () => {
       // WebKit's sends a trackpad's precise deltas, which the pan follows.
       expect(pan[0]).toMatch(/^pan:began:/);
       expect(pan.some(entry => entry.startsWith('pan:ended:'))).toBe(true);
-      // The content moves the way the fingers do: a scroll right drags it left.
-      const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
-      expect(Number(moved.at(-1)?.split(':')[2])).toBeLessThan(0);
+      // The content moves the way the fingers do: a scroll right drags it
+      // left. WebKit may merge the steps into the pan's first move.
+      const shown = pan.filter(entry => /^pan:(began|changed):/.test(entry));
+      expect(Number(shown.at(-1)?.split(':')[2])).toBeLessThan(0);
       expect(await page.evaluate(() => window.scrollX)).toBe(0);
     }
     // Across the pan's axis the wheel is the page's.

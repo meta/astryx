@@ -96,7 +96,7 @@ export const doc = {
     {code: 'ERR_RENDER_BROWSER_API', when: 'the page reads a browser-only API, such as window or document, while rendering'},
     {code: 'ERR_RENDER_ASSET_TOO_LARGE', when: 'a local file the page uses is over 8 MB'},
     {code: 'ERR_RENDER_TIMEOUT', when: 'the page does not finish rendering within 60 seconds'},
-    {code: 'ERR_RENDER_FAILED', when: 'the page throws while rendering for any other reason'},
+    {code: 'ERR_RENDER_FAILED', when: 'the page throws while rendering for any other reason, or Node itself crashes (a crash signal, or a crash status on Windows) or is stopped by a signal while it renders the page (the message names the Node version and path)'},
     {
       code: 'ERR_RENDER_NOT_ASTRYX',
       when: 'reversing a file a render did not write, with no embedded source and no Astryx markup; the suggestion is `astryx build "<what the page is>"`',

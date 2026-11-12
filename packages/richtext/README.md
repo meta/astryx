@@ -71,6 +71,12 @@ if your app has its own reset) loads first.
 
 ## Editing code blocks
 
+In a code block, Tab and Shift+Tab indent and outdent every line the selection
+touches, by the indent the block already uses: a tab when one of its lines
+starts with a tab, otherwise the fewest leading spaces of any indented line,
+kept between 2 and 8, otherwise 2 spaces. Press Escape, then Tab, to move focus
+out of the editor.
+
 Backspace at the very start of a code block turns it into a paragraph of its
 lines, instead of merging the code into the block above.
 

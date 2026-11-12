@@ -1589,6 +1589,41 @@ describe('FileInput statusVariant forwarding', () => {
     );
   });
 
+  // component:FileInput FR6: a dropzone's tall surface cannot carry an
+  // attached message, so its unset placement is detached.
+  it('defaults a dropzone status to detached', () => {
+    const {container} = render(
+      <FileInput
+        label="Upload"
+        mode="dropzone"
+        value={null}
+        onChange={() => {}}
+        status={{type: 'error', message: 'Something went wrong'}}
+      />,
+    );
+    expect(container.querySelector('.astryx-field-status')).toHaveAttribute(
+      'data-variant',
+      'detached',
+    );
+  });
+
+  it('keeps an explicit attached on a dropzone until the next minor release', () => {
+    const {container} = render(
+      <FileInput
+        label="Upload"
+        mode="dropzone"
+        value={null}
+        onChange={() => {}}
+        status={{type: 'error', message: 'Something went wrong'}}
+        statusVariant="attached"
+      />,
+    );
+    expect(container.querySelector('.astryx-field-status')).toHaveAttribute(
+      'data-variant',
+      'attached',
+    );
+  });
+
   it('forwards statusVariant="detached" to the underlying Field status', () => {
     const {container} = render(
       <FileInput

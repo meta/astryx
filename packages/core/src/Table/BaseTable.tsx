@@ -18,7 +18,6 @@ import {
   memo,
   useId,
   useMemo,
-  useRef,
   type ReactElement,
   type ReactNode,
   type Ref,
@@ -72,6 +71,7 @@ import {TableHeader} from './TableHeader';
 import {TableBody} from './TableBody';
 import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {internByIdentity} from './internByIdentity';
 import {
   readsRowCount,
   readsRowIndex,
@@ -186,25 +186,6 @@ function applyRowPlugins<
 
 // Stable empty array to avoid creating new reference on each render
 const EMPTY_PLUGINS: TablePlugin<Record<string, unknown>>[] = [];
-
-/**
- * Shallow-compare two arrays by element identity.
- * Used to stabilize the resolved columns array across renders.
- */
-function areArraysShallowEqual<T>(a: T[], b: T[]): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (a.length !== b.length) {
-    return false;
-  }
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
 
 interface TableRowProps<T extends Record<string, unknown>> {
   item: T;
@@ -608,14 +589,15 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // new array on every call, but if the contents haven't changed, we
   // reuse the previous reference. This prevents MemoizedTableRow from
   // re-rendering all rows when the column array is structurally identical.
-  const resolvedColumnsRef = useRef(transformedColumns);
-  if (!areArraysShallowEqual(resolvedColumnsRef.current, transformedColumns)) {
-    resolvedColumnsRef.current = transformedColumns;
-  }
-  const resolvedColumns = resolvedColumnsRef.current;
+  // Every render with the same columns gets one array, so a render React
+  // discards cannot leave another. No state or ref is written during render.
+  const resolvedColumns = internByIdentity(transformedColumns);
   const headerRowCount = mode === 'data' && resolvedColumns.length > 0 ? 1 : 0;
   const config = getTableVirtualizationConfig(virtualization);
   const windowFallbackReason = useMemo(() => {
+    if (virtualization != null && config == null) {
+      return 'virtualization is not a value from useTableRowsVirtualization';
+    }
     if (mode !== 'data') {
       return 'windowing requires data mode';
     }
@@ -644,8 +626,8 @@ function BaseTableInner<T extends Record<string, unknown>>({
       config == null ||
       !Number.isFinite(config.rowHeight) ||
       config.rowHeight <= 0 ||
-      !Number.isFinite(config.viewportHeight) ||
-      config.viewportHeight <= 0
+      !Number.isFinite(config.initialViewportHeight) ||
+      config.initialViewportHeight <= 0
     ) {
       return 'row and viewport geometry must be positive finite CSS pixels';
     }
@@ -659,6 +641,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
     rowIndexStart,
     rowCount,
     resolvedColumns,
+    virtualization,
     config,
   ]);
   const windowAdmitted = windowFallbackReason === undefined;
@@ -1058,10 +1041,10 @@ function BaseTableInner<T extends Record<string, unknown>>({
     () => ({
       ...runtime,
       viewportHeight: windowPlan.isWindowed
-        ? config?.viewportHeight
+        ? config?.initialViewportHeight
         : undefined,
     }),
-    [runtime, windowPlan.isWindowed, config?.viewportHeight],
+    [runtime, windowPlan.isWindowed, config?.initialViewportHeight],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>

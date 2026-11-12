@@ -273,9 +273,9 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   canonicalises symlinks and rejects a NUL byte; an escape is
   `ERR_PATH_TRAVERSAL`. Bounded inputs are capped rather than trusted. The only
   writes outside a project or output folder are the per-user ones
-  `spec:AST-081` FR7 lists: releases and records in the per-user cache, the
-  settings and state files, and the computer-level skill file with its links or
-  copy in the home folder. None follows a link in its place, and none replaces
+  `spec:AST-081` FR7 lists: releases, records and kept search catalogs in the
+  per-user cache, the settings and state files, and the computer-level skill
+  file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create.
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
   When a current record already confines the writes of a CLI operation (a
@@ -451,7 +451,9 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   outputs. The deprecated plain `theme add` keeps copying source until its scheduled
   cleanup. `theme eject` is the explicit source fork; it copies the complete
   theme directory and same-stem descriptor, with the local descriptor marked as
-  not maintained by the package owner.
+  not maintained by the package owner. The `theme targets` filter drops a
+  leading `.` and surrounding spaces, so a class selector as the output prints
+  it (`.astryx-switch`) matches.
 - **INV20 — A command's API subject has one layout.** A command's behavior lives
   in `api/<subject>/`. `<subject>.mjs` is the subject's entry, and `api/index.mjs`
   re-exports what it exports. A subject with more than one operation puts each in
