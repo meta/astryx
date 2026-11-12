@@ -827,6 +827,33 @@ async function change(sub, slug, thing, value, options) {
   try {
     return await changeOnce(sub, slug, thing, value, options, seen);
   } catch (e) {
+    // A theme name one letter off an existing theme: the same command with
+    // that name comes first, before making a theme of the typo.
+    if (e instanceof AstryxError && e.code === E.ERR_UNKNOWN_THEME) {
+      const near = (e.suggestions ?? []).find(x => x.reason === 'did you mean');
+      if (near && slugOk(near.name)) {
+        const flags = [
+          ...(options.on ? ['--on', options.on] : []),
+          ...(options.when ? ['--when', options.when] : []),
+          ...(options.state ? ['--state', options.state] : []),
+          ...(options.mode ? ['--mode', options.mode] : []),
+          ...(options.only ? ['--only'] : []),
+        ];
+        const words = [thing, ...(value == null ? [] : [value]), ...flags]
+          .filter(w => w != null && w !== '')
+          .map(w =>
+            String(w).startsWith('--') ? w : quoteCommandArgument(String(w)),
+          );
+        e.suggestions = [
+          {
+            name: `${P} ${sub} ${near.name}${words.length ? ` ${words.join(' ')}` : ''}`,
+            reason: `do this instead: ${near.name} is a theme here`,
+          },
+          ...(e.suggestions ?? []).filter(x => x !== near),
+        ];
+      }
+      throw e;
+    }
     // Every `set` the refusal suggests is checked as `set` checks it.
     throw vetSuggestions(e, seen.ctx, slug, seen.data);
   }

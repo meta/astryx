@@ -81,8 +81,10 @@ describe('R5/R6: a theme file that is a folder or cannot be read', () => {
           () => themeEditUndo('t', {cwd}),
         ]) {
           const err = await refusal(run);
-          expect(err.code).toBe('ERR_THEME_INVALID');
-          expect(err.message).toContain('is a folder, not a file');
+          // The source files are named by the editor; a built file by the
+          // build's own check (hunt24), with its code.
+          expect(['ERR_THEME_INVALID', 'ERR_FILE_EXISTS']).toContain(err.code);
+          expect(err.message).toMatch(/is a folder/);
           expect(advice(err)).not.toMatch(/delete|rm /i);
           expect(advice(err)).toContain('ls -la');
         }

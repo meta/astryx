@@ -214,7 +214,14 @@ export function unreadableReason(file) {
  */
 export function refuseUnreadableFiles(cwd, slug) {
   const f = themeFiles(cwd, slug);
-  for (const file of [f.settings, f.ts, f.settingsTs, f.js, f.css, f.history]) {
+  // The files the editor reads (the settings, the source, the history) are
+  // named here; the files the build writes (with their types) by the
+  // build's own check, the same one show uses.
+  refuseUnreadable(cwd, [
+    ...builtFiles(cwd, slug, {name: slug, mode: 'both', settings: []}),
+    path.join(f.dir, `${slug}.variants.d.ts`),
+  ]);
+  for (const file of [f.settings, f.ts, f.history]) {
     const why = unreadableReason(file);
     if (why)
       throw new AstryxError(
@@ -407,6 +414,27 @@ export function loadTheme(
         },
       );
     }
+    // An empty name (an unset variable, a lone dash): no theme to guess
+    // from it, so the themes here are named instead of a new one.
+    if (!same && !/[a-z0-9]/i.test(String(slug ?? ''))) {
+      const have = fs.existsSync(themeFiles(cwd, 'x').root)
+        ? fs
+            .readdirSync(themeFiles(cwd, 'x').root)
+            .filter(
+              d => slugOk(d) && fs.existsSync(themeFiles(cwd, d).settings),
+            )
+            .sort()
+        : [];
+      refuse(
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+        `The theme name is empty${String(slug ?? '').trim() ? ` ("${String(slug).slice(0, 20)}" has no letter or digit)` : ''}.${have.length ? ` Themes here: ${have.slice(0, 6).join(', ')}.` : ''}`,
+        {
+          run: have.length
+            ? have.slice(0, 3).map(t => `${P} show ${t}`)
+            : [`${P} new my-theme`],
+        },
+      );
+    }
     refuse(
       ERROR_CODES.ERR_INVALID_ARGUMENT,
       `"${String(slug ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}).`,
@@ -492,10 +520,19 @@ export function loadTheme(
     refuse(
       ERROR_CODES.ERR_UNKNOWN_THEME,
       `There is no theme "${slug}" made by this command (no themes/${slug}/${slug}.settings.json).`,
-      {
-        didYouMean: same ? [same] : nearest(slug, have),
-        run: same ? [`${P} show ${same}`] : [`${P} new ${slug}`],
-      },
+      (() => {
+        const near = same ? [same] : nearest(slug, have);
+        // A theme near the name comes first; a new theme of the name as
+        // typed only after.
+        return {
+          didYouMean: near,
+          run: same
+            ? [`${P} show ${same}`]
+            : near.length
+              ? [`${P} show ${near[0]}`, `${P} new ${slug}`]
+              : [`${P} new ${slug}`],
+        };
+      })(),
     );
   }
   refuseLinks(cwd, slug);
@@ -3622,6 +3659,23 @@ export async function commitTheme(
         e.code === ERROR_CODES.ERR_THEME_BUSY)
     )
       throw e;
+    // A folder where a built file goes: named for the editor, which has no
+    // --out to pick.
+    const folder =
+      e instanceof AstryxError
+        ? /^The output (.+) is a folder\./.exec(e.message)?.[1]
+        : undefined;
+    if (folder)
+      throw new AstryxError(
+        `${folder} is a folder, not a file, so the theme cannot be built. Put the file back in its place; nothing was changed.`,
+        [
+          {
+            name: `ls -la ${quoteCommandArgument(folder)}`,
+            reason: 'see what is there',
+          },
+        ],
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
     const why = (e instanceof Error ? e.message : String(e))
       .split(`${cwd}${path.sep}`)
       .join('')
