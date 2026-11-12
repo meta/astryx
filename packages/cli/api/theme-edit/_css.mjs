@@ -547,10 +547,15 @@ export function numbersIn(ast) {
   csstree().walk(ast, {
     enter(/** @type {any} */ node) {
       if (node.type === 'Function') fns.push(node.name.toLowerCase());
-      if (node.type === 'Dimension' || node.type === 'Number')
+      if (
+        node.type === 'Dimension' ||
+        node.type === 'Number' ||
+        node.type === 'Percentage'
+      )
         out.push({
           value: Number(node.value),
-          unit: (node.unit ?? '').toLowerCase(),
+          unit:
+            node.type === 'Percentage' ? '%' : (node.unit ?? '').toLowerCase(),
           fn: fns.at(-1) ?? null,
         });
     },
@@ -636,20 +641,31 @@ const FONT_TYPE_LONGHAND = /** @type {Record<string, string>} */ ({
  */
 export function fontShorthandParts(value) {
   const {lexer, parse, generate} = csstree();
-  const word = value.trim().toLowerCase();
-  if (/^[a-z-]+$/.test(word))
-    for (const prop of [
-      'font-weight',
-      'font-style',
-      'font-variant-caps',
-      'font-stretch',
-      'font-size',
-    ])
-      if (keywordsOf(prop).includes(word)) return {[prop]: word};
-  // One size (1rem, 120%) or one weight (700) is that longhand.
-  if (!/[\s,]/.test(word))
-    for (const prop of ['font-size', 'font-weight'])
-      if (matchValue(prop, value.trim())) return {[prop]: value.trim()};
+  // Words that are each one longhand's keyword, size or weight (`bold`,
+  // `italic bold`, `1rem bold`) are those longhands, whatever their order.
+  const LONGHANDS = [
+    'font-weight',
+    'font-style',
+    'font-variant-caps',
+    'font-stretch',
+    'font-size',
+  ];
+  if (!value.includes(',')) {
+    /** @type {Record<string, string>} */
+    const each = {};
+    const words = value.trim().split(/\s+/);
+    for (const w of words) {
+      const lower = w.toLowerCase();
+      const prop =
+        LONGHANDS.find(p => !(p in each) && keywordsOf(p).includes(lower)) ??
+        ['font-size', 'font-weight'].find(
+          p => !(p in each) && !/^[a-z-]+$/i.test(w) && matchValue(p, w),
+        );
+      if (!prop) break;
+      each[prop] = /^[a-z-]+$/i.test(w) ? lower : w;
+    }
+    if (Object.keys(each).length === words.length) return each;
+  }
   /** @type {any} */
   let ast;
   try {

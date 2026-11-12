@@ -1047,6 +1047,13 @@ async function change(sub, slug, thing, value, options) {
           ...exactWins,
         ].map(describe)
       : [];
+  // The role fonts a whole-theme font sits under.
+  const roleOver =
+    sub === 'set' && s.thing === 'font' && !s.on
+      ? data.settings.filter(
+          x => x.thing === 'font' && x.on && ['body', 'heading'].includes(x.on),
+        )
+      : [];
   // The exact property a dial on a part competes with there.
   const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
     corners: /radius$/,
@@ -1120,9 +1127,17 @@ async function change(sub, slug, thing, value, options) {
           `${describe(exactOver)} is an exact property and wins over ${s.thing} there, so this shows only after \`${P} undo ${slug} ${undoArgs(exactOver)}\``,
         ]
       : []),
+    // A whole-theme font under fonts set for each role shows only where no
+    // role font is set.
+    ...(roleOver.length
+      ? [
+          `keeps your ${roleOver.map(describe).join(', ')}: a font for one role wins over the whole-theme font, so ${s.value} shows there only after ${roleOver.map(x => `\`${P} undo ${slug} ${undoArgs(x)}\``).join(' and ')}`,
+        ]
+      : []),
     // An accepted change that the theme already showed says so.
     ...(sub === 'set' &&
     !exactOver &&
+    !roleOver.length &&
     // With the last build unreadable, nothing was compared.
     !r.notes.some(n => n.includes('could not be read')) &&
     !r.unchanged &&

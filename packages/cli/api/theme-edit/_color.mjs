@@ -522,8 +522,15 @@ export function splitTop(v, sep) {
  */
 export function mixSide(side) {
   const words = splitTop(side.trim(), ' ');
-  const share = (/** @type {string | undefined} */ w) =>
-    w != null && /^-?\d*\.?\d+%$/.test(w) ? Number.parseFloat(w) : null;
+  // Any CSS percentage: an exponent or a sign (5e1%, +50%), or math that
+  // gives one percentage (calc(50%)).
+  const share = (/** @type {string | undefined} */ w) => {
+    if (w == null) return null;
+    const plain = /^calc\(\s*(.*?)\s*\)$/i.exec(w)?.[1] ?? w;
+    if (/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?%$/i.test(plain))
+      return Number.parseFloat(plain);
+    return null;
+  };
   // A share outside 0-100% is invalid CSS: the side then names no color,
   // so the mix is refused rather than extrapolated.
   if (words.length < 2) return {color: side.trim(), pct: null};

@@ -17,6 +17,7 @@ import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {
   CLOSEST_OPEN_FONT,
   FONT_ROLES,
+  FONTS,
   OPEN_FONTS,
   isDesktopFamily,
   oneSystemOf,
@@ -238,6 +239,18 @@ export function fontNotes(ctx, data) {
         : `${family} is not installed, so it does not load: the previews and the app show the next font in the stack. Install it: ${installLine(ctx.project.cwd, [pkg])}. Then the preview imports it on the next set or show, and the app imports it once: import '${pkg}'; Until then, the closest font that needs no install is ${near}: ${P} set ${data.name} font ${near}`,
     );
   }
+  // A family the editor's own presets lead with, where the preset gets no
+  // note (Comic Sans MS, of comic), is no more a font to load typed by name.
+  const presetFamily = (/** @type {string} */ family) => {
+    const f = family.replace(/["']/g, '').trim().toLowerCase();
+    // A one-system font keeps its note, preset or not.
+    if (oneSystemOf(family.replace(/["']/g, '').trim())) return false;
+    return Object.entries(FONTS).some(
+      ([k, [first]]) =>
+        (SYSTEM_FONTS.includes(k) || k === 'comic' || k === 'rounded') &&
+        first.replace(/["']/g, '').trim().toLowerCase() === f,
+    );
+  };
   for (const s of data.settings) {
     if (
       s.thing !== 'font' ||
@@ -247,7 +260,8 @@ export function fontNotes(ctx, data) {
       fontOf(s.value).pkg ||
       packages.some(x => x.of === s) ||
       s.value === 'rounded' ||
-      s.value === 'comic'
+      s.value === 'comic' ||
+      presetFamily(fontOf(s.value).family)
     )
       continue;
     const family = fontOf(s.value).family.replace(/["']/g, '').toLowerCase();

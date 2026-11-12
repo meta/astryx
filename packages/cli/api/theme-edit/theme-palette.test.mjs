@@ -2332,3 +2332,98 @@ describe('colors14', () => {
     expect(lab.message).toContain('give the mixed color itself');
   });
 });
+
+describe('colors15', () => {
+  it('refuses negative percentages, and reads any CSS percentage as a mix share', async () => {
+    for (const [prop, value] of [
+      ['line-height', '-50%'],
+      ['gap', '-10%'],
+      ['font-stretch', '-10%'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', prop, value, {cwd, on: 'card'})))
+          .code,
+        `${prop} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    for (const share of ['5e1%', '+50%', 'calc(50%)']) {
+      await themeEditSet(
+        'p',
+        '--color-accent',
+        `color-mix(in srgb, red ${share}, blue)`,
+        {cwd},
+      );
+      await themeEditUndo('p', {cwd, thing: '--color-accent'});
+    }
+    await themeEditSet('p', 'accent', 'color-mix(in srgb, red 1e2%, blue)', {
+      cwd,
+    });
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
+  it('takes a line height token as a number only, as Core multiplies it', async () => {
+    for (const [value, unitless] of [
+      ['1.5em', '1.5'],
+      ['150%', '1.5'],
+      ['normal', null],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', '--text-body-leading', value, {cwd}),
+      );
+      expect(r.code, value).toBe('ERR_THEME_BAD_VALUE');
+      if (unitless)
+        expect(r.run[0], value).toMatch(
+          new RegExp(`--text-body-leading ${unitless}$`),
+        );
+    }
+    await themeEditSet('p', '--text-body-leading', '1.5', {cwd});
+    await themeEditUndo('p', {cwd, thing: '--text-body-leading'});
+  });
+
+  it('suggests the headings word meant, the font a role keeps, and text sizes the dial takes', async () => {
+    for (const [value, word] of [
+      ['BOLD', 'bold'],
+      ['Tight', 'tight'],
+      ['700', 'bold'],
+      ['800', 'heavy'],
+      ['900', 'heavy'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'headings', value, {cwd}),
+      );
+      expect(r.run[0], value).toMatch(new RegExp(` headings ${word}$`));
+    }
+    await themeEditSet('p', 'font', 'georgia', {cwd, on: 'body'});
+    await themeEditSet('p', 'font', 'georgia', {cwd, on: 'heading'});
+    const masked = await themeEditSet('p', 'font', 'verdana', {cwd});
+    const said = masked.data.notes.join(' ');
+    expect(said).not.toContain('already shows');
+    expect(said).toContain('undo p font --on body');
+    for (const thing of ['font', 'font', 'font'])
+      await themeEditUndo('p', {cwd, thing}).catch(() => {});
+    const comic = await themeEditSet('p', 'font', 'Comic Sans MS', {cwd});
+    expect(comic.data.notes.join(' ')).not.toContain('not a system font');
+    await themeEditSet('p', 'text-size', '32', {cwd});
+    const more = await refusal(() =>
+      themeEditSet('p', 'text-size', 'more', {cwd}),
+    );
+    expect(more.run[0]).toContain('--font-size-base');
+    await themeEditSet('p', 'text-size', '31', {cwd});
+    const more31 = await refusal(() =>
+      themeEditSet('p', 'text-size', 'more', {cwd}),
+    );
+    expect(more31.run[0]).toMatch(/ text-size 32$/);
+  });
+
+  it('maps every keyword of a font value on a part to its longhand', async () => {
+    const r = await refusal(() =>
+      themeEditSet('p', 'font', 'italic bold', {cwd, on: 'card'}),
+    );
+    expect(r.run.some(x => /font-style italic --on card$/.test(x))).toBe(true);
+    expect(r.run.some(x => /font-weight bold --on card$/.test(x))).toBe(true);
+    expect(r.run.join(' ')).not.toContain('font-family');
+    const sized = await refusal(() =>
+      themeEditSet('p', 'font', '1rem bold', {cwd, on: 'card'}),
+    );
+    expect(sized.run.some(x => /font-size 1rem --on card$/.test(x))).toBe(true);
+  });
+});

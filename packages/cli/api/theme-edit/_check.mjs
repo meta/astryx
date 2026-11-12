@@ -396,6 +396,32 @@ function checkTypedValue(
   }
   if (type === 'number' && !isNumber(value, name))
     bad('a number', /weight/.test(name) ? '600' : '1.4');
+  // A token Core gives as a plain number (line heights) is one Core also
+  // multiplies by a size inside calc(), where a length, a percentage or
+  // normal is invalid: it takes a number with no unit.
+  const coreDefault = String(TOKENS[name] ?? '').trim();
+  const v0 = value.trim();
+  if (
+    type === 'number' &&
+    /^\d*\.?\d+$/.test(coreDefault) &&
+    !/^var\(--[a-z0-9-]+\)$/i.test(v0) &&
+    !/^\d*\.?\d+$/.test(v0) &&
+    !(MATH_FUNCTION.test(v0) && matchType('number', v0) != null)
+  ) {
+    const n = Number.parseFloat(v0);
+    const unitless = /^\d*\.?\d+em$/i.test(v0)
+      ? String(n)
+      : /^\d*\.?\d+%$/.test(v0)
+        ? String(n / 100)
+        : coreDefault;
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `${name} takes a number with no unit: Core multiplies it by a text size inside calc() (field heights, dialog headers, code blocks), where "${value}" is invalid. ${unitless === coreDefault ? `Core's own value is ${coreDefault}.` : `${unitless} is the same line height as a number.`}`,
+      {
+        run: [`${P} set ${slug} ${name} ${quoteCommandArgument(unitless)}`],
+      },
+    );
+  }
   if (type === 'time' && !isTime(value)) bad('a time up to 60s', '150ms');
   if (type === 'easing' && !isEasing(value))
     bad('an easing', 'cubic-bezier(0.2, 0, 0, 1)');
@@ -1277,28 +1303,36 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       }
       if (HEADING_WEIGHTS[v] !== undefined) s.axis = 'weight';
       else if (HEADING_TRACKING[v] !== undefined) s.axis = 'tracking';
-      else
+      else {
+        // The word meant: in other letters (BOLD), or the rung nearest a
+        // weight number (800 is heavy); never a rung the other way.
+        const lower = v.trim().toLowerCase();
+        const words = [
+          ...Object.keys(HEADING_WEIGHTS),
+          ...Object.keys(HEADING_TRACKING),
+        ];
+        const weight = /^\d+(\.\d+)?$/.test(lower) ? Number(lower) : null;
+        const meant =
+          words.find(w => w === lower) ??
+          (weight != null
+            ? Object.entries(HEADING_WEIGHTS).reduce((a, b) =>
+                Math.abs(Number(b[1]) - weight) <
+                Math.abs(Number(a[1]) - weight)
+                  ? b
+                  : a,
+              )[0]
+            : nearest(lower, words)[0]);
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `headings takes ${DIALS.headings.values}, not "${v}".`,
+          `headings takes ${DIALS.headings.values}, not "${v}".${weight != null && meant ? ` ${meant} sets weight ${HEADING_WEIGHTS[meant]}.` : ''}`,
           {
-            didYouMean: nearest(v, [
-              ...Object.keys(HEADING_WEIGHTS),
-              ...Object.keys(HEADING_TRACKING),
-            ]),
-            run: [
-              setLine(
-                slug,
-                'headings',
-                nearest(v, [
-                  ...Object.keys(HEADING_WEIGHTS),
-                  ...Object.keys(HEADING_TRACKING),
-                ])[0] ?? Object.keys(HEADING_WEIGHTS)[0],
-                s,
-              ),
-            ],
+            didYouMean: meant ? [meant] : [],
+            run: meant
+              ? [setLine(slug, 'headings', meant, s)]
+              : [`${HOW} headings`],
           },
         );
+      }
       return s;
     }
     if (unset) return s;
@@ -1377,17 +1411,26 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         const edge = /** @type {[string, number]} */ (
           v === 'more' ? L[L.length - 1] : L[0]
         );
+        // The example stays inside what the dial takes (text-size: 10 to
+        // 32); at that end, the exact token takes the size instead.
+        const [lo, hi] = thing === 'text-size' ? [10, 32] : [0, Infinity];
+        const want = Math.round(px + (v === 'more' ? 2 : -2));
+        const atEnd = v === 'more' ? px >= hi : px <= lo;
         const example = String(cur).replace(
           /\d*\.?\d+/,
-          String(Math.max(0, Math.round(px + (v === 'more' ? 2 : -2)))),
+          String(Math.max(lo, Math.min(hi, want))),
         );
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `${thing} is ${typeof cur === 'number' ? `${cur}px` : cur}, already ${v === 'more' ? 'above' : 'below'} its ${v === 'more' ? 'largest' : 'smallest'} step (${edge[0]}, ${edge[1]}px), so "${v}" has nowhere to go. Give an exact size.`,
+          `${thing} is ${typeof cur === 'number' ? `${cur}px` : cur}, already ${v === 'more' ? 'above' : 'below'} its ${v === 'more' ? 'largest' : 'smallest'} step (${edge[0]}, ${edge[1]}px), so "${v}" has nowhere to go.${atEnd ? ` It is also the ${v === 'more' ? 'largest' : 'smallest'} size ${thing} takes (${lo} to ${hi}); the base font size token takes any size.` : ' Give an exact size.'}`,
           {
-            run: [
-              `${P} set ${slug} ${thing} ${quoteCommandArgument(example)}${s.on ? ` --on ${s.on}` : ''}`,
-            ],
+            run: atEnd
+              ? [
+                  `${P} set ${slug} --font-size-base ${quoteCommandArgument(`${Math.max(1, want)}px`)}`,
+                ]
+              : [
+                  `${P} set ${slug} ${thing} ${quoteCommandArgument(example)}${s.on ? ` --on ${s.on}` : ''}`,
+                ],
           },
         );
       }
