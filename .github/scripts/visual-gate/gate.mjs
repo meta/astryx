@@ -64,9 +64,17 @@ import {
 } from './lib/plan.mjs';
 import {renderReport} from './lib/report.mjs';
 import {accept, incomparable, readBaseline} from './lib/baseline.mjs';
-import {loadConfig, loadThemeOverrides, loadThemingTargets} from './lib/sources.mjs';
+import {
+  loadConfig,
+  loadThemeOverrides,
+  loadThemingTargets,
+  readOnlyGate,
+} from './lib/sources.mjs';
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../..',
+);
 
 const EXIT = {clean: 0, crashed: 1, changed: 2};
 const RELEASE_TIERS = ['surface', 'probe'];
@@ -82,7 +90,9 @@ const captureIdentity = () => ({
   sha: process.env.ASTRYX_VISUAL_SHA ?? process.env.GITHUB_SHA ?? null,
   runId: process.env.ASTRYX_VISUAL_RUN_ID ?? process.env.GITHUB_RUN_ID ?? null,
   runAttempt:
-    process.env.ASTRYX_VISUAL_RUN_ATTEMPT ?? process.env.GITHUB_RUN_ATTEMPT ?? null,
+    process.env.ASTRYX_VISUAL_RUN_ATTEMPT ??
+    process.env.GITHUB_RUN_ATTEMPT ??
+    null,
   // pr-visual's default touched check (spec:AST-030 FR12) says so, so the
   // pull-request comment can name the label for the full suite.
   ...(process.env.ASTRYX_VISUAL_SCOPE === 'touched' ? {scope: 'touched'} : {}),
@@ -94,7 +104,9 @@ const releaseMode = command === 'release';
 // with the same inputs and accepts no flag that could change that list.
 const releasePlanInputs = releaseMode || command === 'scout';
 const themeCatalog = readThemeCatalog(REPO_ROOT, config.baselineThemes);
-const storybookDir = path.resolve(flag('storybook-dir') ?? 'apps/storybook/dist');
+const storybookDir = path.resolve(
+  flag('storybook-dir') ?? 'apps/storybook/dist',
+);
 const baselineDir = path.resolve(flag('baseline') ?? '.visual-baseline');
 let outDir = path.resolve(flag('out') ?? '.visual-run');
 const tiers = releasePlanInputs
@@ -132,7 +144,9 @@ let maxShots = resolvePrVisualTotalShotLimit({
     : config.prVisualShotLimit,
   safetyLimit: config.visualPlanSafetyLimit,
 });
-const storyPackages = (flag('story-packages') ?? config.stableStoryPackages.join(','))
+const storyPackages = (
+  flag('story-packages') ?? config.stableStoryPackages.join(',')
+)
   .split(',')
   .filter(Boolean);
 /** A trusted, exact shot list used only to recapture an accepted merged result. */
@@ -151,7 +165,9 @@ if (
     only.length ||
     sample)
 ) {
-  throw new Error('The stable release plan is internal and cannot be scoped by CLI flags.');
+  throw new Error(
+    'The stable release plan is internal and cannot be scoped by CLI flags.',
+  );
 }
 
 function readExactPlan(file) {
@@ -172,9 +188,12 @@ function readExactPlan(file) {
       !['light', 'dark'].includes(shot.mode) ||
       !Array.isArray(shot.reasons)
     ) {
-      throw new Error(`Exact visual plan contains an invalid shot: ${JSON.stringify(shot)}`);
+      throw new Error(
+        `Exact visual plan contains an invalid shot: ${JSON.stringify(shot)}`,
+      );
     }
-    if (keys.has(shot.key)) throw new Error(`Exact visual plan repeats ${shot.key}.`);
+    if (keys.has(shot.key))
+      throw new Error(`Exact visual plan repeats ${shot.key}.`);
     keys.add(shot.key);
   }
   return shots;
@@ -191,19 +210,32 @@ function readExactPlan(file) {
  * @returns {string[]}
  */
 function storiesToScout(stories, targets, themeOverrides) {
-  const overridden = new Set(Object.values(themeOverrides).flatMap(keys => Object.keys(keys)));
-  const components = new Set(
-    targets.filter(target => overridden.has(target.key)).map(target => target.component),
+  const overridden = new Set(
+    Object.values(themeOverrides).flatMap(keys => Object.keys(keys)),
   );
-  return stories.filter(story => components.has(story.component)).map(story => story.id);
+  const components = new Set(
+    targets
+      .filter(target => overridden.has(target.key))
+      .map(target => target.component),
+  );
+  return stories
+    .filter(story => components.has(story.component))
+    .map(story => story.id);
 }
 
 /** @returns {Promise<{shots: import('./lib/plan.mjs').Shot[], stories: ReturnType<typeof readStoryIndex>}>} */
 /** The Storybook build a run reads, as stamped by the build job (or null). */
 function storybookBuildSha() {
   const stamp = path.join(storybookDir, 'astryx-build-sha.txt');
-  return fs.existsSync(stamp) ? fs.readFileSync(stamp, 'utf8').trim() || null : null;
+  return fs.existsSync(stamp)
+    ? fs.readFileSync(stamp, 'utf8').trim() || null
+    : null;
 }
+
+// The themes a read-only gate could not read because they are not built
+// (lib/sources.mjs READ_ONLY_ENV). The verdict names them.
+/** @type {string[]} */
+const themesNotBuilt = [];
 
 /**
  * @param {{scoutOnly?: boolean}} [options] `scoutOnly` returns the scout's
@@ -218,7 +250,9 @@ async function plan({scoutOnly = false} = {}) {
   }
   const [targets, allThemeOverrides] = await Promise.all([
     loadThemingTargets(REPO_ROOT),
-    loadThemeOverrides(REPO_ROOT, config.probeTheme),
+    loadThemeOverrides(REPO_ROOT, config.probeTheme, undefined, {
+      notBuilt: themesNotBuilt,
+    }),
   ]);
   const themeOverrides = releasePlanInputs
     ? Object.fromEntries(
@@ -247,13 +281,17 @@ async function plan({scoutOnly = false} = {}) {
   if (dependents.length > 0) {
     const scope = visualComponentScope(stories, components, dependents);
     if (scope.dropped.length > 0) {
-      console.log(`Reverse dependents with no stable story: ${scope.dropped.join(', ')}`);
+      console.log(
+        `Reverse dependents with no stable story: ${scope.dropped.join(', ')}`,
+      );
     }
     components = scope.components;
     if (components.length === 0) {
       // Nothing the scope reaches has a stable story: the caller runs the
       // whole plan rather than an empty one.
-      console.log('No touched component or reverse dependent has a stable story; asking for the whole plan.');
+      console.log(
+        'No touched component or reverse dependent has a stable story; asking for the whole plan.',
+      );
       process.exit(BROADEN_EXIT_CODE);
     }
     maxShots = resolvePrVisualTotalShotLimit({
@@ -287,11 +325,15 @@ async function plan({scoutOnly = false} = {}) {
         storyIds,
         storybookSha: storybookBuildSha(),
       });
-      process.stderr.write(`Read ${storyIds.length} scouted stories from ${shardDir}\n`);
+      process.stderr.write(
+        `Read ${storyIds.length} scouted stories from ${shardDir}\n`,
+      );
     } else if (cachePath && fs.existsSync(cachePath)) {
       observations = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
     } else {
-      process.stderr.write(`Scouting ${storyIds.length} stories for theming targets…\n`);
+      process.stderr.write(
+        `Scouting ${storyIds.length} stories for theming targets…\n`,
+      );
       observations = await scout({
         storyIds,
         storybookDir,
@@ -299,7 +341,8 @@ async function plan({scoutOnly = false} = {}) {
         viewport: config.viewport,
         concurrency: config.scoutConcurrency,
       });
-      if (cachePath) fs.writeFileSync(cachePath, `${JSON.stringify(observations)}\n`);
+      if (cachePath)
+        fs.writeFileSync(cachePath, `${JSON.stringify(observations)}\n`);
     }
   }
 
@@ -349,7 +392,9 @@ async function plan({scoutOnly = false} = {}) {
   // A sample is for trying the rig out, never for a gate run: it is taken
   // evenly across the plan so it spans components rather than the first few.
   const filtered = only.length
-    ? shots.filter(shot => only.some(fragment => shot.storyId.includes(fragment)))
+    ? shots.filter(shot =>
+        only.some(fragment => shot.storyId.includes(fragment)),
+      )
     : shots;
   if (!sample || sample >= filtered.length) {
     return {
@@ -448,14 +493,19 @@ function stageReportImages({reportDir, keys, currentDir, baselinePath}) {
     fs.mkdirSync(path.join(reportDir, name), {recursive: true});
     for (const key of keys) {
       const from = path.join(source, `${key}.png`);
-      if (fs.existsSync(from)) fs.copyFileSync(from, path.join(reportDir, name, `${key}.png`));
+      if (fs.existsSync(from))
+        fs.copyFileSync(from, path.join(reportDir, name, `${key}.png`));
     }
   }
 }
 
 async function check() {
-  const {shots, stories, baselineAccount, componentShotCount = 0} =
-    await plan();
+  const {
+    shots,
+    stories,
+    baselineAccount,
+    componentShotCount = 0,
+  } = await plan();
   const releasePlan = releaseMode ? createReleasePlan(shots) : null;
   const baselineAccounting = releaseMode
     ? summarizeBaselineAccounting(baselineAccount, shots)
@@ -465,7 +515,10 @@ async function check() {
     : [];
   if (ineligible.length) {
     throw new Error(
-      `Canonical stable release plan contains ${ineligible.length} ineligible shot(s): ${ineligible.slice(0, 5).map(shot => shot.key).join(', ')}`,
+      `Canonical stable release plan contains ${ineligible.length} ineligible shot(s): ${ineligible
+        .slice(0, 5)
+        .map(shot => shot.key)
+        .join(', ')}`,
     );
   }
 
@@ -482,9 +535,7 @@ async function check() {
     const measuredShots = componentOverBudget
       ? componentShotCount
       : shots.length;
-    const budget = componentOverBudget
-      ? config.prVisualShotLimit
-      : maxShots;
+    const budget = componentOverBudget ? config.prVisualShotLimit : maxShots;
     const scope = componentOverBudget
       ? `component-selected shots (${components.length} components touched)`
       : 'shots';
@@ -501,8 +552,18 @@ async function check() {
         tiers,
         components,
         ...(releasePlan ? {releasePlan} : {}),
+        ...(readOnlyGate()
+          ? {themesNotBuilt: [...new Set(themesNotBuilt)].sort()}
+          : {}),
       },
-      counts: {total: shots.length, unchanged: 0, changed: 0, added: 0, removed: 0, failed: 0},
+      counts: {
+        total: shots.length,
+        unchanged: 0,
+        changed: 0,
+        added: 0,
+        removed: 0,
+        failed: 0,
+      },
       components,
       changes: [],
       added: [],
@@ -510,10 +571,14 @@ async function check() {
       failures: [],
     };
     fs.mkdirSync(outDir, {recursive: true});
-    fs.writeFileSync(path.join(outDir, 'verdict.json'), `${JSON.stringify(verdict, null, 2)}\n`);
+    fs.writeFileSync(
+      path.join(outDir, 'verdict.json'),
+      `${JSON.stringify(verdict, null, 2)}\n`,
+    );
     const summary = `## Visual gate: skipped\n\n${verdict.reason}\n`;
     process.stdout.write(summary);
-    if (flag('summary-output')) fs.writeFileSync(flag('summary-output'), summary);
+    if (flag('summary-output'))
+      fs.writeFileSync(flag('summary-output'), summary);
     if (process.env.GITHUB_OUTPUT) {
       fs.appendFileSync(
         process.env.GITHUB_OUTPUT,
@@ -523,8 +588,13 @@ async function check() {
     return EXIT.clean;
   }
 
-  process.stderr.write(`Visual gate: ${shots.length} shots (${tiers.join(', ')})\n`);
-  const {manifest, failures: captureFailures} = await runCapture(shots, releasePlan);
+  process.stderr.write(
+    `Visual gate: ${shots.length} shots (${tiers.join(', ')})\n`,
+  );
+  const {manifest, failures: captureFailures} = await runCapture(
+    shots,
+    releasePlan,
+  );
   let failures = [
     ...captureFailures,
     ...(baselineAccounting?.unclassifiedKeys ?? []).map(key => ({
@@ -575,7 +645,9 @@ async function check() {
 
   const [targets, themeOverrides] = await Promise.all([
     loadThemingTargets(REPO_ROOT),
-    loadThemeOverrides(REPO_ROOT, config.probeTheme),
+    loadThemeOverrides(REPO_ROOT, config.probeTheme, undefined, {
+      notBuilt: themesNotBuilt,
+    }),
   ]);
   const targeting = analyzeTargeting({
     observedTargets: manifest.observedTargets,
@@ -595,6 +667,9 @@ async function check() {
       baselineExists: exists,
       components,
       ...(baselineAccounting ? {baselineAccounting} : {}),
+      ...(readOnlyGate()
+        ? {themesNotBuilt: [...new Set(themesNotBuilt)].sort()}
+        : {}),
     },
   });
 
@@ -639,7 +714,10 @@ async function check() {
 function summarize(verdict, baselineExists) {
   const lines = [`## Visual gate: ${verdict.status}`, ''];
   if (!baselineExists) {
-    lines.push('No baseline existed — this run establishes one. Nothing was compared.', '');
+    lines.push(
+      'No baseline existed — this run establishes one. Nothing was compared.',
+      '',
+    );
   }
   lines.push(
     `| shots | changed | added | removed | failed |`,
@@ -662,13 +740,19 @@ function summarize(verdict, baselineExists) {
     }
   }
   if (verdict.changes.length > 0) {
-    lines.push('### Changed', '', '| shot | theme | mode | diff px | why it is in the plan |', '|---|---|---|---|---|');
+    lines.push(
+      '### Changed',
+      '',
+      '| shot | theme | mode | diff px | why it is in the plan |',
+      '|---|---|---|---|---|',
+    );
     for (const change of verdict.changes.slice(0, 40)) {
       lines.push(
         `| \`${change.key}\` | ${change.theme} | ${change.mode} | ${change.diffPixels} | ${(change.reasons ?? []).join(', ')} |`,
       );
     }
-    if (verdict.changes.length > 40) lines.push(`| … | | | | ${verdict.changes.length - 40} more |`);
+    if (verdict.changes.length > 40)
+      lines.push(`| … | | | | ${verdict.changes.length - 40} more |`);
     lines.push('');
   }
   const unexercised = verdict.targeting?.unexercisedOverrides ?? [];
@@ -678,7 +762,10 @@ function summarize(verdict, baselineExists) {
       '',
       ...unexercised
         .slice(0, 25)
-        .map(finding => `- \`${finding.theme}\` → \`${finding.key}${finding.selector ? `.${finding.selector}` : ''}\``),
+        .map(
+          finding =>
+            `- \`${finding.theme}\` → \`${finding.key}${finding.selector ? `.${finding.selector}` : ''}\``,
+        ),
       '',
     );
   }
@@ -701,7 +788,9 @@ async function main() {
       const pages = flag('concurrency') ?? String(config.scoutConcurrency);
       const concurrency = Number(pages);
       if (!Number.isInteger(concurrency) || concurrency < 1) {
-        throw new Error(`--concurrency must be a positive integer, got ${pages}.`);
+        throw new Error(
+          `--concurrency must be a positive integer, got ${pages}.`,
+        );
       }
       process.stderr.write(
         `Scouting shard ${shard.index}/${shard.count}: ${mine.length} of ${scoutStoryIds.length} stories…\n`,
@@ -741,7 +830,9 @@ async function main() {
         }
       }
       process.stdout.write(`${shots.length} shots\n`);
-      for (const [reason, count] of Object.entries(byReason).sort((a, b) => b[1] - a[1])) {
+      for (const [reason, count] of Object.entries(byReason).sort(
+        (a, b) => b[1] - a[1],
+      )) {
         process.stdout.write(`  ${String(count).padStart(5)}  ${reason}\n`);
       }
       return EXIT.clean;
@@ -749,7 +840,9 @@ async function main() {
     case 'capture': {
       const {shots} = await plan();
       const {failures} = await runCapture(shots);
-      process.stdout.write(`Captured ${shots.length - failures.length}/${shots.length} into ${outDir}\n`);
+      process.stdout.write(
+        `Captured ${shots.length - failures.length}/${shots.length} into ${outDir}\n`,
+      );
       return failures.length > 0 ? EXIT.crashed : EXIT.clean;
     }
     case 'check':
@@ -779,7 +872,9 @@ async function main() {
       const unstable = [...seen.entries()]
         .filter(([, hashes]) => hashes.size > 1)
         .map(([key]) => key);
-      const stories = [...new Set(unstable.map(key => key.split('__')[0]))].sort();
+      const stories = [
+        ...new Set(unstable.map(key => key.split('__')[0])),
+      ].sort();
       process.stdout.write(
         `${unstable.length} unstable shot(s) across ${passes} passes, in ${stories.length} stor${stories.length === 1 ? 'y' : 'ies'}\n`,
       );
@@ -794,7 +889,9 @@ async function main() {
     case 'accept': {
       const manifestPath = path.join(outDir, 'manifest.json');
       if (!fs.existsSync(manifestPath)) {
-        throw new Error(`No capture at ${outDir} — run check or capture first.`);
+        throw new Error(
+          `No capture at ${outDir} — run check or capture first.`,
+        );
       }
       const currentManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       const verdictPath = path.join(outDir, 'verdict.json');
@@ -803,7 +900,9 @@ async function main() {
         try {
           verdict = JSON.parse(fs.readFileSync(verdictPath, 'utf8'));
         } catch (error) {
-          throw new Error(`Refusing to promote: ${verdictPath} is unreadable (${error.message}).`);
+          throw new Error(
+            `Refusing to promote: ${verdictPath} is unreadable (${error.message}).`,
+          );
         }
       }
       // accept() validates the verdict against the current baseline before
@@ -818,12 +917,19 @@ async function main() {
               ...Object.keys(currentManifest.shots),
               ...(has('prune') ? removed : []),
             ]
-          : requested.split(',').map(key => key.trim()).filter(Boolean);
-      if (new Set(named).size !== named.length) throw new Error('accept repeats a shot key.');
+          : requested
+              .split(',')
+              .map(key => key.trim())
+              .filter(Boolean);
+      if (new Set(named).size !== named.length)
+        throw new Error('accept repeats a shot key.');
       const prune = has('prune') ? named.filter(key => removed.has(key)) : [];
       const keys = named.filter(key => currentManifest.shots[key]);
-      const unknown = named.filter(key => !currentManifest.shots[key] && !removed.has(key));
-      if (unknown.length) throw new Error(`accept names unknown shot(s): ${unknown.join(', ')}`);
+      const unknown = named.filter(
+        key => !currentManifest.shots[key] && !removed.has(key),
+      );
+      if (unknown.length)
+        throw new Error(`accept names unknown shot(s): ${unknown.join(', ')}`);
       if (prune.length) {
         if (verdict?.status === 'failed') {
           throw new Error('Refusing to prune from a failed visual verdict.');
@@ -832,8 +938,12 @@ async function main() {
           currentManifest.context?.releasePlan,
           currentManifest,
         );
-        if (JSON.stringify(verdict?.context?.releasePlan) !== JSON.stringify(plan)) {
-          throw new Error('Refusing to prune without the capture’s canonical release plan.');
+        if (
+          JSON.stringify(verdict?.context?.releasePlan) !== JSON.stringify(plan)
+        ) {
+          throw new Error(
+            'Refusing to prune without the capture’s canonical release plan.',
+          );
         }
       }
       const baselineManifest = {
@@ -849,7 +959,11 @@ async function main() {
         verdict,
         keys,
         reason: flag('reason') ?? '',
-        actor: flag('actor') ?? process.env.GITHUB_ACTOR ?? process.env.USER ?? 'unknown',
+        actor:
+          flag('actor') ??
+          process.env.GITHUB_ACTOR ??
+          process.env.USER ??
+          'unknown',
         runId: process.env.GITHUB_RUN_ID ?? null,
         prune,
       });

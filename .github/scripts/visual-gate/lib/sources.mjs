@@ -28,6 +28,16 @@ const CORE_THEME_ENTRY = 'packages/core/dist/theme/index.js';
 const BUILD_TIMEOUT_MS = 300_000;
 
 /**
+ * Set to `1` by the Node test project only (vitest.config.ts). A gate a test
+ * runs then builds nothing: it reads the themes that are built and names the
+ * rest, because a build writes into the checkout that other tests read at the
+ * same time. The visual-gate job never sets it, so there the gate builds what
+ * it cannot read.
+ */
+export const READ_ONLY_ENV = 'ASTRYX_VISUAL_GATE_READ_ONLY';
+export const readOnlyGate = () => process.env[READ_ONLY_ENV] === '1';
+
+/**
  * @param {string} repoRoot
  * @param {string} pkg
  */
@@ -57,7 +67,8 @@ async function importBuilt(file, query = '') {
  * @returns {string}
  */
 function packageName(dir) {
-  return JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).name;
+  return JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'))
+    .name;
 }
 
 /**
@@ -67,7 +78,10 @@ function packageName(dir) {
 export async function loadThemingTargets(repoRoot) {
   const module = await import(
     pathToFileURL(
-      path.join(repoRoot, 'packages/cli/foundation/discovery/theming-targets.mjs'),
+      path.join(
+        repoRoot,
+        'packages/cli/foundation/discovery/theming-targets.mjs',
+      ),
     ).href
   );
   return module.collectThemingTargets(path.join(repoRoot, 'packages/core/src'));
@@ -94,12 +108,21 @@ export async function loadThemingTargets(repoRoot) {
  * prerequisites now, so how they get onto the runner is an optimisation rather
  * than a correctness dependency.
  *
+ * With `readOnly`, it builds nothing: a theme whose built source is missing
+ * is left out and its folder name is added to `notBuilt`.
+ *
  * @param {string} repoRoot
  * @param {string} [probeTheme] - name of the coverage fixture to leave out
  * @param {(repoRoot: string, pkg: string) => void} [build] - seam for tests
+ * @param {{readOnly?: boolean, notBuilt?: string[]}} [options]
  * @returns {Promise<Record<string, Record<string, string[]>>>}
  */
-export async function loadThemeOverrides(repoRoot, probeTheme = 'probe', build = pnpmBuild) {
+export async function loadThemeOverrides(
+  repoRoot,
+  probeTheme = 'probe',
+  build = pnpmBuild,
+  {readOnly = readOnlyGate(), notBuilt = []} = {},
+) {
   const themesDir = path.join(repoRoot, 'packages/themes');
   /** @type {Record<string, Record<string, string[]>>} */
   const overrides = {};
@@ -113,7 +136,9 @@ export async function loadThemeOverrides(repoRoot, probeTheme = 'probe', build =
   const buildOnce = (pkg, why) => {
     if (rebuilt.includes(pkg)) return;
     rebuilt.push(pkg);
-    console.log(`visual gate: ${why}; building ${pkg} here rather than failing.`);
+    console.log(
+      `visual gate: ${why}; building ${pkg} here rather than failing.`,
+    );
     build(repoRoot, pkg);
   };
 
@@ -123,6 +148,22 @@ export async function loadThemeOverrides(repoRoot, probeTheme = 'probe', build =
     const built = path.join(dir, 'dist/source.mjs');
 
     let loaded = await importBuilt(built);
+    if (!loaded.ok && readOnly) {
+      if (
+        fs.existsSync(built) &&
+        fs.existsSync(path.join(repoRoot, CORE_THEME_ENTRY))
+      ) {
+        throw unreadableTheme(
+          repoRoot,
+          entry.name,
+          built,
+          loaded.error,
+          rebuilt,
+        );
+      }
+      notBuilt.push(entry.name);
+      continue;
+    }
     if (!loaded.ok) {
       if (!fs.existsSync(path.join(repoRoot, CORE_THEME_ENTRY))) {
         buildOnce(
@@ -131,18 +172,32 @@ export async function loadThemeOverrides(repoRoot, probeTheme = 'probe', build =
         );
       }
       if (!fs.existsSync(built)) {
-        buildOnce(packageName(dir), `${path.relative(repoRoot, built)} is missing`);
+        buildOnce(
+          packageName(dir),
+          `${path.relative(repoRoot, built)} is missing`,
+        );
       }
       loaded = await importBuilt(built, '?rebuilt');
       if (!loaded.ok) {
-        throw unreadableTheme(repoRoot, entry.name, built, loaded.error, rebuilt);
+        throw unreadableTheme(
+          repoRoot,
+          entry.name,
+          built,
+          loaded.error,
+          rebuilt,
+        );
       }
     }
 
-    const theme = Object.values(loaded.module).find(value => value?.name && value?.components);
+    const theme = Object.values(loaded.module).find(
+      value => value?.name && value?.components,
+    );
     if (!theme || theme.name === probeTheme) continue;
     overrides[theme.name] = Object.fromEntries(
-      Object.entries(theme.components).map(([key, styles]) => [key, Object.keys(styles ?? {})]),
+      Object.entries(theme.components).map(([key, styles]) => [
+        key,
+        Object.keys(styles ?? {}),
+      ]),
     );
   }
 
@@ -195,7 +250,10 @@ export function loadConfig(repoRoot) {
     visualPlanSafetyLimit: 5000,
     tiers: ['surface', 'theme-matrix', 'probe'],
   };
-  const configPath = path.join(repoRoot, '.github/scripts/visual-gate/visual-gate.config.json');
+  const configPath = path.join(
+    repoRoot,
+    '.github/scripts/visual-gate/visual-gate.config.json',
+  );
   if (!fs.existsSync(configPath)) return defaults;
   return {...defaults, ...JSON.parse(fs.readFileSync(configPath, 'utf8'))};
 }
