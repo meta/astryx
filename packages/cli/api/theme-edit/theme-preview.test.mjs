@@ -537,7 +537,10 @@ describe('preview options and errors', () => {
   it('lists no pages when there is no routes folder', async () => {
     const bare = path.join(cwd, 'bare-app');
     fs.mkdirSync(bare);
-    fs.writeFileSync(path.join(bare, 'package.json'), '{"name": "bare"}\n');
+    fs.writeFileSync(
+      path.join(bare, 'package.json'),
+      '{"name": "bare", "dependencies": {"@astryxdesign/core": "*"}}\n',
+    );
     try {
       const r = await themeEditPreviewList({cwd: bare});
       expect(r.data).toEqual({
