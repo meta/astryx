@@ -1050,7 +1050,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         installTouchMovePreventer();
       }
     },
-    [attach, installTouchMovePreventer],
+    [attach, installTouchMovePreventer, optionsRef],
   );
 
   // Syncs the document listeners of the menu gesture counter with this mount.
