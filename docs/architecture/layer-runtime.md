@@ -539,14 +539,13 @@ layers use Layer rendering without joining Escape/platform dismissal.
   not an outside press, even when the browser reads it as a tap; a tap outside
   still dismisses. An anchored menu instead closes as that pan begins
   (`spec:AST-094` FR32).
-- **INV7a — A gesture does not dismiss the layer it opened.** A layer shown
-  during an in-flight press or gesture is not dismissed by that gesture:
-  neither native light dismiss nor Astryx's outside-press logic closes it
-  for the gesture whose id `gestureCounter` recorded when it opened. Its next
-  gesture dismisses it as usual. A light-dismiss layer asked to show while a
-  press's release is handled shows after that release's light dismiss, at
+- **INV7a — A release does not dismiss the layer it opened.** A
+  light-dismiss layer asked to show while a press's release is handled is not
+  dismissed by that release: it shows after that release's light dismiss, at
   the press's click or the next task when no click comes, and stays a native
-  `auto` popover; a press-down open keeps its release through `claimPress`.
+  `auto` popover. Its next gesture dismisses it as usual. A press-down open
+  keeps its release through `claimPress`; whether that release then
+  dismisses it is the opening component's decision.
 - **INV8 — Current Escape delivery follows registered layers.** The shared stack
   uses present `close` and `block` entries in its current depth, containment, and
   stable-registration order.

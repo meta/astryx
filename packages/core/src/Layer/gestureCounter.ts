@@ -8,8 +8,8 @@
  *   keydown and click on the document
  * @output Exports the gesture identity, whether its click has run, whether a
  *   press is down or being released (afterRelease runs a callback once that
- *   release is handled), the press mark a layer keeps from its opening
- *   press, and the press claims (claimPress, claimContextMenuPress)
+ *   release is handled), and the press claims (claimPress,
+ *   claimContextMenuPress)
  * @position Internal to the package, not exported. useLayer reads it to tell
  *   a click that belongs to a dismissing press from a fresh one.
  *   useTouchTrigger, useMenuPress, ContextMenu and DropdownMenu read the
@@ -65,7 +65,8 @@ function advance() {
 }
 
 // The page listens for a press's end and its context menu only while a press
-// is down, so at rest it keeps no pointerup listener of its own.
+// is down. At rest it keeps one window pointerup listener, which ends the
+// release's dispatch.
 function startPress(event: PointerEvent) {
   ensureFields();
   state.isDispatchingRelease = false;
@@ -130,6 +131,9 @@ function endReleaseDispatch() {
 
 function listen() {
   ensureFields();
+  // An older copy of Core may have installed these listeners first. Its
+  // listeners open no release window, so a show during a release is not
+  // deferred, as before.
   if (state.isListening || typeof document === 'undefined') {
     return;
   }
