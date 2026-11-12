@@ -293,6 +293,53 @@ describe('DropdownMenu touch grow', () => {
     expect(motion.enter).not.toHaveBeenCalled();
   });
 
+  it("a finger's tap that closes a controlled menu leaves the next open from code with the layer's own entrance", async () => {
+    const onOpenChange = vi.fn();
+    const menu = (isMenuOpen: boolean) => (
+      <ScrollView>
+        <DropdownMenu
+          button={{label: 'Actions'}}
+          items={ITEMS}
+          isMenuOpen={isMenuOpen}
+          onOpenChange={onOpenChange}
+        />
+      </ScrollView>
+    );
+    const {rerender} = render(menu(true));
+    await settle();
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    fireEvent.pointerDown(trigger, touch);
+    fireEvent.pointerUp(trigger, touch);
+    fireEvent.click(trigger, {detail: 1});
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    rerender(menu(false));
+    await settle();
+    rerender(menu(true));
+    await settle();
+    expect(motion.enter).not.toHaveBeenCalled();
+  });
+
+  it("a finger's press on an aria-disabled trigger leaves the next open from code with the layer's own entrance", async () => {
+    const menu = (isMenuOpen: boolean) => (
+      <DropdownMenu
+        button={{label: 'Actions', isDisabled: true}}
+        items={ITEMS}
+        isMenuOpen={isMenuOpen}
+        onOpenChange={() => {}}
+      />
+    );
+    const {rerender} = render(menu(false));
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    expect(trigger).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.pointerDown(trigger, touch);
+    fireEvent.pointerUp(trigger, touch);
+    fireEvent.click(trigger, {detail: 1});
+    await settle();
+    rerender(menu(true));
+    await settle();
+    expect(motion.enter).not.toHaveBeenCalled();
+  });
+
   it("a pen's press grows it", async () => {
     render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
     fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), pen);

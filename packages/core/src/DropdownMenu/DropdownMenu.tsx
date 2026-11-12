@@ -1040,6 +1040,7 @@ function DropdownMenuPopover({
   // keyboard (the modality tracker decides; the suppressed style hides the
   // pointer case, which Safari would otherwise paint after a touch pick).
   const handleLayerHide = useCallback(() => {
+    isTouchOpenRef.current = false;
     releaseEntranceRef.current?.();
     releaseEntranceRef.current = null;
     // Whatever closed the menu — light dismiss, the dismissal stack, Escape
@@ -1103,8 +1104,6 @@ function DropdownMenuPopover({
   const handleLayerShow = useCallback(() => {
     acceptedOpenRef.current = true;
     holdOpeningPressRef.current();
-    // The grow takes the CSS entrance off first, so the entrance hold below
-    // only holds an entrance that plays.
     presentSurfaceRef.current();
     isTouchOpenRef.current = false;
     holdEntranceRef.current();
@@ -1163,7 +1162,7 @@ function DropdownMenuPopover({
   useCommittedRefInto(presentSurfaceRef, () => {
     const surface = popover.contentRef.current;
     // A finger's or a pen's open grows the menu. Under Reduce Motion the
-    // layer's own entrance plays: it only fades in, where the menu rests.
+    // layer's own entrance plays, with no travel.
     surfaceMotion.present(
       surface,
       buttonRef.current,
@@ -1419,6 +1418,7 @@ function DropdownMenuPopover({
       if (
         buttonRef.current?.matches(':disabled, [aria-disabled="true"]') === true
       ) {
+        isTouchOpenRef.current = false;
         return false;
       }
       acceptedOpenRef.current = false;
@@ -1544,22 +1544,26 @@ function DropdownMenuPopover({
       // first item. Real pointer clicks report detail >= 1.
       const modality = e.detail === 0 ? 'keyboard' : 'pointer';
       const pressPointerType = triggerClickPointerType();
-      isTouchOpenRef.current =
-        modality === 'pointer' &&
-        pressPointerType != null &&
-        pressPointerType !== 'mouse';
+      // Only a click that opens the menu marks a finger's or a pen's open.
+      const openFromClick = () => {
+        isTouchOpenRef.current =
+          modality === 'pointer' &&
+          pressPointerType != null &&
+          pressPointerType !== 'mouse';
+        openAndFocus(modality, true);
+      };
       if (isControlled) {
         if (controlledIsOpen) {
           onClick?.();
           onOpenChange?.(false);
         } else {
-          openAndFocus(modality, true);
+          openFromClick();
         }
       } else if (popover.isOpen) {
         onClick?.();
         popover.hide();
       } else {
-        openAndFocus(modality, true);
+        openFromClick();
       }
     },
     [
