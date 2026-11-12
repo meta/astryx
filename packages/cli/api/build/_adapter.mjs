@@ -19,10 +19,12 @@
  */
 
 import fs from 'node:fs';
+import {fileURLToPath} from 'node:url';
 
 import {discoverTemplates} from '../template/template.mjs';
 import {componentKeywords} from '../search/search.mjs';
 import {findCoreDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
 
 /**
@@ -178,6 +180,28 @@ export function loadTreeWeights() {
 
 /** @type {import('./blocks/blocks.mjs').BlockPickerWeights | null | undefined} */
 let blockPicker;
+
+/**
+ * The files the block picker's per-block vectors are worked out from, besides
+ * the catalog text: its module, its weights, and search's word rules (the
+ * stopwords).
+ */
+const BLOCK_CATALOG_INPUTS = [
+  fileURLToPath(new URL('./blocks/blocks.mjs', import.meta.url)),
+  fileURLToPath(new URL('./blocks/blocks.weights.json', import.meta.url)),
+  fileURLToPath(new URL('../search/_query.mjs', import.meta.url)),
+];
+
+/**
+ * Keep the block picker's per-block vectors beside the kept search catalog
+ * (foundation/fs/gather-cache.mjs persistedDerived), keyed also by the files
+ * that work them out, so a later run with the same catalog text and code
+ * reads them back.
+ * @type {import('./blocks/blocks.mjs').KeepCatalog}
+ */
+export function keptBlockCatalog(key, compute, codec) {
+  return persistedDerived(key, compute, codec, BLOCK_CATALOG_INPUTS);
+}
 
 /**
  * The block picker's weights (blocks/blocks.weights.json), read once; null

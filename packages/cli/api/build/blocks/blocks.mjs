@@ -39,21 +39,13 @@
  */
 
 import {createHash} from 'node:crypto';
-import {fileURLToPath} from 'node:url';
-import {persistedDerived} from '../../../foundation/fs/gather-cache.mjs';
+import {STOPWORDS} from '../../search/_query.mjs';
 
 /**
- * This module, the picker weights beside it (read by the adapter), and the
- * search module whose stopwords it drops.
+ * Keeps a value derived from the catalog between runs (build's adapter does
+ * it beside the kept search catalog), or works it out.
+ * @typedef {<T>(key: unknown[], compute: () => T, codec: {encode: (value: T) => any, decode: (stored: any) => T}) => T} KeepCatalog
  */
-const BLOCKS_FILE = fileURLToPath(import.meta.url);
-const WEIGHTS_FILE = fileURLToPath(
-  new URL('./blocks.weights.json', import.meta.url),
-);
-const QUERY_FILE = fileURLToPath(
-  new URL('../../search/_query.mjs', import.meta.url),
-);
-import {STOPWORDS} from '../../search/_query.mjs';
 
 /**
  * @typedef {object} BlockPickerWeights
@@ -340,24 +332,26 @@ const catalogs = new WeakMap();
  * @param {CatalogBlock[]} catalog
  * @param {CatalogComponent[]} components
  * @param {BlockPickerWeights} weights
+ * @param {KeepCatalog} [keep] keeps the value between runs (build's adapter)
  */
-function readCatalog(catalog, components, weights) {
+function readCatalog(catalog, components, weights, keep) {
   const key = JSON.stringify([
     catalog.map(b => [b.name, b.displayName, b.description]),
     components.map(c => [c.name, c.keywords]),
   ]);
   const cached = catalogs.get(weights);
   if (cached && cached.key === key) return cached;
-  // A function of the catalog text and the shipped weights: kept beside the
-  // search catalog, a later run with the same text reads it back.
-  const read = persistedDerived(
-    ['block-catalog', createHash('sha256').update(key).digest('hex')],
-    () => computeCatalog(key, catalog, components, weights),
-    CATALOG_CODEC,
-    // The code that works it out, the weights it reads, and the shared word
-    // rules it imports (the stopwords).
-    [BLOCKS_FILE, WEIGHTS_FILE, QUERY_FILE],
-  );
+  const compute = () => computeCatalog(key, catalog, components, weights);
+  // A function of the catalog text and the shipped weights: where build's
+  // adapter keeps it between runs, a later run with the same text reads it
+  // back.
+  const read = keep
+    ? keep(
+        ['block-catalog', createHash('sha256').update(key).digest('hex')],
+        compute,
+        CATALOG_CODEC,
+      )
+    : compute();
   catalogs.set(weights, read);
   return read;
 }
@@ -516,16 +510,17 @@ function writesName(words, block) {
  * @param {string} request
  * @param {{kitBlocks: string[], searched: BlockScore[], foreign: string[], catalog: CatalogBlock[], components: CatalogComponent[]}} signals
  * @param {BlockPickerWeights} weights
+ * @param {KeepCatalog} [keep] keeps the per-block vectors between runs
  * @returns {{names: string[], entries: Map<string, SearchResultEntry>}} as
  *   many names as build's own list, best first; an entry for each listed
  *   block search did not return
  */
-export function pickBlocks(request, signals, weights) {
+export function pickBlocks(request, signals, weights, keep) {
   const own = signals.kitBlocks;
   /** @type {Map<string, SearchResultEntry>} */
   const entries = new Map();
   if (own.length === 0) return {names: [], entries};
-  const cat = readCatalog(signals.catalog, signals.components, weights);
+  const cat = readCatalog(signals.catalog, signals.components, weights, keep);
   const side = requestSideOf(request, weights);
   /** @type {Map<string, {match: number, overlap: number}>} */
   const scored = new Map();

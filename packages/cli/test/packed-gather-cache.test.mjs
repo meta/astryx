@@ -782,7 +782,10 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     } finally {
       fs.writeFileSync(file, source);
     }
-    // The stopwords the picker drops, from search's word rules.
+    // The stopwords the picker drops, from search's word rules: seeded again
+    // on the restored weights, so only the stopword edit can miss.
+    for (const ask of asks) run(ask, {tmp});
+    const seeded = asks.map(ask => run(ask, {tmp}).stdout);
     const query = path.join(packed, 'api', 'search', '_query.mjs');
     const querySource = fs.readFileSync(query, 'utf8');
     const editedQuery = querySource.replace(
@@ -792,13 +795,16 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     expect(editedQuery).not.toBe(querySource);
     try {
       fs.writeFileSync(query, editedQuery);
-      for (const ask of asks) {
+      let changed = 0;
+      for (const [i, ask] of asks.entries()) {
         const [kept, fresh] = await Promise.all([
           runAsync(ask, {tmp}),
           runAsync(ask, {tmp: freshTmp()}),
         ]);
         expect(kept, ask.join(' ')).toEqual(fresh);
+        if (fresh.stdout !== seeded[i]) changed++;
       }
+      expect(changed).toBeGreaterThan(0);
     } finally {
       fs.writeFileSync(query, querySource);
     }
