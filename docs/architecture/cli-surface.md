@@ -635,6 +635,33 @@ the known gaps.
 | rollback  | Write the template in the working folder again, with the warning, from the final-patch baseline                                                         |
 | state     | `pending` — lands in the next minor with its `[breaking]` Changeset                                                                                     |
 
+### DEP-0031 — `theme build --out` into a theme editor folder
+
+| Field            | Value                                                                                                                                                                                                                               |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id               | `DEP-0031`                                                                                                                                                                                                                          |
+| cleanup          | `CLN-0031`                                                                                                                                                                                                                          |
+| package          | `@astryxdesign/cli`                                                                                                                                                                                                                 |
+| surface          | `astryx theme build --out` and `themeBuild()` with `out`, writing into a folder the theme editor made (folder `<slug>/` holds `<slug>.settings.json`) for a theme source outside that folder                                        |
+| old contract     | The outputs are written there under the `--out` rules for any other folder: new paths, the build's own earlier outputs, and another source's output replaced with a warning                                                         |
+| replacement      | Build beside the source, or pass an `--out` outside the editor folder                                                                                                                                                               |
+| warning          | Human mode: one stderr line per invocation naming DEP-0031 and the migration step, only when nothing refuses the build. JSON mode: `meta.deprecations` entry `{id: 'DEP-0031', replacements: ['theme build', 'theme build --out']}` |
+| migration        | Drop `--out`, or point it outside the editor folder                                                                                                                                                                                 |
+| codemod          | None: no source changes                                                                                                                                                                                                             |
+| downstream       | None: no maintained doc passes `--out` into a theme editor folder                                                                                                                                                                   |
+| direct authority | `spec:AST-050` (application themes)                                                                                                                                                                                                 |
+| state            | `deprecated`                                                                                                                                                                                                                        |
+
+### CLN-0031 — Refuse `theme build --out` into a theme editor folder
+
+| Field     | Value                                                                                                                                                                                               |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id        | `CLN-0031`                                                                                                                                                                                          |
+| lifecycle | `DEP-0031`                                                                                                                                                                                          |
+| delta     | `--out` into a folder the theme editor made, for a source outside it, fails with `ERR_FILE_EXISTS` and names the build beside the source; the warning and the `meta.deprecations` entry are removed |
+| rollback  | Write the outputs there again, with the warning, from the final-patch baseline                                                                                                                      |
+| state     | `pending` — lands in the next minor with its `[breaking]` Changeset                                                                                                                                 |
+
 ## Change coupling
 
 A change to any of the following requires this record to be re-read, and

@@ -45,7 +45,6 @@ export const THEME_TEMPLATE_SRC = path.join(
  */
 export const TEMPLATE_REFUSES_OUTSIDE_PROJECT = false;
 
-/** The warning the CLI prints when it writes the template outside a project. */
 /**
  * The deprecation of `theme template` outside a project (DEP-0030): the
  * stable lifecycle id and the commands that replace it.
@@ -55,6 +54,7 @@ export const OUTSIDE_PROJECT_DEPRECATION = Object.freeze({
   replacements: Object.freeze(['npm init -y', 'theme template']),
 });
 
+/** The warning the CLI prints when it writes the template outside a project. */
 export const OUTSIDE_PROJECT_WARNING =
   'Warning (DEP-0030): no package.json is in this folder or above it, so the template is written here; the next minor version refuses theme template outside a project. Run it inside a project, or run `npm init -y` here first.';
 

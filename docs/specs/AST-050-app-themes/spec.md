@@ -193,8 +193,10 @@ described.
   replaces its own earlier outputs. It replaces the output of another theme
   source that still exists and warns, naming both sources. Into a folder the
   theme editor made (folder `<slug>/` holds `<slug>.settings.json`), `--out`
-  MUST refuse a source outside that folder, even where it would otherwise
-  replace with a warning. `--check` on stale outputs fails with
+  for a source outside that folder writes there and warns
+  (`architecture:cli-surface` DEP-0031); the next minor version MUST refuse
+  it (CLN-0031), even where it would otherwise replace with a warning.
+  `--check` on stale outputs fails with
   `ERR_THEME_STALE`. It warns when the path `--out` names does not end in
   `.css`, and the import it prints names the file as
   written. `theme build --watch` rebuilds when the source or any local file it

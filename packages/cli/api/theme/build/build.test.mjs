@@ -1804,81 +1804,114 @@ describe.each([
 });
 
 describe('themeBuild() — --out into a folder the theme editor made', () => {
-  it('refuses another source, naming the build beside it, and writes nothing', async () => {
-    const editor = path.join(tmpDir, 'themes', 'g');
+  /** @param {string} slug */
+  const editorFolder = slug => {
+    const editor = path.join(tmpDir, 'themes', slug);
     fs.mkdirSync(editor, {recursive: true});
     fs.writeFileSync(
-      path.join(editor, 'g.settings.json'),
+      path.join(editor, `${slug}.settings.json`),
       JSON.stringify({like: 'neutral', settings: []}),
     );
+    return editor;
+  };
+  const writeOther = () =>
     fs.writeFileSync(
       path.join(tmpDir, 'other.mjs'),
       `export default { name: 'other', tokens: { '--color-bg': '#0a0a0a' } };\n`,
     );
-    for (const out of ['themes/g/x.css', 'themes/g/g.settings.json']) {
-      let error;
-      try {
-        await themeBuild('other.mjs', {out}, {cwd: tmpDir});
-      } catch (caught) {
-        error = caught;
-      }
-      expect(error, out).toMatchObject({code: 'ERR_FILE_EXISTS'});
-      expect(error.message).toMatch(/theme editor made/);
-      expect(error.message).not.toMatch(/[Dd]elete/);
-      expect(error.suggestions[0].name).toMatch(/ theme build other\.mjs$/);
+
+  it('writes another source there as released CLIs did, with the DEP-0031 warning and meta entry', async () => {
+    const editor = editorFolder('g');
+    writeOther();
+    const warn = vi.spyOn(logger, 'warn');
+    try {
+      const receipt = /** @type {any} */ (
+        await themeBuild('other.mjs', {out: 'themes/g/x.css'}, {cwd: tmpDir})
+      );
+      expect(fs.existsSync(path.join(editor, 'x.css'))).toBe(true);
+      expect(receipt.meta).toEqual({
+        deprecations: [
+          {id: 'DEP-0031', replacements: ['theme build', 'theme build --out']},
+        ],
+      });
+      const lines = warn.mock.calls.map(c => String(c[0]));
+      const dep = lines.filter(l => l.includes('DEP-0031'));
+      expect(dep).toHaveLength(1);
+      expect(dep[0]).toMatch(/next minor version refuses it/);
+      expect(dep[0]).toMatch(
+        /Build beside the source, or pass an --out outside the editor folder\./,
+      );
+      // A rebuild over its own outputs there is the same deprecated use.
+      warn.mockClear();
+      await themeBuild('other.mjs', {out: 'themes/g/x.css'}, {cwd: tmpDir});
+      expect(
+        warn.mock.calls.filter(c => String(c[0]).includes('DEP-0031')),
+      ).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
     }
-    expect(fs.readdirSync(editor)).toEqual(['g.settings.json']);
   });
 
-  it('builds a source inside the folder into it, over its own earlier outputs', async () => {
-    const editor = path.join(tmpDir, 'themes', 'h');
-    fs.mkdirSync(editor, {recursive: true});
-    fs.writeFileSync(
-      path.join(editor, 'h.settings.json'),
-      JSON.stringify({like: 'neutral', settings: []}),
-    );
-    fs.writeFileSync(
-      path.join(editor, 'h.mjs'),
-      `export default { name: 'h', tokens: { '--color-bg': '#0a0a0a' } };\n`,
-    );
-    await themeBuild(
-      'themes/h/h.mjs',
-      {out: 'themes/h/out.css'},
-      {cwd: tmpDir},
-    );
-    // The folder now holds its own outputs: a second build replaces them.
-    await themeBuild(
-      'themes/h/h.mjs',
-      {out: 'themes/h/out.css'},
-      {cwd: tmpDir},
-    );
-    expect(fs.existsSync(path.join(editor, 'out.css'))).toBe(true);
-  });
-
-  it('keeps --icons-specifier in the build it names beside the source', async () => {
-    const editor = path.join(tmpDir, 'themes', 'i');
-    fs.mkdirSync(editor, {recursive: true});
-    fs.writeFileSync(
-      path.join(editor, 'i.settings.json'),
-      JSON.stringify({like: 'neutral', settings: []}),
-    );
-    fs.writeFileSync(
-      path.join(tmpDir, 'other.mjs'),
-      `export default { name: 'other', tokens: { '--color-bg': '#0a0a0a' } };\n`,
-    );
+  it('never replaces the settings file, and warns about nothing it does not write', async () => {
+    const editor = editorFolder('s');
+    writeOther();
+    const warn = vi.spyOn(logger, 'warn');
     let error;
     try {
       await themeBuild(
         'other.mjs',
-        {out: 'themes/i/x.css', iconsSpecifier: 'my-icons'},
+        {out: 'themes/s/s.settings.json', iconsSpecifier: 'my-icons'},
         {cwd: tmpDir},
       );
     } catch (caught) {
       error = caught;
+    } finally {
+      warn.mockRestore();
     }
-    expect(error.suggestions[0].name).toMatch(
-      / theme build other\.mjs --icons-specifier my-icons$/,
+    expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
+    expect(error.message).not.toMatch(/[Dd]elete/);
+    const names = error.suggestions.map((/** @type {any} */ x) => x.name);
+    expect(names.join('\n')).toMatch(
+      / theme build other\.mjs --icons-specifier my-icons$/m,
     );
+    expect(
+      warn.mock.calls.filter(c => String(c[0]).includes('DEP-0031')),
+    ).toHaveLength(0);
+    expect(fs.readdirSync(editor)).toEqual(['s.settings.json']);
+  });
+
+  it('builds a source inside the folder into it, over its own earlier outputs, with no warning', async () => {
+    const editor = editorFolder('h');
+    fs.writeFileSync(
+      path.join(editor, 'h.mjs'),
+      `export default { name: 'h', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    const warn = vi.spyOn(logger, 'warn');
+    try {
+      const first = /** @type {any} */ (
+        await themeBuild(
+          'themes/h/h.mjs',
+          {out: 'themes/h/out.css'},
+          {cwd: tmpDir},
+        )
+      );
+      // The folder now holds its own outputs: a second build replaces them.
+      const second = /** @type {any} */ (
+        await themeBuild(
+          'themes/h/h.mjs',
+          {out: 'themes/h/out.css'},
+          {cwd: tmpDir},
+        )
+      );
+      expect(first.meta).toBeUndefined();
+      expect(second.meta).toBeUndefined();
+      expect(
+        warn.mock.calls.filter(c => String(c[0]).includes('DEP-0031')),
+      ).toHaveLength(0);
+    } finally {
+      warn.mockRestore();
+    }
+    expect(fs.existsSync(path.join(editor, 'out.css'))).toBe(true);
   });
 });
 
@@ -1905,6 +1938,34 @@ describe('themeBuild() — the --out path it suggests', () => {
     expect(names.join('\n')).toMatch(/--out dist\/o-2\/o\.css/);
     expect(fs.readFileSync(path.join(dist, 'ocean.js'), 'utf8')).toBe(
       'export const mine = 1;\n',
+    );
+  });
+
+  it('checks the exact name it suggests when --out does not end in .css', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'ocean.mjs'),
+      `export default { name: 'ocean', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    const dist = path.join(tmpDir, 'dist');
+    fs.mkdirSync(dist, {recursive: true});
+    // The person's own files: the --out path and the name --out o.txt-2.css
+    // would write.
+    fs.writeFileSync(path.join(dist, 'o.txt'), 'notes\n');
+    fs.writeFileSync(path.join(dist, 'o.txt-2.css'), 'body {}\n');
+    let error;
+    try {
+      await themeBuild('ocean.mjs', {out: 'dist/o.txt'}, {cwd: tmpDir});
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
+    const names = error.suggestions
+      .map((/** @type {any} */ x) => x.name)
+      .join('\n');
+    expect(names).not.toMatch(/--out dist\/o\.txt-2\.css/);
+    expect(names).toMatch(/--out dist\/o\.txt-2\/o\.txt/);
+    expect(fs.readFileSync(path.join(dist, 'o.txt-2.css'), 'utf8')).toBe(
+      'body {}\n',
     );
   });
 });

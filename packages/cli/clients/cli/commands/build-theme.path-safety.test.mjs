@@ -396,3 +396,72 @@ describe('theme build output-path failures carry registered codes', () => {
     expect(fs.readdirSync(shared)).toEqual(['theme.mjs']);
   });
 });
+
+describe('astryx theme build --out into a folder the theme editor made', () => {
+  beforeAll(() => {
+    ensureCoreBuilt();
+  }, 200_000);
+
+  /** A project with an editor folder `themes/g/` and a theme outside it. */
+  function project() {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const editor = path.join(tmpDir, 'themes', 'g');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(
+      path.join(editor, 'g.settings.json'),
+      JSON.stringify({like: 'neutral', settings: []}),
+    );
+    writeTheme(path.join(tmpDir, 'src'), 'other');
+    return editor;
+  }
+
+  it('writes a source outside it as released CLIs did, warning in text and naming DEP-0031 in JSON meta', async () => {
+    const editor = project();
+    const text = await runCli(
+      ['theme', 'build', 'src/theme.mjs', '--out', 'themes/g/a.css'],
+      {cwd: tmpDir},
+    );
+    expect(text.status).toBe(0);
+    expect(fs.existsSync(path.join(editor, 'a.css'))).toBe(true);
+    expect(text.stderr).toMatch(/Warning \(DEP-0031\)/);
+    expect(text.stderr).toMatch(
+      /Build beside the source, or pass an --out outside the editor folder/,
+    );
+
+    const json = await runCli(
+      ['--json', 'theme', 'build', 'src/theme.mjs', '--out', 'themes/g/b.css'],
+      {cwd: tmpDir},
+    );
+    expect(json.status).toBe(0);
+    expect(fs.existsSync(path.join(editor, 'b.css'))).toBe(true);
+    // A deprecation: silent on stderr under --json, named in meta.
+    expect(json.stderr).not.toMatch(/DEP-0031/);
+    expect(JSON.parse(json.stdout).meta.deprecations).toEqual([
+      {id: 'DEP-0031', replacements: ['theme build', 'theme build --out']},
+    ]);
+  });
+
+  it('warns nothing for a source inside it', async () => {
+    const editor = project();
+    writeTheme(editor, 'g');
+    const text = await runCli(
+      ['theme', 'build', 'themes/g/theme.mjs', '--out', 'themes/g/g.css'],
+      {cwd: tmpDir},
+    );
+    expect(text.status).toBe(0);
+    expect(text.stderr).not.toMatch(/DEP-0031/);
+    const json = await runCli(
+      [
+        '--json',
+        'theme',
+        'build',
+        'themes/g/theme.mjs',
+        '--out',
+        'themes/g/g.css',
+      ],
+      {cwd: tmpDir},
+    );
+    expect(json.status).toBe(0);
+    expect(JSON.parse(json.stdout).meta?.deprecations).toBeUndefined();
+  });
+});
