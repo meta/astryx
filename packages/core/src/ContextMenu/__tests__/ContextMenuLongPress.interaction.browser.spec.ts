@@ -1174,16 +1174,24 @@ test('a touch that reaches the page late grows from the first frame at its onset
     const record = {
       touchedAt: 0,
       handledAt: 0,
-      frames: [] as {t: number; scale: number}[],
+      frames: [] as {t: number; scale: number; start: number | null}[],
     };
     (window as unknown as {__lateTouch: typeof record}).__lateTouch = record;
     const sample = (t: number) => {
-      const scale = getComputedStyle(
-        trigger?.firstElementChild as HTMLElement,
-      ).scale;
+      const visual = trigger?.firstElementChild as HTMLElement;
+      const scale = getComputedStyle(visual).scale;
+      // The growth's own curve and its start on the document timeline.
+      const growth = visual
+        .getAnimations()
+        .find(animation =>
+          (animation.effect as KeyframeEffect | null)
+            ?.getKeyframes()
+            .some(keyframe => 'scale' in keyframe),
+        );
       record.frames.push({
         t,
         scale: scale === 'none' ? 1 : Number.parseFloat(scale),
+        start: growth?.startTime == null ? null : Number(growth.startTime),
       });
       if (t - record.touchedAt < 320) {
         requestAnimationFrame(sample);
@@ -1231,7 +1239,7 @@ test('a touch that reaches the page late grows from the first frame at its onset
           __lateTouch: {
             touchedAt: number;
             handledAt: number;
-            frames: {t: number; scale: number}[];
+            frames: {t: number; scale: number; start: number | null}[];
           };
         }
       ).__lateTouch,
@@ -1246,9 +1254,14 @@ test('a touch that reaches the page late grows from the first frame at its onset
   // further along than the spring one frame in.
   expect(before.scale).toBe(1);
   expect(first.scale).toBeLessThanOrEqual(played.at(frameMs / 1000) + 0.0005);
-  // On time: the curve starts in the first frame at or after the onset. So
-  // its first grown frame comes within two frames of the onset.
-  expect(before.t - touchedAt).toBeGreaterThanOrEqual(feedbackOnsetMs);
+  // On time: the curve starts at or after the onset, in the first frame whose
+  // callback runs at or after it. It starts when that callback runs, which
+  // can come after the frame's own time, so the curve's start is read. Its
+  // first grown frame comes within two frames of the onset.
+  expect(first.start, 'the growth has a start on the timeline').not.toBeNull();
+  expect((first.start as number) - touchedAt).toBeGreaterThanOrEqual(
+    feedbackOnsetMs,
+  );
   expect(first.t - touchedAt).toBeLessThanOrEqual(
     feedbackOnsetMs + 2 * frameMs + 1,
   );
