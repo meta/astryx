@@ -21,6 +21,7 @@ import {useInternalConfig} from './useInternalConfig';
 import type {PowerSearchTokenProps} from './types';
 import {useComponentTranslator} from '../i18n/useComponentTranslator';
 import {formatTokenLabel} from './formatTokenValue';
+import {pickDataAttributes} from '../utils/themeProps';
 
 const tokenValueStyles = stylex.create({
   value: {
@@ -45,6 +46,7 @@ export function PowerSearchToken({
   onRemove,
   isDisabled,
   timezoneID,
+  ...rest
 }: PowerSearchTokenProps) {
   const config = useInternalConfig(configProp);
   const t = useComponentTranslator();
@@ -77,6 +79,7 @@ export function PowerSearchToken({
 
   return (
     <Token
+      {...pickDataAttributes(rest)}
       label={tokenLabel}
       endContent={valueContent}
       onClick={

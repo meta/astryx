@@ -7,7 +7,7 @@
  * stamped `type`.
  */
 
-import {LegacyDocSchema} from './_schema.mjs';
+import {DocExampleKindsSchema, LegacyDocSchema} from './_schema.mjs';
 import {formatZodError} from '../_shared/errors.mjs';
 
 /** @typedef {import('./types.js').ComponentDoc} ComponentDoc */
@@ -22,6 +22,10 @@ import {formatZodError} from '../_shared/errors.mjs';
  * @returns {ComponentDoc | HookDoc | ReferenceDoc}
  */
 export function parseLegacyDoc(input, label = 'doc') {
+  const kinds = DocExampleKindsSchema.safeParse(input);
+  if (!kinds.success) {
+    throw new Error(formatZodError(label, kinds.error));
+  }
   const result = LegacyDocSchema.safeParse(input);
   if (!result.success) {
     throw new Error(formatZodError(label, result.error));

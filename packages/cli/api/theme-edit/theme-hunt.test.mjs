@@ -258,7 +258,8 @@ describe('exact tokens', () => {
     for (const [token, value] of [
       ['--radius-element', '2ch'],
       ['--radius-element', 'clamp(4px, 1vw, 12px)'],
-      ['--text-body-leading', 'normal'],
+      // A line-height token takes a number: Core multiplies it in calc().
+      ['--text-body-leading', '1.5'],
       ['--color-syntax-keyword', 'red'],
       ['--text-display-1-size', '80px'],
       ['--color-icon-pink', 'red'],
@@ -466,7 +467,7 @@ describe('rollback and recovery', () => {
     fs.mkdirSync(path.join(cwd, 'themes/w1/w1.history.json'));
     expect(
       (await refusal(() => themeEditSet('w1', 'corners', 'pill', {cwd}))).code,
-    ).toBe('ERR_WRITE_FAILED');
+    ).toBe('ERR_THEME_INVALID'); // a folder in the history's place is refused before any write (hunt25)
     expect(read('themes/w1/w1.css')).toBe(css);
     expect(read('themes/w1/w1.settings.json')).toBe(settings);
     fs.rmSync(path.join(cwd, 'themes/w1'), {recursive: true, force: true});

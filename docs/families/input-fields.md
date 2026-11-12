@@ -444,9 +444,8 @@ DEC-6 does not require unrelated components to add a new floor.
   FormLayout has no form default; `spec:AST-117` lists each gap.
 - **Rejected entries (FR15):** TimeInput and DateTimeInput's time segment
   mark unfinished drafts invalid and announce them on each keystroke with no
-  visible message, and unparsable drafts revert on blur;
-  DateInput and DateTimeInput do the same for unreadable date text, and a
-  native date or time rejection shows no message. Inside an InputGroup, a
+  visible message, unparsable drafts revert on blur, and a native time
+  rejection shows no message. Inside an InputGroup, a
   member's own rejection shows no visible message. `spec:AST-118` lists each
   gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and

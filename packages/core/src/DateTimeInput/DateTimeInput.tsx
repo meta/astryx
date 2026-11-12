@@ -90,6 +90,7 @@ import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
 import {
   type DateInputEntryError,
+  useNativeDateRejection,
   useTypedDateField,
 } from '../DateInput/useTypedDate';
 
@@ -502,9 +503,9 @@ export interface DateTimeInputProps extends Omit<
   /**
    * Status indicator for the input.
    *
-   * For a typed date the date segment rejects, and for unfinished date text
-   * that Enter or blur keeps, the field shows its own error message in place
-   * of `status`. Unreadable date text is announced, not shown. With
+   * For a date the date segment rejects, typed or picked in the native
+   * control, and for unreadable or unfinished date text that Enter or blur
+   * keeps, the field shows its own error message in place of `status`. With
    * `onEntryErrorChange`, an `error` status with a message shows instead, and
    * the field's own message applies only without one. A `warning` or
    * `success` status never replaces a rejection.
@@ -723,6 +724,11 @@ function PointerDateTimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
+  // Form attributes pass through untyped, as other input attributes do.
+  const formControl = controlProps as typeof controlProps & {
+    name?: string;
+    form?: string;
+  };
   const t = useComponentTranslator();
   const locale = useLocale();
   const usesNativePicker = nativeMode !== 'off';
@@ -1043,8 +1049,9 @@ function PointerDateTimeField({
     displayValue: dateDisplayValue,
     formatHint: dateFormatHint,
     isPending: isDatePending,
+    hiddenFormValue,
     isInvalid: isDateInvalid,
-    fieldStatus,
+    fieldStatus: typedFieldStatus,
     alertMessage: dateAlertMessage,
     handleChange: handleTypedDateInput,
     commit: commitDatePendingInput,
@@ -1071,6 +1078,22 @@ function PointerDateTimeField({
     onEntryErrorChange,
     hasPlaceholder: placeholderFromProps != null,
   });
+
+  const nativeDateRejection = useNativeDateRejection({
+    source: 'DateTimeInput',
+    format: 'date_long',
+    min: calendarMin,
+    max: calendarMax,
+    isDateDisabled,
+    value: valueParts.date,
+    isLocked: isEffectivelyDisabled || isBusy,
+    status,
+    hasEntryErrorCallback: onEntryErrorChange != null,
+    isStatusAnnounced: true,
+  });
+  const fieldStatus = usesNativePicker
+    ? nativeDateRejection.fieldStatus
+    : typedFieldStatus;
 
   // The detached message box carries its own glyph, so the helper shows no
   // on-field icon.
@@ -1777,7 +1800,8 @@ function PointerDateTimeField({
               isFocusableDisabled
               isEffectivelyRequired={isEffectivelyRequired}
               isBusy={isBusy}
-              statusType={status?.type}
+              statusType={fieldStatus?.type}
+              rejection={nativeDateRejection}
               ariaDescribedBy={ariaDescribedBy}
               controlProps={{
                 ...controlProps,
@@ -1827,6 +1851,7 @@ function PointerDateTimeField({
               </button>
               <input
                 {...controlProps}
+                name={hiddenFormValue === null ? formControl.name : undefined}
                 ref={mergedDateInputRef}
                 id={dateInputId}
                 type="text"
@@ -1864,6 +1889,14 @@ function PointerDateTimeField({
                   isDateInvalid && styles.inputInvalid,
                 )}
               />
+              {hiddenFormValue !== null && formControl.name != null && (
+                <input
+                  type="hidden"
+                  name={formControl.name}
+                  form={formControl.form}
+                  value={hiddenFormValue}
+                />
+              )}
               {/*
             Announces the date rejection message that the field status does
             not announce. The field status announces the rest.
