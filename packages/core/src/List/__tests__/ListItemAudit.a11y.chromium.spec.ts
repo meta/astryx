@@ -255,152 +255,176 @@ for (const [mode, direction] of [
   });
 }
 
-cases.push({
-  key: 'disabled-light',
-  story: 'core-list--disabled-items',
-  ready: '#storybook-root li',
-  mode: 'light',
-  direction: 'ltr',
-  viewport: SMALL,
-  run: async (page, check, frame) => {
-    const rest = await rowFacts(page, 'Unavailable');
-    check(
-      rest.ariaDisabled === 'true',
-      `row aria-disabled ${rest.ariaDisabled}`,
-    );
-    check(
-      rest.control?.disabled === false,
-      'the disabled row control is native disabled',
-    );
-    check(
-      rest.control?.ariaDisabled === 'true',
-      `control aria-disabled ${rest.control?.ariaDisabled}`,
-    );
-    // A disabled row takes no pointer events, so the pointer is moved over
-    // it rather than hovering it as a target.
-    await page.mouse.move(
-      (rest.box.left + rest.box.right) / 2,
-      rest.box.top + rest.box.height / 2,
-    );
-    await settle(page);
-    const hovered = await rowFacts(page, 'Unavailable');
-    const underPointer = await page.evaluate(
-      ([x, y]) => {
-        const hit = document.elementFromPoint(x, y);
-        return hit ? getComputedStyle(hit).cursor : null;
-      },
-      [
-        (rest.box.left + rest.box.right) / 2,
-        rest.box.top + rest.box.height / 2,
-      ] as const,
-    );
-    check(
-      alphaOf(hovered.background) === 0,
-      `disabled row paints ${hovered.background} under the pointer`,
-    );
-    // The row is never hit-tested, so the pointer shows what the list
-    // under it shows: never an interactive cursor.
-    check(
-      underPointer === 'default' || underPointer === 'auto',
-      `the pointer over the disabled row shows ${underPointer}`,
-    );
-    await frame('hover', {rest, hovered, underPointer});
-    // The disabled row stays in the tab order: Available, then Unavailable.
-    await page.mouse.move(2, 2);
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('Tab');
-    await settle(page);
-    const focused = await rowFacts(page, 'Unavailable');
-    check(focused.control?.focused === true, 'Tab skipped the disabled row');
-    await frame('focus-visible', {focused});
-  },
-});
-
-for (const listStyle of ['disc', 'circle', 'decimal'] as const) {
+for (const mode of ['light', 'dark'] as const) {
   cases.push({
-    key: `marker-${listStyle}-light`,
-    story: `core-list--bulleted-list&args=listStyle:${listStyle}`,
+    key: `disabled-${mode}`,
+    story: 'core-list--disabled-items',
     ready: '#storybook-root li',
-    mode: 'light',
+    mode,
     direction: 'ltr',
     viewport: SMALL,
     run: async (page, check, frame) => {
-      const markers = await page.evaluate(() =>
-        Array.from(document.querySelectorAll('#storybook-root li')).map(li => {
-          const walker = document.createTreeWalker(li, NodeFilter.SHOW_TEXT);
-          const text = walker.nextNode();
-          const range = document.createRange();
-          if (text) {
-            range.selectNodeContents(text);
-          }
-          const line = range.getClientRects()[0];
-          const marker = li.querySelector('[aria-hidden], span:first-child');
-          const shape =
-            li.firstElementChild?.firstElementChild ?? li.firstElementChild;
-          const box = shape?.getBoundingClientRect();
-          const before = li.firstElementChild
-            ? getComputedStyle(li.firstElementChild, '::before').content
-            : 'none';
-          return {
-            text: text?.textContent ?? null,
-            lineTop: line?.top ?? null,
-            lineBottom: line?.bottom ?? null,
-            markerCenter: box ? box.top + box.height / 2 : null,
-            markerBefore: before,
-            hasMarker: marker != null,
-          };
-        }),
+      const rest = await rowFacts(page, 'Unavailable');
+      check(
+        rest.ariaDisabled === 'true',
+        `row aria-disabled ${rest.ariaDisabled}`,
       );
-      for (const item of markers) {
-        check(
-          item.markerCenter != null &&
-            item.lineTop != null &&
-            item.lineBottom != null &&
-            item.markerCenter > item.lineTop &&
-            item.markerCenter < item.lineBottom,
-          `${item.text}: marker center ${item.markerCenter} off the first line ${item.lineTop}-${item.lineBottom}`,
-        );
-        if (listStyle === 'decimal') {
-          check(
-            item.markerBefore.includes('counter(astryx-list)') ||
-              /^"\d+\."$/.test(item.markerBefore),
-            `${item.text}: number marker ${item.markerBefore}`,
-          );
-        }
-      }
-      await frame('rest', {markers});
+      check(
+        rest.control?.disabled === false,
+        'the disabled row control is native disabled',
+      );
+      check(
+        rest.control?.ariaDisabled === 'true',
+        `control aria-disabled ${rest.control?.ariaDisabled}`,
+      );
+      // A disabled row takes no pointer events, so the pointer is moved over
+      // it rather than hovering it as a target.
+      await page.mouse.move(
+        (rest.box.left + rest.box.right) / 2,
+        rest.box.top + rest.box.height / 2,
+      );
+      await settle(page);
+      const hovered = await rowFacts(page, 'Unavailable');
+      const underPointer = await page.evaluate(
+        ([x, y]) => {
+          const hit = document.elementFromPoint(x, y);
+          return hit ? getComputedStyle(hit).cursor : null;
+        },
+        [
+          (rest.box.left + rest.box.right) / 2,
+          rest.box.top + rest.box.height / 2,
+        ] as const,
+      );
+      check(
+        alphaOf(hovered.background) === 0,
+        `disabled row paints ${hovered.background} under the pointer`,
+      );
+      // The row is never hit-tested, so the pointer shows what the list
+      // under it shows: never an interactive cursor.
+      check(
+        underPointer === 'default' || underPointer === 'auto',
+        `the pointer over the disabled row shows ${underPointer}`,
+      );
+      await frame('hover', {rest, hovered, underPointer});
+      // The disabled row stays in the tab order: Available, then Unavailable.
+      await page.mouse.move(2, 2);
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Tab');
+      await settle(page);
+      const focused = await rowFacts(page, 'Unavailable');
+      check(focused.control?.focused === true, 'Tab skipped the disabled row');
+      await frame('focus-visible', {focused});
     },
   });
 }
 
-cases.push({
-  key: 'links-light',
-  story: 'core-list--links',
-  ready: '#storybook-root li a',
-  mode: 'light',
-  direction: 'ltr',
-  viewport: SMALL,
-  run: async (page, check, frame) => {
-    const docs = await rowFacts(page, 'Documentation');
-    const external = await rowFacts(page, 'GitHub');
-    check(
-      docs.control?.tag === 'a' && docs.control.href === '/docs',
-      `docs link ${JSON.stringify(docs.control)}`,
-    );
-    check(
-      external.control?.target === '_blank',
-      `external target ${external.control?.target}`,
-    );
-    check(
-      (external.control?.rel ?? '').includes('noopener') &&
-        (external.control?.rel ?? '').includes('noreferrer'),
-      `external rel ${external.control?.rel}`,
-    );
-    const links = await page.getByRole('link').count();
-    check(links === 3, `${links} links for 3 rows`);
-    await frame('rest', {docs, external, links});
-  },
-});
+for (const mode of ['light', 'dark'] as const) {
+  for (const listStyle of ['disc', 'circle', 'decimal'] as const) {
+    cases.push({
+      key: `marker-${listStyle}-${mode}`,
+      // Rows with a description are two lines tall, so a marker centered on
+      // the whole row misses the label's first line.
+      story: `core-list--ordered-list&args=listStyle:${listStyle}`,
+      ready: '#storybook-root li',
+      mode,
+      direction: 'ltr',
+      viewport: SMALL,
+      run: async (page, check, frame) => {
+        const markers = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('#storybook-root li')).map(
+            li => {
+              const walker = document.createTreeWalker(
+                li,
+                NodeFilter.SHOW_TEXT,
+              );
+              const text = walker.nextNode();
+              const range = document.createRange();
+              if (text) {
+                range.selectNodeContents(text);
+              }
+              const line = range.getClientRects()[0];
+              const spans = Array.from(li.querySelectorAll('span'));
+              // The bullet is the small square box; the number is the span
+              // whose ::before content is the list counter.
+              const marker =
+                spans.find(span =>
+                  getComputedStyle(span, '::before').content.includes(
+                    'counter(',
+                  ),
+                ) ??
+                spans.find(span => {
+                  const r = span.getBoundingClientRect();
+                  return r.width > 0 && r.width <= 8 && r.width === r.height;
+                }) ??
+                null;
+              const box = marker?.getBoundingClientRect();
+              const row = li.getBoundingClientRect();
+              return {
+                text: text?.textContent ?? null,
+                lineTop: line?.top ?? null,
+                lineBottom: line?.bottom ?? null,
+                rowCenter: row.top + row.height / 2,
+                markerCenter: box ? box.top + box.height / 2 : null,
+                markerBefore: marker
+                  ? getComputedStyle(marker, '::before').content
+                  : null,
+              };
+            },
+          ),
+        );
+        for (const item of markers) {
+          check(
+            item.markerCenter != null &&
+              item.lineTop != null &&
+              item.lineBottom != null &&
+              item.markerCenter > item.lineTop &&
+              item.markerCenter < item.lineBottom &&
+              item.markerCenter < item.rowCenter,
+            `${item.text}: marker center ${item.markerCenter} off the first line ${item.lineTop}-${item.lineBottom} (row center ${item.rowCenter})`,
+          );
+          if (listStyle === 'decimal') {
+            check(
+              item.markerBefore?.includes('counter(astryx-list)') === true,
+              `${item.text}: number marker ${item.markerBefore}`,
+            );
+          }
+        }
+        await frame('rest', {markers});
+      },
+    });
+  }
+}
+
+for (const mode of ['light', 'dark'] as const) {
+  cases.push({
+    key: `links-${mode}`,
+    story: 'core-list--links',
+    ready: '#storybook-root li a',
+    mode,
+    direction: 'ltr',
+    viewport: SMALL,
+    run: async (page, check, frame) => {
+      const docs = await rowFacts(page, 'Documentation');
+      const external = await rowFacts(page, 'GitHub');
+      check(
+        docs.control?.tag === 'a' && docs.control.href === '/docs',
+        `docs link ${JSON.stringify(docs.control)}`,
+      );
+      check(
+        external.control?.target === '_blank',
+        `external target ${external.control?.target}`,
+      );
+      check(
+        (external.control?.rel ?? '').includes('noopener') &&
+          (external.control?.rel ?? '').includes('noreferrer'),
+        `external rel ${external.control?.rel}`,
+      );
+      const links = await page.getByRole('link').count();
+      check(links === 3, `${links} links for 3 rows`);
+      await frame('rest', {docs, external, links});
+    },
+  });
+}
 
 /**
  * The test that runs a case. Cases that share a test share one browser
