@@ -492,10 +492,7 @@ export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
     if (error instanceof PathSafetyError) {
       throw new AstryxError(
         targetPath
-          ? error.message.replace(
-              JSON.stringify(target),
-              JSON.stringify(targetPath),
-            )
+          ? error.message.replace(`"${target}"`, `"${targetPath}"`)
           : error.message,
         undefined,
         ERROR_CODES.ERR_PATH_TRAVERSAL,

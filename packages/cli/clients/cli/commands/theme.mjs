@@ -33,7 +33,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
-import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {
+  getCliInvocation,
+  quoteCommandArgument,
+} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
@@ -125,7 +128,8 @@ function inGroupWords(text, words) {
   if (words.group === THEME_WORDS.group) return text;
   // An argument the person typed can hold the same words (a filter of
   // `astryx theme list`); it is echoed as typed. Only an argument with a
-  // space or a backtick can match, so only those are set aside.
+  // space or a backtick can match, and it is set aside only where the CLI
+  // echoes it: in double quotes, or as the argument after a subcommand.
   const typed = [...new Set(process.argv.slice(2))]
     .filter(arg => /[\s`]/.test(arg))
     .sort((a, b) => b.length - a.length);
@@ -133,8 +137,14 @@ function inGroupWords(text, words) {
   const kept = [];
   let masked = String(text);
   for (const arg of typed) {
-    masked = masked.split(arg).join(`\uE000${kept.length}\uE001`);
-    kept.push(arg);
+    const escaped = arg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    masked = masked.replace(
+      new RegExp(
+        `(?<="|\\b(?:add|use|remove|eject|targets|template|build|compile) )${escaped}(?="|\`|\\s|$)`,
+        'g',
+      ),
+      () => `\uE000${kept.push(arg) - 1}\uE001`,
+    );
   }
   return masked
     .replace(
@@ -814,14 +824,15 @@ function registerThemeCommands(theme, program, docs, words) {
           suggestions: looksGlobby
             ? [
                 {
-                  name: `astryx ${words.group} ${words.build} ${entry.file.replace(/['"]/g, '')}`,
+                  // The pattern stays unquoted: the shell expands it.
+                  name: `${getCliInvocation(process.cwd())} ${words.group} ${words.build} ${entry.file.replace(/['"]/g, '')}`,
                   reason:
                     'globs are expanded by your shell; pass the pattern unquoted, or list the files',
                 },
               ]
             : guesses.length > 0
               ? guesses.map(guess => ({
-                  name: `astryx ${words.group} ${words.build} ${guess}`,
+                  name: `${getCliInvocation(process.cwd())} ${words.group} ${words.build} ${quoteCommandArgument(guess)}`,
                   reason: 'a theme source that exists',
                 }))
               : undefined,

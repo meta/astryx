@@ -1412,6 +1412,29 @@ describe('themeBuild() — outputs it may replace', () => {
     });
   });
 
+  it.each(['.jsx', '.tsx', '.ts', '.mts', '.cts'])(
+    'loads a %s theme through the build loader in a folder that resolves Core',
+    async extension => {
+      // Core resolves from this folder, so the build loads the theme without
+      // interception; Node's own loader cannot load every one of these.
+      const dir = makeLinkedFixture('astryx-theme-ext-', ['@astryxdesign']);
+      const file = `extTheme${extension}`;
+      const source =
+        extension === '.cts'
+          ? "module.exports = {name: 'ext', tokens: {'--color-bg': '#0a0a0a'}};\n"
+          : "export const extTheme = {name: 'ext', tokens: {'--color-bg': '#0a0a0a'}};\n";
+      fs.writeFileSync(path.join(dir, file), source);
+      try {
+        await expect(themeBuild(file, {}, {cwd: dir})).resolves.toMatchObject({
+          type: 'theme.build',
+          data: {name: 'ext'},
+        });
+      } finally {
+        removeLinkedFixture(dir);
+      }
+    },
+  );
+
   it('suggests the theme source for a bare name, and never a build output', async () => {
     await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
     let error;

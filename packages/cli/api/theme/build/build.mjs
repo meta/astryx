@@ -875,7 +875,7 @@ export function themeSourceGuesses(file, cwd) {
     themeFilesIn(folder).map(name => shown(path.join(folder, name))),
   );
   for (const extension of THEME_SOURCE_EXTENSIONS) {
-    const candidate = path.resolve(cwd, `${file}${extension}`);
+    const candidate = path.resolve(cwd, file + extension);
     if (isSource(candidate)) guesses.push(shown(candidate));
   }
   return guesses.slice(0, 3);
@@ -2054,17 +2054,24 @@ const THEME_SCOPE_TO = `[data-astryx-theme]`;
  * the author's TypeScript sees, which is the point: the CSS the build emits
  * matches the theme they type-checked.
  */
+// Every theme source extension is in this list: jiti hands a file whose
+// extension it does not list to Node's own loader, which cannot load `.jsx`
+// or, on some Node versions, TypeScript.
 const THEME_MODULE_EXTENSIONS = [
-  '.ts',
-  '.tsx',
-  '.mts',
-  '.cts',
-  '.mtsx',
-  '.ctsx',
-  '.mjs',
-  '.cjs',
-  '.js',
-  '.json',
+  ...new Set([
+    '.ts',
+    '.tsx',
+    '.mts',
+    '.cts',
+    '.mtsx',
+    '.ctsx',
+    '.mjs',
+    '.cjs',
+    '.js',
+    '.jsx',
+    '.json',
+    ...THEME_SOURCE_EXTENSIONS,
+  ]),
 ];
 // prettier-ignore
 const registryGraphError = (/** @type {string} */ message) => new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
