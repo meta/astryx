@@ -4,9 +4,6 @@
 
 export const docs = {
   name: 'CheckboxInput',
-  playground: {
-    defaults: {label: 'Checked', value: true},
-  },
   displayName: 'Checkbox Input',
   group: 'Checkbox',
   category: 'Form Controls',

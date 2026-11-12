@@ -19,9 +19,6 @@ const anatomy = [
 
 export const docs = {
   name: 'StatusDot',
-  playground: {
-    defaults: {label: 'Online'},
-  },
   displayName: 'Status Dot',
   category: 'Feedback & Status',
   keywords: [

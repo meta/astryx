@@ -34,12 +34,7 @@ export const docs = {
   keywords: ['radio', 'tabs', 'toggle', 'toggle-group', 'pill', 'button-group', 'switch', 'segment', 'control'],
   playground: {
     defaults: {
-      label: 'Range',
       value: 'option-1',
-      children: [
-        {__element: 'SegmentedControlItem', props: {value: 'option-1', label: 'Day'}},
-        {__element: 'SegmentedControlItem', props: {value: 'option-2', label: 'Week'}},
-      ],
     },
   },
   examples: [
