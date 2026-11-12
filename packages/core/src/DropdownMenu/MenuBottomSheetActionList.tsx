@@ -151,6 +151,9 @@ export function MenuBottomSheetActionList({
     <List
       ref={listComposedRef}
       density="spacious"
+      // Focus parks on the list when no row is lit, as in DropdownMenu's own
+      // menu, so a row a cancelled finger lit loses its highlight.
+      tabIndex={-1}
       xstyle={styles.list}
       {...menuPress.menuProps}>
       {items.map((option, index) => {

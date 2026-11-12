@@ -311,9 +311,9 @@ select `popover="auto"`. Browser-initiated closes are observed through the queue
 `onHide`, or controlled-state synchronization catches up.
 
 `gestureCounter` identifies the physical pointer or keyboard gesture in flight.
-`useLayer` records the gesture associated with a browser close and
-`wasJustDismissed()` prevents that same press from reopening a trigger.
-DropdownMenu and Selector-family trigger paths consume this guard.
+`useLayer` records the gesture associated with a browser close, and its `show()`
+does not reopen the layer during that same gesture, so every trigger path gets
+this guard from `useLayer` (INV7).
 
 `useMenuHover` adds a real native invoker relationship for applicable auto
 popovers. It separately suppresses the synthetic `mouseenter` produced when a
@@ -803,6 +803,13 @@ it on the surface inside the layer and run no layout while it plays.
 
 - `Layer/useLayer.tsx` owns Popover API lifecycle, state reconciliation,
   anchor/fixed/custom rendering, trigger source, and current same-gesture memory.
+  It also owns two internal members of a context-mode layer, which
+  `useLayerInternal` returns and `useLayer` does not. With `lazyMount`,
+  `prepare()` mounts the layer's content without showing it. The popover stays
+  closed, with no pixel and no accessibility node, and a later `show()` only
+  shows it. `releasePrepared()` unmounts that content unless the layer has
+  shown since. ContextMenu prepares its menu at a held press's commit, so its
+  first render does not fall inside the show at the hold's display moment.
 - `Layer/layerHost.ts` owns safe inline versus nearest corrective portal placement.
 - `Layer/anchorName.ts` owns composition of anchor names on one trigger.
 - `Layer/layerTextReset.stylex.ts` owns the text baseline and

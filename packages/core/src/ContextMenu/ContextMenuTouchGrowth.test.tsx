@@ -313,7 +313,7 @@ describe('ContextMenu’s growth under a finger', () => {
     expect(growths(trigger)).toHaveLength(1);
   });
 
-  it('grows a pen’s press at the onset from the press machine’s mark, which finds the recognizer following the pen', async () => {
+  it('times a pen’s growth from its landing, as a finger’s: it starts at the onset, 150 ms after the pen lands', async () => {
     const trigger = renderMenu();
     const landedAt = performance.now();
     const down = new Event('pointerdown', {bubbles: true, cancelable: true});
@@ -327,11 +327,51 @@ describe('ContextMenu’s growth under a finger', () => {
       clientY: 20,
     });
     Object.defineProperty(down, 'timeStamp', {value: landedAt});
-    // The press machine marks the pen's press from the same pointerdown.
     trigger.dispatchEvent(down);
     await act(async () => {});
-    expect(trigger.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
     advance(149);
+    expect(growths(trigger)).toHaveLength(0);
+    advance(1 + FRAME_MS);
+    expectGrowthFromOnsetFrame(trigger, landedAt);
+  });
+
+  it('grows a pen that drifts past the press machine’s 10 px inside a scroll view, which the recognizer’s 11.5 px tolerance still follows, at its onset', async () => {
+    render(
+      <div data-testid="scroller" style={{overflowY: 'auto', height: 200}}>
+        <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
+          <div>Hold me</div>
+        </ContextMenu>
+      </div>,
+    );
+    // A scroller with content past its height: the press machine waits
+    // 150 ms before it marks a press here, and a travel past 10 px ends it.
+    const scroller = screen.getByTestId('scroller');
+    Object.defineProperty(scroller, 'scrollHeight', {value: 400});
+    Object.defineProperty(scroller, 'clientHeight', {value: 200});
+    const trigger = screen.getByTestId('ctx');
+    const pen = (type: string, x: number) => {
+      const event = new Event(type, {bubbles: true, cancelable: true});
+      Object.assign(event, {
+        pointerId: 7,
+        pointerType: 'pen',
+        isPrimary: true,
+        button: type === 'pointerdown' ? 0 : -1,
+        buttons: 1,
+        clientX: x,
+        clientY: 20,
+      });
+      Object.defineProperty(event, 'timeStamp', {value: performance.now()});
+      trigger.dispatchEvent(event);
+    };
+    const landedAt = performance.now();
+    pen('pointerdown', 20);
+    await act(async () => {});
+    advance(60);
+    // An 11 px drift, before the machine's 150 ms: it never marks the press.
+    pen('pointermove', 31);
+    await act(async () => {});
+    expect(trigger.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    advance(89);
     expect(growths(trigger)).toHaveLength(0);
     advance(1 + FRAME_MS);
     expectGrowthFromOnsetFrame(trigger, landedAt);

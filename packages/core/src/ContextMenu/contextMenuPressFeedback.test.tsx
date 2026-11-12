@@ -17,6 +17,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {contextMenu} from '../motion/uikit/contextMenu';
 import {springs} from '../motion/uikit/springs';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
+import {PRESS_ONSET_MS} from '../utils/pressGesture';
 import {
   useContextMenuPressFeedback,
   type ContextMenuPressFeedback,
@@ -61,22 +62,11 @@ function Trigger() {
 }
 
 /** What the recognizer follows now, as ContextMenu's refs report it. */
-const recognizer = {isFollowing: true, isFinger: false};
+const recognizer = {isFollowing: true};
 function TriggerWithRecognizer() {
   const ref = useRef<HTMLDivElement>(null);
   const isFollowedRef = useRef(() => recognizer.isFollowing);
-  const landedAtRef = useRef((): number | null => null);
-  const followsFingerRef = useRef(
-    () => recognizer.isFollowing && recognizer.isFinger,
-  );
-  feedback = useContextMenuPressFeedback(
-    ref,
-    ref,
-    true,
-    isFollowedRef,
-    landedAtRef,
-    followsFingerRef,
-  );
+  feedback = useContextMenuPressFeedback(ref, ref, true, isFollowedRef);
   return <div ref={ref} data-testid="trigger" />;
 }
 
@@ -139,7 +129,6 @@ const growths = () =>
     ([to]) => ((to as {scale?: number}).scale ?? 1) > 1,
   );
 
-/** Lets the shared mutation observer deliver its records. */
 // The growth starts in the next animation frame.
 const flush = async () =>
   new Promise(resolve => {
@@ -161,6 +150,9 @@ const FAKE_TIMERS = {
 };
 const startsOf = () => growths().map(call => (call[2] as {at: number}).at);
 // One growth, started from rest in the first frame at or after the onset.
+/** The recognizer took a contact on `target` whose onset is now. */
+const landNow = (target: Element) =>
+  feedback?.begin(performance.now() - PRESS_ONSET_MS, target);
 const expectGrowthFromOnsetFrame = (onsetAt: number) => {
   const starts = startsOf();
   expect(starts).toHaveLength(1);
@@ -176,13 +168,13 @@ describe('useContextMenuPressFeedback', () => {
     feedback = null;
   });
 
-  it('keeps growing when the press machine lets the press go, and springs back when the recognizer ends it', async () => {
+  it('ignores the press machine’s mark: it grows from the landing, and springs back when the recognizer ends the press', async () => {
     const {getByTestId} = render(<Trigger />);
     const trigger = getByTestId('trigger');
-    trigger.setAttribute(PRESSED_ATTRIBUTE, 'on');
+    landNow(trigger);
     await flush();
     expect(animator.animate).toHaveBeenCalledOnce();
-    // The press machine's slop is shorter than the recognizer's tolerance.
+    trigger.setAttribute(PRESSED_ATTRIBUTE, 'on');
     trigger.removeAttribute(PRESSED_ATTRIBUTE);
     await flush();
     expect(animator.animate).toHaveBeenCalledOnce();
@@ -190,34 +182,29 @@ describe('useContextMenuPressFeedback', () => {
     expect(animator.animate).toHaveBeenCalledTimes(2);
   });
 
-  it('grows when the press machine marks a pressable control inside the trigger, the innermost surface it marks', async () => {
+  it('grows for a landing on a control inside the trigger', async () => {
     const {getByTestId} = render(<TriggerWithControl />);
-    getByTestId('control').setAttribute(PRESSED_ATTRIBUTE, 'on');
-    await flush();
-    expect(animator.animate).toHaveBeenCalledOnce();
-    getByTestId('control').removeAttribute(PRESSED_ATTRIBUTE);
+    landNow(getByTestId('control'));
     await flush();
     expect(animator.animate).toHaveBeenCalledOnce();
   });
 
-  it('grows only the innermost trigger when one trigger sits inside another', async () => {
+  it('grows only the outer trigger for a landing on its own control beside a nested trigger', async () => {
     const {getByTestId} = render(<NestedTriggers />);
-    getByTestId('inner').setAttribute(PRESSED_ATTRIBUTE, 'on');
+    const control = getByTestId('outer-control');
+    const landedAt = performance.now() - PRESS_ONSET_MS;
+    nested.outer?.begin(landedAt, control);
+    nested.inner?.begin(landedAt, control);
     await flush();
-    expect(animator.animated).toEqual([getByTestId('inner')]);
-    getByTestId('inner').removeAttribute(PRESSED_ATTRIBUTE);
-    await flush();
-    getByTestId('outer-control').setAttribute(PRESSED_ATTRIBUTE, 'on');
-    await flush();
-    expect(animator.animated).toEqual([
-      getByTestId('inner'),
-      getByTestId('outer'),
-    ]);
+    expect(animator.animated).toEqual([getByTestId('outer')]);
   });
 
-  it('grows no outer trigger for a press on a nested trigger that shows no growth', async () => {
+  it('grows no outer trigger for a landing on a nested trigger that shows no growth', async () => {
     const {getByTestId} = render(<NestedTriggers isInnerShown={false} />);
-    getByTestId('inner').setAttribute(PRESSED_ATTRIBUTE, 'on');
+    const inner = getByTestId('inner');
+    const landedAt = performance.now() - PRESS_ONSET_MS;
+    nested.outer?.begin(landedAt, inner);
+    nested.inner?.begin(landedAt, inner);
     await flush();
     expect(animator.animated).toEqual([]);
   });
@@ -225,7 +212,7 @@ describe('useContextMenuPressFeedback', () => {
   it('gives the trigger back its size when its feedback goes while the menu it opened is up', async () => {
     const {getByTestId, rerender} = render(<TriggerWithLayer hasLayer />);
     const trigger = getByTestId('trigger');
-    trigger.setAttribute(PRESSED_ATTRIBUTE, 'on');
+    landNow(trigger);
     await flush();
     expect(animator.animate).toHaveBeenCalledOnce();
     // The menu opened: the animator froze the growth on the element.
@@ -239,7 +226,7 @@ describe('useContextMenuPressFeedback', () => {
   it('grows toward the held scale on springs.contextMenuLift, from the onset', async () => {
     const {getByTestId} = render(<Trigger />);
     const trigger = getByTestId('trigger');
-    trigger.setAttribute(PRESSED_ATTRIBUTE, 'on');
+    landNow(trigger);
     await flush();
     const [to, transition, options] = animator.animate.mock
       .lastCall as unknown as [
@@ -256,7 +243,7 @@ describe('useContextMenuPressFeedback', () => {
   it('returns on springs.contextMenuDismiss, at the time the recognizer ended the press', async () => {
     const {getByTestId} = render(<Trigger />);
     const trigger = getByTestId('trigger');
-    trigger.setAttribute(PRESSED_ATTRIBUTE, 'on');
+    landNow(trigger);
     await flush();
     feedback?.end(1000);
     expect(animator.animate.mock.lastCall).toEqual([
@@ -284,10 +271,9 @@ describe('useContextMenuPressFeedback', () => {
     }
   });
 
-  it('keeps a finger’s onset when the press machine marks the press later', async () => {
+  it('keeps a landing’s onset when the press machine marks the press later', async () => {
     vi.useFakeTimers({toFake: [...FAKE_TIMERS.toFake]});
     try {
-      recognizer.isFinger = true;
       const {getByTestId} = render(<TriggerWithRecognizer />);
       vi.advanceTimersByTime(1000);
       const landedAt = performance.now();
@@ -297,28 +283,6 @@ describe('useContextMenuPressFeedback', () => {
       await vi.advanceTimersByTimeAsync(200);
       expectGrowthFromOnsetFrame(landedAt + 150);
     } finally {
-      recognizer.isFinger = false;
-      vi.useRealTimers();
-    }
-  });
-
-  it('starts a pen’s growth at its mark after a finger’s press ended', async () => {
-    vi.useFakeTimers({toFake: [...FAKE_TIMERS.toFake]});
-    try {
-      recognizer.isFinger = true;
-      const {getByTestId} = render(<TriggerWithRecognizer />);
-      const trigger = getByTestId('trigger');
-      feedback?.begin(performance.now(), trigger);
-      await vi.advanceTimersByTimeAsync(150 + FRAME_MS);
-      expect(growths()).toHaveLength(1);
-      feedback?.end(performance.now());
-      // A pen's press: the press machine's mark starts its growth.
-      recognizer.isFinger = false;
-      trigger.setAttribute(PRESSED_ATTRIBUTE, 'on');
-      await vi.advanceTimersByTimeAsync(FRAME_MS);
-      expect(growths()).toHaveLength(2);
-    } finally {
-      recognizer.isFinger = false;
       vi.useRealTimers();
     }
   });
@@ -381,7 +345,7 @@ describe('useContextMenuPressFeedback', () => {
   it('returns on springs.contextMenuDismiss when the menu the press opened closes', async () => {
     const {getByTestId} = render(<Trigger />);
     const trigger = getByTestId('trigger');
-    trigger.setAttribute(PRESSED_ATTRIBUTE, 'on');
+    landNow(trigger);
     await flush();
     feedback?.hold();
     feedback?.release();
