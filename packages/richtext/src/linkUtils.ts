@@ -41,9 +41,14 @@ const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 export const URL_MATCHER =
   /((https?:\/\/(www\.)?)|(www\.))[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&/=]*)/;
 
-/** Matches a bare email address for AutoLink (rendered as a `mailto:` link). */
+/**
+ * Matches a bare email address for AutoLink (rendered as a `mailto:` link).
+ * An unquoted local part starts only at the text start, after whitespace, or
+ * after one of `<>()[]\,;:@"`. A quoted local part ends at the next quote or
+ * line break. Each run is read once, so matching time stays linear.
+ */
 export const EMAIL_MATCHER =
-  /(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))/;
+  /((?<![^<>()[\]\\,;:\s@"])[^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*|("[^"\r\n]+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))/;
 
 /** Prepend a default `https://` scheme to a bare host so it parses as absolute. */
 function withDefaultScheme(url: string): string {

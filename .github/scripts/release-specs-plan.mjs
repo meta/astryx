@@ -6,17 +6,18 @@
  * @description Which release specs a pull request runs in `release-specs
  *   (changed)`, and in which 4-core shard each runs (spec:AST-030 FR32).
  * @input `--listed <file>`: every file of the merge commit. `--changed
- *   <file>`: the changed files. `--root <dir>`: the merge commit's checkout.
- *   `--out <file>`: where the plan goes.
+ *   <file>`: the changed files, or `--all` (with `--truncated` when GitHub
+ *   truncated the list) when there is no list. `--root <dir>`: the merge
+ *   commit's checkout. `--out <file>`: where the plan goes.
  * @output `{specs, reasons, shards}`, and `has_specs`, `specs` and `shards`
  *   (the shard matrix) for `$GITHUB_OUTPUT`.
  * @position The plan job before the release-spec shards. A release spec (a
  *   `*.release.*.spec.ts` file or a spec tagged `@pr-a11y release-only`) runs
  *   when the pull request adds or changes it, changes a module it imports, or
  *   changes the rendered source of a component it visits. A visit that
- *   cannot be resolved runs the spec; imports that cannot be followed run
- *   every release spec. Each spec runs once, in the shard that a recorded-time
- *   split gives it.
+ *   cannot be resolved runs the spec; imports that cannot be followed, or a
+ *   change with no file list, run every release spec. Each spec runs once, in
+ *   the shard that a recorded-time split gives it.
  */
 
 import fs from 'node:fs';
@@ -70,14 +71,27 @@ export function shardSpecs(specs, seconds) {
  *   imports cannot be followed
  * @param {{stories: Record<string, string[]>, pages: Record<string, string[]>}} options.map
  *   `.github/release-spec-visits.json`
+ * @param {string} [options.everything] why every release spec runs, when
+ *   the change has no file list
  * @returns {{specs: string[], reasons: Record<string, string>}}
  */
-export function planReleaseSpecs({listed, changed, read, importers, map}) {
+export function planReleaseSpecs({
+  listed,
+  changed,
+  read,
+  importers,
+  map,
+  everything,
+}) {
   const all = releaseSpecs(listed, read);
   const reasons = {};
   const add = (spec, reason) => {
     reasons[spec] ??= reason;
   };
+  if (everything) {
+    for (const spec of all) add(spec, everything);
+    return {specs: all, reasons};
+  }
   const present = new Set(all);
   for (const file of changed)
     if (present.has(file)) add(file, 'the change adds or changes it');
@@ -122,9 +136,15 @@ function main(args) {
   const root = option(args, '--root');
   const read = file => fs.readFileSync(path.join(root, file), 'utf8');
   const json = file => JSON.parse(read(file));
+  const everything = args.includes('--all')
+    ? args.includes('--truncated')
+      ? 'GitHub truncated the changed-file list, so every release spec runs'
+      : 'the scope step could not list the changed files, so every release spec runs'
+    : undefined;
   const plan = planReleaseSpecs({
     listed,
-    changed: lines(option(args, '--changed')),
+    changed: everything ? [] : lines(option(args, '--changed')),
+    everything,
     read,
     importers: specs => {
       const releases = new Set(specs);

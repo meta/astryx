@@ -14,7 +14,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Fork a theme as editable local source',
   description:
-    "Copies a bundled or installed package theme's complete source into the local themes root, including a local descriptor. Writes are atomic. Existing files require --overwrite. Use --package when package themes share a slug.",
+    "Copies a bundled or installed package theme's complete source into the local themes root, including a local descriptor. Writes are atomic. Existing files require --overwrite. Eject never writes into a folder that holds another theme or a theme the theme editor made, even with --overwrite. When the fork imports packages the app lacks, the result names them with an install command. Use --package when package themes share a slug.",
   fn: 'themeEject',
   args: [
     {
@@ -33,7 +33,7 @@ export const doc = {
       flag: '-f, --overwrite',
       param: 'options.overwrite',
       description:
-        'Replace existing files. Without it, an existing file fails with ERR_FILE_EXISTS and nothing is written',
+        'Replace the existing files of an earlier fork of the same theme. Without it, an existing file fails with ERR_FILE_EXISTS and nothing is written',
     },
     {
       flag: '--package <package>',
@@ -59,7 +59,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'the theme is unknown or ambiguous, a path escapes, a source file is missing, or a destination exists',
+      when: 'the theme is unknown or ambiguous, a path escapes, a source file is missing, a destination exists, or the folder holds another theme',
     },
   ],
   related: [

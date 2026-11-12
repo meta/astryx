@@ -59,7 +59,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'the theme does not exist, an unknown --section, or a page that does not render',
+      when: 'the theme does not exist, an unknown --section, or a page that does not render; or a folder outside a project with Core installed (ERR_PROJECT_REQUIRED)',
     },
   ],
   related: ['experimental theme editor', 'experimental theme compile'],
