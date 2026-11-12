@@ -133,6 +133,7 @@ describe('internal/touch', () => {
       'toSpring',
       'focusForLastInput',
       'isFocusLost',
+      'prepareFocusReturnOnRemoval',
       'useInteractionModalityTracking',
     ]) {
       expect(typeof entry[name], name).toBe('function');
