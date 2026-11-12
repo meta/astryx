@@ -138,6 +138,8 @@ jobs:
     permissions:
       actions: read
       contents: read
+      # Reads a capacity tool's ci-slot grant on the pull request's head.
+      statuses: read
     outputs:
       fits: ${{ steps.room.outputs.fits }}
       full: ${{ steps.room.outputs.full }}
@@ -160,6 +162,10 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
+          # A pull-request run a capacity tool granted starts without waiting
+          # (spec:AST-030 FR16). CI_ADMISSION_LEGACY=true makes every run wait.
+          slot-grant: ${{ github.event_name == 'pull_request' && vars.CI_ADMISSION_LEGACY != 'true' }}
+          granters: ${{ vars.ENGOWNERS }}
           peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 17 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}

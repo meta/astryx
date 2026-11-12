@@ -19,8 +19,10 @@ import {afterAll, describe, expect, it} from 'vitest';
 
 import {
   CI_CEILING,
+  GRANT_FRESH_MS,
   SMALL_MOST,
   pullRequestPeak,
+  slotGrant,
 } from '../actions/ci-admission/count.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -49,6 +51,76 @@ describe("a pull request's peak", () => {
     );
     // A label that adds no suite adds no jobs.
     expect(pullRequestPeak(workflow, ['CLA Signed'])).toBe(base);
+  });
+});
+
+describe("a capacity tool's grant", () => {
+  const RUN = Date.parse('2026-11-12T00:00:00Z');
+  const base = {
+    pr: {head: {repo: {full_name: 'o/r'}}},
+    repo: 'o/r',
+    attempt: 1,
+    runCreated: RUN,
+    granters: '@Owner-A\n@owner-b',
+  };
+  const status = (overrides = {}) => ({
+    context: 'ci-slot',
+    state: 'success',
+    creator: {login: 'owner-a'},
+    created_at: new Date(RUN - 5 * 60_000).toISOString(),
+    ...overrides,
+  });
+
+  it("grants a first attempt from this repository on an engineering owner's fresh status", () => {
+    expect(slotGrant({...base, statuses: [status()]})).toEqual({
+      granted: true,
+      why: 'granted by owner-a',
+    });
+    // The newest ci-slot status decides; other contexts are ignored.
+    expect(
+      slotGrant({
+        ...base,
+        statuses: [
+          {context: 'other', state: 'success'},
+          status({state: 'pending'}),
+          status(),
+        ],
+      }).granted,
+    ).toBe(false);
+  });
+
+  it('never grants a fork, a re-run, a stale or a foreign status', () => {
+    const cases = [
+      {pr: {head: {repo: {full_name: 'fork/r'}}}},
+      {pr: {head: {repo: null}}},
+      {attempt: 2},
+      {
+        statuses: [
+          status({
+            created_at: new Date(RUN - GRANT_FRESH_MS - 1).toISOString(),
+          }),
+        ],
+      },
+      {
+        statuses: [
+          status({created_at: new Date(RUN + 2 * 60_000).toISOString()}),
+        ],
+      },
+      {statuses: [status({creator: {login: 'someone'}})]},
+      // A marker the pull request's author or its own workflow token set.
+      {statuses: [status({creator: {login: 'pr-author'}})]},
+      {
+        statuses: [
+          status({creator: {login: 'github-actions[bot]', type: 'Bot'}}),
+        ],
+      },
+      {statuses: [status({creator: null})]},
+      {statuses: []},
+    ];
+    for (const overrides of cases)
+      expect(
+        slotGrant({...base, statuses: [status()], ...overrides}).granted,
+      ).toBe(false);
   });
 });
 

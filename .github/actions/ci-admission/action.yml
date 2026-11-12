@@ -50,6 +50,11 @@
 #   repository's API budget is low, the run starts rather than spend it.
 # - A pull request that may not run CI (a draft, or a fork without `ci:run`)
 #   starts at once, so its required contexts report their failure (FR17).
+# - With `slot-grant`, a pull-request run that a capacity tool granted passes
+#   'room' in one check, without waiting: its first attempt, from a branch in this repository,
+#   whose head carries a `ci-slot` success status an engineering owner set at
+#   most thirty minutes before the run (count.mjs slotGrant). A fork's run, a
+#   re-run and every other event wait as above.
 # - A failed lookup, a rate limit included, starts the run.
 
 name: CI admission
@@ -78,6 +83,14 @@ inputs:
     description: "'whole' waits for the whole run; 'room' waits for room for one job and records whether the whole run fit; 'rest' waits for the rest of the run after 'room'."
     required: false
     default: whole
+  slot-grant:
+    description: "For 'room' on a pull request: 'true' lets a run a capacity tool granted start without waiting (count.mjs slotGrant)."
+    required: false
+    default: 'false'
+  granters:
+    description: The engineering owners whose ci-slot status grants a run, as `vars.ENGOWNERS`.
+    required: false
+    default: ''
   fits:
     description: "For 'rest': 'true' when the whole run fit on the 'room' look."
     required: false
@@ -129,13 +142,15 @@ runs:
         MAX_WAIT_MINUTES: ${{ inputs.max-wait-minutes }}
         MAX_LOOKS: ${{ inputs.max-looks }}
         COUNT_MODULE: ${{ github.action_path }}/count.mjs
+        SLOT_GRANT: ${{ inputs.slot-grant }}
+        GRANTERS: ${{ inputs.granters }}
       with:
         retries: 3
         script: |
           // The count itself is shared with the tools that grant CI capacity,
           // so both read CI the same way (count.mjs).
           const {pathToFileURL} = await import('node:url');
-          const {CI_CEILING, STEP, AT_LIMIT_SPACING_MS, waitSpan, countLook} = await import(
+          const {CI_CEILING, STEP, AT_LIMIT_SPACING_MS, waitSpan, countLook, slotGrant} = await import(
             pathToFileURL(process.env.COUNT_MODULE).href
           );
           const JITTER_MS = 20_000;
@@ -182,6 +197,35 @@ runs:
             }
             const extra = JSON.parse(process.env.LABEL_LEGS || '{}');
             for (const label of labels) peak += extra[label] ?? 0;
+          }
+
+          // A run a capacity tool granted already has its room, under the same
+          // count: one check passes the whole run, and 'rest' starts at once on
+          // `fits` (spec:AST-030 FR16).
+          if (PHASE === 'room' && pr != null && process.env.SLOT_GRANT === 'true') {
+            try {
+              const [{data: statuses}, {data: run}] = await Promise.all([
+                github.rest.repos.listCommitStatusesForRef({...context.repo, ref: pr.head.sha, per_page: 100}),
+                github.rest.actions.getWorkflowRun({...context.repo, run_id: context.runId}),
+              ]);
+              const grant = slotGrant({
+                pr,
+                repo: `${context.repo.owner}/${context.repo.repo}`,
+                attempt: Number(process.env.GITHUB_RUN_ATTEMPT),
+                runCreated: Date.parse(run.created_at),
+                statuses,
+                granters: process.env.GRANTERS || '',
+              });
+              if (grant.granted) {
+                core.setOutput('fits', 'true');
+                core.setOutput('started', String(Date.now()));
+                core.info(`A capacity tool granted this run (${grant.why}); it passes admission in one check, without waiting.`);
+                return;
+              }
+              core.info(`No grant to start at once (${grant.why}); waiting for room.`);
+            } catch (error) {
+              core.info(`The grant could not be checked (${error.message}); waiting for room.`);
+            }
           }
 
           // 'rest' carries on the wait 'room' began: its clock and its looks.

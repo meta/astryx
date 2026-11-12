@@ -78,7 +78,18 @@ describe('where runs wait', () => {
       "${{ needs.room.outputs.attempt == github.run_attempt && 'rest' || 'whole' }}",
     );
     expect(needsOf(admission)).toEqual(['room']);
-    expect(room.permissions).toEqual({actions: 'read', contents: 'read'});
+    expect(room.permissions).toEqual({
+      actions: 'read',
+      contents: 'read',
+      statuses: 'read',
+    });
+    // Only a pull-request run's first wait reads a capacity tool's grant, and
+    // CI_ADMISSION_LEGACY=true turns that off (spec:AST-030 FR16).
+    expect(stepOf(room).with['slot-grant']).toBe(
+      "${{ github.event_name == 'pull_request' && vars.CI_ADMISSION_LEGACY != 'true' }}",
+    );
+    expect(stepOf(room).with.granters).toBe('${{ vars.ENGOWNERS }}');
+    expect(wait.with['slot-grant']).toBeUndefined();
     // The rest of the wait carries on from where room left off.
     for (const key of ['fits', 'started', 'looks', 'next'])
       expect(wait.with[key]).toBe(`\${{ needs.room.outputs.${key} }}`);
@@ -639,6 +650,11 @@ describe('ci admission', () => {
     started = '',
     looked = '',
     next = '',
+    slotGrant = false,
+    statuses = [],
+    granters = '',
+    attempt = 1,
+    runCreated = NOW,
   } = {}) {
     vi.useFakeTimers({now: NOW});
     vi.spyOn(Math, 'random').mockReturnValue(random);
@@ -679,6 +695,18 @@ describe('ci admission', () => {
               data: {jobs: runs().find(run => run.id === run_id)?.jobs ?? []},
             };
           },
+          getWorkflowRun: async ({run_id}) => {
+            calls += 1;
+            expect(run_id).toBe(OWN);
+            return {data: {created_at: new Date(runCreated).toISOString()}};
+          },
+        },
+        repos: {
+          listCommitStatusesForRef: async ({ref}) => {
+            calls += 1;
+            expect(ref).toBe('head-sha');
+            return {data: statuses};
+          },
         },
       },
     };
@@ -696,7 +724,7 @@ describe('ci admission', () => {
           : {
               pull_request: {
                 draft: false,
-                head: {repo: {full_name: 'o/r'}},
+                head: {repo: {full_name: 'o/r'}, sha: 'head-sha'},
                 labels: labels.map(name => ({name})),
                 ...pull,
               },
@@ -714,6 +742,9 @@ describe('ci admission', () => {
       STARTED: started,
       LOOKS: looked,
       NEXT: next,
+      SLOT_GRANT: String(slotGrant),
+      GRANTERS: granters,
+      GITHUB_RUN_ATTEMPT: String(attempt),
     });
     // The script loads the shared count with `import()`, which a function
     // built here cannot call; the test passes it in.
@@ -732,6 +763,88 @@ describe('ci admission', () => {
     await done;
     return {...logs, looks, calls, lookTimes, outputs};
   }
+
+  describe("a capacity tool's grant (spec:AST-030 FR16)", () => {
+    // CI is full: 72 live pull-request jobs, one waiting run and the small
+    // workflows' floor leave no room for this run, so only a grant starts it.
+    const full = () => [...prs(6, 12), waitingRun(40), ...slims(3)];
+    const grant = (overrides = {}) => ({
+      context: 'ci-slot',
+      state: 'success',
+      creator: {login: 'owner-a'},
+      created_at: new Date(NOW - 60_000).toISOString(),
+      ...overrides,
+    });
+    const room = options =>
+      admit({
+        active: full(),
+        phase: 'room',
+        peak: 16,
+        maxLooks: 2,
+        maxWait: 12,
+        slotGrant: true,
+        granters: '@owner-a @owner-b',
+        statuses: [grant()],
+        ...options,
+      });
+
+    it('passes a granted run in one check, without looking at CI', async () => {
+      const result = await room();
+      expect(result.outputs.fits).toBe('true');
+      expect(result.looks).toBe(0);
+      expect(result.info.join('\n')).toContain('granted by owner-a');
+    });
+
+    it.each([
+      [
+        "a fork's run, even with an engineering owner's status on its head",
+        {
+          labels: ['ci:run'],
+          pull: {head: {repo: {full_name: 'fork/r'}, sha: 'head-sha'}},
+        },
+        "a fork's run waits",
+      ],
+      ['a re-run', {attempt: 2}, 'a re-run waits'],
+      ['no grant', {statuses: []}, 'no ci-slot grant'],
+      [
+        'a failed grant status',
+        {statuses: [grant({state: 'failure'})]},
+        'is failure',
+      ],
+      [
+        'a status someone else set',
+        {statuses: [grant({creator: {login: 'contributor'}})]},
+        "not an engineering owner's",
+      ],
+      [
+        "a fake marker the pull request's author set on its head",
+        {statuses: [grant({creator: {login: 'pr-author'}})]},
+        "not an engineering owner's (pr-author)",
+      ],
+      [
+        "a marker the pull request's own workflow set with its token",
+        {statuses: [grant({creator: {login: 'github-actions[bot]'}})]},
+        "not an engineering owner's (github-actions[bot])",
+      ],
+      [
+        'a grant from before the run by more than thirty minutes',
+        {
+          statuses: [
+            grant({created_at: new Date(NOW - 31 * 60_000).toISOString()}),
+          ],
+        },
+        'not from just before this run',
+      ],
+      ['the legacy switch', {slotGrant: false}, null],
+    ])('waits for room on %s', async (_name, options, why) => {
+      const result = await room(options);
+      // It looked at CI: it waited as any run does, so a start comes only
+      // from the count, never from the grant.
+      expect(result.looks).toBeGreaterThan(0);
+      expect(result.info.join('\n')).not.toContain('without waiting');
+      if (why) expect(result.info.join('\n')).toContain(why);
+    });
+  });
 
   it('agrees with a capacity tool on a full queue: the same count, and no room for either', async () => {
     // Six pull-request runs at 12 live jobs, one waiting, and small
