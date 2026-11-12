@@ -1492,28 +1492,81 @@ export function draftAnswer(ctx, env, question) {
     /\b(tell me|explain|what does|how does|but not too|stop (making|turning|being|using)|don'?t (touch|change)(?! (the )?(dark|light) mode)|leave (?!(?:the )?(?:dark|light) mode)[a-z ]+ alone|who made|just what i wanted|eyes hurt|is a great)\b|^\s*(yeah|oh sure|sure|great|wow)\b|,\s*nice[.!]*\s*$/i;
   const QUESTION_CLAUSE =
     /^\s*(?!(?:can|could|would|will) you\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b|why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|how about\b|is it possible\b|is there a way\b|can we\b|could we\b)(what|whats|what's|which|why|where|who|when|is|are|does|do|did|can|could|should|will)\b[^?]*\?+!*\s*$|^\s*(?!why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b)(what|whats|what's|which|why|where)\b|^\s*(?!is it possible\b|is there a way\b)(are|is|does|did|would|should) (my|the|it|this|these|those|our|there|a|an|square|round|rounder|bigger|smaller|darker|lighter)\b/i;
+  // "if you can", "if possible": politeness, not a condition. "no fewer
+  // than 2px": a limit, the number.
+  question = question
+    .replace(
+      /\b(?:if (?:you can|possible|you could|you don'?t mind|it'?s not too much trouble|it is not too much trouble)|when you get a chance)\b[,]?\s*/gi,
+      '',
+    )
+    .replace(/\bno (?:less|fewer) than\s+(?=\d)/gi, '');
+  // "dark page #0b0b0f": the mode word scopes the color.
+  question = question.replace(
+    /\b(dark|light) (page|background|body)( colou?r)? (#[0-9a-f]{3,8})\b/gi,
+    '$2 $4 in $1 mode',
+  );
   const segments = question
-    .split(/\s*(?:[,;]|[.?!](?=\s)|\bjust\b|\bthen\b)\s*/i)
+    .split(
+      /\s*(?:[,;\n]|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|(?<=\S)\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
+    )
+    .map(x => x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, ''))
     .filter(x => x.trim());
-  const gated = segments.filter(x => GATE.test(x) || QUESTION_CLAUSE.test(x));
-  const gateAll = gated.length > 0 && gated.length === segments.length;
-  if (gated.length && !gateAll)
-    question = segments
-      .map(x =>
-        gated.includes(x)
-          ? [
-              ...lex.parts.map(([re]) => re.exec(x.toLowerCase())?.[0]),
-              /\b(accent|brand|primary|secondary|danger|success|warning|info)\b/i.exec(
-                x,
-              )?.[0],
-            ]
-              .filter(Boolean)
-              .slice(0, 1)
-              .join(' ')
-          : x,
-      )
-      .filter(Boolean)
-      .join(', ');
+  // A clause writes only when it reads as a direct ask: an imperative, a
+  // request, or a thing with a value or a direction; a condition, an
+  // indirect question, a double negative or a statement of fact gets the
+  // lookup instead. A wrong write is worse than no command.
+  const CONDITION =
+    /^\s*(?:if|unless|in case|provided|providing|only if|assuming|suppose|supposing|as long as)\b/i;
+  const NOT_ASK =
+    /\b(i wonder|wondering|curious|would like to know|let me see|help me understand|any idea|just checking|just asking|check if|check whether|can you check|look at|double check|idk|quick q|do you think)\b|\b(don'?t not|not without|not un-?(?:bold|round|rounded|flat|square|styled)\w*|never no|no lighter|no darker|not at all|isn'?t it time|weren'?t)\b|^\s*(?!(?:can|could|would|will) (?:you|i|we)\b|can (?:the|my|our|all) [\w -]+ be\b|is it possible\b|is there a way\b)(?:do|does|did|will|would|can(?!'t|not)|could|should|is|are)\b(?!n'?t)|^\s*checking\b|\bno less (?!than)|^\s*(would|could|should|does|do|is|are|will)\b[^.]*\b(work|look|be (?:a )?(?:good|better|too much|ok|okay)|good|better|accessible|clash|too much)\b[^.]*\??$|\bor\b[^.]*\?\s*$|^\s*how (?:would|round|big|dark|light|thick)\b|\b(right now|rn)\b(?!.*\b(make|set|change)\b)/i;
+  const ASK_START =
+    /^\s*(?:please |pls |ok,? |okay,? |also |and |now |so |anyway,? )*(?:make|set|change|use|give|turn|add|remove|increase|decrease|lighten|darken|round|square|put|switch|swap|replace|drop|ditch|kill|hide|bump|reduce|raise|lower|tighten|loosen|shrink|grow|enlarge|boost|soften|sharpen|undo|revert|reset|restore|bring|go|keep|let'?s|try|apply|get rid|take|knock|cut|paint|colou?r|fill|flatten|thicken|widen|narrow|underline|bold|unbold|uppercase|lowercase|no|without|stop|don'?t|never|avoid|less|more|bigger|smaller|rounder|sharper|darker|lighter|softer|bolder|thinner|thicker|wider|tighter|looser)\b|^\s*(?:can|could|would|will) (?:you|i|we)\b|^\s*can (?:the|my|our|all) [\w -]+ be\b|^\s*(?:i|we) (?:want|need|'d like|would like)\b|^\s*(?:i'd|id) like\b|^\s*please\b/i;
+  const isAsk = (/** @type {string} */ x) => {
+    const t = x.toLowerCase();
+    return !CONDITION.test(t) && !NOT_ASK.test(t);
+  };
+  const blocked = (/** @type {string} */ x) =>
+    GATE.test(x) ||
+    (QUESTION_CLAUSE.test(x) && !ASK_START.test(x.toLowerCase())) ||
+    !isAsk(x);
+  const gated = segments.filter(blocked);
+  // A condition holds back the whole question: the ask depends on it.
+  const gateAll =
+    (gated.length > 0 && gated.length === segments.length) ||
+    segments.some(x => CONDITION.test(x.replace(/^[^:]*:\s*/, '')));
+  if (gated.length && !gateAll) {
+    // A held-back clause gives the next clause what it names: its part, and
+    // the thing a "them" or "it" there stands for.
+    /** @type {string[]} */
+    const kept = [];
+    let carry = '';
+    let carryPart = '';
+    for (const x of segments) {
+      if (gated.includes(x)) {
+        const part = [
+          ...lex.parts.map(([re]) => re.exec(x.toLowerCase())?.[0]),
+          /\b(accent|brand|primary|secondary|danger|success|warning|info)\b/i.exec(
+            x,
+          )?.[0],
+        ].find(Boolean);
+        const thing =
+          /\b(borders?|shadows?|radius|corners|padding|spacing|gap|font|underlines?|background)\b/i.exec(
+            x,
+          )?.[0];
+        carry = [part, thing].filter(Boolean).join(' ');
+        carryPart = part ?? '';
+        continue;
+      }
+      if (carry && /\b(them|it)\b/i.test(x))
+        kept.push(x.replace(/\b(them|it)\b/i, carry));
+      else if (carryPart) kept.push(carryPart, x);
+      else kept.push(x);
+      carry = '';
+      carryPart = '';
+    }
+    if (carryPart) kept.push(carryPart);
+    question = kept.filter(Boolean).join(', ');
+  }
   /** Family names written in quotes, kept as typed: qq<n>qq in the text. */
   const quoted = /** @type {string[]} */ ([]);
   let q = question

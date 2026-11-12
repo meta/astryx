@@ -270,13 +270,22 @@ async function answer(subject, options, cwd) {
       },
     );
   }
-  // "how b make buttons pill": a first word that names an existing theme,
-  // with more words after it, is the theme, as for set, show and undo.
-  if (!options.theme) {
-    const [first, ...rest] = t.split(/\s+/);
-    if (rest.length && editedThemes(cwd).includes(first))
-      return answer(rest.join(' '), {...options, theme: first}, cwd);
-  }
+  // "how b make buttons pill": a first word typed as its own argument that
+  // names an existing theme, with more words after it, is the theme, as for
+  // set, show and undo. A quoted question ("how 'accent red'") is one
+  // argument: its first word is never a theme.
+  const argv = /** @type {string[] | undefined} */ (options.words);
+  if (
+    !options.theme &&
+    argv &&
+    argv.length >= 2 &&
+    editedThemes(cwd).includes(argv[0])
+  )
+    return answer(
+      argv.slice(1).join(' '),
+      {...options, words: undefined, theme: argv[0]},
+      cwd,
+    );
   const ctx = await context(cwd);
   const {C} = ctx;
   const env = await howTheme(ctx, cwd, options.theme);

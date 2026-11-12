@@ -3778,7 +3778,7 @@ const QUESTIONS_T = [
     /^set q corners square --on button$/,
   ],
   ["don't explain, just set the accent to crimson", /^set q accent '#dc143c'$/],
-  ['can the cards be rounder?', null, /not sure which change you want/],
+  ['can the cards be rounder?', /^set q corners more --on card$/],
   ['are buttons too round?!', null, /not sure which change you want/],
   ['can you make the cards rounder?', /^set q corners more --on card$/],
   [
@@ -3854,10 +3854,31 @@ describe('how answers final-11 questions', () => {
 describe('how steps the headings and text-size dials from the theme', () => {
   it('a first word that names a theme is the theme, as for set', async () => {
     await themeEditNew('tb', {cwd, like: 'neutral'});
-    const {data} = await themeEditHow('tb make buttons pill', {cwd});
+    const {data} = await themeEditHow('tb make buttons pill', {
+      cwd,
+      words: ['tb', 'make', 'buttons', 'pill'],
+    });
     expect(data.results[0].commands.map(bare)[0]).toBe(
       'set tb corners pill --on button',
     );
+    // One quoted argument: its first word is part of the question, even when
+    // a theme has that name.
+    await themeEditNew('make', {cwd, like: 'neutral'});
+    const quoted = await themeEditHow('make the corners pill', {
+      cwd,
+      theme: 'tb',
+      words: ['make the corners pill'],
+    });
+    expect(quoted.data.results[0].commands.map(bare)[0]).toBe(
+      'set tb corners pill',
+    );
+    // tb changed last: the quoted question is for it, not for "make".
+    await themeEditSet('tb', 'accent', '#e11d48', {cwd});
+    const one = await themeEditHow('make the corners pill', {
+      cwd,
+      words: ['make the corners pill'],
+    });
+    expect(one.data.results[0].commands.map(bare)[0]).not.toMatch(/^set make /);
   }, 120_000);
 
   it('moves the headings one rung from the theme and text-size by its step', async () => {
@@ -3879,6 +3900,54 @@ describe('how steps the headings and text-size dials from the theme', () => {
       bare((await ask('make the text a bit smaller'))[0].commands[0]),
     ).toBe('set hv text-size 22');
   }, 120_000);
+});
+
+/**
+ * Final-12 questions: a write only for a direct ask; conditions, indirect
+ * questions and double negatives get the lookup.
+ * @type {Array<[string, RegExp | null]>}
+ */
+const QUESTIONS_V = [
+  ['I wonder if the cards have a shadow', null],
+  ['if the corners are round, make them square', null],
+  ["don't not round the corners", null],
+  ['would #333333 work as an accent', null],
+  ['is 4px a good input radius', null],
+  ['should corners be 6px or 8px', null],
+  ['just checking: are headings bold', null],
+  ['can you check if links are underlined', null],
+  ['can the buttons be rounder?', /^set q corners more --on button$/],
+  ['can I get a serif font?', /^set q font serif$/],
+  ['whats the padding on cards make it 12', /^set q padding 12px --on card$/],
+  [
+    'do badges have borders? remove them either way',
+    /^set q border none --on badge$/,
+  ],
+  [
+    'dark page #0b0b0f',
+    /^set q --color-background-body '#0b0b0f' --mode dark$/,
+  ],
+  ['if you can, accent #e11d48', /^set q accent '#e11d48'$/],
+  ['our brand color is #0055ff', /^set q accent '#0055ff'$/],
+];
+
+describe('how writes only for a direct ask', () => {
+  for (const [question, want] of QUESTIONS_V)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
+    });
 });
 
 describe('how lookups', () => {
