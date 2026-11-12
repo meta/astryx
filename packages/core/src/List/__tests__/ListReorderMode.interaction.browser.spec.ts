@@ -545,9 +545,9 @@ test.describe('with a finger', () => {
     browserName,
   }) => {
     // No control grows for a finger. Where the primary pointer is coarse, a
-    // target reaches toward 44 px through an invisible hit layer. Each side
-    // stops at half the gap to a neighbouring target, so a tap always goes to
-    // the nearer one.
+    // target reaches toward 44 px through an invisible band. In a group each
+    // side stops at half the gap; elsewhere a box under the finger wins over
+    // a band, so a tap goes to the target under or nearest the finger.
     await open(page);
     await handle(page, 'Sent').focus();
     await page.keyboard.press('Enter');

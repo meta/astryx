@@ -17,8 +17,8 @@
  *   drop measures the rows in one pass, before their glides start. The
  *   preview follows the finger one to one and stops at the list's top. The
  *   drop's glides keep moving while the main thread is blocked. A focused
- *   handle shows one whole ring. Its finger target grows toward 44 pt and
- *   stops halfway to the next one's, and its row is no taller for it
+ *   handle shows one whole ring. Its finger target grows toward 44 pt where
+ *   it has room, and its row is no taller for it
  * @position Interaction evidence for List's reorder (List/listReorderEngine.tsx,
  *   List/ListReorderTouch.ts, List/ListReorderHandle.tsx) in the touch phone
  *   context

@@ -1068,8 +1068,8 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     const gap = boxes.link.left - boxes.switch.right;
     expect(gap).toBeGreaterThan(0);
     // The hit area grows to 44 px on every side. Here it stops short of the
-    // link; where it lies over a neighbour, a tap nearer that neighbour does
-    // nothing (utils/touchHitArea.ts).
+    // link; where it lies over a neighbour, a tap on that neighbour's box goes
+    // to the neighbour (utils/touchHitArea.ts).
     expect(boxes.hit.bottom - boxes.hit.top).toBeCloseTo(44, 0);
     expect(boxes.hit.right).toBeLessThanOrEqual(boxes.link.left);
     const y = (boxes.switch.top + boxes.switch.bottom) / 2;

@@ -154,7 +154,8 @@ function activate(target: HTMLElement): void {
 }
 
 /**
- * Checks each finger's tap on `host` until the returned function runs. The
+ * Checks each tap on `host`, by a finger, a pen or a mouse, while the band
+ * exists, until the returned function runs. The
  * press reads nothing, so a scroll it starts never waits. At the click,
  * `targetUnderFinger` may send the tap on; a keyboard or assistive-technology
  * click (detail 0) goes through.
@@ -229,7 +230,7 @@ export function useTouchHitArea(
   options: TouchHitAreaOptions = NO_OPTIONS,
 ): RefCallback<HTMLElement> {
   // Syncs with an external system: the window's input stream, which hears a
-  // finger's press on the element. The ref's cleanup stops listening.
+  // press on the element. The ref's cleanup stops listening.
   return useCallback(
     (element: HTMLElement | null) => {
       if (!enabled || element == null) {

@@ -5,8 +5,9 @@
  *   stories, real touch input and the interaction harness
  * @output Proofs of the hit band under a finger. A labelled checkbox and a
  *   radio option keep their boxes. The band is at least 44 px and never
- *   smaller than the row. It stops at half the gap to a neighbour. A tap on
- *   it picks the control. A mouse gets no band.
+ *   smaller than the row. In a group it stops at half the gap; elsewhere a
+ *   box under the finger wins over the band. A tap on it picks the control.
+ *   A mouse gets no band.
  * @position Real-engine layer; the unit layer is Indicator/touchTarget.test.tsx
  */
 
