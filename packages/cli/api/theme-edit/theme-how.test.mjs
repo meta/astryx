@@ -3125,7 +3125,7 @@ const QUESTIONS_J = [
       top: /^set q font-weight 800 --on heading --when level:1 && set q font-weight 800 --on heading --when level:2 && set q font-weight 800 --on heading --when level:3$/,
     },
   ],
-  // disabled buttons: no command, and why
+  // disabled buttons: the state Core marks with aria-disabled
   [
     'disabled buttons 50% opacity',
     {

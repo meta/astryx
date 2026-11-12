@@ -102,14 +102,13 @@ describe('corners', () => {
       on: 'text-input',
       only: true,
     });
-    const r = await themeEditSet('t', 'corners', 'more', {
-      cwd,
-      on: 'text-input',
-    });
-    // It stays on the member alone, at the roundest rung it already shows.
-    expect(r.data.setting.only).toBe(true);
-    expect(r.data.setting.value).toBe('pill');
-    // The step changed nothing, so one undo removes the first setting.
+    // At the roundest rung it already shows, the step writes nothing (and
+    // its run keeps the member alone).
+    const r = await refusal(() =>
+      themeEditSet('t', 'corners', 'more', {cwd, on: 'text-input'}),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(r.run[0]).toMatch(/--on text-input --only$/);
     await themeEditUndo('t', {cwd});
   }, 240_000);
 

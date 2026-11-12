@@ -249,11 +249,11 @@ describe('dials and part properties (final 3)', () => {
     });
     expect(r.data.setting.value).toBe('round');
     await themeEditSet('m4', 'corners', 'pill', {cwd, on: 'text-input'});
-    const ta = await themeEditSet('m4', 'corners', 'more', {
-      cwd,
-      on: 'text-area',
-    });
-    expect(ta.data.setting.value).toBe('pill');
+    // text-area shows the group's pill: more has nowhere to go.
+    const ta = await refusal(() =>
+      themeEditSet('m4', 'corners', 'more', {cwd, on: 'text-area'}),
+    );
+    expect(ta.code).toBe('ERR_THEME_NO_EFFECT');
     fs.rmSync(path.join(cwd, 'themes/m4'), {recursive: true, force: true});
   }, 240_000);
 

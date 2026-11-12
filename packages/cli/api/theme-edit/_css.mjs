@@ -554,6 +554,10 @@ export function keywordsOf(prop) {
       } else if (n.type === 'Type' && !seen.has(n.name)) {
         seen.add(n.name);
         walk(t.lexer.types[n.name]?.syntax);
+      } else if (n.type === 'Property' && !seen.has(`'${n.name}'`)) {
+        // A shorthand's longhands (<'text-decoration-line'>) hold its words.
+        seen.add(`'${n.name}'`);
+        walk(t.lexer.getProperty(n.name)?.syntax);
       }
     });
   };

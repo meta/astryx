@@ -33,6 +33,7 @@ import {
   shown,
   staleBuild,
   themeFiles,
+  windowsReserved,
 } from './_settings.mjs';
 import {
   colorsPageSource,
@@ -257,10 +258,7 @@ function reservedFolder(cwd, dir) {
   );
   if (built)
     return `${built}/ is where Next writes its build, and the next build empties it`;
-  const odd = segs.find(
-    seg =>
-      /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(seg) || /^\.+$/.test(seg),
-  );
+  const odd = segs.find(seg => windowsReserved(seg) || /^\.+$/.test(seg));
   if (odd)
     return `${odd} is a name Windows does not allow for a folder, so the project could not be checked out there`;
   if (segs[0] === 'pages' || (segs[0] === 'src' && segs[1] === 'pages'))

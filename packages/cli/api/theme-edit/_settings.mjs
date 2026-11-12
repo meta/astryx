@@ -117,7 +117,7 @@ export const slugOk = s =>
  * @param {string} s
  */
 export const windowsReserved = s =>
-  /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/.test(s);
+  /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i.test(s);
 /**
  * The theme name closest to what was typed: spaces and accents dropped,
  * lower case, anything else a dash.
@@ -134,7 +134,8 @@ export const slugFor = name =>
     .replace(/-+$/, '')
     .slice(0, 64)
     // A device name Windows reserves gets a suffix.
-    .replace(/^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/, '$1-theme') || 'my-theme';
+    .replace(/^.+$/, w => (windowsReserved(w) ? `${w}-theme` : w)) ||
+  'my-theme';
 /** @param {string} s */
 export const kebab = s =>
   s.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
@@ -286,6 +287,26 @@ export function loadTheme(
       );
     const fixed = slugFor(plain);
     const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
+    // A list where one theme goes (t,u or "t;u"): one theme at a time,
+    // each that exists named; never a new theme made of the list.
+    const words = String(slug ?? '')
+      .split(/[\s,;|]+/)
+      .map(w => w.trim().toLowerCase())
+      .filter(Boolean);
+    if (words.length > 1) {
+      const existing = words.filter(
+        w => slugOk(w) && fs.existsSync(themeFiles(cwd, w).settings),
+      );
+      refuse(
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+        `"${String(slug ?? '').slice(0, 80)}" names more than one theme; a command takes one theme at a time.`,
+        {
+          run: existing.length
+            ? existing.map(w => `${P} show ${w}`)
+            : [`${P} new ${slugFor(words[0])}`],
+        },
+      );
+    }
     refuse(
       ERROR_CODES.ERR_INVALID_ARGUMENT,
       `"${String(slug ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}).`,

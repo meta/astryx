@@ -97,9 +97,10 @@ describe('words and values', () => {
       const r = await refusal(() => themeEditSet('z', thing, word, {cwd}));
       expect(r.run[0], word).toMatch(new RegExp(`set z ${thing} ${want}$`));
     }
+    // A word that means none of the values gets no guess at one.
     expect(
       (await refusal(() => themeEditSet('z', 'surfaces', 'zzzz', {cwd}))).run,
-    ).toEqual([]);
+    ).toEqual([expect.stringMatching(/ how surfaces$/)]);
   });
 
   it('how base names only installed bases, with the line for the rest', async () => {

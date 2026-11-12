@@ -607,16 +607,28 @@ function propertyProblem(prop, value) {
     return belowRange(prop, v)
       ? {takes: 'a value of 0 or more', near: null}
       : null;
+  // Only keywords the property takes on their own are offered; the same
+  // word without its dashes or a trailing -ed/-s comes first (no-wrap is
+  // nowrap, underlined is underline), then the nearest in spelling.
+  const own = keywordsOf(prop).filter(k => matchValue(prop, k));
+  const typed = v.toLowerCase();
+  const bare = (/** @type {string} */ w) => w.replace(/[-\s]/g, '');
   const near = /^[a-z-]+$/i.test(v)
-    ? (nearest(v.toLowerCase(), keywordsOf(prop))[0] ?? null)
+    ? (own.find(k => bare(k) === bare(typed)) ??
+      own.find(k => typed.replace(/(ed|d|s)$/, '') === k) ??
+      nearest(typed, own)[0] ??
+      null)
     : null;
   // A value that works, for the suggestion: a keyword near the one typed,
-  // the property's initial value, or an example of its kind.
+  // the property's initial value, or an example of its kind; each checked.
   const example = exampleOf(groupOfPropType(prop), prop);
+  const initial = initialOf(prop);
   return {
     takes: `a value its CSS grammar takes (${grammarText(known)})`,
     near:
-      near ?? initialOf(prop) ?? (matchValue(prop, example) ? example : null),
+      near ??
+      (initial && matchValue(prop, initial) ? initial : null) ??
+      (matchValue(prop, example) ? example : null),
   };
 }
 
@@ -965,15 +977,19 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         },
       );
   }
-  // A state that depends on the element (disabled, focus) applies only
-  // where Core's own styles key on it: a part Core marks disabled with an
-  // attribute, or styles only through the parts inside it, never matches.
+  // A state that depends on the element applies only where it can: focus
+  // where Core's own styles key on it, disabled on a part whose component
+  // takes a disabled prop (Core marks it with aria-disabled, which the
+  // theme's selector matches too), never on a part with no styles of its
+  // own.
   if (
     !unset &&
     !ctx.unchecked &&
     s.on &&
     s.state &&
-    ['disabled', 'focus', 'focus-visible', 'active'].includes(s.state)
+    ['disabled', 'focus', 'focus-visible', 'focus-within', 'active'].includes(
+      s.state,
+    )
   ) {
     const parts = partsOf(ctx, s);
     const own = (/** @type {string} */ t) => ctx.C.MAP[t]?.own ?? {};
@@ -981,6 +997,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       JSON.stringify(own(t)).includes(`:${st}`);
     const states = (/** @type {string} */ t) =>
       ctx.project.target.get(t)?.states ?? [];
+    // The part's component, or the one named like the part (tab is Tab,
+    // under TabList), takes a disabled prop.
+    const disables = (/** @type {string} */ t) => {
+      const comps = /** @type {Record<string, any>} */ (
+        ctx.project.components ?? {}
+      );
+      const pascal = t.replace(/(^|-)([a-z0-9])/g, (_, __, c) =>
+        c.toUpperCase(),
+      );
+      return [ctx.project.target.get(t)?.component, pascal].some(n =>
+        Object.keys((n && comps[n]?.props) ?? {}).some(p =>
+          /disabled/i.test(p),
+        ),
+      );
+    };
     // A part Core never styles in focus is not what takes focus (the
     // focusable element is inside it, or beside it).
     const focusable = (/** @type {string} */ t) =>
@@ -991,7 +1022,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         (Object.keys(own(t)).length === 0 ||
           ((s.state === 'focus' || s.state === 'focus-visible') &&
             !focusable(t)) ||
-          (s.state === 'active' && !keys(t, 'active'))),
+          (s.state === 'disabled' &&
+            !keys(t, 'disabled') &&
+            !JSON.stringify(own(t)).includes('aria-disabled') &&
+            !disables(t)) ||
+          (s.state === 'active' && !keys(t, 'active')) ||
+          // focus-within on a part Core never styles that way: nothing
+          // focusable is inside it (a switch's input sits beside its track).
+          (s.state === 'focus-within' &&
+            !keys(t, 'focus-within') &&
+            !focusable(t))),
     );
     if (parts.length && dead.length === parts.length) {
       const bare = Object.keys(own(dead[0])).length === 0;
@@ -1002,7 +1042,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           ? `${s.on} has no styles of its own (its looks come from the parts inside it), so --state ${s.state} never applies on it.`
           : s.state === 'active'
             ? `Core never styles ${s.on} while it is pressed, so --state active never applies on it.`
-            : `${s.on} never takes focus itself (what takes focus is inside it or beside it), so --state ${s.state} never applies on it.${within ? ' focus-within does: the part while something inside it has focus.' : ''}`,
+            : s.state === 'disabled'
+              ? `${s.on} is never marked disabled (its component takes no disabled prop, and Core never styles it disabled), so --state disabled never applies on it.`
+              : s.state === 'focus-within'
+                ? `nothing inside ${s.on} takes focus (what takes focus sits beside it), so --state focus-within never applies on it.`
+                : `${s.on} never takes focus itself (what takes focus is inside it or beside it), so --state ${s.state} never applies on it.${within ? ' focus-within does: the part while something inside it has focus.' : ''}`,
         {
           ...(within && !bare && /^focus/.test(s.state)
             ? {didYouMean: ['focus-within']}
@@ -1100,7 +1144,23 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           `${thing} takes ${DIALS[thing].values}, not "${v}".`,
           {
             didYouMean: near,
-            run: near[0] ? [`${P} set ${slug} ${thing} ${near[0]}`] : [],
+            run: near[0]
+              ? [`${P} set ${slug} ${thing} ${near[0]}`]
+              : // A corner word or a size is the corners dial: on the
+                // buttons for `buttons`, for the whole theme otherwise.
+                CORNERS.some(([n]) => lower.replace(/s$/, '') === n) ||
+                  lengthPx(lower) != null
+                ? [
+                    setLine(
+                      slug,
+                      'corners',
+                      CORNERS.find(
+                        ([n]) => lower.replace(/s$/, '') === n,
+                      )?.[0] ?? lower,
+                      thing === 'buttons' ? {on: 'button'} : {},
+                    ),
+                  ]
+                : [`${HOW} ${thing}`],
           },
         );
       }
@@ -1387,15 +1447,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           v === 'more'
             ? rungs.find(([, n]) => n > shown + 0.01)
             : [...rungs].reverse().find(([, n]) => n < shown - 0.01);
-        // No rung that way: the part stays as it shows (a step never moves
-        // the other way, as pill below an exact 30px would).
-        s.value = next
-          ? next[0]
-          : Number.isNaN(shown)
-            ? 'medium'
-            : onPart && exactPx == null
-              ? onPart.value
-              : `${Math.round(shown * 100) / 100}px`;
+        // No rung that way: nothing is written, as for spacing.
+        if (!next && !Number.isNaN(shown))
+          refuse(
+            E.ERR_THEME_NO_EFFECT,
+            `corners is already at the ${v === 'more' ? 'roundest' : 'squarest'} rung ${s.on ? `on ${s.on}` : 'for the theme'}, so ${v} has nowhere to go.`,
+            {
+              run: [
+                setLine(slug, 'corners', v === 'more' ? 'less' : 'more', s),
+              ],
+            },
+          );
+        s.value = next ? next[0] : 'medium';
       } else {
         // A rung in any case, a size in px written any way: the plain form.
         const lower = v.toLowerCase();
@@ -2126,7 +2189,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             : {}),
           run: grammar.near
             ? [
-                `${P} set ${slug} ${prop} ${quoteCommandArgument(grammar.near)} --on ${s.on}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+                // The same scope, --only included.
+                setLine(slug, prop, grammar.near, s),
               ]
             : [`${HOW} ${prop}`],
         },

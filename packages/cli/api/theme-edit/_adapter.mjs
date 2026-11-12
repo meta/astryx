@@ -50,6 +50,8 @@ import {
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {LIKE, P} from './_tables.mjs';
+import {camel} from './_settings.mjs';
+import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
 export {parsePoints} from './_how.mjs';
 import {themeEditHow as howAt} from './_how.mjs';
@@ -496,7 +498,19 @@ function editorThemeAt(root, word) {
     fs.existsSync(path.join(r, 'themes', slug, `${slug}.settings.json`));
   if (/^[a-z][a-z0-9-]*$/.test(word))
     return has(root, word) ? {root, slug: word} : null;
-  const abs = path.resolve(root, word);
+  // Through a link, the real path decides (a linked theme folder is the
+  // same folder).
+  /** @type {string} */
+  let abs = path.resolve(root, word);
+  try {
+    abs = fs.realpathSync(abs);
+  } catch {
+    try {
+      abs = path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs));
+    } catch {
+      // Not there: the path as given.
+    }
+  }
   // The folder above the last themes/<slug>/ in the path, when that folder
   // is a project's root (src/themes/<slug> is not: its project is above).
   const m = /^(.*)[\\/]themes[\\/]([a-z][a-z0-9-]*)(?:[\\/]|$)/.exec(abs);
@@ -511,6 +525,21 @@ function editorThemeAt(root, word) {
   return path.resolve(top) === path.resolve(m[1])
     ? {root: m[1], slug: m[2]}
     : null;
+}
+
+/**
+ * Whether a file in an editor theme's folder is one of the editor's own
+ * (its theme source or settings), which the editor guards; another file
+ * there (a template written into the folder) is compiled as any file.
+ * @param {string} slug
+ * @param {string} file
+ */
+function editorOwnFile(slug, file) {
+  return [
+    `${slug}.theme.ts`,
+    `${slug}.settings.ts`,
+    `${slug}.settings.json`,
+  ].includes(path.basename(file));
 }
 
 /**
@@ -551,8 +580,13 @@ export function editorThemeRefusal(err, cwd) {
   const named = /"([a-z][a-z0-9-]*)"|'([a-z][a-z0-9-]*)'/.exec(err.message);
   const slug = named ? editorThemeOf(root, named[1] ?? named[2]) : null;
   if (!slug) return null;
+  // A local theme of that name (a fork in the app's own themes folder) is
+  // one the stable commands take: their own message stands.
+  if (fs.existsSync(path.join(root, LOCAL_THEME_ROOT, slug))) return null;
+  const id = `${camel(slug)}Theme`;
+  const key = /^[a-z][a-z0-9]*$/i.test(slug) ? slug : JSON.stringify(slug);
   return new AstryxError(
-    `${slug} is a theme the editor made (themes/${slug}/), not a theme package, so list, add, use, remove and eject do not take it. To use it, import its module (themes/${slug}/${slug}.js) in a file of your own and merge it into the themes there ({...themes, ${slug}: ${slug.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase())}Theme}); do not add it to src/astryx-themes.ts, which add, use and remove write again. Change it with the editor.`,
+    `${slug} is a theme the editor made (themes/${slug}/), not a theme package, so list, add, use, remove and eject do not take it. To use it, import its module and its stylesheet in a file of your own (import {${id}} from './themes/${slug}/${slug}.js'; import './themes/${slug}/${slug}.css';) and merge it into the themes there ({...themes, ${key}: ${id}}); do not add it to src/astryx-themes.ts, which add, use and remove write again. Change it with the editor.`,
     [
       {
         name: runLine(cwd, `experimental theme editor show ${slug}`),
@@ -576,7 +610,7 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
   const cwdRoot = projectRoot(cwd);
   for (const file of files) {
     const at = editorThemeAt(cwdRoot, path.resolve(cwd, file));
-    if (!at) continue;
+    if (!at || !editorOwnFile(at.slug, file)) continue;
     const {root, slug} = at;
     const source = `themes/${slug}/${slug}.theme.ts`;
     if (/\.settings\.(ts|json)$/.test(file))
@@ -675,7 +709,8 @@ export async function editorThemeHold(files, {cwd}) {
   const found = new Map();
   for (const f of files) {
     const at = editorThemeAt(cwdRoot, path.resolve(cwd, f));
-    if (at) found.set(`${at.root}\0${at.slug}`, at);
+    if (at && editorOwnFile(at.slug, f))
+      found.set(`${at.root}\0${at.slug}`, at);
   }
   const themes = [...found.keys()].sort().map(k => found.get(k));
   /** @type {Array<() => Promise<void>>} */

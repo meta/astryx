@@ -95,12 +95,11 @@ describe('corner steps, as the part shows them', () => {
       on: 'text-input',
       only: true,
     });
-    const r = await themeEditSet('t', 'corners', 'more', {
-      cwd,
-      on: 'text-input',
-    });
-    expect(r.data.setting.value).toBe('pill');
-    // The step changed nothing, so one undo removes the first setting.
+    // At pill the step writes nothing.
+    const r = await refusal(() =>
+      themeEditSet('t', 'corners', 'more', {cwd, on: 'text-input'}),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
     await themeEditUndo('t', {cwd});
   }, 240_000);
 

@@ -542,7 +542,7 @@ function strayOption(command, rest) {
         {
           suggestions: [
             {
-              name: `${EDITOR} ${command} --help`,
+              name: cmd(`${EDITOR} ${command} --help`),
               reason: 'every option it takes',
             },
           ],
@@ -556,7 +556,10 @@ function strayOption(command, rest) {
     `unknown option '${word}': only the thing a change names may start with -- (a design token such as --color-accent).`,
     {
       suggestions: [
-        {name: `${EDITOR} ${command} --help`, reason: 'every option it takes'},
+        {
+          name: cmd(`${EDITOR} ${command} --help`),
+          reason: 'every option it takes',
+        },
       ],
       code: ERROR_CODES.ERR_INVALID_OPTION,
     },
@@ -573,7 +576,7 @@ function extraWords(command, extra) {
   if (!extra.length) return null;
   return cliError(`${command} does not take "${extra.join(' ')}".`, {
     suggestions: [
-      {name: `${EDITOR} ${command} --help`, reason: 'what it takes'},
+      {name: cmd(`${EDITOR} ${command} --help`), reason: 'what it takes'},
     ],
     code: ERROR_CODES.ERR_INVALID_ARGUMENT,
   });

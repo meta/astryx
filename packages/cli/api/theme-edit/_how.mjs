@@ -30,7 +30,7 @@ import {
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
 import {baseThemeFile, installLine} from './_project.mjs';
 import {loadTheme, nearest, refuse, themeSourceProblem} from './_settings.mjs';
-import {ASPECTS} from './_check.mjs';
+import {ASPECTS, checkSetting} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
@@ -632,7 +632,24 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     ctx.project.target.get(key)
   );
   const group = familyOf(key);
-  const states = [...new Set([...target.states, ...COMMON_STATES])];
+  // Only the states set takes on this part (it refuses one that never
+  // applies there).
+  const states = [...new Set([...target.states, ...COMMON_STATES])].filter(
+    st => {
+      try {
+        checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
+          on: key,
+          state: st,
+        });
+        return true;
+      } catch (e) {
+        return !(
+          /** @type {any} */ (e)?.code === 'ERR_THEME_NO_EFFECT' &&
+          /--state/.test(String(/** @type {any} */ (e)?.message))
+        );
+      }
+    },
+  );
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
       g,
