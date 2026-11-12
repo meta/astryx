@@ -113,7 +113,7 @@ This table is a review projection; the body below is authoritative.
 | horizontal labels / narrow | One vertical column at 480px or below with a `--spacing-4` gap and no component-owned overflow. | Caller-owned content may wrap; OQ1 asks whether each label and control pair should keep a tighter gap. |
 | optional by default        | Only explicitly required fields show the exception marker.                                      | Field and input type.                                                                                  |
 | required by default        | Only explicitly optional fields show the exception marker.                                      | Field and input type.                                                                                  |
-| nested                     | Inner direction and optionality replace outer values.                                           | Any supported inner direction/default combination.                                                     |
+| nested                     | Inner direction, optionality, and entry error behavior replace outer values.                    | Any supported inner direction/default combination.                                                     |
 | `blur-or-enter` by default | Members without their own `entryErrorBehavior` reveal their own rejections only at commit.      | Field and input type; a field's own `entryErrorBehavior`.                                              |
 
 ### Transformation and precedence order
