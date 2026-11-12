@@ -916,7 +916,7 @@ jobs:
       fail-fast: false
       # A pull request or merge-queue entry runs at most two legs at a time,
       # so many open pull requests cannot flood the organization's shared
-      # runner pool; the legs still all run, in two waves.
+      # runner pool; the legs still all run, in waves.
       max-parallel: 2
       matrix:
         shard: [1, 2, 3, 4]
@@ -1089,7 +1089,7 @@ jobs:
       fail-fast: false
       # A pull request or merge-queue entry runs at most two legs at a time,
       # so many open pull requests cannot flood the organization's shared
-      # runner pool; the legs still all run, in two waves.
+      # runner pool; the legs still all run, in waves.
       max-parallel: 2
       # Five legs keep each leg near nine minutes of the fifteen-minute
       # limit; at four, a leg reached about thirteen and a half minutes of
