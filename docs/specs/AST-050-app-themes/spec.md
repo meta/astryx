@@ -195,8 +195,8 @@ described.
   theme editor made (folder `<slug>/` holds `<slug>.settings.json`), `--out`
   for a source outside that folder writes there and warns, naming the build
   beside the source and another `--out`.
-  `--check` on stale outputs fails with
-  `ERR_THEME_STALE`. It warns when the path `--out` names does not end in
+  `--check` on stale outputs exits 1, and its result carries
+  `code: ERR_THEME_STALE`. It warns when the path `--out` names does not end in
   `.css`, and the import it prints names the file as
   written. `theme build --watch` rebuilds when the source or any local file it
   imports changes. `--check` and `integration verify` treat CRLF and LF line
