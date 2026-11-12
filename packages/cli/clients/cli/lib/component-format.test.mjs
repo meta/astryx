@@ -328,6 +328,13 @@ describe('theme custom-variant annotation', () => {
     expect(out).toContain('neutral, info |');
     expect(out).not.toContain('custom variant from');
   });
+
+  it('stays silent for a theme whose themeVariants export is empty', () => {
+    const out = formatFull(docs, {themeData: {name: 'vartheme', variants: {}}});
+
+    expect(out).toContain('neutral, info |');
+    expect(out).not.toContain('custom variant from');
+  });
 });
 
 describe('component icon slots', () => {

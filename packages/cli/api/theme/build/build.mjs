@@ -2060,15 +2060,13 @@ function generateVariantDeclarations(entries, iconVariantNames) {
  * which prop accepts which value. `resolveTheme()`
  * (clients/cli/lib/resolve-theme.mjs) reads this as the module's
  * `themeVariants` export and component-format.mjs renders each value as a
- * starred `prop:value`. Returns null when the theme adds no custom variants,
- * so the built module only carries the export when it has something to say.
+ * starred `prop:value`. A theme that adds no custom variants gets an empty
+ * object, so every single-theme built module carries the export.
  *
  * @param {Awaited<ReturnType<typeof collectCustomVariants>>} entries
- * @returns {Record<string, Record<string, string[]>>|null}
+ * @returns {Record<string, Record<string, string[]>>}
  */
 function collectRuntimeVariants(entries) {
-  if (entries.length === 0) return null;
-
   /** @type {Record<string, Record<string, string[]>>} */
   const variants = {};
   for (const {component, prop, values} of entries) {
@@ -2703,8 +2701,10 @@ function importStatement({importPath, importedName, localName}, specifier) {
  *
  * When `moduleOptions.variants` is given, the module also exports the theme's
  * custom prop values as `themeVariants` (`{ [componentKey]: { [prop]:
- * value[] } }`, same data the `.variants.d.ts` augments the types with). It
- * is a stable public export. `resolveTheme()` hands it to `astryx component`,
+ * value[] } }`, same data the `.variants.d.ts` augments the types with, and
+ * an empty object when the theme adds none). It is a stable public export,
+ * so a single-theme build always passes it. A family module holds several
+ * themes and passes none, because one module cannot export the name twice. `resolveTheme()` hands it to `astryx component`,
  * which stars each theme-added value in the theming targets table. It is a
  * sibling export, not a theme field: data with no normalized-theme effect
  * stays outside `DefinedTheme`
@@ -2889,8 +2889,7 @@ function generateBuiltModule(
           .join('\n')},\n  __componentIcons: ${componentIconValuesName},\n`
       : serializeField('componentIcons', componentIconValues, true));
 
-  // A public export beside the theme object (see the function doc above). Themes
-  // without custom variants keep the historical output byte-for-byte.
+  // A public export beside the theme object (see the function doc above).
   const variantsExport = moduleOptions.variants
     ? `
 /** Custom component prop values this theme adds, by theme key and prop. A public export, not theme data. */
@@ -3959,7 +3958,7 @@ async function themeBuildInternal(
   const dtsContent =
     generatedHeader(sourceRelative, 'ts', buildCommand, versions) +
     generateBuiltTypes(resolvedTheme || themeDef, iconInfo, variantsFileName, {
-      includeVariantsExport: runtimeVariants !== null,
+      includeVariantsExport: true,
     });
 
   const unloadedFonts = [

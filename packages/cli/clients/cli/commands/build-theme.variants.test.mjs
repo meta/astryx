@@ -853,10 +853,10 @@ describe('theme build custom-variant augmentations', () => {
     ).toEqual(['gray', 'brand', 'hero', 'editorial']);
   });
 
-  it('emits no themeVariants export when the theme adds no custom variants', async () => {
-    // Themes without custom values keep the historical module shape — no
-    // `themeVariants` export or declaration, matching what an older CLI
-    // produced and what component-format.mjs treats as "no theme variants".
+  it('exports an empty themeVariants when the theme adds no custom variants', async () => {
+    // `themeVariants` is a public export, so every built theme carries it:
+    // an empty object, with its declaration, when the theme adds no custom
+    // values.
     const themeFile = writeTheme(
       tmpDir,
       `export default {
@@ -877,14 +877,26 @@ describe('theme build custom-variant augmentations', () => {
     const built = await import(
       pathToFileURL(path.join(tmpDir, 'variants-theme.js')).href
     );
-    expect('themeVariants' in built).toBe(false);
+    expect(built.themeVariants).toEqual({});
     expect('variants' in built.variantsThemeTheme).toBe(false);
     expect(
       fs.readFileSync(path.join(tmpDir, 'variants-theme.d.ts'), 'utf-8'),
-    ).not.toContain('themeVariants');
+    ).toContain(
+      'export declare const themeVariants: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;',
+    );
+
+    // A static named import links only when the export exists, which is what
+    // a strict ESM consumer or bundler requires.
+    const consumer = path.join(tmpDir, 'consumer.mjs');
+    fs.writeFileSync(
+      consumer,
+      "import {themeVariants} from './variants-theme.js';\nexport const keys = Object.keys(themeVariants);\n",
+    );
+    const consumed = await import(pathToFileURL(consumer).href);
+    expect(consumed.keys).toEqual([]);
   });
 
-  it('writes the icon variant augmentation and no themeVariants export for a theme with icon variants and no custom values', async () => {
+  it('writes the icon variant augmentation and an empty themeVariants for a theme with icon variants and no custom values', async () => {
     const themeFile = writeTheme(
       tmpDir,
       `export default {
@@ -912,7 +924,7 @@ describe('theme build custom-variant augmentations', () => {
     const built = await import(
       pathToFileURL(path.join(tmpDir, 'variants-theme.js')).href
     );
-    expect('themeVariants' in built).toBe(false);
+    expect(built.themeVariants).toEqual({});
     const dts = fs.readFileSync(
       path.join(tmpDir, 'variants-theme.d.ts'),
       'utf-8',
@@ -920,7 +932,7 @@ describe('theme build custom-variant augmentations', () => {
     expect(dts).toContain(
       '/// <reference path="./variants-theme.variants.d.ts" />',
     );
-    expect(dts).not.toContain('themeVariants');
+    expect(dts).toContain('export declare const themeVariants:');
   });
 
   it('references the variants file from the main .d.ts so the augmentation loads', async () => {
