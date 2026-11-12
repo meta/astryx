@@ -368,7 +368,15 @@ those contracts.
   subpath: it reports whether a scroller's scroll is a finger's, now or at a
   past time, and, through `onEnd`, when that scroll ends. `timing`, UIKit's
   measured timing table, is on that subpath for Lab components that play the
-  same measured motion.
+  same measured motion. The group press
+  tracking, `useGroupPressTracking` with the pointers it follows,
+  `GROUP_PRESS_POINTERS`, is on that subpath: it is the tracking that
+  `family:buttons` groups use, so a Lab Rating's stars press as one group.
+  `pressGroupItemProps`, the props of the private group-item attribute that
+  `privateAttributes/pressGroupItem.stylex.ts` owns under
+  `architecture:public-component-api` INV23, is on that
+  subpath too: it marks a group's member so press feedback leaves its press to
+  the group's tracker.
 - **INV15 — The animator animates a number.** The animator has a value mode:
   it plays a number, such as a count or a chart value, on the same timing as its property channels: theme motion tokens for a program-started change, and measured springs only where `spec:AST-094` FR45 keeps them, and hands the value to an `onUpdate`
   callback each frame for the component to format and write. The component owns
