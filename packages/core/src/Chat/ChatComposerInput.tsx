@@ -559,9 +559,8 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
       pendingEchoValueRef.current = undefined;
       const wasFocused = document.activeElement === editable;
       restoreValueRef.current(controlledValue);
-      // Restoring content tears down the existing text node,
-      // which collapses any Selection inside this editable to
-      // offset 0. If the user was focused (e.g. a programmatic
+      // Replacing the children collapses any Selection inside
+      // this editable to offset 0. If the user was focused (e.g. a programmatic
       // insert from a slash-menu pick), restore the caret to the
       // end of the new content so the next keystroke appends rather
       // than prepends.

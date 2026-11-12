@@ -626,58 +626,116 @@ describe('ChatComposerInput', () => {
   });
 
   describe('token deserialization', () => {
-    const deserialize = (value: string) =>
-      value === '@cindy' ? {value, label: 'Cindy Zhang'} : null;
-
-    it('restores a token from an externally supplied value without emitting a change', () => {
-      const handleRef = createRef<ChatComposerInputHandle>();
-      const onChange = vi.fn();
-      const value = 'Hi @cindy  @unknown\n';
-      render(
-        <ChatComposerInput
-          value={value}
-          triggers={[createMentionTrigger({deserialize})]}
-          handleRef={handleRef}
-          onChange={onChange}
-        />,
-      );
-
-      const editor = screen.getByRole('combobox');
-      expect(editor.querySelector('[data-astryx-token]')).toHaveTextContent(
-        'Cindy Zhang',
-      );
-      expect(editor.textContent).toBe('Hi Cindy Zhang  @unknown\n');
-      expect(handleRef.current!.getValue()).toBe(value);
-      expect(onChange).not.toHaveBeenCalled();
+    const mentionTrigger = createMentionTrigger({
+      deserialize: value =>
+        value === '@cindy' ? {value, label: 'Cindy Zhang'} : null,
+      onSelect: item => ({value: `@${item.id}`, label: item.label}),
+      hasMultiWordQuery: true,
     });
 
-    it('restores a submitted token on history recall', () => {
-      const handleRef = createRef<ChatComposerInputHandle>();
+    it('shows a saved mention without changing the draft and sends its serialized value', async () => {
+      const user = userEvent.setup();
       const onChange = vi.fn();
+      const onSubmit = vi.fn();
       render(
         <ChatComposerInput
-          triggers={[createMentionTrigger({deserialize})]}
-          handleRef={handleRef}
+          value={'Hi @cindy  @unknown\n'}
+          triggers={[mentionTrigger]}
           onChange={onChange}
+          onSubmit={onSubmit}
+        />,
+      );
+
+      const editor = screen.getByRole('combobox');
+      expect(editor.textContent).toBe('Hi Cindy Zhang  @unknown\n');
+      expect(onChange).not.toHaveBeenCalled();
+
+      await user.click(editor);
+      await user.keyboard('{Enter}');
+
+      expect(onSubmit).toHaveBeenCalledWith('Hi @cindy  @unknown');
+      expect(editor).toBeEmptyDOMElement();
+    });
+
+    it('lets a user select another multi-word mention without losing a saved mention', async () => {
+      const user = userEvent.setup();
+      const onSubmit = vi.fn();
+      const view = (value: string) => (
+        <ChatComposerInput
+          value={value}
+          triggers={[mentionTrigger]}
+          onSubmit={onSubmit}
+          debounceMs={0}
+        />
+      );
+      const {rerender} = render(view(''));
+      const editor = screen.getByRole('combobox');
+      await user.click(editor);
+      rerender(view('@cindy Ping @Cindy Zh'));
+
+      await user.keyboard('a');
+      await screen.findByRole('option', {name: 'Cindy Zhang', hidden: true});
+      await user.keyboard('{Enter}');
+      expect(editor).toHaveTextContent('Cindy Zhang Ping Cindy Zhang');
+
+      await user.keyboard('{Enter}');
+      expect(onSubmit).toHaveBeenCalledWith('@cindy Ping @cindy');
+    });
+
+    it('keeps text after a loaded no-break space literal instead of selecting a mention', async () => {
+      const user = userEvent.setup();
+      const onSubmit = vi.fn();
+      const view = (value: string) => (
+        <ChatComposerInput
+          value={value}
+          triggers={[mentionTrigger]}
+          onSubmit={onSubmit}
+          debounceMs={0}
+        />
+      );
+      const {rerender} = render(view(''));
+      const editor = screen.getByRole('combobox');
+      await user.click(editor);
+      rerender(view('Hello\u00a0@'));
+
+      await user.keyboard('c');
+      expect(editor).toHaveAttribute('aria-expanded', 'false');
+      expect(
+        screen.queryByRole('option', {hidden: true}),
+      ).not.toBeInTheDocument();
+
+      await user.keyboard('{Enter}');
+      expect(onSubmit).toHaveBeenCalledWith('Hello\u00a0@c');
+    });
+
+    it('lets a user select, send, recall, and resend a mention', async () => {
+      const user = userEvent.setup();
+      const onSubmit = vi.fn();
+      render(
+        <ChatComposer
+          onSubmit={onSubmit}
+          input={
+            <ChatComposerInput triggers={[mentionTrigger]} debounceMs={0} />
+          }
         />,
       );
       const editor = screen.getByRole('combobox');
-      act(() => {
-        handleRef.current!.insertToken({
-          value: '@cindy',
-          label: 'Cindy Zhang',
-        });
-      });
-      fireEvent.keyDown(editor, {key: 'Enter'});
-      editor.focus();
-      window.getSelection()!.collapse(editor, 0);
-      fireEvent.keyDown(editor, {key: 'ArrowUp'});
 
-      expect(editor.querySelector('[data-astryx-token]')).toHaveTextContent(
-        'Cindy Zhang',
-      );
-      expect(handleRef.current!.getValue()).toBe('@cindy');
-      expect(onChange).toHaveBeenLastCalledWith('@cindy');
+      await user.type(editor, '@cindy');
+      await screen.findByRole('option', {name: 'Cindy Zhang', hidden: true});
+      await user.keyboard('{Enter}');
+      expect(editor).toHaveTextContent('Cindy Zhang');
+
+      await user.keyboard('{Enter}');
+      expect(onSubmit).toHaveBeenCalledWith('@cindy');
+      expect(editor).toBeEmptyDOMElement();
+
+      await user.keyboard('{ArrowUp}');
+      expect(editor).toHaveTextContent('Cindy Zhang');
+
+      await user.keyboard('{Enter}');
+      expect(onSubmit).toHaveBeenNthCalledWith(2, '@cindy');
+      expect(editor).toBeEmptyDOMElement();
     });
   });
 

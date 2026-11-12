@@ -201,6 +201,10 @@ const COMMAND_ITEMS: SearchableItem<{description: string}>[] = [
 const mentionTrigger: ChatComposerTrigger = {
   character: '@',
   searchSource: createStaticSource(MENTION_ITEMS),
+  deserialize: value => {
+    const user = MENTION_ITEMS.find(user => `@${user.id}` === value);
+    return user ? {value, label: user.label, variant: 'blue'} : null;
+  },
   renderItem: item => (
     <TypeaheadItem
       item={item}

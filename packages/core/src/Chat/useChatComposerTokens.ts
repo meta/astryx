@@ -172,6 +172,7 @@ export function useChatComposerTokensInternal({
 
       const fragment = document.createDocumentFragment();
       const portals: TokenPortal[] = [];
+      let text = '';
       for (const part of value.split(/(\s+)/)) {
         if (!part) {
           continue;
@@ -188,15 +189,22 @@ export function useChatComposerTokensInternal({
           }
         }
         if (token) {
+          if (text) {
+            fragment.append(text);
+            text = '';
+          }
           const portal = createTokenPortal(token);
           fragment.append(portal.span);
           portals.push(portal);
         } else {
-          fragment.append(part);
+          text += part;
         }
       }
+      if (text) {
+        fragment.append(text);
+      }
 
-      // Unlike insertion, restoration adds no spacing and does not move focus.
+      // Unlike insertion, restoration adds no trailing no-break space and does not place the caret.
       editable.replaceChildren(fragment);
       setTokenPortals(portals);
     },

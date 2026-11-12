@@ -1,6 +1,7 @@
 ---
 '@astryxdesign/core': patch
+'@astryxdesign/cli': patch
 ---
 
-[fix] ChatComposerInput restores inline tokens through trigger deserializers when loading controlled values or recalling message history instead of showing their serialized text.
+[fix] ChatComposerInput restores a token when a whitespace-delimited word in a loaded or recalled draft deserializes to a token with the same value. Serialized token values containing whitespace remain plain text. Mention examples include deserializers.
 @korkt-kim

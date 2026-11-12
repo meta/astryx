@@ -29,6 +29,10 @@ export default function ChatComposerInputMentionTrigger() {
   const mentionTrigger: ChatComposerTrigger = {
     character: '@',
     searchSource: userSource,
+    deserialize: value => {
+      const user = USERS.find(user => `@${user.id}` === value);
+      return user ? {value, label: user.label, variant: 'blue'} : null;
+    },
     renderItem: item => (
       <TypeaheadItem
         item={item}
