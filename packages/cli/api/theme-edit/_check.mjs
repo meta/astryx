@@ -750,7 +750,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         run: [`${P} ${unset ? 'undo' : 'set'} --help`],
       });
   // A value pasted over several lines is one value.
-  const v = (value ?? '').replace(/\s*[\r\n]+\s*/g, ' ').trim();
+  const v = (value ?? '')
+    .replace(/\s*[\r\n]+\s*/g, ' ')
+    .replace(/\t+/g, ' ')
+    .trim();
   // A var() that misspells a design token would read nothing.
   if (!unset)
     for (const [, name, comma] of v.matchAll(
@@ -962,24 +965,38 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       JSON.stringify(own(t)).includes(`:${st}`);
     const states = (/** @type {string} */ t) =>
       ctx.project.target.get(t)?.states ?? [];
+    // A part Core never styles in focus is not what takes focus (the
+    // focusable element is inside it, or beside it).
+    const focusable = (/** @type {string} */ t) =>
+      /:focus(?!-within)/.test(JSON.stringify(own(t)));
     const dead = parts.filter(
       t =>
         !states(t).includes(/** @type {string} */ (s.state)) &&
         (Object.keys(own(t)).length === 0 ||
-          (s.state === 'disabled' && !keys(t, 'disabled'))),
+          ((s.state === 'focus' || s.state === 'focus-visible') &&
+            !focusable(t)) ||
+          (s.state === 'active' && !keys(t, 'active'))),
     );
     if (parts.length && dead.length === parts.length) {
       const bare = Object.keys(own(dead[0])).length === 0;
+      const within = keys(dead[0], 'focus-within');
       refuse(
         E.ERR_THEME_NO_EFFECT,
         bare
           ? `${s.on} has no styles of its own (its looks come from the parts inside it), so --state ${s.state} never applies on it.`
-          : `Core marks a disabled ${s.on} with an attribute, not :disabled, so --state disabled never applies on it.`,
+          : s.state === 'active'
+            ? `Core never styles ${s.on} while it is pressed, so --state active never applies on it.`
+            : `${s.on} never takes focus itself (what takes focus is inside it or beside it), so --state ${s.state} never applies on it.${within ? ' focus-within does: the part while something inside it has focus.' : ''}`,
         {
+          ...(within && !bare && /^focus/.test(s.state)
+            ? {didYouMean: ['focus-within']}
+            : {}),
           run: [
-            bare
-              ? `${HOW} --list parts ${s.on.split('-')[0]}`
-              : `${HOW} ${quoteCommandArgument(s.on)}`,
+            within && !bare && /^focus/.test(s.state)
+              ? setLine(slug, thing, v, {...s, state: 'focus-within'}, unset)
+              : bare
+                ? `${HOW} --list parts ${s.on.split('-')[0]}`
+                : `${HOW} ${quoteCommandArgument(s.on)}`,
           ],
         },
       );
@@ -1170,8 +1187,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       const mine =
         latest(s.on ?? '') ??
         (s.on && (s.when || s.state) ? plainOn(s.on) : undefined);
+      // With --only too: the member shows its group's value until it has one
+      // of its own, as corners step.
       const group =
-        fam && fam !== s.on && !s.only
+        fam && fam !== s.on
           ? (latest(fam) ?? (s.when || s.state ? plainOn(fam) : undefined))
           : undefined;
       const shown =
@@ -1261,11 +1280,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       refuse(
         E.ERR_THEME_NO_MODE,
         `${thing} is not a color, so it is the same in light and dark; drop --mode.`,
-        {
-          run: [
-            `${P} set ${slug} ${thing} ${quoteCommandArgument(v)}${onFlag}`,
-          ],
-        },
+        // The same scope, every other flag kept.
+        {run: [setLine(slug, thing, v, {...s, mode: undefined})]},
       );
     if (thing === 'corners') {
       if (s.on) refuseInvisibleCorners(ctx, slug, s, data);
@@ -1425,7 +1441,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           `spacing does not change in a state; drop --state.`,
           {
             run: [
-              `${P} set ${slug} spacing ${quoteCommandArgument(v || 'roomy')}${onFlag}`,
+              setLine(slug, 'spacing', v || 'roomy', {
+                ...s,
+                state: undefined,
+                mode: undefined,
+              }),
             ],
           },
         );
@@ -1657,9 +1677,25 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           E.ERR_THEME_BAD_VALUE,
           `font takes a preset or family names, not "${s.value}". To make ${s.on ? `the ${role} font` : 'a font'} read another token, set the token itself.`,
           {
-            run: [
-              `${P} set ${slug} --font-family-${role} ${quoteCommandArgument(s.value)}`,
-            ],
+            // The token's own rules decide: a value it refuses too is never
+            // offered; a family name is.
+            run: (() => {
+              try {
+                checkSetting(
+                  ctx,
+                  slug,
+                  data,
+                  `--font-family-${role}`,
+                  s.value,
+                  {},
+                );
+                return [
+                  `${P} set ${slug} --font-family-${role} ${quoteCommandArgument(s.value)}`,
+                ];
+              } catch {
+                return [`${P} set ${slug} font inter`, `${HOW} font`];
+              }
+            })(),
           },
         );
       }
@@ -2067,7 +2103,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         },
       );
     }
-    const whenFlag = s.when ? ` --when ${s.when}` : '';
+    // Every scope flag but --mode carries into the runs.
+    const whenFlag = `${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.only ? ' --only' : ''}`;
     if (
       s.mode &&
       !COLOR_PROPS.test(prop) &&

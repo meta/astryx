@@ -131,12 +131,12 @@ describe('dials (final 4)', () => {
     const r = await refusal(() =>
       themeEditSet('st', 'color', 'red', {
         cwd,
-        on: 'button',
+        on: 'checkbox-input',
         state: 'disabled',
       }),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/ how button$/);
+    expect(r.run[0]).toMatch(/ how --list parts checkbox$/);
     fs.rmSync(path.join(cwd, 'themes/st'), {recursive: true, force: true});
   }, 240_000);
 

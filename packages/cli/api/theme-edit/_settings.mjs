@@ -102,11 +102,22 @@ const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
 /** What a theme name may be, in words. */
 export const NAME_RULE =
-  'lowercase letters, digits and dashes, starting with a letter, 64 characters at most';
+  'lowercase letters, digits and dashes, starting with a letter, 64 characters at most, and not a name Windows reserves (con, prn, aux, nul, com1-com9, lpt1-lpt9)';
 
 /** A theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most. @param {string} s */
 export const slugOk = s =>
-  typeof s === 'string' && s.length <= 64 && /^[a-z][a-z0-9-]*$/.test(s);
+  typeof s === 'string' &&
+  s.length <= 64 &&
+  /^[a-z][a-z0-9-]*$/.test(s) &&
+  !windowsReserved(s);
+
+/**
+ * A name Windows reserves for a device (con, nul, com1…): a folder named
+ * so cannot be checked out there.
+ * @param {string} s
+ */
+export const windowsReserved = s =>
+  /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/.test(s);
 /**
  * The theme name closest to what was typed: spaces and accents dropped,
  * lower case, anything else a dash.
@@ -121,7 +132,9 @@ export const slugFor = name =>
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/^[^a-z]+/, '')
     .replace(/-+$/, '')
-    .slice(0, 64) || 'my-theme';
+    .slice(0, 64)
+    // A device name Windows reserves gets a suffix.
+    .replace(/^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/, '$1-theme') || 'my-theme';
 /** @param {string} s */
 export const kebab = s =>
   s.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
@@ -964,7 +977,7 @@ export function compileTheme(ctx, data, base) {
       if (tg?.states.includes(s.state) && s.when == null) b = t[s.state] ??= {};
       else if (tg?.states.includes(s.state))
         b = t[`${s.when}+${s.state}`] ??= {};
-      else b = b[`:${s.state}`] ??= {};
+      else b = b[stateKey(s.state)] ??= {};
     }
     return b;
   };
@@ -2078,7 +2091,7 @@ export function baseComponent(base, ctx, target, prop, s) {
     const states = ctx.project.target.get(target)?.states ?? [];
     b = states.includes(s.state)
       ? t[s.when == null ? s.state : `${s.when}+${s.state}`]
-      : b?.[`:${s.state}`];
+      : (b?.[stateKey(s.state)] ?? b?.[`:${s.state}`]);
   }
   const v = b?.[prop];
   return typeof v === 'string' ? v : null;
@@ -2133,11 +2146,26 @@ export const NEW_MARKER = '.astryx-new.json';
  * @param {string} dir
  */
 export function clearNewMarker(dir) {
+  // Fenced like every write under the theme lock.
+  refuseIfLockLost();
   try {
     fs.rmSync(path.join(dir, NEW_MARKER), {force: true});
   } catch {
     // Read-only: the next writing command tries again.
   }
+}
+
+/**
+ * The pseudo key a state writes in a part's styles. Core marks a disabled
+ * button, link, tab or menu item with aria-disabled (it stays focusable),
+ * and its own styles match both forms: so does the theme.
+ * @param {string} state
+ * @returns {string}
+ */
+export function stateKey(state) {
+  return state === 'disabled'
+    ? ':is(:disabled,[aria-disabled="true"])'
+    : `:${state}`;
 }
 
 /**

@@ -360,6 +360,7 @@ export async function themeEditNew(name, options = {}) {
       const now = fs.statSync(p, {throwIfNoEntry: false})?.mtimeMs;
       return now != null && now === before.get(p);
     });
+    refuseIfLockLost();
     for (const p of gone) fs.rmSync(p, {force: true});
     try {
       fs.rmdirSync(path.join(f.dir, 'tokens'));
@@ -375,6 +376,7 @@ export async function themeEditNew(name, options = {}) {
         .join(', ')}${shownLeft.length > 4 ? ', …' : ''})`,
     );
   }
+  refuseIfLockLost();
   fs.rmSync(marker, {force: true});
   const p = await previewAndRoute(ctx, name, data, png);
   /** @type {string[]} */
@@ -1410,6 +1412,25 @@ function nowApplies(ctx, data, removed, base) {
           )
         : null;
     if (exact) return describe(exact);
+    // A removed exact property leaves the dial that writes it: on the part,
+    // its group, or the whole theme.
+    if (removed.source === 'property') {
+      const dial = Object.entries(DIAL_PROPERTY).find(([, re]) =>
+        re.test(removed.thing),
+      )?.[0];
+      const fromDial = dial
+        ? [...data.settings]
+            .reverse()
+            .find(
+              x =>
+                x.thing === dial &&
+                (x.on === removed.on || (fam && x.on === fam) || !x.on) &&
+                (x.when ?? '') === (removed.when ?? '') &&
+                (x.state ?? '') === (removed.state ?? ''),
+            )
+        : undefined;
+      if (fromDial) return describe(fromDial);
+    }
   }
   const whole =
     removed.on || removed.when || removed.state || removed.mode

@@ -21,6 +21,7 @@ import {
   PathSafetyError,
 } from '../../foundation/fs/path-safety.mjs';
 import {baseResolved, installLine, openProject} from './_project.mjs';
+import {P} from './_tables.mjs';
 import {
   buildTheme,
   editedThemes,
@@ -3109,7 +3110,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
         refuse(
           E.ERR_THEME_BUSY,
           `The lock for ${slug} could not be taken, and its build is not current (${why}), so it is not copied. Nothing was changed.`,
-          {run: [`astryx experimental theme editor show ${slug}`]},
+          {run: [`${P} show ${slug}`]},
         );
     } else if (built < 0 || mtime(from.settings) > built + 2000) {
       await buildTheme(ctx, slug, theme);

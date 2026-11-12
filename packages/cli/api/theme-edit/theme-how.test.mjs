@@ -281,9 +281,10 @@ const QUESTIONS = [
   ],
   [
     'disabled buttons look too faded',
-    // Core marks a disabled button with an attribute, not :disabled: no
-    // command styles it, and none is offered.
-    {top: null},
+    {
+      top: /^set q opacity 0\.8 --on button --state disabled$/,
+      adds: /aria-disabled.*opacity=0\.8/,
+    },
   ],
   [
     'hover color for buttons a bit darker',
@@ -1109,8 +1110,10 @@ const QUESTIONS_2 = [
   ],
   [
     'disabled buttons should be 40% opacity',
-    // As above: no command styles a disabled button.
-    {top: null},
+    {
+      top: /^set q opacity 0\.4 --on button --state disabled$/,
+      adds: /aria-disabled.*opacity=0\.4/,
+    },
   ],
   [
     'button padding 12px 20px',

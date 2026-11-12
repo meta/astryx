@@ -4,7 +4,7 @@
 
 [experimental] `astryx experimental theme editor`: values the browser would drop are refused, and type and font settings do what they say.
 
-- A font that only some systems ship (Roboto, Gill Sans, Calibri) gets its package's install line, or a warning that the app must load it. An installed `@fontsource/<font>` package always loads the font it names.
+- An installed `@fontsource/<font>` package always loads the font it names.
 - Math inside `calc()` and the other math functions must be sound (`calc(1px banana)` is refused).
 - A duration or easing token takes one value, never a list.
 - A line height of `0` is accepted.
