@@ -24,6 +24,7 @@ import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {
   animatorFor,
+  type Animator,
   type MotionCurve,
   type MotionHandle,
 } from '../motion/animator';
@@ -192,13 +193,19 @@ function panDirection(direction: ToastGestureDirection): 'down' | 'up' {
 }
 
 /**
- * Turns the card's stylesheet transitions off. They run its entrance. Once the
- * touch layer moves the card, they would replay its fades: WebKit restarts the
- * opacity transition when a Reduce Motion dip hands the opacity back. Under a
- * finger nothing else transitions the card.
+ * Turns the card's stylesheet transitions off before a Reduce Motion fade:
+ * WebKit restarts the opacity transition when the fade hands the opacity back.
+ * Otherwise the transitions stay, so an entrance runs on under a finger. The
+ * layer moves the card by `translate`, which they do not animate.
  */
-function stillTransitions(root: HTMLElement): void {
-  root.style.setProperty('transition-property', 'none');
+function stillTransitionsBeforeFade(
+  animator: Animator,
+  touchRelease: boolean,
+): void {
+  const root = animator.element;
+  if (root != null && animator.reducedMotion({touchRelease}) !== 'off') {
+    root.style.setProperty('transition-property', 'none');
+  }
 }
 
 export function useToastBannerSwipe(
@@ -267,7 +274,6 @@ export function useToastBannerSwipe(
               (isLeaving || settlingRef.current != null)
             ) {
               // The finger catches a moving card where it shows.
-              stillTransitions(root);
               caughtAt = animator.get('y') * current.direction;
               animator.stop();
               settlingRef.current = null;
@@ -311,6 +317,7 @@ export function useToastBannerSwipe(
       }
       // Under reduced motion the animator replaces the slide with a
       // cross-fade: the card fades out where it is.
+      stillTransitionsBeforeFade(animator, touchRelease);
       const handle = animator.play(
         {
           y: retractCurve(
@@ -361,9 +368,6 @@ export function useToastBannerSwipe(
         const fingerTravel = recognizer.totalTranslation().y * direction;
         if (to === 'began' || to === 'changed') {
           const root = rootRef.current;
-          if (to === 'began' && root != null) {
-            stillTransitions(root);
-          }
           if (session.releaseSelection == null && root != null) {
             session.releaseSelection = lockSelection([root], null);
           }
@@ -407,7 +411,11 @@ export function useToastBannerSwipe(
             to === 'ended' ? fingerVelocity * toast.followRatio : 0;
           // Under reduced motion the animator replaces the spring with a
           // cross-fade (a touch release): the card lands at rest and fades in.
-          const handle = cardAnimator()?.animate(
+          const settler = cardAnimator();
+          if (settler != null) {
+            stillTransitionsBeforeFade(settler, true);
+          }
+          const handle = settler?.animate(
             {y: 0},
             {spring: SETTLE_SPRING, velocity: {y: velocity * direction}},
             {crossfadeAs: 'entrance', touchRelease: true},
@@ -446,7 +454,6 @@ export function useToastBannerSwipe(
     if (root == null || box == null || view == null) {
       return;
     }
-    stillTransitions(root);
     settlingRef.current = null;
     const to = retractTarget(
       box,

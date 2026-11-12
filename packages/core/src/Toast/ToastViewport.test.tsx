@@ -3200,6 +3200,60 @@ describe('Toast swipe dismissal under a finger', () => {
     expect(onHide).toHaveBeenCalledTimes(1);
   });
 
+  it("leaves the card's own transitions running while a finger drags it and while it retracts", async () => {
+    // They run the card's entrance, which a finger takes from where it shows.
+    const {visualToast, onHide} = await renderSwipeToast();
+    const start = strokeStart();
+    act(() => {
+      pen(visualToast, 'pointerDown', 21, start, 0);
+      pen(visualToast, 'pointerMove', 21, start + 200, 50);
+      pen(visualToast, 'pointerMove', 21, start + 400, 100);
+    });
+    expect(cardY(visualToast)).toBeGreaterThan(0);
+    expect(visualToast.style.getPropertyValue('transition-property')).toBe('');
+    act(() => {
+      pen(visualToast, 'pointerMove', 21, start + 600, 150);
+      pen(visualToast, 'pointerUp', 21, start + 610, 150);
+    });
+    expect(onHide).toHaveBeenCalledWith('manual');
+    expect(visualToast.style.getPropertyValue('transition-property')).toBe('');
+    await afterRetract();
+  });
+
+  it("under Reduce Motion turns the card's own transitions off before a release fades it", async () => {
+    // WebKit replays the stylesheet's opacity transition when the fade hands
+    // the opacity back.
+    vi.stubGlobal('matchMedia', (query: string): MediaQueryList => ({
+      matches:
+        query === '(pointer: coarse)' ||
+        query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    const {visualToast, onHide} = await renderSwipeToast();
+    const start = strokeStart();
+    act(() => {
+      pen(visualToast, 'pointerDown', 22, start, 0);
+      pen(visualToast, 'pointerMove', 22, start + 200, 20);
+      pen(visualToast, 'pointerMove', 22, start + 400, 30);
+    });
+    expect(visualToast.style.getPropertyValue('transition-property')).toBe('');
+    // The finger rests, then lifts short of dismissing: the card fades back
+    // to rest.
+    act(() => {
+      pen(visualToast, 'pointerUp', 22, start + 900, 30);
+    });
+    expect(onHide).not.toHaveBeenCalled();
+    expect(visualToast.style.getPropertyValue('transition-property')).toBe(
+      'none',
+    );
+  });
+
   it('opens a new row for a uniqueID update raised while the card retracts, and reports the dismissed toast once', async () => {
     const onHide = vi.fn();
     const onHideUpdate = vi.fn();
