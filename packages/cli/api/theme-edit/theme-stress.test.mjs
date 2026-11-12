@@ -247,6 +247,12 @@ describe('how', () => {
 describe('preview pages', () => {
   it('leaves app frames out of a description and says what it matched', async () => {
     fs.mkdirSync(path.join(cwd, 'src', 'app'), {recursive: true});
+    // A routes folder has a root layout, which loads Core's stylesheet.
+    if (!fs.existsSync(path.join(cwd, 'src/app/layout.tsx')))
+      fs.writeFileSync(
+        path.join(cwd, 'src/app/layout.tsx'),
+        "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+      );
     const r = await themeEditPreviewAdd(
       'a light fintech landing page: announcement bar, nav with sign-in buttons, big two-tone headline, two CTA buttons, and a customer logo strip',
       {cwd, theme: 's'},

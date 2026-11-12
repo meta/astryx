@@ -1444,6 +1444,14 @@ function samePalette(a, b) {
 }
 
 /**
+ * The first line of the empty palette module the preview writes for a
+ * Colors page it keeps (changed by hand) once the theme has no colors, so
+ * the app still builds. The editor replaces it freely.
+ */
+export const PALETTE_STAND_IN =
+  '// A stand-in for a preview page that imports this file: the theme has no generated colors.';
+
+/**
  * Whether a theme's palette file was edited by hand. Its bytes match its
  * receipt, or its colors (read as data, so formatting, a BOM or semicolons
  * never count) are the ones the generator gives for the request it came
@@ -1459,6 +1467,8 @@ export function paletteEdited(cwd, slug) {
   const file = path.join(cwd, f.palette);
   if (!fs.existsSync(file)) return false;
   const text = fs.readFileSync(file, 'utf8');
+  // The empty stand-in a kept preview page imports is the editor's own.
+  if (text.startsWith(PALETTE_STAND_IN)) return false;
   /** @type {any} */
   let receipt;
   try {

@@ -42,6 +42,7 @@ import {
   themeImports,
 } from './_preview.mjs';
 import {
+  PALETTE_STAND_IN,
   paletteFiles,
   paletteMapping,
   tempFor,
@@ -130,6 +131,84 @@ function checkFolderName(where, what, retry) {
       `${what} has a folder name longer than 255 bytes, which the file system does not allow.`,
       {run: [retry(null)]},
     );
+}
+
+/**
+ * A note when the app never imports Core's stylesheet, or null: without
+ * it, components render unstyled, and some show nothing. Read from the
+ * files of the routes folder and src/ (best effort).
+ * @param {string} cwd
+ * @param {{dir: string, app: string | null}} at
+ * @returns {string | null}
+ */
+function coreStylesheetMissing(cwd, at) {
+  if (!at.app) return null;
+  const SHEET = /@astryxdesign\/core\/astryx\.css/;
+  let seen = 0;
+  /** @param {string} folder @returns {boolean} */
+  const imports = folder => {
+    /** @type {fs.Dirent[]} */
+    let entries;
+    try {
+      entries = fs.readdirSync(folder, {withFileTypes: true});
+    } catch {
+      return false;
+    }
+    for (const e of entries) {
+      const full = path.join(folder, e.name);
+      if (e.isDirectory()) {
+        if (
+          e.name === 'node_modules' ||
+          e.name.startsWith('.') ||
+          full === at.dir
+        )
+          continue;
+        if (imports(full)) return true;
+      } else if (
+        /\.(tsx|ts|jsx|js|mjs|css|scss)$/.test(e.name) &&
+        ++seen < 2000
+      )
+        try {
+          if (SHEET.test(fs.readFileSync(full, 'utf8'))) return true;
+        } catch {
+          // Unreadable: skip it.
+        }
+    }
+    return false;
+  };
+  const src = path.join(cwd, 'src');
+  if (
+    imports(at.app) ||
+    (at.app.startsWith(src + path.sep) ? false : imports(src))
+  )
+    return null;
+  const layout = ['tsx', 'ts', 'jsx', 'js']
+    .map(x => path.join(at.app ?? '', `layout.${x}`))
+    .find(f => fs.existsSync(f));
+  return `the app does not import Core's stylesheet, so the preview's components render unstyled and some show nothing; add import '@astryxdesign/core/astryx.css'; to ${layout ? shown(cwd, layout) : "the app's root layout"}`;
+}
+
+/**
+ * The `basePath` next.config sets, read as text (best effort), or '' when
+ * it sets none: every URL of the app starts with it.
+ * @param {string} cwd
+ */
+function nextBasePath(cwd) {
+  for (const name of [
+    'next.config.mjs',
+    'next.config.js',
+    'next.config.ts',
+    'next.config.cjs',
+  ]) {
+    try {
+      const text = fs.readFileSync(path.join(cwd, name), 'utf8');
+      const m = /basePath\s*:\s*['"`](\/[^'"`]*)['"`]/.exec(text);
+      return m ? m[1].replace(/\/+$/, '') : '';
+    } catch {
+      continue;
+    }
+  }
+  return '';
 }
 
 /**
@@ -244,6 +323,9 @@ function pageExtensions(cwd) {
   return null;
 }
 
+/** A catch-all route folder: `[...slug]`, or `[[...slug]]`, which also serves the folder's own URL. */
+const CATCH_ALL = /^\[\[?\.\.\.[^\]]+\]\]?$/;
+
 /** A file Next serves a URL from: a page or a route handler. */
 const ROUTE_FILE = /^(page\.(tsx|ts|jsx|js|mdx)|route\.(tsx|ts|jsx|js))$/;
 
@@ -273,20 +355,29 @@ function sameUrlPage(cwd, app, dir) {
           continue;
         const hit = walk(full);
         if (hit) return hit;
-      } else if (
-        ROUTE_FILE.test(e.name) &&
-        urlSegments(app, folder).join('/') === url
-      )
-        return full;
+      } else if (ROUTE_FILE.test(e.name) && servesUrl(folder)) return full;
     }
     return null;
   };
-  // The preview's own folder: a route handler, or a page other than the
-  // page.tsx the preview writes.
+  /** A folder served at the URL, or at the URLs under it through a catch-all. @param {string} folder */
+  const servesUrl = folder => {
+    const segs = urlSegments(app, folder);
+    return (
+      segs.join('/') === url ||
+      (CATCH_ALL.test(segs.at(-1) ?? '') && segs.slice(0, -1).join('/') === url)
+    );
+  };
+  // The preview's own folder: a route handler, a page other than the
+  // page.tsx the preview writes, or a catch-all route in it.
   try {
-    for (const name of fs.readdirSync(dir))
-      if (ROUTE_FILE.test(name) && name !== 'page.tsx')
-        return path.join(dir, name);
+    for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
+      if (!e.isDirectory()) {
+        if (ROUTE_FILE.test(e.name) && e.name !== 'page.tsx')
+          return path.join(dir, e.name);
+      } else if (CATCH_ALL.test(e.name))
+        for (const name of fs.readdirSync(path.join(dir, e.name)))
+          if (ROUTE_FILE.test(name)) return path.join(dir, e.name, name);
+    }
   } catch {
     // No folder yet.
   }
@@ -435,6 +526,25 @@ function checkPlacement(cwd, dir, where, retry) {
       },
     );
   }
+  if (
+    served &&
+    !rootLayouts.length &&
+    !fs.readdirSync(served).some(f => /^layout\.(tsx|ts|jsx|js)$/.test(f))
+  ) {
+    let free = 'theme-app';
+    for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
+      free = `theme-app-${n}`;
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `${shown(cwd, served)}/ has no root layout (no layout.tsx in it or in a route group), so Next cannot build a page in ${where}.`,
+      {
+        fix: `add a root layout to ${shown(cwd, served)}/ to use the preview in this app`,
+        run: [
+          `${PREVIEW} app ${free}  # a new app with its own root layout and the preview`,
+        ],
+      },
+    );
+  }
   if (rootLayouts.length && !rootLayout)
     refuse(
       E.ERR_INVALID_ARGUMENT,
@@ -451,7 +561,7 @@ function checkPlacement(cwd, dir, where, retry) {
     for (let n = 3; fs.existsSync(free); n++) free = `${dir}-${n}`;
     refuse(
       E.ERR_FILE_EXISTS,
-      `${shown(cwd, clash)} already serves /${urlSegments(app, dir).join('/')}, so a preview in ${where} would stop the app from building, or take that URL from it.`,
+      `${shown(cwd, clash)} already serves /${urlSegments(app, dir).join('/')} or the URLs under it, so a preview in ${where} would stop the app from building, or take that URL from it.`,
       {run: [retry(shown(cwd, free))]},
     );
   }
@@ -510,6 +620,7 @@ function previewDir(cwd, where, opts = {}) {
       ...new Set(editedThemes(cwd).flatMap(t => recordedPreviews(cwd, t))),
     ].filter(d => fs.existsSync(path.join(d, PREVIEW_DATA)));
     if (recorded.length === 1) {
+      inProjectOrRefuse(cwd, recorded[0], retry);
       if (opts.write)
         checkPlacement(cwd, recorded[0], shownDir(cwd, recorded[0]), retry);
       return {dir: recorded[0], app: appOf(recorded[0])};
@@ -547,8 +658,43 @@ function previewDir(cwd, where, opts = {}) {
         ],
       },
     );
+  inProjectOrRefuse(cwd, dir, retry);
   if (opts.write) checkPlacement(cwd, dir, `${shownDir(cwd, dir)}/`, retry);
   return {dir, app: appOf(dir)};
+}
+
+/**
+ * Refuse a preview folder that reaches outside the project through a link,
+ * as `--path` refuses one: every file the preview writes would land there.
+ * @param {string} cwd
+ * @param {string} dir
+ * @param {Retry} retry
+ */
+function inProjectOrRefuse(cwd, dir, retry) {
+  /** @param {string} d */
+  const within = d => {
+    try {
+      assertWithin(d, cwd, {allowAbsolute: true, label: 'the preview folder'});
+      return true;
+    } catch (e) {
+      if (e instanceof PathSafetyError) return false;
+      throw e;
+    }
+  };
+  if (within(dir)) return;
+  let free = `${dir}-2`;
+  for (let n = 3; fs.existsSync(free); n++) free = `${dir}-${n}`;
+  refuse(
+    E.ERR_PATH_TRAVERSAL,
+    `${shownDir(cwd, dir)}/ leads outside the project through a link; the preview stays inside the folder you run the command from.`,
+    {
+      run: [
+        within(path.dirname(dir))
+          ? retry(shown(cwd, free))
+          : `${PREVIEW} app theme-app  # a new app of its own, inside this folder`,
+      ],
+    },
+  );
 }
 
 const CLI_PACKAGE = path.resolve(
@@ -569,18 +715,25 @@ function confined(file, root, what) {
     return assertWithin(file, root, {allowAbsolute: true, label: what});
   } catch (e) {
     if (e instanceof PathSafetyError) {
-      /** @type {string | null} */
+      // The link that leads out: the file itself, or a folder on its way.
+      /** @type {{at: string, to: string} | null} */
       let link = null;
-      try {
-        if (fs.lstatSync(file).isSymbolicLink()) link = fs.readlinkSync(file);
-      } catch {
-        // Not there: the path itself leads out.
-      }
+      for (
+        let at = file;
+        at.startsWith(root + path.sep) && !link;
+        at = path.dirname(at)
+      )
+        try {
+          if (fs.lstatSync(at).isSymbolicLink())
+            link = {at, to: fs.readlinkSync(at)};
+        } catch {
+          // Not there: look at its folder.
+        }
       refuse(
         E.ERR_PATH_TRAVERSAL,
         link == null
           ? `${what} names ${file}, which is outside ${root}.`
-          : `${what} names ${file}, which is a link to ${link}, outside ${root}.`,
+          : `${link.at} is a link to ${link.to}, outside ${root}; the preview never writes through a link.`,
         {run: [`${PREVIEW} list`]},
       );
     }
@@ -2042,6 +2195,25 @@ async function routeWrites(cwd, dir, data, theme, opts = {}) {
 }
 
 /**
+ * The theme's palette module, written as an empty stand-in when the theme
+ * has no generated colors left and a kept Colors page still imports it.
+ * Null when the module is there.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null} the module, as shown
+ */
+function paletteStandIn(cwd, slug) {
+  const file = path.join(cwd, paletteFiles(slug).palette);
+  if (fs.existsSync(file)) return null;
+  fs.mkdirSync(path.dirname(file), {recursive: true});
+  writeWhole(
+    file,
+    `${PALETTE_STAND_IN}\nexport const palette = {} as const;\n`,
+  );
+  return shown(cwd, file);
+}
+
+/**
  * Rewrite the in-app preview routes of a theme when their imports changed, so
  * a font package installed after `set` loads on the next change or `show`,
  * and its Colors page, so it names the shades the tokens use now.
@@ -2088,7 +2260,15 @@ export async function refreshPreviewRoute(cwd, slug) {
       if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === w.text)
         return false;
       if (editedByHand(dir, data, w.rel)) {
-        stale.push(shown(cwd, file));
+        const standIn =
+          w.rel === `${COLORS_PAGE.file}.tsx` &&
+          fs.readFileSync(file, 'utf8').includes(`${slug}.palette`) &&
+          paletteStandIn(cwd, slug);
+        stale.push(
+          standIn
+            ? `${shown(cwd, file)} (changed by hand, so it is kept; the theme has no generated colors now, so ${standIn}, which the page imports, holds an empty stand-in that keeps the app building. Give the page another name if you want to keep your changes, then run ${PREVIEW} add)`
+            : shown(cwd, file),
+        );
         return false;
       }
       return true;
@@ -2170,7 +2350,7 @@ function openLine(cwd, at) {
           : encodeURIComponent(seg),
       )
       .join('/');
-    return `open /${url} in the running app${params.length ? `, with a value for ${params.join(', ')}` : ''}`;
+    return `open ${nextBasePath(cwd)}/${url} in the running app${params.length ? `, with a value for ${params.join(', ')}` : ''}`;
   }
   const routes = ['app', path.join('src', 'app')].filter(r =>
     fs.existsSync(path.join(cwd, r)),
@@ -2778,6 +2958,8 @@ async function addPreview(description, options, box) {
   const at = previewDir(cwd, options.path, {write: true, retry});
   const recovered = recoverPreview(cwd, at.dir);
   if (recovered) notes.push(recovered);
+  const unstyled = coreStylesheetMissing(cwd, at);
+  if (unstyled) notes.push(unstyled);
   box.note = recovered;
   const existing = readPreview(cwd, at.dir, pf);
   /** @type {PreviewData} */

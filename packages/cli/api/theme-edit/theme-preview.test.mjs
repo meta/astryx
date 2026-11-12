@@ -127,6 +127,12 @@ describe('preview add', () => {
 
   it('writes the route, the default pages and the data file in the app routes folder', async () => {
     fs.mkdirSync(path.join(cwd, 'src', 'app'), {recursive: true});
+    // A routes folder has a root layout, which loads Core's stylesheet.
+    if (!fs.existsSync(path.join(cwd, 'src/app/layout.tsx')))
+      fs.writeFileSync(
+        path.join(cwd, 'src/app/layout.tsx'),
+        "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+      );
     const r = await themeEditPreviewAdd(undefined, {cwd});
     expect(r.type).toBe('themeEdit.previewAdd');
     expect(r.data.folder).toBe('src/app/theme-preview');
@@ -689,6 +695,12 @@ describe('preview app', () => {
   it('refuses a folder that is not empty, the project included, and names a free one', async () => {
     const app = path.join(cwd, 'mine');
     fs.mkdirSync(path.join(app, 'src/app'), {recursive: true});
+    // A routes folder has a root layout, which loads Core's stylesheet.
+    if (!fs.existsSync(path.join(app, 'src/app/layout.tsx')))
+      fs.writeFileSync(
+        path.join(app, 'src/app/layout.tsx'),
+        "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+      );
     fs.writeFileSync(path.join(app, 'src/app/layout.tsx'), 'MY LAYOUT\n');
     try {
       const r = await refusal(() => themeEditPreviewApp('mine', {cwd}));

@@ -371,6 +371,12 @@ describe('where commands act', () => {
         JSON.stringify({dependencies: {'@astryxdesign/core': '*'}}),
       );
       fs.mkdirSync(path.join(app, 'src/app'), {recursive: true});
+      // A routes folder has a root layout, which loads Core's stylesheet.
+      if (!fs.existsSync(path.join(app, 'src/app/layout.tsx')))
+        fs.writeFileSync(
+          path.join(app, 'src/app/layout.tsx'),
+          "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+        );
       expect(projectRoot(path.join(app, 'src/app'))).toBe(app);
       // A folder with no Core above it stays where it is.
       expect(projectRoot(cwd)).toBe(cwd);

@@ -106,6 +106,12 @@ beforeAll(async () => {
     `${JSON.stringify(APP_PACKAGES)}\n`,
   );
   fs.mkdirSync(path.join(cwd, 'src/app'), {recursive: true});
+  // A routes folder has a root layout, which loads Core's stylesheet.
+  if (!fs.existsSync(path.join(cwd, 'src/app/layout.tsx')))
+    fs.writeFileSync(
+      path.join(cwd, 'src/app/layout.tsx'),
+      "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+    );
   await themeEditNew('brand', {cwd, like: 'neutral'});
   await themeEditSet('brand', 'accent', '#7c3aed', {cwd});
   await themeEditNew('sea', {cwd, like: 'neutral'});
@@ -115,9 +121,14 @@ afterAll(() => {
   removeLinkedFixture(cwd);
 });
 
+const ROOT_LAYOUT =
+  "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n";
+
 beforeEach(() => {
   for (const d of fs.readdirSync(path.join(cwd, 'src/app')))
     fs.rmSync(path.join(cwd, 'src/app', d), {recursive: true, force: true});
+  // Every test starts from an app with its root layout.
+  fs.writeFileSync(path.join(cwd, 'src/app/layout.tsx'), ROOT_LAYOUT);
   for (const t of ['brand', 'sea'])
     fs.rmSync(path.join(cwd, 'themes', t, 'previews.json'), {force: true});
 });
@@ -1012,6 +1023,8 @@ describe('pass 3', () => {
     } finally {
       rm('next.config.mjs');
     }
+    // The root layout is in [locale]/, not in src/app/.
+    rm('src/app/layout.tsx');
     write(
       'src/app/[locale]/layout.tsx',
       'export default function L({children}: any) { return children; }\n',
@@ -1211,6 +1224,8 @@ describe('pass 4', () => {
   it('places the preview under any of several root layouts, one per route group', async () => {
     const layout =
       'export default function L({children}: any) { return children; }\n';
+    // The root layouts are in the route groups, not in src/app/.
+    fs.rmSync(path.join(cwd, 'src/app/layout.tsx'), {force: true});
     write('src/app/(marketing)/layout.tsx', layout);
     write('src/app/(shop)/layout.tsx', layout);
     const r = await themeEditPreviewAdd(undefined, {
@@ -1589,5 +1604,156 @@ describe('a formatter over the preview', () => {
       expect(r.code).toBe('ERR_FILE_EXISTS');
     }
     fs.writeFileSync(file, text);
+  }, 120_000);
+});
+
+describe('final pass 5', () => {
+  /** @param {string} rel */
+  const rm = rel =>
+    fs.rmSync(path.join(cwd, rel), {recursive: true, force: true});
+  /** Move a file or folder aside for `fn`, then put it back. @param {string} rel @param {() => Promise<void>} fn */
+  const aside = async (rel, fn) => {
+    const had = exists(rel);
+    if (had) fs.renameSync(path.join(cwd, rel), path.join(cwd, `${rel}.aside`));
+    try {
+      await fn();
+    } finally {
+      rm(rel);
+      if (had)
+        fs.renameSync(path.join(cwd, `${rel}.aside`), path.join(cwd, rel));
+    }
+  };
+
+  it('refuses a folder with a catch-all route in it or at its URL', async () => {
+    for (const [file, where] of [
+      ['src/app/cx/[[...x]]/page.tsx', 'src/app/cx'],
+      ['src/app/cy/[...slug]/page.tsx', 'src/app/cy'],
+      ['src/app/(g)/cz/[[...x]]/page.tsx', 'src/app/cz'],
+    ]) {
+      write(file, 'export default 1;\n');
+      try {
+        const r = await refusal(() =>
+          themeEditPreviewAdd(undefined, {cwd, path: where}),
+        );
+        expect(r.code, file).toBe('ERR_FILE_EXISTS');
+        expect(r.message, file).toContain(`${file} already serves`);
+        expect(exists(`${where}/page.tsx`), file).toBe(false);
+      } finally {
+        rm(file.split('/').slice(0, 3).join('/'));
+      }
+    }
+  });
+
+  it('refuses an app with no root layout anywhere, naming preview app', async () => {
+    await aside('src/app/layout.tsx', async () => {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/app/nl'}),
+      );
+      expect(r.code).toBe('ERR_INVALID_ARGUMENT');
+      expect(r.message).toContain('src/app/ has no root layout');
+      expect(r.run[0]).toMatch(
+        /^astryx experimental theme preview app theme-app/,
+      );
+      expect(exists('src/app/nl')).toBe(false);
+    });
+  });
+
+  it('refuses a default preview folder that leads outside the project', async () => {
+    const outside = fs.mkdtempSync(path.join(path.dirname(cwd), 'astryx-out-'));
+    try {
+      await aside('src/app/theme-preview', async () => {
+        fs.symlinkSync(outside, path.join(cwd, 'src/app/theme-preview'));
+        const r = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
+        expect(r.code).toBe('ERR_PATH_TRAVERSAL');
+        expect(r.run[0]).toContain('--path src/app/theme-preview-2');
+        expect(fs.readdirSync(outside)).toEqual([]);
+      });
+    } finally {
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
+  });
+
+  it('puts basePath in front of the URL to open', async () => {
+    write('next.config.mjs', "export default {basePath: '/docs'};\n");
+    try {
+      const r = await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/bp'});
+      expect(r.data.open).toContain('open /docs/bp in the running app');
+    } finally {
+      rm('next.config.mjs');
+      rm('src/app/bp');
+    }
+  }, 120_000);
+
+  it("names the import line when the app never loads Core's stylesheet", async () => {
+    const layout = read('src/app/layout.tsx');
+    write(
+      'src/app/layout.tsx',
+      'export default function RootLayout({children}) { return children; }\n',
+    );
+    try {
+      const r = await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/ns'});
+      expect(r.data.notes.join(' ')).toContain(
+        "the app does not import Core's stylesheet, so the preview's components render unstyled and some show nothing; add import '@astryxdesign/core/astryx.css'; to src/app/layout.tsx",
+      );
+    } finally {
+      write('src/app/layout.tsx', layout);
+      rm('src/app/ns');
+    }
+  }, 120_000);
+
+  it('keeps the app building when the theme loses its colors under a kept Colors page', async () => {
+    await themeEditNew('c1', {cwd, like: 'neutral'});
+    try {
+      await themeEditSet('c1', 'danger', '#dc2626', {cwd});
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'c1',
+        path: 'src/app/pc',
+      });
+      const page = 'src/app/pc/_pages/colors.tsx';
+      write(page, `${read(page)}// my note\n`);
+      const r = await themeEditUndo('c1', {cwd, thing: 'danger'});
+      const stale = /** @type {any} */ (r.data).previewStale.join(' ');
+      expect(stale).toContain(
+        'holds an empty stand-in that keeps the app building',
+      );
+      const palette = read('themes/c1/tokens/c1.palette.ts');
+      expect(palette).toContain('export const palette = {} as const;');
+      // The stand-in is the editor's own: a new color replaces it, unasked.
+      const again = await themeEditSet('c1', 'danger', '#b91c1c', {cwd});
+      expect(again.data.notes.join(' ')).not.toContain('edited by hand');
+      expect(read('themes/c1/tokens/c1.palette.ts')).not.toContain('stand-in');
+    } finally {
+      rm('src/app/pc');
+      rm('themes/c1');
+    }
+  }, 180_000);
+
+  it('names the link when a folder inside the preview leads outside', async () => {
+    const outside = fs.mkdtempSync(path.join(path.dirname(cwd), 'astryx-out-'));
+    try {
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'sea',
+        path: 'src/app/pn',
+      });
+      rm('src/app/pn/_pages');
+      fs.symlinkSync(outside, path.join(cwd, 'src/app/pn/_pages'));
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {
+          cwd,
+          path: 'src/app/pn',
+          template: 'blank',
+        }),
+      );
+      expect(r.code).toBe('ERR_PATH_TRAVERSAL');
+      expect(r.message).toContain(
+        `${path.join(cwd, 'src/app/pn/_pages')} is a link to ${outside}`,
+      );
+      expect(fs.readdirSync(outside)).toEqual([]);
+    } finally {
+      rm('src/app/pn');
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
   }, 120_000);
 });
