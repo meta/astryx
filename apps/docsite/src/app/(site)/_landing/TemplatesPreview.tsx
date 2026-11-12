@@ -2,7 +2,8 @@
 
 /**
  * @file Homepage card of scaled-down page templates.
- * @input The template snapshots that the build renders (FrozenPreview).
+ * @input The tile rows and the template markup that the build renders
+ *   (FrozenPreview).
  * @output A decorative tile grid with no client JavaScript.
  * @position Server component. The homepage and the community page pass it to
  *   their client cards as a prop.
@@ -15,10 +16,17 @@ import {
   shadowVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {FrozenPreview} from './FrozenPreview';
-import {TEMPLATE_PREVIEW_ROWS} from './templatePreviewRows';
+import templateRows from './landingTemplateRows.json';
 
-// The build renders each template once (previewSnapshotSources.tsx); CSS
-// scales it, and CSS variables re-theme it for dark mode.
+// A representative set of the real page templates (storefront, IDE, payment,
+// login, settings, AI chat, product detail). Grouped into rows; the middle row
+// holds three so the centered (login) template sits in the middle.
+//
+// A live render of seven templates costs seconds of main-thread work on a
+// slow device. The card is decorative, so the build renders each template
+// once to static markup (scripts/generate-landing-template-previews.mjs).
+// CSS scales it, and CSS variables re-theme it for dark mode.
+const TEMPLATE_ROWS: ReadonlyArray<ReadonlyArray<string>> = templateRows;
 
 // On small screens the rows flow into a single 3-column grid; 7 templates would
 // leave a lone 7th tile, so this one is dropped there to keep a clean 3 + 3.
@@ -152,9 +160,7 @@ export function TemplatesPreview({
   maxRows?: number;
 }) {
   const rows =
-    maxRows != null
-      ? TEMPLATE_PREVIEW_ROWS.slice(0, maxRows)
-      : TEMPLATE_PREVIEW_ROWS;
+    maxRows != null ? TEMPLATE_ROWS.slice(0, maxRows) : TEMPLATE_ROWS;
   return (
     <div {...stylex.props(styles.container)} inert>
       <div {...stylex.props(styles.root)}>

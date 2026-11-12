@@ -380,10 +380,10 @@ const features: Record<string, Feature> = {
     description:
       'Production-ready templates for common pages, just plug in your content.',
     href: '/templates',
-    // Scaled-down renders of real page templates instead of the baked
-    // /feature-templates.png, so they re-theme for dark mode and stay in sync
-    // with the actual templates. The server page renders them and passes them
-    // to FeaturesShowcase.
+    // Scaled-down static pages that the build renders from the real page
+    // templates, so they re-theme for dark mode and stay in sync with the
+    // templates. The server page renders them and passes them to
+    // FeaturesShowcase.
   },
   cli: {
     title: 'A design system that your agent can use',

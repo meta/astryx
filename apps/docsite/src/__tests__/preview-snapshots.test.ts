@@ -2,7 +2,7 @@
 
 /**
  * @file Build-time preview snapshots: the generate step renders them, and the
- * snapshot markup starts no image download before the visitor scrolls to it.
+ * snapshot images load at low priority, after the page's own resources.
  *
  * @input scripts/lib/preview-snapshot-html.mjs and the docsite package scripts
  * @output Regression coverage for the snapshot markup and its wiring
@@ -24,11 +24,11 @@ describe('finishSnapshotHtml', () => {
     expect(finishSnapshotHtml(html)).not.toContain('<link');
   });
 
-  it('makes each image lazy and keeps an image that sets its own loading', () => {
+  it('gives each image low priority and keeps an image that sets its own', () => {
     const html =
-      '<img src="/a.png" alt=""/><img loading="eager" src="/b.png" alt=""/>';
+      '<img src="/a.png" alt=""/><img fetchpriority="high" src="/b.png" alt=""/>';
     expect(finishSnapshotHtml(html)).toBe(
-      '<img loading="lazy" decoding="async" src="/a.png" alt=""/><img loading="eager" src="/b.png" alt=""/>',
+      '<img fetchpriority="low" decoding="async" src="/a.png" alt=""/><img fetchpriority="high" src="/b.png" alt=""/>',
     );
   });
 });
@@ -39,7 +39,7 @@ describe('generate step', () => {
       fs.readFileSync(path.join(DOCSITE, 'package.json'), 'utf8'),
     );
     expect(pkg.scripts.generate).toContain(
-      'node scripts/generate-preview-snapshots.mjs',
+      'node scripts/generate-landing-template-previews.mjs',
     );
     expect(pkg.scripts.build).toMatch(/^pnpm generate && next build/u);
   });

@@ -2,7 +2,8 @@
 
 /**
  * @file Show a decorative preview that the build rendered to static HTML.
- * @input A preview id from previewSnapshotSources.tsx.
+ * @input A preview id: a template slug from landingTemplateRows.json, or
+ *   'themes-store'.
  * @output The preview markup. It ships no client JavaScript and follows the
  *   page's light or dark mode through CSS variables.
  * @position Server component. Pass it to a client component as a prop. A
@@ -10,7 +11,7 @@
  */
 
 import type {CSSProperties} from 'react';
-import {PREVIEW_SNAPSHOTS} from '@/generated/previewSnapshots';
+import {LANDING_PREVIEWS} from '@/generated/landingPreviews';
 import previewSurface from '../../../components/TemplatePreviewSurface.module.css';
 import styles from './FrozenPreview.module.css';
 
@@ -29,10 +30,10 @@ export function FrozenPreview({
   className?: string;
   style?: CSSProperties;
 }) {
-  const html = PREVIEW_SNAPSHOTS[id];
+  const html = LANDING_PREVIEWS[id];
   if (html == null) {
     throw new Error(
-      `No preview snapshot "${id}". Add it to previewSnapshotSources.tsx.`,
+      `No landing preview "${id}". scripts/generate-landing-template-previews.mjs renders them.`,
     );
   }
   return (
