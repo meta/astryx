@@ -2404,10 +2404,10 @@ function importStatement({importPath, importedName, localName}, specifier) {
  * When `moduleOptions.variants` is given, the module also exports the theme's
  * custom prop values as `themeVariants` (`{ [componentKey]: { [prop]:
  * value[] } }`, same data the `.variants.d.ts` augments the types with). It
- * exists for the CLI: `resolveTheme()` hands it to `astryx component`, which
- * stars each theme-added value in the theming targets table. It is a sibling
- * export, not a theme field: build/CLI metadata with no normalized-theme
- * effect stays outside `DefinedTheme`
+ * is a stable public export. `resolveTheme()` hands it to `astryx component`,
+ * which stars each theme-added value in the theming targets table. It is a
+ * sibling export, not a theme field: data with no normalized-theme effect
+ * stays outside `DefinedTheme`
  * (docs/architecture/theme-authoring-contract.md).
  *
  * The icon registry is imported rather than inlined because it holds React
@@ -2589,11 +2589,11 @@ function generateBuiltModule(
           .join('\n')},\n  __componentIcons: ${componentIconValuesName},\n`
       : serializeField('componentIcons', componentIconValues, true));
 
-  // CLI metadata beside the theme object (see the function doc above). Themes
+  // A public export beside the theme object (see the function doc above). Themes
   // without custom variants keep the historical output byte-for-byte.
   const variantsExport = moduleOptions.variants
     ? `
-/** Custom component prop values this theme adds, by theme key and prop. CLI metadata, not theme data. */
+/** Custom component prop values this theme adds, by theme key and prop. A public export, not theme data. */
 export const themeVariants = ${JSON.stringify(moduleOptions.variants, null, 2)};
 `
     : '';
