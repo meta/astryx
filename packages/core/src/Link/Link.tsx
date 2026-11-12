@@ -385,6 +385,7 @@ export function Link({
   const contentRef = useFocusAcrossSwap<HTMLElement>(undefined, {
     resolveFocusTarget: resolveLinkFocusTarget,
     restoreFocus: isDisabled,
+    isDisabled,
   });
   // Determine target and rel based on isExternalLink
   const {target, rel} = computeTargetAndRel(

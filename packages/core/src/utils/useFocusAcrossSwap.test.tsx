@@ -7,7 +7,7 @@
  * @position Tests the shared focus handoff used by link controls
  */
 
-import {createRef, StrictMode, type Ref} from 'react';
+import {Activity, createRef, StrictMode, type Ref} from 'react';
 import {render} from '@testing-library/react';
 import {describe, expect, it, vi} from 'vitest';
 import {useFocusAcrossSwap} from './useFocusAcrossSwap';
@@ -19,16 +19,19 @@ function Swap({
   button = false,
   descendant = false,
   restoreFocus = true,
+  isDisabled,
   ref,
 }: {
   button?: boolean;
   descendant?: boolean;
   restoreFocus?: boolean;
+  isDisabled?: boolean;
   ref?: Ref<HTMLElement>;
 }) {
   const focusRef = useFocusAcrossSwap(ref, {
     resolveFocusTarget: descendant ? resolveControl : undefined,
     restoreFocus,
+    isDisabled,
   });
   const content = (
     <span ref={descendant ? focusRef : undefined}>Destination</span>
@@ -138,6 +141,62 @@ describe('useFocusAcrossSwap', () => {
     expect(frameDocument.activeElement).toBe(getByRole('button'));
     unmount();
     frame.remove();
+  });
+
+  it.each(['before removal', 'during cleanup'])(
+    'does not take focus from outside its iframe %s',
+    handoff => {
+      const frame = document.createElement('iframe');
+      const other = document.createElement('button');
+      document.body.append(frame, other);
+      let moveFocus = false;
+      const ref = (node: HTMLElement | null) => {
+        if (!node && moveFocus) {
+          other.focus();
+        }
+      };
+      const frameDocument = frame.contentDocument!;
+      const {getByRole, rerender, unmount} = render(<Swap ref={ref} />, {
+        container: frameDocument.body,
+      });
+      try {
+        getByRole('link').focus();
+        if (handoff === 'before removal') {
+          other.focus();
+        } else {
+          moveFocus = true;
+        }
+        rerender(<Swap ref={ref} button />);
+        expect(document.activeElement).toBe(other);
+        expect(frameDocument.activeElement).not.toBe(getByRole('button'));
+      } finally {
+        moveFocus = false;
+        unmount();
+        frame.remove();
+        other.remove();
+      }
+    },
+  );
+
+  it('discards owned-content focus when Activity disconnects it', () => {
+    const fixture = (hidden: boolean, isDisabled: boolean) => (
+      <Activity mode={hidden ? 'hidden' : 'visible'}>
+        <Swap
+          descendant
+          button={isDisabled}
+          isDisabled={isDisabled}
+          restoreFocus={isDisabled}
+        />
+      </Activity>
+    );
+    const {getByRole, rerender} = render(fixture(false, false));
+    const link = getByRole('link');
+    link.focus();
+    rerender(fixture(true, false));
+    link.blur();
+    rerender(fixture(true, true));
+    rerender(fixture(false, true));
+    expect(getByRole('button')).not.toHaveFocus();
   });
 
   it('reads focus inside an open shadow root', () => {

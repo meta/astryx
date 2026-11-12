@@ -294,6 +294,18 @@ describe('Link', () => {
     },
   );
 
+  it('does not restore focus for a root swap while already disabled', () => {
+    const fixture = (onClick?: () => void) => (
+      <Link href="#destination" isDisabled onClick={onClick}>
+        Destination
+      </Link>
+    );
+    const {rerender} = render(fixture());
+    screen.getByRole('link').focus();
+    rerender(fixture(vi.fn()));
+    expect(screen.getByRole('button', {name: 'Destination'})).not.toHaveFocus();
+  });
+
   it('keeps a focused href link with onClick inert and reachable across disablement', async () => {
     const user = userEvent.setup();
     const ref = vi.fn();
