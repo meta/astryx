@@ -13,7 +13,13 @@ import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
-import {CLOSEST_OPEN_FONT, OPEN_FONTS, P, SYSTEM_FONTS} from './_tables.mjs';
+import {
+  CLOSEST_OPEN_FONT,
+  OPEN_FONTS,
+  P,
+  SYSTEM_FAMILIES,
+  SYSTEM_FONTS,
+} from './_tables.mjs';
 import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
@@ -185,6 +191,9 @@ export function fontNotes(ctx, data) {
     if (
       s.thing !== 'font' ||
       SYSTEM_FONTS.includes(s.value) ||
+      SYSTEM_FAMILIES.has(
+        fontOf(s.value).family.replace(/["']/g, '').toLowerCase(),
+      ) ||
       OPEN_FONTS[s.value] ||
       fontOf(s.value).pkg ||
       s.value === 'rounded' ||
@@ -274,9 +283,12 @@ export async function previewAfter(ctx, slug, data, png) {
     preview = await renderPreview(ctx, slug, data);
   } catch (e) {
     // The change is already saved: any failure here leaves it unchecked.
+    const code = /** @type {any} */ (e)?.code;
     cause ??= isRenderFailure(e)
       ? renderCause(ctx.project, /** @type {Error} */ (e).message)
-      : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
+      : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
+        ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
+        : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
   const shots =

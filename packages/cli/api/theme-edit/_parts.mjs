@@ -136,9 +136,12 @@ export async function renderGenerated(project, file, source, extra = []) {
   }
   try {
     const page = await renderPage(entry, {title: file.replace(/\.[^.]+$/, '')});
-    const body = page.html.slice(page.html.indexOf('<body>') + 6);
+    // The page is the same whichever command rendered it: the folder's
+    // per-process name never reaches the file.
+    const html = page.html.split(path.basename(dir)).join('.astryx-render');
+    const body = html.slice(html.indexOf('<body>') + 6);
     const end = body.indexOf('<script type=');
-    return {html: page.html, markup: end >= 0 ? body.slice(0, end) : body};
+    return {html, markup: end >= 0 ? body.slice(0, end) : body};
   } catch (e) {
     if (e instanceof RenderError) {
       const missing = e.code === 'ERR_RENDER_MISSING_DEPENDENCY';
