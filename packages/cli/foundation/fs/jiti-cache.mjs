@@ -10,10 +10,11 @@
  *   own and no one else can reach it; `{fsCache: false}` (transpiled in
  *   memory only) when it is not; `{}` (jiti's own default) where the system
  *   has no user ids (Windows), whose temp folder is the user's own.
- * @position Read by module-loader.mjs and doc-compiler/import.mjs. jiti's
- *   default is a `jiti` folder in the system temp folder, which every account
- *   on a machine shares and the system empties from time to time: another
- *   account could leave transpiled code there under the name jiti looks for,
+ * @position Read by module-loader.mjs, doc-compiler/import.mjs and
+ *   gather-cache.mjs. jiti's default is a `jiti` folder in the system temp
+ *   folder, which on Linux every account on a machine shares, and which the
+ *   system empties from time to time: another account could leave transpiled
+ *   code there under the name jiti looks for,
  *   and after each emptying every TypeScript file is transpiled again. jiti
  *   names each cached file for its source's path and checks a hash of its
  *   source content before using it, so an edited, upgraded or downgraded
