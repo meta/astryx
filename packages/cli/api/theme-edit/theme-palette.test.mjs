@@ -2548,3 +2548,81 @@ describe('colors16', () => {
     ).toBe(true);
   });
 });
+
+describe('colors17', () => {
+  it('checks a var() fallback against the token, and reads sizes and channels as CSS does', async () => {
+    for (const [thing, value] of [
+      ['--text-body-leading', 'var(--nope, 1.5em)'],
+      ['--text-body-leading', 'var(--nope, red)'],
+      ['--font-weight-bold', 'var(--nope, 1.5em)'],
+      ['--color-accent', 'var(--nope, 12px)'],
+      ['--radius-element', '1.px'],
+      ['--radius-element', '50.%'],
+      ['--color-accent', 'rgb(255. 0 0)'],
+      ['--color-accent', 'hsl(120. 50% 20%)'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', thing, value, {cwd}))).code,
+        `${thing} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    const dot = await refusal(() =>
+      themeEditSet('p', '--radius-element', '16.px', {cwd}),
+    );
+    expect(dot.run[0]).toMatch(/--radius-element 16px$/);
+    for (const value of ['+4px', '4e+1px', 'var(--nope, 4px)']) {
+      await themeEditSet('p', '--radius-element', value, {cwd});
+      await themeEditUndo('p', {cwd, thing: '--radius-element'});
+    }
+  });
+
+  it('suggests the vibrancy meant, and none with no color to saturate', async () => {
+    const none = await refusal(() =>
+      themeEditSet('p', 'vibrancy', '70%', {cwd}),
+    );
+    expect(none.code).toBe('ERR_THEME_NO_EFFECT');
+    await themeEditSet('p', 'accent', '#7c3aed', {cwd});
+    for (const [value, want] of [
+      ['MORE', 'more'],
+      ['70%', '70'],
+      ['7e1', '70'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'vibrancy', value, {cwd}),
+      );
+      expect(r.run[0], value).toMatch(new RegExp(` vibrancy ${want}$`));
+    }
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
+  it('carries weights to phones, formats heading weights, and keeps sizes and weights out of the font dial', async () => {
+    const r = await themeEditSet('p', 'headings', 'heavy', {cwd});
+    expect(JSON.stringify(r.data)).not.toContain('[object Object]');
+    await themeEditSet('p', '--text-body-weight', '600', {cwd});
+    const css = read('p.css');
+    const phone = css.slice(css.indexOf('pointer: coarse'));
+    expect(phone).toMatch(/--text-heading-1-weight:\s*800/);
+    expect(phone).toMatch(/--text-body-weight:\s*600/);
+    await themeEditUndo('p', {cwd, thing: '--text-body-weight'});
+    await themeEditUndo('p', {cwd, thing: 'headings'});
+    for (const [value, on, want] of [
+      ['16px', undefined, /--font-size-base 16px$/],
+      ['bold', 'heading', / headings bold$/],
+      [
+        'italic 700 16px/1.4 Georgia, serif',
+        undefined,
+        / font 'Georgia, serif'$/,
+      ],
+    ]) {
+      const f = await refusal(() =>
+        themeEditSet('p', 'font', value, {cwd, ...(on ? {on} : {})}),
+      );
+      expect(f.code, value).toBe('ERR_THEME_BAD_VALUE');
+      expect(
+        f.run.some(x => want.test(x)),
+        `${value} ${f.run}`,
+      ).toBe(true);
+    }
+    await themeEditSet('p', 'font', 'georgia', {cwd});
+    await themeEditUndo('p', {cwd, thing: 'font'});
+  });
+});

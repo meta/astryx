@@ -1392,8 +1392,9 @@ export function compileTheme(ctx, data, base) {
     theme.tokens[k] = l === d ? l : [l, d];
   }
   // Base themes set the type tokens again for phones (a coarse pointer
-  // below the lg width); an exact font family is written there too, so it
-  // applies on every screen. Sizes are not: phones keep their reading base.
+  // below the lg width); an exact font family or weight, and the headings
+  // dial's weights, are written there too, so they apply on every screen.
+  // Sizes are not: phones keep their reading base.
   const phone = Object.fromEntries(
     data.settings
       .filter(
@@ -1401,12 +1402,18 @@ export function compileTheme(ctx, data, base) {
           x.source === 'token' &&
           !x.on &&
           !x.mode &&
-          // Families only: phones keep their own reading sizes.
-          /^--font-family/.test(x.thing) &&
+          /^--font-family|^--(text-[a-z0-9-]+|font)-weight/.test(x.thing) &&
           !(modeOnly && x.mode && x.mode !== modeOnly),
       )
       .map(x => [x.thing, x.value]),
   );
+  // The headings dial's weights, unless an exact token sets one.
+  const headingsWeight = [...data.settings]
+    .reverse()
+    .find(x => x.thing === 'headings' && x.axis !== 'tracking' && !x.on);
+  if (headingsWeight && HEADING_WEIGHTS[headingsWeight.value])
+    for (const k of headingWeightTokens)
+      phone[k] ??= HEADING_WEIGHTS[headingsWeight.value];
   if (Object.keys(phone).length)
     theme.adaptations = {
       rules: [

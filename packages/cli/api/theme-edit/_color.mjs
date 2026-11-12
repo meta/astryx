@@ -283,11 +283,11 @@ const d50ToD65 = ([x, y, z]) => [
 /** One number with its unit, or null. @param {string} part @param {boolean} modern */
 function num(part, modern) {
   if (modern && part.toLowerCase() === 'none') return {n: 0, unit: ''};
-  const m =
-    /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(%|deg|grad|rad|turn)?$/i.exec(
-      part,
-    );
-  return m ? {n: Number(m[1]), unit: (m[2] ?? '').toLowerCase()} : null;
+  // Read as CSS reads a number: `255.` is none.
+  const c = cssNumber(part);
+  return c && ['', '%', 'deg', 'grad', 'rad', 'turn'].includes(c.unit)
+    ? {n: c.value, unit: c.unit}
+    : null;
 }
 
 /**
@@ -943,15 +943,13 @@ export const isColorValue = v => {
  */
 export const isSize = (v, name = '') => {
   const s = String(v).trim();
-  const length =
-    /^-?(\d+\.?\d*|\.\d+)(e-?\d+)?(px|rem|em|ex|ch|lh|rlh|cap|ic|pt|pc|cm|mm|in|q|%|vh|vw|vmin|vmax|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|cqi|cqb)$/i;
   if (s === '0') return true;
-  // Only a property that takes a negative length gets one: an offset, a
-  // letter spacing, an indent.
-  if (length.test(s))
-    return (
-      !s.startsWith('-') || /offset|tracking|letter-spacing|indent/.test(name)
-    );
+  // One length or percentage, read as CSS reads it (+4px, 4e+1px; never
+  // 1.px). Only a property that takes a negative length gets one: an
+  // offset, a letter spacing, an indent.
+  const n = cssNumber(s);
+  if (n && n.unit && matchType('length-percentage', s) != null)
+    return n.value >= 0 || /offset|tracking|letter-spacing|indent/.test(name);
   if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
   if (/^env\([a-z-]+(,.*)?\)$/i.test(s)) return true;
   return MATH_FUNCTION.test(s) && matchType('length-percentage', s) != null;

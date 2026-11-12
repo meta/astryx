@@ -347,8 +347,17 @@ export function styledChanges(before, after) {
           `typography ${role}: ${
             x
               ? Object.entries(x)
-                  .map(([k, v]) => `${k} ${v}`)
-                  .join(', ')
+                  .map(
+                    ([k, v]) =>
+                      `${k} ${
+                        v && typeof v === 'object'
+                          ? Object.entries(v)
+                              .map(([a, b]) => `${a}: ${b}`)
+                              .join(', ')
+                          : v
+                      }`,
+                  )
+                  .join('; ')
               : '(removed)'
           }`,
         );

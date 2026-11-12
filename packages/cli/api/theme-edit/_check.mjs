@@ -386,10 +386,31 @@ function checkTypedValue(
           ],
         },
       );
+    // The fallback is what shows when the variable is unset: it must be a
+    // value of the token's kind too.
+    const fallback = ref[2]?.slice(1).trim();
+    if (fallback)
+      checkTypedValue(
+        type,
+        fallback,
+        name,
+        TOKENS,
+        typeOf,
+        slug,
+        readers,
+        multiplied,
+      );
     return;
   }
   if (type === 'color' && !isFixedColor(value)) bad('a color', '#1f2937');
-  if (type === 'size' && !isSize(value, name)) bad('a size', '6px');
+  if (type === 'size' && !isSize(value, name)) {
+    // The size meant, when one dot or sign is all that is wrong (1.px).
+    const meant = value.trim().replace(/(\d)\.(?=[a-z%]|$)/gi, '$1');
+    bad(
+      'a size',
+      meant !== value.trim() && isSize(meant, name) ? meant : '6px',
+    );
+  }
   // A percentage reaches every property that reads the token; one that
   // takes none (a border or outline width, an outline offset) drops it.
   if (type === 'size' && /%/.test(value.replace(/var\([^)]*\)/g, ''))) {
@@ -1825,23 +1846,34 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             },
           );
         s.value = String(next);
-      } else if (!/^\d{1,3}$/.test(v) || Number(v) > 100) {
-        // A number out of range suggests the nearest one in range.
-        const n = Number(v);
-        const near = /^[+-]?(\d+\.?\d*|\.\d+)$/.test(v)
-          ? Math.max(0, Math.min(100, Math.round(n)))
-          : 60;
-        refuse(
-          E.ERR_THEME_BAD_VALUE,
-          `vibrancy takes a whole number from 0 (gray) to 100 (most vivid), or more or less, not "${v}".`,
-          {run: [`${P} set ${slug} vibrancy ${near}`]},
-        );
-      } else s.value = String(Number(v));
+      }
       const colors = data.settings.filter(
         x => x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
       );
+      // With no color to saturate, no vibrancy value is suggested.
+      const canApply = colors.some(x => !isGraySeed(seedOf(x.value)));
+      if (!step && canApply && (!/^\d{1,3}$/.test(v) || Number(v) > 100)) {
+        // The value meant: a step in other letters (MORE), or the number
+        // read as CSS reads it (70%, 7e1), kept in range.
+        const word = v.trim().toLowerCase();
+        const n = cssNumber(v);
+        const near = ['more', 'less'].includes(word)
+          ? word
+          : n && (n.unit === '' || n.unit === '%')
+            ? String(Math.max(0, Math.min(100, Math.round(n.value))))
+            : null;
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `vibrancy takes a whole number from 0 (gray) to 100 (most vivid), or more or less, not "${v}".`,
+          {
+            run: near
+              ? [`${P} set ${slug} vibrancy ${near}`]
+              : [`${HOW} vibrancy`],
+          },
+        );
+      } else if (!step && /^\d{1,3}$/.test(v)) s.value = String(Number(v));
       // A gray has no color to saturate, so vibrancy changes nothing.
-      if (!colors.some(x => !isGraySeed(seedOf(x.value))))
+      if (!canApply)
         refuse(
           E.ERR_THEME_NO_EFFECT,
           colors.length
@@ -1887,6 +1919,50 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             : parts?.system
               ? `font --on takes body, heading, or code, and "${v}" is a system font keyword of the CSS font shorthand, which sets every part of the font at once. For one part's font use font-family with a family.`
               : `font --on takes body, heading, or code. For one part's font use font-family${parts ? ', and the other parts of the font shorthand one by one' : ''}.`,
+          {run: runs},
+        );
+      }
+      // A size, a weight or a whole CSS font value is no family: the font
+      // dial and the roles take the family alone.
+      // A variable is answered below, as the token form.
+      const fontParts =
+        step || /\b(var|env)\(/i.test(v) ? null : fontShorthandParts(v);
+      if (
+        fontParts &&
+        (fontParts.repeat ||
+          fontParts.system ||
+          Object.keys(fontParts).some(k => k !== 'font-family'))
+      ) {
+        const fam = fontParts['font-family'];
+        const on = s.on ? ` --on ${s.on}` : '';
+        /** @type {string[]} */
+        const runs = [
+          `${P} set ${slug} font ${quoteCommandArgument(fam ?? 'inter')}${on}`,
+        ];
+        if (fontParts['font-size'] && (!s.on || s.on === 'body'))
+          runs.push(
+            `${P} set ${slug} --font-size-base ${quoteCommandArgument(fontParts['font-size'])}`,
+          );
+        const w = fontParts['font-weight'];
+        if (w && (!s.on || s.on === 'heading')) {
+          const num =
+            w === 'bold' ? 700 : w === 'normal' ? 400 : Number(w) || null;
+          const rung = num
+            ? Object.entries(HEADING_WEIGHTS).reduce((a, b) =>
+                Math.abs(Number(b[1]) - num) < Math.abs(Number(a[1]) - num)
+                  ? b
+                  : a,
+              )[0]
+            : null;
+          if (rung) runs.push(`${P} set ${slug} headings ${rung}`);
+        }
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `font${s.on ? ` --on ${s.on}` : ''} takes a family or a preset, and "${v}" ${fam ? 'is a whole CSS font value' : 'is no family'}: ${
+            Object.keys(fontParts)
+              .filter(k => !['font-family', 'repeat', 'system'].includes(k))
+              .join(', ') || 'a keyword'
+          } ${fam ? 'would be read as part of the family name' : 'would be read as a family name'}, and the text would fall back.`,
           {run: runs},
         );
       }
