@@ -184,7 +184,7 @@ export function failingSpecs(job, {run = runGh, sleep = pause} = {}) {
   for (let attempt = 1; attempt <= LOG_ATTEMPTS; attempt += 1) {
     log = run(['run', 'view', '--job', String(job), '--log', '-R', OWNER_REPO]);
     if (log.status === 0 || !/HTTP 5\d\d/.test(log.stderr ?? '')) break;
-    sleep(5000 * attempt);
+    if (attempt < LOG_ATTEMPTS) sleep(5000 * attempt);
   }
   if (log.status !== 0) return null;
   const specs = new Set();

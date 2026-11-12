@@ -206,6 +206,22 @@ describe('failingSpecs', () => {
     expect(waits).toEqual([5000]);
   });
 
+  it('gives up after four server errors in a row, with no wait after the last try', () => {
+    const waits = [];
+    let calls = 0;
+    expect(
+      failingSpecs(1, {
+        run: () => {
+          calls += 1;
+          return {status: 1, stdout: '', stderr: 'HTTP 502: Server Error'};
+        },
+        sleep: ms => waits.push(ms),
+      }),
+    ).toBe(null);
+    expect(calls).toBe(4);
+    expect(waits).toEqual([5000, 10000, 15000]);
+  });
+
   it('gives up at once on an error that is not a server error', () => {
     let calls = 0;
     expect(
