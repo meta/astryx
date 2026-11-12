@@ -3250,16 +3250,78 @@ describe('swipe', () => {
   });
 
   describe('a new value from an inline createSwipe call (spec:AST-057 FR11)', () => {
-    function InlineRow({entries}: {entries: Entry[]}) {
+    function InlineRow({
+      entries,
+      behavior,
+    }: {
+      entries: Entry[];
+      behavior?: 'reveal' | 'commit';
+    }) {
       return (
         <Item
           label="Conversation"
           onClick={vi.fn()}
           data-testid="row"
-          swipe={createSwipe({leading: entries})}
+          swipe={createSwipe({leading: entries, swipeBehavior: behavior})}
         />
       );
     }
+
+    it('reads the newest value in the drag: its behavior at the release, and the handler a full swipe fires', async () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      const {rerender} = render(
+        <InlineRow
+          entries={[{id: 'unread', label: 'Unread', onActivate: first}]}
+        />,
+      );
+      const row = screen.getByTestId('row');
+      layOut(row);
+      rerender(
+        <InlineRow
+          behavior="commit"
+          entries={[{id: 'unread', label: 'Unread', onActivate: second}]}
+        />,
+      );
+      // Under `reveal` this release rests the row open; under `commit` it
+      // springs back.
+      dragLeading(row, 45);
+      await settled();
+      expect(xOf(row)).toBe(0);
+      // One entry: a 72 px panel; the full swipe confirms at about 209 px.
+      dragLeading(row, 220);
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+      });
+      await settled();
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(first).not.toHaveBeenCalled();
+    });
+
+    it('keeps one shared drag through new values: a drag that begins before a new value carries on through it', async () => {
+      const {rerender} = render(
+        <InlineRow
+          entries={[{id: 'unread', label: 'Unread', onActivate: vi.fn()}]}
+        />,
+      );
+      const row = screen.getByTestId('row');
+      layOut(row);
+      const f = finger(row);
+      f.down(10);
+      f.move(20);
+      f.move(35); // 25 px: the swipe begins on UIKit's measure, at 0
+      rerender(
+        <InlineRow
+          entries={[{id: 'unread', label: 'Unread', onActivate: vi.fn()}]}
+        />,
+      );
+      f.move(35 + 22);
+      f.move(35 + 45);
+      f.rest();
+      f.up();
+      await settled();
+      expect(xOf(row)).toBe(72);
+    });
 
     it('keeps a closed row closed and an open row open, and fires the newest handler', async () => {
       const first = vi.fn();

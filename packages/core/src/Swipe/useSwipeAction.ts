@@ -87,6 +87,7 @@ import {getGestureHost} from '../gestures/GestureHost';
 import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import type {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {isRtlElement} from '../hooks/isRtlElement';
 import type {MotionHandle} from '../motion/animator';
@@ -309,6 +310,11 @@ export interface SwipeLayout {
   outerWidth: number;
   /** The row's width. */
   rowWidth: number;
+}
+
+/** The side a drag from a closed row uncovers: toward the inline end is leading. */
+function sideFor(dx: number, inlineSign: 1 | -1): SwipeSide {
+  return dx * inlineSign > 0 ? 'leading' : 'trailing';
 }
 
 /** +1 when the side's panel is on the physical left, −1 on the right. */
@@ -578,24 +584,11 @@ export function useSwipeAction({
   fireOutermost,
   canConfirm,
 }: UseSwipeActionOptions): UseSwipeActionResult {
-  // The latest options, read by listeners and completions that outlive a render.
-  // Synchronizes the gesture system (pan callbacks, settle completions, the
-  // slide-out's fire timer) with the committed options.
-  const latestRef = useRef({
+  const latestRef = useCommittedRef({
     behavior,
     canConfirm,
     fireOutermost,
     sides,
-  });
-  // Syncs the shared drag's model, which runs outside React for the root's
-  // life, with the caller's newest options.
-  useIsomorphicLayoutEffect(() => {
-    latestRef.current = {
-      behavior,
-      canConfirm,
-      fireOutermost,
-      sides,
-    };
   });
 
   const [state, setState] = useState<SwipeState>(IDLE_STATE);
@@ -919,7 +912,7 @@ export function useSwipeAction({
         {cause, ...motion, cover},
       );
     },
-    [settle, slideOutThenFire],
+    [latestRef, settle, slideOutThenFire],
   );
 
   /**
@@ -978,10 +971,6 @@ export function useSwipeAction({
 
   // ---------------------------------------------------------------------------
   // The drag's model: where a drag draws the row, and where a release lands.
-
-  /** The side a drag from a closed row uncovers: toward the inline end is leading. */
-  const sideFor = (dx: number, inlineSign: 1 | -1): SwipeSide =>
-    dx * inlineSign > 0 ? 'leading' : 'trailing';
 
   const begin = (move: SnapDragMove): boolean => {
     const root = rootRef.current;
@@ -1267,6 +1256,17 @@ export function useSwipeAction({
     return null;
   };
 
+  // The model as of the last committed render. The one shared drag outlives
+  // the render that made each of these.
+  const modelRef = useCommittedRef({
+    begin,
+    cancel,
+    confirmOf,
+    release,
+    settleParts,
+    track,
+  });
+
   // The shared drag on the root, created once the root is known: the
   // splitter, the pan, the snap-point drag and the animator.
   useIsomorphicLayoutEffect(() => {
@@ -1285,11 +1285,11 @@ export function useSwipeAction({
         companion: {
           name: SWIPE_CONFIRM_PROPERTY,
           syntax: '<number>',
-          map: confirmOf,
+          map: (x: number) => modelRef.current.confirmOf(x),
         },
       },
       // The settles move the row's parts on the compositor.
-      compositorParts: () => settleParts(root),
+      compositorParts: () => modelRef.current.settleParts(root),
       onSettle: landed,
       pan: {
         // A finger, a pen and a trackpad's two-finger scroll swipe a row; a
@@ -1335,7 +1335,12 @@ export function useSwipeAction({
           );
         },
       },
-      model: {begin, move: track, release, cancel},
+      model: {
+        begin: move => modelRef.current.begin(move),
+        move: move => modelRef.current.track(move),
+        release: end => modelRef.current.release(end),
+        cancel: () => modelRef.current.cancel(),
+      },
     });
     snapRef.current = snap;
     return () => {
@@ -1345,9 +1350,9 @@ export function useSwipeAction({
       root.style.removeProperty(SWIPE_TRAVEL_PROPERTY);
       root.style.removeProperty(SWIPE_CONFIRM_PROPERTY);
     };
-    // The model reads the latest state and options through refs, and the
-    // callbacks it reaches are stable: one shared drag for the root's life.
-  }, [landed]);
+    // The model comes through its committed ref, and the rest is stable: one
+    // shared drag for the root's life.
+  }, [landed, modelRef, panels, presentedX]);
 
   // A touch tap on an open row's own content closes it and activates nothing,
   // as UIKit's dismissal does. The tap recognizes at the lift. The host keeps
