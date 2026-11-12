@@ -64,6 +64,11 @@ const LIVE = ['in_progress', 'queued', 'waiting', 'pending'];
 // A run's jobs appear within seconds of its admission; until then it counts at
 // its planned most.
 const JUST_ADMITTED_MS = 45_000;
+// A queued run of a small workflow whose jobs list is empty holds no runner
+// and counts nothing (spec:AST-030 FR16). At most this many such runs are
+// checked on one look; the rest count their estimate, so a backlog of queued
+// runs cannot spend the API budget.
+export const QUEUED_CHECKS = 20;
 // GitHub keeps listing some long-finished runs as queued; a run not updated in
 // this long holds no runner.
 const STALE_MS = 2 * 60 * 60_000;
@@ -102,6 +107,8 @@ export const waitSpan = waits => {
  * @param {number} options.maxWaitMs a pull-request run's longest wait
  * @param {() => Promise<number>} [options.ownWaitStart] when the looking `main`
  *   run began waiting, on GitHub's clock
+ * @param {boolean} [options.legacy] count a queued run with no jobs at its
+ *   estimate, as before (`CI_ADMISSION_LEGACY`)
  * @returns {Promise<{lowBudget?: number, others: number, large: number, small: number, smallBy: Record<string, number>, mainWaiting: boolean, pullWaiters: {id: number, began: number}[], startedAtLimit: {id: number, ago: number}[], counted: string[], stale: number, calls: number}>}
  */
 export async function countLook({
@@ -111,6 +118,7 @@ export async function countLook({
   main,
   maxWaitMs,
   ownWaitStart = async () => NaN,
+  legacy = false,
 }) {
   const seen = new Set();
   let large = 0;
@@ -125,6 +133,8 @@ export async function countLook({
   const counted = [];
   const smallBy = {};
   let stale = 0;
+  let queuedChecks = 0;
+  let emptyQueued = 0;
   for (const status of ['in_progress', 'queued']) {
     calls += 1;
     const {runs, remaining} = await listRuns(status);
@@ -139,6 +149,20 @@ export async function countLook({
         continue;
       }
       if (!admitted(run)) {
+        // A queued run with no jobs, not admitted in the last forty-five
+        // seconds, counts nothing; a small workflow is never admitted.
+        if (
+          !legacy &&
+          run.status === 'queued' &&
+          queuedChecks < QUEUED_CHECKS
+        ) {
+          queuedChecks += 1;
+          calls += 1;
+          if ((await listJobs(run.id)).length === 0) {
+            emptyQueued += 1;
+            continue;
+          }
+        }
         small += estimate(run);
         smallBy[short(run)] = (smallBy[short(run)] ?? 0) + estimate(run);
         continue;
@@ -214,6 +238,7 @@ export async function countLook({
     startedAtLimit,
     counted,
     stale,
+    emptyQueued,
     calls,
   };
 }
@@ -272,7 +297,7 @@ async function main() {
   const runId = value('--run') == null ? null : Number(value('--run'));
   const usage = () => {
     console.error(
-      'usage: count.mjs --repo <owner/name> (--pr <number> | --peak <jobs>) [--reserved <jobs>] [--run <id>] [--main]',
+      'usage: count.mjs --repo <owner/name> (--pr <number> | --peak <jobs>) [--reserved <jobs>] [--run <id>] [--main] [--legacy]',
     );
     process.exit(2);
   };
@@ -305,6 +330,7 @@ async function main() {
         ).jobs,
       selfId: runId,
       main: isMainCheck,
+      legacy: argv.includes('--legacy'),
       maxWaitMs: (isMainCheck ? 120 : 12) * 60_000,
     });
     const others = look.others + reserved;

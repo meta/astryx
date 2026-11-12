@@ -39,8 +39,10 @@
 #   other back by more than they use; a waiting
 #   `main` run counts its whole peak. A run admitted in the last 45 seconds,
 #   before its jobs appear, counts at least its planned most. Every other
-#   workflow's run counts an estimate. A run not updated in two hours is a
-#   stale record GitHub still lists as active, and counts nothing.
+#   workflow's run counts an estimate, except a queued run with no jobs, which
+#   counts nothing (checked for up to twenty such runs a look). A run not
+#   updated in two hours is a stale record GitHub still lists as active, and
+#   counts nothing.
 # - A look costs two run listings plus one call per active CI or Main run, and
 #   a run looks at most `max-looks` times: twice for a pull request (at once and
 #   after its longest wait), about every four minutes for the rare `main` run. A
@@ -78,6 +80,10 @@ inputs:
     description: "'whole' waits for the whole run; 'room' waits for room for one job and records whether the whole run fit; 'rest' waits for the rest of the run after 'room'."
     required: false
     default: whole
+  legacy:
+    description: "'true' counts a queued run with no jobs at its estimate, as before (`CI_ADMISSION_LEGACY`)."
+    required: false
+    default: 'false'
   fits:
     description: "For 'rest': 'true' when the whole run fit on the 'room' look."
     required: false
@@ -129,6 +135,7 @@ runs:
         MAX_WAIT_MINUTES: ${{ inputs.max-wait-minutes }}
         MAX_LOOKS: ${{ inputs.max-looks }}
         COUNT_MODULE: ${{ github.action_path }}/count.mjs
+        LEGACY: ${{ inputs.legacy }}
       with:
         retries: 3
         script: |
@@ -255,6 +262,7 @@ runs:
                 main,
                 maxWaitMs: MAX_WAIT_MS,
                 ownWaitStart,
+                legacy: process.env.LEGACY === 'true',
               });
               calls += lookAt.calls;
               if (lookAt.lowBudget != null) {

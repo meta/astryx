@@ -19,7 +19,10 @@ import {afterAll, describe, expect, it} from 'vitest';
 
 import {
   CI_CEILING,
+  QUEUED_CHECKS,
   SMALL_MOST,
+  countLook,
+  estimate,
   pullRequestPeak,
 } from '../actions/ci-admission/count.mjs';
 
@@ -49,6 +52,109 @@ describe("a pull request's peak", () => {
     );
     // A label that adds no suite adds no jobs.
     expect(pullRequestPeak(workflow, ['CLA Signed'])).toBe(base);
+  });
+});
+
+describe('a queued run with no jobs (spec:AST-030 FR16)', () => {
+  const NOW = Date.now();
+  const at = ms => new Date(NOW - ms).toISOString();
+  // A run of a small workflow, queued, as GitHub lists the backlog a stall
+  // leaves: runs that have no jobs yet.
+  const queued = (id, jobs = []) => ({
+    run: {
+      id,
+      status: 'queued',
+      event: 'pull_request_target',
+      path: '.github/workflows/review-signal.yml',
+      updated_at: at(60_000),
+    },
+    jobs,
+  });
+  async function look(entries, options = {}) {
+    const jobsOf = new Map(entries.map(({run, jobs}) => [run.id, jobs]));
+    let jobCalls = 0;
+    const result = await countLook({
+      listRuns: async status => ({
+        runs: entries.map(({run}) => run).filter(run => run.status === status),
+      }),
+      listJobs: async id => {
+        jobCalls += 1;
+        return jobsOf.get(id) ?? [];
+      },
+      selfId: null,
+      main: false,
+      maxWaitMs: 12 * 60_000,
+      ...options,
+    });
+    return {...result, jobCalls};
+  }
+
+  it('counts nothing for queued runs with no jobs, the backlog a stall leaves', async () => {
+    const backlog = Array.from({length: 15}, (_, i) => queued(100 + i));
+    const now = await look(backlog);
+    expect(now.small).toBe(0);
+    expect(now.emptyQueued).toBe(15);
+    // The legacy count charges each its estimate, as before.
+    const before = await look(backlog, {legacy: true});
+    expect(before.small).toBe(15 * estimate(backlog[0].run));
+    expect(before.jobCalls).toBe(0);
+  });
+
+  it('every wait reads the one legacy switch', () => {
+    const line = "legacy: ${{ vars.CI_ADMISSION_LEGACY == 'true' }}";
+    const main = fs.readFileSync(
+      path.join(root, '.github/workflows/deploy.yml'),
+      'utf8',
+    );
+    // ci.yml's room and admission, and Main's wait.
+    expect(workflow.split(line).length - 1).toBe(2);
+    expect(main.split(line).length - 1).toBe(1);
+  });
+
+  it('still counts a queued run that has jobs', async () => {
+    const result = await look([queued(1, [{status: 'queued'}])]);
+    expect(result.small).toBe(estimate(queued(1).run));
+  });
+
+  it('keeps the small-workflow floor: a backlog of empty runs never lowers it', async () => {
+    const result = await look(
+      Array.from({length: QUEUED_CHECKS}, (_, i) => queued(200 + i)),
+    );
+    expect(result.others).toBe(SMALL_MOST);
+  });
+
+  it('checks at most a set number of queued runs a look; the rest count their estimate', async () => {
+    const backlog = Array.from({length: QUEUED_CHECKS + 5}, (_, i) =>
+      queued(300 + i),
+    );
+    const result = await look(backlog);
+    expect(result.jobCalls).toBe(QUEUED_CHECKS);
+    expect(result.small).toBe(5 * estimate(backlog[0].run));
+  });
+
+  it('keeps the just-admitted rule: a CI run admitted under 45 s ago with no jobs yet counts its planned most', async () => {
+    const run = {
+      id: 7,
+      status: 'queued',
+      event: 'pull_request',
+      path: '.github/workflows/ci.yml',
+      updated_at: at(10_000),
+    };
+    const jobs = [
+      {
+        status: 'completed',
+        steps: [
+          {
+            name: 'Wait for room under the CI ceiling',
+            status: 'completed',
+            started_at: at(60_000),
+            completed_at: at(10_000),
+          },
+        ],
+      },
+    ];
+    const result = await look([{run, jobs}]);
+    expect(result.large).toBe(estimate(run));
   });
 });
 

@@ -122,6 +122,7 @@ jobs:
           # four minutes, and never yields to a pull-request run.
           max-wait-minutes: 120
           max-looks: 30
+          legacy: ${{ vars.CI_ADMISSION_LEGACY == 'true' }}
 
   # Verify package.json exports match the source tree.
   # Fails if exports are stale — run `node scripts/sync-exports.js` locally to fix.
