@@ -739,8 +739,13 @@ function BaseTableInner<T extends Record<string, unknown>>({
     loadingSource.getSnapshot,
     loadingSource.getServerSnapshot,
   );
+  // Only the Table-owned wrapper renders `afterTable`, where the loading
+  // surface lives.
   const isLoadingAdmitted =
-    mode === 'data' && admission.rowModel === 'flat' && ScrollWrapper != null;
+    mode === 'data' &&
+    admission.rowModel === 'flat' &&
+    ScrollWrapper != null &&
+    isTableScrollWrapperOwned(ScrollWrapper);
   const isLoading = isLoadingAdmitted && (loadingSnapshot & 1) === 1;
   // While any admitted source may load more rows, the total is unknown.
   const hasMoreRows = isLoadingAdmitted && (loadingSnapshot & 2) === 2;

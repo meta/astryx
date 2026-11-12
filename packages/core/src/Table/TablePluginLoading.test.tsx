@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 import {act, render, screen, cleanup} from '@testing-library/react';
+import type {HTMLAttributes, ReactNode} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {useTableInfiniteScroll} from './plugins/infiniteScroll/useTableInfiniteScroll';
 import type {TableColumn} from './types';
@@ -94,6 +95,36 @@ describe('Table plugin loading source', () => {
     );
     expect(screen.queryByText('No data')).not.toBeInTheDocument();
     act(() => screen.getByRole('button', {name: 'Settle'}).click());
+    expect(screen.getByText('No data')).toBeInTheDocument();
+  });
+  it('admits no loading state with a caller scroll wrapper', () => {
+    const source = {
+      subscribe: () => () => {},
+      getSnapshot: () => ({isLoading: true}),
+      getServerSnapshot: () => ({isLoading: true}),
+    };
+    const plugins = {load: {rowModel: 'flat' as const, renderState: source}};
+    // The caller's wrapper does not render `afterTable`, so no loading
+    // surface can show; the default empty state stays.
+    const CallerWrapper = ({
+      children,
+      htmlProps,
+    }: {
+      children: ReactNode;
+      htmlProps?: HTMLAttributes<HTMLDivElement>;
+    }) => (
+      <div {...htmlProps} data-caller-wrapper>
+        {children}
+      </div>
+    );
+    render(
+      <Table
+        data={[]}
+        columns={columns}
+        plugins={plugins}
+        scrollWrapper={CallerWrapper}
+      />,
+    );
     expect(screen.getByText('No data')).toBeInTheDocument();
   });
 });

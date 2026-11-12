@@ -330,8 +330,6 @@ function InfiniteScrollSurface({
     const state = resourcesRef.current;
     state.context = context;
     state.viewport = context.viewport.current;
-    // Table's bounded block viewport is the root when it has one; otherwise
-    // the browser viewport is.
     const root = hasBlockViewport ? context.viewport.current : null;
     const node = sentinelRef.current;
     if (state.root !== root || state.node !== node) {
