@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports from component directories (Button/, Card/, Layout/, Layer/, Toast/)
@@ -194,6 +192,14 @@ export {
   type DragToSnapPoints,
   type DragToSnapPointsOptions,
 } from './dragToSnapPoints/createDragToSnapPoints';
+
+// Reorder (a collection's `reorderable` prop)
+export {
+  createReorderable,
+  type Reorderable,
+  type ReorderableOptions,
+  type ReorderMove,
+} from './reorderable/createReorderable';
 
 // Hooks
 export * from './hooks';

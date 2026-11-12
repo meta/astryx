@@ -168,6 +168,24 @@ function restoreEffect(next: KeyframeEffect, saved: SavedAnimation): void {
   }
 }
 
+/**
+ * Gives `next` the start time `original` runs on, now or, while its play is
+ * still pending, once that play starts. A pending play has no start time
+ * yet: it resolves on the frame that first draws the animation.
+ */
+function followStart(next: Animation, original: Animation): void {
+  const take = () => {
+    if (original.startTime != null && next.playState !== 'idle') {
+      next.startTime = original.startTime;
+    }
+  };
+  if (original.startTime != null) {
+    take();
+    return;
+  }
+  original.ready.then(take, () => undefined);
+}
+
 /** Give `next` the state `saved` had, member by member. */
 function restore(next: Animation, saved: SavedAnimation): void {
   const effect = next.effect as KeyframeEffect | null;
@@ -214,6 +232,11 @@ function restore(next: Animation, saved: SavedAnimation): void {
     next.startTime = start;
   } else if (time != null) {
     next.currentTime = time;
+    // A running one saved while its play was pending had no start time yet.
+    // It takes the start its original resolves to, so the two run in step.
+    if (saved.playState === 'running') {
+      followStart(next, saved.animation);
+    }
   }
 }
 

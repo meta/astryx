@@ -184,6 +184,10 @@ export type TokenValue = string | [light: string, dark: string];
  * `:hover` would otherwise still match. Style the disabled state through
  * `:disabled` instead.
  *
+ * An `:active` override follows the touch press model: it applies to a mouse
+ * press, and under a coarse primary pointer it applies while Astryx believes
+ * the press, not on the touch or through a scroll.
+ *
  * @example
  * ```ts
  * {
@@ -597,7 +601,6 @@ export interface DefinedTheme {
   /**
    * Component icon slot values with their functions, present when any value
    * is a function. Only component slot resolution reads it.
-   * @internal
    */
   __componentIcons?: Partial<Record<string, StoredComponentIconValue>>;
   /** Indicator overrides for stateful control visuals, keyed by name */

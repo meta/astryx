@@ -6,8 +6,9 @@
  * @output Unit tests for the exit a drag's close plays. It starts the close
  *   spring from where the finger left the sheet, and a reopen takes it back.
  *   The scrim fades for as long as that close plays, decided before the
- *   scrim starts to clear. That holds on a standalone sheet and on a
- *   switcher flow
+ *   scrim starts to clear. Under reduced motion no spring plays, and the
+ *   sheet stays where the finger left it while it fades out. Each holds on a
+ *   standalone sheet and on a switcher flow
  * @position The jsdom side of the drag exit; the Chromium release spec reads
  *   the curve the browser plays.
  */
@@ -176,19 +177,41 @@ function getHandle(label = 'Sheet'): HTMLElement {
   return handle;
 }
 
+// Pointer events on one clock, 16 ms apart, so a drag's release velocity
+// follows its events' own timestamps.
+let pointerTime = 0;
+
+function firePointer(
+  target: Element,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  init: {pointerId: number; clientY: number; pointerType?: string},
+) {
+  pointerTime += 16;
+  const event = new Event(type, {bubbles: true, cancelable: true});
+  Object.defineProperties(event, {
+    button: {value: 0},
+    clientY: {value: init.clientY},
+    isPrimary: {value: true},
+    pointerId: {value: init.pointerId},
+    timeStamp: {value: pointerTime},
+  });
+  if (init.pointerType != null) {
+    Object.defineProperty(event, 'pointerType', {value: init.pointerType});
+  }
+  fireEvent(target, event);
+}
+
 /** A fast downward touch drag on the handle: a flick, which closes the sheet. */
 function flickDown(label = 'Sheet') {
   const handle = getHandle(label);
-  fireEvent.pointerDown(handle, {
+  firePointer(handle, 'pointerdown', {
     pointerId: 1,
     pointerType: 'touch',
     clientY: 0,
-    button: 0,
-    isPrimary: true,
   });
-  fireEvent.pointerMove(handle, {pointerId: 1, clientY: 40});
-  fireEvent.pointerMove(handle, {pointerId: 1, clientY: 120});
-  fireEvent.pointerUp(handle, {pointerId: 1, clientY: 120});
+  firePointer(handle, 'pointermove', {pointerId: 1, clientY: 40});
+  firePointer(handle, 'pointermove', {pointerId: 1, clientY: 120});
+  firePointer(handle, 'pointerup', {pointerId: 1, clientY: 120});
 }
 
 it('plays the close spring when a drag closes the sheet', () => {
@@ -218,6 +241,84 @@ it('leaves a finished exit where it ended', async () => {
     exits[0].finish();
   });
   expect(exits[0].retarget).not.toHaveBeenCalled();
+});
+
+/** Matches only the reduced-motion query: a fine pointer that asks for less motion. */
+function preferReducedMotion() {
+  vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+    matches: query === '(prefers-reduced-motion: reduce)',
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+}
+
+/**
+ * A touch flick on the handle, which closes the sheet. Returns the sheet and
+ * the transform the drag left on it at the lift.
+ */
+function flickDownFromHeld(label = 'Sheet') {
+  const handle = getHandle(label);
+  const sheet = handle.closest<HTMLElement>('.astryx-bottom-sheet');
+  firePointer(handle, 'pointerdown', {
+    pointerId: 1,
+    pointerType: 'touch',
+    clientY: 0,
+  });
+  firePointer(handle, 'pointermove', {pointerId: 1, clientY: 40});
+  firePointer(handle, 'pointermove', {pointerId: 1, clientY: 120});
+  const released = sheet?.style.transform;
+  firePointer(handle, 'pointerup', {pointerId: 1, clientY: 120});
+  return {sheet, released};
+}
+
+/**
+ * Expects a reduced-motion close: no spring, and the sheet held where the
+ * finger left it while it fades. Once the fade ends, the hidden sheet holds
+ * no offset, so it opens again from rest.
+ */
+function expectFadesInPlace(
+  {sheet, released}: ReturnType<typeof flickDownFromHeld>,
+  label = 'Sheet',
+) {
+  const dialog = document.querySelector(`dialog[aria-label="${label}"]`);
+  // The release asked the sheet to close: a closing sheet is not modal.
+  expect(dialog?.getAttribute('aria-modal') ?? null).toBeNull();
+  expect(exits).toHaveLength(0);
+  expect(released).toMatch(/^translateY\([1-9]/);
+  expect(sheet?.style.transform).toBe(released);
+  // The cross-fade waits on the opacity transition.
+  const fadeEnd = new Event('transitionend', {bubbles: true});
+  Object.defineProperty(fadeEnd, 'propertyName', {value: 'opacity'});
+  act(() => {
+    sheet?.dispatchEvent(fadeEnd);
+  });
+  expect(dialog?.hasAttribute('open')).toBe(false);
+  expect(sheet?.style.transform).toBe('');
+}
+
+it('holds the sheet where the finger left it while a reduced-motion close fades it out', () => {
+  preferReducedMotion();
+  render(<Host />);
+  layOutSheet();
+  expectFadesInPlace(flickDownFromHeld());
+});
+
+it('leaves the hidden sheet no drag offset once a drag exit ends', async () => {
+  render(<Host />);
+  layOutSheet();
+  const {sheet, released} = flickDownFromHeld();
+  expect(exits).toHaveLength(1);
+  expect(sheet?.style.transform).toBe(released);
+  await act(async () => {
+    exits[0].finish();
+  });
+  // The next open rises from below the screen, not from the old offset.
+  expect(sheet?.style.transform).toBe('');
 });
 
 /** The inline fade duration on the sheet's dialog, '' when none. */
@@ -311,6 +412,13 @@ it("fades a switcher flow's scrim for as long as the close plays when a drag clo
   expectFadeBeforeClear(writes);
 });
 
+it("holds a switcher flow's sheet where the finger left it while a reduced-motion close fades it out", () => {
+  preferReducedMotion();
+  render(<Flow />);
+  layOutSheet('Steps');
+  expectFadesInPlace(flickDownFromHeld('Steps'), 'Steps');
+});
+
 it("clears the scrim's fade duration when the drag exit ends", async () => {
   render(<Host />);
   layOutSheet();
@@ -336,16 +444,14 @@ it("leaves the scrim's fade alone when a mouse drag closes the sheet", () => {
   render(<Host />);
   layOutSheet();
   const handle = getHandle();
-  fireEvent.pointerDown(handle, {
+  firePointer(handle, 'pointerdown', {
     pointerId: 2,
     pointerType: 'mouse',
     clientY: 0,
-    button: 0,
-    isPrimary: true,
   });
-  fireEvent.pointerMove(handle, {pointerId: 2, clientY: 200});
-  fireEvent.pointerMove(handle, {pointerId: 2, clientY: 390});
-  fireEvent.pointerUp(handle, {pointerId: 2, clientY: 390});
+  firePointer(handle, 'pointermove', {pointerId: 2, clientY: 200});
+  firePointer(handle, 'pointermove', {pointerId: 2, clientY: 390});
+  firePointer(handle, 'pointerup', {pointerId: 2, clientY: 390});
   expect(exits).toHaveLength(0);
   expect(scrimFade()).toBe('');
 });

@@ -3,14 +3,19 @@
 
 /**
  * @file BottomSheetRelease.a11y.chromium.spec.ts
- * @input Built BottomSheet stories and real Chromium touch input (CDP), each
- *   event with its own timestamp
- * @output Browser evidence for a touch drag's close: the close and its
- *   scrim's running fade play on one clock and end together. That holds at
- *   each tempo, from the top snap point, and in a switcher flow. A mouse
- *   close under reduced motion moves no further.
- * @position Chromium proof for the drag's close and its scrim. The page reads
- *   the events' timestamps, so load cannot change the release speed.
+ * @input Built BottomSheet stories and real Chromium touch and mouse input
+ *   (CDP), each event with its own timestamp
+ * @output Browser evidence for the touch release: a fast short flick closes
+ *   a sheet at its lowest detent, and its exit starts at the flick's speed.
+ *   From the top snap point, a flick whose projection stops short of the
+ *   next one stops there. One whose projection passes it closes the sheet.
+ *   A faster release never stops short of a slower one. A short slow
+ *   release keeps the sheet open. A quick short mouse drag keeps it open, and
+ *   a mouse close under reduced motion moves no further. A drag's close and
+ *   its scrim's running fade play on one clock and end together, at each
+ *   tempo and in a switcher flow.
+ * @position Chromium proof for useSheetGestures' release. The page reads the
+ *   events' timestamps, so load cannot change the release speed.
  */
 
 import {
@@ -26,6 +31,7 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 import {END_HOLD_MS} from '../../motion/animator';
+import {sheet as sheetTable} from '../../motion/uikit/sheet';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -113,6 +119,178 @@ async function drag(
   });
 }
 
+test('a fast short flick closes the sheet, which leaves at the speed of the flick', async ({
+  page,
+}) => {
+  const {dialog, sheet} = await openFilters(page);
+  const rest = await sheet.evaluate(el => el.getBoundingClientRect());
+  // Every frame's sheet top, until the dialog closes.
+  await page.evaluate(() => {
+    const frames = {tops: [] as number[], done: false};
+    (window as unknown as {sheetFrames: typeof frames}).sheetFrames = frames;
+    const record = () => {
+      const panel = document.querySelector('.astryx-bottom-sheet');
+      if (panel == null || document.querySelector('dialog[open]') == null) {
+        frames.done = true;
+        return;
+      }
+      frames.tops.push(panel.getBoundingClientRect().top);
+      requestAnimationFrame(record);
+    };
+    requestAnimationFrame(record);
+  });
+  const cdp = await page.context().newCDPSession(page);
+  // 30 px in 15 ms is 2,000 px/s: a flick, and too short to project.
+  await drag(cdp, sheet, 30, 15);
+  // The exit the page plays: the close spring on the sheet's `translate`.
+  // Its first keyframe step gives the speed it starts at. A closing dialog
+  // leaves the accessibility tree, so read the panel from the document.
+  const startSpeed = await page.evaluate(async () => {
+    const panel = document.querySelector<HTMLElement>('.astryx-bottom-sheet');
+    const offsetY = (frame: Keyframe) =>
+      Number.parseFloat(String(frame.translate ?? '0px').split(' ')[1] ?? '0');
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      for (const animation of panel?.getAnimations() ?? []) {
+        const effect = animation.effect;
+        if (!(effect instanceof KeyframeEffect)) {
+          continue;
+        }
+        const [first, second] = effect.getKeyframes();
+        if (first?.translate == null || second == null) {
+          continue;
+        }
+        const duration = Number(effect.getComputedTiming().duration);
+        const step =
+          ((second.computedOffset ?? 0) - (first.computedOffset ?? 0)) *
+          duration;
+        return ((offsetY(second) - offsetY(first)) / step) * 1000;
+      }
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+    return null;
+  });
+  expect(startSpeed).not.toBeNull();
+  expect(startSpeed ?? 0).toBeGreaterThan(sheetTable.release.fastSpeed);
+  await expect(dialog).toBeHidden({timeout: 2_000});
+  // A closing dialog leaves the accessibility tree at once, so wait for the
+  // dialog itself to close.
+  const read = async () =>
+    page.evaluate(
+      () =>
+        (window as unknown as {sheetFrames: {tops: number[]; done: boolean}})
+          .sheetFrames,
+    );
+  await expect
+    .poll(async () => (await read()).done, {timeout: 2_000})
+    .toBe(true);
+  // The sheet slides off from where the finger left it, and never turns back
+  // toward rest while any of it shows. The spring settles below the screen.
+  const {tops} = await read();
+  const shown = tops.filter(top => top < 844);
+  expect(shown.length, 'frames drawn before the dialog closed').toBeGreaterThan(
+    0,
+  );
+  const turnsBack = shown.some((top, i) => i > 0 && top < shown[i - 1] - 0.5);
+  expect(turnsBack, tops.join(' ')).toBe(false);
+  expect(Math.max(...tops) - rest.top).toBeGreaterThan(100);
+});
+
+test('a short release under the flick speed keeps the sheet open', async ({
+  page,
+}) => {
+  const {dialog, sheet} = await openFilters(page);
+  const cdp = await page.context().newCDPSession(page);
+  // 30 px in 150 ms is 200 px/s.
+  await drag(cdp, sheet, 30, 150);
+  await expect
+    .poll(async () => sheet.evaluate(el => getComputedStyle(el).transform), {
+      timeout: 2_000,
+    })
+    .toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
+  await expect(dialog).toBeVisible();
+});
+
+/** The sheet's top, once it holds still for 100 ms. */
+async function restingTop(page: Page) {
+  let top = 0;
+  await expect
+    .poll(
+      async () => {
+        const {before, after} = await page.evaluate(async () => {
+          const read = () =>
+            document
+              .querySelector('.astryx-bottom-sheet')
+              ?.getBoundingClientRect().top ?? 0;
+          const first = read();
+          await new Promise(resolve => setTimeout(resolve, 100));
+          return {before: first, after: read()};
+        });
+        top = after;
+        return Math.abs(after - before) < 0.5;
+      },
+      {timeout: 3_000},
+    )
+    .toBe(true);
+  return top;
+}
+
+test('a normal flick from the top snap point stops at the next snap point', async ({
+  page,
+}) => {
+  const {dialog, sheet} = await openSheet(
+    page,
+    'snap-points',
+    'Open nearby places',
+    'Nearby places',
+  );
+  const top = await restingTop(page);
+  const cdp = await page.context().newCDPSession(page);
+  // 60 px in 40 ms is 1,500 px/s: a flick, whose 0.1 s projection lands
+  // short of the half-height snap point.
+  await drag(cdp, sheet, 60, 40);
+  const settled = await restingTop(page);
+  await expect(dialog).toBeVisible();
+  expect(settled - top).toBeGreaterThan(200);
+});
+
+test('a hard flick from the top snap point closes the sheet', async ({
+  page,
+}) => {
+  const {dialog, sheet} = await openSheet(
+    page,
+    'snap-points',
+    'Open nearby places',
+    'Nearby places',
+  );
+  const cdp = await page.context().newCDPSession(page);
+  // 60 px in 6 ms is 10,000 px/s: 0.1 s ahead it lands past the midpoint
+  // between the half-height snap point and closed.
+  await drag(cdp, sheet, 60, 6);
+  await expect(dialog).toBeHidden({timeout: 2_000});
+});
+
+test('a flick from the top snap point whose projection passes the next one closes the sheet', async ({
+  page,
+}) => {
+  const {dialog, sheet} = await openSheet(
+    page,
+    'snap-points',
+    'Open nearby places',
+    'Nearby places',
+  );
+  const top = await restingTop(page);
+  const height = await page.evaluate(() => window.innerHeight);
+  const half = height * 0.5;
+  const cdp = await page.context().newCDPSession(page);
+  // 60 px in 15 ms is 4,000 px/s. 0.1 s ahead it lands past the
+  // half-height snap point, though nearer it than closed.
+  const projected = top + 60 + 4000 * sheetTable.release.projectionSeconds;
+  expect(projected).toBeGreaterThan(half);
+  expect(projected - half).toBeLessThan(height - projected);
+  await drag(cdp, sheet, 60, 15);
+  await expect(dialog).toBeHidden({timeout: 2_000});
+});
+
 test('a mouse close under reduced motion moves the sheet no further', async ({
   page,
 }) => {
@@ -123,14 +301,24 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
   await page.evaluate(() => {
     const frames = {
       samples: [] as [number, number][],
+      moveStamp: Number.NEGATIVE_INFINITY,
+      upStamp: Number.POSITIVE_INFINITY,
       upAt: Number.POSITIVE_INFINITY,
       done: false,
     };
     (window as unknown as {sheetFrames: typeof frames}).sheetFrames = frames;
     window.addEventListener(
+      'pointermove',
+      event => {
+        frames.moveStamp = event.timeStamp;
+      },
+      {capture: true},
+    );
+    window.addEventListener(
       'pointerup',
-      () => {
+      event => {
         frames.upAt = performance.now();
+        frames.upStamp = event.timeStamp;
       },
       {capture: true},
     );
@@ -145,12 +333,10 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
     };
     requestAnimationFrame(record);
   });
-  const x = rest.x + rest.width / 2;
-  const y = rest.y + 12;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(x, y + 150, {steps: 5});
-  await page.mouse.up();
+  const cdp = await page.context().newCDPSession(page);
+  // 150 px in 50 ms is 3,000 px/s, so the mouse release projects past the
+  // dismiss line even when event delivery is slow.
+  await mouseDrag(cdp, sheet, 150, 50);
   // While the dialog closes, no drag exit plays: no inline transition and no
   // animation moves the sheet.
   const exitPlayed = await page.evaluate(async () => {
@@ -176,7 +362,6 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
     return played;
   });
   expect(exitPlayed).toBe(false);
-  await expect(dialog).toBeHidden({timeout: 2_000});
   const read = async () =>
     page.evaluate(
       () =>
@@ -184,12 +369,42 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
           window as unknown as {
             sheetFrames: {
               samples: [number, number][];
+              moveStamp: number;
+              upStamp: number;
               upAt: number;
               done: boolean;
             };
           }
         ).sheetFrames,
     );
+  // The sheet drops aria-modal when the release asks it to close. A release
+  // read as still projects short of the dismiss line and keeps it. The gap
+  // uses the events' own times: CDP delivers them back to back.
+  const lift = await read();
+  const gap = Math.round(lift.upStamp - lift.moveStamp);
+  // Read the DOM, not the accessibility tree: a closing dialog leaves the
+  // tree, so a role locator finds nothing once the close has started.
+  // Past the tracker's 40 ms stillness interval the release reads as still.
+  const cause =
+    gap > 40
+      ? `the drag read as a still release (${gap} ms from the last move to the lift)`
+      : `${gap} ms from the last move to the lift`;
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(
+          () =>
+            document
+              .querySelector('dialog[open]')
+              ?.getAttribute('aria-modal') ?? null,
+        ),
+      {
+        message: `the release did not ask the sheet to close: ${cause}, so its projection stayed short of the dismiss line`,
+        timeout: 2_000,
+      },
+    )
+    .toBeNull();
+  await expect(dialog).toBeHidden({timeout: 2_000});
   await expect
     .poll(async () => (await read()).done, {timeout: 2_000})
     .toBe(true);
@@ -204,6 +419,84 @@ test('a mouse close under reduced motion moves the sheet no further', async ({
   const trace = samples.map(([, top]) => Math.round(top)).join(' ');
   expect(released - rest.top).toBeGreaterThan(100);
   expect(between, trace).toEqual([]);
+});
+
+/** A mouse drag on the grabber of `distance` px in `ms`, each event timestamped. */
+async function mouseDrag(
+  cdp: CDPSession,
+  sheet: Locator,
+  distance: number,
+  ms: number,
+) {
+  const box = await sheet.boundingBox();
+  if (box == null) {
+    throw new Error('no sheet box');
+  }
+  const x = box.x + box.width / 2;
+  const y = box.y + 12;
+  const base = Date.now() / 1000;
+  const steps = 6;
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x,
+    y,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+    timestamp: base,
+  });
+  for (let i = 1; i <= steps; i += 1) {
+    await cdp.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x,
+      y: y + (distance * i) / steps,
+      button: 'left',
+      buttons: 1,
+      timestamp: base + (ms * i) / steps / 1000,
+    });
+  }
+  await cdp.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x,
+    y: y + distance,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+    timestamp: base + (ms + 1) / 1000,
+  });
+}
+
+test('a quick short mouse drag keeps the sheet open', async ({page}) => {
+  const {dialog, sheet} = await openFilters(page);
+  const top = await restingTop(page);
+  const cdp = await page.context().newCDPSession(page);
+  // 40 px in 20 ms is 2,000 px/s. The flick is a touch gesture, and a mouse
+  // release this short does not project.
+  await mouseDrag(cdp, sheet, 40, 20);
+  const settled = await restingTop(page);
+  await expect(dialog).toBeVisible();
+  expect(Math.abs(settled - top)).toBeLessThan(1);
+});
+
+test('a faster touch release never stops short of a slower one', async ({
+  page,
+}) => {
+  const settledAfter = async (ms: number) => {
+    const {sheet} = await openSheet(
+      page,
+      'snap-points-with-peek',
+      'Open route',
+      'Route',
+    );
+    await restingTop(page);
+    const cdp = await page.context().newCDPSession(page);
+    await drag(cdp, sheet, 60, ms);
+    return restingTop(page);
+  };
+  // 60 px at about 950 px/s and at about 1,050 px/s, from the top.
+  const slower = await settledAfter(63);
+  const faster = await settledAfter(57);
+  expect(faster).toBeGreaterThanOrEqual(slower - 1);
 });
 
 interface CloseWatch {

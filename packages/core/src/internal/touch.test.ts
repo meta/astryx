@@ -137,6 +137,28 @@ describe('internal/touch', () => {
     expect(entry.navigation).toBeDefined();
   });
 
+  it("re-exports by name what Lab's PageControl also reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const animator = await import('../motion/animator');
+    const reduced = await import('../motion/reducedMotion');
+    const hitArea = await import('../utils/touchHitArea');
+    const hitAreaStyles = await import('./touchHitArea.stylex');
+    expect(entry.animatorFor).toBe(animator.animatorFor);
+    expect(entry.reducedMotionFade).toBe(reduced.reducedMotionFade);
+    expect(entry.useTouchHitArea).toBe(hitArea.useTouchHitArea);
+    expect(entry.touchHitAreaStyles).toBe(hitAreaStyles.touchHitAreaStyles);
+    // An identity check passes when both sides are undefined, so each name
+    // must also be defined.
+    for (const name of [
+      'animatorFor',
+      'reducedMotionFade',
+      'useTouchHitArea',
+    ]) {
+      expect(typeof entry[name], name).toBe('function');
+    }
+    expect(entry.touchHitAreaStyles).toBeDefined();
+  });
+
   it("re-exports by name what NavigationStack's bars and scroll edge effect read", async () => {
     const entry: Record<string, unknown> = await import('./touch');
     const host = await import('../gestures/GestureHost');
@@ -152,6 +174,28 @@ describe('internal/touch', () => {
     ]) {
       expect(typeof entry[name], name).toBe('function');
     }
+  });
+
+  it('re-exports the action-group tracking hook by name', async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    // Identity alone passes when both sides are undefined.
+    expect(typeof entry.useActionGroupTracking).toBe('function');
+    const modules: Record<string, Record<string, unknown>> = {
+      useActionGroupTracking: await import('../hooks/useActionGroupTracking'),
+    };
+    for (const [name, module] of Object.entries(modules)) {
+      expect(entry[name], name).toBe(module[name]);
+    }
+  });
+
+  it("re-exports by name the scroll test Lab's TabBar reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const geometry = await import('../hooks/scrollGeometry');
+    // Identity alone passes when both sides are undefined.
+    expect(typeof entry.measureLogicalScrollAxis).toBe('function');
+    expect(entry.measureLogicalScrollAxis).toBe(
+      geometry.measureLogicalScrollAxis,
+    );
   });
 
   it('attaches no window or document listeners when it loads', async () => {

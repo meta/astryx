@@ -34,14 +34,40 @@ const reads = new AsyncLocalStorage();
  * Add `file` to every running operation's map, with its state now, unless it
  * is there already.
  * @param {Map<string, string>[]} runs
- * @param {string} file
+ * @param {string} file - What a run checks: the file read, or the folder of
+ *   the path probed.
+ * @param {string} [probed] - The path itself, which an exact run checks.
  */
-function note(runs, file) {
+function note(runs, file, probed = file) {
   let state;
+  let probedState;
   for (const seen of runs) {
-    if (!seen.has(file)) seen.set(file, (state ??= stateOf(file)));
+    if (exactRuns.has(seen)) {
+      const had = seen.get(probed);
+      if (had === undefined) {
+        seen.set(
+          probed,
+          (probedState ??=
+            probed === file ? stateOf(probed) : probeStamp(probed)),
+        );
+      } else if (probed === file && had.startsWith('dir:')) {
+        // A folder first only probed, now listed: its listing counts, so it
+        // is checked by its full stamp from here on.
+        seen.set(probed, (state ??= stateOf(file)));
+      }
+    } else if (!seen.has(file)) {
+      seen.set(file, (state ??= stateOf(file)));
+    }
   }
 }
+
+/**
+ * The runs that record a probe by the path probed, not by its folder: a
+ * record kept across processes, whose folders change for reasons that do not
+ * touch the path (see `recordReads`).
+ * @type {WeakSet<Map<string, string>>}
+ */
+const exactRuns = new WeakSet();
 
 /** node:fs's module object, whose functions every import of it shares. */
 const fs = createRequire(import.meta.url)('node:fs');
@@ -98,7 +124,7 @@ function installRecorder() {
             : path.dirname(file);
         // Its state is taken when it is first read, before the read, so a
         // change made while the operation runs shows as a change afterwards.
-        note(runs, checked);
+        note(runs, checked, file);
       }
       return original.apply(this, args);
     };
@@ -128,13 +154,43 @@ export function fileStamp(file) {
 const stateOf = fileStamp;
 
 /**
+ * A probed path's state for an exact run: a folder's identity alone (a probe
+ * reads whether it is there and what it is, not what it holds, and its time
+ * changes whenever an entry in it changes), a file's full stamp, or absent.
+ * @param {string} file
+ * @returns {string}
+ */
+function probeStamp(file) {
+  try {
+    const stat = statSyncRaw(file);
+    if (stat.isDirectory()) return `dir:${stat.ino}`;
+    return `${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}:${stat.ino}`;
+  } catch {
+    return '-';
+  }
+}
+
+/**
+ * Whether a recorded path is still in the state recorded for it, by the kind
+ * of state that was recorded.
+ * @param {string} file
+ * @param {string} state
+ * @returns {boolean}
+ */
+export function stillInState(file, state) {
+  return (
+    (state.startsWith('dir:') ? probeStamp(file) : stateOf(file)) === state
+  );
+}
+
+/**
  * Whether every recorded path is still in the state it had when it was read.
  * @param {Map<string, string>} recorded - From recordReads.
  * @returns {boolean}
  */
 export function unchangedSince(recorded) {
   for (const [file, state] of recorded) {
-    if (stateOf(file) !== state) return false;
+    if (!stillInState(file, state)) return false;
   }
   return true;
 }
@@ -151,15 +207,46 @@ export function recordContentRead(file) {
 }
 
 /**
+ * Run `fn` with nothing it reads recorded: a cache's own bookkeeping, which
+ * is not an input of what it keeps.
+ * @template T
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function withoutRecording(fn) {
+  return reads.exit(fn);
+}
+
+/**
+ * Count paths as read by the running operations, each with the state given:
+ * what a value kept from an earlier read read. Outside `recordReads` it does
+ * nothing.
+ * @param {Iterable<[string, string]>} states
+ */
+export function recordStates(states) {
+  const runs = reads.getStore();
+  if (!runs) return;
+  for (const [file, state] of states) {
+    for (const seen of runs) if (!seen.has(file)) seen.set(file, state);
+  }
+}
+
+/**
  * Run `fn`, adding to `seen` each path it reads, with that path's state when
  * it was first read (see the file header).
  * @template T
  * @param {Map<string, string>} seen
  * @param {() => T} fn
+ * @param {{exact?: boolean}} [options] - `exact`: record a probe (an
+ *   existence check, a stat, a real path) by the path probed, with its state,
+ *   instead of by its folder; a listing and a content read are recorded as
+ *   ever. A folder's time changes whenever any entry in it is added or
+ *   renamed, so a record kept between runs stays valid longer this way.
  * @returns {T}
  */
-export function recordReads(seen, fn) {
+export function recordReads(seen, fn, {exact = false} = {}) {
   installRecorder();
+  if (exact) exactRuns.add(seen);
   return reads.run([...(reads.getStore() ?? []), seen], fn);
 }
 

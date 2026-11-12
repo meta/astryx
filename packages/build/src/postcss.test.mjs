@@ -20,6 +20,8 @@ const {postcss} = require('./config.js');
 
 const LIBRARY_FILE = 'node_modules/@astryxdesign/core/src/Box/Box.tsx';
 const PRODUCT_FILE = 'src/page.tsx';
+/** A copy `astryx swizzle` wrote: its output folder holds the marker. */
+const SWIZZLED_FILE = 'src/components/astryx/Badge/Badge.tsx';
 
 let appDir;
 
@@ -62,6 +64,14 @@ beforeAll(() => {
       "export const styles = stylex.create({page: {color: 'blue'}});",
       '',
     ].join('\n'),
+    'src/components/astryx/astryx-swizzle.json': JSON.stringify({
+      packages: {'@astryxdesign/core': '0.0.0'},
+    }),
+    [SWIZZLED_FILE]: [
+      "import * as stylex from '@stylexjs/stylex';",
+      "export const styles = stylex.create({badge: {color: 'green'}});",
+      '',
+    ].join('\n'),
   };
   for (const [file, contents] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(appDir, file)), {recursive: true});
@@ -81,15 +91,20 @@ afterAll(() => {
   fs.rmSync(appDir, {recursive: true, force: true});
 });
 
+/** One instance of the documented config's StyleX plugin, as a dev server keeps. */
+function createCompile() {
+  const config = postcss(appDir);
+  const options = config.plugins[require.resolve('./index.js')];
+  const [compile] = require('./index.js')(options).plugins;
+  return compile;
+}
+
 /**
  * Run the documented config's StyleX plugin over the app the way `next build`
  * does: from the app directory, on a stylesheet holding `@stylex;`. Returns the
  * CSS that replaces the at-rule.
  */
-async function compileApp() {
-  const config = postcss(appDir);
-  const options = config.plugins[require.resolve('./index.js')];
-  const [compile] = require('./index.js')(options).plugins;
+async function compileApp(compile = createCompile()) {
   let css = null;
   const atRule = {
     name: 'stylex',
@@ -133,3 +148,55 @@ describe('the PostCSS plugin and the app Babel config', () => {
     }
   });
 });
+
+describe('the PostCSS plugin and a swizzled copy', () => {
+  it('compiles a module under a swizzle marker into the library layer', async () => {
+    globalThis.appBabelConfigFiles = [];
+    try {
+      const css = await compileApp();
+      const library = css.match(/@layer astryx-base \{[^]*?\n\}/)?.[0] ?? '';
+      const product = css.match(/@layer product \{[^]*?\n\}/)?.[0] ?? '';
+      expect(library).toMatch(/color:\s*green/);
+      expect(product).not.toMatch(/color:\s*green/);
+      // The library pass compiles it, with the library class prefix.
+      expect(library).toMatch(/\.astryx[a-z0-9]{5,}[^{]*\{[^}]*color:\s*green/);
+      expect(globalThis.appBabelConfigFiles).not.toContain(
+        path.join(appDir, SWIZZLED_FILE),
+      );
+    } finally {
+      delete globalThis.appBabelConfigFiles;
+    }
+  });
+
+  it('moves an unchanged copy between layers when its marker appears or goes during a dev session', async () => {
+    const marker = path.join(
+      appDir,
+      'src/components/astryx/astryx-swizzle.json',
+    );
+    const saved = fs.readFileSync(marker, 'utf-8');
+    globalThis.appBabelConfigFiles = [];
+    try {
+      const compile = createCompile();
+      const marked = await compileApp(compile);
+      expect(layer(marked, 'astryx-base')).toMatch(/color:\s*green/);
+
+      fs.rmSync(marker);
+      const unmarked = await compileApp(compile);
+      expect(layer(unmarked, 'product')).toMatch(/color:\s*green/);
+      expect(layer(unmarked, 'astryx-base')).not.toMatch(/color:\s*green/);
+
+      fs.writeFileSync(marker, saved);
+      const remarked = await compileApp(compile);
+      expect(layer(remarked, 'astryx-base')).toMatch(/color:\s*green/);
+      expect(layer(remarked, 'product')).not.toMatch(/color:\s*green/);
+    } finally {
+      fs.writeFileSync(marker, saved);
+      delete globalThis.appBabelConfigFiles;
+    }
+  });
+});
+
+/** The text of one `@layer` block in the emitted CSS. */
+function layer(css, name) {
+  return css.match(new RegExp(`@layer ${name} \\{[^]*?\\n\\}`))?.[0] ?? '';
+}

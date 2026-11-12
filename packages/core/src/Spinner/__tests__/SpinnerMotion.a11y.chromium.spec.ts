@@ -386,6 +386,7 @@ test('storyboard: one revolution, frame by frame @storyboard', async ({
     name: 'spinner-ring-cycle',
     clip: xl,
     scope: xl,
+    judges: {target: rotor, property: 'transform'},
     columns: 12,
     cellScale: 2,
     times: timeline(duration - 1),

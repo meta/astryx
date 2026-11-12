@@ -13,6 +13,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Project} from '../../foundation/config/project.mjs';
 import {docs} from './docs.mjs';
 import {oneGuide} from './detail/section/section.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -89,7 +90,7 @@ function kit() {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-namespace-section-test-'),
+    path.join(REPO_ROOT, '.astryx-namespace-section-test-'),
   );
 });
 

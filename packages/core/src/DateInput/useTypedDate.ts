@@ -186,10 +186,17 @@ export function useTypedDate({
     [calendar, locale],
   );
 
+  const isProviderCalendar = isGregorian
+    ? isGregorianCalendar(providerCalendar)
+    : calendar === providerCalendar;
+
   const errorMessage = useCallback(
     (result: CalendarDateParseResult) => {
       if (result.kind === 'nonexistent') {
-        return t('@astryx.dateInput.nonexistentDate', {calendar: calendarName});
+        return t('@astryx.dateInput.nonexistentDate', {
+          named: isProviderCalendar ? 'no' : 'yes',
+          calendar: calendarName,
+        });
       }
       if (result.kind === 'outOfRange') {
         const boundFormat = typeof format === 'function' ? 'date_long' : format;
@@ -220,12 +227,8 @@ export function useTypedDate({
       }
       return t('@astryx.dateInput.invalidDate');
     },
-    [t, calendarName, format, locale, calendar, min, max],
+    [t, isProviderCalendar, calendarName, format, locale, calendar, min, max],
   );
-
-  const isProviderCalendar = isGregorian
-    ? isGregorianCalendar(providerCalendar)
-    : calendar === providerCalendar;
 
   return {
     calendar,

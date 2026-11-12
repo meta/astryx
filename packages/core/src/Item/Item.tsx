@@ -5,7 +5,8 @@
 /**
  * @file Item.tsx
  * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer,
- *   the shared press overlays and the compositor press layer
+ *   the shared press overlays and the compositor press layer, and a row's
+ *   trailing control (ItemTrailingContext)
  * @output Exports Item component, ItemProps type; publishes the shared inline inset.
  *   Only numbered composing rows keep their start/label/end slots in one flex
  *   group, through Item's private exact-marker scope; other marked rows keep
@@ -54,8 +55,10 @@ import {mergeProps} from '../utils/mergeProps';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
+import {ItemLabelContext, ItemLabelNeededContext} from './ItemLabelContext';
 import {ItemListRowContext} from './ItemListRowContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
+import {ItemTrailingContext} from './ItemTrailingContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -70,6 +73,7 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {isCoarsePointer} from '../utils/coarsePointer';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ItemSwipeBridge} from './ItemSwipeLayer';
 
@@ -277,7 +281,7 @@ export interface ItemProps extends BaseProps<HTMLElement> {
   isSelected?: boolean;
 
   /**
-   * Disabled state.
+   * Disabled state. Interactive rows stay keyboard-reachable but cannot activate.
    * @default false
    */
   isDisabled?: boolean;
@@ -762,6 +766,13 @@ export function Item({
   // only once React runs it, such as an empty fragment, still publishes an id.
   const descriptionID = useId();
   const hasRenderableDescription = isRenderable(description);
+  // The label element's id, published through ItemLabelContext for a control
+  // Item renders in a slot that is named after the row (`aria-labelledby`).
+  // Only a row with such a control gives its label an id.
+  const labelID = useId();
+  const isLabelNeeded = use(ItemLabelNeededContext);
+  const publishedLabelID =
+    isLabelNeeded && isRenderable(label) ? labelID : null;
 
   const isStringLabel = typeof label === 'string';
   const isStringDescription = typeof description === 'string';
@@ -791,6 +802,7 @@ export function Item({
   const labelAndDescription = (
     <>
       <span
+        id={publishedLabelID ?? undefined}
         {...stylex.props(
           styles.label,
           isInline && styles.inlineLabel,
@@ -850,6 +862,10 @@ export function Item({
     onClick?.(e);
   };
 
+  // A control a row adds after the slots, unwrapped (ItemTrailingContext):
+  // a List row's reorder handle when the row has no end content.
+  const trailing = use(ItemTrailingContext);
+
   const content = (
     <>
       {isRenderable(startContent) && (
@@ -878,7 +894,7 @@ export function Item({
         <RowAnchor
           ref={anchorRef}
           {...(isDisabled
-            ? {role: 'link', 'aria-disabled': true, tabIndex: -1}
+            ? {role: 'link', 'aria-disabled': true, tabIndex: 0}
             : {href, target, rel})}
           {...stylex.props(
             styles.invisibleAnchor,
@@ -892,7 +908,10 @@ export function Item({
           ref={actionButtonRef}
           type="button"
           onClick={onClick}
-          disabled={isDisabled}
+          aria-disabled={isDisabled || undefined}
+          {...(isDisabled
+            ? disabledInteractionProps<HTMLButtonElement>()
+            : null)}
           {...stylex.props(
             styles.invisibleButton,
             isInline && styles.inlineContent,
@@ -921,6 +940,7 @@ export function Item({
           {endContent}
         </span>
       )}
+      {trailing}
     </>
   );
 
@@ -1049,23 +1069,29 @@ export function Item({
       )}
       role={role}
       onClick={rootOnClick}>
-      <ItemDescriptionContext
-        value={hasRenderableDescription ? descriptionID : null}>
-        <ItemListRowContext value={false}>
-          {isRenderable(marker) && marker}
-          {isRenderable(marker) && columnMarker === marker ? (
-            <span
-              {...stylex.props(
-                styles.markerContent,
-                align === 'first-line' && styles.markerContentFirstLine,
-              )}>
-              {content}
-            </span>
-          ) : (
-            content
-          )}
-        </ItemListRowContext>
-      </ItemDescriptionContext>
+      <ItemTrailingContext value={null}>
+        <ItemDescriptionContext
+          value={hasRenderableDescription ? descriptionID : null}>
+          <ItemLabelContext value={publishedLabelID}>
+            <ItemLabelNeededContext value={false}>
+              <ItemListRowContext value={false}>
+                {isRenderable(marker) && marker}
+                {isRenderable(marker) && columnMarker === marker ? (
+                  <span
+                    {...stylex.props(
+                      styles.markerContent,
+                      align === 'first-line' && styles.markerContentFirstLine,
+                    )}>
+                    {content}
+                  </span>
+                ) : (
+                  content
+                )}
+              </ItemListRowContext>
+            </ItemLabelNeededContext>
+          </ItemLabelContext>
+        </ItemDescriptionContext>
+      </ItemTrailingContext>
       {hasSwipe && (
         // The panels: out-of-flow children of this root, so the DOM is the one
         // the row had before the split. Suspense and lazy add no element, and
