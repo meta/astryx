@@ -93,7 +93,7 @@ describe('seedOf', () => {
   it('gives null for a value with no fixed color', () => {
     for (const v of [
       'var(--color-accent)',
-      'color-mix(in srgb, red, blue)',
+      'color-mix(in srgb, var(--x), blue)',
       'currentcolor',
       'banana',
       '',

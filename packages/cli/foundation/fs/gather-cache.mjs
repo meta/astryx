@@ -36,6 +36,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {CLI_ROOT} from './paths.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
+import {jitiCacheDir} from './jiti-cache.mjs';
 import {
   fileStamp,
   recordReads,
@@ -114,12 +115,28 @@ export function gatherCacheOutcome() {
  * @returns {boolean}
  */
 function inJitiCache(file) {
+  jitiRoots ??= jitiCacheRoots();
+  return jitiRoots.some(
+    root => file === root || file.startsWith(root + path.sep),
+  );
+}
+
+/** jiti's cache folders, worked out once per process (inJitiCache). */
+/** @type {string[] | undefined} */
+let jitiRoots;
+
+/**
+ * Where jiti may keep transpiled code: the system temp folder's `jiti`, the
+ * per-user folder (jiti-cache.mjs), and a set JITI_FS_CACHE.
+ * @returns {string[]}
+ */
+function jitiCacheRoots() {
   const env = process.env.JITI_FS_CACHE;
-  const roots = [path.join(os.tmpdir(), 'jiti')];
+  const roots = [path.join(os.tmpdir(), 'jiti'), jitiCacheDir()];
   if (env && env !== 'false' && env !== 'true' && env !== '0' && env !== '1') {
     roots.push(path.resolve(env));
   }
-  return roots.some(root => file === root || file.startsWith(root + path.sep));
+  return roots;
 }
 
 /**
@@ -354,7 +371,8 @@ function noteLookups(specifier, parentURL, reads) {
  */
 function lookupStamp(folder) {
   try {
-    return `dir:${fs.statSync(folder).ino}`;
+    const stat = fs.statSync(folder, {throwIfNoEntry: false});
+    return stat ? `dir:${stat.ino}` : '-';
   } catch {
     return '-';
   }
@@ -456,12 +474,19 @@ function staleReason(stamps, env) {
  */
 export async function persistedGather(key, load, codec, keep = () => true) {
   const id = withoutRecording(buildId);
-  const dir = id == null ? null : withoutRecording(gatherCacheDir);
+  // A run under Yarn Plug'n'Play's loader neither keeps nor reads catalogs:
+  // its modules resolve through PnP, which a catalog's stamps do not follow.
+  const dir =
+    id == null || runsUnderPnp() ? null : withoutRecording(gatherCacheDir);
   if (id == null || dir == null) {
     lastOutcome = {
       hit: false,
       reason:
-        id == null ? 'this CLI has no build id' : 'no usable cache folder',
+        id == null
+          ? 'this CLI has no build id'
+          : runsUnderPnp()
+            ? "a run under Yarn Plug'n'Play's loader"
+            : 'no usable cache folder',
     };
     try {
       return await load();
