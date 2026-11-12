@@ -501,6 +501,7 @@ export function useTooltipInternal(
       hide: hideFromTouch,
     },
     handleReleaseInLayer,
+    true,
   );
 
   const isHeldOpen = useCallback(() => {

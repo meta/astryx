@@ -249,6 +249,7 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   'internal/page-scroller',
   'internal/line-clamp',
   'internal/virtualization',
+  'internal/committed-ref',
 ];
 
 /**

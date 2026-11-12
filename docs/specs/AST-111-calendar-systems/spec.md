@@ -316,7 +316,9 @@ These requirements apply to the text fields of `DateInput` and
   uses which.
 - **AR3 — Each rejection has its own message.** Unreadable text, a date the
   calendar does not have, and an out-of-range date each announce a different
-  message.
+  message. The message for a date the calendar does not have names the calendar
+  only when the field's calendar differs from its provider's calendar, as AR2
+  says for the description.
 
 ### Platform support
 
