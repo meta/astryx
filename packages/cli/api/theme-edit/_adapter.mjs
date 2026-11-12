@@ -49,11 +49,14 @@ import {
   getCliInvocation,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
-import {LIKE, P} from './_tables.mjs';
-import {camel} from './_settings.mjs';
+import {DIALS, LIKE, P} from './_tables.mjs';
+import {colorProblem} from './_color.mjs';
+import {SHOWCASE_GROUPS} from './_preview.mjs';
+import {camel, typedThemeName} from './_settings.mjs';
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
 export {parsePoints} from './_how.mjs';
+export {newFlagList} from './_edit.mjs';
 import {themeEditHow as howAt} from './_how.mjs';
 
 /**
@@ -89,6 +92,35 @@ export async function themeEditHow(subject, options = {}) {
 
 /** The built-in themes a theme can build on (`--like`). */
 export const builtInThemes = () => [...LIKE];
+
+/** The sections `show --section` takes. */
+export const showSections = () => [...SHOWCASE_GROUPS];
+
+/**
+ * Whether a value fits what a dial takes, read from the dial's own list of
+ * values: a named rung in any case, or a value of the kind it names (a size,
+ * a color, a number). `set` still checks the value in full.
+ * @param {string} dial
+ * @param {string} value
+ */
+export function dialValueFits(dial, value) {
+  const spec = DIALS[/** @type {keyof typeof DIALS} */ (dial)]?.values;
+  if (!spec) return false;
+  const v = String(value).trim();
+  if (v === '') return false;
+  return spec.split('|').some(option => {
+    if (!option.startsWith('<') && !option.startsWith('"'))
+      return option === v.toLowerCase();
+    if (option.startsWith('"')) return true;
+    if (option.includes('size')) return /^\d*\.?\d+(px|rem|em)$/.test(v);
+    // A color by the editor's own color check (a bare word only when it
+    // names a color).
+    if (option === '<color>') return colorProblem(v) == null;
+    if (option === '<0-100>') return /^\d{1,3}$/.test(v) && Number(v) <= 100;
+    if (option === '<number>') return /^\d*\.?\d+$/.test(v);
+    return false;
+  });
+}
 
 /**
  * The project a command acts on: the Astryx project at or above `cwd`, found
@@ -577,16 +609,32 @@ export function editorThemeRefusal(err, cwd) {
   )
     return null;
   const root = projectRoot(cwd);
-  const named = /"([a-z][a-z0-9-]*)"|'([a-z][a-z0-9-]*)'/.exec(err.message);
-  const slug = named ? editorThemeOf(root, named[1] ?? named[2]) : null;
+  // The name as typed, read the way the editor reads a theme name: a path
+  // to its folder or a file in it, in any case, names the theme.
+  const named = /"([^"]+)"|'([^']+)'/.exec(err.message);
+  const word = named ? typedThemeName(named[1] ?? named[2]) : '';
+  const slug = word ? editorThemeOf(root, word) : null;
   if (!slug) return null;
   // A local theme of that name (a fork in the app's own themes folder) is
   // one the stable commands take: their own message stands.
   if (fs.existsSync(path.join(root, LOCAL_THEME_ROOT, slug))) return null;
   const id = `${camel(slug)}Theme`;
   const key = /^[a-z][a-z0-9]*$/i.test(slug) ? slug : JSON.stringify(slug);
+  // The paths from the folder of the app's generated themes module (where
+  // a file that merges themes sits), else from the app root.
+  const generated = path.join(root, 'src', 'astryx-themes.ts');
+  const from = fs.existsSync(generated) ? path.dirname(generated) : root;
+  let rel = path
+    .relative(from, path.join(root, 'themes', slug))
+    .split(path.sep)
+    .join('/');
+  if (!rel.startsWith('.')) rel = `./${rel}`;
+  const where =
+    from === root
+      ? 'in a file of your own at the app root'
+      : `in a file of your own beside ${path.relative(root, generated).split(path.sep).join('/')} (from another folder, change the paths to match)`;
   return new AstryxError(
-    `${slug} is a theme the editor made (themes/${slug}/), not a theme package, so list, add, use, remove and eject do not take it. To use it, import its module and its stylesheet in a file of your own (import {${id}} from './themes/${slug}/${slug}.js'; import './themes/${slug}/${slug}.css';) and merge it into the themes there ({...themes, ${key}: ${id}}); do not add it to src/astryx-themes.ts, which add, use and remove write again. Change it with the editor.`,
+    `${slug} is a theme the editor made (themes/${slug}/), not a theme package, so list, add, use, remove and eject do not take it. To use it, import its module and its stylesheet ${where} (import {${id}} from '${rel}/${slug}.js'; import '${rel}/${slug}.css';) and merge it into the themes there ({...themes, ${key}: ${id}}); do not add it to src/astryx-themes.ts, which add, use and remove write again. Change it with the editor.`,
     [
       {
         name: runLine(cwd, `experimental theme editor show ${slug}`),
@@ -613,6 +661,20 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
     if (!at || !editorOwnFile(at.slug, file)) continue;
     const {root, slug} = at;
     const source = `themes/${slug}/${slug}.theme.ts`;
+    // An editor theme is built from its project's root, as every editor
+    // command runs there: from a subfolder the build would write outside
+    // its working folder. The run names the root.
+    if (path.resolve(cwd) !== path.resolve(root))
+      return new AstryxError(
+        `${slug} is a theme the editor made; compile it from the app root (${path.relative(cwd, root) || '.'}), where the editor builds it.`,
+        [
+          {
+            name: `cd ${quoteCommandArgument(path.relative(cwd, root) || '.')} && ${runLine(root, `experimental theme compile ${source}${check ? ' --check' : ''}`)}`,
+            reason: 'do this instead',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
     if (/\.settings\.(ts|json)$/.test(file))
       return new AstryxError(
         `${file} is the editor's own settings for ${slug}, not a theme source; compile the theme source.`,
@@ -661,6 +723,15 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         if (e instanceof AstryxError) return e;
         throw e;
       }
+      // An own change to the theme source is what compile builds (and what
+      // --check compares): never a reason to refuse it.
+      if (
+        why &&
+        /\.theme\.ts (or a module it imports )?changed since the last build$/.test(
+          why,
+        )
+      )
+        why = null;
       if (why && !check)
         return new AstryxError(
           `${slug}'s generated settings do not match its settings (${why}), so compile would build the old ones. The editor builds it from its settings.`,

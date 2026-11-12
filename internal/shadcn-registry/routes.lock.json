@@ -3972,6 +3972,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-infinite-scroll-load-more-products",
+      "path": "examples/use-table-infinite-scroll/load-more-products",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-row-expansion-tree-table",
       "path": "examples/use-table-row-expansion/tree-table",
       "aliases": []
@@ -4394,6 +4399,11 @@
     {
       "name": "hook-use-table-grouped-rows",
       "path": "hooks/use-table-grouped-rows",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-infinite-scroll",
+      "path": "hooks/use-table-infinite-scroll",
       "aliases": []
     },
     {

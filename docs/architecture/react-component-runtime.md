@@ -311,7 +311,13 @@ those contracts.
   (`spec:AST-105` FR1); a pull that a scroll area hands over only at its
   edge (`spec:AST-094` FR14, FR19); a snap-point drag whose release can
   dismiss its surface, judged by the use's measured projection (`spec:AST-094`
-  FR36); a drag on one element that moves another (a sheet's handle and
+  FR36); a drag's own pointer and scroll filter, claim distance and begin
+  gate, and a snap-point drag's own model of where a drag draws its element
+  and where a release lands (a row's swipe: no mouse drag, UIKit's dead zone,
+  tracking spring and release rule for a finger, and a full swipe reached by
+  position only, `spec:AST-057` AR2, FR5); a drag drawn into one custom
+  property that every part of its component reads (`spec:AST-057` FR2); a
+  drag on one element that moves another (a sheet's handle and
   scrolling body move the sheet; its dim is the layer runtime's backdrop
   tint, `architecture:layer-runtime` INV14); the animator's jobs beyond the
   public handle: a motion role other than `springs.stateChange`
@@ -321,7 +327,11 @@ those contracts.
   (`design:reduced-motion` DR1–DR3); the touch hit-area expansion; and List's
   reorder session, for a collection that adapts the reorderable object to its
   own values or whose rows are not `ListItem`s (`createReorderable`'s
-  plain-element `attach`, `spec:AST-103` FR4b, is not built).
+  plain-element `attach`, `spec:AST-103` FR4b, is not built). One chosen
+  start, `start: 'next-frame'`, exists for motion an interaction starts in an
+  input event's own task. On a busy page such motion then starts on the first
+  frame after that task, so it does not skip ahead. It is internal:
+  `createAnimator`'s options do not have it, and no public entry exports it.
   Components import
   them statically, and the bundler
   keeps one copy per page however many components use them. A surface
@@ -414,7 +424,7 @@ those contracts.
   refs. ToastViewport renders ToastRefSync, which writes through
   `useCommittedRefInto`, before a fragment that holds its children, so a child's
   layout cleanup, an unmount's included, reads the committed list. INV17 gap:
-  ToastViewport writes its toast list during render.
+  ToastViewport writes `toastsRef` and `maxVisibleRef` during render.
 - **INV18 — Layout is read as little as possible.** Placement uses CSS
   (anchor positioning, container queries, logical properties) instead of
   measuring in JS, as `architecture:component-style-authoring` INV2 prefers. A
