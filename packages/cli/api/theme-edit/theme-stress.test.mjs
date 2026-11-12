@@ -32,6 +32,11 @@ import {
 } from '../../test-utils/base-theme-fixture.mjs';
 
 import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+import {
+  appPackages,
+  projectFiles,
+  refusal,
+} from '../../test-utils/theme-edit-fixture.mjs';
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -40,38 +45,11 @@ vi.mock('./_preview.mjs', async importOriginal =>
   ),
 );
 
-/** The packages the template pages import, so ranked pages can be added. */
-const APP_PACKAGES = {
-  name: 'app',
-  private: true,
-  type: 'module',
-  dependencies: {
-    '@heroicons/react': '*',
-    'lucide-react': '*',
-    recharts: '*',
-  },
-};
+const APP_PACKAGES = appPackages();
 
 /** @type {string} */
 let cwd;
-
-/** @param {string} rel */
-const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
+const {read} = projectFiles(() => cwd);
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-stress-', [
@@ -269,6 +247,12 @@ describe('how', () => {
 describe('preview pages', () => {
   it('leaves app frames out of a description and says what it matched', async () => {
     fs.mkdirSync(path.join(cwd, 'src', 'app'), {recursive: true});
+    // A routes folder has a root layout, which loads Core's stylesheet.
+    if (!fs.existsSync(path.join(cwd, 'src/app/layout.tsx')))
+      fs.writeFileSync(
+        path.join(cwd, 'src/app/layout.tsx'),
+        "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+      );
     const r = await themeEditPreviewAdd(
       'a light fintech landing page: announcement bar, nav with sign-in buttons, big two-tone headline, two CTA buttons, and a customer logo strip',
       {cwd, theme: 's'},
@@ -867,8 +851,10 @@ describe('review fixes', () => {
     const line = show.data.partValues.find(x =>
       x.startsWith('corners = large on checks'),
     );
-    expect(line).toContain('--radius-inner');
-    expect(line).toContain('unknown for radio-indicator');
+    expect(line).toContain('--radius-inner 4px for checkbox-indicator');
+    // The radio list renders from its doc's playground, so its dot's
+    // token is known too.
+    expect(line).toContain('--radius-full 9999px for radio-indicator');
     await themeEditUndo('s', {cwd, thing: 'corners', on: 'checks'});
   }, 120_000);
 

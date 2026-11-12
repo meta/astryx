@@ -81,6 +81,7 @@ deciding_specs: [spec:AST-038, spec:AST-059]
       "INV13",
       "INV14",
       "INV15",
+      "INV16",
       "INV17",
       "INV18",
       "INV20"
@@ -91,8 +92,8 @@ deciding_specs: [spec:AST-038, spec:AST-059]
 ```
 
 This record describes the layer runtime shipped on current `main`, except
-INV14, INV15, and INV17, which state required ownership the runtime does not
-yet meet, and INV22, which some anchored layers do not yet meet;
+INV14, INV15, INV16, and INV17, which state required ownership the runtime does
+not yet meet, and INV22, which some anchored layers do not yet meet;
 Current gaps lists where it falls short. Other accepted but unimplemented
 changes live in `spec:AST-003`; they are not current architecture.
 
@@ -635,6 +636,23 @@ layers use Layer rendering without joining Escape/platform dismissal.
   any surface that lifts uses this module and never its own copy, and layers
   that do not lift do not use it. It is internal and unexported
   (`spec:AST-017` FR21).
+- **INV16 — The runtime owns the one input hold.** The layer runtime owns the
+  shared input hold, `holdInput` (`Layer/inputHold.ts`), that keeps input away
+  from a layer while its presentation runs under a finger. Layers that enter
+  through CSS (Dialog, Drawer, MobileNav, DropdownMenu) take it through `holdEntranceInput`
+  (`Layer/holdEntranceInput.ts`). While a layer presents (`spec:AST-094`
+  FR35), the hold takes pointer input only: a shield catches taps and presses,
+  a pinch still zooms the page, and keys and assistive technology stay live.
+  While a layer dismisses, the hold also makes the layer's content inert. A
+  component record may keep content that still holds focus live instead: a
+  standalone BottomSheet is neither `inert` nor `aria-hidden` while focus stays
+  inside it and takes no pointer or keyboard activation, becoming inert once
+  focus leaves it (`component:BottomSheet` FR9), while a leaving AlertDialog
+  (`component:AlertDialog` FR7) and a closing BottomSheetSwitcher step
+  (`component:BottomSheet` FR9) are inert for their dismissal. The component
+  still decides where focus returns. A component that holds input uses this hold rather
+  than building its own. It is separate from INV14's presentation hold, which
+  keeps a layer's chosen presentation.
 - **INV17 — A click inside a layer stops at the layer root.** A pointer,
   mouse, touch, or click event that starts inside a layer root (both
   `useLayer` renderers and the Dialog, Drawer, Lightbox, MobileNav,
@@ -728,6 +746,13 @@ BottomSheet's own includes its sheet stack's mounting — the re-show that
 keeps a document's sheets in open order, a step dialog's modal present, and
 the non-modal sheet's popover host — alongside its scrim; the ordering rules
 above are the stack's, the mounting under them is this gap's.
+
+INV16 gap: BottomSheet's own dismissal hold does not use the shared hold yet.
+
+INV16 gap: the shared hold has no mode that keeps focused content live, which
+`component:BottomSheet` FR9 needs: its dismissal scope makes the content inert at
+once and blurs the focused element inside it (`makeContentInert` in
+`Layer/inputHold.ts`).
 
 INV17 is met through one seam, `Layer/layerClickBoundary.ts`, which every
 listed root spreads; BottomSheetPanel's root is the BottomSheet dialog that
@@ -838,12 +863,13 @@ it on the surface inside the layer and run no layout while it plays.
 - `Layer/presentationHold.ts` owns the presentation hold: a layer's chosen
   presentation, held from the open until its close settles (INV14).
 - `Layer/inputHold.ts` owns the input hold that a touch presentation places
-  while it enters or leaves (`spec:AST-094` FR35); a dismissal hold leaves a
-  nested layer, its path, and a child live region live. It finds a nested
-  layer with `hasLayerRootWithin`, a reader of the layer-root owner
-  (`architecture:public-component-api` INV23). The owner's other readers test
-  an element or its ancestors, and the hold asks whether a subtree holds a
-  layer root.
+  while it enters or leaves (`spec:AST-094` FR35), and
+  `Layer/holdEntranceInput.ts` its use by layers that enter through CSS
+  (INV16). A dismissal hold leaves a nested layer, its path, and a child live
+  region live. It finds a nested layer with `hasLayerRootWithin`, a reader of
+  the layer-root owner (`architecture:public-component-api` INV23). The
+  owner's other readers test an element or its ancestors, and the hold asks
+  whether a subtree holds a layer root.
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
   Escape/platform routing. The stack, the modal outlet registry, the gesture
@@ -917,6 +943,7 @@ this current architecture record.
 | INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests; `useBackdropPress.test.tsx`; `outsidePress.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | A current local channel silently changes ownership or policy                                                                                                                                                                                                                                                                                                                                                                 |
 | INV10        | `LayerProvider.tsx`, `toastHost.tsx`, `LayerProvider.test.tsx`, `toastHost.test.tsx`, `toastHost.lateRegistration.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, `ToastViewport.modalHost.test.tsx`, and `scripts/layer-toast-bundle.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                           | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, a default provider renders differently from no provider, a Layer import loads a Toast module, or a toast added before Toast loads is lost                                                                                                                                                                                            |
 | INV14, INV15 | Source boundary check over Core for top-layer hosts, exit copies, backdrop elements, lift, and rectangle-morph code outside the runtime and the lift module                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | A component building its own copy of a mechanism INV14 lists (top-layer mounting, close-request delivery, hold, exit copy, or backdrop element), or re-implementing the lift or the grow                                                                                                                                                                                                                                     |
+| INV16        | `inputHold.test.tsx`, `holdEntranceInput.test.ts`, and `inputHold.interaction.browser.spec.ts`; the Dialog and Drawer touch-entrance proofs in Chromium and WebKit                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | A component other than the listed BottomSheet gap that holds input on its own, a held key or assistive-technology action during a presentation, a pinch that no longer zooms, or a dismissal that lets its content be activated, inert content that still holds focus, or content made inert or blurred while focus stays inside a layer whose record keeps it live fails                                                    |
 | INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers                                                                                                                                                                                                                                                                                                                                                                  | A click inside a layer root that reaches an ancestor bubble-phase handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                    |
 | INV18        | `useLayer.test.tsx` (a closed trigger has no anchor-name, and the trigger of a shown or fading layer does) and `TooltipClosedTriggerAnchor.interaction.browser.spec.ts` in Chromium and WebKit                                                                                                                                                                                                                                                                                                                                                                                                                                                 | A closed trigger with an anchor-name, a shown or fading layer placed away from its anchor, or a surface around a closed trigger that stops while the main thread is busy                                                                                                                                                                                                                                                     |
 | INV18        | `useLayer.test.tsx`: a closed state that declares a discrete `display` transition or a keyframe animation keeps the trigger's anchor name until those animations end, read from the closed state's style; a layer whose closed state declares neither is not read for animations at the close                                                                                                                                                                                                                                                                                                                                                  | A layer with such a closed-state exit placed away from its anchor while it fades, or an animation read on the close of a layer whose closed state declares no exit                                                                                                                                                                                                                                                           |

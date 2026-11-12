@@ -13,7 +13,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
-import {CSS_PROPERTIES} from './_css-properties.mjs';
+import {cssProperties} from './_css.mjs';
 import {
   AUTO_SPREAD,
   COLOR_PROPS,
@@ -28,9 +28,9 @@ import {
   familyOf,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
-import {baseThemeFile, installLine} from './_project.mjs';
+import {baseInstalled, installLine} from './_project.mjs';
 import {loadTheme, nearest, refuse, themeSourceProblem} from './_settings.mjs';
-import {ASPECTS} from './_check.mjs';
+import {ASPECTS, checkSetting} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
@@ -71,13 +71,15 @@ const PICTURE_NAME = /\.(png|jpe?g|gif|webp|bmp|avif|heic|tiff?|svg)$/i;
  * @param {string} cwd
  */
 export function isPicture(subject, cwd) {
-  if (!subject || /\s/.test(subject.trim())) return false;
-  if (PICTURE_NAME.test(subject)) return true;
+  if (!subject) return false;
+  // A file that exists is a picture whatever its name: macOS names every
+  // screenshot "Screenshot … at 1.23.45 PM.png".
   try {
-    return fs.statSync(path.resolve(cwd, subject)).isFile();
+    if (fs.statSync(path.resolve(cwd, subject.trim())).isFile()) return true;
   } catch {
-    return false;
+    // Not a file here.
   }
+  return !/\s/.test(subject.trim()) && PICTURE_NAME.test(subject);
 }
 
 /**
@@ -196,6 +198,7 @@ async function answer(subject, options, cwd) {
       refuse(
         E.ERR_THEME_INVALID,
         `${broken}, so settings cannot take effect and no command here would change the theme. Put back the import, extends and name lines in themes/${options.theme}/${options.theme}.theme.ts, then ask again.`,
+        {run: [`${P} show ${options.theme}`]},
       );
   }
   if (list != null) {
@@ -203,6 +206,7 @@ async function answer(subject, options, cwd) {
       refuse(
         E.ERR_INVALID_ARGUMENT,
         '--at reads a picture; --list lists names, so drop one of them.',
+        {run: [`${HOW} --list ${quoteCommandArgument(String(list))}`]},
       );
     const kind = listKind(list);
     if (kind === 'kinds')
@@ -328,14 +332,8 @@ async function answer(subject, options, cwd) {
     const d = DIALS[key];
     // A base is named only when it is installed here; the others are
     // listed with the line that installs them.
-    const installed = (/** @type {string} */ b) => {
-      try {
-        baseThemeFile(ctx.project, b);
-        return true;
-      } catch {
-        return false;
-      }
-    };
+    const installed = (/** @type {string} */ b) =>
+      baseInstalled(ctx.project, b);
     const missing = key === 'base' ? LIKE.filter(b => !installed(b)) : [];
     return {
       kind: 'setting',
@@ -363,7 +361,7 @@ async function answer(subject, options, cwd) {
     Object.hasOwn(ctx.project.core.tokenDefaults, key)
   )
     return tokenAnswer(ctx, env, t, key, unknown, themeFields);
-  if (CSS_PROPERTIES.has(key)) {
+  if (cssProperties().has(key)) {
     const setters = Object.keys(C.MAP).filter(p => key in C.MAP[p].own);
     const value = exampleForProperty(key);
     const {commands, refused} = value
@@ -390,11 +388,94 @@ async function answer(subject, options, cwd) {
     };
   }
   // "What does --color-accent do", "what's the variable for card padding":
+  // "--focus-outline-width: 3px": a token typed with a value is set exactly,
+  // or refused with the nearest names; never another token.
+  const typedToken =
+    /^\s*(--[a-z][a-z0-9-]*)\s*(?::|\s+to\s+|\s+)\s*([^;]+?)\s*;?\s*(?:\bin (light|dark) mode\b.*)?$/i.exec(
+      t.replace(/^\s*(?:change|set|make|token)\s+/i, ' '),
+    );
+  if (
+    typedToken &&
+    (Object.hasOwn(
+      ctx.project.core.tokenDefaults,
+      typedToken[1].toLowerCase(),
+    ) ||
+      nearest(
+        typedToken[1].toLowerCase(),
+        Object.keys(ctx.project.core.tokenDefaults),
+      ).length > 0) &&
+    !/^--(on|when|state|mode|theme|list|at)$/.test(typedToken[1]) &&
+    // "what does --color-accent do" is a lookup.
+    !/^\s*(what|which|where|how|is|are|does|do|explain|why)\b/i.test(t) &&
+    !/^(do|does|mean|means|for|control|controls)\b/i.test(typedToken[2].trim())
+  ) {
+    const token = typedToken[1].toLowerCase();
+    const mode = /\bin (light|dark) mode\b/i.exec(t)?.[1]?.toLowerCase();
+    const defaults = ctx.project.core.tokenDefaults;
+    const near = nearest(token, Object.keys(defaults));
+    // A token that does not exist is refused with the nearest real names;
+    // a flag-like word with none near is read as words.
+    if (!Object.hasOwn(defaults, token) && near.length)
+      return refuse(E.ERR_INVALID_ARGUMENT, `There is no token ${token}.`, {
+        run: near.map(k => `${HOW} ${k}`),
+      });
+    // Quotes come off only when the whole value is one quoted string: a
+    // font stack keeps its quoted family.
+    const typedValue = typedToken[2].trim();
+    const value = /^(["'])([^"']*)\1$/.test(typedValue)
+      ? typedValue.slice(1, -1)
+      : typedValue;
+    const {commands, refused} = checked(env, [
+      [
+        {
+          verb: 'set',
+          thing: token,
+          value,
+          ...(mode && env.data.mode === 'both' ? {mode} : {}),
+        },
+      ],
+    ]);
+    return {
+      kind: 'question',
+      subject: t,
+      understood: {parts: [], aspects: []},
+      ...themeFields,
+      results: [
+        {
+          text: commands.length
+            ? `the token ${token}, as you wrote it`
+            : `${token} ${value}: ${refused[0]?.why ?? 'no command does it'}`,
+          commands,
+          ...(refused.length ? {refused} : {}),
+        },
+      ],
+      ...unknown,
+    };
+  }
+  // A question about the tool itself gets the command that answers it.
+  const tool = toolAnswer(t, env, ctx.project.target);
+  if (tool === 'list') {
+    const kind =
+      /\b(dials?|tokens?|parts?|groups?|properties|property)\b/i
+        .exec(t)?.[1]
+        ?.toLowerCase() ?? 'kinds';
+    return answer('', {...options, list: kind}, cwd);
+  }
+  if (tool)
+    return {
+      kind: 'question',
+      subject: t,
+      understood: {parts: [], aspects: []},
+      ...themeFields,
+      results: tool,
+      ...unknown,
+    };
   // a question about what something is gets the lookup, not a change.
   if (
-    /^\s*(what|which|where)\b.*\b(variables?|tokens?|do|does|means?|controls?|for)\b|^\s*what('s| is) the (css )?(variable|token|property)/i.test(
+    (/^\s*(what|which|where)\b.*\b(variables?|tokens?|do|does|means?|controls?|for)\b|^\s*what('s| is) the (css )?(variable|token|property)/i.test(
       t,
-    ) &&
+    ) ||
+      /^\s*(is there|are there|explain|what is|what's|what are)\b/i.test(t)) &&
     !/\b(command|make|makes|set|change)\b/i.test(t)
   ) {
     const tok = /--[a-z0-9-]+/i.exec(t)?.[0]?.toLowerCase();
@@ -431,6 +512,18 @@ async function answer(subject, options, cwd) {
         ...themeFields,
         results,
         ...unknown,
+      };
+    // "which token sets the page background?": the token the answer would
+    // set, looked up.
+    const token = q.parts.includes('page')
+      ? '--color-background-body'
+      : q.drafts
+          .flatMap(d => d.options.flat())
+          .find(st => st.thing.startsWith('--'))?.thing;
+    if (token && Object.hasOwn(ctx.project.core.tokenDefaults, token))
+      return {
+        ...tokenAnswer(ctx, env, token, token, unknown, themeFields),
+        subject: t,
       };
   }
   const h = draftAnswer(ctx, env, t);
@@ -522,7 +615,7 @@ function lookupKey(t, ctx) {
     ctx.project.target.has(x) ||
     ASPECTS.includes(x) ||
     Object.hasOwn(DIALS, x) ||
-    CSS_PROPERTIES.has(x) ||
+    cssProperties().has(x) ||
     x === 'colors' ||
     x === 'palette';
   if (known(k)) return k;
@@ -549,7 +642,25 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     ctx.project.target.get(key)
   );
   const group = familyOf(key);
-  const states = [...new Set([...target.states, ...COMMON_STATES])];
+  // Only the states set takes on this part (it refuses one that never
+  // applies there).
+  // Only the states set takes on this part: a state is dropped when the
+  // same change without it passes and with it is refused.
+  const takes = (/** @type {string | undefined} */ st) => {
+    try {
+      checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
+        on: key,
+        ...(st ? {state: st} : {}),
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const plainOk = takes(undefined);
+  const states = [...new Set([...target.states, ...COMMON_STATES])].filter(
+    st => !plainOk || takes(st),
+  );
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
       g,
@@ -816,6 +927,173 @@ function colorsAnswer(env, dialCommands) {
 }
 
 /**
+ * The answer to a question about the tool itself: help, a list, how to see
+ * a change, or the difference between two things it names. 'list' means
+ * the caller lists the kind the question names.
+ * @param {string} t
+ * @param {import('./_how-commands.mjs').HowTheme} env
+ * @param {Map<string, unknown>} targets the parts Core styles
+ * @returns {Array<{text: string, commands: string[]}> | 'list' | null}
+ */
+function toolAnswer(t, env, targets) {
+  const q = t
+    .trim()
+    .toLowerCase()
+    .replace(/[?.!]+$/, '');
+  if (
+    /^(help|usage|\?|how does (this|it) work|what can (i|you) (ask|do))$/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: 'how answers a part, a setting, a plain-words question or a PNG picture with the commands that make the change; set makes it, show lists what a theme sets',
+        commands: [`${HOW} --help`, `${HOW} --list kinds`],
+      },
+    ];
+  if (
+    /^(list|show)( me)? (all|every|the)? ?(the )?(dials?|tokens?|parts?|groups?|properties)\b/.test(
+      q,
+    )
+  )
+    return 'list';
+  if (/\b(see|view|preview|check) (my |the )?(changes?|theme|edits?)\b/.test(q))
+    return [
+      {
+        text: `show lists what ${env.slug} sets; a preview page shows the theme in the app`,
+        commands: [
+          `${P} show ${env.slug}`,
+          `${PREVIEW} add --theme ${env.slug}`,
+        ],
+      },
+    ];
+  // Questions about the theme's files and life.
+  if (
+    /\b(use|import|apply|add|load) (this|the|my) theme (in|to|into) (my|the) app\b/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `the theme is a module in themes/${env.slug}/; show names it and its files, and the theme docs say how an app loads a theme`,
+        commands: [`${P} show ${env.slug}`, 'astryx docs theme'],
+      },
+    ];
+  if (/\brename\b/.test(q))
+    return [
+      {
+        text: 'no command renames a theme: make a new one, set what you need on it, and remove the old folder',
+        commands: [
+          `${P} new ${env.slug}-2 --like ${env.data.like ?? 'none'}`,
+          `${P} show ${env.slug}`,
+        ],
+      },
+    ];
+  if (
+    /\b(what|which) (changed|did i change|have i changed)\b|\bwhat (is|does) (my|this|the) theme set\b/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `show lists every setting ${env.slug} has, in the order they were made`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (/\b(second|another|new|other) theme\b/.test(q))
+    return [
+      {
+        text: 'new makes a theme beside the ones you have; how and set take --theme to pick one',
+        commands: [`${P} new ${env.slug}-2 --like ${env.data.like ?? 'none'}`],
+      },
+    ];
+  // Screen-size, print and device conditions: the editor has none.
+  if (
+    /\bmedia quer|^(on|for) (mobile|phones?|tablets?|desktops?|print)$|^(print|printing|print styles?)$/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: 'the theme editor has no screen-size, print or device conditions: every setting applies on every screen; a media query needs your own CSS',
+        commands: [`${HOW} --help`],
+      },
+    ];
+  // Questions about what is set now, or the choices: a lookup, never a
+  // write.
+  const asks =
+    /^(how (round|big|small|large|thick|dark|light|bold|wide|tall) (is|are)|what (is|are) the (current|available)|which \w+ (does|do|is|are)|what (font|color|colour|radius|accent) (does|do|is|are)|what (values|options|choices))\b|\b(right now|currently|at the moment)\??$|\bnow\?$/.exec(
+      q,
+    );
+  if (asks || /^which parts (are|does|do)\b/.test(q)) {
+    // The part or setting the question names gets its own lookup.
+    const named = q
+      .split(/[^a-z-]+/)
+      .find(
+        w =>
+          w.length > 2 &&
+          (targets.has(w) ||
+            targets.has(w.replace(/s$/, '')) ||
+            ['inputs', 'checks'].includes(w)),
+      );
+    const key =
+      named && !targets.has(named) && !['inputs', 'checks'].includes(named)
+        ? named.replace(/s$/, '')
+        : named;
+    return [
+      {
+        text: key
+          ? `how ${key} says what ${key} reads and what sets it; show lists what ${env.slug} sets now`
+          : `show lists what ${env.slug} sets now; how <part> or how <setting> says what a part reads and the values a setting takes`,
+        commands: [...(key ? [`${HOW} ${key}`] : []), `${P} show ${env.slug}`],
+      },
+    ];
+  }
+  if (
+    /\b((astryx|cli) version|version of (the )?(cli|astryx)|which cli|what cli)\b/.test(
+      q,
+    )
+  )
+    return [{text: 'the CLI says its version', commands: ['astryx --version']}];
+  if (/\bwhere (are|is|do) .*\b(stored|saved|kept|live|files?)\b/.test(q))
+    return [
+      {
+        text: `everything is in themes/${env.slug}/: the settings file is the source, and the CSS and module are built from it`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    /\b(edit|change) (the )?(css|module|theme)?( files?)? by hand\b|\bhand[- ]edit/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `the CSS and module in themes/${env.slug}/ are built from the settings file, so a hand edit is lost at the next set; make the change with set`,
+        commands: [`${HOW} --help`],
+      },
+    ];
+  const diff = /\bdifference between (.+?) and (.+)$/.exec(q);
+  if (diff) {
+    const props = cssProperties();
+    return [diff[1], diff[2]].map(x => {
+      const w = x.trim().replace(/^(the|a) /, '');
+      return {
+        text: Object.hasOwn(DIALS, w)
+          ? `${w} is a dial: ${DIALS[w].help}`
+          : props.has(w)
+            ? `${w} is a CSS property: set it on one part with --on`
+            : w.startsWith('--')
+              ? `${w} is a token: one value the whole theme reads`
+              : `what ${w} is`,
+        commands: [`${HOW} ${w}`],
+      };
+    });
+  }
+  return null;
+}
+
+/**
  * The tokens most parts read for one aspect, for a whole-theme change.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_how-commands.mjs').HowTheme} env
@@ -829,17 +1107,22 @@ function wholeThemeTokens(ctx, env, aspect) {
     .sort((a, b) => C.anyReader(b).length - C.anyReader(a).length)
     .slice(0, 6);
   if (!toks.length) return [];
-  const value = exampleForToken(
-    C.typeOf(toks[0]),
-    toks[0],
-    env.base.light[toks[0]] ?? '',
-  );
+  // The example uses the most read token whose example changes what shows:
+  // a fully round corner (9999px) scaled up stays fully round.
+  /** @type {string[]} */
+  let commands = [];
+  for (const tok of toks) {
+    const now = env.base.light[tok] ?? '';
+    if (parseFloat(now) >= 999) continue;
+    const value = exampleForToken(C.typeOf(tok), tok, now);
+    if (!value) continue;
+    commands = checked(env, [[{verb: 'set', thing: tok, value}]]).commands;
+    if (commands.length) break;
+  }
   return [
     {
       text: `whole-theme tokens for ${aspect}, most used first: ${toks.map(k => `${k} (${C.anyReader(k).length} parts)`).join(', ')}`,
-      commands: value
-        ? checked(env, [[{verb: 'set', thing: toks[0], value}]]).commands
-        : [`${HOW} ${toks[0]}`],
+      commands: commands.length ? commands : [`${HOW} ${toks[0]}`],
     },
   ];
 }
@@ -911,7 +1194,7 @@ async function listItems(kind, filter, cwd) {
     };
   if (kind === 'properties') {
     const props = filter
-      ? [...CSS_PROPERTIES].filter(x => f(x)).slice(0, 60)
+      ? [...cssProperties()].filter(x => f(x)).slice(0, 60)
       : COMMON_PROPERTIES;
     return {list: kind, items: props.map(name => ({name})), common: !filter};
   }
@@ -938,6 +1221,37 @@ async function listItems(kind, filter, cwd) {
     if (!e.components.includes(x.component)) e.components.push(x.component);
     for (const s of x.states) if (!e.states.includes(s)) e.states.push(s);
     byKey.set(x.key, e);
+  }
+  // A filter no part name holds lists the closest names, never nothing.
+  if (!byKey.size && filter) {
+    const word = filter.toLowerCase().replace(/s$/, '');
+    // The parts of components whose doc lists the word, else the names
+    // nearest it.
+    const owners = Object.entries(ctx.project.components)
+      .filter(([, info]) =>
+        (info.keywords ?? []).some(
+          k => k.toLowerCase().replace(/s$/, '') === word,
+        ),
+      )
+      .map(([name]) => name);
+    const close = new Set(
+      owners.length
+        ? ctx.project.targets
+            .filter(x => owners.includes(x.component))
+            .map(x => x.key)
+        : nearest(
+            word,
+            ctx.project.targets.map(x => x.key),
+            5,
+          ),
+    );
+    for (const x of ctx.project.targets) {
+      if (!close.has(x.key)) continue;
+      const e = byKey.get(x.key) ?? {key: x.key, components: [], states: []};
+      if (!e.components.includes(x.component)) e.components.push(x.component);
+      for (const st of x.states) if (!e.states.includes(st)) e.states.push(st);
+      byKey.set(x.key, e);
+    }
   }
   return {
     list: kind,
@@ -991,6 +1305,7 @@ export function parsePoints(at) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `--at reads at most ${MAX_POINTS} points; it got ${points.length}.`,
+      {run: [example]},
     );
   return points;
 }
@@ -1014,6 +1329,7 @@ function pictureColors(file, cwd, at, count) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       'A count lists main colors; --at reads points. Give one of them.',
+      {run: [`${HOW} ${quoteCommandArgument(file)} ${count}`]},
     );
   if (count != null && (!Number.isInteger(count) || count <= 0))
     refuse(
@@ -1034,6 +1350,7 @@ function pictureColors(file, cwd, at, count) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `${file} is a ${other[0]} picture; how reads PNG only. Save or convert it as PNG.`,
+      {run: [`${HOW} --list`]},
     );
   /** @type {import('./_png.mjs').Picture} */
   let pic;
@@ -1042,7 +1359,7 @@ function pictureColors(file, cwd, at, count) {
   } catch (e) {
     throw new AstryxError(
       `Could not read ${file} as a PNG picture: ${e instanceof Error ? e.message : String(e)}.`,
-      [],
+      [{name: `${HOW} --list`, reason: 'what how reads'}],
       E.ERR_INVALID_ARGUMENT,
     );
   }
@@ -1059,6 +1376,7 @@ function pictureColors(file, cwd, at, count) {
           .join(
             '; ',
           )} ${outside.length > 1 ? 'are' : 'is'} outside the picture, which is ${pic.width}x${pic.height} (x from 0 to ${pic.width - 1}, y from 0 to ${pic.height - 1}).`,
+        {run: [`${HOW} ${quoteCommandArgument(file)} --at 0,0`]},
       );
     return {
       file,
@@ -1068,11 +1386,19 @@ function pictureColors(file, cwd, at, count) {
       points: colorsAt(pic, points),
     };
   }
+  const colors = mainColors(pic, count ?? 14);
+  // Every pixel see-through: no color shows, as with a 0-pixel picture.
+  if (!colors.length)
+    throw new AstryxError(
+      `Could not read ${file} as a PNG picture: every pixel is fully see-through, so it has no visible colors.`,
+      [{name: `${HOW} --list`, reason: 'what how reads'}],
+      E.ERR_INVALID_ARGUMENT,
+    );
   return {
     file,
     width: pic.width,
     height: pic.height,
-    colors: mainColors(pic, count ?? 14),
+    colors,
     points: null,
   };
 }

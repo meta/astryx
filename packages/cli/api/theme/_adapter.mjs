@@ -16,6 +16,7 @@ import {createRequire} from 'node:module';
 import {
   findCarriedCoreDir,
   findPackageRoot,
+  projectWritePath,
   requireCoreDir,
 } from '../../foundation/fs/paths.mjs';
 import {tryLock, userCacheDir} from '../../foundation/release/cache.mjs';
@@ -23,6 +24,7 @@ import {Project} from '../../foundation/config/project.mjs';
 import {
   BUNDLED_THEME_PACKAGE,
   THEMES_DIR,
+  THEME_SLUG_RE,
   discoverBundledThemes,
   discoverIntegrationThemes,
   discoverUnmigratedThemeCopies,
@@ -51,6 +53,7 @@ import {stripCopyrightHeader} from '../../foundation/text/copyright-header.mjs';
 import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
 import {importThemeArtifact} from '../../foundation/fs/module-loader.mjs';
 import {applyWrites} from '../integration/add-helpers.mjs';
+import {forkFileNames, renamedEntry} from './_fork.mjs';
 import {
   formatCliCommand,
   quoteCommandArgument,
@@ -67,6 +70,20 @@ export {BUNDLED_THEME_PACKAGE, THEMES_DIR};
  */
 export function themeRecordOwner(theme) {
   return themeImportPackage(theme);
+}
+
+/**
+ * Whether `--package <name>` selects a theme. It takes either name the CLI
+ * shows for it: the package that provides it (`@astryxdesign/cli` for a
+ * bundled theme) or the package the app imports it from, which the record
+ * holds (`@astryxdesign/theme-butter`).
+ * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string | undefined} name
+ */
+export function themeInPackage(theme, name) {
+  return (
+    name == null || theme.package === name || themeImportPackage(theme) === name
+  );
 }
 
 /**
@@ -434,12 +451,14 @@ function scaffoldContents(bytes) {
 /**
  * Describe an ejected theme as a new, unmaintained local fork.
  * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string} [name] the fork's name: the folder it takes in the local
+ *   themes root, which discovery reads as the theme's name
  */
-function localThemeDescriptor(theme) {
+function localThemeDescriptor(theme, name = theme.slug) {
   return `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */
 export default {
   type: 'theme',
-  name: ${JSON.stringify(theme.slug)},
+  name: ${JSON.stringify(name)},
   displayName: ${JSON.stringify(theme.displayName)},
   description: ${JSON.stringify(theme.description)},
   maintained: false,
@@ -457,8 +476,9 @@ export default {
  * @param {string} dir
  * @param {string} cwd
  * @param {string} projectDir the project root the default target is in
+ * @param {string[]} [forkNames] the fork's own file names, when they differ
  */
-function assertEjectTargetFree(theme, dir, cwd, projectDir) {
+function assertEjectTargetFree(theme, dir, cwd, projectDir, forkNames = []) {
   /** @type {string[]} */
   let entries;
   try {
@@ -487,7 +507,9 @@ function assertEjectTargetFree(theme, dir, cwd, projectDir) {
       ERROR_CODES.ERR_FILE_EXISTS,
     );
   }
-  const ownFiles = new Set(theme.files.map(name => path.basename(name)));
+  const ownFiles = new Set(
+    [...theme.files, ...forkNames].map(name => path.basename(name)),
+  );
   for (const name of entries) {
     const otherDescriptor =
       name.endsWith('.doc.mjs') && !ownFiles.has(name)
@@ -495,7 +517,13 @@ function assertEjectTargetFree(theme, dir, cwd, projectDir) {
         : null;
     const otherEntry =
       /Theme\.(?:ts|tsx|mts)$/.test(name) && !ownFiles.has(name);
-    if ((otherDescriptor && otherDescriptor !== theme.slug) || otherEntry) {
+    // A fork in the local themes root carries its folder's name.
+    if (
+      (otherDescriptor &&
+        otherDescriptor !== theme.slug &&
+        otherDescriptor !== path.basename(dir)) ||
+      otherEntry
+    ) {
       throw new AstryxError(
         `${rel} holds another theme (${name}). Eject does not mix two themes in one folder, even with --overwrite.`,
         suggestion,
@@ -503,6 +531,98 @@ function assertEjectTargetFree(theme, dir, cwd, projectDir) {
       );
     }
   }
+}
+
+/**
+ * Refuse a fork target that `theme list` and `theme add` would then misread:
+ * the local themes folder itself, where every theme has its own folder, or a
+ * folder in it named after another theme the project can use.
+ * @param {string} slug
+ * @param {string} dir absolute target
+ * @param {string} projectDir
+ * @param {string} cwd
+ * @param {Set<string>} takenSlugs the slugs of the themes the project can use
+ * @param {boolean} [sameFork] whether the folder holds no fork or a fork of
+ *   this theme
+ */
+function assertEjectTargetPlace(
+  slug,
+  dir,
+  projectDir,
+  cwd,
+  takenSlugs,
+  sameFork = true,
+) {
+  const themesRoot = path.resolve(projectDir, LOCAL_THEME_ROOT);
+  const resolved = path.resolve(dir);
+  const own = defaultEjectTarget(slug).split(path.sep).join('/');
+  const suggestion = [
+    {
+      name: formatCliCommand(`theme eject ${slug}`, cwd),
+      reason: `fork into ${own}`,
+    },
+  ];
+  if (resolved === themesRoot) {
+    throw new AstryxError(
+      `${path.relative(cwd, dir) || '.'} is the folder that holds the local themes, each in its own folder. Fork ${slug} into ${own}.`,
+      suggestion,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  // A fork may take a new name; only another theme's name is refused.
+  const name = path.basename(resolved);
+  // The theme of that name may be the one in this very folder (a re-fork,
+  // which the folder checks decide).
+  const ownFolder = () => {
+    try {
+      return fs
+        .readdirSync(resolved)
+        .some(
+          file =>
+            file.endsWith('.doc.mjs') &&
+            themeDescriptorName(path.join(resolved, file)) === name,
+        );
+    } catch {
+      return false;
+    }
+  };
+  if (
+    path.dirname(resolved) === themesRoot &&
+    name !== slug &&
+    takenSlugs.has(name) &&
+    !(sameFork && ownFolder())
+  ) {
+    throw new AstryxError(
+      `${path.relative(cwd, dir)} is named after the theme ${name}, and a local theme's folder carries its name. Fork ${slug} into ${own}, or into a folder with a new name.`,
+      suggestion,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+}
+
+/**
+ * Whether a folder holds no fork, or a fork of `theme`: its descriptor
+ * carries the theme's display name, as eject writes it.
+ * @param {string} dir
+ * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
+ */
+function holdsForkOf(dir, theme) {
+  let docs;
+  try {
+    docs = fs.readdirSync(dir).filter(file => file.endsWith('.doc.mjs'));
+  } catch {
+    return true;
+  }
+  return docs.every(file => {
+    try {
+      const text = fs.readFileSync(path.join(dir, file), 'utf-8');
+      return (
+        /\bdisplayName:\s*(['"])(.*?)\1/.exec(text)?.[2] === theme.displayName
+      );
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**
@@ -523,19 +643,30 @@ function themeDescriptorName(file) {
 /**
  * Publish one theme's complete source inventory as an atomic local fork.
  * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
- * @param {{cwd: string, targetPath?: string, overwrite?: boolean}} options
- * @returns {string} project-relative output directory
+ * @param {{cwd: string, targetPath?: string, overwrite?: boolean, takenSlugs?: Set<string>}} options
+ *   `takenSlugs`: the slugs of the themes the project can use, which a fork's
+ *   new folder name may not take
+ * @returns {{outputDir: string, files: string[]}} the project-relative output
+ *   directory and the files written, named as the fork names them
  */
-export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
+export function ejectThemeFiles(
+  theme,
+  {cwd, targetPath: typedPath, overwrite = false, takenSlugs = new Set()},
+) {
   // The fork lands in the project, as list and add read it: the default root
   // is the project's, and a relative [path] is read from the working folder
   // but must stay inside the project.
-  const projectDir = findPackageRoot(cwd) ?? path.resolve(cwd);
-  const target = !targetPath
-    ? defaultEjectTarget(theme.slug)
-    : path.isAbsolute(targetPath)
-      ? targetPath
-      : path.relative(projectDir, path.resolve(cwd, targetPath)) || '.';
+  // Read as every theme command reads a path it writes; a backslash
+  // separates folders on every platform.
+  const {
+    projectDir,
+    typed: targetPath,
+    relative: target,
+  } = projectWritePath(
+    cwd,
+    typedPath || undefined,
+    defaultEjectTarget(theme.slug),
+  );
   let resolvedDir;
   try {
     resolvedDir = assertWithin(target, projectDir, {
@@ -559,13 +690,33 @@ export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
     throw error;
   }
 
+  // A fork in the local themes root is named after its folder, as `theme
+  // list` and `theme add` read it; elsewhere it keeps the theme's name.
+  const inThemesRoot =
+    path.dirname(path.resolve(resolvedDir)) ===
+    path.resolve(projectDir, LOCAL_THEME_ROOT);
+  const forkName = inThemesRoot ? path.basename(resolvedDir) : theme.slug;
+  if (inThemesRoot && !THEME_SLUG_RE.test(forkName)) {
+    throw new AstryxError(
+      `A local theme's folder is its name, which is lowercase kebab-case starting with a letter; ${forkName} is not.`,
+      [
+        {
+          name: formatCliCommand(`theme eject ${theme.slug}`, cwd),
+          reason: `fork into ${defaultEjectTarget(theme.slug).split(path.sep).join('/')}`,
+        },
+      ],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+
+  const names = forkFileNames(theme, forkName);
   let writes;
   try {
-    writes = theme.files.map(name => ({
-      name,
-      src: path.join(theme.sourceDir, name),
-      dest: assertWithin(name, resolvedDir, {
-        label: `theme destination for ${name}`,
+    writes = theme.files.map((src, index) => ({
+      name: names[index],
+      src: path.join(theme.sourceDir, src),
+      dest: assertWithin(names[index], resolvedDir, {
+        label: `theme destination for ${names[index]}`,
       }),
     }));
   } catch (error) {
@@ -590,8 +741,24 @@ export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
     }
   }
 
-  assertEjectTargetFree(theme, resolvedDir, cwd, projectDir);
-
+  // The fork's own names count as its files only in a folder that holds
+  // no fork or a fork of this theme.
+  const sameFork = holdsForkOf(resolvedDir, theme);
+  assertEjectTargetFree(
+    theme,
+    resolvedDir,
+    cwd,
+    projectDir,
+    sameFork ? names : [],
+  );
+  assertEjectTargetPlace(
+    theme.slug,
+    resolvedDir,
+    projectDir,
+    cwd,
+    takenSlugs,
+    sameFork,
+  );
   if (!overwrite) {
     const existing = writes.find(write => fs.existsSync(write.dest));
     if (existing) {
@@ -621,6 +788,17 @@ export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
     }
   }
 
+  // A fork under another name renames its entry first, so an entry that
+  // names no theme is refused before any folder is made.
+  const entrySrc = path.resolve(theme.sourceDir, theme.files[0]);
+  const renamed =
+    forkName !== theme.slug
+      ? renamedEntry(
+          String(scaffoldContents(fs.readFileSync(entrySrc))),
+          theme,
+          forkName,
+        )
+      : null;
   try {
     fs.mkdirSync(resolvedDir, {recursive: true});
     const plans = writes.map(write => {
@@ -632,8 +810,10 @@ export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
         path: dest,
         contents:
           path.resolve(write.src) === path.resolve(theme.docPath)
-            ? localThemeDescriptor(theme)
-            : scaffoldContents(fs.readFileSync(write.src)),
+            ? localThemeDescriptor(theme, forkName)
+            : renamed != null && path.resolve(write.src) === entrySrc
+              ? renamed
+              : scaffoldContents(fs.readFileSync(write.src)),
         createOnly: !overwrite,
       };
     });
@@ -653,7 +833,7 @@ export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
     throw new AstryxError(message, undefined, ERROR_CODES.ERR_WRITE_FAILED);
   }
 
-  return path.relative(cwd, resolvedDir) || '.';
+  return {outputDir: path.relative(cwd, resolvedDir) || '.', files: names};
 }
 
 /**
@@ -692,7 +872,9 @@ function asThemeError(error) {
       ? ERROR_CODES.ERR_FILE_EXISTS
       : ERROR_CODES.ERR_THEME_INVALID;
   const suggestions =
-    error instanceof ThemeStateError ? error.suggestions : undefined;
+    error instanceof ThemeStateError || error instanceof ThemeImportError
+      ? error.suggestions
+      : undefined;
   return new AstryxError(message, suggestions, code);
 }
 
@@ -716,7 +898,7 @@ export async function findTheme(slug, options = {}) {
   const matches = themes.filter(
     theme =>
       theme.slug.toLowerCase() === normalized &&
-      (options.package == null || theme.package === options.package),
+      themeInPackage(theme, options.package),
   );
   const broken = skipped.find(entry => entry.slug.toLowerCase() === normalized);
   if (
