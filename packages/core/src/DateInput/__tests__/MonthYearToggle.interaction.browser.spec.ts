@@ -42,11 +42,21 @@ import {
   type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
 import {datePicker} from '../../motion/uikit/datePicker';
+import {settlingDuration, toSpring} from '../../motion/spring';
+import {springs} from '../../motion/uikit/springs';
 
 const storybook = withStorybook(test);
 
 /** The title chevron's quarter turn, from the UIKit table. */
 const TURN = `rotate(-${datePicker.calendar.monthYearToggle.chevronTurnDegrees}deg)`;
+
+/**
+ * How long the sheet's present spring takes to settle, in ms. Under a finger
+ * the hidden wheels warm up after it, once the main thread is idle.
+ */
+const SHEET_SETTLE_MS = Math.round(
+  settlingDuration(toSpring(springs.sheetPresent)) * 1000,
+);
 
 /** CSS's named cubic-bézier easings, which a browser may report by name. */
 const NAMED_EASINGS: Record<string, ReadonlyArray<number>> = {
@@ -193,6 +203,20 @@ async function settlesAt(locator: Locator, property: string, value: string) {
   );
 }
 
+/**
+ * Under a finger the hidden wheels warm up once the sheet has settled. Their
+ * `visibility` turns visible at opacity 0, with its own transition. This waits
+ * for that transition's end, so a test's first tap meets the wheels at rest.
+ */
+async function waitForWarmWheels(wheels: Locator) {
+  await expect
+    .poll(async () => wheels.evaluate(e => getComputedStyle(e).visibility), {
+      timeout: SHEET_SETTLE_MS + 2000,
+    })
+    .toBe('visible');
+  await settlesAt(wheels, 'visibility', 'visible');
+}
+
 async function openCalendar(
   page: Page,
   {rtl = false, story = STORY}: {rtl?: boolean; story?: string} = {},
@@ -223,6 +247,7 @@ async function openCalendar(
     .first();
   await settlesAt(sheet, 'transform', 'matrix(1, 0, 0, 1, 0, 0)');
   const wheels = page.locator('[data-panel="wheels"]').first();
+  await waitForWarmWheels(wheels);
   const title = page.locator('[data-title="month-year"]');
   const titleBox = await title.boundingBox();
   if (titleBox == null) {
@@ -333,6 +358,7 @@ test('DateTimeInput: the wheels fade in over the calendar on the theme’s motio
   await waitForRest(
     page.getByRole('dialog').locator('.astryx-bottom-sheet').first(),
   );
+  await waitForWarmWheels(wheels);
   const tokens = await toggleTokens(page);
   const chevron = page
     .locator('button[aria-label$="Choose month and year"] .astryx-icon')
@@ -504,6 +530,7 @@ test('DateTimeInput: a tap on the month arrows during the opening fade changes n
   await waitForRest(
     page.getByRole('dialog').locator('.astryx-bottom-sheet').first(),
   );
+  await waitForWarmWheels(page.locator('[data-date-surface="wheels"]').first());
   // Counts the clicks that reach the next-month arrow.
   await page
     .locator('button[aria-label="Next month"]')
@@ -725,8 +752,9 @@ test('DateTimeInput: Done hands focus to the shown month’s day once the calend
   await waitForRest(
     page.getByRole('dialog').locator('.astryx-bottom-sheet').first(),
   );
-  await tapCenter('button[aria-label$="Choose month and year"]');
   const wheels = page.locator('[data-date-surface="wheels"]').first();
+  await waitForWarmWheels(wheels);
+  await tapCenter('button[aria-label$="Choose month and year"]');
   await waitForRest(wheels);
   // Done from the keyboard: focus sits in the wheels' footer.
   const done = wheels.getByRole('button', {name: 'Done', exact: true});
@@ -884,6 +912,63 @@ async function wheelsState(page: Page, selector: string) {
     });
 }
 
+for (const [name, story, titleSelector, selector] of [
+  ['DateInput', STORY, '[data-title="month-year"]', '[data-panel="wheels"]'],
+  [
+    'DateTimeInput',
+    DTI_STORY,
+    'button[aria-label$="Choose month and year"]',
+    '[data-date-surface="wheels"]',
+  ],
+] as const) {
+  test(`${name}: once the sheet settles, the hidden wheels are laid out at opacity 0, still inert, and the title tap starts only their opacity fade`, async ({
+    page,
+  }) => {
+    // Shown ahead of the title tap, the wheels' rows are styled and their
+    // layers built. So the toggle's commit does not flip their `visibility`,
+    // and the fade's first frames show its start.
+    await openStory(page, storybook(), story);
+    const driver = await touchDriver(page);
+    const tapCenter = async (target: string) => {
+      const box = await page.locator(target).first().boundingBox();
+      if (box == null) {
+        throw new Error(`no ${target}`);
+      }
+      await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+    };
+    await tapCenter('button[aria-label^="Open "]');
+    const wheels = page.locator(selector).first();
+    await expect(wheels).toBeAttached();
+    await expect
+      .poll(async () => (await wheelsState(page, selector)).visibility, {
+        timeout: SHEET_SETTLE_MS + 2000,
+      })
+      .toBe('visible');
+    const state = await wheelsState(page, selector);
+    expect(state.opacity).toBe('0');
+    expect(state.inert).toBe(true);
+    expect(state.ariaHidden).toBe('true');
+    await settlesAt(wheels, 'visibility', 'visible');
+    // Every transition the title tap starts on the wheels themselves.
+    await wheels.evaluate(element => {
+      const runs: string[] = [];
+      (window as unknown as {wheelRuns: string[]}).wheelRuns = runs;
+      element.addEventListener('transitionrun', event => {
+        if (event.target === element) {
+          runs.push((event as TransitionEvent).propertyName);
+        }
+      });
+    });
+    await tapCenter(titleSelector);
+    await waitForRest(wheels);
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {wheelRuns: string[]}).wheelRuns,
+      ),
+    ).toEqual(['opacity']);
+  });
+}
+
 type CommitLog = {
   frame: number;
   /** The document timeline's time, ms. */
@@ -932,6 +1017,7 @@ for (const [name, story, titleSelector, panelSelector, panelKey] of [
       'transform',
       'matrix(1, 0, 0, 1, 0, 0)',
     );
+    await waitForWarmWheels(wheels);
     const tokens = await toggleTokens(page);
     await page.evaluate(
       ({selector, key}) => {
@@ -1099,6 +1185,7 @@ for (const [name, story, titleSelector, calendarSelector, wheelsSelector] of [
     );
     const calendar = page.locator(calendarSelector).first();
     const wheels = page.locator(wheelsSelector).first();
+    await waitForWarmWheels(wheels);
     // The panels share one parent, so its watch sees a run on either panel.
     const runs = await watchAnimations(calendar.locator('..'));
     await tapCenter(titleSelector);

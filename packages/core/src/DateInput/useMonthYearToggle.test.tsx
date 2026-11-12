@@ -1,9 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {act, fireEvent, render} from '@testing-library/react';
+import {act, fireEvent, render, renderHook} from '@testing-library/react';
 import {useLayoutEffect, useRef, useState} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as reducedMotion from '../motion/reducedMotion';
+import {settlingDuration, toSpring} from '../motion/spring';
+import {springs} from '../motion/uikit/springs';
 import {useMonthYearToggle} from './useMonthYearToggle';
 
 vi.mock('../motion/reducedMotion', async importOriginal => ({
@@ -35,6 +37,7 @@ function Panels({
     isWheelOpen,
     setIsWheelOpen: next => onToggle?.(next),
     isTouch,
+    isSheetOpen: false,
     calendarRef,
     wheelsRef,
   });
@@ -292,6 +295,7 @@ function Title() {
     isWheelOpen: isOpen,
     setIsWheelOpen: setIsOpen,
     isTouch: true,
+    isSheetOpen: false,
     calendarRef,
     wheelsRef,
   });
@@ -376,5 +380,101 @@ describe('useMonthYearToggle: the chevron under Reduced Motion on a touch screen
     fireEvent.click(view.getByRole('button'));
     view.unmount();
     expect(dips[0].cancel).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** Whether the hidden wheels are warm, for a sheet of no other state. */
+function useWarmth({
+  isSheetOpen,
+  isTouch = true,
+}: {
+  isSheetOpen: boolean;
+  isTouch?: boolean;
+}) {
+  const calendarRef = useRef<HTMLDivElement | null>(null);
+  const wheelsRef = useRef<HTMLDivElement | null>(null);
+  return useMonthYearToggle({
+    isWheelOpen: false,
+    setIsWheelOpen: () => {},
+    isTouch,
+    isSheetOpen,
+    calendarRef,
+    wheelsRef,
+  }).isWheelsWarm;
+}
+
+/** Queues idle callbacks, so a test runs them where the main thread idles. */
+function stubIdle(): (() => void)[] {
+  const idle: (() => void)[] = [];
+  vi.stubGlobal('requestIdleCallback', (callback: () => void) => {
+    idle.push(callback);
+    return idle.length;
+  });
+  vi.stubGlobal('cancelIdleCallback', () => {});
+  return idle;
+}
+
+describe('useMonthYearToggle: the hidden wheels warm up under a finger', () => {
+  // The sheet's present spring's settling time: the warm-up waits for it.
+  const settleMs = Math.round(
+    settlingDuration(toSpring(springs.sheetPresent)) * 1000,
+  );
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('warms them once the open sheet has settled and the main thread is idle, and cools them when it closes', () => {
+    const idle = stubIdle();
+    const {result, rerender} = renderHook(useWarmth, {
+      initialProps: {isSheetOpen: false},
+    });
+    expect(result.current).toBe(false);
+    rerender({isSheetOpen: true});
+    act(() => {
+      vi.advanceTimersByTime(settleMs - 1);
+    });
+    expect(idle).toHaveLength(0);
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(idle).toHaveLength(1);
+    expect(result.current).toBe(false);
+    act(() => {
+      idle[0]?.();
+    });
+    expect(result.current).toBe(true);
+    rerender({isSheetOpen: false});
+    expect(result.current).toBe(false);
+  });
+
+  it('never warms them when the sheet closes before it settles', () => {
+    const idle = stubIdle();
+    const {result, rerender} = renderHook(useWarmth, {
+      initialProps: {isSheetOpen: true},
+    });
+    rerender({isSheetOpen: false});
+    act(() => {
+      vi.advanceTimersByTime(settleMs + 1000);
+    });
+    expect(idle).toHaveLength(0);
+    expect(result.current).toBe(false);
+  });
+
+  it('never warms them with a mouse', () => {
+    const idle = stubIdle();
+    const {result} = renderHook(useWarmth, {
+      initialProps: {isSheetOpen: true, isTouch: false},
+    });
+    act(() => {
+      vi.advanceTimersByTime(settleMs + 1000);
+    });
+    expect(idle).toHaveLength(0);
+    expect(result.current).toBe(false);
   });
 });

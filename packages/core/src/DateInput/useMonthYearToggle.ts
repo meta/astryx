@@ -3,11 +3,11 @@
 
 /**
  * @file useMonthYearToggle.ts
- * @input Whether the month/year wheels show, whether a finger drives the
- *   sheet, and the two panels the toggle cross-fades
+ * @input Whether the sheet is open and the month/year wheels show, whether a
+ *   finger drives the sheet, and the two panels the toggle cross-fades
  * @output Exports `useMonthYearToggle`: which panel is `inert`, whether the
- *   cross-fade runs, the title's ref, and `toggle`, which the title and Done
- *   call
+ *   cross-fade runs, whether the hidden wheels are warm, and the title's ref.
+ *   It also returns `toggle`, which the title and Done call
  * @position Internal hook of TouchDateField.tsx and TouchDateTimeField.tsx
  *
  * SYNC: When modified, update useMonthYearToggle.test.tsx and
@@ -86,6 +86,61 @@ function isExiting(element: Element): boolean {
     );
 }
 
+/**
+ * How long the sheet's present motion (`springs.sheetPresent`) takes to
+ * settle, in milliseconds. A constant, not a table read, so the pickers ship
+ * none of the springs table's other rows. A test holds it to the spring.
+ */
+const SHEET_SETTLE_MS = 506;
+
+/** The longest an idle callback may wait before the wheels warm anyway. */
+const IDLE_TIMEOUT_MS = 300;
+
+/**
+ * True once the open sheet has settled and the main thread has gone idle;
+ * false while it is closed. The caller then shows the hidden wheels at
+ * opacity 0, still inert, so the toggle's commit does not flip their
+ * `visibility`.
+ *
+ * `visibility` is inherited, so showing the wheels restyles every row, and
+ * WebKit builds a layer for each. Done in the toggle's commit, that work
+ * delays the fade's first frames.
+ */
+function useWheelsWarmUp(isSheetOpen: boolean): boolean {
+  const [isWarm, setIsWarm] = useState(false);
+  // Synchronizes with the browser's clock and idle time. The wheels warm after
+  // the sheet's present motion settles and the main thread goes idle. Closing
+  // the sheet cancels both and cools them.
+  useEffect(() => {
+    if (!isSheetOpen) {
+      return undefined;
+    }
+    let idle: number | null = null;
+    const warm = () => {
+      setIsWarm(true);
+    };
+    const timer = window.setTimeout(() => {
+      idle =
+        typeof window.requestIdleCallback === 'function'
+          ? window.requestIdleCallback(warm, {timeout: IDLE_TIMEOUT_MS})
+          : window.setTimeout(warm, 0);
+    }, SHEET_SETTLE_MS);
+    return () => {
+      // Cooled for the next opening, which waits for its own settle.
+      setIsWarm(false);
+      window.clearTimeout(timer);
+      if (idle != null) {
+        if (typeof window.cancelIdleCallback === 'function') {
+          window.cancelIdleCallback(idle);
+        } else {
+          window.clearTimeout(idle);
+        }
+      }
+    };
+  }, [isSheetOpen]);
+  return isSheetOpen && isWarm;
+}
+
 interface MonthYearToggleOptions {
   /** Whether the month/year wheels show. */
   isWheelOpen: boolean;
@@ -97,6 +152,11 @@ interface MonthYearToggleOptions {
    * right after it lands.
    */
   isTouch: boolean;
+  /**
+   * Whether the sheet is open. Under a finger the hidden wheels warm up once
+   * it has settled.
+   */
+  isSheetOpen: boolean;
   calendarRef: RefObject<HTMLElement | null>;
   wheelsRef: RefObject<HTMLElement | null>;
 }
@@ -115,10 +175,13 @@ interface MonthYearToggleOptions {
  * It dips instead (playReducedMotionDip), and the turn lands at the dip's
  * middle.
  *
+ * Under a finger the hidden wheels warm up once the open sheet settles. The
+ * caller then shows them at opacity 0 (`isWheelsWarm`).
+ *
  * @example
  * ```
- * const {isCalendarInert, isWheelsInert, isFading, titleRef, toggle} =
- *   useMonthYearToggle({isWheelOpen, setIsWheelOpen, isTouch, calendarRef, wheelsRef});
+ * const {isCalendarInert, isWheelsInert, isFading, isWheelsWarm, titleRef, toggle} =
+ *   useMonthYearToggle({isWheelOpen, setIsWheelOpen, isTouch, isSheetOpen, calendarRef, wheelsRef});
  * <button ref={titleRef} onClick={() => toggle(!isWheelOpen)} />
  * ```
  */
@@ -126,6 +189,7 @@ export function useMonthYearToggle({
   isWheelOpen,
   setIsWheelOpen,
   isTouch,
+  isSheetOpen,
   calendarRef,
   wheelsRef,
 }: MonthYearToggleOptions): {
@@ -133,11 +197,17 @@ export function useMonthYearToggle({
   isWheelsInert: boolean;
   /** True while the cross-fade runs under a finger: the caller's shield shows. */
   isFading: boolean;
+  /**
+   * True once the open sheet has settled under a finger. The caller shows the
+   * hidden wheels at opacity 0, still inert.
+   */
+  isWheelsWarm: boolean;
   /** A callback ref for the title button: the chevron's dip finds its icon. */
   titleRef: (element: Element | null) => void;
   /** Opens (`true`) or closes the wheels. The title and Done call it. */
   toggle: (next: boolean) => void;
 } {
+  const isWheelsWarm = useWheelsWarmUp(isSheetOpen && isTouch);
   // `settled`: the toggle state whose exit has ended. `focusedFor`: the
   // toggle state whose incoming panel took focus, and so is live early.
   const [{settled, focusedFor}, setFade] = useState<{
@@ -349,6 +419,7 @@ export function useMonthYearToggle({
       isCalendarInert: isWheelOpen,
       isWheelsInert: !isWheelOpen,
       isFading: false,
+      isWheelsWarm,
       titleRef,
       toggle,
     };
@@ -362,6 +433,7 @@ export function useMonthYearToggle({
       ? !settled && !(isIncomingLive && isWheelOpen)
       : !isWheelOpen,
     isFading,
+    isWheelsWarm,
     titleRef,
     toggle,
   };

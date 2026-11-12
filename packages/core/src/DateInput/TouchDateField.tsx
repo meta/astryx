@@ -667,6 +667,12 @@ const styles = stylex.create({
         reducedMotionFadeConsts.easing,
     },
   },
+  // Under a finger, once the sheet has settled, the hidden wheels show at
+  // opacity 0 (useMonthYearToggle). The toggle's commit then does not flip
+  // their `visibility`. They stay inert and hidden from assistive technology.
+  panelOverlayWarm: {
+    visibility: 'visible',
+  },
   footer: {
     paddingBlockStart: spacingVars['--spacing-2'],
     // Same reason as the header: the content box owns the inline inset, so
@@ -832,14 +838,21 @@ export function TouchDateField({
   const calendarPanelRef = useRef<HTMLDivElement | null>(null);
   const wheelsPanelRef = useRef<HTMLDivElement | null>(null);
   const {isTouch} = useTouchPresentation();
-  const {isCalendarInert, isWheelsInert, isFading, titleRef, toggle} =
-    useMonthYearToggle({
-      isWheelOpen,
-      setIsWheelOpen,
-      isTouch,
-      calendarRef: calendarPanelRef,
-      wheelsRef: wheelsPanelRef,
-    });
+  const {
+    isCalendarInert,
+    isWheelsInert,
+    isFading,
+    isWheelsWarm,
+    titleRef,
+    toggle,
+  } = useMonthYearToggle({
+    isWheelOpen,
+    setIsWheelOpen,
+    isTouch,
+    isSheetOpen,
+    calendarRef: calendarPanelRef,
+    wheelsRef: wheelsPanelRef,
+  });
   // The header's actions and the footer's two leave with the toggle and
   // arrive with the fade's end. They sit outside the panels' shield, so they
   // go inert at once. Otherwise a tap on Done during the fade would fall
@@ -1503,6 +1516,7 @@ export function TouchDateField({
             styles.panel,
             styles.panelOverlay,
             !isWheelOpen && styles.panelOverlayHidden,
+            !isWheelOpen && isWheelsWarm && styles.panelOverlayWarm,
           )}>
           {monthYearWheels}
         </div>

@@ -466,6 +466,10 @@ const styles = stylex.create({
         reducedMotionFadeConsts.easing,
     },
   },
+  // Shown at opacity 0 once the sheet settles, still inert (useMonthYearToggle).
+  touchDateSurfaceWarm: {
+    visibility: 'visible',
+  },
   /**
    * The wheels cover the calendar with an opaque plate in the sheet's color,
    * so only they fade and the calendar beneath stays drawn. `isolation` keeps
@@ -722,14 +726,21 @@ export function TouchDateTimeField({
   const calendarSurfaceRef = useRef<HTMLDivElement | null>(null);
   const wheelsSurfaceRef = useRef<HTMLDivElement | null>(null);
   const {isTouch} = useTouchPresentation();
-  const {isCalendarInert, isWheelsInert, isFading, titleRef, toggle} =
-    useMonthYearToggle({
-      isWheelOpen,
-      setIsWheelOpen,
-      isTouch,
-      calendarRef: calendarSurfaceRef,
-      wheelsRef: wheelsSurfaceRef,
-    });
+  const {
+    isCalendarInert,
+    isWheelsInert,
+    isFading,
+    isWheelsWarm,
+    titleRef,
+    toggle,
+  } = useMonthYearToggle({
+    isWheelOpen,
+    setIsWheelOpen,
+    isTouch,
+    isSheetOpen,
+    calendarRef: calendarSurfaceRef,
+    wheelsRef: wheelsSurfaceRef,
+  });
   // The header's arrows and Reset leave with the toggle and arrive with the
   // fade's end. They sit outside the surfaces' shield, so they go inert at
   // once.
@@ -1342,6 +1353,7 @@ export function TouchDateTimeField({
                 styles.touchDateSurface,
                 styles.touchWheelsSurface,
                 !isWheelOpen && styles.touchDateSurfaceHidden,
+                !isWheelOpen && isWheelsWarm && styles.touchDateSurfaceWarm,
               )}>
               <div
                 aria-hidden="true"
