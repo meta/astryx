@@ -35,7 +35,7 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {scrollingAncestor} from '../utils/scrollingAncestor';
 import type {OutlineItem} from './types';
 
@@ -127,11 +127,11 @@ function scrollToTarget(
  * the first), the first item is active; at the bottom, the last item is active.
  */
 function resolveActiveId(
-  items: OutlineItem[],
+  ids: ReadonlyArray<string>,
   scrollRoot: HTMLElement | null,
   offset: number,
 ): string | undefined {
-  if (items.length === 0) {
+  if (ids.length === 0) {
     return undefined;
   }
 
@@ -142,12 +142,12 @@ function resolveActiveId(
       : window.innerHeight + window.scrollY >=
         document.documentElement.scrollHeight - 2;
   if (atBottom) {
-    return items[items.length - 1].id;
+    return ids[ids.length - 1];
   }
 
-  let activeId = items[0].id;
-  for (const item of items) {
-    const element = document.getElementById(item.id);
+  let activeId = ids[0];
+  for (const id of ids) {
+    const element = document.getElementById(id);
     if (element == null) {
       continue;
     }
@@ -155,7 +155,7 @@ function resolveActiveId(
     // 1px of tolerance absorbs sub-pixel rounding after a scroll lands.
     const top = element.getBoundingClientRect().top;
     if (top <= getRestingTop(element, scrollRoot, offset) + 1) {
-      activeId = item.id;
+      activeId = id;
     } else {
       break;
     }
@@ -219,7 +219,10 @@ export function useScrollSpy({
   const [uncontrolledActiveId, setUncontrolledActiveId] = useState<
     string | undefined
   >(items[0]?.id);
-  const activeIdRef = useRef<string | undefined>(activeId);
+  // The uncontrolled active item, for the scroll listener's comparison. It
+  // starts as the state does, and every handler that sets the uncontrolled
+  // state writes it too.
+  const activeIdRef = useRef<string | undefined>(uncontrolledActiveId);
   // While true, scroll-spy ignores scroll updates because a navigation is
   // driving a programmatic scroll. Released when it settles or the user scrolls.
   const suppressRef = useRef(false);
@@ -233,25 +236,12 @@ export function useScrollSpy({
   // Latest scroll-position resolver, so a navigation can resume tracking when
   // the user scrolls during the programmatic scroll.
   const syncRef = useRef<(() => void) | null>(null);
-  // The scroll listener reads the items and the callback through refs, so it
-  // does not subscribe again on each render. Items is a new array each
-  // render. Each ref is written at commit: a render React discards must not
-  // leave its values.
-  const itemsRef = useRef(items);
-  // Syncs the scroll listener's items with the committed props.
-  useIsomorphicLayoutEffect(() => {
-    itemsRef.current = items;
-  });
-  const onActiveIdChangeRef = useRef(onActiveIdChange);
-  // Syncs the listeners' callback with the committed props.
-  useIsomorphicLayoutEffect(() => {
-    onActiveIdChangeRef.current = onActiveIdChange;
-  });
-  const itemIds = items.map(item => item.id).join('\n');
-  // Syncs the scroll listener's active item with the committed one.
-  useIsomorphicLayoutEffect(() => {
-    activeIdRef.current = isControlled ? activeId : uncontrolledActiveId;
-  });
+  // The committed callback. The scroll listener reads it through the ref, so
+  // it does not subscribe again on each render.
+  const onActiveIdChangeRef = useCommittedRef(onActiveIdChange);
+  // Items is a new array each render. The scroll listener subscribes with
+  // their ids, and subscribes again only when the ids change.
+  const itemIds = JSON.stringify(items.map(item => item.id));
 
   /**
    * The element whose scroll position drives the outline: the explicit
@@ -274,6 +264,7 @@ export function useScrollSpy({
 
     const scrollRoot = getScrollRoot();
     const scrollTarget: HTMLElement | Window = scrollRoot ?? window;
+    const ids = JSON.parse(itemIds) as string[];
 
     let frame = 0;
     const update = () => {
@@ -281,11 +272,7 @@ export function useScrollSpy({
       if (suppressRef.current) {
         return;
       }
-      const nextActiveId = resolveActiveId(
-        itemsRef.current,
-        scrollRoot,
-        offset,
-      );
+      const nextActiveId = resolveActiveId(ids, scrollRoot, offset);
       if (nextActiveId != null && nextActiveId !== activeIdRef.current) {
         activeIdRef.current = nextActiveId;
         setUncontrolledActiveId(nextActiveId);
@@ -311,7 +298,7 @@ export function useScrollSpy({
         cancelAnimationFrame(frame);
       }
     };
-  }, [isControlled, itemIds, offset, getScrollRoot]);
+  }, [isControlled, itemIds, offset, getScrollRoot, onActiveIdChangeRef]);
 
   // Tear down any in-flight navigation's listeners when the Outline unmounts.
   useEffect(() => {

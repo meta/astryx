@@ -294,6 +294,24 @@ describe('Outline', () => {
     document.body.removeChild(install);
     document.body.removeChild(api);
   });
+
+  it('reports nothing on mount while the first item is still the active one', () => {
+    // Not at the bottom of the page, and no heading has passed the line.
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      value: 4000,
+      configurable: true,
+    });
+    const onActiveIdChange = vi.fn();
+    // The hook resolves the active id from scroll position on mount. Its
+    // comparison starts from the first item, as the active state does.
+    render(<Outline items={items} onActiveIdChange={onActiveIdChange} />);
+    expect(screen.getByRole('link', {name: 'Introduction'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+    expect(onActiveIdChange).not.toHaveBeenCalled();
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight');
+  });
 });
 
 /**
