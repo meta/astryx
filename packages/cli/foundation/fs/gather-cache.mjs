@@ -225,11 +225,13 @@ export async function recordRunFor(argv, fn) {
   if (
     !command ||
     !KEPT_COMMANDS.has(command) ||
-    (INTEGRATION_COMMANDS.has(command) &&
-      !withoutRecording(() => mayHaveIntegrations(process.cwd()))) ||
     runsUnderPnp() ||
     currentUid() == null ||
-    withoutRecording(buildId) == null
+    withoutRecording(buildId) == null ||
+    // Last, being a few file checks: those commands keep only their
+    // integrations' check results, so a project with none records nothing.
+    (INTEGRATION_COMMANDS.has(command) &&
+      !withoutRecording(() => mayHaveIntegrations(process.cwd())))
   ) {
     return fn();
   }

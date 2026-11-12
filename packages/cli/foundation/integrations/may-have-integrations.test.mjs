@@ -3,7 +3,7 @@
 /**
  * @file may-have-integrations.test.mjs
  * @input Temporary projects with and without a config, a manifest of their
- *   own, or a dependency that ships one
+ *   own, or a dependency that ships one, and a folder outside any project
  * @output mayHaveIntegrations is false only when no integration can load
  */
 
@@ -18,6 +18,7 @@ let dir;
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-may-have-'));
+  // A project, by the release choice's reading: it declares Core.
   fs.writeFileSync(
     path.join(dir, 'package.json'),
     JSON.stringify({
@@ -70,6 +71,15 @@ describe('mayHaveIntegrations', () => {
       ),
       'export default {};\n',
     );
-    expect(mayHaveIntegrations(path.join(dir))).toBe(true);
+    expect(mayHaveIntegrations(dir)).toBe(true);
+  });
+
+  it('is true outside a project, where the integrations beside the CLI load', () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-outside-'));
+    try {
+      expect(mayHaveIntegrations(outside)).toBe(true);
+    } finally {
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
   });
 });

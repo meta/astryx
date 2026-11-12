@@ -966,6 +966,8 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       for (const ask of [
         ['template', '--list'],
         ['component', 'Button'],
+        ['theme', 'list'],
+        ['discover'],
       ]) {
         // Stdout and status: a once-a-day notice may go to stderr.
         const answer = (
@@ -985,6 +987,53 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       expect(issuesEntries(tmp).size).toBe(0);
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('keeps the check results of an integration installed beside the CLI, run outside a project', () => {
+    const tmp = keptTmp('computer');
+    // A computer-level integration: installed in the CLI's own install root.
+    const beside = path.join(
+      work,
+      'install',
+      'node_modules',
+      '@acme',
+      'beside',
+    );
+    const outside = fs.mkdtempSync(path.join(work, 'outside-'));
+    try {
+      fs.mkdirSync(path.join(beside, 'templates'), {recursive: true});
+      fs.writeFileSync(
+        path.join(beside, 'package.json'),
+        JSON.stringify({name: '@acme/beside', version: '1.0.0'}),
+      );
+      fs.writeFileSync(
+        path.join(beside, 'astryx.integration.mjs'),
+        `export default { templates: './templates' };\n`,
+      );
+      fs.writeFileSync(
+        path.join(beside, 'templates', 'tally.doc.mjs'),
+        `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(beside, 'templates', 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = ['template', '--list'];
+      const answer = (
+        /** @type {{status: number | null, stdout: string}} */ r,
+      ) => [r.status, r.stdout];
+      const fresh = answer(
+        run(ask, {tmp: freshTmp(), cwd: outside, json: false}),
+      );
+      expect(answer(run(ask, {tmp, cwd: outside, json: false}))).toEqual(fresh);
+      const kept = issuesEntries(tmp);
+      expect(kept.size).toBe(1);
+      expect(answer(run(ask, {tmp, cwd: outside, json: false}))).toEqual(fresh);
+      expect(issuesEntries(tmp)).toEqual(kept);
+    } finally {
+      fs.rmSync(beside, {recursive: true, force: true});
+      fs.rmSync(outside, {recursive: true, force: true});
     }
   }, 120_000);
 

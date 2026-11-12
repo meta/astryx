@@ -6,9 +6,11 @@
  * @input The working folder.
  * @output `mayHaveIntegrations(cwd)`: false only when the project root (the
  *   nearest package.json's folder, else `cwd`) has no Astryx config, is no
- *   integration itself, and declares no installed dependency that ships an
- *   integration manifest, so no configured, self-resolved or autolinked
- *   integration can load.
+ *   integration itself, declares no installed dependency that ships an
+ *   integration manifest, and the run is inside a project (outside one, the
+ *   integrations installed beside the running CLI load, spec AST-081 FR12),
+ *   so no configured, self-resolved, autolinked or computer-level integration
+ *   can load.
  * @position Read by foundation/fs/gather-cache.mjs: `component`, `template`,
  *   `theme` and `discover` record a run only for their integrations' kept
  *   check results, so a project with none skips the recorder entirely. A true
@@ -17,6 +19,7 @@
  */
 
 import {CONFIG_BASENAMES} from '../config/config-path.mjs';
+import {isOutsideProject} from '../env/project-scope.mjs';
 import {findPackageRoot} from '../fs/paths.mjs';
 import {findPresentFiles} from '../fs/present-files.mjs';
 import {readDeclaredDependencies} from './declared-dependencies.mjs';
@@ -40,5 +43,5 @@ export function mayHaveIntegrations(cwd) {
       return true;
     }
   }
-  return false;
+  return isOutsideProject(cwd);
 }
