@@ -283,17 +283,32 @@ another implementation helper.
   prop wins. `spec:AST-117` owns the rule. Members that reject nothing
   themselves, such as TextInput, Selector, and DateRangeInput, take no
   entry error behavior.
-- **FR15 — An error is identified in text.** A member whose status is an error
+- **FR15 — Rejected entries are never flagged early or dropped silently.**
+  DateInput, DateTimeInput, TimeInput, and NumberInput reveal a value rejection
+  once the entry is complete and a text rejection at commit, show every
+  rejection in a standalone field as a visible message with the invalid state
+  and one announcement, and keep rejected typed text at commit; a native control
+  restores its committed value at blur and keeps the rejection's message. What a form posts does not change (`spec:AST-118` FR4). A `warning`
+  or `success` caller status, or an `error` status without a message, never
+  hides a rejection's message. A caller `error` status with a message shows in
+  place of it on NumberInput and TimeInput, and on DateInput only with
+  `onEntryErrorChange`; NumberInput and TimeInput report each rejection through
+  `onEntryErrorChange`. A typed number is complete only at commit, so
+  NumberInput reveals its rejections at Enter or blur and nothing while the
+  person types. `spec:AST-118` owns the rule, including when each kind of entry
+  is complete. FileInput's rejections are of picked files, which it drops from
+  its value, and stay outside this rule.
+- **FR16 — An error is identified in text.** A member whose status is an error
   sets `aria-invalid="true"` on its control and links text that names the error
   through `aria-describedby`. When the caller gives no message, the member links
   the translated default error text instead, so an error is never shown by
   colour and icon alone (WCAG 2.2 SC 3.3.1). The default text is announced and
   placed like a message (FR8, `component:Field` FR4) (DEC-11).
-- **FR16 — A group error marks its members.** An InputGroup or a group Field
+- **FR17 — A group error marks its members.** An InputGroup or a group Field
   with an error status sets `aria-invalid="true"` on every member control that
   has no status of its own, and each member's description links the group's
   error text. A member with its own status keeps it (DEC-12).
-- **FR17 — A required control takes part in form validation.** A member marked
+- **FR18 — A required control takes part in form validation.** A member marked
   required sets the native `required` attribute on its native form control as
   well as `aria-required`, so the browser blocks submission and names the first
   empty control. A form with `noValidate` keeps the app's own validation. A
@@ -442,6 +457,13 @@ DEC-6 does not require unrelated components to add a new floor.
   yet; `spec:AST-099` lists each gap.
 - **Entry error behavior (FR14):** no member takes `entryErrorBehavior`, and
   FormLayout has no form default; `spec:AST-117` lists each gap.
+- **Rejected entries (FR15):** NumberInput, TimeInput, and DateTimeInput's
+  time segment mark unfinished drafts invalid and announce them on each
+  keystroke with no visible message, and unparsable drafts revert on blur;
+  DateInput and DateTimeInput do the same for unreadable date text, and a
+  native date or time rejection shows no message. Inside an InputGroup, a
+  member's own rejection shows no visible message. `spec:AST-118` lists each
+  gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
   individual state behavior, but do not yet provide the complete real-browser
   inline-size/end-overlap matrix below. This current record names those
@@ -468,9 +490,10 @@ The exhaustive coverage obligation follows the membership and adoption tables.
 | FR12     | `Typeahead.test.tsx`, `BaseTypeahead.test.tsx`, `Tokenizer.test.tsx`, `Selector.test.tsx`, and `MultiSelector.test.tsx` cases for both attributes, with Enter keeping its member-owned effect; `SearchKeyboard.interaction.browser.spec.ts` on a touch-emulated phone, where the search input a tap focuses carries both | Typeahead; Tokenizer; Selector and MultiSelector search row; a phone viewport with touch emulation                                | A missing attribute, or an Enter whose effect changes with the label, fails                                                                                                                                                                                                                                                                |
 | FR13     | TBD (gap): the per-field keyboard focus tests and simulator evidence `spec:AST-099` FR9 names                                                                                                                                                                                                                            | each member FR13 covers, in the page, a sheet, a docked bar Core moves, a floating bar, and a bar with its own `translate`        | A focused field left under the keyboard in a scroller (including one inside a fixed container FR9 leaves to the app), a Core host, or a docked bar Core moves, or a public prop for the behavior; a field with no scroller between it and a floating, own-`translate`, or full-viewport host is the app's to position and is not a failure |
 | FR14     | TBD (gap): the entry error behavior suites `spec:AST-117` names                                                                                                                                                                                                                                                          | DateInput, DateTimeInput, TimeInput, and NumberInput under each value, standalone and in a FormLayout                             | A signal appears before commit under `'blur-or-enter'`, `'complete'` differs from the shipped behavior, or a form default outranks a field's own prop                                                                                                                                                                                      |
-| FR15     | Accessibility-tree tests for TextInput, TextArea, Selector, and DateInput with an error status, with and without a message                                                                                                                                                                                               | An error with `aria-invalid` but no linked text, or a default text that is not announced, fails                                   |
-| FR16     | InputGroup and group Field accessibility-tree tests with a group error, with and without a member's own status                                                                                                                                                                                                           | A member without its own status that is not marked invalid, or a member status that is replaced, fails                            |
-| FR17     | Form submission tests in a real browser: a required empty TextInput, Selector, and CheckboxInput, with and without `noValidate`                                                                                                                                                                                          | A submission that is not blocked, a first invalid control that is not named, or validation that runs under `noValidate`, fails    |
+| FR15     | TBD (gap): the completeness, commit, and message suites `spec:AST-118` names                                                                                                                                                                                                                                             | DateInput, DateTimeInput, TimeInput, and NumberInput, typed and native, standalone and grouped                                    | An unfinished entry is flagged, a commit drops rejected text, a rejection shows no message, or its signals part                                                                                                                                                                                                                            |
+| FR16     | Accessibility-tree tests for TextInput, TextArea, Selector, and DateInput with an error status, with and without a message                                                                                                                                                                                               | An error with `aria-invalid` but no linked text, or a default text that is not announced, fails                                   |
+| FR17     | InputGroup and group Field accessibility-tree tests with a group error, with and without a member's own status                                                                                                                                                                                                           | A member without its own status that is not marked invalid, or a member status that is replaced, fails                            |
+| FR18     | Form submission tests in a real browser: a required empty TextInput, Selector, and CheckboxInput, with and without `noValidate`                                                                                                                                                                                          | A submission that is not blocked, a first invalid control that is not named, or validation that runs under `noValidate`, fails    |
 
 ## Decision links
 
