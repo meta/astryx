@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {REPO_ROOT} from '../test-utils/repo-root.mjs';
 import {packPublishedCli} from '../test-utils/pack-published-cli.mjs';
+import {runFolder} from '../test-utils/global-local-fixtures.mjs';
 
 const BUILD_ID = 'clients/cli/build-id.generated.json';
 
@@ -84,7 +85,10 @@ function makeProject() {
 }
 
 beforeAll(() => {
-  work = fs.mkdtempSync(path.join(os.tmpdir(), 'packed-gather-cache-'));
+  // The global teardown removes the packed trees outside per-file hook limits.
+  work = fs.mkdtempSync(
+    path.join(runFolder() ?? os.tmpdir(), 'packed-gather-cache-'),
+  );
   packed = packPublishedCli(work);
   // What `prepack` writes for a published package.
   fs.writeFileSync(
@@ -100,16 +104,8 @@ beforeAll(() => {
 }, 120_000);
 
 afterAll(() => {
-  // A run's background release check can still be filling a temp folder's
-  // release cache, and removing thousands of files on a loaded runner can
-  // outlast the hook: a detached `rm` clears the folders after the suite, and
-  // a folder it leaves behind in the temp folder is harmless.
-  const dirs = [work, project].filter(Boolean);
-  if (dirs.length === 0) return;
-  const rm = spawn('rm', ['-rf', ...dirs], {detached: true, stdio: 'ignore'});
-  rm.on('error', () => {});
-  rm.unref();
-}, 120_000);
+  if (work && !runFolder()) fs.rmSync(work, {recursive: true, force: true});
+});
 
 /**
  * Run the packed CLI with `tmp` as the system temp folder.
