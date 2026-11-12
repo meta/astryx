@@ -935,34 +935,141 @@ function ownPageTokens(cwd, slug) {
       : node?.type === 'TemplateLiteral' && node.expressions.length === 0
         ? node.quasis.map((/** @type {any} */ q) => q.value.cooked).join('')
         : null;
-  /** @param {any} node */
-  const visit = node => {
+  // Every const binding in the file, by name, so a value given by name
+  // (tokens: mine, ...mine) is read as written.
+  /** @type {Map<string, any>} */
+  const consts = new Map();
+  /** @type {any[]} */
+  const calls = [];
+  /** @param {any} node @param {any} owner the exported name, when exported */
+  const visit = (node, owner = null) => {
     if (!node || typeof node !== 'object') return;
+    if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier')
+      consts.set(node.id.name, node.init);
     if (
       node.type === 'CallExpression' &&
       node.callee?.type === 'Identifier' &&
       node.callee.name === 'defineTheme' &&
-      node.arguments?.[0]?.type === 'ObjectExpression'
-    ) {
-      const tokens = node.arguments[0].properties.find(
-        (/** @type {any} */ p) =>
-          p.type === 'ObjectProperty' &&
-          !p.computed &&
-          keyOf(p.key) === 'tokens' &&
-          p.value.type === 'ObjectExpression',
-      );
-      for (const p of tokens?.value.properties ?? []) {
-        const k =
-          p.type === 'ObjectProperty' && !p.computed ? keyOf(p.key) : null;
-        if (k?.startsWith('--')) out.set(k, textOf(p.value));
-      }
-      return;
+      node.arguments?.[0]
+    )
+      calls.push({call: node, owner});
+    for (const [k, v] of Object.entries(node)) {
+      const nextOwner =
+        node.type === 'VariableDeclarator' && k === 'init'
+          ? (node.id?.name ?? owner)
+          : node.type === 'ExportDefaultDeclaration'
+            ? 'default'
+            : owner;
+      if (Array.isArray(v)) v.forEach(c => visit(c, nextOwner));
+      else if (v && typeof v === 'object' && v.type) visit(v, nextOwner);
     }
-    for (const v of Object.values(node))
-      if (Array.isArray(v)) v.forEach(visit);
-      else if (v && typeof v === 'object' && v.type) visit(v);
   };
   visit(ast.program);
+  /** @param {any} node @param {number} [depth] @returns {any} */
+  const unwrap = (node, depth = 0) => {
+    if (!node || depth > 20) return null;
+    if (
+      [
+        'TSAsExpression',
+        'TSSatisfiesExpression',
+        'TSNonNullExpression',
+        'TSTypeAssertion',
+        'ParenthesizedExpression',
+      ].includes(node.type)
+    )
+      return unwrap(node.expression, depth + 1);
+    if (node.type === 'Identifier' && consts.has(node.name))
+      return unwrap(consts.get(node.name), depth + 1);
+    return node;
+  };
+  // The theme the build loads: the defineTheme that names it, else the one
+  // exported as <camel>Theme or by default, else the only one.
+  const named = calls.find(({call}) => {
+    const obj = unwrap(call.arguments[0]);
+    return (
+      obj?.type === 'ObjectExpression' &&
+      obj.properties.some(
+        (/** @type {any} */ p) =>
+          p.type === 'ObjectProperty' &&
+          keyOf(p.key) === 'name' &&
+          textOf(unwrap(p.value)) === slug,
+      )
+    );
+  });
+  const chosen =
+    named ??
+    calls.find(
+      c => c.owner === `${camel(slug)}Theme` || c.owner === 'default',
+    ) ??
+    (calls.length === 1 ? calls[0] : null);
+  if (!chosen) return out;
+  const def = unwrap(chosen.call.arguments[0]);
+  if (def?.type !== 'ObjectExpression') return out;
+  const tokensProp = def.properties.find(
+    (/** @type {any} */ p) =>
+      p.type === 'ObjectProperty' && !p.computed && keyOf(p.key) === 'tokens',
+  );
+  if (!tokensProp) return out;
+  let unresolved = false;
+  /** @param {any} node @param {number} depth */
+  const collect = (node, depth) => {
+    const obj = unwrap(node);
+    if (obj?.type !== 'ObjectExpression' || depth > 20) {
+      unresolved = true;
+      return;
+    }
+    // Spreads and keys merge in order: a later one wins.
+    for (const p of obj.properties) {
+      if (p.type === 'SpreadElement') collect(p.argument, depth + 1);
+      else if (p.type === 'ObjectProperty' && !p.computed) {
+        const k = keyOf(p.key);
+        if (k?.startsWith('--')) out.set(k, textOf(unwrap(p.value)));
+      } else unresolved = true;
+    }
+  };
+  collect(tokensProp.value, 0);
+  // A value no read of the file can resolve (a call, an import): the
+  // built theme's own top-level tokens, which the build evaluated.
+  if (unresolved)
+    for (const [k, v] of builtTopTokens(cwd, slug))
+      if (!out.has(k)) out.set(k, v);
+  return out;
+}
+
+/**
+ * The top-level tokens of a theme's built module (<slug>.js), which the
+ * build wrote as plain data, or an empty map.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Map<string, string | null>}
+ */
+function builtTopTokens(cwd, slug) {
+  /** @type {Map<string, string | null>} */
+  const out = new Map();
+  try {
+    const ast = /** @type {any} */ (
+      parseModule(fs.readFileSync(themeFiles(cwd, slug).js, 'utf8'), {
+        sourceType: 'module',
+      })
+    );
+    for (const st of ast.program.body) {
+      const decl = st.declaration?.declarations?.[0];
+      const obj = decl?.init;
+      if (obj?.type !== 'ObjectExpression') continue;
+      const tokens = obj.properties.find(
+        (/** @type {any} */ p) =>
+          (p.key?.name ?? p.key?.value) === 'tokens' &&
+          p.value?.type === 'ObjectExpression',
+      );
+      for (const p of tokens?.value.properties ?? []) {
+        const k = p.key?.value ?? p.key?.name;
+        if (typeof k === 'string' && k.startsWith('--'))
+          out.set(k, p.value?.type === 'StringLiteral' ? p.value.value : null);
+      }
+    }
+  } catch {
+    // No build yet, or not one this reads.
+  }
   return out;
 }
 
