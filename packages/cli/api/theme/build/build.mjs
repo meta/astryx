@@ -62,7 +62,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire, isBuiltin} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {parse} from '@babel/parser';
+import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {createJiti} from 'jiti';
 import {
   formatCliCommand,

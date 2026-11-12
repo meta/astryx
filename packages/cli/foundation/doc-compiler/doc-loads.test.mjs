@@ -111,8 +111,13 @@ const RUNNERS = {
     sites: ['loadModuleWithParser(..., parseCodemod)'],
   },
   'authoring/shadcn/source-variants.mjs': {
-    runs: "@babel/plugin-transform-typescript (CommonJS), to reproduce the ShadCN client's transform",
-    sites: ['require(@babel/plugin-transform-typescript)'],
+    runs: "Babel, its TypeScript plugin and recast (CommonJS), each on first use, to reproduce the ShadCN client's transform",
+    sites: [
+      'require(@babel/core)',
+      'require(@babel/parser)',
+      'require(@babel/plugin-transform-typescript)',
+      'require(recast)',
+    ],
   },
   'clients/cli/bin/astryx.mjs': {
     runs: "the CLI's own modules, by real path, so a linked bin finds them",
@@ -490,6 +495,17 @@ const RUNNERS = {
   'foundation/release/handoff.mjs': {
     runs: "the CLI release that answers a project's run, when it is not this copy",
     sites: ['child_process.spawn'],
+  },
+  'foundation/runtime/lazy-dependencies.mjs': {
+    runs: 'Babel, recast, jscodeshift and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',
+    sites: [
+      'require(@babel/core)',
+      'require(@babel/parser)',
+      'require(@babel/plugin-transform-typescript)',
+      'require(jscodeshift)',
+      'require(postcss-selector-parser)',
+      'require(recast)',
+    ],
   },
   'host/index.mjs': {
     runs: "another release's host entry, from one of the host's package sets, when that release answers a hosted run",

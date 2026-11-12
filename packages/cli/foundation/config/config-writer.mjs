@@ -28,7 +28,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {randomUUID} from 'node:crypto';
-import jscodeshift from 'jscodeshift';
+import {jscodeshift as loadJscodeshift} from '../runtime/lazy-dependencies.mjs';
 import {
   findManifestObject,
   unwrapManifestExpression,
@@ -180,7 +180,7 @@ export function setConfigValue(projectDir, key, value) {
   }
   assertWritable(projectDir, existing);
   const source = fs.readFileSync(existing, 'utf-8');
-  const j = jscodeshift.withParser('tsx');
+  const j = loadJscodeshift().withParser('tsx');
   const ast = j(source);
   let object = findManifestObject(j, ast);
   const refuse = () =>
