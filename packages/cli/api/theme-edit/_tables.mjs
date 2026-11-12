@@ -379,7 +379,7 @@ export const DIALS = {
       CORNERS.map(
         ([n, v]) => `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
       ).join(', ') +
-      ", or a size like 6px. Whole theme: sets the 4 corner tokens in fixed ratios. With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.",
+      ", or a size like 6px. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.",
     values: 'square|small|medium|large|round|pill|more|less|<size like 6px>',
     examples: [
       'set my corners pill',

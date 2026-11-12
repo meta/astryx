@@ -262,26 +262,6 @@ export function reactMissing(cwd) {
   });
 }
 
-/**
- * Refuse, before anything is built or written, when the project cannot
- * render the editor's pages: react and react-dom must resolve from it.
- * @param {string} cwd
- */
-export function refuseWithoutReact(cwd) {
-  const missing = reactMissing(cwd);
-  if (missing.length)
-    throw new AstryxError(
-      `This project cannot render the theme's pages: ${missing.join(' and ')} cannot be found from it. The theme command renders components on the server, so react and react-dom must be installed. Nothing was written.`,
-      [
-        {
-          name: installLine(cwd, ['react', 'react-dom']),
-          reason: 'install them',
-        },
-      ],
-      ERROR_CODES.ERR_RENDER_MISSING_DEPENDENCY,
-    );
-}
-
 /** How long the editor's own pages may take to render. */
 const EDITOR_RENDER_MS = 3 * RENDER_TIMEOUT_MS;
 

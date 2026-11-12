@@ -25,6 +25,7 @@ import {
 import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
+import {writeWhole} from './_palette.mjs';
 import {
   fontOf,
   fontPackages,
@@ -388,8 +389,10 @@ function markSheetStale(file, slug) {
   const next =
     at < 0 ? banner + html : html.replace(/<body[^>]*>/i, m => `${m}${banner}`);
   try {
-    fs.writeFileSync(file, next);
-  } catch {
+    // Fenced like every editor write under the theme lock.
+    writeWhole(file, next);
+  } catch (e) {
+    if (/** @type {any} */ (e)?.lockLost) throw e;
     // Read-only: the note in the result still says so.
   }
   return true;

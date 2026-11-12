@@ -770,7 +770,8 @@ describe('hunt2: order and scope', () => {
     expect(r.data.setting.value).toBe('round');
     const pill = await themeEditSet('o3', 'corners', 'pill', {cwd});
     expect(pill.data.changedTokens.join(' ')).toContain('--radius-element');
-    expect(read('themes/o3/o3.css')).toMatch(/--radius-inner: 6px/);
+    // Inner corners at pill stay as round makes them (a rounded square).
+    expect(read('themes/o3/o3.css')).not.toMatch(/--radius-inner: 9999px/);
     fs.rmSync(path.join(cwd, 'themes/o3'), {recursive: true, force: true});
   }, 240_000);
 });

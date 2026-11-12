@@ -946,6 +946,45 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         },
       );
   }
+  // A state that depends on the element (disabled, focus) applies only
+  // where Core's own styles key on it: a part Core marks disabled with an
+  // attribute, or styles only through the parts inside it, never matches.
+  if (
+    !unset &&
+    !ctx.unchecked &&
+    s.on &&
+    s.state &&
+    ['disabled', 'focus', 'focus-visible', 'active'].includes(s.state)
+  ) {
+    const parts = partsOf(ctx, s);
+    const own = (/** @type {string} */ t) => ctx.C.MAP[t]?.own ?? {};
+    const keys = (/** @type {string} */ t, /** @type {string} */ st) =>
+      JSON.stringify(own(t)).includes(`:${st}`);
+    const states = (/** @type {string} */ t) =>
+      ctx.project.target.get(t)?.states ?? [];
+    const dead = parts.filter(
+      t =>
+        !states(t).includes(/** @type {string} */ (s.state)) &&
+        (Object.keys(own(t)).length === 0 ||
+          (s.state === 'disabled' && !keys(t, 'disabled'))),
+    );
+    if (parts.length && dead.length === parts.length) {
+      const bare = Object.keys(own(dead[0])).length === 0;
+      refuse(
+        E.ERR_THEME_NO_EFFECT,
+        bare
+          ? `${s.on} has no styles of its own (its looks come from the parts inside it), so --state ${s.state} never applies on it.`
+          : `Core marks a disabled ${s.on} with an attribute, not :disabled, so --state disabled never applies on it.`,
+        {
+          run: [
+            bare
+              ? `${HOW} --list parts ${s.on.split('-')[0]}`
+              : `${HOW} ${quoteCommandArgument(s.on)}`,
+          ],
+        },
+      );
+    }
+  }
   // On a group, a variant or state must belong to at least one member.
   if (s.on && FAMILIES[s.on] && (s.when || s.state)) {
     const members =
@@ -978,6 +1017,19 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       );
   }
   const step = v === 'more' || v === 'less';
+  // more/less step a dial with a scale; on a dial of named looks, they name
+  // nothing, so the answer is what the dial takes, not one of its values.
+  if (
+    step &&
+    !unset &&
+    DIALS[thing] &&
+    !['corners', 'spacing', 'text-size', 'vibrancy'].includes(thing)
+  )
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `"${v}" steps a dial with a scale (corners, spacing, text-size, vibrancy); ${thing} takes one of ${DIALS[thing].values.replace(/\|/g, ', ')}.`,
+      {run: [`${HOW} ${thing}`]},
+    );
   if (DIALS[thing]) {
     s.source = 'dial';
     if (['surfaces', 'buttons', 'type'].includes(thing)) {
@@ -1102,8 +1154,26 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       // A member covered by a later group setting shows the group's value
       // (the later one wins, as the build applies them).
       const fam = s.on ? familyOf(s.on) : null;
-      const mine = latest(s.on ?? '');
-      const group = fam && fam !== s.on && !s.only ? latest(fam) : undefined;
+      // For a variant or state with no setting of its own, the part's
+      // plain setting applies there too.
+      const plainOn = (/** @type {string} */ on) =>
+        [...data.settings]
+          .reverse()
+          .find(
+            x =>
+              x.thing === thing &&
+              (x.on ?? '') === on &&
+              !x.when &&
+              !x.state &&
+              !x.only === !(on === s.on && s.only),
+          );
+      const mine =
+        latest(s.on ?? '') ??
+        (s.on && (s.when || s.state) ? plainOn(s.on) : undefined);
+      const group =
+        fam && fam !== s.on && !s.only
+          ? (latest(fam) ?? (s.when || s.state ? plainOn(fam) : undefined))
+          : undefined;
       const shown =
         mine && group
           ? data.settings.indexOf(group) > data.settings.indexOf(mine)
@@ -1250,15 +1320,34 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           .find(x => x.thing === 'corners' && !x.on);
         const isRung = (/** @type {string} */ x) =>
           CORNERS.some(([n]) => n === x);
-        const shown = onPart
-          ? isRung(onPart.value) || cornerPxOf(onPart.value) >= 1000
-            ? radiusAt(base, onPart.value, token)
-            : cornerPxOf(onPart.value)
-          : whole
-            ? radiusAt(base, whole.value, token)
-            : // The base theme's radius; one it does not give in px (a var()
-              // chain) counts as medium's.
-              (tokenPx(base, token) ?? radiusAt(base, 'medium', token));
+        // An exact border-radius on the part wins over any corners dial:
+        // that is what it shows, and a step starts from it.
+        const exactRadius = s.on
+          ? [...data.settings]
+              .reverse()
+              .find(
+                x =>
+                  x.source === 'property' &&
+                  x.thing === 'border-radius' &&
+                  x.on &&
+                  partsOf(ctx, x).includes(part) &&
+                  (x.when ?? '') === (s.when ?? '') &&
+                  (x.state ?? '') === (s.state ?? ''),
+              )
+          : undefined;
+        const exactPx = exactRadius ? lengthPx(exactRadius.value) : null;
+        const shown =
+          exactPx != null
+            ? exactPx
+            : onPart
+              ? isRung(onPart.value) || cornerPxOf(onPart.value) >= 1000
+                ? radiusAt(base, onPart.value, token)
+                : cornerPxOf(onPart.value)
+              : whole
+                ? radiusAt(base, whole.value, token)
+                : // The base theme's radius; one it does not give in px (a var()
+                  // chain) counts as medium's.
+                  (tokenPx(base, token) ?? radiusAt(base, 'medium', token));
         const rungs = CORNERS.map(
           ([n]) => /** @type {const} */ ([n, radiusAt(base, n, token)]),
         );
@@ -1266,13 +1355,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           v === 'more'
             ? rungs.find(([, n]) => n > shown + 0.01)
             : [...rungs].reverse().find(([, n]) => n < shown - 0.01);
-        s.value =
-          (next ??
-            (Number.isNaN(shown)
-              ? rungs.find(([n]) => n === 'medium')
-              : v === 'more'
-                ? rungs[rungs.length - 1]
-                : rungs[0]))?.[0] ?? 'medium';
+        // No rung that way: the part stays as it shows (a step never moves
+        // the other way, as pill below an exact 30px would).
+        s.value = next
+          ? next[0]
+          : Number.isNaN(shown)
+            ? 'medium'
+            : onPart && exactPx == null
+              ? onPart.value
+              : `${Math.round(shown * 100) / 100}px`;
       } else {
         // A rung in any case, a size in px written any way: the plain form.
         const lower = v.toLowerCase();
@@ -1281,8 +1372,24 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         else if (px) s.value = `${Number(px[1])}px`;
         else if (lower === '0') s.value = 'square';
         else {
-          // What it most likely means, as a value corners takes.
-          const len = lengthPx(lower);
+          // What it most likely means, as a value corners takes: a simple
+          // calc() of px is worked out.
+          const calc =
+            /^calc\(\s*(\d*\.?\d+)px\s*([*/+-])\s*(\d*\.?\d+)(px)?\s*\)$/.exec(
+              lower,
+            );
+          const calcPx = calc
+            ? {
+                '*': Number(calc[1]) * Number(calc[3]),
+                '/': Number(calc[1]) / Number(calc[3]),
+                '+': Number(calc[1]) + Number(calc[3]),
+                '-': Number(calc[1]) - Number(calc[3]),
+              }[/** @type {'*' | '/' | '+' | '-'} */ (calc[2])]
+            : null;
+          const len =
+            calcPx != null && Number.isFinite(calcPx)
+              ? calcPx
+              : lengthPx(lower);
           const pct = /^(\d+(?:\.\d+)?)%$/.exec(lower);
           // A radius below zero means none: square.
           const meant =
@@ -1340,7 +1447,27 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             {run: [`${P} set ${slug} padding 8px${onFlag}`]},
           );
       }
+      // A scale typed as a number (x0.75, 0.75, 75%) names the rung nearest
+      // that factor.
+      const factor = /^x?(\d*\.?\d+)(%)?$/i.exec(v);
+      const nearFactor = factor
+        ? SPACING.reduce((a, b) =>
+            Math.abs(b[1] - Number(factor[1]) / (factor[2] ? 100 : 1)) <
+            Math.abs(a[1] - Number(factor[1]) / (factor[2] ? 100 : 1))
+              ? b
+              : a,
+          )[0]
+        : null;
       if (step) s.value = ladder(SPACING, 'medium');
+      else if (!SPACING.some(([n]) => n === v) && nearFactor)
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `spacing takes ${DIALS.spacing.values}, not "${v}"; the rung nearest that scale is ${nearFactor} (x${SPACING.find(([n]) => n === nearFactor)?.[1]}).`,
+          {
+            didYouMean: [nearFactor],
+            run: [setLine(slug, 'spacing', nearFactor, s)],
+          },
+        );
       else if (!SPACING.some(([n]) => n === v))
         refuse(
           E.ERR_THEME_BAD_VALUE,

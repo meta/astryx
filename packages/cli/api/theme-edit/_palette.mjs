@@ -101,6 +101,9 @@ export function lockHeld() {
   }
 }
 
+/** When this process started, for telling its own temp files from an earlier one's with the same id. */
+const STARTED_AT = Date.now() - process.uptime() * 1000;
+
 /**
  * Remove the editor's own temp files a stopped command left in a folder:
  * only names the editor makes (`.<name>.astryx-<pid>-<random>.tmp`) whose
@@ -117,7 +120,7 @@ function sweepTemps(dir) {
   }
   for (const n of names) {
     const m = /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(n);
-    if (!m || Number(m[1]) === process.pid) continue;
+    if (!m) continue;
     const p = path.join(dir, n);
     try {
       const st = fs.lstatSync(p);
@@ -128,7 +131,13 @@ function sweepTemps(dir) {
       // may look alive here: past ten minutes, an editor temp file is a
       // leftover whatever its id says (a live writer renames it in
       // moments, and holds the lock this write holds now).
-      if (isAlive(Number(m[1])) && Date.now() - st.mtimeMs < 10 * 60_000)
+      // A temp named with this process's own id but older than this process
+      // is another one's (pid 1 in each container start).
+      const own = Number(m[1]) === process.pid;
+      const young = Date.now() - st.mtimeMs < 10 * 60_000;
+      if (
+        own ? st.mtimeMs >= STARTED_AT && young : isAlive(Number(m[1])) && young
+      )
         continue;
       fs.rmSync(p, {force: true});
     } catch {

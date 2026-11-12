@@ -20,7 +20,7 @@ import {
 } from './theme-edit.mjs';
 import {tryLock} from '../../foundation/release/cache.mjs';
 import {LEASE_RENEW_MS} from '../../foundation/release/lock-lease.mjs';
-import {refuseWithoutReact, renderGenerated} from './_parts.mjs';
+import {reactMissing, renderGenerated} from './_parts.mjs';
 import {previewRecordProblem} from './_preview-app.mjs';
 import {
   SILENT_MS,
@@ -33,6 +33,7 @@ import {
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -42,21 +43,6 @@ vi.mock('./_preview.mjs', async importOriginal =>
 
 /** @type {string} */
 let cwd;
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
 
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-hunt6-', FIXTURE_PACKAGES);
@@ -171,16 +157,10 @@ describe('T11', () => {
 });
 
 describe('renders', () => {
-  it('without React, show is refused before anything is written', () => {
+  it('without React, the project names what cannot be found', () => {
     const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'no-react-'));
     fs.writeFileSync(path.join(bare, 'package.json'), '{}');
-    let code;
-    try {
-      refuseWithoutReact(bare);
-    } catch (e) {
-      code = /** @type {any} */ (e).code;
-    }
-    expect(code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    expect(reactMissing(bare)).toEqual(['react', 'react-dom/server']);
     fs.rmSync(bare, {recursive: true, force: true});
   });
 

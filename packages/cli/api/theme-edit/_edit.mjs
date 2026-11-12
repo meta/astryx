@@ -53,6 +53,8 @@ import {
   staleBuild,
   EDITOR_SUFFIXES,
   madeByEditor,
+  NEW_MARKER,
+  clearNewMarker,
   refuseThemeSource,
   settingsShapeOk,
   slugFor,
@@ -91,7 +93,6 @@ const E = ERROR_CODES;
  * @typedef {import('./theme-edit.type.mjs').ThemeEditChangeOptions} ChangeOptions
  */
 /** The marker a `new` writes first and removes last. */
-const NEW_MARKER = '.astryx-new.json';
 
 /** Files a system or a tool puts in any folder; a folder of only these is empty. */
 const FOLDER_JUNK = new Set(['.DS_Store', '.gitkeep', 'Thumbs.db']);
@@ -152,8 +153,10 @@ function editorLeftovers(dir, slug, damaged = false) {
       e.isFile() &&
       (e.name === `${slug}.theme.ts`
         ? fs.readFileSync(p, 'utf8') === themeSource(slug)
-        : e.name === `${slug}.history.json`
-          ? marked
+        : // A `new` writes no history: one here is from later commands,
+          // and always stays.
+          e.name === `${slug}.history.json`
+          ? false
           : named(e.name));
     (mine ? clear : keep).push(p);
   }
@@ -212,6 +215,8 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `themes in this app is ${rootSt.isSymbolicLink() ? `a link (to ${fs.readlinkSync(f.root)})` : 'a file'}, not a folder, so no editor theme can be made: every theme goes in themes/<name>/. Rename or move it, then run new again.`,
+      // A look that changes nothing: the themes the app can use now.
+      {run: ['astryx theme list']},
     );
   const dirSt = fs.lstatSync(f.dir, {throwIfNoEntry: false});
   if (dirSt && (dirSt.isSymbolicLink() || !dirSt.isDirectory()))
@@ -670,7 +675,36 @@ async function change(sub, slug, thing, value, options) {
               (x.mode ?? null) === (flags.mode ?? null),
           )
         : null;
-    if (!stored) throw e;
+    if (!stored) {
+      // An undo is told what it can undo, never a `set`: the settings of
+      // what it named (or of the dial its refusal names), else the last
+      // step.
+      if (sub === 'undo' && e instanceof AstryxError) {
+        const named = new Set([
+          thing,
+          ...(e.suggestions ?? [])
+            .map(x => new RegExp(` set ${slug} (\\S+)`).exec(x.name)?.[1])
+            .filter(Boolean),
+        ]);
+        const matches = data.settings.filter(x => named.has(x.thing));
+        const steps = readHistory(themeFiles(cwd, slug).history).steps.length;
+        throw new AstryxError(
+          e.message,
+          matches.length
+            ? matches.slice(0, 5).map(x => ({
+                name: `${P} undo ${slug} ${undoArgs(x)}`,
+                reason: 'do this instead',
+              }))
+            : [
+                steps
+                  ? {name: `${P} undo ${slug}`, reason: 'step back one change'}
+                  : {name: `${P} show ${slug}`, reason: 'see what it sets'},
+              ],
+          e.code,
+        );
+      }
+      throw e;
+    }
     s = stored;
   }
   // undo <thing> <value> removes the setting only when that is its value.
@@ -1201,6 +1235,8 @@ export async function themeEditShow(theme, options = {}) {
   const stale = staleBuild(cwd, theme, data);
   const brokenSource = themeSourceProblem(cwd, theme);
   if (stale && !brokenSource && !readOnly) await buildTheme(ctx, theme, data);
+  // The settings loaded whole: a `new` marker beside them is stale.
+  if (!readOnly) clearNewMarker(f.dir);
   // A built module that cannot be read (damaged by hand) is built again.
   /** @type {string | null} */
   let unreadable = null;
@@ -1337,6 +1373,37 @@ function nowApplies(ctx, data, removed, base) {
             : describe(d);
       }
   }
+  // What still reaches where the removed setting applied: on a part, the
+  // same thing set plainly on it, on its group, or for the whole theme; an
+  // exact property on the part that this dial would have competed with.
+  if (removed.on) {
+    const fam = familyOf(removed.on);
+    const reaches = [...data.settings]
+      .reverse()
+      .find(
+        x =>
+          x.thing === removed.thing &&
+          x !== removed &&
+          (!x.mode || x.mode === removed.mode) &&
+          ((x.on === removed.on && !x.when && !x.state) ||
+            (fam && x.on === fam && !x.when && !x.state)),
+      );
+    if (reaches) return describe(reaches);
+    const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
+      corners: /radius$/,
+      spacing: /^(padding|gap)(-|$)/,
+    });
+    const exact =
+      removed.source === 'dial' && DIAL_PROPERTY[removed.thing]
+        ? data.settings.find(
+            x =>
+              x.source === 'property' &&
+              x.on === removed.on &&
+              DIAL_PROPERTY[removed.thing].test(x.thing),
+          )
+        : null;
+    if (exact) return describe(exact);
+  }
   const whole =
     removed.on || removed.when || removed.state || removed.mode
       ? [...data.settings]
@@ -1396,6 +1463,20 @@ function partValues(ctx, data, res, mode) {
       // A setting a later group setting covers shows that one's value.
       const hidden = masked.get(s);
       if (hidden) return `${describe(s)} -> not shown: ${hidden}`;
+      // An exact property on the part wins over the dial there.
+      const exact = data.settings.find(
+        x =>
+          x.source === 'property' &&
+          x.on &&
+          (s.thing === 'corners'
+            ? x.thing === 'border-radius'
+            : /^(padding|gap)(-|$)/.test(x.thing)) &&
+          partsOf(ctx, x).some(t => partsOf(ctx, s).includes(t)) &&
+          (x.when ?? '') === (s.when ?? '') &&
+          (x.state ?? '') === (s.state ?? ''),
+      );
+      if (exact)
+        return `${describe(s)} -> not shown: ${describe(exact)} is an exact property and wins there`;
       const parts = partsOf(ctx, s);
       const listed = `${parts.slice(0, 4).join(', ')}${parts.length > 4 ? `, and ${parts.length - 4} more` : ''}`;
       if (s.thing === 'corners') {

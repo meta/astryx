@@ -260,11 +260,17 @@ export function loadTheme(
 ) {
   if (!slugOk(slug)) {
     // A path or a capital letter typed for a theme that exists names it.
+    // A file name typed for the theme (t.theme.ts, Brand.settings.json)
+    // names the theme.
     const plain = String(slug ?? '')
       .trim()
       .toLowerCase()
       .replace(/^.*themes[\\/]/, '')
-      .replace(/[\\/].*$/, '');
+      .replace(/[\\/].*$/, '')
+      .replace(
+        /\.(theme\.ts|settings\.(json|ts)|history\.json|css\.d\.ts|d\.ts|css|js|ts)$/,
+        '',
+      );
     const fixed = slugFor(plain);
     const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
     refuse(
@@ -297,7 +303,10 @@ export function loadTheme(
     // A `new` that was stopped part way left its marker, or the settings
     // were removed beside the editor's generated module: `new` makes the
     // theme again and keeps every file it did not write.
-    const stopped = fs.existsSync(path.join(f.dir, '.astryx-new.json'));
+    // A marker beside a history is from a `new` that finished (it writes
+    // none): the settings were lost after.
+    const stopped =
+      fs.existsSync(path.join(f.dir, NEW_MARKER)) && !fs.existsSync(f.history);
     if (!same && (stopped || madeByEditor(f.settingsTs)))
       refuse(
         ERROR_CODES.ERR_UNKNOWN_THEME,
@@ -1649,8 +1658,14 @@ export async function buildTheme(ctx, slug, data) {
   const base = await baseResolved(ctx.project, data.like);
   fs.mkdirSync(f.dir, {recursive: true});
   // Each write is recorded for a rollback; the time between them is not.
+  // Each step checks first that this command still holds the theme lock:
+  // the build's own writes (the stylesheet and module the stable build
+  // writes, the files it removes) are fenced as each step starts.
   /** @type {<T>(fn: () => T) => Promise<Awaited<T>>} */
-  const step = fn => track(f.dir, ctx.wrote ?? new Map(), fn);
+  const step = fn => {
+    refuseIfLockLost();
+    return track(f.dir, ctx.wrote ?? new Map(), fn);
+  };
   /** @type {string[]} */
   let notes = [];
   // The palette files are written first, and the theme is built from them
@@ -2109,6 +2124,22 @@ export function radiusTokenOf(ctx, part, when) {
   );
 }
 
+/** The file a `new` keeps beside the files it writes until it is done. */
+export const NEW_MARKER = '.astryx-new.json';
+
+/**
+ * Remove a `new` marker from a theme folder whose settings are whole: the
+ * `new` that left it made the theme, and nothing is left to finish.
+ * @param {string} dir
+ */
+export function clearNewMarker(dir) {
+  try {
+    fs.rmSync(path.join(dir, NEW_MARKER), {force: true});
+  } catch {
+    // Read-only: the next writing command tries again.
+  }
+}
+
 /**
  * The whole-theme radius tokens a generated settings module writes, or null
  * when it writes none.
@@ -2166,8 +2197,13 @@ export function radiusAt(base, value, token) {
     return el && v != null ? v / el : fallback;
   };
   const roundPx = CORNERS.find(([n]) => n === 'round')?.[1] ?? 16;
-  if (token === '--radius-inner')
-    return pill ? 6 : Math.round(px * Math.min(1, ratio(token, 0.6)));
+  // Inner corners (a checkbox) stay a rounded square: never rounder than
+  // at round, so pill keeps round's and no step makes them smaller.
+  if (token === '--radius-inner') {
+    const inner = (/** @type {number} */ x) =>
+      Math.round(x * Math.min(1, ratio(token, 0.6)));
+    return Math.min(inner(roundPx), inner(pill ? roundPx : px));
+  }
   // A container or page is never rounder than at pill, so pill never makes
   // one less round, and a size just under 1000px meets pill smoothly.
   if (token === '--radius-container') {
@@ -2541,7 +2577,10 @@ export async function commitTheme(
     a != null &&
     JSON.stringify({...a, lifted: undefined}) ===
       JSON.stringify({...data, lifted: undefined});
-  if (history && same(parseSettings(snapBefore)) && fs.existsSync(f.js))
+  // A no-op change still mends a build that does not match the settings
+  // (an undo stopped part way): it is built again, with no new step.
+  const noop = history && same(parseSettings(snapBefore));
+  if (noop && fs.existsSync(f.js) && !staleBuild(cwd, slug, data))
     return {
       changed: [],
       res: {light: {}, dark: {}},
@@ -2600,6 +2639,10 @@ export async function commitTheme(
     JSON.stringify({
       like: d.like ?? null,
       corners: d.settings.filter(x => x.thing === 'corners' && !x.on),
+      // An exact radius token feeds the built radii too.
+      tokens: d.settings.filter(
+        x => x.source === 'token' && /^--radius-/.test(x.thing),
+      ),
     });
   const radiiNow =
     moduleNow && moduleUnedited(moduleNow) !== false
@@ -2642,7 +2685,7 @@ export async function commitTheme(
           f.history,
           JSON.stringify(historyAfter.slice(-HISTORY_STEPS)),
         );
-      else if (snapBefore && history)
+      else if (snapBefore && history && !noop)
         writeWhole(
           f.history,
           JSON.stringify(
@@ -2650,6 +2693,9 @@ export async function commitTheme(
           ),
         );
     });
+    // Settings written whole: a `new` marker left beside them (a `new`
+    // stopped after its theme was made) has nothing left to finish.
+    clearNewMarker(f.dir);
   } catch (e) {
     // A command that lost its lock while stopped owns none of these files
     // now: it puts nothing back and deletes nothing (that would undo the

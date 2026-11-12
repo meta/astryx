@@ -32,27 +32,13 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 /** @type {string} */
 let cwd;
 
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
 
 /** @param {string} slug @param {(d: any) => void} edit */
 const editSettings = (slug, edit) => {
@@ -83,8 +69,8 @@ describe('corners', () => {
     expect(read('themes/t/t.css')).toContain(`${container}`);
     await themeEditUndo('t', {cwd});
     const pill = await themeEditSet('t', 'corners', 'pill', {cwd});
-    expect(pill.data.changedTokens.join(' ')).toMatch(
-      /--radius-inner: [^>]*-> 6px/,
+    expect(pill.data.changedTokens.join(' ')).not.toMatch(
+      /--radius-inner: [^>]*-> 9999px/,
     );
     await themeEditUndo('t', {cwd});
   }, 240_000);
