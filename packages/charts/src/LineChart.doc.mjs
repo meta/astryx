@@ -53,7 +53,7 @@ export const docs = {
         requirement: 'Supplemental only',
         states: ['Tooltip enabled'],
         description:
-          'Do not make hover-only tooltip content the only way to obtain important values. Keep the hidden table or another equivalent data view available.',
+          'Do not make hover-only tooltip content the only way to obtain important values. LineChart mirrors small datasets into a visually hidden table. For larger datasets, provide an equivalent nearby summary or data view because the built-in table is intentionally omitted.',
       },
     ],
     anatomy: [
