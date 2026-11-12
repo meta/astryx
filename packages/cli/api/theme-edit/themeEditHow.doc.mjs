@@ -54,6 +54,12 @@ export const doc = {
       description: 'With a picture: how many main colors (default 14).',
     },
     {
+      name: 'options.words',
+      type: 'string[]',
+      description:
+        'The words as typed: a picture first takes only a count after it; anything else is one question. Replaces the subject.',
+    },
+    {
       name: 'options.cwd',
       type: 'string',
       description: 'The app folder.',

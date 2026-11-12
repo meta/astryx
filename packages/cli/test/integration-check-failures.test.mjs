@@ -180,9 +180,18 @@ beforeAll(async () => {
     'tsconfig.json',
     `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
   );
+  // A logo, so the fixture draws no listing note.
   write(
     'package.json',
-    JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),
+    JSON.stringify({
+      name: '@acme/widgets',
+      version: '1.2.3',
+      marketplace: {logo: {light: 'logo.svg'}},
+    }),
+  );
+  write(
+    'logo.svg',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>',
   );
   write(
     'astryx.integration.mjs',
