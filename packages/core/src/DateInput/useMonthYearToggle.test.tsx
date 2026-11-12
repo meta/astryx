@@ -33,14 +33,16 @@ function Panels({
   });
   const calendarRef = useRef<HTMLDivElement | null>(null);
   const wheelsRef = useRef<HTMLDivElement | null>(null);
-  const {isCalendarInert, isWheelsInert, toggle} = useMonthYearToggle({
-    isWheelOpen,
-    setIsWheelOpen: next => onToggle?.(next),
-    isTouch,
-    isSheetOpen: false,
-    calendarRef,
-    wheelsRef,
-  });
+  const {isCalendarInert, isWheelsInert, isFading, toggle} = useMonthYearToggle(
+    {
+      isWheelOpen,
+      setIsWheelOpen: next => onToggle?.(next),
+      isTouch,
+      isSheetOpen: false,
+      calendarRef,
+      wheelsRef,
+    },
+  );
   return (
     <>
       {onToggle != null && (
@@ -48,6 +50,7 @@ function Panels({
           Toggle
         </button>
       )}
+      {isFading && <div data-testid="shield" />}
       <div
         ref={calendarRef}
         data-testid="calendar"
@@ -256,6 +259,44 @@ describe('useMonthYearToggle: inert and focus', () => {
     view.rerender(<Panels isWheelOpen isTouch={false} />);
     expect(view.getByTestId('calendar').hasAttribute('inert')).toBe(true);
     expect(view.getByTestId('wheels').hasAttribute('inert')).toBe(false);
+  });
+
+  it('keeps the shield up through a fade a second tap turns around, until the reversed fade ends', async () => {
+    const view = render(<Panels isWheelOpen={false} />);
+    const calendar = view.getByTestId('calendar');
+    const wheels = view.getByTestId('wheels');
+    fading(calendar, wheels);
+    view.rerender(<Panels isWheelOpen />);
+    transitionRun(wheels);
+    expect(view.queryByTestId('shield')).not.toBeNull();
+    // The second tap turns the opening fade around: the wheels fade back out.
+    view.rerender(<Panels isWheelOpen={false} />);
+    expect(view.queryByTestId('shield')).not.toBeNull();
+    // Neither panel's `inert` changes with the turnaround.
+    expect(calendar.hasAttribute('inert')).toBe(false);
+    expect(wheels.hasAttribute('inert')).toBe(true);
+    await fadeEnd(wheels);
+    expect(view.queryByTestId('shield')).toBeNull();
+    expect(calendar.hasAttribute('inert')).toBe(false);
+    expect(wheels.hasAttribute('inert')).toBe(true);
+  });
+
+  it('keeps the shield up through a reopen mid-close, until the wheels have faded back in', async () => {
+    const view = render(<Panels isWheelOpen />);
+    const calendar = view.getByTestId('calendar');
+    const wheels = view.getByTestId('wheels');
+    fading(calendar, wheels);
+    view.rerender(<Panels isWheelOpen={false} />);
+    transitionRun(wheels);
+    // A title tap mid-close turns the fade around: the wheels fade back in.
+    view.rerender(<Panels isWheelOpen />);
+    expect(view.queryByTestId('shield')).not.toBeNull();
+    expect(calendar.hasAttribute('inert')).toBe(true);
+    expect(wheels.hasAttribute('inert')).toBe(false);
+    await fadeEnd(wheels);
+    expect(view.queryByTestId('shield')).toBeNull();
+    expect(calendar.hasAttribute('inert')).toBe(true);
+    expect(wheels.hasAttribute('inert')).toBe(false);
   });
 
   it('swaps with the toggle in one commit with a mouse', () => {

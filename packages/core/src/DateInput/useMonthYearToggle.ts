@@ -168,8 +168,9 @@ interface MonthYearToggleOptions {
  * Under a finger both flips wait for the cross-fade to end, when nothing on
  * screen moves. Meanwhile the caller's `aria-hidden` keeps assistive
  * technology out of the outgoing panel. The caller's shield keeps touches off
- * both, as a UIKit view animation does. `toggle` moves focus inside the
- * outgoing panel into the incoming one in the toggle's commit.
+ * both, as a UIKit view animation does. A second toggle mid-fade turns the
+ * fade around, and the shield stays until it ends. `toggle` moves focus
+ * inside the outgoing panel into the incoming one in the toggle's commit.
  *
  * Under Reduced Motion on a touch screen the title's chevron does not turn.
  * It dips instead (playReducedMotionDip), and the turn lands at the dip's
@@ -210,17 +211,44 @@ export function useMonthYearToggle({
   const isWheelsWarm = useWheelsWarmUp(isSheetOpen && isTouch);
   // `settled`: the toggle state whose exit has ended. `focusedFor`: the
   // toggle state whose incoming panel took focus, and so is live early.
-  const [{settled, focusedFor}, setFade] = useState<{
+  // `shown`: the toggle state of the last render. `isTurning`: a toggle back
+  // to `settled` turned a running fade around, and that fade still runs.
+  const [fade, setFade] = useState<{
     settled: boolean;
     focusedFor: boolean | null;
-  }>({settled: isWheelOpen, focusedFor: null});
-  // With a mouse the panels swap `inert` with the toggle. So `settled`
-  // follows `isWheelOpen` during render, React's pattern for state that
-  // tracks a prop, and the toggle costs one commit.
-  if (!isTouch && settled !== isWheelOpen) {
-    setFade({settled: isWheelOpen, focusedFor: null});
+    shown: boolean;
+    isTurning: boolean;
+  }>({
+    settled: isWheelOpen,
+    focusedFor: null,
+    shown: isWheelOpen,
+    isTurning: false,
+  });
+  const {settled, focusedFor, isTurning} = fade;
+  // Both follow `isWheelOpen` during render, React's pattern for state that
+  // tracks a prop. With a mouse the panels swap `inert` with the toggle, so
+  // the toggle costs one commit. Under a finger, a toggle back to `settled`
+  // turns a running fade around. The shield then stays until the reversed
+  // fade ends, and neither panel's `inert` changes.
+  if (
+    !isTouch &&
+    (settled !== isWheelOpen || fade.shown !== isWheelOpen || isTurning)
+  ) {
+    setFade({
+      settled: isWheelOpen,
+      focusedFor: null,
+      shown: isWheelOpen,
+      isTurning: false,
+    });
+  } else if (isTouch && fade.shown !== isWheelOpen) {
+    setFade({
+      ...fade,
+      shown: isWheelOpen,
+      isTurning:
+        isTurning || (fade.shown !== settled && isWheelOpen === settled),
+    });
   }
-  const isFading = settled !== isWheelOpen;
+  const isFading = settled !== isWheelOpen || isTurning;
 
   // Synchronizes with the outgoing panel's exit: the swap of `inert` lands on
   // its end. Nothing here reads style in the toggle's commit, which would
@@ -230,11 +258,18 @@ export function useMonthYearToggle({
     if (!isFading) {
       return;
     }
+    // The fade has ended: the panels swap `inert`, and the shield goes.
+    const landed = (current: typeof fade) => ({
+      ...current,
+      settled: isWheelOpen,
+      focusedFor: null,
+      isTurning: false,
+    });
     const outgoing = (isWheelOpen ? calendarRef : wheelsRef).current;
     if (outgoing == null || typeof outgoing.getAnimations !== 'function') {
       // With no outgoing panel, or no Web Animations, no exit can run.
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- whether an exit can run is known only from the committed panel (its Web Animations support), which render cannot read
-      setFade({settled: isWheelOpen, focusedFor: null});
+      setFade(landed);
       return;
     }
     const incoming = (isWheelOpen ? wheelsRef : calendarRef).current;
@@ -246,9 +281,7 @@ export function useMonthYearToggle({
     // last frame is on screen rather than holding that frame back.
     const settle = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() =>
-        setFade({settled: isWheelOpen, focusedFor: null}),
-      );
+      frame = requestAnimationFrame(() => setFade(landed));
     };
     // The cross-fade ends when either panel's own transition ends. The layer
     // beneath may have none: it stays visible, covered. Only a transition
@@ -292,7 +325,7 @@ export function useMonthYearToggle({
       frame = requestAnimationFrame(() => {
         if (!panels.some(isExiting)) {
           // No transition runs on either panel (one is not rendered, say).
-          setFade({settled: isWheelOpen, focusedFor: null});
+          setFade(landed);
         }
       });
     });

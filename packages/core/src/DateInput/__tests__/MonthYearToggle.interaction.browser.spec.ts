@@ -560,6 +560,146 @@ test('DateTimeInput: a tap on the month arrows during the opening fade changes n
   ).toBe(0);
 });
 
+/** Counts the clicks that reach `locator`'s first element, page-side. */
+async function countClicks(locator: Locator, key: string) {
+  await locator.first().evaluate((element, name) => {
+    const counts = window as unknown as Record<string, number>;
+    counts[name] = 0;
+    element.addEventListener('click', () => {
+      counts[name] += 1;
+    });
+  }, key);
+}
+
+async function clicksOf(page: Page, key: string): Promise<number> {
+  return page.evaluate(
+    name => (window as unknown as Record<string, number>)[name],
+    key,
+  );
+}
+
+/** Resolves once `locator`'s element shows less than `opacity`, page-side. */
+async function waitForOpacityBelow(locator: Locator, opacity: number) {
+  await locator.evaluate(
+    async (element, below) =>
+      new Promise<void>(resolve => {
+        const check = () => {
+          if (Number(getComputedStyle(element).opacity) < below) {
+            resolve();
+          } else {
+            requestAnimationFrame(check);
+          }
+        };
+        check();
+      }),
+    opacity,
+  );
+}
+
+for (const [name, story, title, surface] of [
+  ['DateInput', STORY, '[data-title="month-year"]', '[data-panel="wheels"]'],
+  [
+    'DateTimeInput',
+    DTI_STORY,
+    'button[aria-label$="Choose month and year"]',
+    '[data-date-surface="wheels"]',
+  ],
+] as const) {
+  test(`${name}: a second title tap mid-fade keeps the shield; the arrow and the calendar take no tap until the reversed fade ends`, async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), story);
+    const driver = await touchDriver(page);
+    const tapCenter = async (selector: string) => {
+      const box = await page.locator(selector).first().boundingBox();
+      if (box == null) {
+        throw new Error(`no ${selector}`);
+      }
+      await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+    };
+    await tapCenter('button[aria-label^="Open "]');
+    await waitForRest(
+      page.getByRole('dialog').locator('.astryx-bottom-sheet').first(),
+    );
+    const wheels = page.locator(surface).first();
+    await waitForWarmWheels(wheels);
+    const monthTitle = await page.locator(title).first().textContent();
+    await countClicks(
+      page.locator('button[aria-label="Next month"]'),
+      'arrowClicks',
+    );
+    // Every click that reaches a day of the calendar beneath the wheels.
+    await page.evaluate(() => {
+      const counts = window as unknown as Record<string, number>;
+      counts.dayClicks = 0;
+      document.addEventListener(
+        'click',
+        event => {
+          if ((event.target as Element).closest('[data-date]') != null) {
+            counts.dayClicks += 1;
+          }
+        },
+        true,
+      );
+    });
+    await page.addStyleTag({content: STRETCH_SHEET_FADES});
+    await tapCenter(title);
+    await waitForOpacityAbove(wheels, 0.5);
+    // The second tap turns the fade around: the wheels fade back out.
+    await tapCenter(title);
+    await tapCenter('button[aria-label="Next month"]');
+    await tapCenter(surface);
+    // The taps landed while the reversed fade still ran.
+    expect(
+      Number(await wheels.evaluate(e => getComputedStyle(e).opacity)),
+    ).toBeGreaterThan(0);
+    await waitForRest(wheels);
+    expect(await clicksOf(page, 'arrowClicks')).toBe(0);
+    expect(await clicksOf(page, 'dayClicks')).toBe(0);
+    await expect(page.locator(title).first()).toHaveText(monthTitle ?? '');
+  });
+}
+
+test('a title tap mid-close keeps Done from taking a tap until the wheels have faded back in', async ({
+  page,
+}) => {
+  const {driver, wheels, titleAt} = await openCalendar(page);
+  await driver.tap(titleAt);
+  await waitForRest(wheels);
+  const done = await page
+    .locator('dialog[open] button', {hasText: /^Done$/})
+    .boundingBox();
+  if (done == null) {
+    throw new Error('no Done');
+  }
+  const doneAt = {x: done.x + done.width / 2, y: done.y + done.height / 2};
+  await page.addStyleTag({content: STRETCH_SHEET_FADES});
+  await driver.tap(doneAt);
+  await waitForOpacityBelow(wheels, 0.5);
+  // From here, every click that reaches Done, or Save beneath it.
+  await countClicks(
+    page.locator('dialog[open] button', {hasText: /^Done$/}),
+    'doneClicks',
+  );
+  await countClicks(
+    page.locator('dialog[open] button', {hasText: /^Save$/}),
+    'saveClicks',
+  );
+  // The title tap turns the closing fade around: the wheels fade back in.
+  await driver.tap(titleAt);
+  await driver.tap(doneAt);
+  // The tap landed while the wheels still faded back in.
+  expect(
+    Number(await wheels.evaluate(e => getComputedStyle(e).opacity)),
+  ).toBeLessThan(1);
+  await waitForRest(wheels);
+  expect(await clicksOf(page, 'doneClicks')).toBe(0);
+  expect(await clicksOf(page, 'saveClicks')).toBe(0);
+  // The wheels stay open, and the sheet too.
+  expect(await wheels.evaluate(e => getComputedStyle(e).opacity)).toBe('1');
+  await expect(page.locator('dialog[open]')).toHaveCount(1);
+});
+
 /**
  * The chip's mean green channel in every frame: magenta over whatever is
  * beneath, so it moves with the panel's opacity.

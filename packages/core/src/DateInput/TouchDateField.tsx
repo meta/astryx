@@ -859,8 +859,8 @@ export function TouchDateField({
   // arrive with the fade's end. They sit outside the panels' shield, so they
   // go inert at once. Otherwise a tap on Done during the fade would fall
   // through to Save.
-  const isCalendarActionsInert = isWheelOpen || isCalendarInert;
-  const isWheelsActionsInert = !isWheelOpen || isWheelsInert;
+  const isCalendarActionsInert = isWheelOpen || isCalendarInert || isFading;
+  const isWheelsActionsInert = !isWheelOpen || isWheelsInert || isFading;
   const MonthGrid = isTouch ? MonthPager : MonthScroller;
   const scrollerHandleRef = useRef<MonthScrollerHandle | null>(null);
   const previousArrowRef = useRef<HTMLButtonElement | null>(null);

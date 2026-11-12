@@ -744,7 +744,7 @@ export function TouchDateTimeField({
   // The header's arrows and Reset leave with the toggle and arrive with the
   // fade's end. They sit outside the surfaces' shield, so they go inert at
   // once.
-  const isCalendarActionsInert = isWheelOpen || isCalendarInert;
+  const isCalendarActionsInert = isWheelOpen || isCalendarInert || isFading;
   const MonthGrid = isTouch ? MonthPager : MonthScroller;
   const [draftTime, setDraftTime] = useState<ISOTimeString | undefined>(() =>
     normalizeISOTime(splitDateTime(value).time, hasSeconds),
