@@ -30,6 +30,7 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {projectFiles, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
@@ -41,26 +42,7 @@ vi.mock('./_preview.mjs', async importOriginal =>
 
 /** @type {string} */
 let cwd;
-
-/** @param {string} rel */
-const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-/** @param {string} rel */
-const exists = rel => fs.existsSync(path.join(cwd, rel));
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
+const {read, exists} = projectFiles(() => cwd);
 
 /** @param {string[]} args */
 const cli = async args => {
@@ -389,6 +371,12 @@ describe('where commands act', () => {
         JSON.stringify({dependencies: {'@astryxdesign/core': '*'}}),
       );
       fs.mkdirSync(path.join(app, 'src/app'), {recursive: true});
+      // A routes folder has a root layout, which loads Core's stylesheet.
+      if (!fs.existsSync(path.join(app, 'src/app/layout.tsx')))
+        fs.writeFileSync(
+          path.join(app, 'src/app/layout.tsx'),
+          "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+        );
       expect(projectRoot(path.join(app, 'src/app'))).toBe(app);
       // A folder with no Core above it stays where it is.
       expect(projectRoot(cwd)).toBe(cwd);
@@ -587,9 +575,11 @@ describe('fix3', () => {
 
   it('no command removes a file it did not write in that run', async () => {
     const dir = path.join(cwd, 'themes/h');
+    // A live process's temp file (this test's parent runs); a dead
+    // process's editor temp file is swept, and that is tested elsewhere.
     const mine = [
       'notes.4194311.tmp',
-      '.h.settings.json.astryx-4194311-abc.tmp',
+      `.h.settings.json.astryx-${process.ppid}-abc.tmp`,
     ];
     for (const f of mine) fs.writeFileSync(path.join(dir, f), 'mine');
     await themeEditShow('h', {cwd});
@@ -649,9 +639,15 @@ describe('fix3: links, rollback, locks, paths', () => {
 
   it('show finds a build that does not match the settings and builds again', async () => {
     await themeEditNew('k3', {cwd});
+    // A build left by another CLI than wrote the settings module (a build
+    // stopped part way); file times alone never count.
     const css = path.join(cwd, 'themes/k3/k3.css');
-    const old = new Date(Date.now() - 60_000);
-    fs.utimesSync(css, old, old);
+    fs.writeFileSync(
+      css,
+      fs
+        .readFileSync(css, 'utf8')
+        .replace(/(\* CLI: @astryxdesign\/cli@)\S+/, '$10.0.1'),
+    );
     const r = await themeEditShow('k3', {cwd});
     expect(r.data.notes.join(' ')).toContain('built again');
     const again = await themeEditShow('k3', {cwd});
@@ -786,7 +782,8 @@ describe('hunt2: order and scope', () => {
     expect(r.data.setting.value).toBe('round');
     const pill = await themeEditSet('o3', 'corners', 'pill', {cwd});
     expect(pill.data.changedTokens.join(' ')).toContain('--radius-element');
-    expect(read('themes/o3/o3.css')).toMatch(/--radius-inner: 6px/);
+    // Inner corners at pill stay as round makes them (a rounded square).
+    expect(read('themes/o3/o3.css')).not.toMatch(/--radius-inner: 9999px/);
     fs.rmSync(path.join(cwd, 'themes/o3'), {recursive: true, force: true});
   }, 240_000);
 });

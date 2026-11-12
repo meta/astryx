@@ -63,7 +63,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {
-  cancelNestedTouchPress,
+  cancelNestedPress,
   PRESSABLE_CONTAINER_ATTRIBUTE,
   useClickableContainerProxy,
 } from '../hooks/useClickableContainer';
@@ -717,7 +717,7 @@ export function Item({
   const hasOwnAction =
     (onClick != null || href != null) && !hasParentRole && !isLinkRoot;
   const pressOnRow = (event: React.PointerEvent<HTMLElement>) =>
-    cancelNestedTouchPress(
+    cancelNestedPress(
       event,
       event.currentTarget,
       href != null ? actionLinkRef.current : actionButtonRef.current,

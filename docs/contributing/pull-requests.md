@@ -126,8 +126,8 @@ The report reads only the local repository. It prints:
   cite or that the added lines route;
 - the global baseline claims that the linked components' review triggers route,
   read at the merge base;
-- the authored line count, with advice when it is over the size guideline, and
-  whether the change merges into the base;
+- the authored line count, with advice when the lines outside templates are
+  over the size guideline, and whether the change merges into the base;
 - the findings for items i to l, each with its file and line, the rule, and
   the fix;
 - the checklist items that apply to this change, each with its reason.
@@ -225,11 +225,21 @@ each finding at its file and line.
   `subscribeInput`, `useDevWarning`, or `parentAcrossShadow`
   ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
   INV16).
-- **j. Effects (automatic).** An added Effect with no comment that names the
-  system it syncs, an Effect that only copies a value into a ref, and a DOM node
-  in React state are findings
+- **j. Effects (automatic).** Interaction logic lives in callbacks, and no
+  Effect reacts to interaction state. These are findings: an added Effect with
+  no comment that names the system it syncs; an Effect that only copies props
+  or state into other state; an Effect that only copies a value into a ref
+  (keep a latest prop or callback with `useCommittedRef` or
+  `useCommittedRefInto` from `packages/core/src/hooks/useCommittedRef.ts`); a
+  read of such a ref's `current` during render or in `useMemo`; a `ref.current`
+  write during render, except lazy initialization such as
+  `if (ref.current == null) ref.current = value`; and a DOM node in React state
   ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
-  INV1 and INV3).
+  INV1, INV2, INV3 and INV17).
+  The check reads only the lines a change adds or changes. Two render-time
+  writes are not findings: Markdown's streaming fade-in refs, an exception that
+  `component:Markdown` DEC-7 allows, and `useTableSortable`'s config ref, exempt
+  as INV17's named gap until the owner decides.
 - **k. Release notes and records (automatic).** A package that ships a change
   with no Changeset, a `[fix]`, `[feat]`, or `[perf]` Changeset for a package
   where nothing that ships changes, such as a change to tests or tooling only,
