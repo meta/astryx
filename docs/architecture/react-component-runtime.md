@@ -132,15 +132,19 @@ those contracts.
   synchronization MUST NOT duplicate consumer-visible callbacks or other
   one-time work. A latest-value ref, which event or gesture callbacks read for
   the latest committed prop or callback, goes only through Core's internal
-  `useCommittedRef` (DEC-3), which writes it in a commit-phase insertion Effect:
-  no per-site Effect copy and no render-time `ref.current =` write. Such a ref
-  is read only in event and gesture callbacks, never during render or in
-  `useMemo`; render reads the value directly. One hook decides the timing once,
-  and React has no built-in for it at Core's React floor. Where only an Effect
-  calls the callback, `useEffectEvent` replaces it once that floor reaches 19.2.
-  INV3 gap: about 45 Core and Lab hooks and components keep a latest-value ref
-  in their own Effect, such as `useLayerDismissal`, `useHotkeys`,
-  `useGestureRecognizer`, ComplexSelector, and Lab's NavigationStack.
+  `useCommittedRef` hook (DEC-3), which writes it in a commit-phase insertion
+  Effect: no per-site Effect copy and no render-time `ref.current =` write. Its
+  second call shape, `useCommittedRefInto(ref, value)`, writes a ref declared
+  earlier, with the same insertion-Effect timing and the same read rule, for
+  callbacks declared above the value they read; it writes the ref its caller
+  hands over. Such a ref is read only in event and gesture callbacks, never
+  during render or in `useMemo`; render reads the value directly. One hook
+  decides the timing once, and React has no built-in for it at Core's React
+  floor. Where only an Effect calls the callback, `useEffectEvent` replaces it
+  once that floor reaches 19.2. INV3 gap: about 45 Core and Lab hooks and
+  components keep a latest-value ref in their own Effect, such as
+  `useLayerDismissal`, `useHotkeys`, `useGestureRecognizer`, ComplexSelector,
+  and Lab's NavigationStack.
 - **INV4 — Mutable refs do not become hidden rendered state.** Refs MAY hold general
   non-rendering mutable data. A ref mutation MUST NOT be the sole source for a value
   later read to produce React-rendered output. A callback ref MAY synchronously
@@ -396,21 +400,19 @@ those contracts.
 - **INV17 — Render stays pure.** A component never writes `ref.current` during
   render, except a lazy one-time initialization. A render React discards would
   otherwise leave an uncommitted value. A latest-value ref uses
-  `useCommittedRef` (INV3, DEC-3). Exception: Markdown's streaming fade-in refs
-  (`component:Markdown` DEC-7, INV4) stay render-time writes. INV17 gap: three
-  sites read a latest-value ref during render or in `useMemo` instead of the
-  value. INV17 gap: `useTableSortable`'s header reads the current sort from a
-  ref, because its plugin is documented and tested as referentially stable;
-  fixing it needs a Table API choice. INV17 gap: about 70 components write a
-  latest-value ref during render, such as ChatComposerInput, Slider, and
-  `useTooltip`. INV17 gap: about 18 render-time reads of a previous value; these
-  are not latest-value refs. Exception: Toast's earlier-sibling `ToastRefSync`
-  keeps the toast list. `toast()` checks whether a namesake is in the committed
-  list so its dismissal still reports `onHide` (`component:Toast` FR3), and a
-  child can call it from a layout-effect cleanup in the commit that shows the
-  toast. React runs that cleanup before the viewport's own insertion Effect, so
-  `useCommittedRef` there would read the previous list. INV17 gap: ToastViewport
-  writes its toast list during render.
+  `useCommittedRef` or its `useCommittedRefInto` call shape (INV3, DEC-3).
+  Exception: Markdown's streaming fade-in refs (`component:Markdown` DEC-7,
+  INV4) stay render-time writes. INV17 gap: three sites read a latest-value ref
+  during render or in `useMemo` instead of the value. INV17 gap:
+  `useTableSortable`'s header reads the current sort from a ref, because its
+  plugin is documented and tested as referentially stable; fixing it needs a
+  Table API choice. INV17 gap: about 70 components write a latest-value ref
+  during render, such as ChatComposerInput, Slider, and `useTooltip`. INV17 gap:
+  about 18 render-time reads of a previous value; these are not latest-value
+  refs. ToastViewport renders ToastRefSync, which writes through
+  `useCommittedRefInto`, before a fragment that holds its children, so a child's
+  layout cleanup, an unmount's included, reads the committed list. INV17 gap:
+  ToastViewport writes its toast list during render.
 - **INV18 — Layout is read as little as possible.** Placement uses CSS
   (anchor positioning, container queries, logical properties) instead of
   measuring in JS, as `architecture:component-style-authoring` INV2 prefers. A
@@ -543,15 +545,17 @@ contracts.
   correctness boundary without receiving stable public API status.
 - `packages/core/src/utils/sharedResizeObserver.ts` — current shared Core resize
   observation mechanism; tooling and utility tests own its concrete API.
-- `packages/core/src/hooks/useCommittedRef.ts` — `useCommittedRef<T>(value: T):
-{ readonly current: T }`, a read-only ref whose `current` is written only in a
-  commit-phase insertion Effect (INV3, INV17, DEC-3), beside the internal
-  `useIsomorphicLayoutEffect`. Its comment reads: "Stores values only. Refs to
-  DOM nodes are not attached yet when this runs." Internal: never in
-  `hooks/index.ts` or the package entry; Lab imports it from
-  `@astryxdesign/core/internal/committed-ref`, as it reaches other Core
-  internals. Until it exists, sites keep the per-site Effect copies INV3's gap
-  lists.
+- `packages/core/src/hooks/useCommittedRef.ts` — one internal hook with two call
+  shapes, beside the internal `useIsomorphicLayoutEffect` (INV3, INV17, DEC-3).
+  `useCommittedRef<T>(value: T): { readonly current: T }` returns a read-only
+  ref whose `current` is written only in a commit-phase insertion Effect.
+  `useCommittedRefInto(ref, value)` writes a ref declared earlier, with the same
+  insertion-Effect timing and the same read rule, for callbacks declared above
+  the value they read; it writes the ref its caller hands over. Its comment
+  reads: "Stores values only. Refs to DOM nodes are not attached yet when this
+  runs." Internal: never in `hooks/index.ts` or the package entry; Lab imports
+  both from `@astryxdesign/core/internal/committed-ref`, as it reaches other
+  Core internals.
 
 ## Deciding specs
 
@@ -577,20 +581,22 @@ The owner chose option A, "one shared internal hook (useCommittedRef)":
 latest-value refs use one shared internal hook, `useCommittedRef<T>(value: T): {
 readonly current: T }`, in `packages/core/src/hooks/`. It returns a read-only
 ref updated to the committed value whose `current` is written only in a
-commit-phase insertion Effect, never during render. One hook gives every
-component the same commit-safe timing, and one place to adopt `useEffectEvent`
-at React 19.2 for callbacks that only an Effect calls. No existing module does
-this: `useIsomorphicLayoutEffect` only picks the Effect, and the per-component
-copies it replaces each write the ref in their own Effect or during render.
+commit-phase insertion Effect, never during render. Its second call shape,
+`useCommittedRefInto(ref, value)`, writes a ref the caller declared earlier,
+with the same timing (INV3). One hook gives every component the same commit-safe
+timing, and one place to adopt `useEffectEvent` at React 19.2 for callbacks that
+only an Effect calls. No existing module does this: `useIsomorphicLayoutEffect`
+only picks the Effect, and the per-component copies it replaces each write the
+ref in their own Effect or during render.
 
 The owner asked whether it is safe under concurrent rendering. It is: a
 commit-phase write survives a render React drops, a render-phase write does not,
 and `useEffectEvent` needs React 19.2 or later. The insertion Effect runs before
 every layout-Effect setup in the same commit, so each of those reads the new
-value (a descendant's layout-Effect cleanup runs earlier, the case INV17's Toast
-exception names); server rendering keeps the initial value; and it works on
-React 18 and later. It runs before refs attach, so it stores values only, never
-DOM nodes.
+value (a descendant's layout-Effect cleanup runs earlier, the case INV17's
+ToastRefSync placement note covers); server rendering keeps the initial value;
+and it works on React 18 and later. It runs before refs attach, so it stores
+values only, never DOM nodes.
 
 Rejected: a one-line Effect per component, which repeats the same code in every
 component and keeps the render-time writes INV17 forbids easy to reintroduce.
@@ -611,7 +617,7 @@ component suite is not blanket conformance with every invariant.
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1–INV2             | Initial-render and interaction tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Output flashes a known-wrong state, or one action is delayed or repeated through an Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | INV3, INV5            | StrictMode setup/cleanup and dependency-change tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Duplicate callback, leaked work, stale subscription, or missing resynchronization                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| INV3 (ref sync)       | `pnpm review:pre` item j flags an Effect that only copies a value into a ref; review accepts a latest-value ref only through `useCommittedRef`, read in an event or gesture callback, never during render or in `useMemo`. Implementation gap: item j does not yet recognize `useCommittedRef`                                                                                                                                                                                                                                                                                                                                 | A per-site Effect or render-time write that keeps a latest-value ref in place of `useCommittedRef`, or a read of one during render or in `useMemo`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| INV3 (ref sync)       | `pnpm review:pre` item j flags an Effect that only copies a value into a ref; review accepts a latest-value ref only through `useCommittedRef` or `useCommittedRefInto`, read in an event or gesture callback, never during render or in `useMemo`. Implementation gap: item j does not yet recognize `useCommittedRef`                                                                                                                                                                                                                                                                                                        | A per-site Effect or render-time write that keeps a latest-value ref in place of `useCommittedRef`, or a read of one during render or in `useMemo`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | INV1, INV4, INV6      | Ref attach/null/replacement, DOM-in-state rejection, and old-node cleanup-before-new-attach mutations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | A DOM node or collection enters state, old node remains active, cleanup misses replacement, or ref mutation changes semantics silently                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | INV7                  | Real-browser geometry plus N-consumer observer-instance/subscription mutations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Geometry is invalid, observer instances grow with repeated consumers, one unsubscribe silences peers, or cleanup removes another subscriber                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | INV8                  | Owner-observable behavior across documented composition replacement; optional focused internal mechanism tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Behavior disappears or changes owner when a documented subpart is replaced                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
