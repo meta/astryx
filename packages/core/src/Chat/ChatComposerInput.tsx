@@ -40,6 +40,7 @@ import {
   type DragEvent,
 } from 'react';
 import {createPortal} from 'react-dom';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import type {BaseProps} from '../BaseProps';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
 import * as stylex from '@stylexjs/stylex';
@@ -603,7 +604,9 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   });
   cleanupPortalsRef.current = tokens.cleanupPortals;
   const handleTokenKeyDown = tokens.handleKeyDown;
-  restoreValueRef.current = value => tokens.restoreValue(value, triggers);
+  useCommittedRefInto(restoreValueRef, (value: string) =>
+    tokens.restoreValue(value, triggers),
+  );
 
   // --- Paste-as-token (internal default) ---
   const defaultPasteAsToken = useChatPasteAsToken({inputRef: selfRef});
