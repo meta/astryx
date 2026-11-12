@@ -1288,6 +1288,80 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     120_000,
   );
 
+  it("does not depend on a variable's value when code only lists the names", () => {
+    const tmp = keptTmp('env-values');
+    const other = makeProject();
+    try {
+      // A TypeScript manifest: loading it transforms it, and the transform
+      // lists every variable's name (it reads only its own variables).
+      fs.rmSync(path.join(other.widgets, 'astryx.integration.mjs'));
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.ts'),
+        "const integration: {templates: string} = {templates: './templates'};\nexport default integration;\n",
+      );
+      const templates = path.join(other.widgets, 'templates');
+      fs.mkdirSync(templates, {recursive: true});
+      fs.writeFileSync(
+        path.join(templates, 'tally.doc.mjs'),
+        `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(templates, 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = QUERIES[0];
+      const at = (/** @type {string} */ value) =>
+        run(ask, {tmp, cwd: other.dir, env: {ASTRYX_TEST_TOKEN: value}});
+      const first = at('one');
+      const inodes = () =>
+        new Map([...entries(tmp)].map(([name, {ino}]) => [name, ino]));
+      const kept = inodes();
+      expect(kept.size).toBeGreaterThan(0);
+      // An unrelated variable with another value, as a tool sets per call:
+      // the kept catalog is read back.
+      expect(at('two')).toEqual(first);
+      expect(inodes()).toEqual(kept);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('misses when a variable the gather reads has another value', () => {
+    const tmp = keptTmp('env-read');
+    const other = makeProject();
+    try {
+      // The manifest reads a variable's value to pick its templates.
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        "export default {templates: process.env.ASTRYX_TEST_ROOT === 'b' ? './templates-b' : './templates'};\n",
+      );
+      for (const [folder, description] of [
+        ['templates', 'Running totals, tallied by team.'],
+        ['templates-b', 'Grand totals, tallied by week.'],
+      ]) {
+        const dir = path.join(other.widgets, folder);
+        fs.mkdirSync(dir, {recursive: true});
+        fs.writeFileSync(
+          path.join(dir, 'tally.doc.mjs'),
+          `export default {type: 'page', name: 'tally', description: '${description}', category: 'Widget - Tally'};\n`,
+        );
+        fs.writeFileSync(
+          path.join(dir, 'tally.tsx'),
+          `export default function Page() { return null; }\n`,
+        );
+      }
+      const ask = ['template', '--list'];
+      const at = (/** @type {string} */ value, /** @type {string} */ where) =>
+        run(ask, {tmp: where, cwd: other.dir, env: {ASTRYX_TEST_ROOT: value}});
+      expect(at('a', tmp)).toEqual(at('a', freshTmp()));
+      const b = at('b', tmp);
+      expect(b.stdout).toContain('Grand totals');
+      expect(b).toEqual(at('b', freshTmp()));
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
     const notAFolder = path.join(work, 'tmp', 'file-tmp');

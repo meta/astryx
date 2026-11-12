@@ -192,10 +192,20 @@ export async function discover(query, options = {}) {
       : undefined;
 
   const {packages: scanned, configured, project} = await discoverPackages();
-  const integrations = await describeInstalled(project, scanned);
-  const declared = declaredDependencies(project);
   // The official list is always read, so discover always has a source.
   const official = officialList({project});
+  // With no query, discover always asks its sources for the full catalog:
+  // ask them now, so a slow source answers while the installed packages are
+  // described, and use that answer below.
+  /** @type {ReturnType<typeof callSources> | undefined} */
+  let fullCatalog;
+  if (!query) {
+    fullCatalog = callSources(project, {}, {official});
+    // Awaited below; a local failure first must not leave it unhandled.
+    fullCatalog.catch(() => {});
+  }
+  const integrations = await describeInstalled(project, scanned);
+  const declared = declaredDependencies(project);
   const declarations = officialDeclarations(project, official.packages);
   const add = addCommand(project);
   const addOfficial = addCommand(project, {official: official.packages});
@@ -203,7 +213,14 @@ export async function discover(query, options = {}) {
   const installFor = pkg => (pkg.official ? addOfficial : add)(pkg.package);
 
   /** @param {{package?: string, version?: string}} [request] */
-  const catalogFor = request => callSources(project, request, {official});
+  const catalogFor = request => {
+    if (request == null && fullCatalog) {
+      const asked = fullCatalog;
+      fullCatalog = undefined;
+      return asked;
+    }
+    return callSources(project, request, {official});
+  };
   /**
    * What the project has, once a catalog says which official packages it
    * declares.
