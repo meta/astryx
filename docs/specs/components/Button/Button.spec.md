@@ -217,6 +217,13 @@ Consumer migration instructions belong in consumer docs and release notes.
   `width` or a theme icon-only aspect that makes a Button narrower than 24 CSS
   pixels, or a caller height under 24 CSS pixels, leaves its target size to that
   caller or theme.
+- **AR7 — Forced-colors edge.** Under forced colors, a solid variant (one that
+  separates itself from the page by its fill alone) keeps a visible 1 px
+  system-colour (`ButtonText`) border, so its shape stays visible when forced
+  colors replace the fill (`spec:AST-020` FR1, WCAG 2.2 SC 1.4.11). In a
+  ButtonGroup, the group's dividers stay and its first and last buttons close
+  the group's outer edge, with no doubled seam. `ghost` stays borderless.
+  Outside forced colors no border is added.
 
 Implementation gap: Button's hover and pressed overlays on the dark accent give
 its label 4.35:1 and 4.02:1, under 4.5:1.
@@ -290,6 +297,7 @@ anatomy-theming map.
 | AR2                          | `Button.a11y.chromium.spec.ts` activation and tab-reachability checks. Evidence gap: no test of Enter activation in link mode                                                                                                                                                                                                                                                                | Text and icon-only Buttons                                                                      | A Button that Enter or Space does not activate, or that Tab skips, fails.                                                                                                     | `audit:Button/accessibility` |
 | AR3                          | Evidence gap: no test asserts the focus outline or the destructive error-colored ring                                                                                                                                                                                                                                                                                                        | Keyboard focus; destructive                                                                     | —                                                                                                                                                                             | `audit:Button/accessibility` |
 | AR6, PR1                     | Evidence gap: no test measures the target size or asserts that an idle Button schedules nothing                                                                                                                                                                                                                                                                                              | —                                                                                               | —                                                                                                                                                                             | `audit:Button/behavior`      |
+| AR7                          | `Button.forcedColors.a11y.chromium.spec.ts`: each solid variant keeps a border on every side in forced colors and gains none outside them; `ghost` stays borderless; a ButtonGroup keeps its dividers and closes its outer edge with no doubled seam                                                                                                                                         |
 
 ## Current-state impact
 
