@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditNew,
   themeEditPreviewAdd,
@@ -34,6 +34,15 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -369,19 +378,24 @@ describe('builds that stay the same', () => {
     drop('pc');
   }, 240_000);
 
-  it('preview.html is the same on every build; a letter case change is no token change', async () => {
-    await themeEditNew('lc', {cwd});
-    const before = read('themes/lc/preview.html');
-    expect(before).not.toMatch(/astryx-render-\d/);
-    const r = await themeEditSet('lc', 'neutral', '#000000', {cwd});
-    for (const c of r.data.changedTokens) {
-      const [, from, to] = /: (.*) -> (.*)$/.exec(c) ?? [];
-      if (from) expect(from.toLowerCase(), c).not.toBe(to.toLowerCase());
-    }
-    await themeEditUndo('lc', {cwd});
-    expect(read('themes/lc/preview.html')).toBe(before);
-    drop('lc');
-  }, 240_000);
+  it(
+    'preview.html is the same on every build; a letter case change is no token change',
+    () =>
+      withRealRenders(async () => {
+        await themeEditNew('lc', {cwd});
+        const before = read('themes/lc/preview.html');
+        expect(before).not.toMatch(/astryx-render-\d/);
+        const r = await themeEditSet('lc', 'neutral', '#000000', {cwd});
+        for (const c of r.data.changedTokens) {
+          const [, from, to] = /: (.*) -> (.*)$/.exec(c) ?? [];
+          if (from) expect(from.toLowerCase(), c).not.toBe(to.toLowerCase());
+        }
+        await themeEditUndo('lc', {cwd});
+        expect(read('themes/lc/preview.html')).toBe(before);
+        drop('lc');
+      }),
+    240_000,
+  );
 
   it('show builds a damaged module again and says so', async () => {
     await themeEditNew('dj', {cwd});

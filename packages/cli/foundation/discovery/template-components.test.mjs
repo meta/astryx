@@ -6,6 +6,7 @@ import {describe, expect, it} from 'vitest';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {componentsInSource, parsedComponents} from './template-adapter.mjs';
 import {storedKey} from '../doc-compiler/stored-docs.mjs';
+import {parsedSpecifiers} from './template-needs.mjs';
 import {templateComponentsText} from '../../scripts/generate-template-components.mjs';
 
 // The file is written at `prepack`, so a checkout has none. Its text is read
@@ -23,6 +24,10 @@ describe('stored template component lists', () => {
       if (!fs.existsSync(file)) continue;
       const source = fs.readFileSync(file, 'utf-8');
       expect(stored[storedKey(source)], name).toEqual(parsedComponents(source));
+      // And the module specifiers it imports, as build's setup notes read them.
+      expect(stored[`imports:${storedKey(source)}`], name).toEqual(
+        parsedSpecifiers(source),
+      );
       checked++;
     }
     expect(checked).toBeGreaterThan(20);
