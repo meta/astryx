@@ -162,6 +162,34 @@ describe('isListingImage', () => {
       ]),
     ],
     [
+      'a CSS escape in a url',
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="u\\rl(https:\\/\\/e.x/p)"/></svg>',
+    ],
+    [
+      'a CSS hex escape in a mask',
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect mask="\\75 rl(https:\\2f\\2f e.x/m)"/></svg>',
+    ],
+    [
+      'an unclosed outside url',
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="url(https:e.x/p"/></svg>',
+    ],
+    [
+      'markup inside the XML declaration',
+      '<?xml version="1.0" x="><img src=x onerror=alert(1)>"?><svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>',
+    ],
+    [
+      'an XML declaration in another encoding',
+      '<?xml version="1.0" encoding="UTF-7"?><svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>',
+    ],
+    [
+      'elements inside a title',
+      '<svg xmlns="http://www.w3.org/2000/svg"><title><title><!--</title><img src=x onerror=alert(1)>--></title></title></svg>',
+    ],
+    [
+      'markup in the namespace value',
+      '<svg xmlns="<!--javascript:alert(1)"><rect/></svg>',
+    ],
+    [
       'text outside a title',
       '<svg xmlns="http://www.w3.org/2000/svg"><g>hi</g></svg>',
     ],
@@ -307,6 +335,18 @@ describe('packageListingCheck', () => {
     const result = await check(component);
     expect(codes(result)).toEqual(['package_without_example']);
     expect(result.notes[0].message).toContain('1 component ');
+  });
+
+  it('draws no note for a themes-only package with a packed logo', async () => {
+    const dir = makePackage({
+      'package.json': packageJson({}),
+      'astryx.integration.mjs': manifest(
+        "themes: './themes', logo: {light: './logo.svg'}",
+      ),
+      'logo.svg': SVG,
+      'themes/acme/acme.theme.mjs': 'export default {};\n',
+    });
+    expect(codes(await check(dir))).toEqual([]);
   });
 
   it('is quiet once a block template is the example of a component', async () => {

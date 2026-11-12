@@ -2622,40 +2622,54 @@ const SVG_ATTRIBUTE = /([^\s"'=<>/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'))?/gu;
  * @returns {boolean}
  */
 function isLocalSvgValue(name, value) {
-  // A character reference could spell a URL the tests below would miss.
-  if (value.includes('&')) return false;
-  if (name === 'xmlns' || name === 'xmlns:xlink') return true;
+  // A character reference or a CSS escape could spell a URL the tests
+  // below would miss.
+  if (value.includes('&') || value.includes('\\')) return false;
+  if (name === 'xmlns') return value === 'http://www.w3.org/2000/svg';
+  if (name === 'xmlns:xlink') return value === 'http://www.w3.org/1999/xlink';
   if (name === 'href' || name === 'xlink:href') {
     return /^#[\w.-]+$/u.test(value.trim());
   }
-  const urls = value.match(/url\s*\([^)]*\)/giu) ?? [];
-  if (!urls.every(url => /^url\s*\(\s*(["']?)#[\w.-]+\1\s*\)$/iu.test(url))) {
-    return false;
-  }
-  return !/[<>]|javascript:|data:|\/\//iu.test(
-    value.replace(/url\s*\([^)]*\)/giu, ''),
-  );
+  const rest = value.replace(/url\(\s*(["']?)#[\w.-]+\1\s*\)/giu, '');
+  return !/url|[<>]|javascript:|data:|\/\//iu.test(rest);
 }
+
+const XML_DECLARATION =
+  /^<\?xml((?:\s+(?:version|encoding|standalone)\s*=\s*(?:"[\w.-]*"|'[\w.-]*'))*)\s*\?>/u;
 
 /**
  * Whether `source` is an SVG drawn only with shapes: after an optional XML
- * declaration, every element and attribute is on the allowlists above, every
- * reference points inside the file, no attribute value holds a character
- * reference, and only `title` and `desc` hold text. Comments are skipped
- * where a tag could start; a doctype, CDATA or processing instruction is
- * refused.
+ * declaration (only `version`, `encoding` and `standalone`, in UTF-8), every
+ * element and attribute is on the allowlists above, every reference points
+ * inside the file, no attribute value holds a character reference or a CSS
+ * escape, and only `title` and `desc` hold text, and nothing else. Comments
+ * are skipped where a tag could start; a doctype, CDATA or processing
+ * instruction is refused.
  * @param {string} source
  * @returns {boolean}
  */
 function isShapesOnlySvg(source) {
-  let rest = source
-    .replace(/^\uFEFF/u, '')
-    .replace(/^\s*<\?xml\s[^?]*\?>/u, '')
-    .trim();
+  let rest = source.replace(/^\uFEFF/u, '').trim();
+  if (rest.startsWith('<?')) {
+    const declaration = XML_DECLARATION.exec(rest);
+    if (declaration == null) return false;
+    const encoding = /encoding\s*=\s*["']([^"']*)["']/u.exec(declaration[1]);
+    if (encoding != null && encoding[1].toLowerCase() !== 'utf-8') return false;
+    rest = rest.slice(declaration[0].length).trim();
+  }
   /** @type {string[]} */
   const open = [];
   let rootClosed = false;
   while (rest.length > 0) {
+    const inText = open.at(-1) === 'title' || open.at(-1) === 'desc';
+    // `title` and `desc` hold text alone: no comment and no element.
+    if (
+      inText &&
+      rest.startsWith('<') &&
+      !rest.startsWith(`</${open.at(-1)}`)
+    ) {
+      return false;
+    }
     // A comment is skipped only where a tag could start, so one opened
     // inside an attribute value cannot hide markup.
     // Its body may not start with `>` or `->` or hold `--`: an HTML parser
