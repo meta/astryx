@@ -13,6 +13,7 @@ import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {REPO_ROOT} from '../test-utils/repo-root.mjs';
 import {packPublishedCli} from '../test-utils/pack-published-cli.mjs';
@@ -1361,6 +1362,58 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       fs.rmSync(other.dir, {recursive: true, force: true});
     }
   }, 120_000);
+
+  it('hands a variable an inner kept gather read on to the gather around it', () => {
+    const tmp = keptTmp('env-nested');
+    const dir = fs.mkdtempSync(path.join(work, 'nested-'));
+    try {
+      // Two kept gathers of the installed CLI, one inside the other: the
+      // outer reads a file, the inner a variable.
+      const input = path.join(dir, 'outer.txt');
+      const script = path.join(dir, 'nested.mjs');
+      fs.writeFileSync(
+        script,
+        `import * as fs from 'node:fs';
+const {persistedGather, recordRun} = await import(${JSON.stringify(
+          pathToFileURL(
+            path.join(packed, 'foundation', 'fs', 'gather-cache.mjs'),
+          ).href,
+        )});
+const codec = {encode: v => v, decode: v => v};
+const answer = await recordRun(() =>
+  persistedGather(['nested-outer'], async () => {
+    const inner = await persistedGather(['nested-inner'], async () => process.env.ASTRYX_TEST_V, codec);
+    return inner + ':' + fs.readFileSync(${JSON.stringify(input)}, 'utf8');
+  }, codec),
+);
+process.stdout.write(answer);
+`,
+      );
+      const at = (/** @type {string} */ value) => {
+        const result = spawnSync(process.execPath, [script], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            XDG_CACHE_HOME: tmp,
+            XDG_CONFIG_HOME: userConfig(),
+            ASTRYX_TEST_V: value,
+          },
+        });
+        expect(result.status, result.stderr).toBe(0);
+        return result.stdout;
+      };
+      fs.writeFileSync(input, '1');
+      expect(at('a')).toBe('a:1');
+      // Only the outer input changes: the outer gathers again while the
+      // inner is read back.
+      fs.writeFileSync(input, '2');
+      expect(at('a')).toBe('a:2');
+      // Then the variable the inner read changes.
+      expect(at('b')).toBe('b:2');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 60_000);
 
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});

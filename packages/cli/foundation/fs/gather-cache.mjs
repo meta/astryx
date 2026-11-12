@@ -606,6 +606,14 @@ async function gatherAt(key, load, codec, keep) {
       if (stale == null) {
         const value = codec.decode(stored.value);
         recordStates(stored.stamps);
+        // A gather around this one depends on what this one read, the
+        // environment included: a hit hands its variables on, as a fresh
+        // gather's reads would be.
+        if (run) {
+          for (const [name, value] of stored.env) {
+            if (!run.env.has(name)) run.env.set(name, value);
+          }
+        }
         gatherCode = cliStates(stored.stamps);
         lastOutcome = {hit: true, reason: 'unchanged'};
         try {
