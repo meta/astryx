@@ -1171,8 +1171,8 @@ export function keepFieldAboveKeyboard(
     return () => {};
   }
   const stopScrollBack = claimKeyboardScrollBack(win);
-  // The module keeps the tallest root box per window, so a later shrink reads
-  // as room.
+  // The module keeps the root's box from when a field took focus with no
+  // keyboard up, so a later shrink reads as room.
   const resizedRoom = () => getResizedRoom(win).room;
   const stopClaim = refuseFocusReveal(doc, {
     claim: destination =>

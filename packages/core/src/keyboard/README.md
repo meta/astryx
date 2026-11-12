@@ -21,21 +21,22 @@ that times motion with it. Everything here is internal to
 - **Where it measures (FR6, FR7, DEC-4):** `isKeyboardMeasurable(window)` is
   true for a top-level document with a visual viewport, a browser with its own
   keyboard geometry API (`navigator.virtualKeyboard`, Chrome on Android)
-  included, whose visual viewport shrinks for the keyboard as everywhere
-  else. It is decided from capabilities, never from the user agent or the
-  pointer. A desktop browser's visual viewport never shrinks for a keyboard,
-  so it reads 0; inside an iframe the height is 0. Where the app sets
-  `interactive-widget=resizes-content`, Chrome shrinks the layout viewport
-  with the keyboard, so the height is 0 there too and nothing rides: the
-  browser has made the inset (FR8). `getResizedRoom(window)` reads that room,
-  measured once per report against the tallest root box at the same width, so
-  a focused field still sits 10 px clear of the layout viewport's new bottom,
-  revealed by its nearest scroller. The room counts only while a text-entry
-  control has focus: a shorter window with nothing focused, as in Android's
-  split screen, makes none. A width Core has not measured with the
-  keyboard closed, as after a turn of the phone, reads no room until the keyboard
-  closes (`spec:AST-099` Gap 15). It also returns the width from that same
-  read, so the scroll back tells a turn without a layout read of its own.
+  included, whose visual viewport shrinks for the keyboard as everywhere else.
+  It is decided from capabilities, never from the user agent or the pointer. A
+  desktop browser's visual viewport never shrinks for a keyboard, so it reads 0;
+  inside an iframe the height is 0. Where the app sets
+  `interactive-widget=resizes-content`, Chrome shrinks the layout viewport with
+  the keyboard, so the height is 0 there too and nothing rides: the browser has
+  made the inset (FR8). `getResizedRoom(window)` reads that room, measured once
+  per report against the root's box at the same width from when a text-entry
+  control took focus with no keyboard up, so a focused field still sits 10 px
+  clear of the layout viewport's new bottom, revealed by its nearest scroller.
+  The room counts only while a text-entry control has focus: a shorter window
+  with nothing focused, as in Android's split screen, makes none. A width Core
+  has not measured with the keyboard closed, as after a turn of the phone, reads
+  no room until the keyboard closes (`spec:AST-099` Gap 15). It also returns the
+  width from that same read, so the scroll back tells a turn without a layout
+  read of its own.
 - **One set of listeners (FR1, INV11):** `subscribeKeyboardHeight(window, fn)`
   delivers every report (the visual viewport's resize and scroll, the window's
   resize, and with `{focus: true}` focus moves, whose input-stream

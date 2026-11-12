@@ -19,7 +19,7 @@
  */
 
 import {armClickGuard} from '../utils/clickGuard';
-import {matchesMediaQuery} from '../utils/coarsePointer';
+import {isCoarsePointer, matchesMediaQuery} from '../utils/coarsePointer';
 import {getTouches, subscribeInput} from '../utils/inputStream';
 import {deepActiveElement} from '../utils/flatTree';
 import {isElement, isHTMLElement, isNode} from '../utils/nodeType';
@@ -109,13 +109,17 @@ interface KeyboardStore {
   startsAtHide: number | null;
   /** The room the browser made by shrinking the root's box (getResizedRoom). */
   room: number;
+  /** Whether a viewport report measured the room, rather than the attach. */
+  isRoomReported: boolean;
   /** The root's box width at the last report that measured the room. */
   rootWidth: number;
   /**
-   * The tallest the root's box has been at each width it had. The store keeps
-   * them across subscriptions, so a turn of the phone and back keeps the room.
+   * The root's box height at each width. It is read when a text-entry control
+   * takes focus with no keyboard up, or at a report that finds it taller. The
+   * store keeps them across subscriptions, so a turn of the phone and back
+   * keeps the room.
    */
-  rootTallest: Map<number, number>;
+  rootAtFocus: Map<number, number>;
   listeners: Set<(event: KeyboardHeightEvent) => void>;
   /** The subscribers that asked for focus moves too (the layout guide). */
   focusListeners: Set<(event: KeyboardHeightEvent) => void>;
@@ -135,8 +139,9 @@ function storeOf(win: Window): KeyboardStore {
       height: 0,
       startsAtHide: null,
       room: 0,
+      isRoomReported: false,
       rootWidth: 0,
-      rootTallest: new Map(),
+      rootAtFocus: new Map(),
       listeners: new Set(),
       focusListeners: new Set(),
       detach: null,
@@ -186,9 +191,9 @@ function measureResizedRoom(
   }
   const width = root.clientWidth;
   store.rootWidth = width;
-  const tallest = store.rootTallest.get(width) ?? 0;
-  if (height > tallest) {
-    store.rootTallest.set(width, height);
+  const base = store.rootAtFocus.get(width) ?? 0;
+  if (height > base) {
+    store.rootAtFocus.set(width, height);
     return 0;
   }
   if (keyboardHeight > KEYBOARD_EPSILON) {
@@ -196,17 +201,47 @@ function measureResizedRoom(
   }
   // A window that gets shorter with no text entry focused, as in Android's
   // split screen, makes no room for a keyboard.
-  const room = tallest - height;
+  const room = base - height;
   return room > KEYBOARD_EPSILON &&
     isTextEntryControl(deepActiveElement(win.document))
     ? room
     : 0;
 }
 
+// The room's base: the root's box when a text-entry control takes focus with
+// no keyboard up. A window made shorter before that focus, as in Android's
+// split screen, then reads no room once Back closes the keyboard. A room that
+// a report measured is a keyboard still up, as when focus moves to another
+// field, so the base stays. The room the attach measured has no keyboard
+// behind it yet.
+function noteRootAtFocus(win: Window, store: KeyboardStore): void {
+  if (
+    store.height > KEYBOARD_EPSILON ||
+    (store.isRoomReported && store.room > KEYBOARD_EPSILON) ||
+    !isKeyboardMeasurable(win) ||
+    !isTextEntryControl(deepActiveElement(win.document))
+  ) {
+    return;
+  }
+  const root = win.document.documentElement;
+  const height = root.clientHeight;
+  if (height > 0) {
+    store.rootAtFocus.set(root.clientWidth, height);
+    // Readers from now on read the room against the new base.
+    store.room = measureResizedRoom(win, store, store.height);
+  }
+}
+
 function attach(win: Window, store: KeyboardStore): () => void {
   const viewport = win.visualViewport;
   store.height = measureKeyboardHeight(win);
   store.room = measureResizedRoom(win, store, store.height);
+  store.isRoomReported = false;
+  // Only a coarse primary pointer reads the room, so a fine one adds no focus
+  // listener.
+  const stopFocusBase = isCoarsePointer(win)
+    ? subscribeInput(win, 'focusin', () => noteRootAtFocus(win, store))
+    : null;
   // Set while a step of a hide waits. The store keeps the height it reported,
   // so every reader lays out once, when the keyboard comes to rest.
   let stepTimer: ReturnType<typeof setTimeout> | null = null;
@@ -217,6 +252,7 @@ function attach(win: Window, store: KeyboardStore): () => void {
       store.height > KEYBOARD_EPSILON || store.room > KEYBOARD_EPSILON;
     store.height = height;
     store.room = measureResizedRoom(win, store, height);
+    store.isRoomReported = true;
     if (wasUp && height <= KEYBOARD_EPSILON && store.room <= KEYBOARD_EPSILON) {
       store.startsAtHide = getTouches(win).starts;
     }
@@ -275,12 +311,13 @@ function attach(win: Window, store: KeyboardStore): () => void {
     viewport?.removeEventListener('resize', onViewport);
     viewport?.removeEventListener('scroll', onViewport);
     stopResize();
+    stopFocusBase?.();
   };
 }
 
-// Focus moves are heard only while a subscriber asks for them. A viewport
-// reader, such as a Tall BottomSheet's hook under any pointer, adds no focus
-// listener.
+// Focus moves are reported only while a subscriber asks for them. Under a fine
+// primary pointer, a viewport reader, such as a Tall BottomSheet's hook, adds
+// no focus listener.
 function attachFocus(win: Window, store: KeyboardStore): () => void {
   const onFocus = (event: FocusEvent) => {
     const report: KeyboardHeightEvent = {
@@ -375,14 +412,14 @@ export interface ResizedRoom {
  * The room the browser makes for the keyboard by shrinking the layout
  * viewport, CSS px. Chrome on Android does so under
  * `interactive-widget=resizes-content`, where the keyboard height reads 0.
- * It is how far the root's box is short of the tallest it has been at the
- * same width. The toolbar's moves leave the root's box as it is. The room is
- * 0 while the visual viewport measures a keyboard. While the module listens,
- * it is the room measured at the last report, so every reader shares that one
- * layout read. The module keeps the tallest box per width across
- * subscriptions. A width first measured with such a keyboard up reads 0 until
- * that keyboard goes. That happens after a turn of the phone, or for a
- * window's first reader.
+ * It is how far the root's box is short of its box at the same width. That box
+ * is read when a text-entry control takes focus with no keyboard up. The
+ * toolbar's moves leave the root's box as it is. The room is 0 while the visual
+ * viewport measures a keyboard. While the module listens, it is the room
+ * measured at the last report, so every reader shares that one layout read.
+ * The module keeps that box per width across subscriptions. A width first
+ * measured with such a keyboard up reads 0 until that keyboard goes. That
+ * happens after a turn of the phone, or for a window's first reader.
  *
  * It comes with the root's box width it is measured at. While the module
  * listens, that width is the one read with the room at the last report, so

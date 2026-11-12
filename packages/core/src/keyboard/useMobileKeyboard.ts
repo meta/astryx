@@ -250,9 +250,9 @@ export function useMobileKeyboard(
       }
       // A field inside the sheet moves nothing itself.
       const unregister = registerKeyboardTarget(sheet);
-      // The module keeps the tallest root box per window, so a later shrink
-      // reads as room. Only a coarse primary pointer reads it: a desktop
-      // window made shorter is no keyboard.
+      // The module keeps the root's box from when a field took focus with no
+      // keyboard up, so a later shrink reads as room. Only a coarse primary
+      // pointer reads it: a desktop window made shorter is no keyboard.
       const resizedRoom = () => (isTouch ? getResizedRoom(window).room : 0);
 
       let keyboardGeometry: KeyboardGeometry | null = null;

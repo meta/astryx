@@ -447,7 +447,8 @@ gap below is open.
   clearing it needs a way for the app to name its docked bar (an open API
   question).
 - **Gap 15 — An unmeasured width under resizes-content.** The room is how far
-  the root's box is short of its tallest at the same width, as Core measured it.
+  the root's box is short of its box at the same width, as Core measured it.
+  Core reads that box when a text-entry control takes focus with no keyboard up.
   It counts only while a text-entry control has focus, so a shorter window with
   nothing focused, as in Android's split screen, makes no room. At a width Core
   has not measured with the keyboard closed, the room reads 0 until the keyboard

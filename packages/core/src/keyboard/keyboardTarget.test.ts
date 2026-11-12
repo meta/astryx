@@ -566,6 +566,66 @@ describe('keepFieldAboveKeyboard', () => {
     expect(scrollBy).not.toHaveBeenCalled();
   });
 
+  it('scrolls the page back when Back closes a keyboard that resizes a split-screen window, with the field still focused', () => {
+    const page = {scrollY: 0};
+    Object.defineProperty(window, 'scrollY', {
+      configurable: true,
+      get: () => page.scrollY,
+    });
+    const input = element('input', {top: 300, height: 40});
+    document.body.append(input);
+    vi.spyOn(input, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, 300 - page.scrollY, 300, 40),
+    );
+    vi.stubGlobal('scrollBy', ({top}: {top: number}) => {
+      page.scrollY += top;
+    });
+    const scrollTo = vi.fn(({top}: {top: number}) => {
+      page.scrollY = top;
+    });
+    vi.stubGlobal('scrollTo', scrollTo);
+    try {
+      track(keepFieldAboveKeyboard(input));
+      // Split screen in portrait, with nothing focused: the window is 300 px
+      // shorter at the same width.
+      resizeForKeyboard(300);
+      const split = window.innerHeight;
+      focusOn(input);
+      expect(getResizedRoom(window).room).toBe(0);
+      // The keyboard takes 200 px of the split window.
+      resizeForKeyboard(200);
+      expect(getResizedRoom(window).room).toBe(200);
+      expect(page.scrollY).toBe(340 + FIELD_OFFSET - (split - 200));
+      // Back closes the keyboard, and the field keeps focus.
+      vi.stubGlobal('innerHeight', split);
+      pageScrollRange(3000);
+      viewport.height = split;
+      act(() => {
+        viewport.dispatchEvent(new Event('resize'));
+      });
+      expect(getResizedRoom(window).room).toBe(0);
+      expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+      expect(page.scrollY).toBe(0);
+    } finally {
+      Reflect.deleteProperty(window, 'scrollY');
+    }
+  });
+
+  it('keeps the room when focus moves to another field while a keyboard that resizes the page shows', () => {
+    vi.stubGlobal('scrollBy', vi.fn());
+    vi.stubGlobal('scrollTo', vi.fn());
+    const first = element('input', {top: 100, height: 40});
+    const second = element('input', {top: 200, height: 40});
+    document.body.append(first, second);
+    track(keepFieldAboveKeyboard(first));
+    track(keepFieldAboveKeyboard(second));
+    focusOn(first);
+    resizeForKeyboard(300);
+    expect(getResizedRoom(window).room).toBe(300);
+    focusOn(second);
+    expect(getResizedRoom(window).room).toBe(300);
+  });
+
   it('keeps a field in the page 10 px above the keyboard where the browser shrinks the layout viewport for it, in the report\u2019s own frame', () => {
     const scrollBy = vi.fn();
     vi.stubGlobal('scrollBy', scrollBy);
@@ -968,6 +1028,36 @@ describe('keepFieldAboveKeyboard', () => {
       expect(scrollTo).toHaveBeenCalledTimes(1);
       expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'smooth'});
       expect(page.scrollY).toBe(40);
+    } finally {
+      vi.useRealTimers();
+      Reflect.deleteProperty(window, 'scrollY');
+    }
+  });
+
+  it('scrolls the page back when Back closes the keyboard in a split-screen window, with the field still focused', () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    try {
+      // Split screen in portrait, with nothing focused: the window is 300 px
+      // shorter at the same width.
+      vi.stubGlobal('innerHeight', window.innerHeight - 300);
+      pageScrollRange(window.innerHeight * 2);
+      viewport.height = window.innerHeight;
+      act(() => {
+        window.dispatchEvent(new Event('resize'));
+      });
+      const fieldTop = window.innerHeight - 100;
+      const {input, page, scrollTo} = pageField(fieldTop, window.innerHeight);
+      track(keepFieldAboveKeyboard(input));
+      focusOn(input);
+      keyboard(200);
+      expect(page.scrollY).toBe(
+        fieldTop + 40 + FIELD_OFFSET - (window.innerHeight - 200),
+      );
+      // Back closes the keyboard, and the field keeps focus.
+      keyboard(0);
+      expect(getResizedRoom(window).room).toBe(0);
+      expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+      expect(page.scrollY).toBe(0);
     } finally {
       vi.useRealTimers();
       Reflect.deleteProperty(window, 'scrollY');
