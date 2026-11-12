@@ -14,6 +14,7 @@ import {
   themeEditShow,
   themeEditUndo,
 } from './theme-edit.mjs';
+import {baseInstalled} from './_project.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -191,8 +192,13 @@ describe('corrected new commands keep every option', () => {
         '--mode',
         'dark-only',
       ],
-      // The nearest base is guessed only among installed ones (none here).
-      / new y (?!.*--like)/,
+      // The nearest base is guessed only among installed ones. The fixture
+      // installs none, but a test runner's NODE_PATH reaches this
+      // repository's theme-neutral once another suite has built it.
+      () =>
+        baseInstalled(cwd, 'neutral')
+          ? / new y --like neutral --accent red --mode dark-only$/
+          : / new y (?!.*--like)/,
     ],
     [
       ['new', 'z', '--accent', '#ggg', '--mode', 'light-only', '--png'],
@@ -209,8 +215,9 @@ describe('corrected new commands keep every option', () => {
       const names = JSON.parse(r.stdout).suggestions.map(
         (/** @type {any} */ x) => x.name,
       );
+      const pattern = typeof expected === 'function' ? expected() : expected;
       expect(
-        names.some((/** @type {string} */ n) => expected.test(n)),
+        names.some((/** @type {string} */ n) => pattern.test(n)),
         names.join('\n'),
       ).toBe(true);
     },
