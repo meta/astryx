@@ -186,6 +186,7 @@ export type TemplateCategory =
   // Content
   | 'Content - Card Grid'
   | 'Content - Order Detail'
+  | 'Content - Printable Document'
   | 'Content - Product Detail'
   | 'Content - Work Item Detail'
   | 'Content - Course Detail'
