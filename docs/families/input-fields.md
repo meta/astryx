@@ -108,7 +108,7 @@ another implementation helper.
   it renders a box. A member omits its nested Field when a supported InputGroup
   owns the group label and supporting text.
 - `FormLayout` owns outer arrangement, spacing, direction, form-level
-  optionality, and the form-level validation behavior default (FR14). It does
+  optionality, and the form-level entry error behavior default (FR14). It does
   not redefine a member's internal control geometry.
 - `InputGroup` owns the row height (fixed today; it grows with a set text size
   under `spec:AST-102` FR4, and the fixed height is a gap), connected outer surface, edge alignment,
@@ -276,14 +276,14 @@ another implementation helper.
   no keyboard, such as DateRangeInput, FileInput, ComplexSelector, or a touch
   picker field with no input mode, is outside it.
 
-- **FR14 — Members that reject entries share one validation behavior.**
+- **FR14 — Members that reject entries share one entry error behavior.**
   DateInput, DateTimeInput, TimeInput, and NumberInput take
-  `validationBehavior`: `'complete'`, the default, keeps each member's shipped
+  `entryErrorBehavior`: `'complete'`, the default, keeps each member's shipped
   timing, and `'blur-or-enter'` holds every signal of a rejection until Enter or blur.
-  FormLayout's `defaultValidationBehavior` sets it for a form, and a field's own
+  FormLayout's `defaultEntryErrorBehavior` sets it for a form, and a field's own
   prop wins. `spec:AST-117` owns the rule. Members that reject nothing
   themselves, such as TextInput, Selector, and DateRangeInput, take no
-  validation behavior.
+  entry error behavior.
 
 ## Allowed component variation
 
@@ -425,7 +425,7 @@ DEC-6 does not require unrelated components to add a new floor.
 - **On-screen keyboard (FR13):** no member meets FR13 on current main. No
   member has keyboard handling, and the keyboard module does not exist
   yet; `spec:AST-099` lists each gap.
-- **Validation behavior (FR14):** no member takes `validationBehavior`, and
+- **Entry error behavior (FR14):** no member takes `entryErrorBehavior`, and
   FormLayout has no form default; `spec:AST-117` lists each gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
   individual state behavior, but do not yet provide the complete real-browser
@@ -452,7 +452,7 @@ The exhaustive coverage obligation follows the membership and adoption tables.
 | FR11     | `InputClearButton.test.tsx` tooltip and accessible-name assertions, plus real-Chromium hover captures                                                                                                                                                                                                                    | a long field label; a locale override; light and dark                                                                             | The tooltip repeats the field label, or the accessible name loses the field label                                                                                                                                                                                                                                                          |
 | FR12     | `Typeahead.test.tsx`, `BaseTypeahead.test.tsx`, `Tokenizer.test.tsx`, `Selector.test.tsx`, and `MultiSelector.test.tsx` cases for both attributes, with Enter keeping its member-owned effect; `SearchKeyboard.interaction.browser.spec.ts` on a touch-emulated phone, where the search input a tap focuses carries both | Typeahead; Tokenizer; Selector and MultiSelector search row; a phone viewport with touch emulation                                | A missing attribute, or an Enter whose effect changes with the label, fails                                                                                                                                                                                                                                                                |
 | FR13     | TBD (gap): the per-field keyboard focus tests and simulator evidence `spec:AST-099` FR9 names                                                                                                                                                                                                                            | each member FR13 covers, in the page, a sheet, a docked bar Core moves, a floating bar, and a bar with its own `translate`        | A focused field left under the keyboard in a scroller (including one inside a fixed container FR9 leaves to the app), a Core host, or a docked bar Core moves, or a public prop for the behavior; a field with no scroller between it and a floating, own-`translate`, or full-viewport host is the app's to position and is not a failure |
-| FR14     | TBD (gap): the validation behavior suites `spec:AST-117` names                                                                                                                                                                                                                                                           | DateInput, DateTimeInput, TimeInput, and NumberInput under each value, standalone and in a FormLayout                             | A signal appears before commit under `'blur-or-enter'`, `'complete'` differs from the shipped behavior, or a form default outranks a field's own prop                                                                                                                                                                                      |
+| FR14     | TBD (gap): the entry error behavior suites `spec:AST-117` names                                                                                                                                                                                                                                                          | DateInput, DateTimeInput, TimeInput, and NumberInput under each value, standalone and in a FormLayout                             | A signal appears before commit under `'blur-or-enter'`, `'complete'` differs from the shipped behavior, or a form default outranks a field's own prop                                                                                                                                                                                      |
 
 ## Decision links
 

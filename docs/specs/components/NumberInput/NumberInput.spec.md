@@ -43,7 +43,7 @@ system_specs: [spec:AST-085, spec:AST-086, spec:AST-102, spec:AST-117]
 
 | Area                    | Contract                                                                                                                                                                                                                                                         |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | NumberInput is a controlled numeric field with Field props, size, status, `min`, `max`, `step`, `isIntegerOnly`, `formatValue`, `units`, `validationBehavior`, steppers, wheel stepping, clear, disabled and read-only states, and input-family part props.      |
+| Public contract         | NumberInput is a controlled numeric field with Field props, size, status, `min`, `max`, `step`, `isIntegerOnly`, `formatValue`, `units`, `entryErrorBehavior`, steppers, wheel stepping, clear, disabled and read-only states, and input-family part props.      |
 | Behavior                | A text-backed `spinbutton`; a typed draft commits on blur or Enter, parsed for the locale and clamped to the range. Arrow keys, the wheel, and available non-coarse-pointer steppers step on a grid and commit at once.                                          |
 | End-user impact         | Coarse-pointer users enter numbers directly instead of using compact steppers. Keyboard stepping remains available. Invalid entries are announced; disabled fields remain reachable; read-only is not announced.                                                 |
 | Builder impact          | Public prop types and numeric callbacks remain unchanged; existing NumberInput calls need no source or configuration migration.                                                                                                                                  |
@@ -64,11 +64,11 @@ Consumer usage lives in `NumberInput.doc.mjs`.
 
 - Released default preserved: `yes`; `step={1}`, wheel stepping on, no
   steppers, no clear, `size="md"`, `statusVariant="attached"`,
-  `validationBehavior` resolving to `'complete'`, the shipped behavior
+  `entryErrorBehavior` resolving to `'complete'`, the shipped behavior
 - Compatibility class: non-breaking presentation adaptation; public prop
   names, types, exports, numeric values and callbacks, validation, direct entry,
   and keyboard stepping remain unchanged under `spec:AST-017` FR3's numeric-stepper
-  presentation rule; `validationBehavior` is additive (FR14, `spec:AST-117`)
+  presentation rule; `entryErrorBehavior` is additive (FR14, `spec:AST-117`)
 - Controlled/uncontrolled behavior: controlled only; `value` (`number`, `null`,
   or `undefined`) is the committed value, and NumberInput keeps only an
   uncommitted text draft of its own
@@ -134,7 +134,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR11 | Arrow and Enter keys that belong to an IME composition neither step nor commit.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Current tests                                                          |
 | FR12 | Field composition, InputGroup adaptation, status presentation, start icon, click-to-focus, size and iOS text floor, and the prop targets match `component:TextInput` FR1, FR9, FR11–FR13, including its implementation gaps (the fixed height against `spec:AST-102` FR4, an error status without text, the color-only `detached` status, and the grouped description), plus a `labelIcon` passed to Field.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `family:input-fields` FR3, FR8–FR10; current tests                     |
 | FR13 | The control box carries `astryx-number-input` with `data-size`, `data-status`, `data-disabled`, and `data-readonly`. A theme `padding` in any spelling on `number-input` pads the control box and the stepper column together.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `architecture:component-theming-surface`; current tests                |
-| FR14 | Its own rejections follow `validationBehavior` (`spec:AST-117` FR1, FR2). Under `'complete'`, the shipped behavior (`spec:AST-117` FR3), a draft that is not a valid in-range number colors the text secondary, sets `aria-invalid`, and is announced on each keystroke (FR2). Under `'blur-or-enter'`, the field marks and announces no rejection while the person types. Enter reveals the draft's current rejection, its signals together and announced once, and keeps a draft that FR3 keeps; blur announces a rejected draft that FR3 reverts (one that does not parse, a fractional draft in an integer-only field, or any number while `min` is above `max`) once, then reverts it; a number that FR3 clamps reveals no rejection (`spec:AST-117` FR4). A revealed rejection clears as soon as the draft is valid or empty (`spec:AST-117` FR5). Implementation gap: the field has no `validationBehavior` and always behaves as `'complete'`.            | `spec:AST-117` FR1–FR6; proposal                                       |
+| FR14 | Its own rejections follow `entryErrorBehavior` (`spec:AST-117` FR1, FR2). Under `'complete'`, the shipped behavior (`spec:AST-117` FR3), a draft that is not a valid in-range number colors the text secondary, sets `aria-invalid`, and is announced on each keystroke (FR2). Under `'blur-or-enter'`, the field marks and announces no rejection while the person types. Enter reveals the draft's current rejection, its signals together and announced once, and keeps a draft that FR3 keeps; blur announces a rejected draft that FR3 reverts (one that does not parse, a fractional draft in an integer-only field, or any number while `min` is above `max`) once, then reverts it; a number that FR3 clamps reveals no rejection (`spec:AST-117` FR4). A revealed rejection clears as soon as the draft is valid or empty (`spec:AST-117` FR5). Implementation gap: the field has no `entryErrorBehavior` and always behaves as `'complete'`.            | `spec:AST-117` FR1–FR6; proposal                                       |
 
 ### Allowed variation
 
@@ -175,7 +175,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **AR1 — Spinbutton.** FR1; the committed value, not the draft, is exposed.
 - **AR2 — Invalid entry.** FR2's assertive region announces an invalid draft,
   since an invalid draft reverts silently on blur (WCAG 3.3.1). Under
-  `validationBehavior="blur-or-enter"`, the announcement waits for Enter or blur
+  `entryErrorBehavior="blur-or-enter"`, the announcement waits for Enter or blur
   (FR14).
 - **AR3 — Disabled.** FR9 satisfies `spec:AST-085` FR1, FR5, and FR6.
 - **AR4 — Steppers.** Compact pointer-only aids are hidden on coarse primary
@@ -206,7 +206,7 @@ anatomy-theming map.
 - `spec:AST-085` owns disabled focusability; NumberInput meets it, including
   the steppers.
 - `spec:AST-086` FR3 and FR4 own the persistent invalid-entry region.
-- `spec:AST-117` owns validation behavior; FR14 projects its FR1–FR6.
+- `spec:AST-117` owns entry error behavior; FR14 projects its FR1–FR6.
 - `architecture:internationalization` owns locale resolution the parser uses.
 - `component:TextInput` is the reference for the shared text-field behavior
   FR12 names.
@@ -228,7 +228,7 @@ anatomy-theming map.
 | FR11                     | `NumberInput.test.tsx` "does not step or commit on a composing keydown (IME)" and "waits for IME composition to finish before committing" | Composing arrows and Enter                                                             | A step or commit during composition fails.                                                                                  | `audit:NumberInput/behavior`      |
 | FR5, FR13, AR4           | `NumberInput.coarse-pointer.a11y.chromium.spec.ts`                                                                                        | Coarse/non-coarse pointers at 390 and 1280 px, LTR/RTL, non-default themed end padding | Visible coarse-pointer steppers, hidden fine-pointer steppers, wrong end padding, or lost direct/keyboard entry fail.       | `audit:NumberInput/behavior`      |
 | FR5                      | `NumberInput.test.tsx` "a held stepper" suite                                                                                             | Hold and release; pointer cancel; a bound; clicks; a finger press                      | A commit per repeat, a repeat after the release, or a step after the field turns disabled or read-only fails.               | `audit:NumberInput/behavior`      |
-| FR14, AR2                | TBD (gap): `NumberInput.test.tsx` validation behavior suites                                                                              | `-`; `1a`; `150` in 10–100; each value; Enter and blur                                 | A signal before commit under `'blur-or-enter'`, a lone signal, an unannounced revert, or a change under `'complete'` fails. | `audit:NumberInput/behavior`      |
+| FR14, AR2                | TBD (gap): `NumberInput.test.tsx` entry error behavior suites                                                                             | `-`; `1a`; `150` in 10–100; each value; Enter and blur                                 | A signal before commit under `'blur-or-enter'`, a lone signal, an unannounced revert, or a change under `'complete'` fails. | `audit:NumberInput/behavior`      |
 
 ## Current-state impact
 
@@ -243,7 +243,7 @@ anatomy-theming map.
   3.3.1), the color-only `detached` status without a message (WCAG 2.2 1.4.1),
   and the grouped description reference that `component:TextInput` records
   apply here.
-- **Validation behavior (FR14).** The field has no `validationBehavior`, so
+- **Entry error behavior (FR14).** The field has no `entryErrorBehavior`, so
   it always reveals rejections as `'complete'` does.
 - **Stepper icon key.** The steppers resolve their icon through the
   `numberInput:stepperDown` extension key rather than the component-slot model,

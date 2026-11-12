@@ -17,7 +17,7 @@ affects_consumer_docs:
   [DateInput, DateTimeInput, TimeInput, NumberInput, FormLayout]
 ---
 
-# Validation behavior system spec
+# Entry error behavior system spec
 
 <!-- path-applicability:v1 -->
 
@@ -54,7 +54,7 @@ entries themselves: `DateInput`, `DateTimeInput`, `TimeInput`, and
 `NumberInput`. `FormLayout` sets a form-wide default for them. Members that
 reject nothing themselves, such as `TextInput`, `Selector`, and
 `DateRangeInput`, whose dates come only from a Calendar that disables
-unreachable days, take no validation behavior.
+unreachable days, take no entry error behavior.
 
 ## Non-goals
 
@@ -82,7 +82,7 @@ unreachable days, take no validation behavior.
 ## Public contract
 
 ```tsx
-<FormLayout defaultValidationBehavior="blur-or-enter">
+<FormLayout defaultEntryErrorBehavior="blur-or-enter">
   <DateInput label="Start" value={start} onChange={setStart} max="2026-12-31" />
   <NumberInput
     label="Seats"
@@ -95,13 +95,13 @@ unreachable days, take no validation behavior.
     label="Arrival"
     value={arrival}
     onChange={setArrival}
-    validationBehavior="complete" // this field's own prop wins
+    entryErrorBehavior="complete" // this field's own prop wins
   />
 </FormLayout>
 ```
 
 ```ts
-type ValidationBehavior = 'complete' | 'blur-or-enter';
+type EntryErrorBehavior = 'complete' | 'blur-or-enter';
 ```
 
 ## Requirements
@@ -119,18 +119,18 @@ type ValidationBehavior = 'complete' | 'blur-or-enter';
 
 ### Behavior
 
-- **FR1 — Each member takes `validationBehavior`.** `DateInput`,
+- **FR1 — Each member takes `entryErrorBehavior`.** `DateInput`,
   `DateTimeInput`, `TimeInput`, and `NumberInput` accept an optional
-  `validationBehavior` of `'complete'` or `'blur-or-enter'`. One value governs every
+  `entryErrorBehavior` of `'complete'` or `'blur-or-enter'`. One value governs every
   surface and segment of the field: typed text, the native control, and
   `DateTimeInput`'s date and time segments. The type of the value is exported as
-  `ValidationBehavior`. The values name when a member reveals its own
-  rejections; React Aria's prop of the same name chooses between native and
-  ARIA validation, which is a different concept.
+  `EntryErrorBehavior`. The prop sets when a member reveals its own entry
+  errors, the rejections that `onEntryErrorChange` reports where a member has
+  it; validation itself runs on every edit under both values.
 - **FR2 — The form sets a default and the field wins.** `FormLayout` accepts an
-  optional `defaultValidationBehavior` of the same type. A member resolves its
-  behavior from its own `validationBehavior`, else the nearest `FormLayout`'s
-  `defaultValidationBehavior`, else `'complete'`. `FormLayout` provides the
+  optional `defaultEntryErrorBehavior` of the same type. A member resolves its
+  behavior from its own `entryErrorBehavior`, else the nearest `FormLayout`'s
+  `defaultEntryErrorBehavior`, else `'complete'`. `FormLayout` provides the
   default as it provides `defaultOptionality` (`component:FormLayout` FR4): a
   nested `FormLayout` replaces it for its own descendants, an unset nested value
   included, and content in a layer opened inside a `FormLayout` starts without
@@ -138,7 +138,7 @@ type ValidationBehavior = 'complete' | 'blur-or-enter';
 - **FR3 — `'complete'` is each member's shipped behavior.** Under
   `'complete'`, a member reveals each rejection when, and with the signals,
   its own record states, and nothing in this record changes that. A field
-  with no `validationBehavior` and no `FormLayout` default behaves the same
+  with no `entryErrorBehavior` and no `FormLayout` default behaves the same
   way.
 - **FR4 — `'blur-or-enter'` holds every signal until commit.** Under `'blur-or-enter'`, while
   a person types or edits, a member shows, marks, styles, and announces no
@@ -162,11 +162,11 @@ type ValidationBehavior = 'complete' | 'blur-or-enter';
   member's record states, clears its rejection.
 - **FR6 — Disabled and busy fields reveal no rejection.** While a member is
   disabled or busy, it reveals no rejection of its own, as its record states
-  (`spec:AST-085` FR2). Once it is editable, its validation behavior applies
+  (`spec:AST-085` FR2). Once it is editable, its entry error behavior applies
   again.
 - **FR7 — Compositions keep the default.** `PowerSearch`'s value editors and
   Table's filter editors render members with `'complete'` and expose no
-  validation behavior prop. A `FormLayout` around them does not change it.
+  entry error behavior prop. A `FormLayout` around them does not change it.
 
 ### Accessibility contract
 
@@ -184,7 +184,7 @@ type ValidationBehavior = 'complete' | 'blur-or-enter';
 
 Classified under `spec:AST-017` against the latest stable release:
 
-- `validationBehavior` and `defaultValidationBehavior` are new optional props,
+- `entryErrorBehavior` and `defaultEntryErrorBehavior` are new optional props,
   and their default, `'complete'`, is each member's shipped behavior (FR3), so
   usage that sets neither is unchanged: additive (`spec:AST-017` FR5;
   `architecture:public-component-api` INV3).
@@ -207,16 +207,17 @@ Classified under `spec:AST-017` against the latest stable release:
   FR14, a projection of this record; its shared-owner section gives `FormLayout`
   the form-level default.
 - `component:DateInput`, `component:DateTimeInput`, `component:TimeInput`, and
-  `component:NumberInput` add `validationBehavior` and project FR1–FR6.
-- `component:FormLayout` adds `defaultValidationBehavior` to its props and its
+  `component:NumberInput` add `entryErrorBehavior` and project FR1–FR6.
+- `component:FormLayout` adds `defaultEntryErrorBehavior` to its props and its
   layout context.
 - The `.doc.mjs` files of the five components document the props, the default,
-  precedence, and the difference from React Aria's prop of the same name.
+  and precedence, and say that the prop sets when an entry error shows, not
+  when validation runs.
 
 Requirement gaps:
 
-- FR1–FR6 gap: no member accepts `validationBehavior`, and `FormLayout` has no
-  `defaultValidationBehavior`; every member behaves as FR3 states.
+- FR1–FR6 gap: no member accepts `entryErrorBehavior`, and `FormLayout` has no
+  `defaultEntryErrorBehavior`; every member behaves as FR3 states.
 - FR4 gap: `TimeInput` and `DateTimeInput`'s time segment take no commit on
   Enter.
 
@@ -229,7 +230,7 @@ Requirement gaps:
 | FR4      | Keystroke-by-keystroke and commit suites under `'blur-or-enter'`                | Each rejection of each member; native edits; Enter and blur; an entry the member drops at blur                                         | A signal appears before Enter or blur, the signals appear apart, the announcement repeats, or a dropped entry is not announced        |
 | FR5      | Edit suites after a revealed rejection                                          | Edit to valid; to empty; to still rejected; caller `value` change; calendar pick                                                       | A fixed entry keeps its rejection, a still-rejected edit clears it or announces it again under `'blur-or-enter'`, or a pick leaves it |
 | FR6      | Disabled and busy suites                                                        | Rejection revealed, then disabled; draft kept while busy                                                                               | A locked field reveals a rejection, or its behavior does not apply again once editable                                                |
-| FR7      | `PowerSearch` and Table filter editor suites inside a `FormLayout`              | `defaultValidationBehavior="blur-or-enter"` around the composition                                                                     | An editor follows the form default                                                                                                    |
+| FR7      | `PowerSearch` and Table filter editor suites inside a `FormLayout`              | `defaultEntryErrorBehavior="blur-or-enter"` around the composition                                                                     | An editor follows the form default                                                                                                    |
 | AR1–AR3  | Screen-reader evidence under `spec:AST-009`                                     | Each member, typed and native, under `'blur-or-enter'`                                                                                 | A rejection is heard before commit, heard twice, or a dropped entry is not explained                                                  |
 
 ## Decision log
@@ -263,22 +264,27 @@ on the form, and those that also take it per field let the field win.
 ### DEC-3 — The name follows the behavior-prop rule
 
 **Reference:** `spec:AST-117/DEC-3`
-**Decider:** `nynexman4464`, `2026-11-11`
+**Decider:** pending
 
 A prop that chooses how a component responds to input is named
-`<thing>Behavior` (`architecture:public-component-api` INV2), so the option is
-`validationBehavior`, the form default `defaultValidationBehavior`, and the type
-`ValidationBehavior`. Its values name when a rejection appears:
+`<thing>Behavior` (`architecture:public-component-api` INV2). The thing is the
+member's entry error, the rejection that `onEntryErrorChange` already reports,
+so the option is `entryErrorBehavior`, the form default
+`defaultEntryErrorBehavior`, and the type `EntryErrorBehavior`. Its values name
+when an entry error appears:
 `'complete'`, as soon as the entry is complete enough to be wrong, and
 `'blur-or-enter'`, when the person leaves the field or presses Enter. The
 second value names both triggers, because Enter commits an entry without
-moving focus. React Aria uses the same prop name for native versus ARIA
-validation; FR1 and the consumer docs state the difference.
+moving focus.
 
 Rejected:
 
-- `validationTiming`, because it breaks the `<thing>Behavior` rule for a prop
-  that chooses how a component responds to input.
+- `validationBehavior`, because React Aria uses that name for native versus
+  ARIA validation, and because it suggests when validation runs.
+- `validateOn`, `validateTrigger`, and `validationTiming`, because they suggest
+  when validation runs and break the `<thing>Behavior` rule.
+- `errorBehavior` and `errorTiming`, because they also suggest control over a
+  caller's errors; `errorTiming` also breaks the rule.
 - Separate `'blur'` and `'enter'` values. With Enter alone, a person who tabs
   away from a rejected entry is never told, and phone number pads have no
   Enter key. With blur alone, Enter commits a rejected entry with no sign.
@@ -318,7 +324,7 @@ keep `'complete'` and take no prop (FR7).
   option (a).
   - (a) No. The editors keep `'complete'`, and `DateRangeInput` has no typed
     entry to reject.
-  - (b) `PowerSearch` and Table filtering take a validation behavior prop and
+  - (b) `PowerSearch` and Table filtering take a entry error behavior prop and
     pass it to their editors.
   - (c) The editors follow a `FormLayout` around the composition.
 - **OQ4 — Under `'blur-or-enter'`, does a revealed rejection stay while an edit leaves
