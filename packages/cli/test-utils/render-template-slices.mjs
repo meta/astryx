@@ -67,6 +67,18 @@ function buildThemeOnce(themeDir) {
 }
 
 /**
+ * The templates slice `slice` (1-based) of `count` renders: every `count`th
+ * one, so the slices together hold each template exactly once.
+ * @param {string[]} ids every ready page template, as the registry lists them
+ * @param {number} slice
+ * @param {number} count
+ * @returns {string[]}
+ */
+export function templateSlice(ids, slice, count) {
+  return ids.filter((_, i) => i % count === slice - 1);
+}
+
+/**
  * Scaffolds and renders every `count`th ready page template, starting at
  * `slice`.
  * @param {number} slice
@@ -102,7 +114,7 @@ export function describeTemplateSlice(slice, count) {
         .filter((/** @type {any} */ t) => t.isReady)
         .map((/** @type {any} */ t) => t.id);
       expect(ready.length).toBeGreaterThanOrEqual(count);
-      const ids = ready.filter((_, i) => i % count === slice - 1);
+      const ids = templateSlice(ready, slice, count);
       /** @type {Set<string>} */
       const themes = new Set();
       for (const id of ids) {
