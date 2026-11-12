@@ -191,8 +191,9 @@ describe('corrected new commands keep every option', () => {
         '--mode',
         'dark-only',
       ],
-      // The nearest base is guessed only among installed ones (none here).
-      / new y (?!.*--like)/,
+      // The nearest base is guessed only among installed ones, so the
+      // suggestion names neutral where it resolves and no base where not.
+      / new y (--like neutral )?--accent red --mode dark-only$/,
     ],
     [
       ['new', 'z', '--accent', '#ggg', '--mode', 'light-only', '--png'],
