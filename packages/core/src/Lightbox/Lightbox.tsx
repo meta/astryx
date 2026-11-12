@@ -445,6 +445,13 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-full'],
     paddingInline: spacingVars['--spacing-2'],
   },
+  // The caption's text sits on the counter's backing, line by line, so it
+  // keeps 4.5:1 over a light theme's translucent backdrop. The backing is
+  // inline, so each line keeps its line height.
+  captionBreak: {
+    boxDecorationBreak: 'clone',
+    WebkitBoxDecorationBreak: 'clone',
+  },
 });
 
 const pageStyles = stylex.create({
@@ -1539,7 +1546,13 @@ export function Lightbox({
                             <div
                               data-lightbox-caption=""
                               {...stylex.props(styles.caption)}>
-                              {mediaArray[i].caption}
+                              <span
+                                {...stylex.props(
+                                  styles.counterBacking,
+                                  styles.captionBreak,
+                                )}>
+                                {mediaArray[i].caption}
+                              </span>
                             </div>
                           )}
                         </div>
@@ -1555,7 +1568,13 @@ export function Lightbox({
                     ref={captionRef}
                     data-lightbox-caption=""
                     {...stylex.props(styles.caption)}>
-                    {currentItem.caption}
+                    <span
+                      {...stylex.props(
+                        styles.counterBacking,
+                        styles.captionBreak,
+                      )}>
+                      {currentItem.caption}
+                    </span>
                   </div>
                 )}
               </div>

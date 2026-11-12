@@ -427,6 +427,77 @@ for (const theme of SHIPPED_THEMES) {
   });
 }
 
+// 'none' is Core's own default tokens, with no theme applied.
+for (const theme of [...SHIPPED_THEMES, 'none'] as const) {
+  for (const mode of ['light', 'dark'] as const) {
+    test(`the caption's text keeps 4.5:1 over the backdrop (${theme}, ${mode})`, async ({
+      page,
+    }) => {
+      await page.route('https://picsum.photos/**', async route =>
+        route.fulfill({
+          contentType: 'image/svg+xml',
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="#fff"/></svg>',
+        }),
+      );
+      await page.goto(
+        `${storybook()}/iframe.html?id=core-lightbox--with-caption&viewMode=story&globals=astryxTheme:${theme};colorMode:${mode}`,
+      );
+      await page.locator('#storybook-root > *').first().waitFor();
+      await frames(page, 2);
+      const driver = await touchDriver(page);
+      const trigger = await page
+        .getByRole('button', {name: 'Open with caption'})
+        .boundingBox();
+      if (trigger == null) {
+        throw new Error('no trigger');
+      }
+      await driver.tap({
+        x: trigger.x + trigger.width / 2,
+        y: trigger.y + trigger.height / 2,
+      });
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      const caption = dialog.locator('[data-lightbox-caption]');
+      await expect(caption).toBeVisible();
+      await waitForRest(dialog.getByRole('img', {name: 'Forest path'}));
+      await frames(page, 2);
+      // The first line of the caption's text, and the caption's text colour.
+      const {line, color} = await caption.evaluate(el => {
+        // The text node's own boxes, not an element's, which include padding.
+        const text = document
+          .createTreeWalker(el, NodeFilter.SHOW_TEXT)
+          .nextNode();
+        if (text == null) {
+          throw new Error('The caption has no text.');
+        }
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const first = range.getClientRects()[0];
+        return {
+          line: {
+            left: first.left,
+            right: first.right,
+            top: first.top,
+            height: first.height,
+          },
+          color: getComputedStyle(el).color,
+        };
+      });
+      const shot = PNG.sync.read(await page.screenshot());
+      const scale = shot.width / (page.viewportSize()?.width ?? shot.width);
+      // Just outside the first line's glyphs, at its middle: what the text
+      // sits on.
+      const middle = line.top + line.height / 2;
+      const beside = [
+        {x: line.left - 3, y: middle},
+        {x: line.right + 3, y: middle},
+      ];
+      const ratio = contrast(parseRgb(color), lightestAt(shot, scale, beside));
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+}
+
 test('the stage fills the phone screen and fits the photo', async ({page}) => {
   const {state} = await openViewer(page);
   const s = await state();
