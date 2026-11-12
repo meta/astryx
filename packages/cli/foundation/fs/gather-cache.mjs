@@ -36,6 +36,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {CLI_ROOT} from './paths.mjs';
+import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
 import {jitiCacheDir} from './jiti-cache.mjs';
@@ -46,6 +47,17 @@ import {
   stillInState,
   withoutRecording,
 } from './read-record.mjs';
+
+/**
+ * The kept commands whose only kept gather is their integrations' check
+ * results: a project with no integration records none of them.
+ */
+const INTEGRATION_COMMANDS = new Set([
+  'component',
+  'template',
+  'theme',
+  'discover',
+]);
 
 /** The run's commands whose gathers are kept. */
 const KEPT_COMMANDS = new Set([
@@ -215,7 +227,11 @@ export async function recordRunFor(argv, fn) {
     !KEPT_COMMANDS.has(command) ||
     runsUnderPnp() ||
     currentUid() == null ||
-    withoutRecording(buildId) == null
+    withoutRecording(buildId) == null ||
+    // Last, being a few file checks: those commands keep only their
+    // integrations' check results, so a project with none records nothing.
+    (INTEGRATION_COMMANDS.has(command) &&
+      !withoutRecording(() => mayHaveIntegrations(process.cwd())))
   ) {
     return fn();
   }
