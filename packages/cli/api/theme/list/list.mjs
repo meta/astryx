@@ -11,6 +11,7 @@ import * as path from 'node:path';
 
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {
+  listAvailableThemeState,
   listAvailableThemes,
   listThemes,
   listUnmigratedThemeCopies,
@@ -72,7 +73,7 @@ export async function themeListCopySources(options = {}) {
 export async function themeListAvailable(options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const state = readThemeListState(cwd);
-  const themes = await listAvailableThemes(cwd);
+  const {themes, skipped} = await listAvailableThemeState(cwd);
   const data = themes
     .filter(
       theme => options.package == null || theme.package === options.package,
@@ -106,9 +107,17 @@ export async function themeListAvailable(options = {}) {
     ),
     upgradeCommand,
   }));
+  const skippedThemes = options.package == null ? skipped : [];
   return {
     type: 'theme.list',
     data,
-    ...(unmigratedCopies.length > 0 ? {meta: {unmigratedCopies}} : {}),
+    ...(unmigratedCopies.length > 0 || skippedThemes.length > 0
+      ? {
+          meta: {
+            unmigratedCopies,
+            ...(skippedThemes.length > 0 ? {skippedThemes} : {}),
+          },
+        }
+      : {}),
   };
 }

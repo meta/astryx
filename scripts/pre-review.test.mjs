@@ -41,24 +41,10 @@ describe('applicableChecks', () => {
     expect(idsFor([['README.md', ['text']]])).toEqual(['d']);
   });
 
-  it('routes a new hook row to the API delta and hook example items', () => {
+  it('routes published package code to the API delta item', () => {
     expect(
-      idsFor([['packages/core/api-report.md', ['hook useThing: () => void']]]),
-    ).toEqual(['a', 'd', 'e']);
-  });
-
-  it('routes a behavior or boolean prop row to the behavior prop item', () => {
-    expect(
-      idsFor([
-        [
-          'packages/core/api-report.md',
-          ["  prop openBehavior?: 'hover' | 'press'"],
-        ],
-      ]),
-    ).toEqual(['a', 'c', 'd']);
-    expect(
-      idsFor([['packages/core/api-report.md', ['  prop isPinned?: boolean']]]),
-    ).toEqual(['a', 'c', 'd']);
+      idsFor([['packages/core/src/Button/Button.tsx', ['const x = 1;']]]),
+    ).toEqual(['a', 'b', 'd']);
   });
 
   it('routes published source to the behavior item and its comments to the comment item', () => {
@@ -72,7 +58,7 @@ describe('applicableChecks', () => {
           ],
         ],
       ]),
-    ).toEqual(['b', 'd', 'f']);
+    ).toEqual(['a', 'b', 'd', 'f']);
   });
 
   it('routes a hook export from an entry point to the hook example item', () => {
@@ -83,7 +69,7 @@ describe('applicableChecks', () => {
           ["export {useThing} from './useThing/useThing';"],
         ],
       ]),
-    ).toEqual(['b', 'd', 'e']);
+    ).toEqual(['a', 'b', 'd', 'e']);
   });
 
   it('ignores directives and the copyright line', () => {
@@ -97,7 +83,7 @@ describe('applicableChecks', () => {
           ],
         ],
       ]),
-    ).toEqual(['b', 'd']);
+    ).toEqual(['a', 'b', 'd']);
   });
 
   it('keeps tests, stories, and docs out of the source items', () => {
@@ -113,10 +99,10 @@ describe('applicableChecks', () => {
   it('routes published code outside src and shipped catalogs to the behavior item', () => {
     expect(
       idsFor([['packages/cli/clients/cli/bin/astryx.mjs', ['run();']]]),
-    ).toEqual(['b', 'd']);
+    ).toEqual(['a', 'b', 'd']);
     expect(
       idsFor([['packages/core/locales/fr-FR.json', ['"key": "value"']]]),
-    ).toEqual(['b', 'd']);
+    ).toEqual(['a', 'b', 'd']);
   });
 
   it('keeps private packages out of the behavior item', () => {
@@ -157,7 +143,6 @@ describe('fileClass', () => {
     expect(
       fileClass('docs/x.md', {specRecord: true, ownerGatedRecord: true}),
     ).toBe('record, owner-gated');
-    expect(fileClass('packages/core/api-report.md', plain)).toBe('API report');
     expect(fileClass('packages/lab/src/A/A.tsx', plain)).toBe('Lab');
     expect(fileClass('packages/core/src/A/A.tsx', plain)).toBe(
       'published package code',
@@ -208,7 +193,8 @@ describe('formatReport', () => {
       ],
       checklist: 'docs/contributing/pull-requests.md#pre-review-checklist',
     });
-    expect(text).toContain('Authored lines: 12 (limit 2000;');
+    expect(text).toContain('Authored lines: 12 (guideline 2000;');
+    expect(text).not.toContain('consider splitting');
     expect(text).toContain('Merge into origin/main: clean');
     expect(text).toContain(
       '  [i] packages/core/src/A/A.tsx:12  A new ResizeObserver; Core owns this concern\n      fix: Call `observeResize`.',
@@ -218,6 +204,27 @@ describe('formatReport', () => {
     expect(text).toContain(
       'Checklist: docs/contributing/pull-requests.md#pre-review-checklist',
     );
+  });
+  it('reports a large change as advice, not as a finding', () => {
+    const text = formatReport({
+      base: 'origin/main',
+      head: 'working tree',
+      mergeBase: 'a'.repeat(40),
+      scope: 'changes include another surface',
+      files: [{file: 'packages/cli/assets/templates/pages/a.tsx', class: 'x'}],
+      records: [],
+      claims: [],
+      baselines: {command: null, claims: []},
+      authoredLines: 9000,
+      merge: {conflicts: []},
+      findings: [],
+      checks: [],
+      checklist: 'docs/contributing/pull-requests.md#pre-review-checklist',
+    });
+    expect(text).toContain(
+      'Authored lines: 9000 (guideline 2000; lockfiles, snapshots, and generated files excluded)\n  Over 2,000 authored lines: consider splitting if a smaller change would review more easily.',
+    );
+    expect(text).toContain('Findings in this change (0):\n  none');
   });
 });
 

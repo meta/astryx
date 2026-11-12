@@ -192,6 +192,10 @@ export default defineConfig(
       // Canonical consumer fixtures are validated and built in copied,
       // standalone sandboxes rather than linted as workspace source.
       'internal/vibe-tests/fixtures/**',
+      // Vibe eval starter apps and reference solutions build inside copied
+      // consumer apps outside the workspace, with their own dependencies.
+      'internal/vibe-tests/eval/arms/**',
+      'internal/vibe-tests/eval/tasks/*/reference/**',
       // Changesets tooling (custom changelog module + config) is CommonJS
       // build/release glue, not shipped source — keep it out of the TS/ESM
       // lint pass (consistent with scripts/** above).
@@ -1004,6 +1008,19 @@ export default defineConfig(
         reactSeverity,
         {baseline: privateAttributeBaseline, root: import.meta.dirname},
       ],
+    },
+  },
+  // React attaches its wheel, touchstart and touchmove listeners as passive,
+  // so preventDefault() in those handlers does nothing. Shipped package
+  // source, the same files as the block above.
+  {
+    files: privateAttributeScope.files,
+    ignores: privateAttributeScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-prevent-default-in-passive-react-handler': 'error',
     },
   },
   // A source comment explains a reason, a constraint, or a quirk. It does not

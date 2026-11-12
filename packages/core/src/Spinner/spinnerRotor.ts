@@ -14,6 +14,7 @@
 
 import * as stylex from '@stylexjs/stylex';
 import {durationVars} from '../theme/tokens.stylex';
+import {sharedState} from '../utils/sharedRealm';
 
 /** The fraction of the ring the arc covers: 135°. */
 export const SPINNER_ARC_FRACTION = 0.375;
@@ -71,16 +72,18 @@ export const spinnerRotorStyles = stylex.create({
  * each mount re-force what the previous one invalidated: 53 style recalcs for
  * 38 spinners, against 19 batched.
  */
-const pendingRotors = new Set<Element>();
-let flushScheduled = false;
+const rotors = sharedState('spinner/spinner-rotor/state', 1, () => ({
+  pendingRotors: new Set<Element>(),
+  flushScheduled: false,
+}));
 
 function pinRotorsToTimelineOrigin(): void {
-  flushScheduled = false;
+  rotors.flushScheduled = false;
   const animations: Animation[] = [];
-  for (const rotor of pendingRotors) {
+  for (const rotor of rotors.pendingRotors) {
     animations.push(...rotor.getAnimations());
   }
-  pendingRotors.clear();
+  rotors.pendingRotors.clear();
   for (const animation of animations) {
     animation.startTime = 0;
   }
@@ -102,12 +105,12 @@ export function syncRotationPhase(
   if (typeof rotor.getAnimations !== 'function') {
     return undefined;
   }
-  pendingRotors.add(rotor);
-  if (!flushScheduled) {
-    flushScheduled = true;
+  rotors.pendingRotors.add(rotor);
+  if (!rotors.flushScheduled) {
+    rotors.flushScheduled = true;
     requestAnimationFrame(pinRotorsToTimelineOrigin);
   }
   return () => {
-    pendingRotors.delete(rotor);
+    rotors.pendingRotors.delete(rotor);
   };
 }

@@ -99,7 +99,7 @@ export const authors = {
 ```
 
 For GitHub-backed authors, the avatar and profile link default to
-`https://github.com/<handle>.png` and `https://github.com/<handle>` — no
+`https://github.com/<handle>.png?size=128` and `https://github.com/<handle>` — no
 build-time profile fetching. Then reference the key from your post:
 
 ```yaml
