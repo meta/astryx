@@ -629,6 +629,8 @@ const CASES = [
       'written — stated in status token ([ok] / [skip])',
       'path — stated in the "[ok] Wrote ..." line',
       'reason — absent; only in skip envelopes',
+      'overwritable — stated by the hint after [skip]: --overwrite, or a new path',
+      'alternative — the path in the suggested template command; null when --overwrite works',
     ],
   },
   // The experimental copies of the theme commands: the same cases.
@@ -682,6 +684,8 @@ const CASES = [
       'written — stated in status token ([ok] / [skip])',
       'path — stated in the "[ok] Wrote ..." line',
       'reason — absent; only in skip envelopes',
+      'overwritable — stated by the hint after [skip]: --overwrite, or a new path',
+      'alternative — the path in the suggested template command; null when --overwrite works',
     ],
   },
   // The theme editor: refusals before any build, and a list.

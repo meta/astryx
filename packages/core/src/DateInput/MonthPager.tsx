@@ -27,6 +27,7 @@ import {
   useState,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {usePager} from '../hooks/usePager';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {observeResize} from '../utils/sharedResizeObserver';
@@ -114,8 +115,7 @@ function MonthPagerComponent({
   const pendingRowRef = useRef<number | null>(null);
 
   // Read through a ref, so a caller need not memoize the callback.
-  const onVisibleMonthChangeRef = useRef(onVisibleMonthChange);
-  onVisibleMonthChangeRef.current = onVisibleMonthChange;
+  const onVisibleMonthChangeRef = useCommittedRef(onVisibleMonthChange);
 
   const report = useCallback(
     (row: number) => {
@@ -125,7 +125,7 @@ function MonthPagerComponent({
       reportedRowRef.current = row;
       onVisibleMonthChangeRef.current(minMonthIndex + row);
     },
-    [minMonthIndex],
+    [minMonthIndex, onVisibleMonthChangeRef],
   );
 
   const pager = usePager({
