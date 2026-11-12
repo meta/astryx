@@ -312,4 +312,76 @@ describe('pull-request jobs that check out the head', () => {
       }),
     ).toEqual(['Run a new check: .github/scripts/new-check.mjs']);
   });
+
+  describe('scripts from the scope checkout', () => {
+    const script = '.github/scripts/new-check.mjs';
+    const scope = (
+      dirs = ['.github/actions/test-scope', '.github/scripts'],
+    ) => ({
+      name: 'Check out the scope action',
+      uses: 'actions/checkout@v7',
+      with: {'sparse-checkout': dirs.join('\n'), path: '.test-scope'},
+    });
+    const head = {
+      name: 'Checkout',
+      uses: 'actions/checkout@v7',
+      with: {ref: '${{ github.event.pull_request.head.sha }}'},
+    };
+    const fromScope = {
+      name: 'Run from the scope checkout',
+      run: `node .test-scope/${script}`,
+    };
+    const keep = (dir = 'legs') => ({
+      name: 'Keep the check',
+      run: `cp .test-scope/${script} "$RUNNER_TEMP/${dir}/.github/scripts/"`,
+    });
+    const fromCopy = {
+      name: 'Run the copy',
+      run: `node "$RUNNER_TEMP/legs/${script}"`,
+    };
+
+    it('accepts a script read from the scope checkout before the head checkout', () => {
+      expect(unguardedScripts({steps: [scope(), fromScope, head]})).toEqual([]);
+    });
+
+    it('rejects it after the head checkout replaced the workspace', () => {
+      expect(unguardedScripts({steps: [scope(), head, fromScope]})).toEqual([
+        `Run from the scope checkout: ${script}`,
+      ]);
+    });
+
+    it("rejects it when the scope checkout's sparse directories do not hold it", () => {
+      expect(
+        unguardedScripts({
+          steps: [scope(['.github/actions/test-scope']), fromScope, head],
+        }),
+      ).toEqual([`Run from the scope checkout: ${script}`]);
+    });
+
+    it('rejects a scope checkout of another commit', () => {
+      const pinned = scope();
+      pinned.with.ref = '${{ github.event.pull_request.head.sha }}';
+      expect(unguardedScripts({steps: [pinned, fromScope, head]})).toEqual([
+        `Run from the scope checkout: ${script}`,
+      ]);
+    });
+
+    it('accepts a copy an earlier step took from the scope checkout before the head checkout', () => {
+      expect(
+        unguardedScripts({steps: [scope(), keep(), head, fromCopy]}),
+      ).toEqual([]);
+    });
+
+    it('rejects a copy taken after the head checkout, never taken, or taken to another directory', () => {
+      expect(
+        unguardedScripts({steps: [scope(), head, keep(), fromCopy]}),
+      ).toEqual([`Keep the check: ${script}`, `Run the copy: ${script}`]);
+      expect(unguardedScripts({steps: [scope(), head, fromCopy]})).toEqual([
+        `Run the copy: ${script}`,
+      ]);
+      expect(
+        unguardedScripts({steps: [scope(), keep('other'), head, fromCopy]}),
+      ).toEqual([`Run the copy: ${script}`]);
+    });
+  });
 });

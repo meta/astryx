@@ -700,7 +700,8 @@ function docFinderOver(catalog, tree, fromProvider, summaries = true) {
         entry &&
         !entry.tree &&
         (providerOf(entry) === provider ||
-          catalog.aliasesOf(entry).includes(parsed.name.toLowerCase()))
+          catalog.aliasesOf(entry).includes(parsed.name.toLowerCase()) ||
+          entry.replaces?.toLowerCase() === parsed.name.toLowerCase())
       ) {
         let title = entry.title ?? entry.name;
         let summary = entry.description ?? '';
@@ -1764,9 +1765,87 @@ export function nameOwner(tree, catalog, name) {
     return entry == null ? null : {kind: 'topic', entry};
   }
   const entry = catalog.resolve(name);
-  if (entry == null) return null;
-  const owner = routeOwner(tree, entry);
-  return owner == null ? {kind: 'topic', entry} : {kind: 'node', node: owner};
+  if (entry != null) {
+    const owner = routeOwner(tree, entry);
+    return owner == null ? {kind: 'topic', entry} : {kind: 'node', node: owner};
+  }
+  return childOwner(tree, name);
+}
+
+/**
+ * The child a reader names without its namespace, or with a route that leaves
+ * out the prefix the child's own name repeats (spec:AST-046 FR5). A namespace
+ * whose children repeat its name makes its own routes stutter: `tokens` holds
+ * `tokens-color`, so the route is `tokens/tokens-color`, while the namespace
+ * listing shows the bare `tokens-color`. Both spellings name one child, so
+ * that child answers. Two or more children answering is ambiguous, and the
+ * read falls through to the suggestion list, unchanged. An experimental doc
+ * never answers to a bare name: its project reaches it only by a marked route
+ * (spec:AST-017 FR27).
+ * @param {DocsTree} tree
+ * @param {string} name
+ * @returns {{kind: 'node', node: TreeNode} | null}
+ */
+function childOwner(tree, name) {
+  const wanted = name.toLowerCase();
+  const slash = wanted.lastIndexOf('/');
+  const parent = slash > 0 ? wanted.slice(0, slash) : null;
+  const unstuttered =
+    parent == null
+      ? null
+      : `${parent}/${parent.slice(parent.lastIndexOf('/') + 1)}-${wanted.slice(slash + 1)}`;
+  const matches = [...tree.nodes.values()].filter(
+    node =>
+      node.ref?.flatTopic == null &&
+      node.route.includes('/') &&
+      // An experimental doc is reachable only by a route its project marked
+      // as experimental (spec:AST-017 FR27): a bare name never opens one.
+      !isExperimentalTreeNode(tree, node) &&
+      (node.name?.toLowerCase() === wanted ||
+        (unstuttered != null && node.route.toLowerCase() === unstuttered)),
+  );
+  return matches.length === 1 ? {kind: 'node', node: matches[0]} : null;
+}
+
+/**
+ * `stability: 'experimental'` for a node whose doc is marked experimental, or
+ * that sits under an experimental namespace (spec:AST-017 FR27), the way help
+ * marks an experimental command; nothing for a stable one, so stable entries
+ * read as they always have.
+ * @param {DocsTree} tree
+ * @param {TreeNode} node
+ * @returns {{stability?: 'experimental'}}
+ */
+export function stabilityOf(tree, node) {
+  return isExperimentalTreeNode(tree, node) ? {stability: 'experimental'} : {};
+}
+
+/**
+ * The fields every child carries: what it is, and the route that opens it.
+ * Shared, so a child reads the same whether a namespace read or the topic
+ * list names it — including the package, which is the integration's for a
+ * guide an integration replaced, not the package whose route it took.
+ * @param {DocsTree} tree
+ * @param {TreeNode} child
+ * @returns {import('./docs.type.mjs').DocsNodeChild}
+ */
+export function childIdentity(tree, child) {
+  return {
+    route: child.route,
+    name: child.route.slice(child.route.lastIndexOf('/') + 1),
+    package: child.guideOverlay?.replacement?.package ?? child.provider,
+    // A guide an integration's doc took the place of names whose it was.
+    ...(child.guideOverlay?.replacement
+      ? {
+          replaces: child.route,
+          replacedPackage: child.guideOverlay.replacedPackage ?? child.provider,
+        }
+      : {}),
+    kind: child.kind,
+    title: child.title,
+    summary: child.summary,
+    ...stabilityOf(tree, child),
+  };
 }
 
 /**

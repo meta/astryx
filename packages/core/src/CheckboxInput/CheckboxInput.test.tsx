@@ -86,7 +86,55 @@ beforeEach(() => {
   };
 });
 
+/** A pointer press on `target`, as the press controller and React read it. */
+function pointerDown(
+  target: Element,
+  init: {pointerType: string; button: number; ctrlKey?: boolean},
+): void {
+  fireEvent.pointerDown(target, {pointerId: 1, ...init});
+  fireEvent.pointerUp(target, {pointerId: 1, ...init});
+}
+
+/** Runs `check` on macOS, where a ctrl-click is the context click. */
+function onApplePlatform(check: () => void): void {
+  Object.defineProperty(navigator, 'platform', {
+    configurable: true,
+    get: () => 'MacIntel',
+  });
+  try {
+    check();
+  } finally {
+    Reflect.deleteProperty(navigator, 'platform');
+  }
+}
+
 describe('CheckboxInput', () => {
+  it("paints a primary mouse press at once, and none for a macOS ctrl-click or a pen's barrel button", () => {
+    render(<CheckboxInput label="Accept" value={false} onChange={() => {}} />);
+    const target = screen.getByRole('checkbox');
+    const row = target.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    onApplePlatform(() =>
+      pointerDown(target, {pointerType: 'mouse', button: 0, ctrlKey: true}),
+    );
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    pointerDown(target, {pointerType: 'pen', button: 2});
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+  });
+
   it('calls onChange with new checked state when clicked', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -452,6 +500,65 @@ describe('CheckboxInput', () => {
       expect(
         document.querySelector('[data-astryx-live-region="assertive"]'),
       ).toHaveTextContent('Required field');
+    });
+  });
+
+  describe('caller handlers', () => {
+    const h = {hidden: true} as const;
+
+    it('does not run a disabled checkbox’s caller handlers other than focus and blur', () => {
+      const onKeyDown = vi.fn();
+      const onKeyUp = vi.fn();
+      const onPointerDown = vi.fn();
+      const onMouseDown = vi.fn();
+      const onFocus = vi.fn();
+      const onBlur = vi.fn();
+      render(
+        <CheckboxInput
+          label="Accept terms"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+        />,
+      );
+      const checkbox = screen.getByRole('checkbox', h);
+      fireEvent.pointerDown(checkbox);
+      fireEvent.mouseDown(checkbox);
+      fireEvent.keyDown(checkbox, {key: 'x'});
+      fireEvent.keyUp(checkbox, {key: 'x'});
+      expect(onPointerDown).not.toHaveBeenCalled();
+      expect(onMouseDown).not.toHaveBeenCalled();
+      expect(onKeyDown).not.toHaveBeenCalled();
+      expect(onKeyUp).not.toHaveBeenCalled();
+      fireEvent.focus(checkbox);
+      fireEvent.blur(checkbox);
+      expect(onFocus).toHaveBeenCalledTimes(1);
+      expect(onBlur).toHaveBeenCalledTimes(1);
+    });
+
+    it('still runs an enabled checkbox’s caller handlers', () => {
+      const onKeyDown = vi.fn();
+      const onPointerDown = vi.fn();
+      render(
+        <CheckboxInput
+          label="Accept terms"
+          value={false}
+          onChange={() => {}}
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+        />,
+      );
+      const checkbox = screen.getByRole('checkbox', h);
+      fireEvent.pointerDown(checkbox);
+      fireEvent.keyDown(checkbox, {key: 'x'});
+      expect(onPointerDown).toHaveBeenCalledTimes(1);
+      expect(onKeyDown).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -930,10 +1037,16 @@ describe('pressed state', () => {
 });
 
 describe('an indicator that paints its own press', () => {
-  it('keeps its marker internal: no public entry exports it, and the API report has no row', () => {
+  it('keeps its marker internal: no public entry exports it', () => {
     expect(Object.keys(publicMarkers)).not.toContain('indicatorPressScope');
-    const report = readFileSync('packages/core/api-report.md', 'utf8');
-    expect(report).not.toContain('indicatorPressScope');
+    // The marker's module is under src/internal, which the API surface leaves
+    // out, and the package barrel does not name it.
+    expect(
+      readFileSync('packages/core/src/CheckboxInput/CheckboxInput.tsx', 'utf8'),
+    ).toContain("from '../internal/indicatorPress.stylex'");
+    expect(readFileSync('packages/core/src/index.ts', 'utf8')).not.toContain(
+      'indicatorPress',
+    );
   });
 
   const partsOf = (container: HTMLElement) => {

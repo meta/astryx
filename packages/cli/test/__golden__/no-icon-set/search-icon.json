@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon",
-    "matchCount": 228,
+    "matchCount": 235,
     "results": [
       {
         "domain": "component",
@@ -112,6 +112,19 @@
         "mentions": []
       },
       {
+        "domain": "doc",
+        "name": "icons",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs icons component-icon-slots",
+        "parent": "astryx docs icons --index",
+        "mentions": []
+      },
+      {
         "domain": "template",
         "name": "BaseTypeaheadCustomSearch",
         "package": "@astryxdesign/core",
@@ -121,6 +134,18 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template BaseTypeaheadCustomSearch --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "BaseTypeaheadMenu",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template BaseTypeaheadMenu --type block",
         "mentions": []
       },
       {
@@ -217,30 +242,6 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template CenterInsideACard --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatComposerDrawerShowcase",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatComposerDrawerShowcase --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatComposerDrawerWithProgress",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatComposerDrawerWithProgress --type block",
         "mentions": []
       }
     ]

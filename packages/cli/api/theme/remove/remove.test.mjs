@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import {themeAdd} from '../add/add.mjs';
 import {themeRemove} from './remove.mjs';
 import {parseThemeModuleRecord} from '../../../foundation/config/theme-state.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -44,7 +45,7 @@ function installThemes() {
 }
 
 beforeEach(async () => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-theme-remove-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-theme-remove-'));
   fs.mkdirSync(path.join(tmpDir, 'src'));
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
@@ -81,14 +82,44 @@ describe('themeRemove', () => {
   it('refuses to remove the default and names theme use', async () => {
     await expect(themeRemove('ocean', {cwd: tmpDir})).rejects.toMatchObject({
       code: 'ERR_THEME_INVALID',
-      message: expect.stringContaining(' theme use <other-slug>`'),
+      message: expect.stringContaining(' theme use reef`'),
+      suggestions: [{name: expect.stringMatching(/ theme use reef$/)}],
     });
   });
 
-  it('names theme add when the slug is not added', async () => {
+  it('names theme list when no theme by that slug is available', async () => {
     await expect(themeRemove('missing', {cwd: tmpDir})).rejects.toMatchObject({
       code: 'ERR_UNKNOWN_THEME',
-      message: expect.stringContaining(' theme add missing`'),
+      message: expect.stringContaining(
+        ' theme list` for the themes you can add.',
+      ),
+      suggestions: [{name: expect.stringMatching(/ theme list$/)}],
     });
+  });
+
+  it('names theme add when an available theme is not added', async () => {
+    await expect(themeRemove('butter', {cwd: tmpDir})).rejects.toMatchObject({
+      code: 'ERR_UNKNOWN_THEME',
+      message: expect.stringContaining(' theme add butter`'),
+      suggestions: [{name: expect.stringMatching(/ theme add butter$/)}],
+    });
+  });
+
+  it('still refuses to remove the default when its source is gone, and names theme use', async () => {
+    fs.rmSync(path.join(tmpDir, 'node_modules/@acme/themes/themes/ocean'), {
+      recursive: true,
+    });
+    await expect(themeRemove('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message: expect.stringContaining(' theme use reef`'),
+    });
+  });
+
+  it('removes a non-default theme whose source is gone', async () => {
+    fs.rmSync(path.join(tmpDir, 'node_modules/@acme/themes/themes/reef'), {
+      recursive: true,
+    });
+    const result = await themeRemove('reef', {cwd: tmpDir});
+    expect(result.data.themes.map(theme => theme.slug)).toEqual(['ocean']);
   });
 });

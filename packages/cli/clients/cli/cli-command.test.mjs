@@ -6,7 +6,7 @@
  * bare.
  */
 
-import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -18,6 +18,7 @@ import {
 } from '../../foundation/env/cli-command.mjs';
 import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {loadProjectForHelp} from './index.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const BIN = path.resolve(import.meta.dirname, 'bin', 'astryx.mjs');
 
@@ -26,7 +27,7 @@ let tmpDir;
 
 beforeEach(() => {
   // Repo-local, so Vite permits importing the integration manifest.
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-cli-command-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-cli-command-'));
 });
 
 afterEach(() => {
@@ -61,7 +62,8 @@ describe("an integration's cliCommand", () => {
     appWithIntegration('acme astryx');
     const {status, stderr} = await runCli(['theme', 'remove', 'nope'], tmpDir);
     expect(status).toBe(1);
-    expect(stderr).toContain('`acme astryx theme add nope`');
+    // No theme is called nope, so the hint names the list, through the integration's command.
+    expect(stderr).toContain('`acme astryx theme list`');
   });
 });
 
@@ -71,6 +73,16 @@ describe('the setup nudge in a project with no CLI of its own', () => {
     const app = fs.mkdtempSync(
       path.join(os.tmpdir(), 'astryx-cli-command-nudge-'),
     );
+    // The reminder prints once a day per project and never under CI: give
+    // this run its own per-user state, outside CI.
+    const stateHome = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-cli-command-state-'),
+    );
+    vi.stubEnv('HOME', stateHome);
+    vi.stubEnv('USERPROFILE', stateHome);
+    vi.stubEnv('XDG_CONFIG_HOME', stateHome);
+    vi.stubEnv('APPDATA', stateHome);
+    vi.stubEnv('CI', '');
     try {
       // Only Core, of another release than the CLI that answers, an
       // integration declaring cliCommand, and no agent docs yet.
@@ -105,7 +117,9 @@ describe('the setup nudge in a project with no CLI of its own', () => {
         'Next step: run `npm install @astryxdesign/cli@0.0.1`, then `acme astryx init`',
       );
     } finally {
+      vi.unstubAllEnvs();
       fs.rmSync(app, {recursive: true, force: true});
+      fs.rmSync(stateHome, {recursive: true, force: true});
     }
   });
 });

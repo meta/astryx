@@ -22,16 +22,47 @@
 // the bin is invoked (symlink, copy, or Windows shim). Uses only built-ins, so
 // the version gate below still runs first.
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {realpathSync} from 'node:fs';
 import {dirname, join} from 'node:path';
+import * as nodeModule from 'node:module';
+import {existsSync, mkdirSync, realpathSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {
+  currentUid,
+  isPrivateDir,
+} from '../../../foundation/env/private-dir.mjs';
+
+// Node's compile cache keeps the compiled form of the CLI's modules between
+// runs, so a run skips most of their compiling. It lives in a folder of the
+// user's own in the system temp folder (node-compile-cache-<uid>). It is used
+// only once that folder exists, so a machine's first run just makes it and a
+// one-off run never pays to write the cache; and only while it is a real
+// folder the user owns that no one else can reach, since a shared folder
+// could hold planted cache files (foundation/env/private-dir.mjs, the check
+// the kept search catalogs use too). Where the system has no user ids
+// (Windows), ownership cannot be checked, so the cache stays off.
+// NODE_DISABLE_COMPILE_CACHE turns it off. It is best effort: a cache Node
+// cannot read or write is skipped, and nothing about it is printed.
+try {
+  const uid = currentUid();
+  if (!process.env.NODE_DISABLE_COMPILE_CACHE && uid != null) {
+    const cacheDir = join(tmpdir(), `node-compile-cache-${uid}`);
+    if (!existsSync(cacheDir)) {
+      mkdirSync(cacheDir, {mode: 0o700});
+    } else if (isPrivateDir(cacheDir)) {
+      nodeModule.enableCompileCache?.(cacheDir);
+    }
+  }
+} catch {
+  // A run without the cache is the same run, only slower.
+}
 
 const binDir = dirname(realpathSync(fileURLToPath(import.meta.url)));
 /** @param {string} rel */
-const importSrc = rel =>
-  import(pathToFileURL(join(binDir, '..', rel)).href);
+const importSrc = rel => import(pathToFileURL(join(binDir, '..', rel)).href);
 
-const {isNodeVersionSupported, unsupportedNodeMessage} =
-  await importSrc('../../foundation/env/node-version.mjs');
+const {isNodeVersionSupported, unsupportedNodeMessage} = await importSrc(
+  '../../foundation/env/node-version.mjs',
+);
 
 if (!isNodeVersionSupported(process.versions.node)) {
   const msg = unsupportedNodeMessage(process.versions.node);
@@ -59,7 +90,12 @@ if (!isNodeVersionSupported(process.versions.node)) {
 // does it load and dispatch the command. See clients/cli/run.mjs,
 // foundation/release/handoff.mjs, and spec AST-081 FR2 and FR9.
 const {runCli} = await importSrc('run.mjs');
-await runCli({
-  cliRoot: join(binDir, '..', '..', '..'),
-  argv: process.argv.slice(2),
-});
+const {recordRunFor} = await importSrc('../../foundation/fs/gather-cache.mjs');
+// A search or build records what it reads, so a later run with the same
+// inputs can reuse its gathered catalog (foundation/fs/gather-cache.mjs).
+await recordRunFor(process.argv.slice(2), () =>
+  runCli({
+    cliRoot: join(binDir, '..', '..', '..'),
+    argv: process.argv.slice(2),
+  }),
+);
