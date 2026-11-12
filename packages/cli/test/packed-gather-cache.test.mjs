@@ -1244,6 +1244,50 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     }
   }, 120_000);
 
+  it.skipIf(process.getuid?.() === 0)(
+    'lets doctor answer the same, silently, when its cache cannot be written',
+    () => {
+      const other = makeProject();
+      /** @param {string} tmp @param {string} [mode] */
+      const doctor = (tmp, mode) => {
+        const catalogs = path.join(tmp, CACHE_NAME);
+        fs.mkdirSync(catalogs, {recursive: true, mode: 0o700});
+        if (mode === 'folder') fs.chmodSync(catalogs, 0o500);
+        if (mode === 'tree') {
+          fs.chmodSync(catalogs, 0o500);
+          fs.chmodSync(path.dirname(catalogs), 0o500);
+        }
+        try {
+          const r = run(['doctor'], {tmp, cwd: other.dir});
+          return {
+            status: r.status,
+            stderr: r.stderr,
+            // The cache row counts what the folder holds, which a write
+            // earlier in the run adds to: the rest must match exactly.
+            stdout: r.stdout
+              .split(tmp)
+              .join('<tmp>')
+              .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+          };
+        } finally {
+          fs.chmodSync(path.dirname(catalogs), 0o700);
+          fs.chmodSync(catalogs, 0o700);
+        }
+      };
+      try {
+        const writable = doctor(freshTmp());
+        expect(writable.status).toBe(0);
+        // An unwritable cache folder, and a cache whose whole tree is read
+        // only: doctor neither fails nor warns, and says the same.
+        expect(doctor(freshTmp(), 'folder')).toEqual(writable);
+        expect(doctor(freshTmp(), 'tree')).toEqual(writable);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    120_000,
+  );
+
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
     const notAFolder = path.join(work, 'tmp', 'file-tmp');
