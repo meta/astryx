@@ -51,8 +51,31 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {boolean} bodyFontReachesHeadings - Whether `font X --on body` also changes the heading font in this release.
  * @property {import('./_settings.mjs').ThemeData} data
  * @property {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string}} check
  */
+
+/**
+ * The theme's own token values in each mode: the base theme's, with the
+ * theme's settings applied (a whole-theme corners setting, an exact
+ * token), as `compile` builds them.
+ * @param {any} compiled
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @returns {{light: Record<string, string>, dark: Record<string, string>}}
+ */
+function ownTokens(compiled, base) {
+  const out = {light: {...base.light}, dark: {...base.dark}};
+  for (const [k, v] of Object.entries(compiled?.tokens ?? {})) {
+    const pair = Array.isArray(v)
+      ? v
+      : v && typeof v === 'object'
+        ? [/** @type {any} */ (v).light, /** @type {any} */ (v).dark]
+        : [v, v];
+    if (typeof pair[0] === 'string') out.light[k] = pair[0];
+    if (typeof pair[1] === 'string') out.dark[k] = pair[1];
+  }
+  return out;
+}
 
 /**
  * The theme an answer's commands are for: the one named, the only one, or
@@ -155,6 +178,7 @@ export async function howTheme(ctx, cwd, name) {
           : 'last-changed',
     data: theme,
     base,
+    own: ownTokens(compileTheme(ctx, theme, base), base),
     undoSteps: exists
       ? readHistory(themeFiles(cwd, slug).history).steps.length
       : 0,
@@ -162,8 +186,10 @@ export async function howTheme(ctx, cwd, name) {
     check(steps) {
       /** @type {import('./_settings.mjs').ThemeData} */
       const d = JSON.parse(JSON.stringify(theme));
+      // The checks set runs read the base theme's values (the corner rungs).
+      const checkCtx = /** @type {any} */ ({...ctx, base});
       try {
-        for (const st of steps) apply(ctx, slug, d, st);
+        for (const st of steps) apply(checkCtx, slug, d, st);
         if (compiled(d) === before)
           return {
             ok: false,

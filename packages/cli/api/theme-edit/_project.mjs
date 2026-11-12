@@ -322,6 +322,34 @@ export function importPathOf(project, name) {
 }
 
 /**
+ * The built module of a base's theme package, resolved the way the theme
+ * resolves it: from the project (an open project, or its folder, relative
+ * or not). Null when it is not installed there. The one base resolution:
+ * `new`, `set base`, `how` and every suggestion ask this.
+ * @param {ThemeProject | string} from
+ * @param {string} like
+ * @returns {string | null}
+ */
+export function baseModule(from, like) {
+  const req =
+    typeof from === 'string'
+      ? createRequire(path.join(path.resolve(from), 'noop.js'))
+      : from.req;
+  try {
+    return req.resolve(`@astryxdesign/theme-${like}/built`);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a base's theme package is installed in the project.
+ * @param {ThemeProject | string} from
+ * @param {string} like
+ */
+export const baseInstalled = (from, like) => baseModule(from, like) != null;
+
+/**
  * The built-in theme package for a base, or a refusal naming its install line.
  * @param {ThemeProject} project
  * @param {string} like
@@ -329,15 +357,13 @@ export function importPathOf(project, name) {
  */
 export function baseThemeFile(project, like) {
   const pkg = `@astryxdesign/theme-${like}`;
-  try {
-    return project.req.resolve(`${pkg}/built`);
-  } catch {
-    throw new AstryxError(
-      `The ${like} theme is not installed, so a theme cannot build on it. Install ${pkg}, or build on no theme. Nothing was changed.`,
-      [{name: installLine(project.cwd, [pkg]), reason: 'install it'}],
-      ERROR_CODES.ERR_UNKNOWN_THEME,
-    );
-  }
+  const file = baseModule(project, like);
+  if (file) return file;
+  throw new AstryxError(
+    `The ${like} theme is not installed, so a theme cannot build on it. Install ${pkg}, or build on no theme. Nothing was changed.`,
+    [{name: installLine(project.cwd, [pkg]), reason: 'install it'}],
+    ERROR_CODES.ERR_UNKNOWN_THEME,
+  );
 }
 
 /**

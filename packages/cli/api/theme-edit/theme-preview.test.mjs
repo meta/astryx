@@ -318,6 +318,12 @@ describe('the components page', () => {
       '.tp-fill{flex:1 1 100%;max-height:300px;overflow:auto}',
     );
     expect(page).toContain('align-items:start}');
+    // Pieces of a table render only inside a table.
+    expect(page).not.toContain('<Safe name="TableBody">');
+    // The route renders its pages only in the browser.
+    expect(read('src/app/theme-preview/page.tsx')).toContain(
+      '{ready ? <current.Page /> : null}',
+    );
     // A part that only draws a line fills its row.
     expect(page).toMatch(
       /<div className="tp-item tp-fill">\s*<Safe name="Divider">/,
