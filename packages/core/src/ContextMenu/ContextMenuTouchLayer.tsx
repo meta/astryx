@@ -75,16 +75,11 @@ export function ContextMenuTouchLayer({
   // Whether the recognizer follows a finger or a pen now. It is set below,
   // where the recognizer exists.
   const isFollowedRef = useRef<() => boolean>(() => false);
-  // When the finger the recognizer follows landed, for the growth's onset.
-  const landedAtRef = useRef<() => number | null>(() => null);
-  const followsFingerRef = useRef<() => boolean>(() => false);
   const feedback = useContextMenuPressFeedback(
     triggerRef,
     visualRef,
     isShown,
     isFollowedRef,
-    landedAtRef,
-    followsFingerRef,
   );
   const feedbackRef = useRef(feedback);
   feedbackRef.current = feedback;
@@ -111,15 +106,13 @@ export function ContextMenuTouchLayer({
           onCancelRef.current?.();
         }
       });
-      // A finger's growth counts from the landing the recognizer records as
-      // it takes the touch. A pen's press waits for the press machine's mark.
+      // A finger's or a pen's growth counts from the landing the recognizer
+      // records as it takes the contact.
       recognizer.onPressBegan = (touch, time) => {
-        if (touch.pointerType === 'touch') {
-          feedbackRef.current.begin(
-            time,
-            isElement(touch.target) ? touch.target : null,
-          );
-        }
+        feedbackRef.current.begin(
+          time,
+          isElement(touch.target) ? touch.target : null,
+        );
       };
       return recognizer;
     },
@@ -164,10 +157,6 @@ export function ContextMenuTouchLayer({
 
   isFollowedRef.current = () =>
     recognizer.numberOfTouches > 0 && !isTerminal(recognizer.state);
-  landedAtRef.current = () => recognizer.press?.time ?? null;
-  followsFingerRef.current = () =>
-    isFollowedRef.current() &&
-    recognizer.trackedTouches[0]?.pointerType === 'touch';
 
   useImperativeHandle(
     ref,
