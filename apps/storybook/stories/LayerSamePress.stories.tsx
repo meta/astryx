@@ -5,8 +5,9 @@
  * @input DropdownMenu, ContextMenu, Popover and BottomSheet from
  *   @astryxdesign/core
  * @output A story whose menu rows open a layer as they act: a Popover, a
- *   BottomSheet, and a Popover nested in an open Popover. The rows act at
- *   the press's release, so the release must not close the layer it opened
+ *   Popover with a text field, a BottomSheet, and a Popover nested in an open
+ *   Popover. The rows act at the press's release, so the release must not
+ *   close the layer it opened, and the text field takes focus within the tap
  * @position Fixture for Layer/__tests__/LayerSamePress.interaction.browser.spec.ts
  */
 
@@ -17,6 +18,7 @@ import {ContextMenu} from '@astryxdesign/core/ContextMenu';
 import {Popover} from '@astryxdesign/core/Popover';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
+import {TextInput} from '@astryxdesign/core/TextInput';
 
 const meta: Meta = {
   title: 'Core/Layer Same Press',
@@ -59,6 +61,8 @@ function AnchoredPopover({
 
 function SamePressDemo() {
   const [isItemPopoverOpen, setItemPopoverOpen] = useState(false);
+  const [isRenameOpen, setRenameOpen] = useState(false);
+  const [name, setName] = useState('');
   const [isSheetOpen, setSheetOpen] = useState(false);
   const [isContextPopoverOpen, setContextPopoverOpen] = useState(false);
   const [isParentOpen, setParentOpen] = useState(false);
@@ -78,6 +82,21 @@ function SamePressDemo() {
           <DropdownMenuItem
             label="Open sheet"
             onClick={() => setSheetOpen(true)}
+          />
+        </DropdownMenu>
+      </AnchoredPopover>
+
+      <AnchoredPopover
+        label="Rename popover"
+        isOpen={isRenameOpen}
+        onOpenChange={setRenameOpen}
+        content={
+          <TextInput label="New name" value={name} onChange={setName} />
+        }>
+        <DropdownMenu button={{label: 'More'}}>
+          <DropdownMenuItem
+            label="Rename"
+            onClick={() => setRenameOpen(true)}
           />
         </DropdownMenu>
       </AnchoredPopover>
