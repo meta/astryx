@@ -908,6 +908,23 @@ export async function editorThemeHold(files, {cwd}) {
 }
 
 /**
+ * For `compile` of a file that is not there: when it is an editor theme's
+ * own source (`themes/<t>/<t>.theme.ts` beside its settings), the command
+ * that writes it again; null otherwise.
+ * @param {string} file the path as given
+ * @param {string} cwd
+ * @returns {{name: string, reason: string} | null}
+ */
+export function editorMissingSource(file, cwd) {
+  const at = editorThemeAt(projectRoot(cwd), path.resolve(cwd, file));
+  if (!at || path.basename(file) !== `${at.slug}.theme.ts`) return null;
+  return {
+    name: runLine(cwd, `experimental theme editor show ${at.slug}`),
+    reason: `the editor writes ${at.slug}.theme.ts again from its settings`,
+  };
+}
+
+/**
  * `theme template` for the experimental command: in a folder the theme
  * editor made, only the editor's own files are protected.
  * @param {{targetPath?: string, overwrite?: boolean, cwd?: string}} options

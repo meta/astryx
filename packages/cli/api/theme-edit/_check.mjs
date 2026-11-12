@@ -9,6 +9,7 @@
  * @position api/theme-edit — checks over the part data
  */
 
+import {AstryxError} from '../error.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {partForWord} from './_how-question.mjs';
@@ -266,7 +267,11 @@ function typedPlain(v) {
  * @param {string} value
  */
 function valueMeant(type, value) {
+  // `!important` is not part of a token's value (the theme places its
+  // rules itself): the value without it.
   let p = typedPlain(value)
+    .replace(/;+\s*$/, '')
+    .replace(/\s*!\s*important\s*$/i, '')
     .replace(/;+\s*$/, '')
     .trim();
   const q = /^(["'])(.*)\1$/.exec(p);
@@ -629,7 +634,7 @@ function checkTypedValue(
   if (!isSafeValue(value))
     refuse(
       E.ERR_THEME_BAD_VALUE,
-      `"${value}" cannot be a CSS value: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote.`,
+      `"${value}" cannot be a CSS value: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote.${/!\s*important/i.test(value) ? ' !important is not used: the theme places its own rules.' : ''}`,
       {
         run: [
           `${P} set ${slug} ${name} ${quoteCommandArgument(meant() ?? exampleOf(type, name))}`,
@@ -1204,6 +1209,58 @@ function baseReads(ctx, like, token) {
  * @returns {import('./_settings.mjs').Setting}
  */
 export function checkSetting(
+  ctx,
+  slug,
+  data,
+  thing,
+  value,
+  flags,
+  unset = false,
+) {
+  // The font dial's value as pasted from a stylesheet (`Georgia, serif;`,
+  // a comment, `!important`): a refusal suggests the font it names, when
+  // set takes that.
+  if (thing === 'font' && !unset && typeof value === 'string') {
+    const meant = typedPlain(value)
+      .replace(/;+\s*$/, '')
+      .replace(/\s*!\s*important\s*$/i, '')
+      .replace(/;+\s*$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (meant && meant !== value.trim())
+      try {
+        return checkSettingAsTyped(ctx, slug, data, thing, value, flags);
+      } catch (e) {
+        try {
+          checkSettingAsTyped(ctx, slug, data, thing, meant, flags);
+        } catch {
+          throw e;
+        }
+        if (e instanceof AstryxError)
+          e.suggestions = [
+            {
+              name: `${P} set ${slug} font ${quoteCommandArgument(meant)}${flags.on ? ` --on ${quoteCommandArgument(flags.on)}` : ''}`,
+              reason: 'do this instead',
+            },
+          ];
+        throw e;
+      }
+  }
+  return checkSettingAsTyped(ctx, slug, data, thing, value, flags, unset);
+}
+
+/**
+ * checkSetting for the value as typed.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} thing
+ * @param {string | undefined} value
+ * @param {SetFlags} flags
+ * @param {boolean} [unset]
+ * @returns {import('./_settings.mjs').Setting}
+ */
+function checkSettingAsTyped(
   ctx,
   slug,
   data,

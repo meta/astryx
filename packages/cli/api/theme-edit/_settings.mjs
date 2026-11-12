@@ -3738,6 +3738,9 @@ export function builtFiles(cwd, slug, data, some = false) {
     : [];
   return [
     f.settingsTs,
+    // The theme's own source: the editor writes it once, and every build
+    // reads it, so one deleted by hand is written again.
+    f.ts,
     f.css,
     f.js,
     path.join(f.dir, `${slug}.d.ts`),
@@ -3909,7 +3912,14 @@ export async function commitTheme(
   // A no-op change still mends a build that does not match the settings
   // (an undo stopped part way): it is built again, with no new step.
   const noop = history && same(parseSettings(snapBefore));
-  if (noop && fs.existsSync(f.js) && !staleBuild(cwd, slug, data))
+  const stale =
+    noop && fs.existsSync(f.js) ? staleBuild(cwd, slug, data) : null;
+  // The no-op that mends one says what it built again.
+  if (noop && stale)
+    notes.push(
+      `the build was not current (${stale}), so it was built again from the settings`,
+    );
+  if (noop && fs.existsSync(f.js) && !stale)
     return {
       changed: [],
       res: {light: {}, dark: {}},

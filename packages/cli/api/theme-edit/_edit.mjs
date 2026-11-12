@@ -1294,6 +1294,16 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
     );
     dialTokens = touched;
   }
+  // A role font (font X --on heading) writes --font-family-<role>: an exact
+  // setting of that token wins over it.
+  if (sub === 'set' && s.thing === 'font' && s.on && FONT_ROLES.includes(s.on))
+    exactWins = data.settings.filter(
+      x =>
+        x.source === 'token' &&
+        !x.on &&
+        !x.when &&
+        x.thing === `--font-family-${s.on}`,
+    );
   const kept =
     sub === 'set' && s.source === 'dial' && !s.on
       ? [
@@ -1302,12 +1312,32 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
         ].map(describe)
       : [];
   // The role fonts a whole-theme font sits under.
+  // An exact --font-family-<role> wins over both: that role is named by
+  // the exact note instead.
+  /** @param {string} role */
+  const exactFamily = role =>
+    data.settings.find(
+      x =>
+        x.source === 'token' &&
+        !x.on &&
+        !x.when &&
+        x.thing === `--font-family-${role}`,
+    );
   const roleOver =
     sub === 'set' && s.thing === 'font' && !s.on
       ? data.settings.filter(
-          x => x.thing === 'font' && x.on && ['body', 'heading'].includes(x.on),
+          x =>
+            x.thing === 'font' &&
+            x.on &&
+            ['body', 'heading'].includes(x.on) &&
+            !exactFamily(x.on),
         )
       : [];
+  if (sub === 'set' && s.thing === 'font' && !s.on)
+    for (const role of FONT_ROLES) {
+      const exact = exactFamily(role);
+      if (exact && !exactWins.includes(exact)) exactWins.push(exact);
+    }
   // The exact property a dial on a part competes with there.
   const DIAL_PROPERTY = wordTable(
     /** @type {Record<string, RegExp>} */ ({
@@ -1352,7 +1382,7 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
     ...(exactWins.length
       ? [
-          `keeps your exact ${exactWins.map(describe).join(', ')}: an exact setting wins over a dial, so ${exactWins.length > 1 ? 'those do' : 'that does'} not change`,
+          `keeps your exact ${exactWins.map(describe).join(', ')}: an exact setting wins over a dial, so ${exactWins.length > 1 ? 'those do' : 'that does'} not change; this shows after \`${P} undo ${slug} ${exactWins.map(x => undoArgs(x)).join(`\` and \`${P} undo ${slug} `)}\``,
         ]
       : []),
     ...(covers.length
@@ -1978,6 +2008,22 @@ function dialWrites(ctx, data, dial, base) {
  * @returns {string}
  */
 function nowApplies(ctx, data, removed, base) {
+  // A role font removed under an exact --font-family-<role>: that token is
+  // what shows there.
+  if (
+    removed.thing === 'font' &&
+    removed.on &&
+    FONT_ROLES.includes(removed.on)
+  ) {
+    const exact = data.settings.find(
+      x =>
+        x.source === 'token' &&
+        !x.on &&
+        !x.when &&
+        x.thing === `--font-family-${removed.on}`,
+    );
+    if (exact) return describe(exact);
+  }
   // A token a dial still writes (an accent color feeds --color-accent):
   // name that dial.
   if (removed.source === 'token' && !removed.on) {
@@ -2147,9 +2193,11 @@ function dialTouched(ctx, data, s, base) {
   for (const r of FONT_ROLES)
     if (differs(withDial.typography?.[r], without.typography?.[r]))
       touched.add(`--font-family-${r}`);
+  // The type scale feeds every font size and every role size (body,
+  // headings, labels): an exact one of those keeps its text as it is.
   if (differs(withDial.typography?.scale, without.typography?.scale))
     for (const k of Object.keys(ctx.project.core.tokenDefaults ?? {}))
-      if (/^--font-size-/.test(k)) touched.add(k);
+      if (/^--(font-size-|text-[a-z0-9-]+-size$)/.test(k)) touched.add(k);
   return touched;
 }
 
