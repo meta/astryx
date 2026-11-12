@@ -7,7 +7,8 @@
  * @input Uses @lexical/react (composer context), @lexical/code (CodeNode), and
  *   lexical.
  * @output Exports CodePastePlugin, which makes rich content pasted or dropped
- *   into a code block go in as plain lines of code.
+ *   into a code block go in as plain lines of code, and $startsInCodeBlock,
+ *   which TablePastePlugin uses to leave such a paste to it.
  * @position Rendered by RichTextEditor; always on; not exported. A paste
  *   whose selection starts in a code block goes in as plain text: the
  *   clipboard's plain text, or else one line per pasted block.
@@ -38,7 +39,7 @@ import {
 const RICH_TYPES = ['text/html', 'application/x-lexical-editor'];
 
 /** Whether content inserted at the selection lands in a code block. */
-function $startsInCodeBlock(
+export function $startsInCodeBlock(
   selection: BaseSelection | null,
 ): selection is RangeSelection {
   if (!$isRangeSelection(selection)) {
