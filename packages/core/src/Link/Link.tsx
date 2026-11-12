@@ -39,6 +39,7 @@ import type {
   TextDisplay,
 } from '../theme/types';
 import {useLinkComponent} from './useLinkComponent';
+import {useLinkFocus} from './useLinkFocus';
 import type {LinkComponentType} from './types';
 import {mergeProps} from '../utils';
 import {computeTargetAndRel} from './computeTargetAndRel';
@@ -314,6 +315,7 @@ export function Link({
   className,
   style,
   ref,
+  tabIndex,
   ...props
 }: LinkProps) {
   // Constant marker props; the hook's only effect is installing the shared
@@ -323,7 +325,9 @@ export function Link({
   const t = useTranslator();
   const newTabLabel = newTabLabelFromProps ?? t('@astryx.link.newTab');
   const LinkComponent = useLinkComponent(as);
-  const role = useInteractiveRole({href, onClick, isDisabled});
+  // Disabled changes operability, not the semantic role.
+  const role = useInteractiveRole({href, onClick});
+  const contentRef = useLinkFocus(isDisabled);
   // Determine target and rel based on isExternalLink
   const {target, rel} = computeTargetAndRel(
     isExternalLink ? '_blank' : targetFromProps,
@@ -338,6 +342,7 @@ export function Link({
   const sharedContent = (
     <>
       <Text
+        ref={contentRef}
         type={type}
         size={size}
         weight={weight}
@@ -362,6 +367,7 @@ export function Link({
       <button
         ref={ref as React.Ref<HTMLButtonElement>}
         type="button"
+        tabIndex={tabIndex}
         onClick={onClick}
         {...(isDisabled ? undefined : pressable)}
         aria-label={label || undefined}
@@ -392,8 +398,8 @@ export function Link({
     );
   } else if (isDisabled) {
     // A disabled link renders as an <a> with no href, so nothing can navigate
-    // and the consumer onClick never fires. It keeps a Tab stop and the link
-    // role so keyboard and screen-reader users still find it (spec:AST-085
+    // and the consumer onClick never fires. It keeps its tab eligibility and
+    // link role so keyboard and screen-reader users still find it (spec:AST-085
     // FR1, FR5). The router LinkComponent is deliberately skipped — a disabled
     // link performs no navigation, and custom router links may require a live
     // href. target/rel are omitted with the href.
@@ -403,7 +409,7 @@ export function Link({
         role="link"
         aria-label={label || undefined}
         aria-disabled={true}
-        tabIndex={0}
+        tabIndex={tabIndex ?? 0}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
@@ -434,7 +440,7 @@ export function Link({
         {...(isDisabled ? undefined : pressable)}
         aria-label={label || undefined}
         aria-disabled={isDisabled || undefined}
-        tabIndex={isDisabled ? -1 : undefined}
+        tabIndex={tabIndex}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
