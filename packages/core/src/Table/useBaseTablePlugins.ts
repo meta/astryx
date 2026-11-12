@@ -36,8 +36,8 @@
  * - /packages/core/src/Table/Table.tsx (primary consumer)
  */
 
-import {useRef} from 'react';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useEffect, useRef} from 'react';
+import {internByIdentity} from './internByIdentity';
 import type {TablePlugin} from './types';
 import {devWarn} from '../utils/devWarning';
 
@@ -171,7 +171,8 @@ function validatePlugin<T extends Record<string, unknown>>(
  *
  * @param basePlugins - Stable array of built-in plugins (e.g. Astryx style plugin)
  * @param userPlugins - Named plugin record from the consumer
- * @returns Stable array of plugins suitable for BaseTable
+ * @returns Stable array of plugins suitable for BaseTable. Every caller with
+ *   the same plugins gets this one array, so treat it as read-only.
  *
  * @example
  * ```
@@ -183,31 +184,26 @@ export function useBaseTablePlugins<T extends Record<string, unknown>>(
   basePlugins: TablePlugin<T>[],
   userPlugins: Record<string, TablePlugin<T>> | undefined,
 ): TablePlugin<T>[] {
-  // Only a committed render writes this cache. A render React discards cannot
-  // replace it.
-  const prevRef = useRef<{
-    basePlugins: TablePlugin<T>[];
-    userPlugins: Record<string, TablePlugin<T>> | undefined;
-    result: TablePlugin<T>[];
-  } | null>(null);
-  const prev = prevRef.current;
-  const result =
-    prev != null &&
-    prev.basePlugins === basePlugins &&
-    arePluginRecordsEqual(prev.userPlugins, userPlugins)
-      ? prev.result
-      : mergePlugins(basePlugins, userPlugins);
+  // Every render with the same merged plugins, in the same order, gets one
+  // array, so a render React discards cannot leave another. No state or ref
+  // is written during render.
+  const result = internByIdentity(mergePlugins(basePlugins, userPlugins));
 
-  // Syncs the plugin cache with the committed plugins. It validates them only
-  // when the committed array changes, so each warning prints once.
-  useIsomorphicLayoutEffect(() => {
-    if (prevRef.current?.result !== result && userPlugins) {
+  // The array the dev console last validated.
+  const validatedRef = useRef<TablePlugin<T>[] | null>(null);
+  // Syncs the dev console's plugin warnings with the committed plugins. Each
+  // array is validated once, so a StrictMode replay prints nothing more.
+  useEffect(() => {
+    if (validatedRef.current === result) {
+      return;
+    }
+    validatedRef.current = result;
+    if (userPlugins) {
       for (const [name, plugin] of Object.entries(userPlugins)) {
         validatePlugin(name, plugin);
       }
     }
-    prevRef.current = {basePlugins, userPlugins, result};
-  });
+  }, [result, userPlugins]);
   return result;
 }
 
@@ -223,35 +219,4 @@ function mergePlugins<T extends Record<string, unknown>>(
     : [];
 
   return [...basePlugins, ...sortedUserPlugins];
-}
-
-/**
- * Compares two plugin records by checking that they have the same keys
- * and each key maps to the same plugin instance (by reference).
- */
-function arePluginRecordsEqual<T extends Record<string, unknown>>(
-  a: Record<string, TablePlugin<T>> | undefined,
-  b: Record<string, TablePlugin<T>> | undefined,
-): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (a == null || b == null) {
-    return false;
-  }
-
-  const keysA = Object.keys(a);
-  const keysB = Object.keys(b);
-
-  if (keysA.length !== keysB.length) {
-    return false;
-  }
-
-  for (const key of keysA) {
-    if (a[key] !== b[key]) {
-      return false;
-    }
-  }
-
-  return true;
 }
