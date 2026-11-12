@@ -23,6 +23,7 @@ import {
   belowRange,
   fontShorthandParts,
   cssProperties,
+  familyListMeant,
   grammarText,
   initialOf,
   keywordsOf,
@@ -260,6 +261,30 @@ function typedPlain(v) {
 }
 
 /**
+ * A font pasted as a declaration (`font-family: Georgia, serif;`, from
+ * devtools or a stylesheet), as the family list it names; a `font:`
+ * shorthand gives its family. Null when the value is not a pasted
+ * declaration.
+ * @param {string} v
+ * @returns {string | null}
+ */
+export function pastedFont(v) {
+  const plain = typedPlain(v);
+  const m = /^(font-family|font)\s*:\s*(.*)$/i.exec(plain);
+  if (!m) return null;
+  const rest = m[2]
+    .replace(/;+\s*$/, '')
+    .replace(/\s*!\s*important\s*$/i, '')
+    .replace(/;+\s*$/, '')
+    .trim();
+  if (m[1].toLowerCase() === 'font-family') return rest || null;
+  const parts = fontShorthandParts(rest);
+  return parts && typeof parts['font-family'] === 'string'
+    ? parts['font-family']
+    : null;
+}
+
+/**
  * The values a value may have meant, when what is wrong is how it was
  * typed: plain (full-width characters, comments and a trailing `;` gone,
  * quotes around a whole non-font value dropped), and for a font list each
@@ -271,7 +296,12 @@ function typedPlain(v) {
 function valueMeant(type, value) {
   // `!important` is not part of a token's value (the theme places its
   // rules itself): the value without it.
-  let p = typedPlain(value)
+  /** @type {string} */
+  let p = (
+    type === 'font' || type === 'font-family'
+      ? (pastedFont(value) ?? value)
+      : typedPlain(value)
+  )
     .replace(/;+\s*$/, '')
     .replace(/\s*!\s*important\s*$/i, '')
     .replace(/;+\s*$/, '')
@@ -279,13 +309,17 @@ function valueMeant(type, value) {
   const q = /^(["'])(.*)\1$/.exec(p);
   if (q && type !== 'font') p = q[2].trim();
   const out = [p];
-  if (type === 'font' || type === 'font-family')
-    out.push(
-      p
-        .split(',')
-        .map(f => cssFamily(f.trim().replace(/^["']|["']$/g, ''), true))
-        .join(', '),
-    );
+  if (type === 'font' || type === 'font-family') {
+    // A comma left out between families (`"Open Sans" serif`), read with
+    // css-tree.
+    const listed = familyListMeant(p);
+    if (listed) out.push(listed);
+    // Each family quoted as CSS needs it, only when no family holds a
+    // quote inside (the pieces are whole names).
+    const pieces = p.split(',').map(f => f.trim().replace(/^["']|["']$/g, ''));
+    if (!listed && pieces.every(f => !/["'\\]/.test(f)))
+      out.push(pieces.map(f => cssFamily(f, true)).join(', '));
+  }
   return [...new Set(out)].filter(x => x && x !== value.trim());
 }
 
@@ -1233,6 +1267,16 @@ export function checkSetting(
   // The font dial's value as pasted from a stylesheet (`Georgia, serif;`,
   // a comment, `!important`): a refusal suggests the font it names, when
   // set takes that.
+  // A font pasted with its property name is the family list it names.
+  if (
+    !unset &&
+    typeof value === 'string' &&
+    (thing === 'font' ||
+      (thing.startsWith('--') && ctx.C.typeOf(thing) === 'font'))
+  ) {
+    const pasted = pastedFont(value);
+    if (pasted) value = pasted;
+  }
   if (thing === 'font' && !unset && typeof value === 'string') {
     const meant = typedPlain(value)
       .replace(/;+\s*$/, '')
@@ -1259,7 +1303,33 @@ export function checkSetting(
         throw e;
       }
   }
-  return checkSettingAsTyped(ctx, slug, data, thing, value, flags, unset);
+  const s = checkSettingAsTyped(ctx, slug, data, thing, value, flags, unset);
+  // A var() with a fallback always gives a value; a name one slip from a
+  // design token is noted as a likely typo, and the setting stands.
+  if (!unset && typeof value === 'string' && !s.note) {
+    const typo = fallbackVarTypo(value, ctx.project.core.tokenDefaults ?? {});
+    if (typo) s.note = typo;
+  }
+  return s;
+}
+
+/**
+ * A note for a var() with a fallback whose name is a letter or two off a
+ * design token (`var(--spacing-xl, 2rem)` when the token is `--spacing-x1`):
+ * the fallback shows until it is fixed. Null when there is none.
+ * @param {string} v
+ * @param {Record<string, unknown>} TOKENS
+ */
+function fallbackVarTypo(v, TOKENS) {
+  for (const [, name] of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*,/gi)) {
+    if (name in TOKENS || name.startsWith('--_')) continue;
+    const near = nearest(name, Object.keys(TOKENS)).filter(
+      n => levenshteinDistance(n, name) <= 2,
+    );
+    if (near.length)
+      return `${name} is not a design token, so its fallback always shows; did you mean ${near[0]}?`;
+  }
+  return null;
 }
 
 /**
@@ -3416,6 +3486,9 @@ export function normalValue(thing, value) {
 export function unknownVarRef(v, TOKENS, thing) {
   for (const [, name, comma] of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/gi)) {
     if (name in TOKENS || name.startsWith('--_')) continue;
+    // A fallback always gives a value: never "reads nothing" (a likely
+    // typo is noted when the setting is made).
+    if (comma) continue;
     const near = nearest(name, Object.keys(TOKENS)).filter(
       n => levenshteinDistance(n, name) <= 2,
     );
