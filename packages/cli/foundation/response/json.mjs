@@ -28,6 +28,7 @@
  * Version of the JSON envelope contract. Bump on breaking shape changes so
  * consumers can negotiate. Exposed on every envelope as `apiVersion`.
  */
+import * as fs from 'node:fs';
 import {ERROR_CODES, isErrorCode} from './error-codes.mjs';
 import {recordEnvelope, setOutcome} from '../debug/index.mjs';
 import {answeredBy} from '../release/run-context.mjs';
@@ -142,15 +143,23 @@ export function jsonOut(response) {
  */
 export function toErrorEnvelope(err, suggestions, code, receipt) {
   const message =
-    err instanceof Error ? err.message : typeof err === 'string' ? err : String(err);
+    err instanceof Error
+      ? err.message
+      : typeof err === 'string'
+        ? err
+        : String(err);
   const carried =
     err && typeof err === 'object' ? /** @type {any} */ (err).code : undefined;
-  const resolvedCode = [code, carried].find(isErrorCode) ?? ERROR_CODES.ERR_UNKNOWN;
+  const resolvedCode =
+    [code, carried].find(isErrorCode) ?? ERROR_CODES.ERR_UNKNOWN;
   /** @type {any} */
   const env = {apiVersion: API_VERSION, error: message, code: resolvedCode};
-  if (Array.isArray(suggestions) && suggestions.length) env.suggestions = suggestions;
+  if (Array.isArray(suggestions) && suggestions.length)
+    env.suggestions = suggestions;
   const carriedReceipt =
-    err && typeof err === 'object' ? /** @type {any} */ (err).receipt : undefined;
+    err && typeof err === 'object'
+      ? /** @type {any} */ (err).receipt
+      : undefined;
   const resolvedReceipt = receipt ?? carriedReceipt;
   if (resolvedReceipt && typeof resolvedReceipt === 'object') {
     env.receipt = resolvedReceipt;
@@ -171,6 +180,56 @@ export function jsonError(message, suggestions, code, receipt) {
   const err = toErrorEnvelope(message, suggestions, code, receipt);
   // No-op when cliError already classified this failure — first outcome wins.
   setOutcome('error', {exitCode: 1, error: new Error(message), code: err.code});
-  console.log(JSON.stringify(err, null, 2));
+  // Written whole before the exit: a process that exits with output still
+  // queued for a pipe (a slow reader, bash `$(…)`) loses all but the first
+  // 64 KiB, and a --json caller gets invalid JSON.
+  writeAllSync(1, `${JSON.stringify(err, null, 2)}\n`);
   process.exit(1);
+}
+
+const CONSOLE_LOG = console.log;
+const CONSOLE_ERROR = console.error;
+
+/**
+ * Whether the output on `fd` is captured in process: the console method or
+ * the stream's write replaced since this module loaded (a test).
+ * @param {number} fd
+ */
+export function outputCaptured(fd) {
+  const stream = fd === 2 ? process.stderr : process.stdout;
+  return (
+    Object.hasOwn(stream, 'write') ||
+    (fd === 2 ? console.error !== CONSOLE_ERROR : console.log !== CONSOLE_LOG)
+  );
+}
+
+/**
+ * Write `text` to a file descriptor whole, synchronously, waiting while a
+ * full pipe drains (a non-blocking pipe answers EAGAIN until its reader
+ * reads). Used for a command's last output before it exits, so nothing is
+ * lost however slowly the output is read.
+ * @param {number} fd 1 (stdout) or 2 (stderr)
+ * @param {string} text
+ */
+export function writeAllSync(fd, text) {
+  // Output captured in process (a test replaced the console or the
+  // stream's write) keeps going through what captures it.
+  if (outputCaptured(fd)) {
+    (fd === 2 ? console.error : console.log)(text.replace(/\n$/, ''));
+    return;
+  }
+  const buf = Buffer.from(text, 'utf8');
+  const pause = new Int32Array(new SharedArrayBuffer(4));
+  let off = 0;
+  while (off < buf.length) {
+    try {
+      off += fs.writeSync(fd, buf, off, buf.length - off);
+    } catch (e) {
+      const code = /** @type {any} */ (e)?.code;
+      // A full pipe: wait a moment for its reader, then write the rest.
+      if (code === 'EAGAIN') Atomics.wait(pause, 0, 0, 5);
+      // The reader is gone (EPIPE) or the fd is closed: nothing to keep.
+      else return;
+    }
+  }
 }
