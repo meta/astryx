@@ -168,8 +168,9 @@ interface TimeInputEntryError {
   rejected `NumberInput` or `TimeInput` draft, and after Enter or blur on
   unreadable `DateInput` or `DateTimeInput` date text, a hidden input carries
   the caller's `name` with the committed value's text, and the typed input
-  carries none: the committed number for `NumberInput` (`component:NumberInput`
-  FR6), and the committed value as the field shows it for `TimeInput`,
+  carries none: the committed number as the focused field shows it for
+  `NumberInput` (`component:NumberInput` FR6), and the committed value as the
+  field shows it for `TimeInput`,
   `DateInput`, and `DateTimeInput`'s date segment (`component:TimeInput` FR11,
   `component:DateInput` FR25, `component:DateTimeInput` FR8). In every other
   case the input that carries `name` on the latest stable release keeps it,
