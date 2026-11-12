@@ -1233,6 +1233,33 @@ describe('derived var expansion', () => {
     },
   );
 
+  it.each([
+    [
+      {paddingInlineStart: '4px', paddingInline: ''},
+      '--astryx-card-padding-inline-start: 4px;',
+    ],
+    [
+      {paddingBlockStart: '4px', paddingBlock: ''},
+      '--astryx-card-padding-block-start: 4px;',
+    ],
+    [
+      {paddingBlockStart: '4px', padding: ''},
+      '--astryx-card-padding-block-start: 4px;',
+    ],
+  ])(
+    'keeps the longhands before an empty shorthand: %j',
+    (base, declaration) => {
+      const theme = defineTheme({
+        name: 'test-padding-empty-shorthand',
+        components: {card: {base}},
+      });
+      const rule = generateThemeRules(theme).find(r =>
+        r.includes('.astryx-card'),
+      );
+      expect(rule).toContain(declaration);
+    },
+  );
+
   it('emits no padding token for an empty padding value', () => {
     // An empty value has no components, so there is nothing to emit; a
     // `--astryx-card-padding: ;` declaration would be invalid CSS.

@@ -276,9 +276,13 @@ function parsePadding(props: [string, string][]): ParsedPadding {
 
   for (const [rawProp, value] of props) {
     const prop = PHYSICAL_BLOCK_PADDING_PROPS[rawProp] ?? rawProp;
+    // An empty shorthand sets nothing. It keeps the longhands before it.
     switch (prop) {
       case 'padding': {
         const parts = splitTopLevelWhitespace(value);
+        if (parts.length === 0) {
+          break;
+        }
         if (parts.length === 1) {
           result.blockStart = parts[0];
           result.blockEnd = parts[0];
@@ -296,12 +300,18 @@ function parsePadding(props: [string, string][]): ParsedPadding {
       }
       case 'paddingBlock': {
         const parts = splitTopLevelWhitespace(value);
+        if (parts.length === 0) {
+          break;
+        }
         result.blockStart = parts[0];
         result.blockEnd = parts[1] ?? parts[0];
         break;
       }
       case 'paddingInline': {
         const parts = splitTopLevelWhitespace(value);
+        if (parts.length === 0) {
+          break;
+        }
         if (parts.length === 1) {
           result.inline = parts[0];
         } else {

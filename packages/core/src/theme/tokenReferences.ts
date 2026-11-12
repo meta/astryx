@@ -18,10 +18,10 @@
  */
 
 /**
- * Call `visit` with the index of each character of a CSS value that sits at
- * the top level: outside parentheses and outside quoted strings, where a
- * backslash escapes the next character. Stops early when `visit` returns
- * true.
+ * Call `visit` for each top-level character of a CSS value. A top-level
+ * character is outside parentheses and outside quoted strings. In a quoted
+ * string, a backslash escapes the next character. The scan stops when `visit`
+ * returns true.
  */
 function scanTopLevel(input: string, visit: (index: number) => boolean): void {
   let depth = 0;
