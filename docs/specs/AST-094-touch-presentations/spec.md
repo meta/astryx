@@ -34,6 +34,7 @@ verified_by:
   "paths": [
     "packages/core/src/Layer/holdEntranceInput.ts",
     "packages/core/src/Layer/inputHold.ts",
+    "packages/core/src/gestures/nativeScroll.ts",
     "packages/core/src/gestures/tapWobble.ts",
     "packages/core/src/hooks/usePager.ts",
     "packages/core/src/motion/uikit/segmented.ts",
@@ -975,6 +976,12 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
 - The shared pager's loop arithmetic: `hooks/usePager.ts` exports `mod` and
   `nearestLoopCopy`, and DateInput's looping picker wheel imports both
   (`component:DateInput` DEC-3).
+- The gesture system's drag axes: `gestures/nativeScroll.ts` exports `dragAxes`.
+  It counts an axis only at half the other's travel or more, as a browser locks
+  a mostly straight drag to its major axis. The native-scroll probe and
+  ChatLayout's composer page hold (`component:ChatLayout` FR10) both read a
+  drag's axes through it. No existing export does this: `canElementScroll` asks
+  whether an element scrolls along an axis, not which axes a drag moves along.
 - `architecture:react-component-runtime` INV13: gestures attach for every
   pointer, within FR24's listener budget.
 - `design:user-states` DR1, DR3 and `family:buttons`: press timing follows
