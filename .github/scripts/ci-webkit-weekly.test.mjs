@@ -444,6 +444,9 @@ describe("the weekly run's WebKit accessibility contracts (report-only)", () => 
     const report = step(job, 'Report the WebKit accessibility results');
     expect(report.if).toBe('always()');
     expect(report.run).toContain('.github/scripts/webkit-a11y-report.mjs');
+    // The report reads the JSON the specs write.
+    const specs = job.steps.find(each => each.id === 'specs');
+    expect(report.run).toContain(specs.env.PLAYWRIGHT_JSON_OUTPUT_NAME);
     const upload = step(job, 'Upload the WebKit accessibility report');
     expect(upload.if).toBe('always()');
     expect(upload.with.name).toBe('webkit-weekly-a11y-report');

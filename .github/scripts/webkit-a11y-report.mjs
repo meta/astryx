@@ -64,15 +64,29 @@ export function testsOf(report) {
  * @param {{sha?: string}} [options]
  */
 export function buildReport(report, {sha = ''} = {}) {
-  if (!report) {
+  const tests = report ? testsOf(report) : [];
+  // A run that left no report, stopped on an error, or ran no test is never a
+  // pass: no spec matched, or a spec failed to load before its tests.
+  const errors = (report?.errors ?? []).map(
+    (/** @type {any} */ error) =>
+      String(error?.message ?? error)
+        .replace(/\x1b\[[0-9;]*m/g, '')
+        .split('\n')
+        .find(Boolean) ?? '',
+  );
+  if (!report || errors.length > 0 || tests.length === 0) {
+    const why = !report
+      ? 'the specs did not run to the end'
+      : errors.length > 0
+        ? `the run stopped on ${errors.length === 1 ? 'an error' : `${errors.length} errors`}: ${errors.join('; ')}`
+        : 'no test ran (no spec file matched)';
     return {
       ok: false,
       counts: null,
       failures: [],
-      markdown: `# WebKit accessibility contracts (report-only)\n\nThe run left no results${sha ? ` for ${sha}` : ''}: the specs did not run to the end. See the run's log.\n`,
+      markdown: `# WebKit accessibility contracts (report-only)\n\nThe run left no results${sha ? ` for ${sha}` : ''}: ${why}. See the run's log.\n`,
     };
   }
-  const tests = testsOf(report);
   const count = status => tests.filter(test => test.status === status).length;
   const counts = {
     failed: count('unexpected'),

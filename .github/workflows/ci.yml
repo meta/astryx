@@ -3525,7 +3525,7 @@ jobs:
   # a command that runs it again, for the fix loop.
   webkit-weekly-a11y:
     needs: [webkit-weekly-request, build-storybook]
-    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success' && needs.build-storybook.result == 'success' }}
+    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success' && needs.build-storybook.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The WebKit interaction legs' image: WebKit and its system libraries are
@@ -3570,7 +3570,7 @@ jobs:
         continue-on-error: true
         env:
           A11Y_CONTRACT_WORKERS: '4'
-          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/webkit-a11y.json
+          PLAYWRIGHT_JSON_OUTPUT_NAME: webkit-a11y.json
         run: |
           LP_NUM_THREADS="$(nproc)"
           if [ -r /sys/fs/cgroup/cpu.max ]; then
@@ -3586,8 +3586,8 @@ jobs:
       - name: Report the WebKit accessibility results
         if: always()
         run: |
-          node .github/scripts/webkit-a11y-report.mjs "$RUNNER_TEMP/webkit-a11y.json" "$RUNNER_TEMP/webkit-a11y-report"
-          cat "$RUNNER_TEMP/webkit-a11y-report/report.md" >> "$GITHUB_STEP_SUMMARY"
+          node .github/scripts/webkit-a11y-report.mjs webkit-a11y.json webkit-a11y-report
+          cat webkit-a11y-report/report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the WebKit accessibility report
         if: always()
@@ -3595,7 +3595,7 @@ jobs:
         with:
           name: webkit-weekly-a11y-report
           path: |
-            ${{ runner.temp }}/webkit-a11y-report
+            webkit-a11y-report
             webkit-a11y-output
           if-no-files-found: ignore
           retention-days: 90

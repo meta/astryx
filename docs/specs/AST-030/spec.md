@@ -266,7 +266,7 @@ they are separately named.
   runs the `release-only` spec files a changed component owns directly, never
   through a shared scope token or an unknown scope; full a11y
   sweeps, whole-repository spec-test contracts, and their evidence uploads MUST
-  run only for `release-check` in this workflow. Missing,
+  run only for `release-check` in this workflow, except the weekly WebKit run's `.a11y.browser.spec.ts` files, which report their failures without failing (DEC-24). Missing,
   failed, cancelled, or skipped required work MUST block the release-check join.
   The request and join MUST verify that the checked SHA is the dispatch event SHA
   and remains an ancestor of current remote `main` at the start and completion of
@@ -874,6 +874,10 @@ Rejected: a separate workflow, per-push full audits (DEC-7 supersedes this for
 pushes to `main`), and treating a maintenance
 capture, skipped check, a checked SHA no longer in current `main` history, or
 retroactive status as release evidence.
+
+Amended 2026-11-12 under DEC-24's amendment (the chief of staff with CI &
+Release and the release owner): the weekly WebKit run also runs the
+`.a11y.browser.spec.ts` files, report-only.
 
 ### DEC-7 — Full visual, accessibility and RTL suites run on main; pull request updates check only touched components
 

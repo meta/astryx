@@ -94,6 +94,21 @@ describe('the weekly WebKit accessibility report', () => {
     );
   });
 
+  it('never reads a run that stopped on an error, or ran no test, as a pass', () => {
+    const stopped = buildReport({
+      suites: [],
+      errors: [{message: 'Error: No tests found'}],
+    });
+    expect(stopped.ok).toBe(false);
+    expect(stopped.markdown).toContain(
+      'the run stopped on an error: Error: No tests found',
+    );
+    expect(stopped.markdown).not.toContain('passed');
+    const empty = buildReport({suites: []});
+    expect(empty.ok).toBe(false);
+    expect(empty.markdown).toContain('no test ran');
+  });
+
   it('never reads a run that left no results as a pass', () => {
     const result = buildReport(null, {sha: 'abc123'});
     expect(result.ok).toBe(false);
