@@ -5,11 +5,20 @@
  * @input useMobileKeyboard on a field, a stand-in visual viewport and a
  *   pointer query that changes
  * @output Proves a field's keyboard path follows the primary pointer: a
- *   docked mouse drops the tap route, and a finger brings it back
+ *   docked mouse drops the tap route, and a finger brings it back. Also
+ *   proves the hook reads its committed options: after a render React
+ *   discards, and in a commit where an earlier sibling blurs the field
  * @position Keyboard module tests
  */
 
-import {useRef} from 'react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+} from 'react';
 import {afterEach, beforeEach, expect, it, vi} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
 import {__resetLayoutViewportForTest} from '../utils/layoutViewport';
@@ -114,4 +123,101 @@ it('drops the tap route when a mouse becomes the primary pointer, and takes it b
 
   pointerChanges(true);
   expect(tapIsClaimed(input)).toBe(true);
+});
+
+// A transition that suspends for good: React renders it, then keeps the
+// committed tree and never commits that render.
+const forever = new Promise<never>(() => {});
+function Forever(): null {
+  use(forever);
+  return null;
+}
+function Discardable({
+  children,
+  isPending = false,
+}: {
+  children: ReactNode;
+  isPending?: boolean;
+}) {
+  return (
+    <Suspense fallback={null}>
+      {children}
+      {isPending ? <Forever /> : null}
+    </Suspense>
+  );
+}
+
+it('dismisses by the committed options after React discards a render that disables it', async () => {
+  let dismiss: (() => void) | null = null;
+  function Panel({isEnabled}: {isEnabled: boolean}) {
+    const ref = useRef<HTMLDivElement | null>(null);
+    const keyboard = useMobileKeyboard(ref, {isEnabled});
+    dismiss = () => keyboard.dismiss();
+    return (
+      <div ref={ref}>
+        <input aria-label="Name" />
+      </div>
+    );
+  }
+  const {rerender} = render(
+    <Discardable>
+      <Panel isEnabled />
+    </Discardable>,
+  );
+  const input = screen.getByRole('textbox');
+  act(() => input.focus());
+  await act(async () => {
+    startTransition(() => {
+      rerender(
+        <Discardable isPending>
+          <Panel isEnabled={false} />
+        </Discardable>,
+      );
+    });
+  });
+
+  act(() => dismiss?.());
+
+  // The committed keyboard is enabled, so the dismissal blurs the field.
+  expect(input).not.toHaveFocus();
+});
+
+it('parks no focus on a target that closes in the commit where an earlier sibling blurs its field', () => {
+  // An earlier sibling's layout effect runs before the target's own layout
+  // effects. It blurs the field as the flow closes the target.
+  function Blurrer({isClosing}: {isClosing: boolean}) {
+    useLayoutEffect(() => {
+      if (isClosing) {
+        (document.activeElement as HTMLElement | null)?.blur();
+      }
+    }, [isClosing]);
+    return null;
+  }
+  // A sheet that reserves the keyboard's inset, with its scrolling body.
+  function Panel({isOpen}: {isOpen: boolean}) {
+    const ref = useRef<HTMLDivElement | null>(null);
+    useMobileKeyboard(ref, {isOpen, inset: true});
+    return (
+      <div ref={ref} tabIndex={-1} data-testid="panel">
+        <div data-scroll-axis="y">
+          <input aria-label="Name" />
+        </div>
+      </div>
+    );
+  }
+  function Flow({isOpen}: {isOpen: boolean}) {
+    return (
+      <>
+        <Blurrer isClosing={!isOpen} />
+        <Panel isOpen={isOpen} />
+      </>
+    );
+  }
+  const {rerender} = render(<Flow isOpen />);
+  act(() => screen.getByRole('textbox').focus());
+
+  rerender(<Flow isOpen={false} />);
+
+  // The target was closing, so the blur left focus where it went.
+  expect(document.activeElement).not.toBe(screen.getByTestId('panel'));
 });
