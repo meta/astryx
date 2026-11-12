@@ -368,6 +368,40 @@ export {
   type DiffViewerSide,
 } from './DiffViewer';
 
+// MediaPlayer: the media root, its control parts, and its media element
+export {
+  MediaCaptionsButton,
+  MediaFullscreenButton,
+  MediaPlayButton,
+  MediaPlaybackRate,
+  MediaPlayer,
+  MediaPlayerElement,
+  MediaSeekButton,
+  MediaTime,
+  MediaTimeSlider,
+  MediaVolume,
+  useMediaPlaybackTime,
+  useMediaPlayer,
+  type MediaButtonPartProps,
+  type MediaControlSize,
+  type MediaPlayButtonProps,
+  type MediaPlaybackRateProps,
+  type MediaPlayerActions,
+  type MediaPlayerAudioElementProps,
+  type MediaPlayerElementProps,
+  type MediaPlayerError,
+  type MediaPlayerProps,
+  type MediaPlayerState,
+  type MediaPlayerVideoElementProps,
+  type MediaSeekButtonProps,
+  type MediaSliderPlacement,
+  type MediaTextTrackInfo,
+  type MediaTimeProps,
+  type MediaTimeSliderProps,
+  type MediaVolumeProps,
+  type UseMediaPlayerResult,
+} from './MediaPlayer';
+
 // NavigationStack: push/pop drill-down navigation with UIKit's transitions
 // and back swipes.
 export {
