@@ -49,7 +49,8 @@ import {
   getCliInvocation,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
-import {LIKE, P} from './_tables.mjs';
+import {DIALS, LIKE, P} from './_tables.mjs';
+import {SHOWCASE_GROUPS} from './_preview.mjs';
 import {camel} from './_settings.mjs';
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
@@ -89,6 +90,36 @@ export async function themeEditHow(subject, options = {}) {
 
 /** The built-in themes a theme can build on (`--like`). */
 export const builtInThemes = () => [...LIKE];
+
+/** The sections `show --section` takes. */
+export const showSections = () => [...SHOWCASE_GROUPS];
+
+/**
+ * Whether a value fits what a dial takes, read from the dial's own list of
+ * values: a named rung in any case, or a value of the kind it names (a size,
+ * a color, a number). `set` still checks the value in full.
+ * @param {string} dial
+ * @param {string} value
+ */
+export function dialValueFits(dial, value) {
+  const spec = DIALS[/** @type {keyof typeof DIALS} */ (dial)]?.values;
+  if (!spec) return false;
+  const v = String(value).trim();
+  if (v === '') return false;
+  return spec.split('|').some(option => {
+    if (!option.startsWith('<') && !option.startsWith('"'))
+      return option === v.toLowerCase();
+    if (option.startsWith('"')) return true;
+    if (option.includes('size')) return /^\d*\.?\d+(px|rem|em)$/.test(v);
+    if (option === '<color>')
+      return /^(#[0-9a-f]{3,8}|[a-z]+|(rgb|rgba|hsl|hsla|oklch|oklab|lab|lch|color)\(.*\))$/i.test(
+        v,
+      );
+    if (option === '<0-100>') return /^\d{1,3}$/.test(v) && Number(v) <= 100;
+    if (option === '<number>') return /^\d*\.?\d+$/.test(v);
+    return false;
+  });
+}
 
 /**
  * The project a command acts on: the Astryx project at or above `cwd`, found

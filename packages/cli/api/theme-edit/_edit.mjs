@@ -195,6 +195,14 @@ export async function themeEditNew(name, options = {}) {
   // `--like none` builds on no base, as `set <theme> base none` does.
   const like = options.like === 'none' ? undefined : options.like;
   requireProject(cwd);
+  // A corrected `new` keeps every option given, fixing only the bad one.
+  // A --like in another case is the built-in theme it names.
+  const likeFixed =
+    like != null && LIKE.includes(String(like).toLowerCase())
+      ? String(like).toLowerCase()
+      : like;
+  const again = (/** @type {string} */ newName, likeValue = likeFixed) =>
+    `${P} new ${newName}${newFlags(likeValue, settings, png)}`;
   if (!slugOk(name)) {
     const fixed = slugFor(name);
     // The name as typed may be a theme that exists in another case.
@@ -202,7 +210,7 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.`,
-      {run: exists ? [`${P} show ${fixed}`] : [`${P} new ${fixed}`]},
+      {run: exists ? [`${P} show ${fixed}`] : [again(fixed)]},
     );
   }
   // A built-in theme's name would collide with the theme of that name the
@@ -234,7 +242,7 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `themes/${name} is ${dirSt.isSymbolicLink() ? 'a link' : 'a file'}, so a theme is not made there.`,
-      {run: [`${P} new ${name}-copy`]},
+      {run: [again(freeThemeName(cwd, name))]},
     );
   // Settings that are not valid JSON are kept aside, and the theme is
   // made again beside them.
@@ -258,7 +266,7 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `themes/${name}/ already holds files this command did not make; choose another name.`,
-      {run: [`${P} new ${name}-copy`]},
+      {run: [again(freeThemeName(cwd, name))]},
     );
   if (like != null && !LIKE.includes(like))
     refuse(
@@ -266,7 +274,16 @@ export async function themeEditNew(name, options = {}) {
       `--like takes a built-in theme (${LIKE.join(', ')}), not "${like}"${fs.existsSync(themeFiles(cwd, String(like)).settings) ? `; ${like} is a theme made here, and a new theme builds only on a built-in one` : ''}.`,
       {
         didYouMean: nearest(String(like).toLowerCase(), LIKE),
-        run: [`${P} new ${name}`],
+        // The built-in theme it names in another case, or the nearest one,
+        // else none.
+        run: [
+          again(
+            name,
+            LIKE.includes(String(like).toLowerCase())
+              ? String(like).toLowerCase()
+              : nearest(String(like).toLowerCase(), LIKE)[0],
+          ),
+        ],
       },
     );
   const ctx = await context(cwd);
@@ -298,7 +315,7 @@ export async function themeEditNew(name, options = {}) {
     );
   if (left?.keep.some(p => path.basename(p) === `${name}.history.json`))
     leftNotes.push(
-      `the earlier settings are kept in ${name}.history.json: \`${P} undo ${name}\` steps back to them`,
+      `the history is kept in ${name}.history.json: \`${P} undo ${name}\` steps back to the settings from before the last change, and the last change itself is not kept`,
     );
   // The marker goes first and comes off last: a `new` stopped between
   // leaves a folder the next `new` can prove it made. The damaged settings
@@ -455,7 +472,7 @@ function applyNewSettings(ctx, slug, data, settings) {
       try {
         s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
       } catch (e) {
-        throw asNewRefusal(e, slug, settings);
+        throw asNewRefusal(e, slug, settings, data.like);
       }
       if (thing === 'mode')
         data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (
@@ -480,18 +497,40 @@ function applyNewSettings(ctx, slug, data, settings) {
 }
 
 /**
+ * The options of a `new` as flags, in the order `new --help` lists them.
+ * @param {string | undefined} like
+ * @param {Record<string, string | string[] | undefined>} settings
+ * @param {boolean} png
+ */
+function newFlags(like, settings, png) {
+  const parts = [
+    ...(like ? [`--like ${quoteCommandArgument(like)}`] : []),
+    ...Object.entries(settings)
+      .filter(([, v]) => v != null)
+      .flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map(x => [k, x]))
+      .map(([k, v]) => `--${k} ${quoteCommandArgument(String(v))}`),
+    ...(png ? ['--png'] : []),
+  ];
+  return parts.length ? ` ${parts.join(' ')}` : '';
+}
+
+/**
  * A refusal from a setting `new` was given, with its suggestions turned
  * into `new` commands: the theme does not exist yet, so a `set` would fail.
  * @param {unknown} e
  * @param {string} slug
  * @param {Record<string, string | string[] | undefined>} settings
+ * @param {string} [like] the --like given, kept in a corrected command
  */
-function asNewRefusal(e, slug, settings) {
+function asNewRefusal(e, slug, settings, like) {
   if (!(e instanceof AstryxError)) return e;
-  const flags = Object.entries(settings)
-    .filter(([, v]) => v != null)
-    .flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map(x => [k, x]))
-    .map(([k, v]) => `--${k} ${quoteCommandArgument(String(v))}`);
+  const flags = [
+    ...(like ? [`--like ${quoteCommandArgument(like)}`] : []),
+    ...Object.entries(settings)
+      .filter(([, v]) => v != null)
+      .flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map(x => [k, x]))
+      .map(([k, v]) => `--${k} ${quoteCommandArgument(String(v))}`),
+  ];
   const setPrefix = `${P} set ${slug} `;
   e.suggestions = (e.suggestions ?? []).map(s => {
     if (s.name === `${P} set --help`) return {...s, name: `${P} new --help`};
@@ -579,7 +618,12 @@ function refuseStoredTokens(ctx, slug, data, skip) {
       // setting is never refused for another.
       run: [
         ...bad.slice(0, 5).map(b => `${P} undo ${slug} ${undoArgs(b.setting)}`),
-        ...(one && !one.scope
+        // A value to set only for a token whose stored value has the wrong
+        // type; any other thing `set` would refuse, or read as a dial.
+        ...(one &&
+        !one.scope &&
+        one.setting.source === 'token' &&
+        ctx.C.isToken(one.setting.thing)
           ? [
               `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(exampleOf(ctx.C.typeOf(one.setting.thing), one.setting.thing))}`,
             ]
@@ -587,6 +631,22 @@ function refuseStoredTokens(ctx, slug, data, skip) {
       ],
     },
   );
+}
+
+/**
+ * A theme name near `name` that is valid and whose folder is free: `name-2`,
+ * `name-3`, …, shortened to fit the name's length limit.
+ * @param {string} cwd
+ * @param {string} name
+ */
+function freeThemeName(cwd, name) {
+  for (let n = 2; n < 1000; n += 1) {
+    const suffix = `-${n}`;
+    const candidate = `${name.slice(0, 64 - suffix.length).replace(/-+$/, '')}${suffix}`;
+    if (slugOk(candidate) && !fs.existsSync(themeFiles(cwd, candidate).dir))
+      return candidate;
+  }
+  return '<another name>';
 }
 
 /**
@@ -683,7 +743,7 @@ async function change(sub, slug, thing, value, options) {
       sub === 'undo'
         ? data.settings.find(
             x =>
-              x.thing === thing &&
+              x.thing.toLowerCase() === String(thing).toLowerCase() &&
               (x.on ?? null) === (flags.on ?? null) &&
               (x.when ?? null) === (flags.when ?? null) &&
               (x.state ?? null) === (flags.state ?? null) &&
@@ -695,13 +755,36 @@ async function change(sub, slug, thing, value, options) {
       // what it named (or of the dial its refusal names), else the last
       // step.
       if (sub === 'undo' && e instanceof AstryxError) {
+        // Setting names are matched in any case, and a near name of a
+        // setting the theme has counts: `undo t Corners`, `undo t corner`.
+        const typed = String(thing).toLowerCase();
         const named = new Set([
-          thing,
+          typed,
           ...(e.suggestions ?? [])
-            .map(x => new RegExp(` set ${slug} (\\S+)`).exec(x.name)?.[1])
+            .filter(x => x.reason === 'did you mean')
+            .map(x => x.name.toLowerCase()),
+          ...(e.suggestions ?? [])
+            .map(
+              x => new RegExp(` (?:set|undo) ${slug} (\\S+)`).exec(x.name)?.[1],
+            )
             .filter(Boolean),
+          ...nearest(
+            typed,
+            data.settings.map(x => x.thing.toLowerCase()),
+          ),
         ]);
-        const matches = data.settings.filter(x => named.has(x.thing));
+        const matches = data.settings.filter(x =>
+          named.has(x.thing.toLowerCase()),
+        );
+        // A word that is near a setting name (a typo, another case) is never
+        // answered with a bare step back, which would undo another change;
+        // any other word (`all`) may mean the last step.
+        const nearSetting =
+          named.size > 1 ||
+          nearest(typed, [
+            ...Object.keys(DIALS),
+            ...data.settings.map(x => x.thing.toLowerCase()),
+          ]).length > 0;
         const steps = readHistory(themeFiles(cwd, slug).history).steps.length;
         throw new AstryxError(
           e.message,
@@ -711,7 +794,7 @@ async function change(sub, slug, thing, value, options) {
                 reason: 'do this instead',
               }))
             : [
-                steps
+                steps && !nearSetting
                   ? {name: `${P} undo ${slug}`, reason: 'step back one change'}
                   : {name: `${P} show ${slug}`, reason: 'see what it sets'},
               ],

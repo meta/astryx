@@ -45,9 +45,11 @@ import {
 } from '../../../../api/theme-edit/theme-edit.mjs';
 import {
   builtInThemes,
+  dialValueFits,
   editorCompileProblem,
   editorThemeHold,
   editorThemeRefusal,
+  showSections,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
@@ -353,19 +355,24 @@ function newSettings(o, themeName = '<theme>') {
   const out = {};
   // --like given two values is refused like a dial given two.
   const likes = flagValues('like');
-  if (new Set(likes).size > 1)
+  if (new Set(likes).size > 1) {
+    // The suggestion keeps the first built-in theme given, or drops --like.
+    const like = likes
+      .map(l => l.toLowerCase())
+      .find(l => builtInThemes().includes(l));
     throw new AstryxError(
       `--like was given twice (${likes.join(', ')}); give it once. Nothing was changed.`,
       [
         {
-          name: cmd(
-            `${EDITOR} new ${themeName}${newFlagLine({...o, like: likes.at(-1)})}`,
-          ),
-          reason: 'do this instead',
+          name: cmd(`${EDITOR} new ${themeName}${newFlagLine({...o, like})}`),
+          reason: like
+            ? 'do this instead: the first built-in theme given'
+            : 'do this instead: none of them is a built-in theme',
         },
       ],
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
+  }
   for (const opt of newDoc.options ?? []) {
     if (opt.param !== 'options.settings') continue;
     const flag = opt.flag.split(' ')[0].slice(2);
@@ -376,20 +383,24 @@ function newSettings(o, themeName = '<theme>') {
     // tracking); any other flag given two different values is refused.
     const all = flagValues(flag);
     if (flag === 'headings' && all.length > 1) out[flag] = all;
-    else if (new Set(all).size > 1)
+    else if (new Set(all).size > 1) {
+      // The suggestion keeps the first value the dial takes, or drops it.
+      const fits = all.find(v => dialValueFits(flag, v));
       throw new AstryxError(
         `--${flag} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
         [
           {
             name: cmd(
-              `${EDITOR} new ${themeName}${newFlagLine({...o, [key]: all.at(-1)})}`,
+              `${EDITOR} new ${themeName}${newFlagLine({...o, [key]: fits})}`,
             ),
-            reason: 'do this instead: the last value',
+            reason: fits
+              ? 'do this instead: the first value it takes'
+              : `do this instead: none of them is a value --${flag} takes`,
           },
         ],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
-    else out[flag] = String(value);
+    } else out[flag] = String(value);
   }
   return out;
 }
@@ -859,8 +870,10 @@ export function registerExperimentalTheme(group, program) {
               {
                 suggestions: [
                   {
+                    // The first section given that `show` takes, else the
+                    // whole sheet.
                     name: cmd(
-                      `${EDITOR} show ${name} --section ${flagValues('section')[0]}`,
+                      `${EDITOR} show ${name}${(sec => (sec ? ` --section ${sec}` : ''))(flagValues('section').find(v => showSections().includes(v)))}`,
                     ),
                     reason: 'do this instead',
                   },

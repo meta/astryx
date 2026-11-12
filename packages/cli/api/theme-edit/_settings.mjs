@@ -349,7 +349,7 @@ export function loadTheme(
         ERROR_CODES.ERR_UNKNOWN_THEME,
         stopped
           ? `themes/${slug} was left by a \`new\` that was stopped part way, so it has no settings yet. Run new again to finish it; files you added there are kept.`
-          : `themes/${slug} has lost its settings (${slug}.settings.json is gone), but the editor made it. Run new to make it again: your own files there are kept${fs.existsSync(f.history) ? `, and \`undo ${slug}\` then steps back to the earlier settings` : ''}.`,
+          : `themes/${slug} has lost its settings (${slug}.settings.json is gone), but the editor made it. Run new to make it again: your own files there are kept${fs.existsSync(f.history) ? `, and \`undo ${slug}\` then steps back to the settings from before the last change (the last change itself is not kept)` : ''}.`,
         {run: [`${P} new ${slug}`]},
       );
     if (!same && (other || LIKE.includes(slug)))
