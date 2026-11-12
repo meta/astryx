@@ -172,7 +172,8 @@ interface TimeInputEntryError {
   FR6), and the committed value as the field shows it for `TimeInput`,
   `DateInput`, and `DateTimeInput`'s date segment (`component:TimeInput` FR11,
   `component:DateInput` FR25, `component:DateTimeInput` FR8). In every other
-  case the typed input keeps `name`, and a form posts the typed text: a
+  case the input that carries `name` on the latest stable release keeps it,
+  and a form posts what it posts there: the typed text of a
   `NumberInput` or `TimeInput` draft that Enter submits before blur, and
   incomplete date text or a date the calendar does not have or that `min`,
   `max`, or `dateConstraints` rules out. The hidden input carries `name` until
@@ -293,7 +294,7 @@ behavior made for accessibility conformance to FR53.
   and documented usage keep working; the committed value and `onChange` do not
   change; what a form posts does not change, because a hidden input carries the
   committed value's text wherever the latest stable release reverts rejected
-  text, and the typed input posts its text wherever the release keeps it
+  text, and elsewhere the input that carries `name` on the release keeps it
   (FR4); and `NumberInput`,
   `TimeInput`, and `DateTimeInput`'s time segment keep a caller `error` status
   with a message shown over their own message (FR7).
@@ -475,8 +476,8 @@ that change.
 
 Enter reveals a rejected draft's message, and the field does not prevent it
 beyond that commit, so a form submits from `TimeInput` as it does from any text
-field. The submitted value is the committed one, since a valid draft commits
-while it is typed (FR9). `DateTimeInput`'s time segment follows the same rule
+field. A valid draft has already committed while it was typed, and a rejected
+draft posts its typed text, as on the latest stable release (FR4, FR9). `DateTimeInput`'s time segment follows the same rule
 outside its preset-time list.
 
 ### DEC-7 — A shown rejection stays until the entry is valid
@@ -555,8 +556,8 @@ numbers and decimals.
 A form posts what it posts on the latest stable release. Where that release
 reverts rejected text at a commit, the member keeps the text, and a hidden
 input carries the caller's `name` with the committed value's text, which the
-release posts once the text reverts. Where the release keeps the text, the
-typed input posts it, as it does there. No posted value changes, so the change
+release posts once the text reverts. Elsewhere, the input that carries `name`
+on the release keeps it and posts what it posts there. No posted value changes, so the change
 stays an accessibility behavior fix under `spec:AST-017` FR53 (FR4).
 
 Rejected: the committed value's text in every case, because it changes what a
