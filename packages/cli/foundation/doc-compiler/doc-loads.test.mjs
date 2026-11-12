@@ -60,6 +60,10 @@ const RUNNERS = {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
   },
+  'api/theme-edit/_check.mjs': {
+    runs: 'css-tree and the MDN property data it ships, on the first CSS value check, so other commands do not load them',
+    sites: ['require(css-tree)', 'require(mdn-data/css/properties.json)'],
+  },
   'api/theme-edit/_preview.mjs': {
     runs: 'a Playwright the project has installed, or a Chrome found on the machine, to picture a preview only with --png',
     sites: ['child_process.spawnSync', 'import(<computed>)'],
@@ -326,6 +330,10 @@ const RUNNERS = {
   'foundation/agent-docs/agent-docs.mjs': {
     runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
     sites: ['child_process.spawnSync'],
+  },
+  'foundation/fs/gather-cache.mjs': {
+    runs: 'nothing; a module hook that notes each module a search or build loads, with its state, and loads it unchanged',
+    sites: ['module.registerHooks'],
   },
   'foundation/fs/file-protection.mjs': {
     runs: 'the ignore matcher (CommonJS), loaded when a resolver first reads an ignore file',

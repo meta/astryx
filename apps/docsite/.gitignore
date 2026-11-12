@@ -13,6 +13,11 @@ public/playground-types.json
 public/monaco/
 public/vendor/
 
+# Landing templates card previews, rendered by
+# scripts/generate-landing-template-previews.mjs (regenerated on build)
+public/landing/template-previews/
+.landing-template-previews/
+
 # Vercel stages both static apps and deployment identity during builds, never in source control.
 public/storybook/
 public/sandbox/

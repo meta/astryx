@@ -62,7 +62,7 @@ import {
   type FocusWithin,
 } from '../utils/focusReturn';
 import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {warnOnce} from '../utils/devWarning';
 import {
   AppShellDrawerFocusContext,
@@ -1032,16 +1032,13 @@ export function AppShell({
       </SideNavRenderContext>
     </div>
   ) : null;
-  const drawerHasContentRef = useRef(drawerHasContent);
-  useIsomorphicLayoutEffect(() => {
-    drawerHasContentRef.current = drawerHasContent;
-  });
+  const drawerHasContentRef = useCommittedRef(drawerHasContent);
   const drawerFocus = useMemo<AppShellDrawerFocus>(
     () => ({
       main: () => mainNodeRef.current,
       isDrawerEmpty: () => !drawerHasContentRef.current,
     }),
-    [],
+    [drawerHasContentRef],
   );
   // eslint-disable-next-line @eslint-react/no-unstable-context-value -- context transports ReactNode; instability is inherent
   const barMobileContent = {

@@ -71,7 +71,7 @@ import {
   AppShellDrawerFocusContext,
   type AppShellDrawerFocus,
 } from '../AppShell/appShellDrawerFocus';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {mergeProps, composeEventHandlers} from '../utils';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
@@ -533,10 +533,7 @@ export function MobileNav({
   const appShellMobile = useAppShellMobile();
   // Read when the drawer closes, from a timer or a teardown.
   const shellFocus = use(AppShellDrawerFocusContext);
-  const shellFocusRef = useRef(shellFocus);
-  useIsomorphicLayoutEffect(() => {
-    shellFocusRef.current = shellFocus;
-  });
+  const shellFocusRef = useCommittedRef(shellFocus);
   const isOpen = isOpenProp ?? appShellMobile.isMobileNavOpen;
   // Share the id from AppShell context so the toggle's aria-controls resolves to
   // this drawer; fall back to a locally generated id when used standalone.
@@ -667,7 +664,7 @@ export function MobileNav({
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
     };
-  }, [isOpen, releasePresentation]);
+  }, [isOpen, releasePresentation, shellFocusRef]);
 
   // Close the native dialog on unmount if it's still open. Inside AppShell the
   // drawer is mounted in an <Activity> that switches to mode="hidden" when the
@@ -688,10 +685,12 @@ export function MobileNav({
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
       if (dialog?.open) {
+        // A committed value, not a DOM node: teardown reads the latest one.
+        // eslint-disable-next-line @eslint-react/exhaustive-deps
         closeAndRestoreFocus(dialog, triggerElementRef, shellFocusRef.current);
       }
     };
-  }, []);
+  }, [shellFocusRef]);
 
   const {shouldDismissOnCloseRequest} = useLayerDismissal({
     isActive: isOpen,
