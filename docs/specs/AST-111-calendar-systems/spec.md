@@ -3,7 +3,7 @@ schema_version: 4
 template_version: 2
 kind: system-spec
 id: spec:AST-111
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
 approved_by: nynexman4464
