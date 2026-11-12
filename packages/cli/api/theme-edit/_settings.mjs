@@ -97,7 +97,7 @@ import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null, derived?: Record<string, Array<{property: string}>>}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null, derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -1351,9 +1351,63 @@ export function compileTheme(ctx, data, base) {
         },
       ],
     };
+  expandStateBlocks(theme.components, ctx.derived ?? {});
   if (!Object.keys(theme.tokens).length) delete theme.tokens;
   if (!Object.keys(theme.components).length) delete theme.components;
   return theme;
+}
+
+/** Padding longhands that reach a part's `padding` entry. */
+const PADDING_LONGHANDS = new Set([
+  'paddingBlock',
+  'paddingInline',
+  'paddingTop',
+  'paddingBottom',
+  'paddingLeft',
+  'paddingRight',
+  'paddingBlockStart',
+  'paddingBlockEnd',
+  'paddingInlineStart',
+  'paddingInlineEnd',
+]);
+
+/**
+ * Core writes a part's derived variables (a card's inner corners, a
+ * button's radius variable) from its plain declarations only; in a state
+ * block (`:hover`, `:is(:disabled,…)`) they would stay behind. The same
+ * expansion is written into each state block here: every variable the
+ * registry names for the property gets the value, and a property the
+ * variable replaces goes. An entry that expands into container padding is
+ * not computed here (set refuses that case).
+ * @param {Record<string, Record<string, any>>} components
+ * @param {Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>} registry
+ */
+export function expandStateBlocks(components, registry) {
+  for (const [target, keys] of Object.entries(components ?? {})) {
+    const entries = registry[target];
+    if (!entries?.length) continue;
+    for (const block of Object.values(keys ?? {})) {
+      if (!block || typeof block !== 'object') continue;
+      for (const [key, styles] of Object.entries(block)) {
+        if (!key.startsWith(':') || !styles || typeof styles !== 'object')
+          continue;
+        for (const [prop, value] of Object.entries(styles)) {
+          if (typeof value !== 'string') continue;
+          const match = entries.filter(
+            e =>
+              e.property === prop ||
+              (e.property === 'padding' &&
+                PADDING_LONGHANDS.has(prop) &&
+                !e.replaces),
+          );
+          for (const e of match) {
+            for (const v of e.vars ?? []) styles[v] ??= value;
+            if (e.replaces && e.vars?.length) delete styles[prop];
+          }
+        }
+      }
+    }
+  }
 }
 
 /** Core's default type scale ratio. */

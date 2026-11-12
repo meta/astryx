@@ -117,16 +117,16 @@ describe('hunt13', () => {
     expect(r.data.setting.value).toBe('20px');
   }, 240_000);
 
-  it('F7-4: corners with a state on a part Core expands are refused', async () => {
+  it('F7-4: padding with a state on a part Core expands into container tokens is refused', async () => {
     const r = await refusal(() =>
-      themeEditSet('m', 'border-radius', '19px', {
+      themeEditSet('m', 'padding', '40px', {
         cwd,
         on: 'card',
         state: 'hover',
       }),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/border-radius 19px --on card$/);
+    expect(r.run[0]).toMatch(/padding 40px --on card$/);
   });
 });
 

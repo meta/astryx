@@ -123,7 +123,7 @@ export async function context(cwd) {
  * Core's registry of the variables a part's plain border-radius or padding
  * also writes (a card's inner corners), or empty on a Core without it.
  * @param {string} coreDir
- * @returns {Promise<Record<string, Array<{property: string}>>>}
+ * @returns {Promise<Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>>}
  */
 async function derivedVars(coreDir) {
   const file = path.join(coreDir, 'dist', 'theme', 'derivedVarRegistry.js');

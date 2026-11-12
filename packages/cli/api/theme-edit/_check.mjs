@@ -1085,10 +1085,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       );
     }
   }
-  // Core writes a part's inner-corner and padding variables from a plain
-  // border-radius or padding only: in a state they would be left behind
-  // (a card's full-bleed image keeps the old corners), so a state is
-  // refused for those, with the plain run.
+  // Core expands a part's padding into its container tokens from a plain
+  // padding only; in a state the editor cannot write that expansion, so a
+  // state is refused there, with the plain run. (Derived variables such as
+  // a card's inner corners are written into the state block by the build.)
   if (!unset && s.on && s.state && ctx.derived) {
     const prop =
       /radius$/.test(thing) || thing === 'corners'
@@ -1096,9 +1096,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         : /^padding/.test(thing) || thing === 'spacing'
           ? 'padding'
           : null;
+    // The editor writes a derived variable into the state block itself;
+    // only container padding, which Core expands into its own tokens, is
+    // not computed there.
     const hit = prop
       ? partsOf(ctx, s).find(t =>
-          (ctx.derived?.[t] ?? []).some(d => d.property === prop),
+          (ctx.derived?.[t] ?? []).some(
+            d => d.property === prop && d.expand === 'container',
+          ),
         )
       : undefined;
     if (hit)
