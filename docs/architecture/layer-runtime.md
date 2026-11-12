@@ -93,8 +93,7 @@ deciding_specs: [spec:AST-038, spec:AST-059]
 
 This record describes the layer runtime shipped on current `main`, except
 INV14, INV15, INV16, and INV17, which state required ownership the runtime does
-not yet meet, and INV22, which some anchored layers do not yet meet;
-Current gaps lists where it falls short. Other accepted but unimplemented
+not yet meet; Current gaps lists where it falls short. Other accepted but unimplemented
 changes live in `spec:AST-003`; they are not current architecture.
 
 ## Purpose
@@ -702,17 +701,6 @@ Current gaps are observable facts, not current target behavior:
   claim, because the layer cannot see its content (INV7).
 - In a browser that light-dismisses at the release, a Popover closes when a
   control's own drag that began outside it ends outside it (INV7).
-- Some layers anchor to the control that the press scales, so a press moves
-  the layer and can narrow it (INV22). DropdownMenu anchors its menu to its
-  Button. A finger held on the trigger opens the menu from the pressed box and
-  moves it while the menu is open. In WebKit, a mouse press also scales the
-  trigger, so the menu that the press opens sits off the unpressed box until
-  the release. In Chromium, a mouse press does not scale the trigger, so the
-  menu keeps its place. Popover with an `anchorRef` or render-prop trigger
-  anchors to the caller's control, which a Button scales on press.
-  MultiSelector and ComplexSelector anchor to their own control. Ghost and
-  secondary Selector place a list that opens on a press from the trigger's
-  pressed box, so the list sits off by the trigger's press scale.
 - Tooltip currently consumes Escape ahead of an associated Popover, menu, or
   Dialog instead of acting as passive information.
 - There is no distinction between active, blocking, passive, and visual-only
@@ -943,7 +931,7 @@ this current architecture record.
 | INV18        | `useLayer.test.tsx`: a closed state that declares a discrete `display` transition or a keyframe animation keeps the trigger's anchor name until those animations end, read from the closed state's style; a layer whose closed state declares neither is not read for animations at the close                                                                                                                                                                                                                                                                                                                                                  | A layer with such a closed-state exit placed away from its anchor while it fades, or an animation read on the close of a layer whose closed state declares no exit                                                                                                                                                                                                                                                           |
 | INV20        | `layerEntranceSide.test.ts` for the side and the meeting point, and `LayerEntranceSide.interaction.browser.spec.ts` in Chromium and WebKit for the first frame of each anchored layer that flips                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | INV21        | A source check over Core for a scroll, resize, observer or animation-frame handler that writes a layer's `top`, `left`, `inset`, `translate` or `transform` from a measured rectangle, excluding the keyboard lift; a performance trace of a page scroll with an open Popover, counting script position writes                                                                                                                                                                                                                                                                                                                                 | A script write of a layer's position during a scroll, or a handler outside DEC-9's four uses that moves a layer toward its anchor                                                                                                                                                                                                                                                                                            |
-| INV22        | `LayerPressTransform.interaction.browser.spec.ts`: a browser case per layer that opens from a pressable trigger (Popover, DropdownMenu, Selector, MultiSelector, ComplexSelector, ContextMenu), by mouse and by finger: during and after a press, the layer's rectangle, layout box and computed transform match an unpressed open, and a layer that opens on the press is placed from the untransformed box in its first frame.                                                                                                                                                                                                               | A layer whose rectangle, size or computed transform changes while its trigger is pressed                                                                                                                                                                                                                                                                                                                                     |
+| INV22        | `LayerPressTransform.interaction.browser.spec.ts`: a browser case per layer that opens from a pressable trigger (Popover, DropdownMenu, Selector, MultiSelector, ComplexSelector, ContextMenu), by mouse and by finger: during and after a press, the layer's rectangle, layout box and computed transform match an unpressed open, a layer that opens on the press is placed from the untransformed box in its first frame, and a press on a trigger whose own layer is open leaves the trigger unscaled.                                                                                                                                     | A layer whose rectangle, size or computed transform changes while its trigger is pressed                                                                                                                                                                                                                                                                                                                                     |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered
