@@ -11,6 +11,7 @@ import {
   stagePreviewPage,
 } from '../../scripts/generate-landing-template-previews.mjs';
 import templateRows from '../app/(site)/_landing/landingTemplateRows.json';
+import {previewColorModeFragment} from '../app/(site)/_landing/templatePreviewColorMode';
 
 const docsiteDir = path.resolve(__dirname, '../..');
 const templatesDir = path.resolve(
@@ -110,6 +111,24 @@ describe('previewDocument', () => {
     expect(html).toContain(
       ':root:has(#light:target),:root:has(#light:target) [data-astryx-theme]{color-scheme:light!important}',
     );
+  });
+});
+
+describe('previewColorModeFragment', () => {
+  it('adds nothing while the site follows the OS', () => {
+    expect(previewColorModeFragment('system', null)).toBe('');
+    expect(previewColorModeFragment('system', true)).toBe('');
+    expect(previewColorModeFragment('light', false)).toBe('');
+    expect(previewColorModeFragment('dark', true)).toBe('');
+  });
+
+  it('adds nothing before the OS scheme is known, so the server and the first client render agree', () => {
+    expect(previewColorModeFragment('dark', null)).toBe('');
+  });
+
+  it('names the mode that a visitor set against the OS', () => {
+    expect(previewColorModeFragment('dark', false)).toBe('#dark');
+    expect(previewColorModeFragment('light', true)).toBe('#light');
   });
 });
 

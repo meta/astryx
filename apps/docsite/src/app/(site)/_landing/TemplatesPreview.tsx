@@ -3,12 +3,13 @@
 /**
  * @file Shows a decorative grid of page-template previews on a feature card.
  * @input Uses the tile rows and the static preview pages that scripts/generate-landing-template-previews.mjs renders at build time.
- * @output Renders each preview page in a lazy-loaded frame, scaled to its tile. The frame's URL fragment gives the page the site's color mode.
+ * @output Renders each preview page in a lazy-loaded frame, scaled to its tile. A visitor's own color mode reaches the page in the frame's URL.
  * @position Landing and community feature cards.
  */
 
 'use client';
 
+import {useSyncExternalStore} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   spacingVars,
@@ -17,6 +18,7 @@ import {
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {useThemeMode} from '../../providers';
 import templateRows from './landingTemplateRows.json';
+import {previewColorModeFragment} from './templatePreviewColorMode';
 
 // A representative set of the real page templates (storefront, IDE, payment,
 // login, settings, AI chat, product detail). Grouped into rows; the middle row
@@ -146,6 +148,14 @@ const styles = stylex.create({
   },
 });
 
+const OS_DARK_SCHEME = '(prefers-color-scheme: dark)';
+
+function subscribeToOsColorScheme(onChange: () => void) {
+  const query = window.matchMedia(OS_DARK_SCHEME);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
 export function TemplatesPreview({
   maxRows,
 }: {
@@ -158,10 +168,12 @@ export function TemplatesPreview({
   const {themeMode} = useThemeMode();
   const rows =
     maxRows != null ? TEMPLATE_ROWS.slice(0, maxRows) : TEMPLATE_ROWS;
-  // A preview page follows the OS color scheme on its own. A fragment gives
-  // it the site's color mode, which a visitor can set by hand. A change of
-  // fragment does not reload the page.
-  const colorMode = themeMode === 'system' ? '' : `#${themeMode}`;
+  const osPrefersDark = useSyncExternalStore(
+    subscribeToOsColorScheme,
+    () => window.matchMedia(OS_DARK_SCHEME).matches,
+    () => null,
+  );
+  const colorMode = previewColorModeFragment(themeMode, osPrefersDark);
 
   return (
     <div {...stylex.props(styles.container)} inert>
@@ -182,6 +194,10 @@ export function TemplatesPreview({
                 )}>
                 <div {...stylex.props(styles.frameBox)}>
                   <iframe
+                    // A new URL in a loaded frame adds a browser history
+                    // entry, so Back would step through the tiles. A new
+                    // frame for the new color mode adds none.
+                    key={colorMode}
                     src={`${PREVIEW_DIRECTORY}/${slug}.html${colorMode}`}
                     title={`${slug} template preview`}
                     loading="lazy"
