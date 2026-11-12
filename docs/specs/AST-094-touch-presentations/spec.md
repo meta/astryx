@@ -383,11 +383,13 @@ a measured, sourced difference exists.
   | Gesture                           | Springs: a tap, key or program turn plays `springs.settle` from rest; the flick coast keeps UIKit's measured deceleration; the slow-release snap stays as recorded                                              | the DateInput and TimeInput wheels                                                                                                         |
   | Tap                               | Curve tokens                                                                                                                                                                                                    | Accordion, Disclosure, Collapsible, DropdownMenu, Popover, Tooltip, HoverCard, Dialog, AlertDialog, Tabs, Checkbox, press feedback         |
   | Gesture-capable                   | Springs under a touch presentation: the thumb drags, so every tap, click, key or value change settles on the same spring; without a touch presentation they keep the theme's curve (owner decision, 2026-11-04) | Switch, SegmentedControl                                                                                                                   |
-  | Exception, under a finger (Toast) | Under a finger every exit, a tap dismiss included, plays the notification banner's measured slide; a fine pointer keeps the theme's fade (`component:Toast` DEC-2)                                              | Toast                                                                                                                                      |
+  | Exception, under a finger (Toast) | Under a finger every exit, a tap dismiss too, plays the banner's measured slide, also in place of a swipe commit's FR38 spring and FR4 role; a fine pointer keeps the theme's fade (`component:Toast` DEC-2)    | Toast                                                                                                                                      |
 
   Toast is the exception: under a finger every exit plays the notification
   banner's measured slide, a tap dismiss included, and a fine pointer keeps
-  the theme's fade (`component:Toast` DEC-2).
+  the theme's fade. For a swipe's commit the slide also takes the place of
+  FR38's tempo-scaled spring and FR4's named motion role (`component:Toast`
+  DEC-2).
 
   | Spring roles                                                                                                                                                                                                        | Timing tier                                     |
   | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |

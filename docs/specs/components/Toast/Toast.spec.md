@@ -326,7 +326,8 @@ card slides past its edge from where it is, on `toast.exitMs` and
 `toast.exitCurve`. A fine pointer keeps the theme's fade. This is Toast's
 exception to `spec:AST-094` FR45, which plays a tap dismiss on the theme's
 curve tokens, and to the 2026-11-04 owner decision that taps keep the theme's
-curve.
+curve. For a swipe's commit it also takes the place of `spec:AST-094` FR38's
+tempo-scaled spring and FR4's named motion role.
 
 Rejected: theme timing for a tap dismiss under a finger, and the banner's
 slide for a swipe only.
