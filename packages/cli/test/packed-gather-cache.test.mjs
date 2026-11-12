@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {REPO_ROOT} from '../test-utils/repo-root.mjs';
 import {packPublishedCli} from '../test-utils/pack-published-cli.mjs';
+import {runFolder} from '../test-utils/global-local-fixtures.mjs';
 
 const BUILD_ID = 'clients/cli/build-id.generated.json';
 
@@ -84,7 +85,10 @@ function makeProject() {
 }
 
 beforeAll(() => {
-  work = fs.mkdtempSync(path.join(os.tmpdir(), 'packed-gather-cache-'));
+  // The global teardown removes the packed trees outside per-file hook limits.
+  work = fs.mkdtempSync(
+    path.join(runFolder() ?? os.tmpdir(), 'packed-gather-cache-'),
+  );
   packed = packPublishedCli(work);
   // What `prepack` writes for a published package.
   fs.writeFileSync(
@@ -100,8 +104,7 @@ beforeAll(() => {
 }, 120_000);
 
 afterAll(() => {
-  if (work) fs.rmSync(work, {recursive: true, force: true});
-  if (project) fs.rmSync(project, {recursive: true, force: true});
+  if (work && !runFolder()) fs.rmSync(work, {recursive: true, force: true});
 });
 
 /**
