@@ -430,6 +430,32 @@ function newFlagLine(o) {
 }
 
 /**
+ * Refuse a preview flag given twice with different values: the command
+ * would keep only the last one without a word. Undefined when each is
+ * given once.
+ * @param {string} command the preview subcommand, for the suggestion
+ * @param {string[]} flags
+ * @returns {undefined}
+ */
+function previewFlagsOnce(command, flags) {
+  for (const flag of flags) {
+    const all = flagValues(flag);
+    if (new Set(all).size > 1)
+      throw new AstryxError(
+        `--${flag} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
+        [
+          {
+            name: cmd(`${PREFIX} preview ${command} --help`),
+            reason: 'every option it takes',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+  }
+  return undefined;
+}
+
+/**
  * Every value one flag was given on the command line, in order.
  * @param {string} name
  * @returns {string[]}
@@ -947,6 +973,7 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
+            previewFlagsOnce('add', ['theme', 'template', 'top', 'path']) ??
             themeEditPreviewAdd([words ?? []].flat().join(' ') || undefined, {
               cwd: process.cwd(),
               theme: o.theme,
@@ -993,6 +1020,7 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
+            previewFlagsOnce('app', ['theme']) ??
             themeEditPreviewApp(dir, {
               cwd: process.cwd(),
               theme: o.theme,
@@ -1031,7 +1059,9 @@ export function registerExperimentalTheme(group, program) {
       action: (/** @type {any} */ o) =>
         run(
           program,
-          () => themeEditPreviewList({cwd: process.cwd(), path: o.path}),
+          () =>
+            previewFlagsOnce('list', ['path']) ??
+            themeEditPreviewList({cwd: process.cwd(), path: o.path}),
           r =>
             r.data.folder
               ? project(/** @type {any} */ (r.data))
@@ -1057,6 +1087,7 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
+            previewFlagsOnce('remove', ['path']) ??
             themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
           r => [
             r.data.pages.length

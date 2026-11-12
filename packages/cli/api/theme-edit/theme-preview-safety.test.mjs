@@ -2219,4 +2219,74 @@ describe('final pass 5', () => {
       rm('src/app/ts2');
     }
   }, 120_000);
+
+  it('refuses a path through a file or too long, a case twin outside the routes folder, and a repeated flag', async () => {
+    for (const where of ['src/app/layout.tsx/k']) {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: where}),
+      );
+      expect(r.code, where).toBe('ERR_INVALID_ARGUMENT');
+      expect(r.message, where).toContain('src/app/layout.tsx, which is a file');
+      const rem = await refusal(() =>
+        themeEditPreviewRemove(undefined, {cwd, path: where}),
+      );
+      expect(rem.code, where).toBe('ERR_INVALID_ARGUMENT');
+    }
+    const long = `src/app/${Array.from({length: 17}, () => 'b'.repeat(250)).join('/')}`;
+    for (const call of [
+      () => themeEditPreviewAdd(undefined, {cwd, path: long}),
+      () => themeEditPreviewRemove(undefined, {cwd, path: long}),
+      () => themeEditPreviewList({cwd, path: long}),
+    ])
+      expect((await refusal(call)).message).toContain(
+        'longer than the system takes',
+      );
+    const app = await refusal(() => themeEditPreviewApp('SRC', {cwd}));
+    expect(app.message).toContain('differs from it only in case');
+    const add = await refusal(() =>
+      themeEditPreviewAdd(undefined, {cwd, path: 'SRC/app/y'}),
+    );
+    expect(add.message).toContain('differs from it only in case');
+    // The way on goes through the folder that is there.
+    expect(add.run[0]).toContain('--path src/app/y');
+    const twice = await cli([
+      'remove',
+      '--path',
+      'src/app/p1',
+      '--path',
+      'src/app/p2',
+    ]);
+    expect(twice.status).toBe(1);
+    expect(twice.stdout).toContain(
+      '--path was given twice (src/app/p1, src/app/p2)',
+    );
+  }, 120_000);
+
+  it('leaves an unreadable page in place on remove, and says so', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/ur',
+    });
+    const file = path.join(cwd, 'src/app/ur/_pages/overview.tsx');
+    fs.chmodSync(file, 0o000);
+    try {
+      if (process.getuid?.() === 0) return; // root reads every file
+      const r = await themeEditPreviewRemove('overview', {
+        cwd,
+        path: 'src/app/ur',
+      });
+      expect(r.data.removed).toEqual([]);
+      expect(r.data.kept).toContain('src/app/ur/_pages/overview.tsx');
+      expect(r.data.notes.join(' ')).toContain(
+        'could not be read (EACCES), so it is left in place',
+      );
+      expect(read('src/app/ur/theme-preview.json')).toContain(
+        '_pages/overview.tsx',
+      );
+    } finally {
+      fs.chmodSync(file, 0o644);
+      rm('src/app/ur');
+    }
+  }, 120_000);
 });

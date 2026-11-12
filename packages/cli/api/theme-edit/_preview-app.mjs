@@ -550,6 +550,36 @@ function typeScriptNotes(cwd, dir, added) {
 }
 
 /**
+ * Why a file cannot be read (its error code), or null when it can.
+ * @param {string} file
+ * @returns {string | null}
+ */
+function unreadable(file) {
+  try {
+    fs.closeSync(fs.openSync(file, 'r'));
+    return null;
+  } catch (e) {
+    const code = /** @type {any} */ (e)?.code;
+    return code === 'ENOENT' ? null : (code ?? 'error');
+  }
+}
+
+/**
+ * Whether a folder beside `dir` has its name in another case.
+ * @param {string} dir
+ */
+function twinBeside(dir) {
+  const name = path.basename(dir);
+  try {
+    return fs
+      .readdirSync(path.dirname(dir))
+      .some(n => n !== name && n.toLowerCase() === name.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/**
  * A folder beside `dir`, or beside one of its parents, whose name differs
  * only in case, or null.
  * @param {string} dir
@@ -808,9 +838,7 @@ function checkPlacement(cwd, dir, where, retry) {
     let fixed = base;
     for (
       let n = 2;
-      fs.existsSync(fixed) ||
-      sameCaseSibling(fixed) ||
-      sameUrlPage(cwd, app, fixed);
+      fs.existsSync(fixed) || twinBeside(fixed) || sameUrlPage(cwd, app, fixed);
       n++
     )
       fixed = `${base}-${n}`;
@@ -822,11 +850,17 @@ function checkPlacement(cwd, dir, where, retry) {
   }
   // A folder whose name differs from a folder beside it only in case is the
   // same folder on macOS and Windows: one of them is lost in a checkout.
-  const twin = app && sameCaseSibling(dir);
+  const twin = sameCaseSibling(dir);
   if (twin) {
-    let free = `${dir}-2`;
-    for (let n = 3; fs.existsSync(free) || sameCaseSibling(free); n++)
-      free = `${dir}-${n}`;
+    // A twin of a folder on the way: the same path through the folder that
+    // is there. A twin of the folder itself: the first free name beside it.
+    const rel = path.relative(path.dirname(twin), dir).split(path.sep);
+    let free = path.join(twin, ...rel.slice(1));
+    if (rel.length === 1) {
+      free = `${dir}-2`;
+      for (let n = 3; fs.existsSync(free) || twinBeside(free); n++)
+        free = `${dir}-${n}`;
+    }
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `${where} is no place for the preview: ${shownDir(cwd, twin)}/ differs from it only in case, and on macOS and Windows they are one folder, so the project could not be checked out there.`,
@@ -949,6 +983,39 @@ function previewDir(cwd, where, opts = {}) {
         );
       throw e;
     }
+    // A file on the way, or a path longer than the system takes, would
+    // fail every command on it with a system error.
+    const blocker = (() => {
+      for (
+        let at = path.dirname(dir);
+        at.startsWith(cwd + path.sep);
+        at = path.dirname(at)
+      )
+        try {
+          if (!fs.statSync(at).isDirectory()) return at;
+        } catch {
+          // Not there yet: made with the folder.
+        }
+      return null;
+    })();
+    if (blocker)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `--path ${where} goes through ${shown(cwd, blocker)}, which is a file, so no folder can be made there.`,
+        {
+          run: [
+            retry(
+              shown(cwd, path.join(path.dirname(blocker), 'theme-preview')),
+            ),
+          ],
+        },
+      );
+    if (Buffer.byteLength(dir) > 3500)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `--path ${where} is longer than the system takes for a path with the preview's files in it.`,
+        {run: [retry(null)]},
+      );
     if (opts.write) checkPlacement(cwd, dir, `--path ${where}`, retry);
     return {dir, app: appOf(dir)};
   }
@@ -1160,7 +1227,11 @@ function planStarterApp(cwd, where, extra, dependencies, slug = null) {
     reservedFolder(cwd, root) ??
     (routes.some(r => root === r || root.startsWith(r + path.sep))
       ? "it is inside this app's routes folder, where Next would serve the new app's files as pages of this one"
-      : null);
+      : null) ??
+    (t =>
+      t
+        ? `${shownDir(cwd, t)}/ differs from it only in case, and on macOS and Windows they are one folder`
+        : null)(sameCaseSibling(root));
   if (why) {
     let free = 'theme-app';
     for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
@@ -4057,12 +4128,19 @@ async function removePreview(page, options, box) {
         `${name} was not written by the preview, so it is kept; only its nav item is gone`,
       );
     } else if (!fs.existsSync(inside(rel))) missing.push(name);
-    else if (verdict !== 'delete') {
+    else if (unreadable(inside(rel))) {
+      kept.push(name);
+      notes.push(
+        `${name} could not be read (${unreadable(inside(rel))}), so it is left in place and stays in ${PREVIEW_DATA}; fix its permissions, then run ${PREVIEW} remove${pf} again`,
+      );
+    } else if (verdict !== 'delete') {
       kept.push(name);
       notes.push(keptNote(name, verdict));
     } else deletes.push(rel);
     data.pages = data.pages.filter(x => x !== target);
-    data.files = data.files.filter(f => f !== rel);
+    // A file left in place because it could not be read stays recorded.
+    if (!unreadable(inside(rel)))
+      data.files = data.files.filter(f => f !== rel);
     const wore = data.theme;
     /** @type {string | null} */
     let gone = null;
@@ -4206,6 +4284,14 @@ async function removePreview(page, options, box) {
       kept.push(shown(cwd, file));
       notes.push(
         `${shown(cwd, file)} is kept: page.tsx stays, and it imports the pages`,
+      );
+      continue;
+    }
+    const cannot = unreadable(file);
+    if (cannot) {
+      kept.push(shown(cwd, file));
+      notes.push(
+        `${shown(cwd, file)} could not be read (${cannot}), so it is left in place; fix its permissions, then run ${PREVIEW} remove${pf} again`,
       );
       continue;
     }
