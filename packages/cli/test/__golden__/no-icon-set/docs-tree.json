@@ -643,6 +643,7 @@
     "sections": [
       "check-before-you-publish",
       "keep-private-files-out",
+      "ship-javascript",
       "publish-to-npm",
       "check-the-published-package"
     ],

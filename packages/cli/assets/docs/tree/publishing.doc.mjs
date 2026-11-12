@@ -65,6 +65,25 @@ export const docs = {
       ],
     },
     {
+      id: 'ship-javascript',
+      title: 'Ship JavaScript files',
+      content: [
+        {
+          type: 'prose',
+          text: 'The CLI compiles each `.ts` file it loads from your package (`astryx.integration.ts`, `.doc.ts` topics, codemods) through a TypeScript transpiler on first read per machine, loading that transpiler too. A `.mjs` file loads directly, so commands in apps using your package start faster. Publish JavaScript files.',
+        },
+        {
+          type: 'list',
+          style: 'unordered',
+          items: [
+            'Manifests hold only paths and settings: `integration add` writes `astryx.integration.mjs`, typed through a `@type` comment ({@link generic:quick-start}).',
+            'Ship exactly one manifest. Packages holding both `astryx.integration.ts` and `astryx.integration.mjs` fail to load.',
+            'Write doc topics as `.doc.mjs`, codemods as `.mjs`.',
+          ],
+        },
+      ],
+    },
+    {
       id: 'publish-to-npm',
       title: 'Publish to npm',
       content: [
