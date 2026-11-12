@@ -14,7 +14,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Write the annotated theme template into your project',
   description:
-    'Writes theme.template.ts: the annotated reference for the whole theme surface, covering every defineTheme field, the token families, the component override syntax, and how a theme is consumed, naming the CLI command that prints the authoritative reference for each. Read it, copy what you need into your own theme file, delete it. Use `experimental theme add <slug>` to use an installed built theme, extend that theme for ordinary customization, or use `experimental theme eject <slug>` for a complete source fork. Leaves an existing file untouched unless --overwrite.',
+    'Writes theme.template.ts: the annotated reference for the whole theme surface, covering every defineTheme field, the token families, the component override syntax, and how a theme is consumed, naming the CLI command that prints the authoritative reference for each. Read it, copy what you need into your own theme file, delete it. Use `experimental theme add <slug>` to use an installed built theme, extend that theme for ordinary customization, or use `experimental theme eject <slug>` for a complete source fork. The path is a .ts file, never a folder. Leaves an existing file untouched unless --overwrite, which replaces only an earlier copy of the template or a file named like a theme source (`*.theme.ts`, `*Theme.ts`, `*.template.ts`).',
   fn: 'themeTemplate',
   args: [
     {
@@ -27,7 +27,8 @@ export const doc = {
     {
       flag: '-f, --overwrite',
       param: 'options.overwrite',
-      description: 'Replace an existing file',
+      description:
+        'Replace an existing copy of the template or theme source file. Any other file, such as package.json, or a file in a folder the theme editor made, fails with ERR_FILE_EXISTS and is left as it was',
     },
   ],
   examples: [
@@ -48,7 +49,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'the target path escapes the project, or the file cannot be written',
+      when: 'the target path escapes the project, is blank, a folder or not a .ts file, --overwrite names a file that is not a theme template or source, or the file cannot be written',
     },
   ],
   related: [

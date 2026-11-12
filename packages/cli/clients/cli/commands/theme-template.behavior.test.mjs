@@ -95,3 +95,46 @@ describe('astryx theme template', () => {
     expect(JSON.parse(stdout).code).toBe('ERR_WRITE_FAILED');
   });
 });
+
+describe('theme subcommands refuse a stray word', () => {
+  it.each([
+    [['theme', 'template', 'a.ts', 'b.ts']],
+    [['theme', 'use', 'neutral', 'dark']],
+    [['theme', 'remove', 'neutral', 'extra']],
+    [['theme', 'list', 'neutral']],
+    [['theme', 'targets', 'Switch', 'Button']],
+    [['theme', 'eject', 'neutral', 'a', 'b']],
+  ])('%j exits 1 with ERR_INVALID_ARGUMENT and writes nothing', async args => {
+    const before = fs.readdirSync(tmpDir).sort();
+    const {status, stdout} = await runCli(['--json', ...args], {cwd: tmpDir});
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout).code).toBe('ERR_INVALID_ARGUMENT');
+    expect(fs.readdirSync(tmpDir).sort()).toEqual(before);
+  });
+});
+
+describe('theme template and eject next steps', () => {
+  it('quotes a path with a space in the build command', async () => {
+    const {stdout} = await runCli(['theme', 'template', 'x y.ts'], {
+      cwd: tmpDir,
+    });
+    expect(stdout).toMatch(/ theme build 'x y\.ts'/);
+  });
+
+  it('names a free path, not --overwrite, for a file overwrite would refuse', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'util.ts'), 'export const x = 1;\n');
+    const {status, stdout} = await runCli(['theme', 'template', 'util.ts'], {
+      cwd: tmpDir,
+    });
+    expect(status).toBe(0);
+    expect(stdout).not.toContain('--overwrite to replace');
+    expect(stdout).toMatch(/ theme template theme\.template\.ts/);
+  });
+
+  it('quotes the fork path in the eject build command', async () => {
+    const {stdout} = await runCli(['theme', 'eject', 'neutral', "it's"], {
+      cwd: tmpDir,
+    });
+    expect(stdout).toContain(` theme build 'it'\\''s/neutralTheme.ts'.`);
+  });
+});
