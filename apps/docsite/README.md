@@ -110,9 +110,10 @@ patch release.
 Template and block previews load the PNG and JPEG files under
 `public/template-assets` through the Next.js image optimizer (`/_next/image`).
 `scripts/template-image-loader.mjs` rewrites the `/template-assets/` paths in
-the modules that a preview renders. The template sources keep their paths, and
-so do the code the site shows and the files `astryx template` copies. Vector
-images, video, and a path with no file stay as written.
+the modules that a preview renders. The template sources and the code the site
+shows keep their paths. `astryx template` and the shadcn Install item still
+replace them with placeholders. Vector images, video, and a path with no file
+stay as written.
 
 Each image keeps its pixel size, up to 1920 pixels wide, and arrives in the
 format the browser accepts.
