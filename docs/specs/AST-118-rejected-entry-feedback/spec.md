@@ -41,8 +41,7 @@ When an input that checks its own entries refuses an entry, the person learns
 it once, in words they hear and, in a standalone field, see, and keeps what
 they typed so they can correct it. An entry the person has not finished is
 never flagged, so a lone `-` never flashes an error. Apps change no code: the
-committed value and `onChange` keep working as they do, and a form posts the
-committed value's text, never rejected text.
+committed value, `onChange`, and what a form posts keep working as they do.
 
 ## Members
 
@@ -102,12 +101,13 @@ interface TimeInputEntryError {
   label="Seats"
   value={seats}
   onChange={setSeats}
+  isIntegerOnly
   min={1}
   max={40}
   onEntryErrorChange={setSeatsEntryError} // optional
   status={
-    seatsEntryError?.kind === 'outOfRange'
-      ? {type: 'error', message: 'Choose 1 to 40 seats'}
+    seatsEntryError?.kind === 'fractional'
+      ? {type: 'error', message: 'Enter a whole number of seats'}
       : undefined
   }
 />
@@ -162,20 +162,25 @@ interface TimeInputEntryError {
 - **FR4 — Commit keeps rejected text, and never discards an entry silently.**
   Enter or blur on typed text with a rejection keeps the text in the field and
   shows the rejection. The committed value does not change, and `onChange` does
-  not fire. While rejected typed text stays, a form posts the committed value's
-  text under the caller's `name`, from a hidden input, and the typed input
-  carries no `name`: the committed number for `NumberInput`
-  (`component:NumberInput` FR6), and the committed value as the field shows it
-  for `TimeInput`, `DateInput`, and `DateTimeInput`'s date segment
-  (`component:TimeInput` FR11, `component:DateInput` FR24,
-  `component:DateTimeInput` FR8). No member reverts rejected text. A native
-  date or time control restores the committed value at commit, because its own
-  value is what a form posts; its rejection stays revealed, with every signal
-  FR5 gives it, until the next edit or a new `value`, so the restore is never
-  silent. An empty entry is not a rejection: a commit clears it or restores the
-  committed value, as each member's record states. `NumberInput` clamps a
-  number outside its range at commit (`component:NumberInput` FR3), so that
-  rejection ends at the commit.
+  not fire. What a form posts does not change. After a blur that keeps a
+  rejected `NumberInput` or `TimeInput` draft, and after Enter or blur on
+  unreadable `DateInput` or `DateTimeInput` date text, a hidden input carries
+  the caller's `name` with the committed value's text, and the typed input
+  carries none: the committed number for `NumberInput` (`component:NumberInput`
+  FR6), and the committed value as the field shows it for `TimeInput`,
+  `DateInput`, and `DateTimeInput`'s date segment (`component:TimeInput` FR11,
+  `component:DateInput` FR24, `component:DateTimeInput` FR8). In every other
+  case the typed input keeps `name`, and a form posts the typed text: a
+  `NumberInput` or `TimeInput` draft that Enter submits before blur, and
+  incomplete date text or a date the calendar does not have or that `min`,
+  `max`, or `dateConstraints` rules out. No member reverts rejected text. A
+  native date or time control restores the committed value at commit, because
+  its own value is what a form posts; its rejection stays revealed, with every
+  signal FR5 gives it, as FR6 states, so the restore is never silent. An empty
+  entry is not a rejection: a commit clears it or restores the committed value,
+  as each member's record states. `NumberInput` clamps a number outside its
+  range at commit (`component:NumberInput` FR3), so that rejection ends at the
+  commit.
 - **FR5 — In a standalone field, a rejection is a visible message, and its
   signals move together.** In a standalone field, a rejection that appears
   shows its message as the field's error status, in the field's status
@@ -200,9 +205,9 @@ interface TimeInputEntryError {
   next commit, or the next complete entry, replaces it with the entry's current
   rejection: a changed message, as when one complete wrong entry is edited into
   another, is announced once, and the same message is not announced again. A
-  new `value` from the caller, or a date or
-  time picked from a Calendar, sheet, or native picker, replaces the entry and
-  clears its rejection.
+  new `value` from the caller, or a date or time the member accepts picked from
+  a Calendar, sheet, or native picker, replaces the entry and clears its
+  rejection.
 - **FR7 — A caller status never hides a rejection behind a warning.** A
   `warning` or `success` caller status never replaces a rejection's message, on
   any member, with or without `onEntryErrorChange`, and a caller `error` status
@@ -278,9 +283,10 @@ behavior made for accessibility conformance to FR53.
   names the old and new behavior and the two success criteria.
 - It requires no app-layer code change. Existing props, types, exports, tokens,
   and documented usage keep working; the committed value and `onChange` do not
-  change; a form posts the committed value's text while rejected text stays, as
-  it does once a revert has run on the latest stable release (FR4); and
-  `NumberInput`,
+  change; what a form posts does not change, because a hidden input carries the
+  committed value's text wherever the latest stable release reverts rejected
+  text, and the typed input posts its text wherever the release keeps it
+  (FR4); and `NumberInput`,
   `TimeInput`, and `DateTimeInput`'s time segment keep a caller `error` status
   with a message shown over their own message (FR7).
 - `onEntryErrorChange` and its `NumberInputEntryError` and `TimeInputEntryError`
@@ -303,11 +309,11 @@ behavior made for accessibility conformance to FR53.
   entry is unfinished, with unreadable text revealed at commit (FR1–FR3).
   `NumberInput` reveals every rejection at commit and nothing while the person
   types.
-- A form posts the committed value's text, never rejected text (FR4). On the
-  latest stable release, two submissions post rejected text instead: kept
-  nonexistent or out-of-range `DateInput` and `DateTimeInput` date text, and an
-  unparsable `NumberInput` or `TimeInput` draft submitted by Enter. These now
-  post the committed value's text (DEC-13).
+- Two submissions post rejected text, as they do on the latest stable release:
+  incomplete date text or a date the calendar does not have or that its bounds
+  rule out, which `DateInput` and `DateTimeInput` keep after blur, and a
+  `NumberInput` or `TimeInput` draft that Enter submits before blur (FR4,
+  DEC-13).
 - Two screens an app chose change, as part of the same fix:
   - A `NumberInput`, `TimeInput`, or time segment with a caller `warning` or
     `success` status shows the rejection's message in place of that status
@@ -336,15 +342,15 @@ behavior made for accessibility conformance to FR53.
 
 - `family:input-fields` adds FR14, a projection of this record.
 - `component:DateInput` FR24, `component:DateTimeInput` FR15,
-  `component:TimeInput` FR13 and FR14, and `component:NumberInput` FR14 and
-  FR15 project FR1–FR10, and the rows that describe a revert, a keystroke
-  alert, or a rejection shown only by color point to them.
-  `component:NumberInput` FR6, `component:TimeInput` FR11,
-  `component:DateInput` FR24, and `component:DateTimeInput` FR8 post the
-  committed value's text from a hidden input while rejected text stays.
-  `component:DateTimeInput` FR15 shows the date segment's message when both
-  segments hold a rejection. `component:NumberInput` and `component:TimeInput` add
-  `onEntryErrorChange` and their entry-error types.
+  `component:TimeInput` FR13 and FR14, and `component:NumberInput` FR14 and FR15
+  project FR1–FR10, and the rows that describe a revert, a keystroke alert, or a
+  rejection shown only by color point to them. `component:NumberInput` FR6,
+  `component:TimeInput` FR11, `component:DateInput` FR24, and
+  `component:DateTimeInput` FR8 post the committed value's text from a hidden
+  input after blur keeps a rejected draft, or Enter or blur keeps unreadable
+  date text. `component:DateTimeInput` FR15 shows the date segment's
+  message when both segments hold a rejection. `component:NumberInput` and
+  `component:TimeInput` add `onEntryErrorChange` and their entry-error types.
 - The `.doc.mjs` files of the four components describe when a rejection shows,
   that rejected text stays at commit, and which message wins over a caller
   `status`; the `NumberInput` and `TimeInput` docs describe
@@ -363,10 +369,6 @@ says otherwise:
   range, reverts on blur; a `NumberInput` draft that does not parse reverts on
   blur; a native date control restores its committed value at blur and drops
   its rejection. None of these says so on screen.
-- FR4 gap, outside WCAG: no member posts from a hidden input, so a form
-  submitted while rejected text stays posts that text: kept nonexistent or
-  out-of-range date text, and an unparsable `NumberInput` or `TimeInput` draft
-  submitted by Enter.
 - FR5 gap (WCAG 2.2 1.4.1, 3.3.1): in a standalone field, `NumberInput`,
   `TimeInput`, `DateTimeInput`'s time segment, the native date and time
   controls, and unreadable date text set `aria-invalid` and announce through a
@@ -389,7 +391,7 @@ says otherwise:
 | -------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1      | Completeness unit cases per kind of entry     | Dates per `spec:AST-111` FR12; `1:3`, `1:30`, `1:30 PM`, `13:30` in 12- and 24-hour fields; `-`, `1a`, `150` with `max={100}` while typed and at commit; `0002-05-10` | An unfinished entry counts as complete, or a complete one waits                                                                              |
 | FR2, FR3 | Keystroke-by-keystroke suites                 | Each value and text rejection of each member; native date year typing; pasted text                                                                                    | A rejection appears before the entry is complete, a text rejection appears while typing, or a complete value rejection waits                 |
-| FR4      | Enter and blur suites; native form submission | Each rejection kind; empty entry; `NumberInput` past a bound; a native restore; a form posted while each member keeps rejected text                                   | Rejected text reverts or commits, `onChange` fires, a form posts rejected text, a native restore drops its rejection, or a clamp is reported |
+| FR4      | Enter and blur suites; native form submission | Each rejection kind; empty entry; `NumberInput` past a bound; a native restore; a form posted after Enter and after blur on each kept rejection                       | Text reverts or commits, `onChange` fires, a form posts other than FR4 says, a native restore drops its rejection, or a clamp is reported    |
 | FR5, FR7 | Accessibility-tree and live-region assertions | Standalone, horizontal-labels; InputGroup (alert only); each status placement; no caller `status`; an `error`, `warning`, and `success` status; callback or none      | The signals appear or clear apart, a `warning` or `success` status hides a rejection, the wrong message wins, or an announcement repeats     |
 | FR6      | Edit suites after a shown rejection           | Edit to valid; to empty; to incomplete; to another rejection; caller `value` change; calendar pick                                                                    | A fixed entry keeps its rejection, an incomplete edit clears it or announces it again, or a pick leaves it                                   |
 | FR8      | `NumberInput` and `TimeInput` callback suites | Each kind; the rejection ending by typing, a new `value`, or a new bound; disabling; unmount; an unchanged rejection; native and sheet surfaces                       | A report is missing, repeats an unchanged rejection, carries the wrong `kind` or `value`, or comes from a surface with no typed text         |
@@ -483,8 +485,8 @@ message is new information, so it is announced once (FR6).
 Each change makes the four members meet WCAG 2.2 1.4.1 and 3.3.1 in a
 standalone field, and none needs an app to change code, so they ship together
 as a patch under `spec:AST-017` FR53. A caller `error` status keeps its place
-on `NumberInput` and `TimeInput` (DEC-5), and a form posts the committed value's
-text while rejected text stays (DEC-13). Two screens an app chose change as part of
+on `NumberInput` and `TimeInput` (DEC-5), and what a form posts does not change
+(DEC-13). Two screens an app chose change as part of
 the fix: a `warning` or `success` status gives way to a rejection's message
 (DEC-11), and unreadable `DateInput` text stays at commit with its message in
 place of a caller status, as the field's message already wins there.
@@ -533,22 +535,21 @@ Rejected: a number that no digit typed at its end can bring into range counting
 as complete, because the test is complex and easy to get wrong with negative
 numbers and decimals.
 
-### DEC-13 — A form posts the committed value's text, never rejected text
+### DEC-13 — What a form posts does not change
 
 **Reference:** `spec:AST-118/DEC-13`
-**Decider:** `nynexman4464`, `2026-11-11`
+**Decider:** pending
 
-A form posts the field's value, so it never posts text the field rejects. While
-rejected typed text stays, a hidden input carries the caller's `name` with the
-committed value's text, and an app's server receives the value its `onChange`
-already reported (FR4). This also covers the two submissions that post
-rejected text on the latest stable release: kept nonexistent or out-of-range
-`DateInput` and `DateTimeInput` date text, and an unparsable `NumberInput` or
-`TimeInput` draft submitted by Enter.
+A form posts what it posts on the latest stable release. Where that release
+reverts rejected text at a commit, the member keeps the text, and a hidden
+input carries the caller's `name` with the committed value's text, which the
+release posts once the text reverts. Where the release keeps the text, the
+typed input posts it, as it does there. No posted value changes, so the change
+stays an accessibility behavior fix under `spec:AST-017` FR53 (FR4).
 
-Rejected: posting the typed text in those two submissions. It would keep
-today's result there, but the four members would post different things, and a
-server would receive text the field rejects.
+The owner chose the committed value's text in every case; this record narrows
+it to the cases where the release posts it, so the patch changes no posted
+value.
 
 ## Open questions
 
