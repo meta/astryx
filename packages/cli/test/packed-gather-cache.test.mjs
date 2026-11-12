@@ -1048,7 +1048,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     }
   }, 120_000);
 
-  it('keeps the whole issue list, and finds a replacement problem after an edit', async () => {
+  it.skipIf(!hasModuleHooks)('keeps the whole issue list, and finds a replacement problem after an edit', async () => {
     const tmp = keptTmp('replacement');
     const other = makeProject();
     try {
@@ -1086,7 +1086,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     }
   }, 120_000);
 
-  it('gives doctor its own answer after an everyday command kept the issue list', () => {
+  it.skipIf(!hasModuleHooks)('gives doctor its own answer after an everyday command kept the issue list', () => {
     const tmp = keptTmp('doctor-core');
     // A project with no installed Core, and an opted-in integration whose
     // component replaces a Core one: everyday commands read the Core the CLI
