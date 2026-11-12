@@ -7,8 +7,9 @@
  * @output jsdom proofs that a reorder handle's name follows its row when the
  *   handle does not render again. A nameless row's place follows a row above
  *   it that goes, and a reorder, also after the list's numbering turns on. A
- *   label names the handle while it shows text. A handle named some other way
- *   renders once per mount, and once when it hydrates.
+ *   label names the handle while it shows text. A handle named by its label,
+ *   its `aria-label` or otherwise renders once per mount, and once when it
+ *   hydrates.
  * @position Tests for List/ListReorderHandle.tsx
  */
 
@@ -158,13 +159,16 @@ describe('List reorder handle names', () => {
     warn.mockRestore();
   });
 
-  it("renders a handle its row's aria-label names once per mount, though the session reads the names after the commit", async () => {
+  it("renders a handle its row's label or aria-label names once per mount, though the session reads the names after the commit", async () => {
     // Each handle render reads the verb once, so the reads count renders.
     verbReads = 0;
     const reorderable = createReorderable({onReorder: () => {}});
+    // Inbox is named by its `aria-label`, the other rows by their labels.
     const Row = memo(function Row({itemKey}: {itemKey: string}) {
-      return (
+      return itemKey === 'Inbox' ? (
         <ListItem itemKey={itemKey} aria-label={itemKey} label={itemKey} />
+      ) : (
+        <ListItem itemKey={itemKey} label={itemKey} />
       );
     });
     const rows = (keys: ReadonlyArray<string>) => (
@@ -193,14 +197,14 @@ describe('List reorder handle names', () => {
     expect(verbReads).toBe(3);
   });
 
-  it("renders a hydrated handle its row's aria-label names once, though the server snapshot comes before the session's read", async () => {
+  it("renders a hydrated handle its row's label or aria-label names once, though the server snapshot comes before the session's read", async () => {
     const error = vi.spyOn(console, 'error');
     const reorderable = createReorderable({onReorder: () => {}});
     const tree = (
       <InternationalizationContext value={COUNTING_ENGLISH}>
         <List reorderable={reorderable}>
           <ListItem itemKey="inbox" aria-label="Inbox" label="Inbox" />
-          <ListItem itemKey="sent" aria-label="Sent" label="Sent" />
+          <ListItem itemKey="sent" label="Sent" />
         </List>
       </InternationalizationContext>
     );

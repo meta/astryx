@@ -254,12 +254,13 @@ const LABEL_WATCH: MutationObserverInit = {
 
 /**
  * What names a handle besides its own text, as the list last showed it. Its
- * row's 1-based place among the list's rows, and whether Item's label element
- * shows a name. Each is null until the session reads it.
+ * row's 1-based place among the list's rows, null until the session reads
+ * it. And whether Item's label element shows no name: an unread label counts
+ * as one that shows a name, so a first read that finds a name changes nothing.
  */
 export interface ListReorderHandleName {
   readonly position: number | null;
-  readonly labelNamesRow: boolean | null;
+  readonly labelShowsNoName: boolean;
 }
 
 /**
@@ -976,10 +977,10 @@ export class ListReorderController implements ListReorderSession {
           );
         }
       }
-      const labelNamesRow = label?.labelId == null ? null : namesRow(element);
+      const labelShowsNoName = label?.labelId != null && !namesRow(element);
       const byPlace =
         label != null &&
-        (label.labelId != null ? labelNamesRow === false : !label.isNamed);
+        (label.labelId != null ? labelShowsNoName : !label.isNamed);
       // Only a handle named after its place keeps it, so a reorder leaves
       // the handles named some other way alone.
       const row = byPlace ? this.rowOf(handle) : null;
@@ -987,9 +988,9 @@ export class ListReorderController implements ListReorderSession {
       const previous = this.handleNameOf(handle);
       if (
         previous.position !== position ||
-        previous.labelNamesRow !== labelNamesRow
+        previous.labelShowsNoName !== labelShowsNoName
       ) {
-        this.handleNames.set(handle, {position, labelNamesRow});
+        this.handleNames.set(handle, {position, labelShowsNoName});
         changed = true;
       }
       if (byPlace && position != null && !this.warnedNameless.has(handle)) {

@@ -317,7 +317,7 @@ export function ListReorderHandle({
     return null;
   }
   // A label element that shows no name falls back to the row's place.
-  const labelShowsName = byLabel && shown.labelNamesRow !== false;
+  const labelShowsName = byLabel && !shown.labelShowsNoName;
   const byPlace = byLabel ? !labelShowsName : !named;
   const shownLabelledBy = byLabel && !labelShowsName ? undefined : labelledBy;
   // Named through the label element. The handle's own `aria-label` is the
@@ -402,7 +402,7 @@ const subscribeNothing = () => () => {};
  */
 export const UNREAD_HANDLE_NAME: ListReorderHandleName = {
   position: null,
-  labelNamesRow: null,
+  labelShowsNoName: false,
 };
 
 /**
