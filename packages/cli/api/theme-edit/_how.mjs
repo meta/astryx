@@ -28,7 +28,7 @@ import {
   familyOf,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
-import {baseThemeFile, installLine} from './_project.mjs';
+import {baseInstalled, installLine} from './_project.mjs';
 import {loadTheme, nearest, refuse, themeSourceProblem} from './_settings.mjs';
 import {ASPECTS, checkSetting} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
@@ -332,14 +332,8 @@ async function answer(subject, options, cwd) {
     const d = DIALS[key];
     // A base is named only when it is installed here; the others are
     // listed with the line that installs them.
-    const installed = (/** @type {string} */ b) => {
-      try {
-        baseThemeFile(ctx.project, b);
-        return true;
-      } catch {
-        return false;
-      }
-    };
+    const installed = (/** @type {string} */ b) =>
+      baseInstalled(ctx.project, b);
     const missing = key === 'base' ? LIKE.filter(b => !installed(b)) : [];
     return {
       kind: 'setting',
@@ -459,7 +453,7 @@ async function answer(subject, options, cwd) {
     };
   }
   // A question about the tool itself gets the command that answers it.
-  const tool = toolAnswer(t, env);
+  const tool = toolAnswer(t, env, ctx.project.target);
   if (tool === 'list') {
     const kind =
       /\b(dials?|tokens?|parts?|groups?|properties|property)\b/i
@@ -650,21 +644,22 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
   const group = familyOf(key);
   // Only the states set takes on this part (it refuses one that never
   // applies there).
+  // Only the states set takes on this part: a state is dropped when the
+  // same change without it passes and with it is refused.
+  const takes = (/** @type {string | undefined} */ st) => {
+    try {
+      checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
+        on: key,
+        ...(st ? {state: st} : {}),
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const plainOk = takes(undefined);
   const states = [...new Set([...target.states, ...COMMON_STATES])].filter(
-    st => {
-      try {
-        checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
-          on: key,
-          state: st,
-        });
-        return true;
-      } catch (e) {
-        return !(
-          /** @type {any} */ (e)?.code === 'ERR_THEME_NO_EFFECT' &&
-          /--state/.test(String(/** @type {any} */ (e)?.message))
-        );
-      }
-    },
+    st => !plainOk || takes(st),
   );
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
@@ -937,9 +932,10 @@ function colorsAnswer(env, dialCommands) {
  * the caller lists the kind the question names.
  * @param {string} t
  * @param {import('./_how-commands.mjs').HowTheme} env
+ * @param {Map<string, unknown>} targets the parts Core styles
  * @returns {Array<{text: string, commands: string[]}> | 'list' | null}
  */
-function toolAnswer(t, env) {
+function toolAnswer(t, env, targets) {
   const q = t
     .trim()
     .toLowerCase()
@@ -1011,7 +1007,53 @@ function toolAnswer(t, env) {
         commands: [`${P} new ${env.slug}-2 --like ${env.data.like ?? 'none'}`],
       },
     ];
-  if (/\b(version|which cli|what cli)\b/.test(q))
+  // Screen-size, print and device conditions: the editor has none.
+  if (
+    /\bmedia quer|^(on|for) (mobile|phones?|tablets?|desktops?|print)$|^(print|printing|print styles?)$/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: 'the theme editor has no screen-size, print or device conditions: every setting applies on every screen; a media query needs your own CSS',
+        commands: [`${HOW} --help`],
+      },
+    ];
+  // Questions about what is set now, or the choices: a lookup, never a
+  // write.
+  const asks =
+    /^(how (round|big|small|large|thick|dark|light|bold|wide|tall) (is|are)|what (is|are) the (current|available)|which \w+ (does|do|is|are)|what (font|color|colour|radius|accent) (does|do|is|are)|what (values|options|choices))\b|\b(right now|currently|at the moment)\??$|\bnow\?$/.exec(
+      q,
+    );
+  if (asks || /^which parts (are|does|do)\b/.test(q)) {
+    // The part or setting the question names gets its own lookup.
+    const named = q
+      .split(/[^a-z-]+/)
+      .find(
+        w =>
+          w.length > 2 &&
+          (targets.has(w) ||
+            targets.has(w.replace(/s$/, '')) ||
+            ['inputs', 'checks'].includes(w)),
+      );
+    const key =
+      named && !targets.has(named) && !['inputs', 'checks'].includes(named)
+        ? named.replace(/s$/, '')
+        : named;
+    return [
+      {
+        text: key
+          ? `how ${key} says what ${key} reads and what sets it; show lists what ${env.slug} sets now`
+          : `show lists what ${env.slug} sets now; how <part> or how <setting> says what a part reads and the values a setting takes`,
+        commands: [...(key ? [`${HOW} ${key}`] : []), `${P} show ${env.slug}`],
+      },
+    ];
+  }
+  if (
+    /\b((astryx|cli) version|version of (the )?(cli|astryx)|which cli|what cli)\b/.test(
+      q,
+    )
+  )
     return [{text: 'the CLI says its version', commands: ['astryx --version']}];
   if (/\bwhere (are|is|do) .*\b(stored|saved|kept|live|files?)\b/.test(q))
     return [

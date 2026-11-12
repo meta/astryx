@@ -58,14 +58,34 @@ let names = null;
 export function cssProperties() {
   if (names) return names;
   const mdn = mdnProperties();
+  const current = syntaxPatches().properties;
   names = new Set([
     ...Object.keys(csstree().lexer.properties).filter(
-      k => !k.startsWith('-') && mdn[k] && mdn[k].status !== 'obsolete',
+      k =>
+        !k.startsWith('-') &&
+        mdn[k] &&
+        // MDN marks a renamed property obsolete (font-stretch is font-width
+        // now); one the current specifications still define, as browsers
+        // ship it, stays.
+        (mdn[k].status !== 'obsolete' || k in current),
     ),
     ...NOT_IN_MDN_YET,
   ]);
   return names;
 }
+
+/**
+ * The current specifications' grammar, as patches to css-tree's: the
+ * ranges MDN's data leaves out (`line-height` takes `<number [0,∞]>`).
+ * @returns {{properties: Record<string, string>, types: Record<string, string>, atrules: Record<string, unknown>}}
+ */
+const syntaxPatches = () =>
+  require('@csstools/css-syntax-patches-for-csstree').next;
+
+/** @type {any} */
+let patched = null;
+/** css-tree's lexer with the current specifications' grammar. */
+const currentLexer = () => (patched ??= csstree().fork(syntaxPatches()).lexer);
 
 /** What a var() or env() may stand for while the rest of a value is matched. */
 const VAR_STANDS_FOR = ['0', '1px', '1ms', 'red', 'ease', 'serif', '0 0 red'];
@@ -178,7 +198,8 @@ function matchWith(value, match) {
 /**
  * Whether a value that matches a property's grammar is still below a range
  * the specs set and css-tree's data does not carry: a `<line-width>` (a
- * border or outline width) and a duration are never negative.
+ * border or outline width) and a duration are never negative, nor is any
+ * number the current specifications' grammar ranges at 0 or more.
  * @param {string} property
  * @param {string} value
  */
@@ -208,6 +229,19 @@ export function belowRange(property, value) {
     numbersIn(ast).some(n => n.value < 0 && ['s', 'ms'].includes(n.unit))
   )
     below = true;
+  // A negative number the current grammar's range refuses (`line-height
+  // -1`, `gap -2px`).
+  // Only the sign decides: the same value with every number made positive
+  // must match the current grammar.
+  if (!below && numbersIn(ast).some(n => n.value < 0)) {
+    const lexer = currentLexer();
+    const positive = parse(value.replace(/(^|[\s(,/])-(?=\.?\d)/g, '$1'), {
+      context: 'value',
+    });
+    below =
+      Boolean(lexer.matchProperty(property, ast).error) &&
+      !lexer.matchProperty(property, positive).error;
+  }
   return below;
 }
 
@@ -513,10 +547,15 @@ export function numbersIn(ast) {
   csstree().walk(ast, {
     enter(/** @type {any} */ node) {
       if (node.type === 'Function') fns.push(node.name.toLowerCase());
-      if (node.type === 'Dimension' || node.type === 'Number')
+      if (
+        node.type === 'Dimension' ||
+        node.type === 'Number' ||
+        node.type === 'Percentage'
+      )
         out.push({
           value: Number(node.value),
-          unit: (node.unit ?? '').toLowerCase(),
+          unit:
+            node.type === 'Percentage' ? '%' : (node.unit ?? '').toLowerCase(),
           fn: fns.at(-1) ?? null,
         });
     },
@@ -583,6 +622,55 @@ export function initialOf(prop) {
     : null;
 }
 
+/**
+ * One CSS number, percentage or dimension, read by css-tree's tokenizer as
+ * the browser reads it (`1.5e0`, `+1.5`, `15E-1`, `1.5EM`; never `50.%`),
+ * or null for anything else.
+ * @param {string} value
+ * @returns {{value: number, unit: string} | null}
+ */
+export function cssNumber(value) {
+  /** @type {any} */
+  let ast;
+  try {
+    ast = csstree().parse(value.trim(), {context: 'value'});
+  } catch {
+    return null;
+  }
+  const nodes = ast.children?.toArray?.() ?? [];
+  if (nodes.length !== 1) return null;
+  const [n] = nodes;
+  if (n.type === 'Number') return {value: Number(n.value), unit: ''};
+  if (n.type === 'Percentage') return {value: Number(n.value), unit: '%'};
+  if (n.type === 'Dimension')
+    return {value: Number(n.value), unit: String(n.unit).toLowerCase()};
+  return null;
+}
+
+/**
+ * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
+ * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
+ * @param {string} v
+ * @param {',' | ' '} sep
+ * @returns {string[]}
+ */
+export function splitTop(v, sep) {
+  /** @type {string[]} */
+  const out = [];
+  let depth = 0;
+  let cur = '';
+  for (const c of v) {
+    if (c === '(') depth++;
+    if (c === ')') depth--;
+    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
+      if (cur.trim() || sep === ',') out.push(cur);
+      cur = '';
+    } else cur += c;
+  }
+  if (cur.trim() || sep === ',') out.push(cur);
+  return out.filter(x => sep === ',' || x.trim());
+}
+
 /** The longhand each type of the `font` grammar sets, where css-tree names a type, not a property. */
 const FONT_TYPE_LONGHAND = /** @type {Record<string, string>} */ ({
   'font-variant-css2': 'font-variant-caps',
@@ -602,15 +690,86 @@ const FONT_TYPE_LONGHAND = /** @type {Record<string, string>} */ ({
  */
 export function fontShorthandParts(value) {
   const {lexer, parse, generate} = csstree();
-  const word = value.trim().toLowerCase();
-  if (/^[a-z-]+$/.test(word))
-    for (const prop of [
-      'font-weight',
-      'font-style',
-      'font-variant-caps',
-      'font-stretch',
-    ])
-      if (keywordsOf(prop).includes(word)) return {[prop]: word};
+  // Words that are each one longhand's keyword, size or weight (`bold`,
+  // `italic bold`, `bold 1rem`) are those longhands, in any order before the
+  // size; after the size the rest is the family (`1rem bold` names a family
+  // called bold), as CSS reads it.
+  const LONGHANDS = [
+    'font-weight',
+    'font-style',
+    'font-variant-caps',
+    'font-stretch',
+    'font-size',
+  ];
+  if (!value.includes(',')) {
+    /** @type {Record<string, string>} */
+    const each = {};
+    const words = splitTop(value.trim(), ' ');
+    let all = true;
+    // `normal` fits several longhands: every other word is placed first,
+    // then each `normal` takes the first longhand still free.
+    const normals = words.filter(w => w.toLowerCase() === 'normal').length;
+    // A normal after the size is part of the family, read below.
+    const sizeAt = words.findIndex(
+      w => matchValue('font-size', w.split('/')[0]) && !/^[a-z-]+$/i.test(w),
+    );
+    if (
+      sizeAt >= 0 &&
+      words.slice(sizeAt + 1).some(w => w.toLowerCase() === 'normal')
+    )
+      all = false;
+    for (const w of words.filter(x => x.toLowerCase() !== 'normal')) {
+      if (!all) break;
+      const lower = w.toLowerCase();
+      // After the size, the rest is the family (16px bold names a family
+      // called bold): the grammar below reads it.
+      if ('font-size' in each) {
+        all = false;
+        break;
+      }
+      // A size with its line height (1rem/1.5).
+      const slash = /^([^/]+)\/([^/]+)$/.exec(w);
+      if (
+        slash &&
+        !('font-size' in each) &&
+        matchValue('font-size', slash[1]) &&
+        matchValue('line-height', slash[2])
+      ) {
+        each['font-size'] = slash[1];
+        each['line-height'] = slash[2];
+        continue;
+      }
+      const takers = LONGHANDS.filter(p => keywordsOf(p).includes(lower));
+      const keyword = takers.find(p => !(p in each));
+      // A part given twice (bold bold, bold lighter, italic oblique) is no
+      // font value.
+      if (takers.length && !keyword) return {repeat: lower, part: takers[0]};
+      const prop =
+        keyword ??
+        ['font-size', 'font-weight'].find(
+          p => !(p in each) && !/^[a-z-]+$/i.test(w) && matchValue(p, w),
+        );
+      if (!prop) {
+        all = false;
+        break;
+      }
+      each[prop] = /^[a-z-]+$/i.test(w) ? lower : w;
+    }
+    for (let n = 0; all && n < normals; n += 1) {
+      const free = LONGHANDS.find(
+        p => !(p in each) && keywordsOf(p).includes('normal'),
+      );
+      if (!free)
+        return {
+          repeat: 'normal',
+          part: LONGHANDS.filter(p => keywordsOf(p).includes('normal')).join(
+            ', ',
+          ),
+        };
+      each[free] = 'normal';
+    }
+    if (all && words.length) return each;
+  }
   /** @type {any} */
   let ast;
   try {

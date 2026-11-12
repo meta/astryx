@@ -18,6 +18,8 @@ import {
   DIALS,
   FAMILIES,
   FONT_ROLES,
+  HEADING_TRACKING,
+  HEADING_WEIGHTS,
   KEY_TOKENS,
   LIKE,
   P,
@@ -53,6 +55,7 @@ import {
   staleBuild,
   EDITOR_SUFFIXES,
   madeByEditor,
+  camel,
   NEW_MARKER,
   clearNewMarker,
   refuseThemeSource,
@@ -76,7 +79,7 @@ import {
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
 import {refreshPreviewRoute} from './_preview-app.mjs';
-import {baseResolved, installLine} from './_project.mjs';
+import {baseInstalled, baseResolved, installLine} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
   requireProject,
@@ -88,7 +91,10 @@ import {
   checkSection,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {
+  getCliInvocation,
+  quoteCommandArgument,
+} from '../../foundation/env/package-manager.mjs';
 
 const E = ERROR_CODES;
 
@@ -191,6 +197,27 @@ export async function themeEditNew(name, options = {}) {
   // `--like none` builds on no base, as `set <theme> base none` does.
   const like = options.like === 'none' ? undefined : options.like;
   requireProject(cwd);
+  // A corrected `new` keeps every option given, fixing only the bad one.
+  // A --like in another case is the built-in theme it names.
+  // A --like that names no built-in theme is the nearest one, or none: a
+  // corrected command never repeats a --like that is refused below.
+  // A guess (the nearest base to a word that names none) is only a base the
+  // project has installed: another would be refused in turn. A base named
+  // in other letters is the one meant, installed or not (its refusal then
+  // offers the install, or the same new on no base).
+  const have = LIKE.filter(b => baseInstalled(cwd, b));
+  const likeFixed =
+    like == null
+      ? options.like === 'none'
+        ? 'none'
+        : undefined
+      : LIKE.includes(String(like).toLowerCase())
+        ? String(like).toLowerCase()
+        : (nearest(String(like).toLowerCase(), have)[0] ?? null);
+  const again = (
+    /** @type {string} */ newName,
+    /** @type {string | null | undefined} */ likeValue = likeFixed,
+  ) => `${P} new ${newName}${newFlags(likeValue, settings, png)}`;
   if (!slugOk(name)) {
     const fixed = slugFor(name);
     // The name as typed may be a theme that exists in another case.
@@ -198,7 +225,7 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.`,
-      {run: exists ? [`${P} show ${fixed}`] : [`${P} new ${fixed}`]},
+      {run: exists ? [`${P} show ${fixed}`] : [again(fixed)]},
     );
   }
   // A built-in theme's name would collide with the theme of that name the
@@ -207,7 +234,18 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `${name} is a built-in theme; an editor theme needs a name of its own. To start from ${name}, build on it.`,
-      {run: [`${P} new my-${name} --like ${name}`]},
+      {
+        run: [
+          again(
+            fs.existsSync(themeFiles(cwd, `my-${name}`).dir)
+              ? freeThemeName(cwd, `my-${name}`)
+              : `my-${name}`,
+            // Built on the theme named when it is installed, unless another
+            // base (or none) was given.
+            likeFixed ?? name,
+          ),
+        ],
+      },
     );
   const f = themeFiles(cwd, name);
   // A link or a file where the theme goes is never written through or
@@ -218,15 +256,19 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `themes in this app is ${rootSt.isSymbolicLink() ? `a link (to ${fs.readlinkSync(f.root)})` : 'a file'}, not a folder, so no editor theme can be made: every theme goes in themes/<name>/. Rename or move it, then run new again.`,
-      // A look that changes nothing: the themes the app can use now.
-      {run: ['astryx theme list']},
+      // A look that changes nothing: what is in the way.
+      {
+        run: [
+          `ls -la ${quoteCommandArgument(path.relative(cwd, f.root) || 'themes')}`,
+        ],
+      },
     );
   const dirSt = fs.lstatSync(f.dir, {throwIfNoEntry: false});
   if (dirSt && (dirSt.isSymbolicLink() || !dirSt.isDirectory()))
     refuse(
       E.ERR_FILE_EXISTS,
       `themes/${name} is ${dirSt.isSymbolicLink() ? 'a link' : 'a file'}, so a theme is not made there.`,
-      {run: [`${P} new ${name}-copy`]},
+      {run: [again(freeThemeName(cwd, name))]},
     );
   // Settings that are not valid JSON are kept aside, and the theme is
   // made again beside them.
@@ -250,28 +292,38 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `themes/${name}/ already holds files this command did not make; choose another name.`,
-      {run: [`${P} new ${name}-copy`]},
+      {run: [again(freeThemeName(cwd, name))]},
     );
   if (like != null && !LIKE.includes(like))
     refuse(
       E.ERR_THEME_BAD_VALUE,
       `--like takes a built-in theme (${LIKE.join(', ')}), not "${like}"${fs.existsSync(themeFiles(cwd, String(like)).settings) ? `; ${like} is a theme made here, and a new theme builds only on a built-in one` : ''}.`,
       {
-        didYouMean: nearest(String(like).toLowerCase(), LIKE),
-        run: [`${P} new ${name}`],
+        // The built-in theme it names in another case, or the nearest
+        // installed one, else none: the did-you-mean and the run agree.
+        didYouMean: likeFixed ? [likeFixed] : [],
+        run: [again(name, likeFixed ?? null)],
       },
     );
   const ctx = await context(cwd);
   /** @type {import('./_settings.mjs').ThemeData} */
   const data = {name, ...(like ? {like} : {}), mode: 'both', settings: []};
-  /** @type {import('./_settings.mjs').Ctx} */ (ctx).base = await baseResolved(
-    ctx.project,
-    data.like,
-  );
+  try {
+    /** @type {import('./_settings.mjs').Ctx} */ (ctx).base =
+      await baseResolved(ctx.project, data.like);
+  } catch (e) {
+    // A base that is not installed: install it, or the same new on no base.
+    if (e instanceof AstryxError && e.code === E.ERR_UNKNOWN_THEME)
+      e.suggestions = [
+        ...(e.suggestions ?? []),
+        {name: again(name, null), reason: 'build on no theme'},
+      ];
+    throw e;
+  }
   // Every check comes before the first change to the folder: the settings,
   // and a source of the user's own kept from before (it must still extend
   // the settings, or the build fails after the folder was cleared).
-  applyNewSettings(ctx, name, data, settings);
+  applyNewSettings(ctx, name, data, settings, png, likeFixed ?? undefined);
   if (left?.keep.some(p => path.basename(p) === `${name}.theme.ts`))
     refuseThemeSource(cwd, name);
   /** @type {string[]} */
@@ -290,7 +342,7 @@ export async function themeEditNew(name, options = {}) {
     );
   if (left?.keep.some(p => path.basename(p) === `${name}.history.json`))
     leftNotes.push(
-      `the earlier settings are kept in ${name}.history.json: \`${P} undo ${name}\` steps back to them`,
+      `the history is kept in ${name}.history.json: \`${P} undo ${name}\` steps back to the settings from before the last change, and the last change itself is not kept`,
     );
   // The marker goes first and comes off last: a `new` stopped between
   // leaves a folder the next `new` can prove it made. The damaged settings
@@ -417,8 +469,17 @@ export async function themeEditNew(name, options = {}) {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {Record<string, string | string[] | undefined>} settings
+ * @param {boolean} [png] kept in a corrected `new` a refusal suggests
+ * @param {string} [likeFlag] the --like a corrected `new` keeps (`none` too)
  */
-function applyNewSettings(ctx, slug, data, settings) {
+function applyNewSettings(
+  ctx,
+  slug,
+  data,
+  settings,
+  png = false,
+  likeFlag = data.like,
+) {
   const given = Object.entries(settings).filter(([, v]) => v != null);
   for (const [thing] of given)
     if (!DIALS[thing] || thing === 'base')
@@ -441,13 +502,14 @@ function applyNewSettings(ctx, slug, data, settings) {
     const given = settings[thing];
     if (given == null) continue;
     // `headings` takes a weight and a tracking: one value per axis.
-    for (const value of Array.isArray(given) ? given : [given]) {
+    const values = Array.isArray(given) ? given : [given];
+    for (const [index, value] of values.entries()) {
       /** @type {import('./_settings.mjs').Setting} */
       let s;
       try {
         s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
       } catch (e) {
-        throw asNewRefusal(e, slug, settings);
+        throw asNewRefusal(e, slug, settings, likeFlag, png, {thing, index});
       }
       if (thing === 'mode')
         data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (
@@ -460,8 +522,14 @@ function applyNewSettings(ctx, slug, data, settings) {
             E.ERR_INVALID_ARGUMENT,
             `--${thing} was given two values for the same thing (${data.settings[same].value}, ${s.value}); give one.`,
             {
+              // Every other option given stays, and the first value on each
+              // axis: every later value for an axis already given goes.
               run: [
-                `${P} new ${slug} --${thing} ${quoteCommandArgument(s.value)}`,
+                `${P} new ${slug}${newFlags(
+                  likeFlag,
+                  {...settings, [thing]: firstPerAxis(values)},
+                  png,
+                )}`,
               ],
             },
           );
@@ -472,33 +540,114 @@ function applyNewSettings(ctx, slug, data, settings) {
 }
 
 /**
+ * The options of a `new` as flags, in the order given (`new --help`'s order
+ * for the command): `--like`, each dial setting, then `--png`.
+ * @param {string | null | undefined} like none when null or undefined
+ * @param {Record<string, string | string[] | undefined>} settings
+ * @param {boolean} [png]
+ * @returns {string[]}
+ */
+export function newFlagList(like, settings, png = false) {
+  return [
+    ...(like ? [`--like ${quoteCommandArgument(like)}`] : []),
+    ...Object.entries(settings)
+      .filter(([, v]) => v != null)
+      .flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map(x => [k, x]))
+      .map(([k, v]) => `--${k} ${quoteCommandArgument(String(v))}`),
+    ...(png ? ['--png'] : []),
+  ];
+}
+
+/**
+ * The options of a `new` as one flag line, with its leading space.
+ * @param {string | null | undefined} like
+ * @param {Record<string, string | string[] | undefined>} settings
+ * @param {boolean} png
+ */
+function newFlags(like, settings, png) {
+  const parts = newFlagList(like, settings, png);
+  return parts.length ? ` ${parts.join(' ')}` : '';
+}
+
+/**
  * A refusal from a setting `new` was given, with its suggestions turned
  * into `new` commands: the theme does not exist yet, so a `set` would fail.
  * @param {unknown} e
  * @param {string} slug
  * @param {Record<string, string | string[] | undefined>} settings
+ * @param {string} [like] the --like given, kept in a corrected command
+ * @param {boolean} [png] --png, kept in a corrected command
+ * @param {{thing: string, index: number} | null} [at] the value refused
  */
-function asNewRefusal(e, slug, settings) {
+function asNewRefusal(e, slug, settings, like, png = false, at = null) {
   if (!(e instanceof AstryxError)) return e;
-  const flags = Object.entries(settings)
-    .filter(([, v]) => v != null)
-    .flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map(x => [k, x]))
-    .map(([k, v]) => `--${k} ${quoteCommandArgument(String(v))}`);
   const setPrefix = `${P} set ${slug} `;
   e.suggestions = (e.suggestions ?? []).map(s => {
     if (s.name === `${P} set --help`) return {...s, name: `${P} new --help`};
     if (!s.name.startsWith(setPrefix)) return s;
     const [thing, ...rest] = s.name.slice(setPrefix.length).split(' ');
     if (thing.startsWith('--') || !DIALS[thing]) return s;
-    const keep = flags.filter(f => !f.startsWith(`--${thing} `));
+    const fixed = unquoteWord(rest.join(' '));
+    // Only the refused value changes: a dial given several values
+    // (--headings tight --headings BOLD) keeps the others, in order.
+    const given = settings[thing];
+    const values = Array.isArray(given) ? [...given] : null;
+    const next =
+      values && at && at.thing === thing
+        ? firstPerAxis(values.map((v, i) => (i === at.index ? fixed : v)))
+        : fixed;
     return {
       ...s,
-      name: [`${P} new ${slug}`, ...keep, `--${thing} ${rest.join(' ')}`].join(
-        ' ',
-      ),
+      name: `${P} new ${slug}${newFlags(like, {...settings, [thing]: next}, png)}`,
     };
   });
+  // A refused value with nothing to put in its place: the same new
+  // without it, every other option kept.
+  if (at && !e.suggestions.some(x => x.name.startsWith(`${P} new `))) {
+    const given = settings[at.thing];
+    const rest = Array.isArray(given)
+      ? given.filter((_, i) => i !== at.index)
+      : undefined;
+    e.suggestions.push({
+      name: `${P} new ${slug}${newFlags(like, {...settings, [at.thing]: rest?.length ? rest : undefined}, png)}`,
+      reason: `without --${at.thing} ${quoteCommandArgument(String(Array.isArray(given) ? given[at.index] : given))}`,
+    });
+  }
   return e;
+}
+
+/**
+ * Headings values with every later value for an axis already given left
+ * out (the first weight and the first tracking stay); a word of neither
+ * axis stays, for its own refusal.
+ * @param {string[]} values
+ * @returns {string[]}
+ */
+function firstPerAxis(values) {
+  const seen = new Set();
+  return values.filter(v => {
+    const w = String(v).trim().toLowerCase();
+    const axis =
+      HEADING_WEIGHTS[w] !== undefined
+        ? 'weight'
+        : HEADING_TRACKING[w] !== undefined
+          ? 'tracking'
+          : null;
+    if (!axis) return true;
+    if (seen.has(axis)) return false;
+    seen.add(axis);
+    return true;
+  });
+}
+
+/**
+ * A word as a suggested command writes it, without the quotes
+ * quoteCommandArgument adds.
+ * @param {string} word
+ */
+function unquoteWord(word) {
+  const m = /^'(.*)'$/s.exec(word);
+  return m ? m[1].replace(/'\\''/g, "'") : word;
 }
 
 /**
@@ -571,7 +720,12 @@ function refuseStoredTokens(ctx, slug, data, skip) {
       // setting is never refused for another.
       run: [
         ...bad.slice(0, 5).map(b => `${P} undo ${slug} ${undoArgs(b.setting)}`),
-        ...(one && !one.scope
+        // A value to set only for a token whose stored value has the wrong
+        // type; any other thing `set` would refuse, or read as a dial.
+        ...(one &&
+        !one.scope &&
+        one.setting.source === 'token' &&
+        ctx.C.isToken(one.setting.thing)
           ? [
               `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(exampleOf(ctx.C.typeOf(one.setting.thing), one.setting.thing))}`,
             ]
@@ -579,6 +733,22 @@ function refuseStoredTokens(ctx, slug, data, skip) {
       ],
     },
   );
+}
+
+/**
+ * A theme name near `name` that is valid and whose folder is free: `name-2`,
+ * `name-3`, …, shortened to fit the name's length limit.
+ * @param {string} cwd
+ * @param {string} name
+ */
+function freeThemeName(cwd, name) {
+  for (let n = 2; n < 1000; n += 1) {
+    const suffix = `-${n}`;
+    const candidate = `${name.slice(0, 64 - suffix.length).replace(/-+$/, '')}${suffix}`;
+    if (slugOk(candidate) && !fs.existsSync(themeFiles(cwd, candidate).dir))
+      return candidate;
+  }
+  return '<another name>';
 }
 
 /**
@@ -675,7 +845,7 @@ async function change(sub, slug, thing, value, options) {
       sub === 'undo'
         ? data.settings.find(
             x =>
-              x.thing === thing &&
+              x.thing.toLowerCase() === String(thing).toLowerCase() &&
               (x.on ?? null) === (flags.on ?? null) &&
               (x.when ?? null) === (flags.when ?? null) &&
               (x.state ?? null) === (flags.state ?? null) &&
@@ -687,13 +857,36 @@ async function change(sub, slug, thing, value, options) {
       // what it named (or of the dial its refusal names), else the last
       // step.
       if (sub === 'undo' && e instanceof AstryxError) {
+        // Setting names are matched in any case, and a near name of a
+        // setting the theme has counts: `undo t Corners`, `undo t corner`.
+        const typed = String(thing).toLowerCase();
         const named = new Set([
-          thing,
+          typed,
           ...(e.suggestions ?? [])
-            .map(x => new RegExp(` set ${slug} (\\S+)`).exec(x.name)?.[1])
+            .filter(x => x.reason === 'did you mean')
+            .map(x => x.name.toLowerCase()),
+          ...(e.suggestions ?? [])
+            .map(
+              x => new RegExp(` (?:set|undo) ${slug} (\\S+)`).exec(x.name)?.[1],
+            )
             .filter(Boolean),
+          ...nearest(
+            typed,
+            data.settings.map(x => x.thing.toLowerCase()),
+          ),
         ]);
-        const matches = data.settings.filter(x => named.has(x.thing));
+        const matches = data.settings.filter(x =>
+          named.has(x.thing.toLowerCase()),
+        );
+        // A word that is near a setting name (a typo, another case) is never
+        // answered with a bare step back, which would undo another change;
+        // any other word (`all`) may mean the last step.
+        const nearSetting =
+          named.size > 1 ||
+          nearest(typed, [
+            ...Object.keys(DIALS),
+            ...data.settings.map(x => x.thing.toLowerCase()),
+          ]).length > 0;
         const steps = readHistory(themeFiles(cwd, slug).history).steps.length;
         throw new AstryxError(
           e.message,
@@ -703,7 +896,7 @@ async function change(sub, slug, thing, value, options) {
                 reason: 'do this instead',
               }))
             : [
-                steps
+                steps && !nearSetting
                   ? {name: `${P} undo ${slug}`, reason: 'step back one change'}
                   : {name: `${P} show ${slug}`, reason: 'see what it sets'},
               ],
@@ -956,6 +1149,13 @@ async function change(sub, slug, thing, value, options) {
           ...exactWins,
         ].map(describe)
       : [];
+  // The role fonts a whole-theme font sits under.
+  const roleOver =
+    sub === 'set' && s.thing === 'font' && !s.on
+      ? data.settings.filter(
+          x => x.thing === 'font' && x.on && ['body', 'heading'].includes(x.on),
+        )
+      : [];
   // The exact property a dial on a part competes with there.
   const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
     corners: /radius$/,
@@ -986,6 +1186,29 @@ async function change(sub, slug, thing, value, options) {
           `comes after ${covers.map(describe).join(', ')}, so ${covers.length > 1 ? 'those parts show' : `${covers[0].on} shows`} this value now; set ${covers.length > 1 ? 'one' : 'it'} again to make it win`,
         ]
       : []),
+    // Core writes a part's derived variables (a button's or card's radius
+    // variable, read by what is drawn inside it) from plain declarations
+    // only: in a state they keep the plain value, and the result says so.
+    ...(sub === 'set' && s.state && s.on
+      ? (() => {
+          const prop =
+            s.thing === 'corners' || /radius$/.test(s.thing)
+              ? 'borderRadius'
+              : s.thing === 'padding' || s.thing === 'spacing'
+                ? 'padding'
+                : s.thing.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+          const vars = parts.flatMap(t =>
+            (ctx.derived?.[t] ?? [])
+              .filter(d => d.property === prop)
+              .flatMap(d => d.vars ?? []),
+          );
+          return vars.length
+            ? [
+                `in the ${s.state} state, ${[...new Set(vars)].join(', ')} (which Core sets from the plain value, for what is drawn inside the part) keeps the plain value`,
+              ]
+            : [];
+        })()
+      : []),
     // Phones keep the base theme's reading sizes (a coarse pointer below
     // the lg width), so a size change says where it applies.
     ...(sub === 'set' &&
@@ -1006,9 +1229,17 @@ async function change(sub, slug, thing, value, options) {
           `${describe(exactOver)} is an exact property and wins over ${s.thing} there, so this shows only after \`${P} undo ${slug} ${undoArgs(exactOver)}\``,
         ]
       : []),
+    // A whole-theme font under fonts set for each role shows only where no
+    // role font is set.
+    ...(roleOver.length
+      ? [
+          `keeps your ${roleOver.map(describe).join(', ')}: a font for one role wins over the whole-theme font, so ${s.value} shows there only after ${roleOver.map(x => `\`${P} undo ${slug} ${undoArgs(x)}\``).join(' and ')}`,
+        ]
+      : []),
     // An accepted change that the theme already showed says so.
     ...(sub === 'set' &&
     !exactOver &&
+    !roleOver.length &&
     // With the last build unreadable, nothing was compared.
     !r.notes.some(n => n.includes('could not be read')) &&
     !r.unchanged &&
@@ -1104,8 +1335,13 @@ async function change(sub, slug, thing, value, options) {
   if (s.thing === 'font' && sub === 'set')
     notes.unshift(...fontNotes(ctx, {...data, settings: [s]}));
   if (s.thing === 'type' || s.thing === 'headings')
-    for (const [m, why] of maskedSettings(data))
+    for (const [m, why] of maskedSettings(data, ctx))
       notes.push(`${describe(m)}: ${why}`);
+  // An earlier setting this one now covers (through a spread too) is named.
+  else if (sub === 'set')
+    for (const [m, why] of maskedSettings(data, ctx))
+      if (m !== s && why.startsWith(describe(s)))
+        notes.push(`${describe(m)} no longer shows: ${why}`);
   if (s.thing === 'type' && sub === 'set' && TYPE_STYLES[s.value].ratio > 1.2)
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
@@ -1235,7 +1471,7 @@ export async function themeEditShow(theme, options = {}) {
             ? [installLine(cwd, ['react', 'react-dom'])]
             : // Two copies of React and other install problems are named by
               // doctor; the same show would fail the same way.
-              ['astryx doctor'],
+              [`${getCliInvocation(cwd)} doctor`],
       },
     );
   const f = themeFiles(cwd, theme);
@@ -1243,7 +1479,42 @@ export async function themeEditShow(theme, options = {}) {
   // a hand edit, another CLI) is made again from the settings, and said.
   const stale = staleBuild(cwd, theme, data);
   const brokenSource = themeSourceProblem(cwd, theme);
-  if (stale && !brokenSource && !readOnly) await buildTheme(ctx, theme, data);
+  if (stale && !brokenSource && !readOnly) {
+    // Every file the build may rewrite or remove (the settings module, the
+    // variants types, section sheets, pictures), so a theme source that
+    // does not build leaves the folder exactly as it was.
+    const kept = new Map(
+      fs
+        .readdirSync(f.dir)
+        .filter(
+          n =>
+            n === path.basename(f.settingsTs) ||
+            n === `${theme}.variants.d.ts` ||
+            /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?\.png)$/.test(n),
+        )
+        .map(n => [path.join(f.dir, n), fs.readFileSync(path.join(f.dir, n))]),
+    );
+    try {
+      await buildTheme(ctx, theme, data);
+    } catch (e) {
+      for (const [file, bytes] of kept) writeWhole(file, bytes);
+      if (e instanceof AstryxError && e.code !== E.ERR_THEME_LOAD) throw e;
+      // An own theme source that no longer builds is named, as `set` names
+      // it; the old build is never shown as current.
+      const why = (e instanceof Error ? e.message : String(e))
+        .split(`${cwd}${path.sep}`)
+        .join('')
+        .replace(/\s*Make sure all imports[^|]*$/s, '')
+        .split('\n')
+        .slice(0, 3)
+        .join(' | ');
+      refuse(
+        E.ERR_THEME_INVALID,
+        `${theme} did not build: ${why}${why.includes(path.basename(f.ts)) ? ` (${shown(cwd, f.ts)} is your own file: fix it, then run show again)` : ''}`,
+        {run: [`${P} how --list dials`]},
+      );
+    }
+  }
   // The settings loaded whole: a `new` marker beside them is stale.
   if (!readOnly) clearNewMarker(f.dir);
   // A built module that cannot be read (damaged by hand) is built again.
@@ -1251,6 +1522,17 @@ export async function themeEditShow(theme, options = {}) {
   let unreadable = null;
   const res = await resolvedTokens(ctx, theme).catch(async e => {
     if (e instanceof AstryxError || readOnly) throw e;
+    // The source lines the settings need are missing too: the build cannot
+    // be made again until they are back, and show says so (never a run of
+    // show itself).
+    if (brokenSource)
+      refuse(
+        E.ERR_THEME_INVALID,
+        `${theme}.js could not be read, and it cannot be built again: ${brokenSource}. Put back the import of ${camel(theme)}Settings from './${theme}.settings', extends: ${camel(theme)}Settings and name: '${theme}' in ${shown(cwd, f.ts)}, then run show again.`,
+        {
+          run: [`cat ${quoteCommandArgument(shown(cwd, f.ts))}`],
+        },
+      );
     unreadable = `${theme}.js could not be read (${e instanceof Error ? e.message.split('\n')[0] : String(e)}), so it was built again from the settings`;
     await buildTheme(ctx, theme, data);
     return resolvedTokens(ctx, theme);
@@ -1297,7 +1579,7 @@ export async function themeEditShow(theme, options = {}) {
       like: data.like ?? null,
       mode: data.mode,
       settings: data.settings.map(s => {
-        const masked = maskedSettings(data).get(s);
+        const masked = maskedSettings(data, ctx).get(s);
         return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
       }),
       notes: [
@@ -1312,7 +1594,7 @@ export async function themeEditShow(theme, options = {}) {
             ]
           : stale
             ? [
-                `the build did not match ${theme}.settings.json (${stale}), so it was built again from the settings`,
+                `the build was not current (${stale}), so it was built again from the settings`,
               ]
             : []),
         ...(unreadable ? [unreadable] : []),
@@ -1339,7 +1621,7 @@ export async function themeEditShow(theme, options = {}) {
         res,
         modes[0],
       ),
-      ...colorsReport(pal, data),
+      ...colorsReport(pal, data, res, theme),
       problems,
       preview,
       previewStale,
@@ -1481,7 +1763,7 @@ function otherModeNotes(data) {
  * @returns {string[]}
  */
 function partValues(ctx, data, res, mode) {
-  const masked = maskedSettings(data);
+  const masked = maskedSettings(data, ctx);
   return data.settings
     .filter(
       s =>
@@ -1554,9 +1836,13 @@ function partValues(ctx, data, res, mode) {
  * says so), and the contrast moves behind the shade choices.
  * @param {import('./_palette.mjs').PaletteMapping | null} pal
  * @param {import('./_settings.mjs').ThemeData} data
+ * @param {Record<'light' | 'dark', Record<string, string>>} [built] the
+ *   built theme's resolved values: where one differs from the generated
+ *   shade with no exact setting, the theme's own source changed it
+ * @param {string} [slug]
  * @returns {{vibrancy: number | null, colors: import('./theme-edit.type.mjs').ThemeEditColor[], colorNotes: string[]}}
  */
-function colorsReport(pal, data) {
+function colorsReport(pal, data, built, slug = '') {
   if (!pal) return {vibrancy: null, colors: [], colorNotes: []};
   /** What the user set for each token exactly, in each mode. */
   const exactBy =
@@ -1566,6 +1852,19 @@ function colorsReport(pal, data) {
       for (const m of s.mode ? [s.mode] : ['light', 'dark'])
         (exactBy[s.thing] ??= {})[/** @type {'light' | 'dark'} */ (m)] =
           s.value;
+  /** Tokens the theme's own source sets to another value than generated. */
+  const ownBy =
+    /** @type {Record<string, {light?: string, dark?: string}>} */ ({});
+  for (const [k, v] of Object.entries(pal.tokens))
+    for (const m of /** @type {const} */ (['light', 'dark'])) {
+      const now = built?.[m]?.[k];
+      if (
+        now &&
+        !exactBy[k]?.[m] &&
+        now.trim().toLowerCase() !== String(v[m].color).trim().toLowerCase()
+      )
+        (ownBy[k] ??= {})[m] = now;
+    }
   /** @param {import('./_palette.mjs').StopRef} r */
   const shade = r =>
     r.family === 'black' || r.family === 'white'
@@ -1587,12 +1886,14 @@ function colorsReport(pal, data) {
             k,
             // Each mode says what it shows: the exact setting where one is
             // made for it, else the generated shade.
-            exactBy[k]
+            exactBy[k] || ownBy[k]
               ? modes
                   .map(m =>
-                    exactBy[k][m] != null
+                    exactBy[k]?.[m] != null
                       ? `${m} ${exactBy[k][m]} (your exact setting wins over the generated ${shade(v[m])})`
-                      : `${m} ${shade(v[m])}`,
+                      : ownBy[k]?.[m] != null
+                        ? `${m} ${ownBy[k][m]} (your change in ${slug}.theme.ts wins over the generated ${shade(v[m])})`
+                        : `${m} ${shade(v[m])}`,
                   )
                   .join(', ')
               : shades(v),
@@ -1600,9 +1901,22 @@ function colorsReport(pal, data) {
       ),
     })),
     colorNotes: [
-      ...pal.notes,
+      // A note about a token the theme's own source changed is dropped:
+      // what it says no longer holds.
+      ...pal.notes.filter(
+        n =>
+          !Object.keys(ownBy).some(k =>
+            new RegExp(`${k.replace(/[-]/g, '\\-')}(?![\\w-])`).test(n),
+          ),
+      ),
       ...pal.contrast
         .filter(c => modes.includes(c.mode))
+        // A pairing the theme's own source changed no longer holds.
+        .filter(
+          c =>
+            !ownBy[c.token]?.[/** @type {'light' | 'dark'} */ (c.mode)] &&
+            !ownBy[c.against]?.[/** @type {'light' | 'dark'} */ (c.mode)],
+        )
         .filter(c => c.note || !c.pass || c.stop !== c.preferred)
         .map(c =>
           c.note
@@ -1611,7 +1925,12 @@ function colorsReport(pal, data) {
               ? `${c.token} ${c.mode}: shade ${c.stop}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`
               : `${c.token} ${c.mode}: only ${c.ratio}:1 on ${c.against} at shade ${c.stop} (needs ${c.needs}:1)`,
         ),
-    ],
+    ].filter(
+      n =>
+        !Object.keys(ownBy).some(k =>
+          new RegExp(`${k.replace(/[-]/g, '\\-')}(?![\\w-])`).test(n),
+        ),
+    ),
   };
 }
 
@@ -1789,6 +2108,16 @@ export async function themeEditUndo(theme, options = {}) {
       );
     prev = repaired.data;
     leftOut = repaired.dropped;
+  }
+  // The checks that need this Core too (a token's type, a part, a state,
+  // a name that is no token or property): what they refuse is left out of
+  // the step, with the same note, so the build stays valid.
+  {
+    const bad = new Set(storedProblems(ctx, theme, prev).map(p => p.setting));
+    if (bad.size) {
+      leftOut = [...leftOut, ...prev.settings.filter(s => bad.has(s))];
+      prev = {...prev, settings: prev.settings.filter(s => !bad.has(s))};
+    }
   }
   // The popped history is written with the change, inside its rollback.
   const committed = await commitTheme(ctx, theme, prev, {
