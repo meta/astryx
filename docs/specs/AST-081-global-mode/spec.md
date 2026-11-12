@@ -388,9 +388,10 @@ works on is `spec:AST-040` FR9's.
     folder that an environment setting points at counts only when it is an
     absolute path), for saved discover answers (`spec:AST-051` FR8), for the
     releases global mode installs into a project's run (FR2, FR3), and for
-    what `search`, `build`, `component`, `template`, `theme` and `discover`
-    keep in `astryx/catalogs` (search's catalogs and each integration's
-    contribution-check results), a folder only the user can reach (made
+    what `search`, `build`, `component`, `template`, `theme`, `discover` and
+    `doctor` keep in `astryx/catalogs` (search's catalogs, each integration's
+    contribution-check results, and doctor's file-only docs checks, which
+    doctor keeps only once a search or build has made the folder), a folder only the user can reach (made
     `0700`, used only while it is a real folder the user owns and others
     cannot open, never where the system has no user ids), each kept value
     used only while every input its gather read is unchanged; a run

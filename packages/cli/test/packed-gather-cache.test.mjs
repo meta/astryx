@@ -1037,6 +1037,46 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     }
   }, 120_000);
 
+  it("keeps doctor's docs checks, and a broken link shows on the very next run", () => {
+    const tmp = keptTmp('doctor-docs');
+    const other = makeProject();
+    try {
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        `export default { docs: './docs' };\n`,
+      );
+      fs.mkdirSync(path.join(other.widgets, 'docs'));
+      const topic = path.join(other.widgets, 'docs', 'deploying.doc.mjs');
+      const write = (/** @type {string} */ link) =>
+        fs.writeFileSync(
+          topic,
+          `export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it, then see {@link generic:${link}}.'}]}]};\n`,
+        );
+      write('quick-start');
+      const tree = (/** @type {{stdout: string}} */ r) =>
+        JSON.parse(r.stdout).data.checks.find(
+          (/** @type {{id: string}} */ c) => c.id === 'docs-tree',
+        );
+      const doctor = (/** @type {string} */ at) =>
+        tree(run(['doctor'], {tmp: at, cwd: other.dir}));
+      const fresh = doctor(freshTmp());
+      expect(doctor(tmp)).toEqual(fresh);
+      const kept = new Set(fs.readdirSync(path.join(tmp, CACHE_NAME)));
+      expect(doctor(tmp)).toEqual(fresh);
+      expect(new Set(fs.readdirSync(path.join(tmp, CACHE_NAME)))).toEqual(kept);
+      // Broken in place: the very next doctor reports it, as a fresh one does.
+      write('no-such-topic');
+      const broken = doctor(tmp);
+      expect(JSON.stringify(broken)).toContain('no-such-topic');
+      expect(broken).toEqual(doctor(freshTmp()));
+      // Fixed: the next doctor no longer reports it.
+      write('quick-start');
+      expect(doctor(tmp)).toEqual(fresh);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 180_000);
+
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
     const notAFolder = path.join(work, 'tmp', 'file-tmp');

@@ -67,6 +67,8 @@ const KEPT_COMMANDS = new Set([
   'template',
   'theme',
   'discover',
+  // The project check alone (no subcommand): its docs checks are kept.
+  'doctor',
 ]);
 
 /** Where `prepack` writes the id of the package's exact contents. */
@@ -225,6 +227,8 @@ export async function recordRunFor(argv, fn) {
   if (
     !command ||
     !KEPT_COMMANDS.has(command) ||
+    (command === 'doctor' &&
+      argv.filter(arg => !arg.startsWith('-')).length > 1) ||
     runsUnderPnp() ||
     currentUid() == null ||
     withoutRecording(buildId) == null ||
@@ -240,6 +244,10 @@ export async function recordRunFor(argv, fn) {
   // it, so a one-off run never pays to store one.
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {
+    // doctor uses the folder once a search or build made it; it never makes
+    // it, so a doctor alone changes nothing on the machine (nor its own
+    // cache row).
+    if (command === 'doctor') return fn();
     try {
       withoutRecording(() => fs.mkdirSync(dir, {recursive: true, mode: 0o700}));
     } catch {
@@ -761,6 +769,12 @@ export function runsUnderPnp() {
  *   `pnp`: whether this run is under Yarn Plug'n'Play's loader (runsUnderPnp)
  */
 export function gatherCacheSummary() {
+  // The cache's own bookkeeping, never an input of what it keeps.
+  return withoutRecording(summarize);
+}
+
+/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean} | null} */
+function summarize() {
   if (buildId() == null) return null;
   const dir = gatherCacheDir();
   if (dir == null) return null;

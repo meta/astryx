@@ -45,6 +45,7 @@ export {unlistedIconSets} from '../../foundation/discovery/icon-set-discovery.mj
 import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import * as path from 'node:path';
+import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
 import {
   Project,
   availableComputerIntegrations,
@@ -82,6 +83,27 @@ export {
   authoringAudit,
   authoringAuditData,
 } from './_authoring-audit.mjs';
+
+/** A doctor check record, kept as it is. */
+const CHECK_CODEC = {
+  encode: (/** @type {any} */ check) => check,
+  decode: (/** @type {any} */ check) => check,
+};
+
+/**
+ * A doctor check that reads only files, kept between runs through the kept
+ * gather (foundation/fs/gather-cache.mjs): a later `doctor` with every file,
+ * folder, module and environment variable it read unchanged reads the check
+ * back. Only the docs checks go through here; a check that depends on the
+ * time, the network or anything else the stamps do not see never does.
+ * @template T
+ * @param {unknown[]} key
+ * @param {() => Promise<T>} check
+ * @returns {Promise<T>}
+ */
+export function keptFileCheck(key, check) {
+  return persistedGather(['doctor-check', ...key], check, CHECK_CODEC);
+}
 
 /**
  * Package written to the generated app record for one discovered theme.
