@@ -26,7 +26,7 @@ import {isElement, isHTMLElement, isNode} from '../utils/nodeType';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {PRESS_SLOP_PX} from '../utils/pressGesture';
 import {caretAt} from '../utils/selectionLock';
-import {sharedWeakMap} from '../utils/sharedRealm';
+import {sharedState, sharedWeakMap} from '../utils/sharedRealm';
 
 // A shortfall smaller than this is rounding, not a keyboard.
 export const KEYBOARD_EPSILON = 1;
@@ -127,9 +127,8 @@ interface KeyboardStore {
   detachFocus: (() => void) | null;
 }
 
-// The hide's touch count and the room's fields changed the store's shape, so
-// its version moved on: a copy of Core built against another shape keeps its
-// own store.
+// The store holds the hide's touch count and the room's fields. A copy of
+// Core with another store shape keeps its own store under another version.
 const stores = sharedWeakMap<Window, KeyboardStore>(
   'keyboard/keyboard-height/stores',
   3,
@@ -206,21 +205,53 @@ function measureResizedRoom(
   // split screen, makes no room for a keyboard.
   const room = base - height;
   return room > KEYBOARD_EPSILON &&
-    isTextEntryControl(deepActiveElement(win.document))
+    isTextEntryControl(deepActiveElement(win.document)) &&
+    resizesContent(win.document)
     ? room
     : 0;
 }
+
+// Chrome shrinks the layout viewport for the keyboard only where the page's
+// viewport meta sets `interactive-widget=resizes-content`. Elsewhere a shorter
+// root is a shorter window. The last viewport meta replaces the whole setting
+// of any before it.
+function resizesContent(doc: Document): boolean {
+  const metas = doc.querySelectorAll('meta[name="viewport"]');
+  const content = metas[metas.length - 1]?.getAttribute('content') ?? '';
+  return content.split(/[,;]/).some(part => {
+    const [key = '', value = ''] = part.split('=');
+    return (
+      key.trim().toLowerCase() === 'interactive-widget' &&
+      value.trim().toLowerCase() === 'resizes-content'
+    );
+  });
+}
+
+// The control a focus takeover moves focus from, while its own focus call
+// runs. That focus event names no related target. Every copy of Core shares
+// it, since one copy's takeover can move focus into another copy's field.
+const takeover = sharedState<{from: EventTarget | null}>(
+  'keyboard/keyboard-height/takeover',
+  1,
+  () => ({from: null}),
+);
 
 // The room's base: the root's box when a text-entry control takes focus with
 // no keyboard up. A window made shorter before that focus, as in Android's
 // split screen, then reads no room once Back closes the keyboard. A room that
 // a report measured is a keyboard still up, as when focus moves to another
-// field, so the base stays. The room the attach measured has no keyboard
-// behind it yet.
-function noteRootAtFocus(win: Window, store: KeyboardStore): void {
+// field, so the base stays. Focus from another text-entry control can find
+// its keyboard up before Core listens, so the base stays then too.
+function noteRootAtFocus(
+  win: Window,
+  store: KeyboardStore,
+  event: Event,
+): void {
+  const from = (event as FocusEvent).relatedTarget ?? takeover.from;
   if (
     store.height > KEYBOARD_EPSILON ||
     (store.isRoomReported && store.room > KEYBOARD_EPSILON) ||
+    (isElement(from) && isTextEntryControl(from)) ||
     !isKeyboardMeasurable(win) ||
     !isTextEntryControl(deepActiveElement(win.document))
   ) {
@@ -243,7 +274,9 @@ function attach(win: Window, store: KeyboardStore): () => void {
   // Only a coarse primary pointer reads the room, so a fine one adds no focus
   // listener.
   const stopFocusBase = isCoarsePointer(win)
-    ? subscribeInput(win, 'focusin', () => noteRootAtFocus(win, store))
+    ? subscribeInput(win, 'focusin', event =>
+        noteRootAtFocus(win, store, event),
+      )
     : null;
   // Set while a step of a hide waits. The store keeps the height it reported,
   // so every reader lays out once, when the keyboard comes to rest.
@@ -415,6 +448,7 @@ export interface ResizedRoom {
  * The room the browser makes for the keyboard by shrinking the layout
  * viewport, CSS px. Chrome on Android does so under
  * `interactive-widget=resizes-content`, where the keyboard height reads 0.
+ * The room is 0 unless the page's viewport meta sets that value.
  * It is how far the root's box is short of its box at the same width. That box
  * is read when a text-entry control takes focus with no keyboard up. The
  * toolbar's moves leave the root's box as it is. The room is 0 while the visual
@@ -560,7 +594,12 @@ export function refuseFocusReveal(
     const destination = claim(event.relatedTarget);
     if (destination != null) {
       if (destination !== doc.activeElement) {
-        destination.focus({preventScroll: true});
+        takeover.from = event.target;
+        try {
+          destination.focus({preventScroll: true});
+        } finally {
+          takeover.from = null;
+        }
       }
       return;
     }

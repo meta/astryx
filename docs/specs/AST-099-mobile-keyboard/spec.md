@@ -449,13 +449,18 @@ gap below is open.
 - **Gap 15 — An unmeasured width under resizes-content.** The room is how far
   the root's box is short of its box at the same width, as Core measured it.
   Core reads that box when a text-entry control takes focus with no keyboard up.
-  It counts only while a text-entry control has focus, so a shorter window with
-  nothing focused, as in Android's split screen, makes no room. At a width Core
-  has not measured with the keyboard closed, the room reads 0 until the keyboard
-  closes. That happens after a turn of the phone. It also happens when a field
-  without Core's handling, such as a plain input, opens the keyboard before any
-  Core field has measured the page. A field revealed there ends on the
-  keyboard's top edge, not 10 CSS px clear.
+  It counts only while a text-entry control has focus, and only where the
+  document's viewport meta sets `interactive-widget=resizes-content`. A shorter
+  window with nothing focused, as in Android's split screen, makes no room. At a
+  width Core has not measured with the keyboard closed, the room reads 0 until
+  the keyboard closes. That happens after a turn of the phone. It also happens
+  when a field without Core's handling, such as a plain input, opens the
+  keyboard before any Core field has measured the page. A field revealed there
+  ends on the keyboard's top edge, not 10 CSS px clear. Under
+  `interactive-widget=resizes-content`, a window that gets shorter while a field
+  keeps focus, with no focus change, reads as keyboard room until focus leaves
+  the fields. After a later keyboard, Back then leaves the page where the reveal
+  put it. No platform signal tells such a window from a keyboard.
 - **Gap 19 — A field in a modal BottomSheet shorter than `tall`:** the sheet's
   full-viewport dialog has no scroller, and BottomSheet's keyboard path runs
   only for `height="tall"`, so the field keeps the browser's own reveal; Chrome

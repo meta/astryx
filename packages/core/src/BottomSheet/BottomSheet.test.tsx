@@ -166,6 +166,19 @@ function mockRootHeight(height: number) {
   });
 }
 
+// The page sets `interactive-widget=resizes-content` in its viewport meta.
+function setResizesContent() {
+  if (document.querySelector('meta[name="viewport"]') != null) {
+    return;
+  }
+  const meta = document.createElement('meta');
+  meta.name = 'viewport';
+  meta.content =
+    'width=device-width, initial-scale=1, interactive-widget=resizes-content';
+  document.head.append(meta);
+  onTestFinished(() => meta.remove());
+}
+
 // The layout viewport — `100dvh`, `window.innerHeight` — which is what the
 // sheet's height budget and its detents are measured against. Deliberately
 // separate from the visual viewport above: the mobile keyboard shrinks that
@@ -3229,6 +3242,7 @@ describe('BottomSheet', () => {
       // sheet with them. The keyboard height reads 0, and nothing overlaps the
       // body.
       function resizeForKeyboard(body: HTMLElement, height: number) {
+        setResizesContent();
         mockWindowHeight(height);
         mockRootHeight(height);
         vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(

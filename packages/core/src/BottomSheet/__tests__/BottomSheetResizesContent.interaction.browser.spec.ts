@@ -105,6 +105,19 @@ async function resizeForKeyboard(page: Page): Promise<number> {
   if (size == null) {
     throw new Error('no viewport size');
   }
+  // The page asks for it in its viewport meta, as an app does.
+  await page.evaluate(() => {
+    const meta =
+      document.querySelector('meta[name="viewport"]') ??
+      document.head.appendChild(
+        Object.assign(document.createElement('meta'), {name: 'viewport'}),
+      );
+    const content = meta.getAttribute('content') ?? '';
+    meta.setAttribute(
+      'content',
+      `${content}${content === '' ? '' : ', '}interactive-widget=resizes-content`,
+    );
+  });
   const height = size.height - KEYBOARD;
   await page.setViewportSize({width: size.width, height});
   await frames(page, 30);

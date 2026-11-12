@@ -9,7 +9,15 @@
  * @position Keyboard module tests
  */
 
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from 'vitest';
 import {act} from '@testing-library/react';
 import {animatorFor} from '../motion/animator';
 import {__resetLayoutViewportForTest} from '../utils/layoutViewport';
@@ -71,6 +79,19 @@ function touchEvent(type: string, fingers: number): Event {
 function focusOn(element: HTMLElement) {
   act(() => element.focus());
   runFrames();
+}
+
+/** The page sets `interactive-widget=resizes-content` in its viewport meta. */
+function setResizesContent() {
+  if (document.querySelector('meta[name="viewport"]') != null) {
+    return;
+  }
+  const meta = document.createElement('meta');
+  meta.name = 'viewport';
+  meta.content =
+    'width=device-width, initial-scale=1, interactive-widget=resizes-content';
+  document.head.append(meta);
+  onTestFinished(() => meta.remove());
 }
 
 // A box laid out from `data-top` and `data-height`, moved by its own inline
@@ -522,6 +543,7 @@ describe('keepFieldAboveKeyboard', () => {
   // viewport, the root's box and the visual viewport shrink together, so the
   // keyboard height reads 0.
   function resizeForKeyboard(cover: number) {
+    setResizesContent();
     const height = window.innerHeight - cover;
     vi.stubGlobal('innerHeight', height);
     pageScrollRange(3000);
@@ -625,6 +647,62 @@ describe('keepFieldAboveKeyboard', () => {
     expect(getResizedRoom(window).room).toBe(300);
     focusOn(second);
     expect(getResizedRoom(window).room).toBe(300);
+  });
+
+  it('reads no room where the page keeps the default viewport, since a shorter window there is not the keyboard', () => {
+    vi.stubGlobal('scrollBy', vi.fn());
+    const input = element('input', {top: 600, height: 40});
+    document.body.append(input);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    // A freeform window made shorter at the same width, the field still
+    // focused.
+    vi.stubGlobal('innerHeight', window.innerHeight - 300);
+    pageScrollRange(3000);
+    viewport.height = window.innerHeight;
+    act(() => {
+      viewport.dispatchEvent(new Event('resize'));
+    });
+    expect(getResizedRoom(window).room).toBe(0);
+  });
+
+  it('reads no room where a later viewport meta leaves out resizes-content, since the last meta is the whole setting', () => {
+    vi.stubGlobal('scrollBy', vi.fn());
+    const input = element('input', {top: 600, height: 40});
+    document.body.append(input);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    resizeForKeyboard(300);
+    expect(getResizedRoom(window).room).toBe(300);
+    const later = document.createElement('meta');
+    later.name = 'viewport';
+    later.content = 'width=device-width, initial-scale=1';
+    document.head.append(later);
+    onTestFinished(() => later.remove());
+    act(() => {
+      viewport.dispatchEvent(new Event('resize'));
+    });
+    expect(getResizedRoom(window).room).toBe(0);
+  });
+
+  it('keeps the room when focus comes to a field from a text input Core does not handle, while a keyboard that resizes the page shows', () => {
+    const scrollBy = vi.fn();
+    vi.stubGlobal('scrollBy', scrollBy);
+    vi.stubGlobal('scrollTo', vi.fn());
+    const input = element('input', {top: 600, height: 40});
+    const other = element('input', {top: 100, height: 40});
+    document.body.append(input, other);
+    track(keepFieldAboveKeyboard(input));
+    // The field once took focus with no keyboard up, then lost it.
+    focusOn(input);
+    act(() => input.blur());
+    runFrames();
+    // A plain input opens the keyboard while nothing in Core listens.
+    focusOn(other);
+    resizeForKeyboard(300);
+    focusOn(input);
+    expect(getResizedRoom(window).room).toBe(300);
+    expect(scrollBy).toHaveBeenCalled();
   });
 
   it('keeps its own store beside a copy of Core whose store has the earlier shape, and reads its own room (spec:AST-110 FR3)', () => {

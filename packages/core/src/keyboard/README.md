@@ -31,12 +31,13 @@ that times motion with it. Everything here is internal to
   per report against the root's box at the same width from when a text-entry
   control took focus with no keyboard up, so a focused field still sits 10 px
   clear of the layout viewport's new bottom, revealed by its nearest scroller.
-  The room counts only while a text-entry control has focus: a shorter window
-  with nothing focused, as in Android's split screen, makes none. A width Core
-  has not measured with the keyboard closed, as after a turn of the phone, reads
-  no room until the keyboard closes (`spec:AST-099` Gap 15). It also returns the
-  width from that same read, so the scroll back tells a turn without a layout
-  read of its own.
+  The room counts only while a text-entry control has focus, and only where the
+  page's viewport meta sets `interactive-widget=resizes-content`: elsewhere a
+  shorter window, as in Android's split screen, makes none. A width Core has not
+  measured with the keyboard closed, as after a turn of the phone, reads no room
+  until the keyboard closes (`spec:AST-099` Gap 15). It also returns the width
+  from that same read, so the scroll back tells a turn without a layout read of
+  its own.
 - **One set of listeners (FR1, INV11):** `subscribeKeyboardHeight(window, fn)`
   delivers every report (the visual viewport's resize and scroll, the window's
   resize, and with `{focus: true}` focus moves, whose input-stream
