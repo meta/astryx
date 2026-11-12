@@ -1045,7 +1045,8 @@ function checkCycle(thing, value, TOKENS, data, cwd, scope = {}) {
     // Else what the part's plain rule holds as built: the own source's and
     // the base theme's part rules (neutral's progress-bar reads
     // --color-border-emphasized).
-    if (scope.state || scope.when || !cwd) return undefined;
+    // A state or variant rule of the part inherits its plain rule.
+    if (!cwd) return undefined;
     const rule = partRule().get(t);
     return rule ?? undefined;
   };

@@ -120,6 +120,7 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
  * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
+ * @property {(files: string[], options: {cwd: string}) => Promise<void>} [afterBuild] - Told after a build or check that left the outputs current (not under --watch), while the locks are held.
  * @property {(file: string, cwd: string) => {name: string, reason: string} | null} [missingSource] - For a source file that is not there, this group's way to write it again, or null.
  * @property {(options: {targetPath?: string, overwrite?: boolean, cwd?: string}) => import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} [template] - This group's template write, in place of `themeTemplate`.
  */
@@ -1417,9 +1418,16 @@ function registerThemeCommands(theme, program, docs, words) {
       if (cmd.opts().watch) return;
       release = await words.hold?.(cmd.args, {cwd: process.cwd()});
     });
-    buildCli.hook('postAction', async () => {
-      await release?.();
-      release = undefined;
+    buildCli.hook('postAction', async (_, cmd) => {
+      try {
+        // A build or check that found the outputs current tells the group
+        // (the editor records what its theme was built from).
+        if (!cmd.opts().watch && !process.exitCode)
+          await words.afterBuild?.(cmd.args, {cwd: process.cwd()});
+      } finally {
+        await release?.();
+        release = undefined;
+      }
     });
   }
 

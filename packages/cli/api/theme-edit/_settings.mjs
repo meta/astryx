@@ -1123,38 +1123,42 @@ function builtLoops(cwd, slug) {
   // Inside one part: a part's own token reads the part's other own tokens
   // first, and a whole-theme one only as already resolved, so a loop there
   // closes among the part's own tokens.
-  for (const part of blockKeys(themeFiles(cwd, slug).js, ['components'])) {
-    const block = blockOf(themeFiles(cwd, slug).js, [
-      'components',
-      part,
-      'base',
-    ]);
-    for (const start of block.keys()) {
-      if (!start.startsWith('--')) continue;
-      /** @type {string[]} */
-      const path = [];
-      /** @param {string} t @returns {boolean} */
-      const walk = t => {
-        const at = path.indexOf(t);
-        if (at >= 0) {
-          const cycle = path.slice(at);
-          const key = `${part}: ${[...cycle].sort().join(' ')}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            loops.push({key, path: [...cycle, t], part});
+  const js = themeFiles(cwd, slug).js;
+  for (const part of blockKeys(js, ['components'])) {
+    const plain = blockOf(js, ['components', part, 'base']);
+    // Each state or variant rule of the part also has its plain rule.
+    for (const scope of blockKeys(js, ['components', part])) {
+      const own =
+        scope === 'base' ? plain : blockOf(js, ['components', part, scope]);
+      const block = new Map([...plain, ...own]);
+      const where = scope === 'base' ? part : `${part} ${scope}`;
+      for (const start of own.keys()) {
+        if (!start.startsWith('--')) continue;
+        /** @type {string[]} */
+        const path = [];
+        /** @param {string} t @returns {boolean} */
+        const walk = t => {
+          const at = path.indexOf(t);
+          if (at >= 0) {
+            const cycle = path.slice(at);
+            const key = `${where}: ${[...cycle].sort().join(' ')}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              loops.push({key, path: [...cycle, t], part: where});
+            }
+            return true;
           }
-          return true;
-        }
-        if (!block.has(t) || path.length > 50) return false;
-        path.push(t);
-        for (const m of String(block.get(t) ?? '').matchAll(
-          /var\(\s*(--[a-z0-9-]+)/gi,
-        ))
-          if (walk(m[1])) return true;
-        path.pop();
-        return false;
-      };
-      walk(start);
+          if (!block.has(t) || path.length > 50) return false;
+          path.push(t);
+          for (const m of String(block.get(t) ?? '').matchAll(
+            /var\(\s*(--[a-z0-9-]+)/gi,
+          ))
+            if (walk(m[1])) return true;
+          path.pop();
+          return false;
+        };
+        walk(start);
+      }
     }
   }
   return loops;
@@ -1353,9 +1357,11 @@ export function partRuleTokens(cwd, slug, like, part) {
  * @param {string} cwd
  * @param {string} slug
  * @param {string} part
+ * @param {string} [scope] the rule: `base` (the plain one), or a variant
+ *   such as `variant:primary`
  * @returns {Map<string, string | null>}
  */
-export function ownPartTokens(cwd, slug, part) {
+export function ownPartTokens(cwd, slug, part, scope = 'base') {
   /** @type {Map<string, string | null>} */
   const out = new Map();
   const f = themeFiles(cwd, slug);
@@ -1375,11 +1381,11 @@ export function ownPartTokens(cwd, slug, part) {
   )?.[1];
   const baseFile = like ? baseModule(cwd, like) : null;
   const base = baseFile
-    ? blockOf(baseFile, ['components', part, 'base'])
+    ? blockOf(baseFile, ['components', part, scope])
     : new Map();
-  const settings = blockOf(f.settingsTs, ['components', part, 'base']);
+  const settings = blockOf(f.settingsTs, ['components', part, scope]);
   const named = namedInOwnSource(cwd, slug);
-  for (const [k, v] of blockOf(f.js, ['components', part, 'base'])) {
+  for (const [k, v] of blockOf(f.js, ['components', part, scope])) {
     const given = settings.has(k) ? settings.get(k) : base.get(k);
     if (given !== v && named(k))
       out.set(
@@ -1749,6 +1755,53 @@ function sealModule(text) {
     /^(\/\/ Built from settings [^\n]*\n)/m,
     `$1// Module ${hash}.\n`,
   );
+}
+
+/**
+ * Record in an editor theme's generated settings that they were built with
+ * its own source as it is now, after `compile` built that source: only
+ * when the settings would come out the same (their phone rule repeats the
+ * family and weight tokens the source sets, so a change to those needs the
+ * editor's build), and only in a module as the editor wrote it.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {boolean} whether it was recorded
+ */
+export function refreshSourceStamp(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  const ts = fs.readFileSync(f.settingsTs, 'utf8');
+  if (moduleUnedited(ts) !== true) return false;
+  const stamp = /\/\/ Built with (\S+\.theme\.ts) ([0-9a-f]{16})\./.exec(ts);
+  if (!stamp) return false;
+  const now = themeSourceHash(cwd, slug);
+  if (stamp[2] === now) return true;
+  // The phone rule as written, against what the source sets now.
+  const PHONE_TYPE = /^--font-family|^--(text-[a-z0-9-]+|font)-weight/;
+  const at = ts.indexOf('"adaptations"');
+  const phone = at < 0 ? '' : ts.slice(at);
+  const settingsKeys = new Set(
+    loadTheme(cwd, slug)
+      .settings.filter(x => x.source === 'token' && !x.on)
+      .map(x => x.thing),
+  );
+  const own = new Map(
+    [...ownPageTokens(cwd, slug)].filter(([k]) => PHONE_TYPE.test(k)),
+  );
+  for (const [k, v] of own)
+    if (
+      v == null ||
+      !phone.includes(`${JSON.stringify(k)}: ${JSON.stringify(v)}`)
+    )
+      return false;
+  for (const m of phone.matchAll(/"(--[a-z0-9-]+)":/g))
+    if (PHONE_TYPE.test(m[1]) && !settingsKeys.has(m[1]) && !own.has(m[1]))
+      return false;
+  const text = ts
+    .replace(/\r\n/g, '\n')
+    .replace(SEAL, '')
+    .replace(stamp[0], `// Built with ${stamp[1]} ${now}.`);
+  fs.writeFileSync(f.settingsTs, sealModule(text));
+  return true;
 }
 
 /**
@@ -2749,19 +2802,26 @@ export function compileTheme(ctx, data, base) {
   // Base themes set the type tokens again for phones (a coarse pointer
   // below the lg width); an exact font family or weight, and the headings
   // dial's weights, are written there too, so they apply on every screen.
-  // Sizes are not: phones keep their reading base.
-  const phone = Object.fromEntries(
-    data.settings
+  // Sizes are not: phones keep their reading base. A family or weight the
+  // theme's own source sets wins there too, as it does on a wide screen:
+  // its value is written in place of the setting's.
+  const PHONE_TYPE = /^--font-family|^--(text-[a-z0-9-]+|font)-weight/;
+  const ownType = Object.entries(
+    ctx.project?.cwd ? ownSourceTokenValues(ctx.project.cwd, data.name) : {},
+  ).filter(([k]) => PHONE_TYPE.test(k));
+  const phone = Object.fromEntries([
+    ...data.settings
       .filter(
         x =>
           x.source === 'token' &&
           !x.on &&
           !x.mode &&
-          /^--font-family|^--(text-[a-z0-9-]+|font)-weight/.test(x.thing) &&
+          PHONE_TYPE.test(x.thing) &&
           !(modeOnly && x.mode && x.mode !== modeOnly),
       )
       .map(x => [x.thing, x.value]),
-  );
+    ...ownType,
+  ]);
   // The headings dial's weights, unless an exact token sets one.
   const headingsWeight = [...data.settings]
     .reverse()
