@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "row-actions-menu",
+  "source": "fwc-5",
+  "title": "Row actions menu with keyboard support",
+  "prompt": "Show a list of three projects: \"Apollo\", \"Gemini\" and \"Mercury\". Each row has a button whose accessible name is \"Actions for\" followed by the project name, for example \"Actions for Gemini\". It opens a menu (role=\"menu\", with role=\"menuitem\" items) with the items \"Rename\", \"Duplicate\" and \"Delete\". The menu works with the keyboard: Enter on the button opens the menu with focus on the first item, the arrow keys move between items, Enter chooses the focused item, and Escape closes the menu and moves focus back to the button. \"Duplicate\" adds a row named with the project name followed by \" copy\" (for example \"Gemini copy\") right after the original. \"Delete\" removes the row. \"Rename\" can do nothing."
+}

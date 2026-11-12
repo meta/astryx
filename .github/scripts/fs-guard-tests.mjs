@@ -27,7 +27,11 @@
 //   `list --json` output, or one path per line), so a test the `--changed`
 //   run already ran does not run a second time.
 //
-// Usage: node .github/scripts/fs-guard-tests.mjs [--spec-readers [--project ui|node]] [--changed <ref>] [--already-run <file>]
+// - With `--reached <file>`: prints the tests that file lists (the tests the
+//   change reaches, in the same formats) and then the other tests, each once,
+//   so one run covers both lists and its legs balance them together.
+//
+// Usage: node .github/scripts/fs-guard-tests.mjs [--spec-readers [--project ui|node]] [--changed <ref>] [--already-run <file> | --reached <file>]
 //   (newline-separated paths)
 
 import {execFileSync} from 'node:child_process';
@@ -317,6 +321,11 @@ export function withoutAlreadyRun(tests, alreadyRun) {
   return tests.filter(test => !ran.has(test));
 }
 
+/** The `reached` tests, then the `tests` they do not list, each once. */
+export function withReached(tests, reached) {
+  return [...new Set(reached), ...withoutAlreadyRun(tests, reached)];
+}
+
 /**
  * The tests that read a record a spec-only change may touch: the import
  * closure (relative imports followed, as for the guards above) reads files
@@ -432,6 +441,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     }
   } else {
     tests = scopedExtraTests(files, read, changedFiles);
+  }
+  const reachedFlag = process.argv.indexOf('--reached');
+  if (reachedFlag !== -1) {
+    tests = withReached(
+      tests,
+      readTestList(read(process.argv[reachedFlag + 1]), process.cwd()),
+    );
   }
   const alreadyRunFlag = process.argv.indexOf('--already-run');
   if (alreadyRunFlag !== -1) {

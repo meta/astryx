@@ -8,6 +8,7 @@
  * upgrade, another project or another environment, and after random changes.
  */
 
+import {COMPONENT_REPLACES_CLI} from '../foundation/integrations/cli-requirement.mjs';
 import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -113,9 +114,9 @@ const userConfig = () => path.join(work, 'config');
 /**
  * Run the packed CLI with `tmp` as the system temp folder.
  * @param {string[]} args
- * @param {{tmp: string, cwd?: string, env?: Record<string, string>}} options
+ * @param {{tmp: string, cwd?: string, env?: Record<string, string>, json?: boolean}} options
  */
-function run(args, {tmp, cwd = project, env = {}}) {
+function run(args, {tmp, cwd = project, env = {}, json = true}) {
   fs.mkdirSync(tmp, {recursive: true});
   const base = {...process.env};
   delete base.CI;
@@ -124,7 +125,7 @@ function run(args, {tmp, cwd = project, env = {}}) {
     [
       path.join(packed, 'clients', 'cli', 'bin', 'astryx.mjs'),
       ...args,
-      '--json',
+      ...(json ? ['--json'] : []),
     ],
     {
       cwd,
@@ -155,10 +156,10 @@ function run(args, {tmp, cwd = project, env = {}}) {
  * run(), without blocking: the kept and the fresh runs of a query go side by
  * side.
  * @param {string[]} args
- * @param {{tmp: string, cwd?: string, env?: Record<string, string>}} options
+ * @param {{tmp: string, cwd?: string, env?: Record<string, string>, json?: boolean}} options
  * @returns {Promise<{status: number | null, stdout: string, stderr: string}>}
  */
-function runAsync(args, {tmp, cwd = project, env = {}}) {
+function runAsync(args, {tmp, cwd = project, env = {}, json = true}) {
   fs.mkdirSync(tmp, {recursive: true});
   const base = {...process.env};
   delete base.CI;
@@ -168,7 +169,7 @@ function runAsync(args, {tmp, cwd = project, env = {}}) {
       [
         path.join(packed, 'clients', 'cli', 'bin', 'astryx.mjs'),
         ...args,
-        '--json',
+        ...(json ? ['--json'] : []),
       ],
       {
         cwd,
@@ -229,6 +230,39 @@ function derivedEntry(file) {
 }
 
 /**
+ * Whether a kept file holds an integration's contribution-check results (a
+ * list), not a catalog.
+ * @param {string} file
+ * @returns {boolean}
+ */
+function issuesEntry(file) {
+  try {
+    const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return entry.derived !== true && Array.isArray(entry.value);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The integrations' kept contribution-check results in a temp folder's cache
+ * folder.
+ * @param {string} tmp
+ * @returns {Map<string, number>} name to inode
+ */
+function issuesEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    if (issuesEntry(file)) out.set(name, fs.statSync(file).ino);
+  }
+  return out;
+}
+
+/**
  * The derived values kept in a temp folder's cache folder.
  * @param {string} tmp
  * @returns {string[]}
@@ -252,7 +286,7 @@ function entries(tmp) {
   if (!fs.existsSync(dir)) return out;
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
-    if (derivedEntry(file)) continue;
+    if (derivedEntry(file) || issuesEntry(file)) continue;
     const {ino, mtimeMs} = fs.statSync(file);
     out.set(name, {ino, mtimeMs});
   }
@@ -853,6 +887,279 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       fs.writeFileSync(query, querySource);
     }
   }, 240_000);
+
+  it("keeps each integration's check results, and checks again after an edit", async () => {
+    const tmp = keptTmp('issues');
+    const other = makeProject();
+    try {
+      const templates = path.join(other.widgets, 'templates');
+      fs.mkdirSync(templates, {recursive: true});
+      const doc = path.join(templates, 'tally.doc.mjs');
+      fs.writeFileSync(
+        doc,
+        `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(templates, 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = ['template', '--list'];
+      const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      const kept = issuesEntries(tmp);
+      // The integration's own checks, and the project's whole issue list.
+      expect(kept.size).toBe(2);
+      // Read back, not checked again: the same file, and the same answer.
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      expect(issuesEntries(tmp)).toEqual(kept);
+      // A template doc edited in place so that the checks find a problem.
+      fs.writeFileSync(
+        doc,
+        `export default {type: 'page', name: 'tally', description: 42, category: 'Widget - Tally'};\n`,
+      );
+      const [again, edited] = await Promise.all([
+        runAsync(ask, {tmp, cwd: other.dir, json: false}),
+        runAsync(ask, {tmp: freshTmp(), cwd: other.dir, json: false}),
+      ]);
+      // The checks find the problem: a warning names the integration.
+      expect(edited.stderr).toContain('@acme/widgets');
+      expect(fresh.stderr).not.toContain('@acme/widgets');
+      expect(again).toEqual(edited);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('records nothing for component, template, theme or discover in a project with no integration', () => {
+    const tmp = keptTmp('no-integration');
+    // A project with Core and nothing else: no config, no manifest, no
+    // dependency that ships one.
+    const bare = fs.mkdtempSync(path.join(work, 'projects', 'bare-'));
+    try {
+      fs.mkdirSync(path.join(bare, 'node_modules', '@astryxdesign'), {
+        recursive: true,
+      });
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'packages', 'core'),
+        path.join(bare, 'node_modules', '@astryxdesign', 'core'),
+        'dir',
+      );
+      fs.writeFileSync(
+        path.join(bare, 'package.json'),
+        JSON.stringify({
+          name: 'bare',
+          dependencies: {'@astryxdesign/core': '*'},
+        }),
+      );
+      // A resolver that refuses the options module hooks pass: a run that
+      // installed the recorder's hooks would fail its requires.
+      const strict = path.join(work, 'strict-bare.cjs');
+      fs.writeFileSync(
+        strict,
+        `const Module = require('node:module');
+const resolve = Module._resolveFilename;
+Module._resolveFilename = function (request, parent, isMain, options) {
+  if (options && options.conditions) throw new Error('resolver options are not supported');
+  return resolve.call(this, request, parent, isMain, options);
+};
+`,
+      );
+      const env = {NODE_OPTIONS: `--require ${strict}`};
+      for (const ask of [
+        ['template', '--list'],
+        ['component', 'Button'],
+        ['theme', 'list'],
+        ['discover'],
+      ]) {
+        // Stdout and status: a once-a-day notice may go to stderr.
+        const answer = (
+          /** @type {{status: number | null, stdout: string}} */ r,
+        ) => [r.status, r.stdout];
+        const fresh = answer(
+          run(ask, {tmp: freshTmp(), cwd: bare, json: false}),
+        );
+        expect(answer(run(ask, {tmp, cwd: bare, json: false, env}))).toEqual(
+          fresh,
+        );
+        expect(answer(run(ask, {tmp, cwd: bare, json: false, env}))).toEqual(
+          fresh,
+        );
+      }
+      expect(entries(tmp).size).toBe(0);
+      expect(issuesEntries(tmp).size).toBe(0);
+    } finally {
+      fs.rmSync(bare, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('keeps the check results of an integration installed beside the CLI, run outside a project', () => {
+    const tmp = keptTmp('computer');
+    // A computer-level integration: installed in the CLI's own install root.
+    const beside = path.join(
+      work,
+      'install',
+      'node_modules',
+      '@acme',
+      'beside',
+    );
+    const outside = fs.mkdtempSync(path.join(work, 'outside-'));
+    try {
+      fs.mkdirSync(path.join(beside, 'templates'), {recursive: true});
+      fs.writeFileSync(
+        path.join(beside, 'package.json'),
+        JSON.stringify({name: '@acme/beside', version: '1.0.0'}),
+      );
+      fs.writeFileSync(
+        path.join(beside, 'astryx.integration.mjs'),
+        `export default { templates: './templates' };\n`,
+      );
+      fs.writeFileSync(
+        path.join(beside, 'templates', 'tally.doc.mjs'),
+        `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(beside, 'templates', 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = ['template', '--list'];
+      const answer = (
+        /** @type {{status: number | null, stdout: string}} */ r,
+      ) => [r.status, r.stdout];
+      const fresh = answer(
+        run(ask, {tmp: freshTmp(), cwd: outside, json: false}),
+      );
+      expect(answer(run(ask, {tmp, cwd: outside, json: false}))).toEqual(fresh);
+      const kept = issuesEntries(tmp);
+      // The integration's own checks, and the project's whole issue list.
+      expect(kept.size).toBe(2);
+      expect(answer(run(ask, {tmp, cwd: outside, json: false}))).toEqual(fresh);
+      expect(issuesEntries(tmp)).toEqual(kept);
+    } finally {
+      fs.rmSync(beside, {recursive: true, force: true});
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('keeps the whole issue list, and finds a replacement problem after an edit', async () => {
+    const tmp = keptTmp('replacement');
+    const other = makeProject();
+    try {
+      const templates = path.join(other.widgets, 'templates');
+      fs.mkdirSync(templates, {recursive: true});
+      const doc = path.join(templates, 'tally.doc.mjs');
+      const page = `{type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'`;
+      fs.writeFileSync(doc, `export default ${page}};\n`);
+      fs.writeFileSync(
+        path.join(templates, 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = ['component', 'Button'];
+      const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      const kept = issuesEntries(tmp);
+      expect(kept.size).toBe(2);
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      expect(issuesEntries(tmp)).toEqual(kept);
+      // The template now claims to replace a Core page that does not exist:
+      // only the replacement pass, which reads every template, finds it.
+      fs.writeFileSync(
+        doc,
+        `export default ${page}, replaces: 'no-such-page'};\n`,
+      );
+      const [again, edited] = await Promise.all([
+        runAsync(ask, {tmp, cwd: other.dir, json: false}),
+        runAsync(ask, {tmp: freshTmp(), cwd: other.dir, json: false}),
+      ]);
+      expect(edited.stderr).toContain('@acme/widgets');
+      expect(fresh.stderr).not.toContain('@acme/widgets');
+      expect(again).toEqual(edited);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('gives doctor its own answer after an everyday command kept the issue list', () => {
+    const tmp = keptTmp('doctor-core');
+    // A project with no installed Core, and an opted-in integration whose
+    // component replaces a Core one: everyday commands read the Core the CLI
+    // carries, doctor only the project's (none), so their lists differ.
+    const dir = fs.mkdtempSync(path.join(work, 'projects', 'no-core-'));
+    // The Core the CLI carries: the repository's, beside the installed CLI,
+    // for this case only.
+    const carried = path.join(
+      work,
+      'install',
+      'node_modules',
+      '@astryxdesign',
+      'core',
+    );
+    fs.symlinkSync(path.join(REPO_ROOT, 'packages', 'core'), carried, 'dir');
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify({
+          name: 'no-core',
+          dependencies: {'@astryxdesign/cli': '*', '@acme/nav': '1.0.0'},
+        }),
+      );
+      const nav = path.join(dir, 'node_modules', '@acme', 'nav');
+      fs.mkdirSync(path.join(nav, 'components'), {recursive: true});
+      fs.writeFileSync(
+        path.join(nav, 'package.json'),
+        JSON.stringify({
+          name: '@acme/nav',
+          version: '1.0.0',
+          exports: {'./components/*': './components/*.tsx'},
+          peerDependencies: {
+            '@astryxdesign/cli': `>=${COMPONENT_REPLACES_CLI}`,
+          },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(nav, 'astryx.integration.mjs'),
+        "export default {components: './components'};\n",
+      );
+      fs.writeFileSync(
+        path.join(nav, 'components', 'AcmeSideNav.doc.mjs'),
+        `export default ${JSON.stringify({
+          type: 'component',
+          name: 'AcmeSideNav',
+          displayName: 'AcmeSideNav',
+          import: '@acme/nav/components/AcmeSideNav',
+          replaces: 'SideNav',
+          keywords: ['acme'],
+          usage: {description: 'AcmeSideNav for Acme apps.'},
+          props: [],
+        })};\n`,
+      );
+      fs.writeFileSync(
+        path.join(nav, 'components', 'AcmeSideNav.tsx'),
+        'export function AcmeSideNav() { return null; }\n',
+      );
+      const check = (/** @type {{stdout: string}} */ r) =>
+        JSON.parse(r.stdout).data.checks.find(
+          (/** @type {{id: string}} */ c) => c.id === 'integration-issues',
+        );
+      const fresh = check(run(['doctor'], {tmp: freshTmp(), cwd: dir}));
+      // Doctor, reading no Core, finds the replaced component missing; the
+      // everyday command, reading the carried Core, finds nothing.
+      expect(JSON.stringify(fresh)).toContain('SideNav');
+      const everyday = run(['template', '--list'], {
+        tmp,
+        cwd: dir,
+        json: false,
+      });
+      expect(everyday.stderr).not.toContain('@acme/nav');
+      run(['template', '--list'], {tmp, cwd: dir, json: false});
+      // The everyday command kept its lists (the integration's and the
+      // project's); doctor still answers as a fresh doctor does.
+      expect(issuesEntries(tmp).size).toBe(2);
+      expect(check(run(['doctor'], {tmp, cwd: dir}))).toEqual(fresh);
+    } finally {
+      fs.rmSync(carried, {force: true});
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 120_000);
 
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
