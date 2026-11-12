@@ -4,7 +4,7 @@
 
 /**
  * @file useTableRowsVirtualization.ts
- * @input Positive finite CSS-pixel row pitch and viewport height
+ * @input Positive finite CSS-pixel row pitch and first-frame viewport height
  * @output Stable opaque TableVirtualizationCapability and public config type
  * @position Geometry-only opt-in; Table owns data, admission and rendering
  */
@@ -16,10 +16,18 @@ import {sharedKey} from '../../../utils/sharedRealm';
 const CAPABILITY = sharedKey('table/virtualization-capability', 1);
 
 export interface UseTableRowsVirtualizationConfig {
-  /** Total body-row pitch, including padding and collapsed borders, in CSS pixels. */
+  /**
+   * Total body-row pitch, including padding and collapsed borders, in CSS
+   * pixels. Rows never measure shorter. When every mounted row measures
+   * taller, as with enlarged text, windowing uses the measured height.
+   */
   rowHeight: number;
-  /** Bounded Table-owned viewport height in CSS pixels. */
-  viewportHeight: number;
+  /**
+   * The viewport height in CSS pixels that the first window plans for, on
+   * the server and before the viewport is measured. It does not size the
+   * Table: the Table takes its height from its parent.
+   */
+  initialViewportHeight: number;
 }
 
 /** Geometry intent, not a data slice, renderer, scroll handle or plugin. */
@@ -55,19 +63,19 @@ export function getTableVirtualizationConfig(
  *
  * @example
  * ```
- * const virtualization = useTableRowsVirtualization({rowHeight: 48, viewportHeight: 480});
+ * const virtualization = useTableRowsVirtualization({rowHeight: 48, initialViewportHeight: 480});
  * <Table data={data} columns={columns} idKey="id" virtualization={virtualization} />;
  * ```
  */
 export function useTableRowsVirtualization({
   rowHeight,
-  viewportHeight,
+  initialViewportHeight,
 }: UseTableRowsVirtualizationConfig): TableVirtualizationCapability {
   return useMemo(
     () =>
       Object.freeze({
-        [CAPABILITY]: Object.freeze({rowHeight, viewportHeight}),
+        [CAPABILITY]: Object.freeze({rowHeight, initialViewportHeight}),
       }) as unknown as TableVirtualizationCapability,
-    [rowHeight, viewportHeight],
+    [rowHeight, initialViewportHeight],
   );
 }

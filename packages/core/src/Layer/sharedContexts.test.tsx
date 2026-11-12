@@ -154,6 +154,29 @@ describe('two Reacts in one process', () => {
     expect(other).not.toBe(context);
     expect(onOtherReact.createSharedContext(name, 1, 'default')).toBe(other);
   });
+
+  it('gives each React its own React-bound value, and one per React', async () => {
+    const otherReact = secondReact();
+    const onThisReact = await freshInstance(
+      async () => import('../utils/sharedForReact'),
+    );
+    const copyOnThisReact = await freshInstance(
+      async () => import('../utils/sharedForReact'),
+    );
+    vi.resetModules();
+    vi.doMock('react', () => ({...otherReact, default: otherReact}));
+    const onOtherReact = await import('../utils/sharedForReact');
+    vi.doUnmock('react');
+    const value = onThisReact.sharedForReact('test/two-reacts', 1, () => ({}));
+    expect(
+      copyOnThisReact.sharedForReact('test/two-reacts', 1, () => ({})),
+    ).toBe(value);
+    const other = onOtherReact.sharedForReact('test/two-reacts', 1, () => ({}));
+    expect(other).not.toBe(value);
+    expect(onOtherReact.sharedForReact('test/two-reacts', 1, () => ({}))).toBe(
+      other,
+    );
+  });
 });
 
 describe('every Core context is registered under a versioned key', () => {

@@ -45,9 +45,14 @@ export function isDisabledWithin(
 export function preferTabStops<T extends Element>(
   elements: ReadonlyArray<T>,
 ): T[] {
+  // A browser's querySelectorAll returns document order. jsdom can group a
+  // selector list's matches by selector. Sort them here.
+  const inDocumentOrder = [...elements].sort((a, b) =>
+    a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+  );
   const isTabStop = (element: T) => element.getAttribute('tabindex') !== '-1';
   return [
-    ...elements.filter(isTabStop),
-    ...elements.filter(element => !isTabStop(element)),
+    ...inDocumentOrder.filter(isTabStop),
+    ...inDocumentOrder.filter(element => !isTabStop(element)),
   ];
 }

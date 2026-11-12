@@ -24,8 +24,10 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  armHold,
   countBetween,
   openStory,
+  releaseAnimations,
   traceRendering,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
@@ -191,8 +193,17 @@ test('a removal: the removed row stays in place, inert and out of the accessibil
 }) => {
   await open(page);
   const gap = await rowGap(page);
+  // The exit lasts as long as the glides. The page holds it from its first
+  // frame, so the row is still there for each read below, however late a
+  // loaded runner sends it. The hold takes the list only. The pressed
+  // button's own press can start first, and would meet the hold's count.
+  const hold = await armHold(page, page.locator('#storybook-root ul'), {
+    judges: {target: leaving(page), property: 'clip-path'},
+    newOnly: true,
+  });
   await press(page, 'Remove the second row');
   const {glides, clipped} = await snapshot(page);
+  await hold.held();
   // The rows after it, and the content after the list, start where they were.
   // So do the buttons: the pressed one glides with its neighbors, never onto
   // them.
@@ -222,6 +233,7 @@ test('a removal: the removed row stays in place, inert and out of the accessibil
     page.getByRole('listitem').filter({hasText: 'Sent'}),
   ).toHaveCount(0);
   // Then it goes.
+  await releaseAnimations(page);
   await expect(exit).toHaveCount(0, {timeout: 3000});
 });
 
@@ -864,25 +876,30 @@ test('a change with a row swiped open lays the page out no more often than the s
     await expect
       .poll(async () => page.evaluate(() => document.getAnimations().length))
       .toBe(0);
-    await cdp.send('Performance.enable');
-    const layouts = async () => {
-      const {metrics} = await cdp.send('Performance.getMetrics');
-      return metrics.find(metric => metric.name === 'LayoutCount')?.value ?? 0;
-    };
-    const before = await layouts();
-    // A click with no pointer, so no swipe closes and no hover restyles.
-    await page.evaluate(async () => {
-      const button = [...document.querySelectorAll('button')].find(
-        element => element.textContent?.trim() === 'Move Archive first',
-      );
-      button?.click();
-      await new Promise<void>(resolve => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    await cdp.detach();
+    // Counted on the page's own clock, from the click through the next two
+    // frames. A count read over the runner's round trips also takes a layout
+    // of other page work in them. A story that just opened can do such work.
+    let change = {from: 0, to: 0};
+    const trace = await traceRendering(page, async () => {
+      // A click with no pointer, so no swipe closes and no hover restyles.
+      change = await page.evaluate(async () => {
+        const button = [...document.querySelectorAll('button')].find(
+          element => element.textContent?.trim() === 'Move Archive first',
+        );
+        const from = performance.timeOrigin + performance.now();
+        button?.click();
+        // The third frame's callback runs once the second frame has laid
+        // out, so the window holds both frames' work.
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          );
+        });
+        return {from, to: performance.timeOrigin + performance.now()};
       });
     });
-    const after = await layouts();
-    await cdp.detach();
-    return after - before;
+    return countBetween(trace, change.from, change.to).Layout ?? 0;
   };
   const none = await layoutsFor(false);
   const swiped = await layoutsFor(true);
@@ -985,9 +1002,10 @@ test('a row swiped away lays the page out no more often than the same swipe with
 });
 
 /**
- * Swipes `label` away, and 30 ms into its exit presses `button`. In the frame
- * after the press, it reads the rows' order and the leaving row's glides and
- * top. It also returns the row's top as its exit started.
+ * Swipes `label` away, and in the first frame that shows its exit presses
+ * `button`. Once the press commits, in the same task, it reads the rows' order
+ * and the leaving row's glides and top. It also returns the row's top as its
+ * exit started.
  */
 async function secondChangeDuringExit(
   page: Page,
@@ -1025,27 +1043,31 @@ async function secondChangeDuringExit(
           return;
         }
         const topBefore = exit.getBoundingClientRect().top;
-        setTimeout(() => {
-          [...document.querySelectorAll('button')]
-            .find(element => element.textContent?.trim() === button)
-            ?.click();
-          requestAnimationFrame(() => {
-            (window as unknown as {__second: object}).__second = {
-              starts: exit.getAnimations().flatMap(animation => {
-                const first = (
-                  animation.effect as KeyframeEffect | null
-                )?.getKeyframes()[0]?.translate;
-                return typeof first === 'string' ? [first] : [];
-              }),
-              order: [...document.querySelectorAll('#storybook-root li')].map(
-                li =>
-                  `${li.hasAttribute('data-astryx-leaving') ? 'leaving:' : ''}${labelOf(li)}`,
-              ),
-              topBefore,
-              topAfter: exit.getBoundingClientRect().top,
-            };
-          });
-        }, 30);
+        // The exit lasts under half a second. A timer or a frame between this
+        // frame and the reads can come after it ends on a loaded runner. So
+        // the press lands now, and the reads follow React's commit of it,
+        // which runs in a microtask before this frame renders.
+        [...document.querySelectorAll('button')]
+          .find(element => element.textContent?.trim() === button)
+          ?.click();
+        const read = () => {
+          (window as unknown as {__second: object}).__second = {
+            starts: exit.getAnimations().flatMap(animation => {
+              const first = (
+                animation.effect as KeyframeEffect | null
+              )?.getKeyframes()[0]?.translate;
+              return typeof first === 'string' ? [first] : [];
+            }),
+            order: [...document.querySelectorAll('#storybook-root li')].map(
+              li =>
+                `${li.hasAttribute('data-astryx-leaving') ? 'leaving:' : ''}${labelOf(li)}`,
+            ),
+            topBefore,
+            topAfter: exit.getBoundingClientRect().top,
+          };
+        };
+        // After the microtasks that the commit queues in turn.
+        queueMicrotask(() => queueMicrotask(() => queueMicrotask(read)));
       };
       requestAnimationFrame(tick);
     },
