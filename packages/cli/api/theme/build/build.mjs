@@ -939,8 +939,11 @@ export function themeSourceFiles(filePath) {
       continue;
     }
     for (const spec of parsedSpecifiers(source)) {
-      // Resolved as the build resolves it; what resolves into a package is
-      // not the theme's own.
+      // Only relative and absolute imports are the theme's own files. A bare
+      // specifier names a package, which a workspace link can resolve to a
+      // real path outside node_modules.
+      if (!spec.startsWith('.') && !path.isAbsolute(spec)) continue;
+      // Resolved as the build resolves it.
       let target;
       try {
         target = path.resolve(resolveThemeModule(spec, file));
