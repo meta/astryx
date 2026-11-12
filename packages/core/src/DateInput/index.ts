@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input DateInput component exports
@@ -18,4 +16,5 @@ export type {
   DateInputPresentation,
   DateInputStatus,
   DateInputStatusType,
+  DateInputEntryError,
 } from './DateInput';

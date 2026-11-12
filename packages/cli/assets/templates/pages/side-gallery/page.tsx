@@ -83,7 +83,7 @@ function ImageGrid() {
   return (
     <Grid columns={3} gap={3}>
       {IMAGES.map(img => (
-        <AspectRatio key={img.src} ratio={1} style={imageClip}>
+        <AspectRatio key={img.alt} ratio={1} style={imageClip}>
           <img src={img.src} alt={img.alt} style={imageStyle} />
         </AspectRatio>
       ))}

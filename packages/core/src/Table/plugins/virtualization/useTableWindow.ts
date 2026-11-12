@@ -5,58 +5,34 @@
 /**
  * @file useTableWindow.ts
  * @input Parent-admitted data/keys, parent-owned shared geometry source and DOM refs
- * @output React-tracked stable row/gap plan, one focus island and fixed-mode status
- * @position Table pre-cell planner; DOM refs are effect resources, with no owned observation
+ * @output Table's admission into the shared list window, logical-position
+ *   column widths and mounted-row diagnostics
+ * @position Table's adapter over the private list-windowing hook
+ *   (`virtualization/useListWindow`); DOM refs are effect resources, with no
+ *   owned observation
  */
-import {
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type RefObject,
-} from 'react';
+import {useMemo, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../../../hooks/useIsomorphicLayoutEffect';
-import {
-  moveFocusLeftBehind,
-  noteFocusWithin,
-  type FocusWithin,
-} from '../../../utils/focusReturn';
-import {useInteractionModalityTrackingFor} from '../../../utils/interactionModality';
 import {useDevWarningPerMessage} from '../../../hooks/useDevWarning';
 import {
   calculateListWindow,
-  createListWindowSegments,
   isPositiveFinite,
-  reconcileListAnchor,
-  type ListWindowPlan,
   type ListWindowSegment,
-} from '../../../utils/listWindow';
+} from '../../../virtualization/listWindow';
+import {measureText, readPixels} from '../../../virtualization/measure';
+import {
+  useListWindow,
+  type ListWindowGeometry,
+  type ListWindowGeometrySource,
+} from '../../../virtualization/useListWindow';
 import {
   getTableVirtualizationConfig,
   type TableVirtualizationCapability,
   type UseTableRowsVirtualizationConfig,
 } from './useTableRowsVirtualization';
 
-export interface TableWindowGeometry {
-  /** Actual unobscured body viewport height; sticky occlusion is accounted for once by Table. */
-  viewportHeight: number;
-  scrollTop: number;
-  /** Native scroll content extent, including after-table chrome when measured. */
-  scrollHeight?: number;
-  /** Effective body origin in the same coordinate space as scrollTop. */
-  bodyOffset: number;
-  isMeasured: boolean;
-  /** Increments on each content or layout invalidation; a scroll keeps it. */
-  revision?: number;
-  /** Increments on each size, font, or outer class or style change. */
-  layoutRevision?: number;
-}
-export interface TableWindowGeometrySource {
-  subscribe: (onChange: () => void) => () => void;
-  getSnapshot: () => TableWindowGeometry;
-  getServerSnapshot: () => TableWindowGeometry;
-}
+export type TableWindowGeometry = ListWindowGeometry;
+export type TableWindowGeometrySource = ListWindowGeometrySource;
 export interface UseTableWindowOptions<T> {
   capability: TableVirtualizationCapability | undefined;
   data: T[];
@@ -81,23 +57,6 @@ export interface TableWindowResult {
   /** Parent invokes only for genuine departure, including its recognized layer ownership. */
   onRowBlur: () => void;
 }
-interface RenderedWindow {
-  data: unknown[];
-  keys: (string | number)[];
-  config: Readonly<UseTableRowsVirtualizationConfig>;
-  geometry: TableWindowGeometry;
-  plan: ListWindowPlan;
-}
-interface PendingAnchor {
-  snapshot: TableWindowGeometry;
-  to: number;
-}
-interface WindowTracking {
-  source: TableWindowGeometrySource;
-  snapshot: TableWindowGeometry;
-  window: RenderedWindow;
-  pending: PendingAnchor | undefined;
-}
 interface ValidationState {
   data: unknown[];
   keys: (string | number)[];
@@ -111,17 +70,20 @@ interface ValidationState {
 interface Violation {
   data: unknown[];
   keys: (string | number)[];
+  /** The declared config, so a measured pitch change keeps the fallback. */
   config: Readonly<UseTableRowsVirtualizationConfig>;
   reason: string;
 }
-const EMPTY_GEOMETRY: TableWindowGeometry = Object.freeze({
-  viewportHeight: 0,
-  scrollTop: 0,
-  bodyOffset: 0,
-  isMeasured: false,
-});
+interface MeasuredPitch {
+  declared: Readonly<UseTableRowsVirtualizationConfig>;
+  rowHeight: number;
+}
 const EMPTY_LOGICAL_POSITION_COLUMNS: ReadonlySet<number> = new Set();
 const EMPTY_POSITION_WIDTHS: ReadonlyMap<number, number> = new Map();
+
+function roundPixels(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 function areWidthsEqual(
   a: ReadonlyMap<number, number>,
@@ -137,27 +99,6 @@ function areWidthsEqual(
     }
   }
   return true;
-}
-
-let textContext: OffscreenCanvasRenderingContext2D | null | undefined;
-
-/** Canvas text metrics: no layout read and no DOM write. */
-function measureText(font: string, text: string): number | undefined {
-  if (textContext === undefined) {
-    textContext =
-      typeof OffscreenCanvas === 'undefined'
-        ? null
-        : new OffscreenCanvas(1, 1).getContext('2d');
-  }
-  if (textContext == null) {
-    return undefined;
-  }
-  textContext.font = font;
-  return textContext.measureText(text).width;
-}
-
-function readPixels(value: string): number {
-  return Number.parseFloat(value) || 0;
 }
 
 /**
@@ -218,8 +159,6 @@ function measureLogicalPositionWidth(
   }
   return Math.ceil(textWidth + spacing * text.length + chrome + 1);
 }
-const getEmptyGeometry = () => EMPTY_GEOMETRY;
-const subscribeToNothing = () => () => {};
 
 function hasClippedRowNumber(cell: HTMLTableCellElement): boolean {
   const view = cell.ownerDocument.defaultView;
@@ -261,12 +200,69 @@ function hasClippedRowNumber(cell: HTMLTableCellElement): boolean {
   return false;
 }
 
+/** Rows within this distance of each other, or of the pitch, share one pitch. */
+const PITCH_TOLERANCE = 0.75;
+/** A shared height closer than this to the pitch is the pitch. */
+const PITCH_EPSILON = 0.01;
+
+type GeometryCheck = {reason: string} | {pitch: number} | undefined;
+
+function getContentViolation(
+  row: HTMLTableRowElement,
+  logicalPositionColumns: ReadonlySet<number>,
+): string | undefined {
+  for (const [columnIndex, cell] of Array.from(row.cells).entries()) {
+    if (logicalPositionColumns.has(columnIndex) && hasClippedRowNumber(cell)) {
+      return 'Mounted row-number content exceeds the column width.';
+    }
+    if (cell.clientHeight > 0 && cell.scrollHeight > cell.clientHeight + 1) {
+      return 'Mounted cell content exceeds the declared fixed height.';
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The pitch every mounted row shares after a text-size, zoom or theme change,
+ * or why the rows cannot share one. Reads every mounted row once.
+ */
+function measureSharedPitch(
+  rows: HTMLTableRowElement[],
+  logicalPositionColumns: ReadonlySet<number>,
+): GeometryCheck {
+  let min = Number.POSITIVE_INFINITY;
+  let max = 0;
+  let sum = 0;
+  let count = 0;
+  for (const row of rows) {
+    const height = row.getBoundingClientRect().height;
+    if (!(height > 0)) {
+      continue;
+    }
+    const reason = getContentViolation(row, logicalPositionColumns);
+    if (reason) {
+      return {reason};
+    }
+    min = Math.min(min, height);
+    max = Math.max(max, height);
+    sum += height;
+    count++;
+  }
+  if (count === 0) {
+    return undefined;
+  }
+  if (max - min > PITCH_TOLERANCE) {
+    return {reason: 'Mounted rows have different heights.'};
+  }
+  return {pitch: sum / count};
+}
+
 /**
  * Diagnostics inspect only mounted native rows/cells; all observers belong to Table.
- * Rows in `checkedRows` passed since the last layout invalidation, so only
- * newly mounted rows are read.
+ * Rows in `checkedRows` passed since the last layout invalidation, so a
+ * content change reads only newly mounted rows, until one leaves the pitch.
  */
-function getGeometryViolation(
+function getGeometryCheck(
   body: HTMLTableSectionElement,
   viewport: HTMLDivElement,
   table: HTMLTableElement,
@@ -275,7 +271,7 @@ function getGeometryViolation(
   logicalPositionColumns: ReadonlySet<number>,
   checkedRows: WeakSet<HTMLTableRowElement>,
   checkExtent: boolean,
-): string | undefined {
+): GeometryCheck {
   if (
     !body.isConnected ||
     !viewport.isConnected ||
@@ -286,7 +282,41 @@ function getGeometryViolation(
   ) {
     return undefined;
   }
-  if (checkExtent) {
+  const rows = Array.from(body.rows).filter(
+    row => row.getAttribute('aria-hidden') !== 'true',
+  );
+  let shouldCheckExtent = checkExtent;
+  for (const row of rows) {
+    if (checkedRows.has(row)) {
+      continue;
+    }
+    const height = row.getBoundingClientRect().height;
+    // A row that left the pitch: if every mounted row moved together, as after
+    // a text-size, zoom or theme change, their height becomes the pitch.
+    if (height > 0 && Math.abs(height - rowHeight) > PITCH_TOLERANCE) {
+      const shared = measureSharedPitch(rows, logicalPositionColumns);
+      if (
+        shared === undefined ||
+        'reason' in shared ||
+        Math.abs(shared.pitch - rowHeight) > PITCH_TOLERANCE
+      ) {
+        return shared;
+      }
+      // The rows still share this pitch and their content fits, so only the
+      // extent can show the difference.
+      for (const mounted of rows) {
+        checkedRows.add(mounted);
+      }
+      shouldCheckExtent = true;
+      break;
+    }
+    const reason = getContentViolation(row, logicalPositionColumns);
+    if (reason) {
+      return {reason};
+    }
+    checkedRows.add(row);
+  }
+  if (shouldCheckExtent) {
     const bodyHeight = body.getBoundingClientRect().height;
     if (!isPositiveFinite(bodyHeight)) {
       return undefined;
@@ -295,35 +325,23 @@ function getGeometryViolation(
       Math.abs(bodyHeight - totalHeight) > 1 ||
       (viewport.scrollHeight > 0 && totalHeight > viewport.scrollHeight + 1)
     ) {
-      return 'The browser cannot represent the declared body extent or fixed row pitch.';
-    }
-  }
-  for (const row of Array.from(body.rows)) {
-    if (row.getAttribute('aria-hidden') === 'true' || checkedRows.has(row)) {
-      continue;
-    }
-    const height = row.getBoundingClientRect().height;
-    if (height > 0 && Math.abs(height - rowHeight) > 0.75) {
-      return 'Mounted row pitch does not match rowHeight.';
-    }
-    for (const [columnIndex, cell] of Array.from(row.cells).entries()) {
+      // Rows that each moved by less than the tolerance still add up across
+      // the body, so a height they share becomes the pitch.
+      const shared = measureSharedPitch(rows, logicalPositionColumns);
       if (
-        logicalPositionColumns.has(columnIndex) &&
-        hasClippedRowNumber(cell)
+        shared !== undefined &&
+        ('reason' in shared ||
+          Math.abs(shared.pitch - rowHeight) > PITCH_EPSILON)
       ) {
-        return 'Mounted row-number content exceeds the column width.';
+        return shared;
       }
-      if (cell.clientHeight > 0 && cell.scrollHeight > cell.clientHeight + 1) {
-        return 'Mounted cell content exceeds the declared fixed height.';
-      }
+      return {
+        reason:
+          'The browser cannot represent the declared body extent or fixed row pitch.',
+      };
     }
-    checkedRows.add(row);
   }
   return undefined;
-}
-
-function scrollViewport(node: HTMLDivElement, scrollTop: number) {
-  node.scrollTop = scrollTop;
 }
 
 export function useTableWindow<T>({
@@ -338,13 +356,34 @@ export function useTableWindow<T>({
   geometry,
 }: UseTableWindowOptions<T>): TableWindowResult {
   const [violation, setViolation] = useState<Violation | undefined>();
-  const config = getTableVirtualizationConfig(capability);
+  const declared = getTableVirtualizationConfig(capability);
+  // The pitch every mounted row shares when it differs from rowHeight, as
+  // after a text-size, zoom or theme change. A new capability drops it.
+  const [measuredPitch, setMeasuredPitch] = useState<MeasuredPitch>();
+  const config = useMemo(
+    () =>
+      declared !== undefined && measuredPitch?.declared === declared
+        ? Object.freeze({...declared, rowHeight: measuredPitch.rowHeight})
+        : declared,
+    [declared, measuredPitch],
+  );
+  // The engine plans its first window from the declared first-frame height.
+  const pitch = useMemo(
+    () =>
+      config === undefined
+        ? undefined
+        : {
+            rowHeight: config.rowHeight,
+            viewportHeight: config.initialViewportHeight,
+          },
+    [config],
+  );
   const hasValidConfig =
-    config !== undefined &&
+    declared !== undefined &&
     calculateListWindow({
       rowCount: data.length,
-      rowHeight: config.rowHeight,
-      viewportHeight: config.viewportHeight,
+      rowHeight: declared.rowHeight,
+      viewportHeight: declared.initialViewportHeight,
       scrollTop: 0,
       startOffset: 0,
       isMeasured: false,
@@ -352,21 +391,13 @@ export function useTableWindow<T>({
   const isRejected =
     violation?.data === data &&
     violation.keys === keys &&
-    violation.config === config;
+    violation.config === declared;
   const canWindow =
     isAdmitted &&
     hasValidConfig &&
     !isRejected &&
     keys.length === data.length &&
     data.length > 0;
-  const snapshot = useSyncExternalStore(
-    canWindow ? geometry.subscribe : subscribeToNothing,
-    canWindow ? geometry.getSnapshot : getEmptyGeometry,
-    canWindow ? geometry.getServerSnapshot : getEmptyGeometry,
-  );
-  const [focusedKey, setFocusedKey] = useState<string | number | undefined>();
-  const [tracking, setTracking] = useState<WindowTracking | undefined>();
-  const focusNoteRef = useRef<FocusWithin | null>(null);
   const [positionWidths, setPositionWidths] = useState(EMPTY_POSITION_WIDTHS);
   const validationRef = useRef<ValidationState | null>(null);
   useDevWarningPerMessage(
@@ -374,179 +405,28 @@ export function useTableWindow<T>({
     `${violation?.reason} Rendering all rows without fixed constraints.`,
     isRejected,
   );
-  // Focus return reads the last input, so only a windowed table tracks it.
-  useInteractionModalityTrackingFor(viewport, canWindow);
-
-  // This is the only full-data pass owned here, and never runs on a scroll snapshot.
-  const keyIndices = useMemo(() => {
-    const indices = new Map<string | number, number>();
-    if (hasValidConfig && isAdmitted) {
-      for (let index = 0; index < keys.length; index++) {
-        indices.set(keys[index], index);
-      }
-    }
-    return indices;
-  }, [keys, hasValidConfig, isAdmitted]);
-  const focusIndex =
-    focusedKey === undefined ? undefined : keyIndices.get(focusedKey);
-  if (focusedKey !== undefined && focusIndex === undefined) {
-    setFocusedKey(undefined);
-  }
-  const last = tracking?.window;
-  const hasCurrentMeasurement =
-    snapshot.isMeasured &&
-    isPositiveFinite(snapshot.viewportHeight) &&
-    Number.isFinite(snapshot.scrollTop) &&
-    Number.isFinite(snapshot.bodyOffset) &&
-    snapshot.bodyOffset >= 0;
-  const effectiveGeometry = hasCurrentMeasurement
-    ? snapshot
-    : last != null && last.config === config
-      ? last.geometry
-      : {
-          viewportHeight: config?.viewportHeight ?? 0,
-          scrollTop: 0,
-          bodyOffset: 0,
-          isMeasured: false,
-        };
-  const hasChangedInputs =
-    last !== undefined &&
-    (last.data !== data ||
-      last.keys !== keys ||
-      last.config.rowHeight !== config?.rowHeight ||
-      last.config.viewportHeight !== config?.viewportHeight);
-  const anchorScroll =
-    canWindow && !isRejected && hasChangedInputs && config && last
-      ? reconcileListAnchor({
-          previousKeys: last.keys,
-          keys,
-          keyIndices,
-          firstVisibleIndex: last.plan.firstVisibleIndex,
-          // A negative offset is a distance inside the leading content, not a
-          // fraction of a row, so a new pitch does not scale it.
-          offset:
-            last.plan.offset < 0
-              ? last.plan.offset
-              : (last.plan.offset / last.config.rowHeight) * config.rowHeight,
-          rowHeight: config.rowHeight,
-          viewportHeight: effectiveGeometry.viewportHeight,
-          startOffset: effectiveGeometry.bodyOffset,
-          trailingContentHeight: Math.max(
-            0,
-            (last.geometry.scrollHeight ?? 0) -
-              last.geometry.bodyOffset -
-              last.plan.totalHeight,
-          ),
-        })
-      : undefined;
-  const pending = tracking?.pending;
-  const isAwaitingAnchor =
-    tracking?.source === geometry &&
-    pending !== undefined &&
-    pending.snapshot.scrollTop === snapshot.scrollTop &&
-    (pending.to !== snapshot.scrollTop || pending.snapshot === snapshot);
-  const pendingScroll =
-    anchorScroll ?? (isAwaitingAnchor ? pending.to : undefined);
-  const resolvedScroll = pendingScroll ?? effectiveGeometry.scrollTop;
-  const plan =
-    canWindow && !isRejected && config
-      ? calculateListWindow({
-          rowCount: data.length,
-          rowHeight: config.rowHeight,
-          viewportHeight: effectiveGeometry.viewportHeight,
-          scrollTop: resolvedScroll,
-          scrollHeight: effectiveGeometry.scrollHeight,
-          startOffset: effectiveGeometry.bodyOffset,
-          isMeasured: effectiveGeometry.isMeasured,
-          focusIndex,
-        })
-      : null;
-  const isWindowed = plan !== null;
-  const start = plan?.start ?? 0;
-  const end = plan?.end ?? data.length;
-  const rowHeight = config?.rowHeight ?? 0;
-  // The last window affects rendering, so it lives in state.
-  // Immutable inputs limit this update to one extra render.
-  if (plan !== null && config !== undefined) {
-    if (
-      tracking === undefined ||
-      tracking.source !== geometry ||
-      tracking.snapshot !== snapshot ||
-      last?.data !== data ||
-      last.keys !== keys ||
-      last.config !== config
-    ) {
-      setTracking({
-        source: geometry,
-        snapshot,
-        window: {
-          data,
-          keys,
-          config,
-          geometry: {...effectiveGeometry, scrollTop: resolvedScroll},
-          plan,
-        },
-        pending:
-          anchorScroll !== undefined
-            ? {snapshot, to: anchorScroll}
-            : isAwaitingAnchor
-              ? pending
-              : undefined,
-      });
-    }
-  } else if (tracking !== undefined) {
-    setTracking(undefined);
-  }
-  // Range snapshots within the same mounted interval retain the exact segment array.
-  const segments = useMemo<ListWindowSegment[]>(() => {
-    if (!isWindowed) {
-      return data.length === 0
-        ? []
-        : [{type: 'rows', start: 0, end: data.length}];
-    }
-    return createListWindowSegments(
-      data.length,
-      rowHeight,
-      start,
-      end,
-      focusIndex,
-    );
-  }, [isWindowed, start, end, data.length, rowHeight, focusIndex]);
-
-  const onRowFocus = useCallback(
-    (key: string | number, focusTarget?: HTMLElement) => {
-      focusNoteRef.current =
-        noteFocusWithin(focusTarget ?? body.current) ?? focusNoteRef.current;
-      setFocusedKey(key);
-    },
-    [body],
+  useDevWarningPerMessage(
+    'Table',
+    `Rows measure ${roundPixels(config?.rowHeight ?? 0)}px, not rowHeight ${roundPixels(declared?.rowHeight ?? 0)}px. Windowing uses the measured height.`,
+    config !== declared,
   );
-  const onRowBlur = useCallback(() => {
-    focusNoteRef.current = null;
-    setFocusedKey(undefined);
-  }, []);
-
-  useIsomorphicLayoutEffect(() => {
-    // Syncs DOM focus and the viewport scroll position with the committed rows.
-    if (
-      focusNoteRef.current != null &&
-      (focusedKey === undefined || focusIndex === undefined)
-    ) {
-      moveFocusLeftBehind(focusNoteRef.current, viewport.current, null, {
-        preventScroll: true,
-      });
-      focusNoteRef.current = null;
-    }
-    if (!isWindowed || !config || !plan) {
-      return;
-    }
-    if (
-      pendingScroll !== undefined &&
-      viewport.current &&
-      Math.abs(viewport.current.scrollTop - pendingScroll) > 0.5
-    ) {
-      scrollViewport(viewport.current, pendingScroll);
-    }
+  const {
+    segments,
+    plan,
+    isWindowed,
+    snapshot,
+    onItemFocus: onRowFocus,
+    onItemBlur: onRowBlur,
+  } = useListWindow({
+    items: data,
+    keys,
+    rowCount: data.length,
+    pitch,
+    isEligible: hasValidConfig && isAdmitted,
+    canWindow,
+    geometry,
+    viewport,
+    focusContainer: body,
   });
 
   const totalHeight = plan?.totalHeight ?? 0;
@@ -626,7 +506,7 @@ export function useTableWindow<T>({
     const checkExtent = isLayoutChanged || state.totalHeight !== totalHeight;
     state.layoutRevision = layoutRevision;
     state.totalHeight = totalHeight;
-    const reason = getGeometryViolation(
+    const check = getGeometryCheck(
       body.current,
       viewport.current,
       table.current,
@@ -636,12 +516,22 @@ export function useTableWindow<T>({
       state.checkedRows,
       checkExtent,
     );
-    if (reason) {
-      setViolation({data, keys, config, reason});
+    if (check === undefined || declared === undefined) {
+      return;
+    }
+    if ('pitch' in check) {
+      setMeasuredPitch(
+        Math.abs(check.pitch - declared.rowHeight) < PITCH_EPSILON
+          ? undefined
+          : {declared, rowHeight: check.pitch},
+      );
+    } else {
+      setViolation({data, keys, config: declared, reason: check.reason});
     }
   }, [
     isWindowed,
     config,
+    declared,
     data,
     keys,
     logicalPositionColumns,
