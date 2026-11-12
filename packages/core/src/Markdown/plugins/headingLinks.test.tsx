@@ -27,6 +27,9 @@ import {
   vi,
 } from 'vitest';
 import {__resetLiveRegionsForTest} from '../../hooks/useAnnounce';
+import {defineTheme} from '../../theme/defineTheme';
+import {Theme} from '../../theme/Theme';
+import {resetThemes} from '../../theme/themeRegistry';
 import {useContainerReveal} from '../../hooks/useContainerReveal';
 import {LinkProvider} from '../../Link/LinkProvider';
 import {InternationalizationProvider} from '../../i18n';
@@ -698,5 +701,51 @@ describe('createMarkdownHeadingLinks', () => {
 
     expect(received).toEqual(['nested', 'root']);
     expect(screen.queryByRole('button', {name: /Copy link to/})).toBeNull();
+  });
+});
+
+describe('heading copy-link failure glyph', () => {
+  // Label each shared icon's artwork, so a test reads which name rendered.
+  const icons = {
+    check: <span data-icon="check" />,
+    close: <span data-icon="close" />,
+  };
+
+  afterEach(() => {
+    resetThemes();
+    __resetLiveRegionsForTest();
+    vi.restoreAllMocks();
+  });
+
+  function glyphOf(name: string) {
+    const button = screen.getByRole('button', {name});
+    return button.querySelector('[data-icon]')?.getAttribute('data-icon');
+  }
+
+  it.each([
+    ['clipboard writing rejects', 'reject'],
+    ['the Clipboard API is unavailable', 'missing'],
+  ] as const)('draws the close glyph when %s', async (_, how) => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value:
+        how === 'missing'
+          ? undefined
+          : {writeText: vi.fn().mockRejectedValue(new Error('denied'))},
+    });
+    render(
+      <Theme theme={defineTheme({name: `heading-link-glyph-${how}`, icons})}>
+        <Markdown plugins={[createMarkdownHeadingLinks()]}>
+          {'# Overview'}
+        </Markdown>
+      </Theme>,
+    );
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Copy link to Overview'}),
+    );
+    await screen.findByRole('button', {
+      name: 'Failed to copy value to clipboard.',
+    });
+    expect(glyphOf('Failed to copy value to clipboard.')).toBe('close');
   });
 });
