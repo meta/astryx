@@ -368,8 +368,11 @@ those contracts.
   subpath: it reports whether a scroller's scroll is a finger's, now or at a
   past time, and, through `onEnd`, when that scroll ends. `timing`, UIKit's
   measured timing table, is on that subpath for Lab components that play the
-  same measured motion. `playReducedMotionCrossFade` is on that subpath too:
-  under Reduce Motion, it cross-fades an element through an inert copy, so the
+  same measured motion.
+  `prepareFocusReturnOnRemoval` is on that subpath too: it returns focus when
+  a removal loses it, so a Lab Tour step that ends sends focus to its target
+  or the opener. `playReducedMotionCrossFade` is on that subpath too: under
+  Reduce Motion, it cross-fades an element through an inert copy, so the
   element's area never goes blank. The animator and `motion/reducedMotion.ts`
   give only a dip, which blanks the area between the old state and the new one.
 - **INV15 — The animator animates a number.** The animator has a value mode:

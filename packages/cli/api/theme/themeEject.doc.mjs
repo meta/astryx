@@ -13,7 +13,7 @@ export const doc = {
   displayName: 'themeEject()',
   summary: 'Eject an available theme into a project as editable source.',
   description:
-    "Resolves a theme from the CLI bundle or an installed integration and ejects it into the consumer project: a bundled theme's source files, or an integration theme's complete directory with its descriptor. Writes are staged and existing files require explicit overwrite. Duplicate slugs fail closed until the caller selects an owner package.",
+    "Resolves a theme from the CLI bundle or an installed integration and ejects it into the consumer project: a bundled theme's source files, or an integration theme's complete directory with its descriptor. Writes are staged and existing files require explicit overwrite. A target inside a folder the theme editor made (a subfolder of <slug>/ that holds <slug>.settings.json) is written, and the CLI warns. Duplicate slugs fail closed until the caller selects an owner package.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'themeEject(slug: string, options?: {targetPath?: string, overwrite?: boolean, cwd?: string, package?: string}): Promise<ThemeEjectResponse>',
