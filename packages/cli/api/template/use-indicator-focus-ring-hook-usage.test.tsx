@@ -106,30 +106,14 @@ describe('useIndicatorFocusRingHookUsage example', () => {
     expect(indicator.style.outlineStyle).toBe('');
   });
 
-  it('toggles checked state cleanly and skips the focus ring when disabled', () => {
+  it('toggles checked state cleanly', () => {
     renderExample();
     const input = getCheckbox();
-    const indicator = getIndicatorElement();
 
     expect(input.checked).toBe(true);
     act(() => {
       input.click();
     });
     expect(input.checked).toBe(false);
-
-    const disableButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>('button'),
-    ).find(button => button.textContent === 'Disable');
-    expect(disableButton).toBeDefined();
-
-    act(() => {
-      disableButton?.click();
-    });
-    expect(input.disabled).toBe(true);
-
-    act(() => {
-      input.dispatchEvent(new FocusEvent('focus', {bubbles: true}));
-    });
-    expect(indicator.style.outlineStyle).toBe('');
   });
 });

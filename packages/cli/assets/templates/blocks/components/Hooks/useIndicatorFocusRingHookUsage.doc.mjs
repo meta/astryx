@@ -10,5 +10,5 @@ export const doc = {
     'Renders a custom checkbox backed by a visually hidden native input: spreads useIndicatorFocusRing focusProps onto the input container and wraps only CheckboxIndicator in the target ref so the focus ring hugs the indicator.',
   isReady: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['Button', 'Card', 'Indicator', 'Layout', 'Text'],
+  componentsUsed: ['Card', 'Indicator', 'Layout', 'Text'],
 };
