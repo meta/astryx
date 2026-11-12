@@ -53,7 +53,7 @@ const anatomy = [
     name: 'Image',
     required: false,
     description:
-      'Block image or unsafe-URL fallback; a custom image renderer replaces a safe default image.',
+      'Block image, or its alternative text in brackets when the image URL is empty; a custom image renderer replaces a default image that has a URL. An unsafe URL renders as the source text instead.',
   },
 ];
 
@@ -342,6 +342,16 @@ export const docs = {
         guidance: false,
         description:
           'Use Markdown for hand-authored layouts; use Text and Heading directly when you control the content.',
+      },
+      {
+        guidance: false,
+        description:
+          'Do not pass plugins from a Server Component into Markdown: function-bearing plugin entries cannot cross the client boundary. Run them on the server with parseMarkdownAst from @astryxdesign/core/Markdown/parser, or create them in client code.',
+      },
+      {
+        guidance: false,
+        description:
+          'Do not rely on Markdown to sanitize what a custom renderer, a plugin renderer, or components.math returns. Markdown passes them inert text and parsed nodes; each renderer owns its own output and its accessible semantics.',
       },
     ],
   },
@@ -881,6 +891,16 @@ export const docsZh = {
         description:
           'Use Markdown for hand-authored layouts; use Text and Heading directly when you control the content.',
       },
+      {
+        guidance: false,
+        description:
+          'Do not pass plugins from a Server Component into Markdown: function-bearing plugin entries cannot cross the client boundary. Run them on the server with parseMarkdownAst from @astryxdesign/core/Markdown/parser, or create them in client code.',
+      },
+      {
+        guidance: false,
+        description:
+          'Do not rely on Markdown to sanitize what a custom renderer, a plugin renderer, or components.math returns. Markdown passes them inert text and parsed nodes; each renderer owns its own output and its accessible semantics.',
+      },
     ],
   },
 };
@@ -983,6 +1003,16 @@ export const docsDense = {
         description:
           'Use Markdown for hand-authored layouts; use Text and Heading directly when you control the content.',
       },
+      {
+        guidance: false,
+        description:
+          'Do not pass plugins from a Server Component into Markdown; function-bearing entries cannot cross the client boundary. Run them server-side with parseMarkdownAst.',
+      },
+      {
+        guidance: false,
+        description:
+          'Do not rely on Markdown to sanitize custom, plugin, or math renderer output; each renderer owns its output and semantics.',
+      },
     ],
   },
   propDescriptions: {
@@ -999,7 +1029,7 @@ export const docsDense = {
     citationStyle:
       "'label'|'number'. label=chip w/ title+icon, number=compact badge. Default: 'label'.",
     contentWidth:
-      'number|string. Max width for prose (headings, paragraphs, lists). Tables/code unconstrained.',
+      'number|string. Max width for prose (headings, paragraphs, lists). Tables/code unconstrained. Default: 680.',
     contentAlign:
       "'start'|'center'. Prose alignment when contentWidth < container. Default: 'start'.",
     plugins:

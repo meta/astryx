@@ -187,7 +187,7 @@
   },
   {
     "component": "core/Markdown",
-    "reason": "Markdown delegates bidi text, semantic list markers, links, and caller-authored content to browser semantics and shared components. Its own prose styling uses logical block/inline properties and it owns no directional control, physical placement, drag, scroll action, or overlay."
+    "reason": "Markdown sets each prose block's and table cell's dir from its own text, so a Hebrew paragraph in a left-to-right document starts at the right edge; its unit tests and a mixed-direction story cover that. Semantic list markers, links, and caller-authored content follow browser semantics and shared components. Its own prose styling uses logical block/inline properties, a table's sideways scroll belongs to the nested Table, and it owns no directional icon, control order, physical placement, drag, or overlay."
   },
   {
     "component": "core/Section",

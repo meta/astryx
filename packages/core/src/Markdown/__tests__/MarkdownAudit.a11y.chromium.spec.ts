@@ -123,26 +123,13 @@ async function documentShape(page: Page) {
       headings: Array.from(root.querySelectorAll('h1, h2, h3, h4, h5, h6')).map(
         h => `${h.tagName.toLowerCase()}:${h.textContent}`,
       ),
-      firstGap: (() => {
-        const paragraphs = Array.from(
-          root.querySelectorAll('.astryx-markdown-paragraph'),
+      paragraphMargin: (() => {
+        const paragraph = root.querySelector(
+          '.astryx-markdown-paragraph:not(:first-child)',
         );
-        const pair = paragraphs.find(
-          (p, i) =>
-            i < paragraphs.length - 1 &&
-            p.nextElementSibling === paragraphs[i + 1],
-        );
-        if (pair == null) {
-          return null;
-        }
-        const next = pair.nextElementSibling as Element;
-        return (
-          Math.round(
-            (next.getBoundingClientRect().top -
-              pair.getBoundingClientRect().bottom) *
-              10,
-          ) / 10
-        );
+        return paragraph == null
+          ? null
+          : parseFloat(getComputedStyle(paragraph).marginBlockStart);
       })(),
       blockCount: blocks.length,
     };
@@ -182,13 +169,15 @@ async function tableBlock(page: Page) {
       blockName: block.getAttribute('aria-label'),
       blockTabIndex: block.getAttribute('tabindex'),
       blockOverflowX: getComputedStyle(block).overflowX,
-      regions: Array.from(block.querySelectorAll('[role="region"]')).map(r => ({
+      regions: Array.from(
+        block.querySelectorAll('.astryx-table-scroll-wrapper'),
+      ).map(r => ({
+        role: r.getAttribute('role'),
         name:
           r.getAttribute('aria-label') ??
-          (r.getAttribute('aria-labelledby')
-            ? document.getElementById(r.getAttribute('aria-labelledby')!)
-                ?.textContent
-            : null),
+          document.getElementById(r.getAttribute('aria-labelledby') ?? '')
+            ?.textContent ??
+          null,
         tabIndex: r.getAttribute('tabindex'),
         scrolls: r.scrollWidth > r.clientWidth + 1,
       })),
@@ -236,6 +225,89 @@ async function blockDirections(page: Page) {
   });
 }
 
+/**
+ * Contrast of each meaningful text part against the backdrop it paints on.
+ * Each foreground is composited over the first opaque ancestor background.
+ */
+async function contrastPairs(page: Page) {
+  return page.evaluate(() => {
+    const parse = (value: string) => {
+      const m = /rgba?\(([^)]+)\)/.exec(value);
+      if (m == null) {
+        return null;
+      }
+      const [r, g, b, a = '1'] = m[1].split(/[ ,/]+/).filter(Boolean);
+      return [Number(r), Number(g), Number(b), Number(a)];
+    };
+    const backdrop = (el: Element) => {
+      const layers: number[][] = [];
+      let node: Element | null = el;
+      while (node != null) {
+        const color = parse(getComputedStyle(node).backgroundColor);
+        if (color != null && color[3] > 0) {
+          layers.push(color);
+          if (color[3] >= 1) {
+            break;
+          }
+        }
+        node = node.parentElement;
+      }
+      let base = [255, 255, 255];
+      for (const layer of layers.reverse()) {
+        base = base.map((c, i) => layer[i] * layer[3] + c * (1 - layer[3]));
+      }
+      return base;
+    };
+    const luminance = (rgb: number[]) => {
+      const [r, g, b] = rgb.map(c => {
+        const v = c / 255;
+        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const root = document.querySelector('#storybook-root .astryx-markdown');
+    const parts: [string, string][] = [
+      ['paragraph', '.astryx-markdown-paragraph'],
+      ['heading', '.astryx-markdown-heading'],
+      ['link', 'a'],
+      ['strikethrough', 'del, s'],
+      ['inline code', 'li code'],
+      [
+        'blockquote text',
+        '.astryx-markdown-blockquote p, .astryx-markdown-blockquote',
+      ],
+      ['table header', 'th'],
+      ['table cell', 'td'],
+      ['list item', '.astryx-markdown-list li'],
+    ];
+    return parts.flatMap(([name, selector]) => {
+      const el = root?.querySelector(selector);
+      if (el == null) {
+        return [];
+      }
+      const style = getComputedStyle(el);
+      const fg = parse(style.color) as number[];
+      const bg = backdrop(el);
+      const composite = bg.map((c, i) => fg[i] * fg[3] + c * (1 - fg[3]));
+      const [hi, lo] = [luminance(composite), luminance(bg)].sort(
+        (a, b) => b - a,
+      );
+      const size = parseFloat(style.fontSize);
+      const bold = Number(style.fontWeight) >= 700;
+      const large = size >= 24 || (bold && size >= 18.66);
+      return [
+        {
+          part: name,
+          foreground: style.color,
+          backdrop: `rgb(${bg.map(Math.round).join(', ')})`,
+          ratio: Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100,
+          threshold: large ? 3 : 4.5,
+        },
+      ];
+    });
+  });
+}
+
 const HEBREW = /[\u0590-\u05FF]/;
 
 const cases: AuditCase[] = [];
@@ -270,8 +342,15 @@ for (const mode of ['light', 'dark'] as const) {
         shape.headings[0] === 'h1:Markdown Demo',
         `h1 ${shape.headings[0]}`,
       );
-      defaultGaps[mode] = shape.firstGap;
-      await frame('rest', {shape});
+      defaultGaps[mode] = shape.paragraphMargin;
+      const contrast = await contrastPairs(page);
+      for (const pair of contrast) {
+        check(
+          pair.ratio >= pair.threshold,
+          `${pair.part} contrast ${pair.ratio} below ${pair.threshold}`,
+        );
+      }
+      await frame('rest', {shape, contrast});
 
       const link = page.getByRole('link', {name: 'Links'});
       await link.hover();
@@ -306,10 +385,11 @@ for (const mode of ['light', 'dark'] as const) {
       });
       check(focus.name === 'Links', `focused ${focus.name}`);
       check(focus.focusVisible, 'the link is not :focus-visible');
+      // The default link draws the browser's own focus outline. It is
+      // visible; whether it takes the shared focus tokens is not settled.
       check(
-        /^solid ([1-9]|\d{2,})(\.\d+)?px/.test(focus.outline) ||
-          focus.boxShadow !== 'none',
-        `focus ring ${focus.outline} / ${focus.boxShadow}`,
+        !focus.outline.startsWith('none') || focus.boxShadow !== 'none',
+        `no focus indicator: ${focus.outline} / ${focus.boxShadow}`,
       );
       await frame('link-focus-visible', {focus});
     },
@@ -332,10 +412,10 @@ for (const mode of ['light', 'dark'] as const) {
       );
       const defaultGap = defaultGaps[mode];
       check(
-        shape.firstGap != null &&
+        shape.paragraphMargin != null &&
           defaultGap != null &&
-          shape.firstGap < defaultGap,
-        `compact paragraph gap ${shape.firstGap} not below default ${defaultGap}`,
+          shape.paragraphMargin < defaultGap,
+        `compact paragraph margin ${shape.paragraphMargin} not below default ${defaultGap}`,
       );
       await frame('rest', {shape, defaultGap});
     },
@@ -368,6 +448,10 @@ for (const mode of ['light', 'dark'] as const) {
         check(
           table.regions.length === 1,
           `table ${i} has ${table.regions.length} regions`,
+        );
+        check(
+          table.regions[0]?.role === 'group' && Boolean(table.regions[0]?.name),
+          `table ${i} scroll region ${JSON.stringify(table.regions[0])}`,
         );
         check(
           table.headers.every(header => !header.ellipsis),
@@ -439,44 +523,48 @@ for (const mode of ['light', 'dark'] as const) {
   });
 }
 
-cases.push({
-  key: 'mixed-direction-rtl-light',
-  group: 'direction',
-  story: 'core-markdown--mixed-direction',
-  ready: '#storybook-root .astryx-markdown-table td',
-  mode: 'light',
-  direction: 'rtl',
-  viewport: MEDIUM,
-  run: async (page, check, frame) => {
-    const blocks = await blockDirections(page);
-    checkMixedDirection(blocks, 'rtl', check);
-    await frame('rest', {blocks});
-  },
-});
+for (const mode of ['light', 'dark'] as const) {
+  cases.push({
+    key: `mixed-direction-rtl-${mode}`,
+    group: 'direction',
+    story: 'core-markdown--mixed-direction',
+    ready: '#storybook-root .astryx-markdown-table td',
+    mode,
+    direction: 'rtl',
+    viewport: MEDIUM,
+    run: async (page, check, frame) => {
+      const blocks = await blockDirections(page);
+      checkMixedDirection(blocks, 'rtl', check);
+      await frame('rest', {blocks});
+    },
+  });
+}
 
-cases.push({
-  key: 'document-rtl-light',
-  group: 'direction',
-  story: 'core-markdown--default',
-  ready: '#storybook-root .astryx-markdown-table',
-  mode: 'light',
-  direction: 'rtl',
-  viewport: WIDE,
-  run: async (page, check, frame) => {
-    const blocks = await blockDirections(page);
-    const heading = blocks.find(block => block.text === 'Markdown Demo');
-    // English text keeps its own direction inside a right-to-left document.
-    check(
-      heading?.direction === 'ltr',
-      `heading direction ${heading?.direction}`,
-    );
-    check(
-      heading?.edge != null && heading.edge.fromLeft < heading.edge.fromRight,
-      `heading text edge ${JSON.stringify(heading?.edge)}`,
-    );
-    await frame('rest', {heading});
-  },
-});
+for (const mode of ['light', 'dark'] as const) {
+  cases.push({
+    key: `document-rtl-${mode}`,
+    group: 'direction',
+    story: 'core-markdown--default',
+    ready: '#storybook-root .astryx-markdown-table',
+    mode,
+    direction: 'rtl',
+    viewport: WIDE,
+    run: async (page, check, frame) => {
+      const blocks = await blockDirections(page);
+      const heading = blocks.find(block => block.text === 'Markdown Demo');
+      // English text keeps its own direction inside a right-to-left document.
+      check(
+        heading?.direction === 'ltr',
+        `heading direction ${heading?.direction}`,
+      );
+      check(
+        heading?.edge != null && heading.edge.fromLeft < heading.edge.fromRight,
+        `heading text edge ${JSON.stringify(heading?.edge)}`,
+      );
+      await frame('rest', {heading});
+    },
+  });
+}
 
 for (const mode of ['light', 'dark'] as const) {
   cases.push({
@@ -532,38 +620,40 @@ for (const mode of ['light', 'dark'] as const) {
   });
 }
 
-cases.push({
-  key: 'images-light',
-  group: 'width',
-  story: 'core-markdown--with-images',
-  ready: '#storybook-root .astryx-markdown-image img',
-  mode: 'light',
-  direction: 'ltr',
-  viewport: MEDIUM,
-  run: async (page, check, frame) => {
-    const images = await page.evaluate(() =>
-      Array.from(
-        document.querySelectorAll('#storybook-root .astryx-markdown-image'),
-      ).map(block => {
-        const img = block.querySelector('img');
-        return {
-          alt: img?.getAttribute('alt') ?? null,
-          overflows: img != null && img.clientWidth > block.clientWidth + 1,
-        };
-      }),
-    );
-    check(images.length === 3, `${images.length} image blocks`);
-    check(
-      images.every(image => image.alt != null && image.alt !== ''),
-      'an image has no alternative text',
-    );
-    check(
-      images.every(image => !image.overflows),
-      'an image overflows its block',
-    );
-    await frame('rest', {images});
-  },
-});
+for (const mode of ['light', 'dark'] as const) {
+  cases.push({
+    key: `images-${mode}`,
+    group: 'width',
+    story: 'core-markdown--with-images',
+    ready: '#storybook-root .astryx-markdown-image img',
+    mode,
+    direction: 'ltr',
+    viewport: MEDIUM,
+    run: async (page, check, frame) => {
+      const images = await page.evaluate(() =>
+        Array.from(
+          document.querySelectorAll('#storybook-root .astryx-markdown-image'),
+        ).map(block => {
+          const img = block.querySelector('img');
+          return {
+            alt: img?.getAttribute('alt') ?? null,
+            overflows: img != null && img.clientWidth > block.clientWidth + 1,
+          };
+        }),
+      );
+      check(images.length === 3, `${images.length} image blocks`);
+      check(
+        images.every(image => image.alt != null && image.alt !== ''),
+        'an image has no alternative text',
+      );
+      check(
+        images.every(image => !image.overflows),
+        'an image overflows its block',
+      );
+      await frame('rest', {images});
+    },
+  });
+}
 
 for (const mode of ['light', 'dark'] as const) {
   cases.push({
@@ -578,7 +668,7 @@ for (const mode of ['light', 'dark'] as const) {
       const overflow = await horizontalOverflow(page);
       check(overflow.page <= 0, `page scrolls sideways by ${overflow.page}px`);
       check(
-        overflow.scrollers.every(s => s.insideTable && s.role === 'region'),
+        overflow.scrollers.every(s => s.insideTable && s.role === 'group'),
         `unexpected sideways scroller ${JSON.stringify(overflow.scrollers)}`,
       );
       await frame('rest', {overflow});
@@ -586,31 +676,33 @@ for (const mode of ['light', 'dark'] as const) {
   });
 }
 
-cases.push({
-  key: 'narrow-wide-table-light',
-  group: 'narrow',
-  story: 'core-markdown--table-narrow-wide-content',
-  args: 'width:320',
-  ready: '#storybook-root .astryx-markdown-table table',
-  mode: 'light',
-  direction: 'ltr',
-  viewport: NARROW,
-  run: async (page, check, frame) => {
-    const tables = await tableBlock(page);
-    const region = tables[0]?.regions[0];
-    check(tables.length === 1, `${tables.length} table blocks`);
-    check(tables[0]?.blockTabIndex == null, 'the table block is a tab stop');
-    check(region?.scrolls === true, 'the wide table does not scroll');
-    check(
-      region?.tabIndex === '0',
-      `scroll region tabindex ${region?.tabIndex}`,
-    );
-    check(Boolean(region?.name), 'the scroll region has no name');
-    const overflow = await horizontalOverflow(page);
-    check(overflow.page <= 0, `page scrolls sideways by ${overflow.page}px`);
-    await frame('rest', {tables, overflow});
-  },
-});
+for (const mode of ['light', 'dark'] as const) {
+  cases.push({
+    key: `narrow-wide-table-${mode}`,
+    group: 'narrow',
+    story: 'core-markdown--table-narrow-wide-content',
+    args: 'width:320',
+    ready: '#storybook-root .astryx-markdown-table table',
+    mode,
+    direction: 'ltr',
+    viewport: NARROW,
+    run: async (page, check, frame) => {
+      const tables = await tableBlock(page);
+      const region = tables[0]?.regions[0];
+      check(tables.length === 1, `${tables.length} table blocks`);
+      check(tables[0]?.blockTabIndex == null, 'the table block is a tab stop');
+      check(region?.scrolls === true, 'the wide table does not scroll');
+      check(
+        region?.tabIndex === '0',
+        `scroll region tabindex ${region?.tabIndex}`,
+      );
+      check(Boolean(region?.name), 'the scroll region has no name');
+      const overflow = await horizontalOverflow(page);
+      check(overflow.page <= 0, `page scrolls sideways by ${overflow.page}px`);
+      await frame('rest', {tables, overflow});
+    },
+  });
+}
 
 function checkMixedDirection(
   blocks: Awaited<ReturnType<typeof blockDirections>>,

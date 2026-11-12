@@ -201,6 +201,37 @@ describe('Markdown', () => {
         'turn-7',
       );
     });
+
+    it('merges className and style onto the block root beside its target', () => {
+      const {container} = render(
+        <Markdown className="answer" style={{scrollMarginTop: '12px'}}>
+          Hello
+        </Markdown>,
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(root).toHaveClass('answer');
+      expect(root).toHaveClass('astryx-markdown');
+      expect(root.style.scrollMarginTop).toBe('12px');
+    });
+
+    it('forwards ref, className and style to the inline root', () => {
+      const ref = {current: null as HTMLSpanElement | null};
+      const {container} = render(
+        <Markdown
+          display="inline"
+          ref={ref}
+          className="answer"
+          style={{scrollMarginTop: '12px'}}>
+          Hello
+        </Markdown>,
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.tagName).toBe('SPAN');
+      expect(ref.current).toBe(root);
+      expect(root).toHaveClass('answer');
+      expect(root).toHaveClass('astryx-markdown');
+      expect(root.style.scrollMarginTop).toBe('12px');
+    });
   });
 
   describe('block spacing theme targets', () => {
@@ -952,6 +983,17 @@ describe('Markdown', () => {
     const link = container.querySelector('a');
     expect(link).toBeNull();
     expect(container.textContent).toContain('click');
+  });
+
+  it('renders the alternative text in the image part for an empty image URL', () => {
+    const image = vi.fn(() => null);
+    const {container} = render(
+      <Markdown components={{image}}>{'![Diagram]( )'}</Markdown>,
+    );
+    const part = container.querySelector('.astryx-markdown-image');
+    expect(part).toHaveTextContent('[Diagram]');
+    expect(container.querySelector('img')).toBeNull();
+    expect(image).not.toHaveBeenCalled();
   });
 
   it('sanitizes data: URLs in images', () => {
