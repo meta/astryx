@@ -123,13 +123,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State            | Required invariant                                | Allowed variation |
-| ---------------- | ------------------------------------------------- | ----------------- |
-| Closed           | Trigger with collapsed state.                     | Theme styling.    |
-| Hover-open       | Menu open; focus does not move.                   | Delay.            |
-| Click-open       | Menu open; focus on the first item.               | —                 |
-| Drawer collapsed | Items inert and hidden from assistive technology. | —                 |
-| Drawer expanded  | Items reachable; activation closes the drawer.    | Animation.        |
+| State            | Required invariant                                                                                      | Allowed variation |
+| ---------------- | ------------------------------------------------------------------------------------------------------- | ----------------- |
+| Closed           | Trigger with collapsed state.                                                                           | Theme styling.    |
+| Hover-open       | Menu open; focus does not move.                                                                         | Delay.            |
+| Click-open       | Menu open; focus on the first item.                                                                     | —                 |
+| Drawer collapsed | Items inert and hidden from assistive technology.                                                       | —                 |
+| Drawer expanded  | Items reachable; activation closes the drawer, except a modified click on a link, which leaves it open. | Animation.        |
 
 ### Transformation and precedence order
 

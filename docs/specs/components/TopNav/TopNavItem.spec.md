@@ -33,15 +33,15 @@ system_specs: [spec:AST-085]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                    |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `TopNavItem` with `label`, `href`, `target`, `as`, `isSelected`, `isDisabled`, `isIconOnly`, `icon`, `children`, and `size`; target `top-nav-item` with `mode` and `selected` states.                                       |
-| Behavior                | A link in the TopNav bar or drawer. Selected marks the current page; disabled drops the destination; in the drawer, activating it closes the drawer.                                                                        |
-| End-user impact         | Users see and hear which destination is current; a disabled item cannot navigate by any input; drawer users return to the page after choosing a destination.                                                                |
-| Builder impact          | None.                                                                                                                                                                                                                       |
-| Compatibility/readiness | Records shipped behavior; no prop, default, target, or export changes. Two implementation gaps (see Current-state impact).                                                                                                  |
-| Review checks           | Reject a disabled item that keeps an `href` or fires `onClick`, a selected item without `aria-current="page"`, an icon-only item without an accessible name, or a drawer item that leaves the drawer open after navigating. |
-| Governing rules         | `component:TopNav` render modes; `spec:AST-085` (disabled items); `architecture:interaction-modality` (shared focus indicator); `architecture:component-theming-surface`.                                                   |
+| Area                    | Contract                                                                                                                                                                                                                                  |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `TopNavItem` with `label`, `href`, `target`, `as`, `isSelected`, `isDisabled`, `isIconOnly`, `icon`, `children`, and `size`; target `top-nav-item` with `mode` and `selected` states.                                                     |
+| Behavior                | A link in the TopNav bar or drawer. Selected marks the current page; disabled drops the destination; in the drawer, activating it closes the drawer, except a modified click on a link, which leaves it open.                             |
+| End-user impact         | Users see and hear which destination is current; a disabled item cannot navigate by any input; drawer users return to the page after choosing a destination.                                                                              |
+| Builder impact          | None.                                                                                                                                                                                                                                     |
+| Compatibility/readiness | Records shipped behavior; no prop, default, target, or export changes. Two implementation gaps (see Current-state impact).                                                                                                                |
+| Review checks           | Reject a disabled item that keeps an `href` or fires `onClick`, a selected item without `aria-current="page"`, an icon-only item without an accessible name, or a drawer item that leaves the drawer open after an unmodified activation. |
+| Governing rules         | `component:TopNav` render modes; `spec:AST-085` (disabled items); `architecture:interaction-modality` (shared focus indicator); `architecture:component-theming-surface`.                                                                 |
 
 This table is a review projection; the body below is authoritative.
 
@@ -115,13 +115,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State     | Required invariant                            | Allowed variation |
-| --------- | --------------------------------------------- | ----------------- |
-| Rest      | Link with label.                              | Theme styling.    |
-| Selected  | `aria-current="page"`; selected fill.         | Fill color.       |
-| Disabled  | No `href`, no click; keeps its tab stop.      | Muted styling.    |
-| Icon only | `aria-label` from `label`; no visible text.   | Icon.             |
-| Drawer    | Full-width row; activation closes the drawer. | Row size.         |
+| State     | Required invariant                                                                                     | Allowed variation |
+| --------- | ------------------------------------------------------------------------------------------------------ | ----------------- |
+| Rest      | Link with label.                                                                                       | Theme styling.    |
+| Selected  | `aria-current="page"`; selected fill.                                                                  | Fill color.       |
+| Disabled  | No `href`, no click; keeps its tab stop.                                                               | Muted styling.    |
+| Icon only | `aria-label` from `label`; no visible text.                                                            | Icon.             |
+| Drawer    | Full-width row; activation closes the drawer, except a modified click on a link, which leaves it open. | Row size.         |
 
 ### Transformation and precedence order
 

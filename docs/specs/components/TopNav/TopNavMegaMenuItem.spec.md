@@ -28,15 +28,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `TopNavMegaMenuItem` with `title`, `description`, `icon`, `href`, `onClick`, and `as`; target `top-nav-mega-menu-item` with a `mode` state. |
-| Behavior                | One destination in a mega menu: a rich tile in the desktop panel and a row in the drawer. A drawer row closes the drawer on activation.     |
-| End-user impact         | Users see a title, description, and icon per destination.                                                                                   |
-| Builder impact          | None.                                                                                                                                       |
-| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap (see Current-state impact).                                              |
-| Review checks           | Reject a drawer item that leaves the drawer open after activation or drops caller props and styling.                                        |
-| Governing rules         | `architecture:interaction-modality` INV4; WCAG 2.1.1; `component:TopNav` render modes.                                                      |
+| Area                    | Contract                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public contract         | `TopNavMegaMenuItem` with `title`, `description`, `icon`, `href`, `onClick`, and `as`; target `top-nav-mega-menu-item` with a `mode` state.                                                      |
+| Behavior                | One destination in a mega menu: a rich tile in the desktop panel and a row in the drawer. A drawer row closes the drawer on activation, except a modified click on a link, which leaves it open. |
+| End-user impact         | Users see a title, description, and icon per destination.                                                                                                                                        |
+| Builder impact          | None.                                                                                                                                                                                            |
+| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap (see Current-state impact).                                                                                                   |
+| Review checks           | Reject a drawer item that leaves the drawer open after an unmodified activation or drops caller props and styling.                                                                               |
+| Governing rules         | `architecture:interaction-modality` INV4; WCAG 2.1.1; `component:TopNav` render modes.                                                                                                           |
 
 This table is a review projection; the body below is authoritative.
 
@@ -95,11 +95,11 @@ No component-local concept beyond the consumer props.
 
 ### Representative states
 
-| State         | Required invariant                        | Allowed variation |
-| ------------- | ----------------------------------------- | ----------------- |
-| Desktop link  | Link tile with title and description.     | Icon.             |
-| Drawer link   | Row link; activation closes the drawer.   | —                 |
-| Drawer action | Button row; activation closes the drawer. | —                 |
+| State         | Required invariant                                                                               | Allowed variation |
+| ------------- | ------------------------------------------------------------------------------------------------ | ----------------- |
+| Desktop link  | Link tile with title and description.                                                            | Icon.             |
+| Drawer link   | Row link; activation closes the drawer, except a modified click on a link, which leaves it open. | —                 |
+| Drawer action | Button row; activation closes the drawer.                                                        | —                 |
 
 ### Transformation and precedence order
 

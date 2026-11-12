@@ -35,15 +35,15 @@ system_specs: [spec:AST-085]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                      |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `SideNavItem` with `label`, `href`, `as`, `onClick`, `icon`, `selectedIcon`, `isSelected`, `isDisabled`, `endContent`, `actions`, `children`, `collapsible`, and `size`; target `side-nav-item` with `size`, `selected`, and `disabled` states.               |
-| Behavior                | One SideNav row: a link or button with optional icon and passive end content, optional row-level actions beside it, and optional nested children that can expand and collapse. In a collapsed rail it is icon-only with a tooltip or a flyout.                |
-| End-user impact         | Users see and hear the current page, reach row actions before nested items, expand or collapse groups without navigating, and return to the page after choosing a destination in the mobile drawer.                                                           |
-| Builder impact          | None.                                                                                                                                                                                                                                                         |
-| Compatibility/readiness | Records shipped behavior; no public change. Three implementation gaps (see Current-state impact).                                                                                                                                                             |
-| Review checks           | Reject an interactive control rendered inside the primary element, a link that also toggles collapse, a toggle or action that activates the row, collapsed children that stay reachable, or a drawer activation that leaves the drawer open after navigating. |
-| Governing rules         | `component:SideNav` FR1–FR5, DD1 (nesting and row geometry); `family:navigation-destinations`; `architecture:interaction-modality`; `architecture:public-component-api`.                                                                                      |
+| Area                    | Contract                                                                                                                                                                                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `SideNavItem` with `label`, `href`, `as`, `onClick`, `icon`, `selectedIcon`, `isSelected`, `isDisabled`, `endContent`, `actions`, `children`, `collapsible`, and `size`; target `side-nav-item` with `size`, `selected`, and `disabled` states.          |
+| Behavior                | One SideNav row: a link or button with optional icon and passive end content, optional row-level actions beside it, and optional nested children that can expand and collapse. In a collapsed rail it is icon-only with a tooltip or a flyout.           |
+| End-user impact         | Users see and hear the current page, reach row actions before nested items, expand or collapse groups without navigating, and return to the page after choosing a destination in the mobile drawer.                                                      |
+| Builder impact          | None.                                                                                                                                                                                                                                                    |
+| Compatibility/readiness | Records shipped behavior; no public change. Three implementation gaps (see Current-state impact).                                                                                                                                                        |
+| Review checks           | Reject an interactive control rendered inside the primary element, a link that also toggles collapse, a toggle or action that activates the row, collapsed children that stay reachable, or an unmodified drawer activation that leaves the drawer open. |
+| Governing rules         | `component:SideNav` FR1–FR5, DD1 (nesting and row geometry); `family:navigation-destinations`; `architecture:interaction-modality`; `architecture:public-component-api`.                                                                                 |
 
 This table is a review projection; the body below is authoritative.
 
@@ -148,16 +148,16 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                      | Required invariant                                             | Allowed variation |
-| -------------------------- | -------------------------------------------------------------- | ----------------- |
-| Link, selected             | `aria-current="page"` on the link; selected icon if given.     | Fill.             |
-| Disabled button            | `aria-disabled`; focusable; no `onClick`.                      | Muted styling.    |
-| Collapsible without action | Whole row toggles; chevron turns.                              | —                 |
-| Collapsible with `href`    | Link navigates; separate toggle button collapses.              | —                 |
-| Actions                    | Actions after toggle, before children; never activate the row. | Action content.   |
-| Collapsed rail leaf        | Icon-only; tooltip with label.                                 | —                 |
-| Collapsed rail parent      | Icon-only trigger; flyout with header and children.            | Delay.            |
-| Mobile drawer              | Activation closes the drawer.                                  | —                 |
+| State                      | Required invariant                                                                     | Allowed variation |
+| -------------------------- | -------------------------------------------------------------------------------------- | ----------------- |
+| Link, selected             | `aria-current="page"` on the link; selected icon if given.                             | Fill.             |
+| Disabled button            | `aria-disabled`; focusable; no `onClick`.                                              | Muted styling.    |
+| Collapsible without action | Whole row toggles; chevron turns.                                                      | —                 |
+| Collapsible with `href`    | Link navigates; separate toggle button collapses.                                      | —                 |
+| Actions                    | Actions after toggle, before children; never activate the row.                         | Action content.   |
+| Collapsed rail leaf        | Icon-only; tooltip with label.                                                         | —                 |
+| Collapsed rail parent      | Icon-only trigger; flyout with header and children.                                    | Delay.            |
+| Mobile drawer              | Activation closes the drawer, except a modified click on a link, which leaves it open. | —                 |
 
 ### Transformation and precedence order
 
