@@ -105,6 +105,19 @@ When a set's library is one huge barrel module, the build imports each icon from
 unchanged. This setting is experimental: it may change or be removed in a
 patch release.
 
+## Template preview images
+
+Template and block previews load the PNG and JPEG files under
+`public/template-assets` through the Next.js image optimizer (`/_next/image`).
+`scripts/template-image-loader.mjs` rewrites the `/template-assets/` paths in
+the modules that a preview renders. The template sources and the code the site
+shows keep their paths. `astryx template` and the shadcn Install item still
+replace them with placeholders. Vector images, video, and a path with no file
+stay as written.
+
+Each image keeps its pixel size, up to 1920 pixels wide, and arrives in the
+format the browser accepts.
+
 ## Adding a New Theme
 
 1. Create the theme package under `packages/themes/<name>/`

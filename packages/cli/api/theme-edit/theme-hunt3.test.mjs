@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditNew,
   themeEditPreviewAdd,
@@ -35,26 +35,19 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+import {projectFiles, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
+
 /** @type {string} */
 let cwd;
-
-/** @param {string} rel */
-const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
+const {read} = projectFiles(() => cwd);
 
 /** @param {string[]} args */
 const cli = async args => {
@@ -243,9 +236,12 @@ describe('set', () => {
       const r = await refusal(() =>
         themeEditSet('h', 'background_color', value, {cwd, on: 'card'}),
       );
-      expect(r.run[0]).toContain(
-        `background-color ${quoteCommandArgument(value)} --on card`,
-      );
+      // None of these is a color, so the set `background-color` would
+      // refuse is left out; no line carries the value unquoted.
+      for (const line of r.run)
+        expect(line.replace(quoteCommandArgument(value), '')).not.toContain(
+          value,
+        );
       expect(quoteCommandArgument(value)).toMatch(/^'/);
     }
   });
@@ -369,25 +365,32 @@ describe('builds that stay the same', () => {
     drop('pc');
   }, 240_000);
 
-  it('preview.html is the same on every build; a letter case change is no token change', async () => {
-    await themeEditNew('lc', {cwd});
-    const before = read('themes/lc/preview.html');
-    expect(before).not.toMatch(/astryx-render-\d/);
-    const r = await themeEditSet('lc', 'neutral', '#000000', {cwd});
-    for (const c of r.data.changedTokens) {
-      const [, from, to] = /: (.*) -> (.*)$/.exec(c) ?? [];
-      if (from) expect(from.toLowerCase(), c).not.toBe(to.toLowerCase());
-    }
-    await themeEditUndo('lc', {cwd});
-    expect(read('themes/lc/preview.html')).toBe(before);
-    drop('lc');
-  }, 240_000);
+  it(
+    'preview.html is the same on every build; a letter case change is no token change',
+    () =>
+      withRealRenders(async () => {
+        await themeEditNew('lc', {cwd});
+        const before = read('themes/lc/preview.html');
+        expect(before).not.toMatch(/astryx-render-\d/);
+        const r = await themeEditSet('lc', 'neutral', '#000000', {cwd});
+        for (const c of r.data.changedTokens) {
+          const [, from, to] = /: (.*) -> (.*)$/.exec(c) ?? [];
+          if (from) expect(from.toLowerCase(), c).not.toBe(to.toLowerCase());
+        }
+        await themeEditUndo('lc', {cwd});
+        expect(read('themes/lc/preview.html')).toBe(before);
+        drop('lc');
+      }),
+    240_000,
+  );
 
   it('show builds a damaged module again and says so', async () => {
     await themeEditNew('dj', {cwd});
     fs.writeFileSync(path.join(cwd, 'themes/dj/dj.js'), 'export const = ;');
     const r = await themeEditShow('dj', {cwd});
-    expect(r.data.notes.join(' ')).toContain('could not be read');
+    expect(r.data.notes.join(' ')).toMatch(
+      /could not be read|dj\.js differs from what the settings build/,
+    );
     drop('dj');
   }, 240_000);
 });

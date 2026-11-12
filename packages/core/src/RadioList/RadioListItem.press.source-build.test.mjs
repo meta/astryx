@@ -3,11 +3,13 @@
 /**
  * @file RadioListItem.press.source-build.test.mjs
  * @input Uses Babel, the StyleX plugin as the package stylesheet compiles it,
- *   and the RadioListItem source
+ *   and the RadioListItem source and its press paint's owner module
+ *   (privateAttributes/press.stylex.ts)
  * @output Verifies the shipped mouse press reaches the radio circle through an
  *   inherited custom property, with no `:has()` ancestor scan. Its press
  *   exempts the nested controls the row's container rule names
  * @position Regression test for the compiled CSS of the RadioListItem module
+ *   and its row press paint (`rowPressPaintStyles.radioRow`)
  *
  * The circle's pressed layer once read the row through
  * `.layer:where(.row:active:not(:has(...)) *)`. That shape makes the browser
@@ -28,6 +30,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Core declares the presets, so they resolve from here, not from the folder
 // the tests run in.
 const require = createRequire(import.meta.url);
+// The press attribute's owner module writes the row's press paint.
+const PRESS_OWNER = '../privateAttributes/press.stylex.ts';
 
 async function compiledCss(fileName) {
   const file = path.join(__dirname, fileName);
@@ -87,14 +91,17 @@ function listParts(list) {
 
 describe('the shipped RadioListItem mouse press', () => {
   it('ships no :has() followed by a descendant *', async () => {
-    const selectors = selectorsOf(await compiledCss('RadioListItem.tsx'));
+    const selectors = [
+      ...selectorsOf(await compiledCss('RadioListItem.tsx')),
+      ...selectorsOf(await compiledCss(PRESS_OWNER)),
+    ];
     expect(
       selectors.filter(selector => /:has\([^{]*\)[^{,]* \*/.test(selector)),
     ).toEqual([]);
   });
 
   it('keeps the nested-control exclusion on the row itself, and leaves a press the controller paints to its image', async () => {
-    const css = await compiledCss('RadioListItem.tsx');
+    const css = await compiledCss(PRESS_OWNER);
     const press = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(match =>
       match[2].includes('--_radio-row-press:'),
     );
@@ -115,7 +122,7 @@ describe('the shipped RadioListItem mouse press', () => {
         ? 'input:not([type="radio"],[aria-readonly="true"]):active'
         : `${control}:not([aria-readonly="true"]):active`,
     );
-    const css = await compiledCss('RadioListItem.tsx');
+    const css = await compiledCss(PRESS_OWNER);
     const press = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(match =>
       match[2].includes('--_radio-row-press:'),
     );

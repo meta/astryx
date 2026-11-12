@@ -5,6 +5,7 @@ import {createHeadlessEditor} from '@lexical/headless';
 import {$getRoot} from 'lexical';
 import {parseInline, parseMarkdown} from '@astryxdesign/core/Markdown/parser';
 import {DEFAULT_NODES} from './editorNodes';
+import {protectCodeSpans} from './markdownCharacterReferences';
 import {
   editorStateJSONToMarkdown,
   markdownToEditorStateJSON,
@@ -198,5 +199,14 @@ describe('character references (spec:AST-061 FR7, DEC-5)', () => {
     // The decoded `&copy;` text is escaped, so it does not decode again.
     expect(exported).toBe('A © B \\&copy; C ©!\n');
     expect(richTextText(exported)).toBe('A © B &copy; C ©!');
+  });
+});
+
+describe('code spans in table rows', () => {
+  it('reads a long space run on a table-candidate line in linear time', () => {
+    const markdown = `a | \`b\`\n|-${' '.repeat(100_000)}x`;
+    const start = performance.now();
+    protectCodeSpans(markdown);
+    expect(performance.now() - start).toBeLessThan(500);
   });
 });
