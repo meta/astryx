@@ -18,7 +18,8 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import {use, useState} from 'react';
+import {use, useEffect, useState} from 'react';
+import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -1640,6 +1641,169 @@ describe('AppShell hiddenRegions', () => {
     render(<Shell hiddenRegions={['topNav']} />);
     expect(screen.getByText('Home').closest('[inert]')).not.toBeNull();
     expect(screen.getByText('Count 0').closest('[inert]')).toBeNull();
+  });
+
+  // A side nav whose effect logs each run and each cleanup.
+  function LoggingSideNav({log}: {log: string[]}) {
+    useEffect(() => {
+      log.push('run');
+      return () => {
+        log.push('clean');
+      };
+    }, [log]);
+    return <CountingSideNav />;
+  }
+
+  function LoggingShell({
+    log,
+    hiddenRegions,
+  }: {
+    log: string[];
+    hiddenRegions?: ReadonlyArray<'topNav' | 'sideNav'>;
+  }) {
+    return (
+      <AppShell
+        hiddenRegions={hiddenRegions}
+        topNav={
+          <TopNav heading={<TopNavHeading heading="App" />}>
+            <TopNavItem label="Home" href="/home" />
+          </TopNav>
+        }
+        sideNav={<LoggingSideNav log={log} />}>
+        <button type="button">In content</button>
+      </AppShell>
+    );
+  }
+
+  /**
+   * Gives each inert element (a hidden region) `exit` as its running motion.
+   * Returns the restore.
+   */
+  function stubExitMotion(exit: Animation): () => void {
+    const original = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'getAnimations',
+    );
+    Object.defineProperty(HTMLElement.prototype, 'getAnimations', {
+      configurable: true,
+      value(this: HTMLElement) {
+        return this.matches('[inert]') ? [exit] : [];
+      },
+    });
+    return () => {
+      if (original == null) {
+        delete (HTMLElement.prototype as {getAnimations?: unknown})
+          .getAnimations;
+      } else {
+        Object.defineProperty(HTMLElement.prototype, 'getAnimations', original);
+      }
+    };
+  }
+
+  /** Whether React's Activity hides `element` or a box around it. */
+  function isPausedInActivity(element: Element): boolean {
+    for (let at: Element | null = element; at != null; at = at.parentElement) {
+      if ((at as HTMLElement).style?.display === 'none') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  it("stops a hidden region's effects, and runs them again when it shows", () => {
+    const log: string[] = [];
+    const {rerender} = render(<LoggingShell log={log} />);
+    expect(log).toEqual(['run']);
+    rerender(<LoggingShell log={log} hiddenRegions={['sideNav']} />);
+    expect(log).toEqual(['run', 'clean']);
+    rerender(<LoggingShell log={log} />);
+    expect(log).toEqual(['run', 'clean', 'run']);
+  });
+
+  it('pauses a hidden top nav, and shows it again before its reveal', () => {
+    const {rerender} = render(<Shell />);
+    const home = screen.getByText('Home');
+    expect(isPausedInActivity(home)).toBe(false);
+    rerender(<Shell hiddenRegions={['topNav']} />);
+    expect(isPausedInActivity(home)).toBe(true);
+    rerender(<Shell />);
+    expect(isPausedInActivity(home)).toBe(false);
+  });
+
+  it("keeps a hiding region's effects running until its exit motion ends", async () => {
+    const log: string[] = [];
+    const {rerender} = render(<LoggingShell log={log} />);
+    let finish: () => void = () => {};
+    const exit = {
+      finished: new Promise<void>(resolve => {
+        finish = resolve;
+      }),
+    } as unknown as Animation;
+    const restoreAnimations = stubExitMotion(exit);
+    rerender(<LoggingShell log={log} hiddenRegions={['sideNav']} />);
+    // The side nav slides out by its edge, so it stays shown and running.
+    expect(log).toEqual(['run']);
+    expect(isPausedInActivity(screen.getByText('Count 0'))).toBe(false);
+    await act(async () => {
+      finish();
+      await exit.finished;
+    });
+    expect(log).toEqual(['run', 'clean']);
+    restoreAnimations();
+  });
+
+  it('does not pause a region that shows again before its exit motion ends', async () => {
+    const log: string[] = [];
+    const {rerender} = render(<LoggingShell log={log} />);
+    let finish: () => void = () => {};
+    const exit = {
+      finished: new Promise<void>(resolve => {
+        finish = resolve;
+      }),
+    } as unknown as Animation;
+    const restoreAnimations = stubExitMotion(exit);
+    rerender(<LoggingShell log={log} hiddenRegions={['sideNav']} />);
+    rerender(<LoggingShell log={log} />);
+    await act(async () => {
+      finish();
+      await exit.finished;
+    });
+    expect(log).toEqual(['run']);
+    restoreAnimations();
+  });
+
+  it('starts a region that mounts hidden paused, and runs it when it shows', () => {
+    const log: string[] = [];
+    const {rerender} = render(
+      <LoggingShell log={log} hiddenRegions={['sideNav']} />,
+    );
+    expect(log).toEqual([]);
+    rerender(<LoggingShell log={log} />);
+    expect(log).toEqual(['run']);
+  });
+
+  it('hydrates a server-rendered hidden region with no mismatch', async () => {
+    const log: string[] = [];
+    const html = renderToString(
+      <LoggingShell log={log} hiddenRegions={['sideNav']} />,
+    );
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.append(container);
+    const errors: unknown[] = [];
+    await act(async () => {
+      hydrateRoot(
+        container,
+        <LoggingShell log={log} hiddenRegions={['sideNav']} />,
+        {
+          onRecoverableError: error => errors.push(error),
+        },
+      );
+    });
+    expect(errors).toEqual([]);
+    // The hidden region's box is in the markup, inert, as on the client.
+    expect(container.querySelector('[inert]')).not.toBeNull();
+    container.remove();
   });
 
   it('moves focus inside a region that hides to main', () => {

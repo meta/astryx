@@ -114,18 +114,38 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/AppShell/AppShell.generated';
+import {ActivityWrapper, HasActivity} from './appShellActivity';
 
 registerEnglishFallback(english);
-const HasActivity = typeof React.Activity !== 'undefined';
-const ActivityWrapper = HasActivity
-  ? ({
-      mode,
-      children,
-    }: {
-      mode: 'visible' | 'hidden';
-      children: React.ReactNode;
-    }) => <React.Activity mode={mode}>{children}</React.Activity>
-  : ({children}: {mode: string; children: React.ReactNode}) => <>{children}</>;
+
+/**
+ * Calls `pause` once every motion running on `elements` has ended, or at
+ * once when none runs. Returns a cancel for a change that comes first.
+ */
+function pauseAfterMotion(
+  elements: ReadonlyArray<HTMLElement | null>,
+  pause: () => void,
+): () => void {
+  if (!HasActivity) {
+    return () => {};
+  }
+  const running = elements.flatMap(element => element?.getAnimations?.() ?? []);
+  if (running.length === 0) {
+    pause();
+    return () => {};
+  }
+  let isCancelled = false;
+  void Promise.allSettled(
+    running.map(async animation => animation.finished),
+  ).then(() => {
+    if (!isCancelled) {
+      pause();
+    }
+  });
+  return () => {
+    isCancelled = true;
+  };
+}
 
 // =============================================================================
 // Constants
@@ -711,6 +731,21 @@ export function AppShell({
     hasSideNav && hiddenRegions?.includes('sideNav') === true;
   const showsTopNav = hasTopNav && !isTopNavHidden;
   const showsSideNav = hasSideNav && !isSideNavHidden;
+  // A hidden region's content pauses in Activity once its edge motion ends,
+  // so its effects stop. It shows again in the commit that reveals it, before
+  // the reveal plays.
+  const [isTopNavPaused, setIsTopNavPaused] = useState(isTopNavHidden);
+  const [isSideNavPaused, setIsSideNavPaused] = useState(isSideNavHidden);
+  if (!isTopNavHidden && isTopNavPaused) {
+    setIsTopNavPaused(false);
+  }
+  if (!isSideNavHidden && isSideNavPaused) {
+    setIsSideNavPaused(false);
+  }
+  const topNavActivityMode =
+    isTopNavHidden && isTopNavPaused ? 'hidden' : 'visible';
+  const sideNavActivityMode =
+    isSideNavHidden && isSideNavPaused ? 'hidden' : 'visible';
   // While a region is hidden, the drawer shows what is left: the side nav,
   // the top nav's own items, or the app's own drawer content. With nothing
   // left, it reads as closed and disabled. The app's own open state is kept,
@@ -1026,9 +1061,11 @@ export function AppShell({
         isSideNavHidden ? styles.drawerContentHidden : styles.drawerContent,
       )}
       inert={isSideNavHidden || undefined}>
-      <SideNavRenderContext value="drawer-content">
-        {sideNav}
-      </SideNavRenderContext>
+      <ActivityWrapper mode={sideNavActivityMode}>
+        <SideNavRenderContext value="drawer-content">
+          {sideNav}
+        </SideNavRenderContext>
+      </ActivityWrapper>
     </div>
   ) : null;
   const drawerHasContentRef = useCommittedRef(drawerHasContent);
@@ -1073,7 +1110,9 @@ export function AppShell({
             ref={topNavRegionRef}
             {...stylex.props(isTopNavHidden && styles.regionHiddenBlock)}
             inert={isTopNavHidden || undefined}>
-            {topNavContent}
+            <ActivityWrapper mode={topNavActivityMode}>
+              {topNavContent}
+            </ActivityWrapper>
           </div>
         )}
       </LayoutHeader>
@@ -1322,10 +1361,22 @@ export function AppShell({
   );
   useLayoutEffect(() => {
     topNavEdge.animate();
+    if (!isTopNavHidden) {
+      return;
+    }
+    return pauseAfterMotion([topNavRegionRef.current], () =>
+      setIsTopNavPaused(true),
+    );
   }, [isTopNavHidden, topNavEdge]);
   useLayoutEffect(() => {
     sideNavEdge.animate();
     mobileBarEdge.animate();
+    if (!isSideNavHidden) {
+      return;
+    }
+    return pauseAfterMotion([railRef.current, mobileBarRef.current], () =>
+      setIsSideNavPaused(true),
+    );
   }, [isSideNavHidden, sideNavEdge, mobileBarEdge]);
 
   // Build sideNav content
@@ -1349,7 +1400,9 @@ export function AppShell({
         isAuto && styles.panelAutoFill,
         isSideNavHidden && styles.regionHiddenInline,
       ]}>
-      <SideNavShellContext value={sideNavShell}>{sideNav}</SideNavShellContext>
+      <SideNavShellContext value={sideNavShell}>
+        <ActivityWrapper mode={sideNavActivityMode}>{sideNav}</ActivityWrapper>
+      </SideNavShellContext>
     </LayoutPanel>
   ) : undefined;
 
@@ -1541,9 +1594,11 @@ export function AppShell({
             {...stylex.props(styles.autoMobileTopBar)}
             role="navigation"
             aria-label={t('@astryx.appShell.mobileNavigation')}>
-            <SideNavRenderContext value="topbar">
-              {sideNav}
-            </SideNavRenderContext>
+            <ActivityWrapper mode={sideNavActivityMode}>
+              <SideNavRenderContext value="topbar">
+                {sideNav}
+              </SideNavRenderContext>
+            </ActivityWrapper>
             <MobileNavToggle />
           </div>
         </LayoutHeader>

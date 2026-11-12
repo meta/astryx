@@ -8,7 +8,8 @@
  * @output Exports `AppShellDrawerFocusContext`: where focus goes when the
  *   AppShell drawer closes and the button that opened it is gone
  * @position Internal to Core, not exported from the AppShell entry. AppShell
- *   provides it; MobileNav reads it when its drawer closes.
+ *   provides it. TopNav narrows it for its drawer, and MobileNav reads it
+ *   when its drawer closes.
  */
 
 import {createSharedContext} from '../utils/sharedContext';

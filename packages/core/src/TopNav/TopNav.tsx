@@ -32,6 +32,7 @@ import {Divider} from '../Divider/Divider';
 import {MobileNav} from '../MobileNav/MobileNav';
 import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {ActivityWrapper} from '../AppShell/appShellActivity';
 import {themeProps} from '../utils/themeProps';
 import {
   registerEnglishFallback,
@@ -330,8 +331,10 @@ export function TopNav({
                 isOwnContentHidden && styles.drawerItemsHidden,
               )}
               inert={isOwnContentHidden || undefined}>
-              {resolvedStartContent}
-              {centerContent}
+              <ActivityWrapper mode={isOwnContentHidden ? 'hidden' : 'visible'}>
+                {resolvedStartContent}
+                {centerContent}
+              </ActivityWrapper>
             </div>
           )}
           {hasCollapsibleContent &&
