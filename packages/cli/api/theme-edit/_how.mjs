@@ -29,7 +29,13 @@ import {
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
 import {baseInstalled, installLine} from './_project.mjs';
-import {loadTheme, nearest, refuse, themeSourceProblem} from './_settings.mjs';
+import {
+  editedThemes,
+  loadTheme,
+  nearest,
+  refuse,
+  themeSourceProblem,
+} from './_settings.mjs';
 import {ASPECTS, checkSetting} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
@@ -263,6 +269,13 @@ async function answer(subject, options, cwd) {
         ],
       },
     );
+  }
+  // "how b make buttons pill": a first word that names an existing theme,
+  // with more words after it, is the theme, as for set, show and undo.
+  if (!options.theme) {
+    const [first, ...rest] = t.split(/\s+/);
+    if (rest.length && editedThemes(cwd).includes(first))
+      return answer(rest.join(' '), {...options, theme: first}, cwd);
   }
   const ctx = await context(cwd);
   const {C} = ctx;

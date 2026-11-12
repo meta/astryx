@@ -2440,6 +2440,27 @@ export function draftAnswer(ctx, env, question) {
           !st.state &&
           !st.mode,
       )?.value ?? null;
+  /**
+   * The theme's own whole-theme value for a dial (its last plain setting).
+   * @param {string} thing
+   */
+  const ownDial = thing =>
+    [...env.data.settings]
+      .reverse()
+      .find(
+        st => st.thing === thing && !st.on && !st.when && !st.state && !st.mode,
+      )?.value ?? null;
+  /**
+   * The text-size a step takes from the theme's own size: a number moves by
+   * the dial's step of 2px; a named size steps with more/less.
+   * @param {'more' | 'less'} dir
+   */
+  const textSizeStep = dir => {
+    const own = ownDial('text-size');
+    return own && /^\d+(\.\d+)?$/.test(own)
+      ? String(Number(own) + (dir === 'less' ? -2 : 2))
+      : dir;
+  };
   /** The member a group's checks read. @param {string} on */
   const one = on => (FAMILIES[on] ? FAMILIES[on][0] : on);
   /**
@@ -3607,7 +3628,12 @@ export function draftAnswer(ctx, env, question) {
         return {
           text: 'the body text size: text-size (every heading scales from it)',
           options: [
-            [set('text-size', px ?? (c.dir === 'less' ? 'less' : 'more'))],
+            [
+              set(
+                'text-size',
+                px ?? textSizeStep(c.dir === 'less' ? 'less' : 'more'),
+              ),
+            ],
           ],
         };
       }
@@ -4027,6 +4053,33 @@ export function draftAnswer(ctx, env, question) {
         const rung = Object.entries(HEADING_WEIGHTS).find(
           ([, v]) => v === value,
         )?.[0];
+        // A step ("bolder", "a bit lighter") moves one rung from the
+        // headings rung the theme sets, never back to a fixed one.
+        const ownRung = ownDial('headings');
+        const rungs = Object.keys(HEADING_WEIGHTS);
+        const stepAsk =
+          !typedW &&
+          !c.neg &&
+          !/\btoo /.test(c.text) &&
+          /\b(bolder|heavier|lighter|thinner|less bold)\b/.test(c.text);
+        if (
+          stepAsk &&
+          ownRung &&
+          rungs.includes(ownRung) &&
+          ((!on && /\b(headings?|titles?)\b/.test(c.text)) ||
+            (on === 'heading' && !f.when))
+        ) {
+          const next = rungs[rungs.indexOf(ownRung) + (light ? -1 : 1)];
+          if (!next)
+            return {
+              text: `the headings are already ${light ? 'the lightest' : 'the boldest'} rung (${ownRung}), so nothing changes`,
+              options: [],
+            };
+          return {
+            text: `${next} headings: one rung ${light ? 'lighter' : 'bolder'} than ${ownRung}`,
+            options: [[set('headings', next)]],
+          };
+        }
         if (
           (!on && /\b(headings?|titles?)\b/.test(c.text)) ||
           (on === 'heading' && !f.when)
@@ -4090,9 +4143,7 @@ export function draftAnswer(ctx, env, question) {
                           ? Math.round(parseFloat(px) * 16 * 100) / 100
                           : parseFloat(px),
                       )
-                    : c.dir === 'less'
-                      ? 'less'
-                      : 'more',
+                    : textSizeStep(c.dir === 'less' ? 'less' : 'more'),
                 ),
               ],
             ],

@@ -3851,6 +3851,36 @@ describe('how answers final-11 questions', () => {
   });
 });
 
+describe('how steps the headings and text-size dials from the theme', () => {
+  it('a first word that names a theme is the theme, as for set', async () => {
+    await themeEditNew('tb', {cwd, like: 'neutral'});
+    const {data} = await themeEditHow('tb make buttons pill', {cwd});
+    expect(data.results[0].commands.map(bare)[0]).toBe(
+      'set tb corners pill --on button',
+    );
+  }, 120_000);
+
+  it('moves the headings one rung from the theme and text-size by its step', async () => {
+    await themeEditNew('hv', {cwd, like: 'neutral'});
+    await themeEditSet('hv', 'headings', 'heavy', {cwd});
+    await themeEditSet('hv', 'text-size', '24', {cwd});
+    const ask = async (/** @type {string} */ q) =>
+      (await themeEditHow(q, {cwd, theme: 'hv'})).data.results ?? [];
+    const bolder = await ask('make the headings bolder');
+    expect(bolder[0].commands).toEqual([]);
+    expect(bolder[0].text).toMatch(/already the boldest rung \(heavy\)/);
+    expect(
+      bare((await ask('make the headings a bit lighter'))[0].commands[0]),
+    ).toBe('set hv headings bold');
+    expect(bare((await ask('make the text a bit bigger'))[0].commands[0])).toBe(
+      'set hv text-size 26',
+    );
+    expect(
+      bare((await ask('make the text a bit smaller'))[0].commands[0]),
+    ).toBe('set hv text-size 22');
+  }, 120_000);
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;
