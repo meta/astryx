@@ -22,10 +22,16 @@
 // costs one attribute write and no React render.
 //
 // Where the primary pointer is fine, the controller ignores the mouse and the
-// keyboard, and CSS `:active` keeps their press. Under a coarse primary
-// pointer the CSS drops `:active`, so the controller paints every press. A
-// mouse, trackpad or Space press paints at once. The controller reads the
-// same query as the stylesheet, so they agree.
+// keyboard, and CSS `:active` keeps their press. A surface that owns a
+// control's box (pressBox.stylex.ts), as a checkbox or a radio row does, is
+// the exception. There the controller paints a mouse's or a pen's press at
+// once and fades it on release, as it does a finger's. The surface's `:active`
+// arm yields while it does. On a row, a press on a nested control is that
+// control's: the row's container rule ends the row's paint
+// (hooks/useClickableContainer.ts).
+// Under a coarse primary pointer the CSS drops `:active`, so the controller
+// paints every press. A mouse, trackpad or Space press paints at once. The
+// controller reads the same query as the stylesheet, so they agree.
 //
 // A finger waits only inside a scroller. Outside one, a surface highlights in
 // the frame the finger lands, as a UIControl does. Inside one, it waits the
@@ -56,6 +62,8 @@ import {subscribeInput} from './inputStream';
 import {isInsideScrollView} from './scrollView';
 import {msSinceInput} from './inputAge';
 import {TOUCH_QUERY} from './touchPresentation';
+import {pressBoxesIn} from '../privateAttributes/pressBox.stylex';
+import {isPrimaryClick} from './primaryClick';
 import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
 
@@ -483,6 +491,24 @@ function stylesheetDroppedActive(): boolean {
 }
 
 /**
+ * Whether the press on `target` lands on a surface that takes the
+ * fine-pointer press. There a mouse's or a pen's press paints at once, on any
+ * primary pointer.
+ */
+function paintsFinePress(target: EventTarget | null): boolean {
+  const surface = surfaceAt(target);
+  return surface != null && paintsFinePointerPress(surface);
+}
+
+/**
+ * Whether `surface` takes the fine-pointer press. It does when it owns a
+ * control's box.
+ */
+function paintsFinePointerPress(surface: Element): boolean {
+  return pressBoxesIn(surface).length > 0;
+}
+
+/**
  * The surface a mouse button's or the Space key's press paints, if any: the
  * innermost marked surface, outside a menu and off a tracked action. A key's
  * press paints only a focused element that is itself the surface, as
@@ -523,10 +549,28 @@ function pressButton(
   apply(button, pressGestureStep(button.live.gesture, {kind: 'buttonDown'}));
 }
 
+/**
+ * Whether a release on `element` ends at once. Under Reduce Motion a fine
+ * pointer's release changes at once, with no fade. This holds on a surface
+ * that takes the fine-pointer press, where the primary pointer is fine.
+ */
+function releasesAtOnce(element: Element): boolean {
+  return (
+    paintsFinePointerPress(element) &&
+    !stylesheetDroppedActive() &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
 /** The mouse button or the key came up: the press fades like a finger's. */
 function releaseButton(): void {
   holdKey(false);
   if (button.live == null) {
+    return;
+  }
+  if (releasesAtOnce(button.live.element)) {
+    cancelButton();
     return;
   }
   apply(button, pressGestureStep(button.live.gesture, {kind: 'up'}));
@@ -547,10 +591,25 @@ function onPointerDown(event: PointerEvent): void {
     // A mouse already has hover and keeps `:active` where the primary pointer
     // is fine; the touch treatment's CSS is inside `@media (pointer: coarse)`.
     // Not tracking it there keeps desktop identical and costs the mouse path
-    // nothing. Only the primary button: that is the press `:active` paints.
-    if (event.button === 0 && stylesheetDroppedActive()) {
+    // nothing, except on a surface that takes the fine-pointer press. Only
+    // the primary button paints, as `:active` does. On such a surface a
+    // macOS ctrl-click is a context click, so it paints nothing either.
+    if (
+      stylesheetDroppedActive()
+        ? event.button === 0
+        : isPrimaryClick(event) && paintsFinePress(event.target)
+    ) {
       pressButton(event.target, event.pointerId);
     }
+    return;
+  }
+  // On a surface that takes the fine-pointer press, a pen's barrel or eraser
+  // button is not a press.
+  if (
+    event.pointerType === 'pen' &&
+    !isPrimaryClick(event) &&
+    paintsFinePress(event.target)
+  ) {
     return;
   }
   armTouchCancel();
@@ -574,11 +633,19 @@ function onPointerDown(event: PointerEvent): void {
     finish(finger);
   }
   const element = surfaceAt(event.target);
+  // On a surface that takes the fine-pointer press, a pen presses at once on
+  // any primary pointer, in a scroll view too. The delay and the brake wait
+  // out a finger's scroll.
+  const presentsAtOnce =
+    event.pointerType === 'pen' &&
+    element != null &&
+    paintsFinePointerPress(element);
   // The touch clock is stamped AFTER the brake reads it, deliberately: the
   // question the brake asks is whether a PREVIOUS finger could still be
   // driving this scroll, and stamping first would make every first touch on a
   // freshly restored page answer yes.
-  const braking = element != null && scrollerIsBraking(element);
+  const braking =
+    element != null && !presentsAtOnce && scrollerIsBraking(element);
   lastTouchAt = Date.now();
   lastTouchTarget = event.target instanceof Node ? event.target : null;
   // A group's tracker that follows this pointer paints its action, so two
@@ -611,7 +678,7 @@ function onPointerDown(event: PointerEvent): void {
       kind: 'down',
       x: event.clientX,
       y: event.clientY,
-      delayed: isInsideScrollView(element),
+      delayed: !presentsAtOnce && isInsideScrollView(element),
     }),
     msSinceInput(event.timeStamp, event),
   );
@@ -673,7 +740,11 @@ function onPointerUp(event: PointerEvent): void {
   ) {
     return;
   }
-  apply(finger, pressGestureStep(live.gesture, {kind: 'up'}));
+  const step =
+    event.pointerType === 'pen' && releasesAtOnce(live.element)
+      ? 'cancel'
+      : 'up';
+  apply(finger, pressGestureStep(live.gesture, {kind: step}));
   releaseIfDead(finger);
 }
 

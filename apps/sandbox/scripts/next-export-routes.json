@@ -843,6 +843,7 @@
     "/templates/useTableColumnSettingsStateHookUsage/",
     "/templates/useTableSortableStateHookUsage/",
     "/templates/useThemeHookUsage/",
+    "/templates/useThemeNameHookUsage/",
     "/templates/useToastHookUsage/",
     "/templates/useTranslatorHookUsage/",
     "/templates/useTreeFocusHookUsage/",
