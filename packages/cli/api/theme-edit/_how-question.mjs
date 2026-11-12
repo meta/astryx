@@ -1470,10 +1470,78 @@ export function draftAnswer(ctx, env, question) {
         },
       ],
     };
+  // Sarcasm and dislike name the thing to drop: "enough with the shadows",
+  // "nobody asked for borders", "who needs X", "shadows 👎".
+  question = question
+    .replace(/\b([a-z]+) (?:👎|❌)/gi, 'no $1')
+    .replace(/(?:👎|❌)\s*([a-z]+)/gi, 'no $1')
+    .replace(
+      /\b(?:enough with|quit with|nobody asked for|no one asked for|who needs|get rid of all|(?:i )?loathe) (?:the |all the |these |those )?/gi,
+      'no ',
+    )
+    .replace(/^\s*([a-z][a-z -]*?)\s*(?:👎|:-?\(|:thumbsdown:)\s*$/i, 'no $1')
+    // "too dark, I hate it": the description is the ask.
+    .replace(
+      /[,.;!]?\s*(?:i )?(?:hate|dislike|can'?t stand) (?:it|this|that)\b[.!]*/gi,
+      '',
+    );
+  // The gate works per clause: a clause that is a question, a "tell me",
+  // a "stop …" or a "don't touch …" blocks only itself; the other clauses
+  // are read, with the parts the blocked clause names.
+  const GATE =
+    /\b(tell me|explain|what does|how does|but not too|stop (making|turning|being|using)|don'?t (touch|change)(?! (the )?(dark|light) mode)|leave (?!(?:the )?(?:dark|light) mode)[a-z ]+ alone|who made|just what i wanted|eyes hurt|is a great)\b|^\s*(yeah|oh sure|sure|great|wow)\b|,\s*nice[.!]*\s*$/i;
+  const QUESTION_CLAUSE =
+    /^\s*(?!(?:can|could|would|will) you\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b|why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|how about\b|is it possible\b|is there a way\b|can we\b|could we\b)(what|whats|what's|which|why|where|who|when|is|are|does|do|did|can|could|should|will)\b[^?]*\?+!*\s*$|^\s*(?!why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b)(what|whats|what's|which|why|where)\b|^\s*(?!is it possible\b|is there a way\b)(are|is|does|did|would|should) (my|the|it|this|these|those|our|there|a|an|square|round|rounder|bigger|smaller|darker|lighter)\b/i;
+  const segments = question
+    .split(/\s*(?:[,;]|[.?!](?=\s)|\bjust\b|\bthen\b)\s*/i)
+    .filter(x => x.trim());
+  const gated = segments.filter(x => GATE.test(x) || QUESTION_CLAUSE.test(x));
+  const gateAll = gated.length > 0 && gated.length === segments.length;
+  if (gated.length && !gateAll)
+    question = segments
+      .map(x =>
+        gated.includes(x)
+          ? [
+              ...lex.parts.map(([re]) => re.exec(x.toLowerCase())?.[0]),
+              /\b(accent|brand|primary|secondary|danger|success|warning|info)\b/i.exec(
+                x,
+              )?.[0],
+            ]
+              .filter(Boolean)
+              .slice(0, 1)
+              .join(' ')
+          : x,
+      )
+      .filter(Boolean)
+      .join(', ');
   /** Family names written in quotes, kept as typed: qq<n>qq in the text. */
   const quoted = /** @type {string[]} */ ([]);
   let q = question
     .normalize('NFKC')
+    // "too airy", "headings too thin", "not bright enough": the other way.
+    .replace(
+      /\btoo (airy|spacious|roomy|loose|spread out)\b/gi,
+      'tighter spacing',
+    )
+    .replace(
+      /\b(headings?|titles?|fonts?) (?:are |is |look |looks )?too (thin|light|weak)\b|\b(text|labels?) (?:are |is |looks? )?too (thin)\b/gi,
+      (_, a, _b, t) => `${a ?? t} bolder`,
+    )
+    .replace(
+      /\bnot (bright|dark|bold|round|big|light|soft|warm|cool) enough\b/gi,
+      (_, w) =>
+        `${{bright: 'brighter', dark: 'darker', bold: 'bolder', round: 'rounder', big: 'bigger', light: 'lighter', soft: 'softer', warm: 'warmer', cool: 'cooler'}[/** @type {'bright'} */ (w.toLowerCase())]}`,
+    )
+    // "change only light to violet": light mode, not a light-only theme.
+    .replace(
+      /\b(?:change |set |make )?only (light|dark)(?: mode)? (?=to\b)/gi,
+      'in $1 mode change ',
+    )
+    // "links not underlined until hover": none, then underlined on hover.
+    .replace(
+      /\b([a-z]+) (?:are |is )?not underlined until (?:you )?hover\w*/gi,
+      '$1 no underline; $1 underlined on hover',
+    )
     // "3 pixels sharper": pixels are px.
     .replace(/(\d+(?:\.\d+)?)\s*pixels?\b/gi, '$1px')
     // "take 2px off", "remove 4px from": an amount down.
@@ -4759,7 +4827,17 @@ export function draftAnswer(ctx, env, question) {
         options: [[set('mode', 'dark-only')]],
       };
     if (
-      /\blight[- ]?(mode|theme)? only\b|\bonly light\b|\blight-only\b/.test(t)
+      /\blight[- ]?(mode|theme)? only\b|\bonly light\b|\blight-only\b/.test(
+        t,
+      ) &&
+      // "light only" removes dark mode only when the ask is about the
+      // theme's modes, never beside another change.
+      (/\b(theme|app)\b/.test(t) ||
+        !clauses.some(
+          o =>
+            o.text !== c.text &&
+            (o.parts.length || o.colors.length || o.aspects.length),
+        ))
     )
       return {
         text: 'a theme with only a light mode: mode light-only',
@@ -5179,10 +5257,7 @@ export function draftAnswer(ctx, env, question) {
   // A confidence gate: a question, a "tell me", a "but not too" or a typo
   // read as a direction leaves how unsure which way to go; a wrong write is
   // worse than none, so it gives the lookup and asks for the ask.
-  const unsure =
-    /\b(tell me|explain|what does|how does|but not too|stop (making|turning|being|using))\b|^(is|are|does|do) (the|my|this|these|those|our)\b.*\?\s*$/i.test(
-      question.trim(),
-    );
+  const unsure = gateAll;
   if (unsure && result.some(d => d.options.some(o => o.length))) {
     const part = partsSeen[0];
     result.splice(0, result.length, {

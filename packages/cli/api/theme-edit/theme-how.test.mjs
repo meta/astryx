@@ -3766,6 +3766,91 @@ describe('how works changes by an amount out from the theme itself', () => {
   }, 120_000);
 });
 
+/**
+ * Final-11 questions: the gate per clause, question clauses as lookups,
+ * sarcasm and dislike, "too X" and "not X enough", a one-mode change that
+ * keeps both modes, and underline until hover.
+ * @type {Array<[string, RegExp | null, RegExp?]>}
+ */
+const QUESTIONS_T = [
+  [
+    'stop making the buttons so round, make them square',
+    /^set q corners square --on button$/,
+  ],
+  ["don't explain, just set the accent to crimson", /^set q accent '#dc143c'$/],
+  ['can the cards be rounder?', null, /not sure which change you want/],
+  ['are buttons too round?!', null, /not sure which change you want/],
+  ['can you make the cards rounder?', /^set q corners more --on card$/],
+  [
+    'enough with the shadows',
+    /^set q --shadow-low none && set q --shadow-med none && set q --shadow-high none$/,
+  ],
+  ['who needs borders', /^set q --border-width 0px$/],
+  ['shadows 👎', /^set q --shadow-low none/],
+  ['too airy', /^set q spacing less$/],
+  ['headings too thin', /^set q headings bold$/],
+  [
+    'keep the dark mode accent, change only light to violet',
+    /^set q --color-accent '#7c3aed' --mode light$/,
+  ],
+  [
+    'links not underlined until hover',
+    /^set q text-decoration none --on link && set q text-decoration underline --on link --state hover$/,
+  ],
+  ["don't touch spacing, just make text larger", /^set q text-size more$/],
+];
+
+describe('how answers final-11 questions', () => {
+  for (const [question, want, text] of QUESTIONS_T)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      if (text) expect(results.map(r => r.text).join('\n')).toMatch(text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
+    });
+
+  it('no answer removes a mode unless the ask is about the theme modes', async () => {
+    const asks = [
+      'keep the dark mode accent, change only light to violet',
+      'in dark mode only, cards #111111',
+      'dark mode only, accent teal',
+      'light mode only, cards #fafafa',
+      'only in light mode, buttons rounder',
+      "don't touch dark mode, make the accent orange",
+      'make the accent teal except in dark mode',
+      '#22c55e in light, #4ade80 in dark',
+    ];
+    for (const q of asks) {
+      const {data} = await themeEditHow(q, {cwd, theme: 'q'});
+      const all = (data.results ?? [])
+        .flatMap((/** @type {any} */ r) => r.commands)
+        .join('\n');
+      expect(all, q).not.toMatch(/ mode (light|dark)-only/);
+    }
+    for (const q of [
+      'only dark mode please',
+      'light mode only',
+      'make the theme dark only',
+    ]) {
+      const {data} = await themeEditHow(q, {cwd, theme: 'q'});
+      const all = (data.results ?? [])
+        .flatMap((/** @type {any} */ r) => r.commands)
+        .join('\n');
+      expect(all, q).toMatch(/ mode (light|dark)-only/);
+    }
+  });
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;
