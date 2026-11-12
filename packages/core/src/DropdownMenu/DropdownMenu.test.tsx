@@ -2728,16 +2728,19 @@ describe('DropdownMenu open focus follows the menu-button pattern (#9000)', () =
     render(<DropdownMenu button={{label: 'Actions'}} items={items} />);
 
     await user.click(screen.getByRole('button', {name: /Actions/}));
-    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
-    fireEvent.pointerMove(edit, {pointerType: 'mouse'});
-    expect(edit).toHaveFocus();
+    const duplicate = screen.getByRole('menuitem', {
+      name: 'Duplicate',
+      hidden: true,
+    });
+    fireEvent.pointerMove(duplicate, {pointerType: 'mouse'});
+    expect(duplicate).toHaveFocus();
     act(() => {
       for (const callback of frames.splice(0)) {
         callback(performance.now());
       }
     });
 
-    expect(edit).toHaveFocus();
+    expect(duplicate).toHaveFocus();
   });
 
   it('a pointer open with no row lit before the open frame focuses the first item', async () => {
