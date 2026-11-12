@@ -49,7 +49,6 @@ import {
   inputStatusHoverShadowStyles,
   inputWrapperStyles,
 } from '../Field';
-import type {InputStatus} from '../Field/types';
 import {useInputStatusIcon, useMergedRefs} from '../hooks';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -275,6 +274,9 @@ export function NativeDateField({
   placeholder: placeholderFromProps,
   size: sizeProp,
   status,
+  // The control takes no typed text, so it never reports a rejection. With
+  // the callback, the caller's error status words a refused date.
+  onEntryErrorChange,
   statusVariant = 'attached',
   labelTooltip,
   hasClear = false,
@@ -351,8 +353,6 @@ export function NativeDateField({
 
   const {isDateDisabled} = useCalendarConstraints({min, max, dateConstraints});
 
-  // A refused date shows its message in place of the caller's status, as the
-  // typed field's rejections do.
   const rejection = useNativeDateRejection({
     source: 'DateInput',
     format,
@@ -361,11 +361,11 @@ export function NativeDateField({
     isDateDisabled,
     value,
     isLocked: isEffectivelyDisabled || isBusy,
+    status,
+    hasEntryErrorCallback: onEntryErrorChange != null,
+    isStatusAnnounced: !inputGroup,
   });
-  const fieldStatus: InputStatus | undefined =
-    rejection.message != null
-      ? {type: 'error', message: rejection.message}
-      : status;
+  const {fieldStatus} = rejection;
   const isInputValid = rejection.message == null;
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
@@ -696,7 +696,9 @@ export function NativeDateField({
           }
           aria-describedby={ariaDescribedBy}
           aria-required={isEffectivelyRequired ? 'true' : undefined}
-          aria-invalid={fieldStatus?.type === 'error' ? 'true' : undefined}
+          aria-invalid={
+            fieldStatus?.type === 'error' || !isInputValid ? 'true' : undefined
+          }
           aria-busy={isBusy || undefined}
           {...stylex.props(
             styles.input,
@@ -719,11 +721,11 @@ export function NativeDateField({
         )}
       </span>
       {/*
-          Inside an InputGroup no Field announces the field status, so this
-          region announces a refused date's message.
+          Announces the rejection message that the field status does not
+          announce. The field status announces the rest.
         */}
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
-        {inputGroup ? (rejection.message ?? '') : ''}
+        {rejection.alertMessage}
       </VisuallyHidden>
       {hasClear && value !== undefined && !isEffectivelyDisabled && !isBusy && (
         <InputClearButton

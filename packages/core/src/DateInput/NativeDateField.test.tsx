@@ -35,7 +35,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import {DateInput} from './DateInput';
+import {DateInput, type DateInputProps} from './DateInput';
 import type {ISODateString} from '../utils';
 import type * as NativeDateSegments from './nativeDateSegments';
 import {
@@ -848,6 +848,26 @@ describe('DateInput native rejected entries', () => {
     return container.querySelector('.astryx-field-status')?.textContent ?? '';
   }
 
+  /** Records each text that the shared assertive live region shows. */
+  const observers: MutationObserver[] = [];
+  afterEach(() => {
+    observers.splice(0).forEach(observer => observer.disconnect());
+  });
+  function recordAssertive(): string[] {
+    const texts: string[] = [];
+    const observer = new MutationObserver(() => {
+      const text =
+        document.querySelector('[data-astryx-live-region="assertive"]')
+          ?.textContent ?? '';
+      if (text && text !== texts.at(-1)) {
+        texts.push(text);
+      }
+    });
+    observer.observe(document.body, {subtree: true, childList: true});
+    observers.push(observer);
+    return texts;
+  }
+
   it('flags no partial year the control reports while the year is typed', () => {
     stubPointer(true);
     const onChange = vi.fn();
@@ -875,16 +895,7 @@ describe('DateInput native rejected entries', () => {
 
   it('shows a refused date in place of a caller status and announces it once', async () => {
     stubPointer(true);
-    const texts: string[] = [];
-    const observer = new MutationObserver(() => {
-      const text =
-        document.querySelector('[data-astryx-live-region="assertive"]')
-          ?.textContent ?? '';
-      if (text && text !== texts.at(-1)) {
-        texts.push(text);
-      }
-    });
-    observer.observe(document.body, {subtree: true, childList: true});
+    const texts = recordAssertive();
     const {container} = render(
       <DateInput
         label="Date"
@@ -912,7 +923,41 @@ describe('DateInput native rejected entries', () => {
     fireEvent.blur(input);
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(texts).toEqual([RANGE_MESSAGE]);
-    observer.disconnect();
+  });
+
+  it('with onEntryErrorChange, shows a caller error message in place of a refused date, and announces it once', async () => {
+    stubPointer(true);
+    const announced = recordAssertive();
+    const field = (status: DateInputProps['status']) => (
+      <DateInput
+        label="Date"
+        dateConstraints={[date => date.getDay() !== 0]}
+        value="2026-03-23"
+        status={status}
+        onEntryErrorChange={() => {}}
+        onChange={() => {}}
+      />
+    );
+    const {container, rerender} = render(
+      field({type: 'error', message: 'Pick a weekday'}),
+    );
+    await waitFor(() => {
+      expect(announced).toEqual(['Pick a weekday']);
+    });
+    const alert = within(container).getByRole('alert');
+    fireEvent.change(getInput(), {target: {value: '2026-03-22'}});
+    fireEvent.blur(getInput());
+
+    expect(statusText(container)).toBe('Pick a weekday');
+    expect(getInput()).toHaveAttribute('aria-invalid', 'true');
+    // The status does not change, so the field's alert announces it once.
+    expect(alert).toHaveTextContent('Pick a weekday');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(announced).toEqual(['Pick a weekday']);
+
+    rerender(field({type: 'warning', message: 'Busy week'}));
+    expect(statusText(container)).toBe('Enter an available date');
+    expect(alert).toHaveTextContent('');
   });
 
   it.each([

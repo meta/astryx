@@ -767,11 +767,25 @@ export interface UseNativeDateRejectionOptions {
   value: ISODateString | undefined;
   /** A disabled or busy field hides the rejection and ignores commits. */
   isLocked: boolean;
+  /**
+   * The caller's status. A shown rejection shows its own error instead,
+   * except that a caller with `onEntryErrorChange` words the error: its error
+   * status with a message shows in place of the field's own message.
+   */
+  status?: InputStatus;
+  /** Whether the caller passes `onEntryErrorChange`. */
+  hasEntryErrorCallback: boolean;
+  /** Whether the shown status announces itself, as Field's status does. */
+  isStatusAnnounced: boolean;
 }
 
 export interface NativeDateRejection {
-  /** The message of the shown rejection, or null. */
+  /** Null until Enter or blur reveals a refused date. */
   message: string | null;
+  /** The status the field shows. */
+  fieldStatus: InputStatus | undefined;
+  /** The rejection message that the field status does not announce. */
+  alertMessage: string;
   /** Whether a refused date waits for the next commit or shows. */
   isRefused: boolean;
   /** Holds a date that the field refuses until the next commit. */
@@ -794,6 +808,9 @@ const NO_REFUSAL = {held: null, shown: null} as const;
 export function useNativeDateRejection({
   value,
   isLocked,
+  status,
+  hasEntryErrorCallback,
+  isStatusAnnounced,
   ...options
 }: UseNativeDateRejectionOptions): NativeDateRejection {
   const typedDate = useTypedDate({...options, calendar: 'gregory'});
@@ -822,15 +839,52 @@ export function useNativeDateRejection({
     }
   }, [isLocked]);
 
+  const message =
+    !isLocked && refusal.shown !== null
+      ? typedDate.errorMessage({
+          kind: 'outOfRange',
+          date: plainDateFromISO(refusal.shown),
+          isComplete: true,
+        })
+      : null;
+  const callerErrorMessage =
+    hasEntryErrorCallback && status?.type === 'error' && status.message
+      ? status.message
+      : null;
+
+  // A rejection that starts under the caller's error message changes no
+  // status, so the alert announces that message once. A later change of the
+  // caller's message ends the repeat, because Field announces the change.
+  const isRejected = message != null;
+  const [repeat, setRepeat] = useState<{
+    isRejected: boolean;
+    message: string | null;
+  }>({isRejected: false, message: null});
+  if (repeat.isRejected !== isRejected) {
+    setRepeat({isRejected, message: isRejected ? callerErrorMessage : null});
+  } else if (repeat.message !== null && repeat.message !== callerErrorMessage) {
+    setRepeat({isRejected, message: null});
+  }
+
+  let alertMessage = '';
+  if (message != null) {
+    if (!isStatusAnnounced) {
+      alertMessage = callerErrorMessage ?? message;
+    } else if (
+      callerErrorMessage != null &&
+      callerErrorMessage === repeat.message
+    ) {
+      alertMessage = callerErrorMessage;
+    }
+  }
+
   return {
-    message:
-      !isLocked && refusal.shown !== null
-        ? typedDate.errorMessage({
-            kind: 'outOfRange',
-            date: plainDateFromISO(refusal.shown),
-            isComplete: true,
-          })
-        : null,
+    message,
+    fieldStatus:
+      message != null && callerErrorMessage == null
+        ? {type: 'error', message}
+        : status,
+    alertMessage,
     isRefused: refusal !== NO_REFUSAL,
     refuse,
     clear,

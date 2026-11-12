@@ -1180,13 +1180,20 @@ export function DateInput(props: DateInputProps) {
     presentation: _presentation,
     nativePicker: _nativePicker,
     calendar: _calendar,
-    // Only the pointer field takes typed text.
+    // Only the pointer field takes typed text. The native field reads only
+    // whether the callback is set.
     onEntryErrorChange,
     ...rest
   } = props;
   switch (surface) {
     case 'native':
-      return <NativeDateField {...rest} isDisabled={isDisabled} />;
+      return (
+        <NativeDateField
+          {...rest}
+          isDisabled={isDisabled}
+          onEntryErrorChange={onEntryErrorChange}
+        />
+      );
     case 'sheet':
       return (
         <TouchDateField

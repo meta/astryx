@@ -3470,4 +3470,42 @@ describe('DateTimeInput date segment rejected entries', () => {
     expect(statusText(container)).toBe('Looks good');
     vi.unstubAllGlobals();
   });
+
+  it('with onEntryErrorChange, shows a caller error message in place of a refused native date', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: /pointer:\s*coarse/.test(query),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    const {container} = render(
+      <DateTimeInput
+        label="Starts"
+        presentation="native"
+        value={'2026-03-15T10:00' as ISODateTimeString}
+        max={'2026-03-20T17:00' as ISODateTimeString}
+        status={{type: 'error', message: 'Pick a date this month'}}
+        onEntryErrorChange={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    const dateInput =
+      container.querySelector<HTMLInputElement>('input[type="date"]')!;
+    const alert = within(dateInput.closest('div') as HTMLElement).getByRole(
+      'alert',
+    );
+    expect(alert).toHaveTextContent('');
+    fireEvent.change(dateInput, {target: {value: '2026-03-25'}});
+    fireEvent.keyDown(dateInput, {key: 'Enter'});
+
+    expect(statusText(container)).toBe('Pick a date this month');
+    expect(dateInput).toHaveAttribute('aria-invalid', 'true');
+    // The status does not change, so the date alert announces it once.
+    expect(alert).toHaveTextContent('Pick a date this month');
+    vi.unstubAllGlobals();
+  });
 });

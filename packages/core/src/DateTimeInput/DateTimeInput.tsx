@@ -1087,14 +1087,13 @@ function PointerDateTimeField({
     isDateDisabled,
     value: valueParts.date,
     isLocked: isEffectivelyDisabled || isBusy,
+    status,
+    hasEntryErrorCallback: onEntryErrorChange != null,
+    isStatusAnnounced: true,
   });
-  const nativeDateMessage = usesNativePicker
-    ? nativeDateRejection.message
-    : null;
-  const fieldStatus: InputStatus | undefined =
-    nativeDateMessage != null
-      ? {type: 'error', message: nativeDateMessage}
-      : typedFieldStatus;
+  const fieldStatus = usesNativePicker
+    ? nativeDateRejection.fieldStatus
+    : typedFieldStatus;
 
   // The detached message box carries its own glyph, so the helper shows no
   // on-field icon.

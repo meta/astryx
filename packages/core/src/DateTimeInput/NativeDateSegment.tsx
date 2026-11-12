@@ -36,6 +36,7 @@ import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon} from '../Icon';
 import {useLocale} from '../i18n';
+import {VisuallyHidden} from '../VisuallyHidden';
 import {
   focusOutlineStyles,
   formatSharedDate,
@@ -75,7 +76,7 @@ export type NativeDateSegmentProps = {
   /** The field's status type, which a shown rejection makes `error`. */
   statusType?: InputStatusType;
   /**
-   * The rejection of a refused date. DateTimeInput shows its message as the
+   * The rejection of a refused date. DateTimeInput shows its status as the
    * field status.
    */
   rejection: NativeDateRejection;
@@ -340,7 +341,9 @@ export function NativeDateSegment({
           readOnly={(isEffectivelyDisabled && isFocusableDisabled) || undefined}
           aria-describedby={ariaDescribedBy}
           aria-required={isEffectivelyRequired ? 'true' : undefined}
-          aria-invalid={statusType === 'error' ? 'true' : undefined}
+          aria-invalid={
+            statusType === 'error' || !isInputValid ? 'true' : undefined
+          }
           aria-busy={isBusy || undefined}
           {...stylex.props(
             styles.input,
@@ -362,6 +365,13 @@ export function NativeDateSegment({
           </span>
         )}
       </span>
+      {/*
+          Announces the rejection message that the field status does not
+          announce. The field status announces the rest.
+        */}
+      <VisuallyHidden as="div" role="alert" aria-live="assertive">
+        {rejection.alertMessage}
+      </VisuallyHidden>
     </>
   );
 }
