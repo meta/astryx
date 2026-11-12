@@ -2,7 +2,13 @@
 
 'use client';
 
-import {createContext, useContext, useEffect, useState} from 'react';
+import {
+  createContext,
+  startTransition,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import Link from 'next/link';
 import {Theme} from '@astryxdesign/core/theme';
 import {LinkProvider} from '@astryxdesign/core/Link';
@@ -41,12 +47,20 @@ export function Providers({children}: {children: React.ReactNode}) {
   const [mode, setMode] = useState<'system' | ThemeMode>('system');
   const [isManual, setIsManual] = useState(false);
 
+  // Syncs the mode with the OS color scheme until the visitor sets one.
   useEffect(() => {
     if (isManual) {
       return;
     }
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const sync = () => setMode(mq.matches ? 'dark' : 'light');
+    // The mode is context above every page, and this runs when the site
+    // shell is live. On a slow connection the page's own script is not there
+    // yet. React answers an urgent update above a page it has not hydrated by
+    // rendering the page again in place of its server HTML, and it holds the
+    // shell's other start-up updates until the script arrives. A transition
+    // waits for the page to hydrate.
+    const sync = () =>
+      startTransition(() => setMode(mq.matches ? 'dark' : 'light'));
     sync();
     mq.addEventListener('change', sync);
     return () => mq.removeEventListener('change', sync);
