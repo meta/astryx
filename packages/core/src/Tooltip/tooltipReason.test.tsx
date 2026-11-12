@@ -14,7 +14,7 @@
 
 import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import type {ReactNode} from 'react';
+import {memo, type ReactNode} from 'react';
 import {useTooltip, useTooltipInternal} from './useTooltip';
 import {Tooltip} from './Tooltip';
 import {Button} from '../Button/Button';
@@ -90,6 +90,11 @@ function ControlledLabel({label, onHide}: {label: string; onHide: () => void}) {
     </button>
   );
 }
+
+/** A child that never re-renders on its parent's render. */
+const MemoButton = memo(function MemoButton({label}: {label: string}) {
+  return <Button label="Save" tooltip={label} />;
+});
 
 /** The open tooltip layers' text. */
 function shownTooltips(): string[] {
@@ -290,12 +295,58 @@ describe('a disabled reason is the only tooltip its control shows', () => {
     expect(shownTooltips()).toContain(LABEL);
   });
 
-  // Known limit (Tooltip FR14): coverage is read when a tooltip renders or
-  // would show. A child that never re-renders when a reason turns on later
-  // keeps its label in the description until it renders again.
-  it.todo(
-    "drops a memoized child's label description when a reason turns on later without re-rendering the child",
-  );
+  it('closes an open label tooltip when a reason turns on, and restores it when the reason turns off', async () => {
+    vi.useFakeTimers();
+    const LABEL = 'The label tooltip';
+    const {rerender} = render(
+      <ReasonContainer isOn={false}>
+        <Button label="Save" tooltip={LABEL} />
+      </ReasonContainer>,
+    );
+    await act(async () => {});
+    const button = screen.getByRole('button', {name: 'Save'});
+    fireEvent.pointerEnter(button, {pointerType: 'mouse'});
+    fireEvent.mouseEnter(button);
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(shownTooltips()).toContain(LABEL);
+
+    rerender(
+      <ReasonContainer isOn>
+        <Button label="Save" tooltip={LABEL} />
+      </ReasonContainer>,
+    );
+    await act(async () => {});
+    expect(shownTooltips()).not.toContain(LABEL);
+    expect(button).not.toHaveAccessibleDescription(
+      expect.stringContaining(LABEL),
+    );
+
+    rerender(
+      <ReasonContainer isOn={false}>
+        <Button label="Save" tooltip={LABEL} />
+      </ReasonContainer>,
+    );
+    await act(async () => {});
+    expect(button).toHaveAccessibleDescription(expect.stringContaining(LABEL));
+  });
+
+  it("drops a memoized child's label description when a reason turns on later, without re-rendering the child", async () => {
+    const LABEL = 'The label tooltip';
+    const child = <MemoButton label={LABEL} />;
+    const {rerender} = render(
+      <ReasonContainer isOn={false}>{child}</ReasonContainer>,
+    );
+    await act(async () => {});
+    const button = screen.getByRole('button', {name: 'Save'});
+    expect(button).toHaveAccessibleDescription(expect.stringContaining(LABEL));
+    rerender(<ReasonContainer isOn>{child}</ReasonContainer>);
+    await act(async () => {});
+    expect(button).not.toHaveAccessibleDescription(
+      expect.stringContaining(LABEL),
+    );
+  });
 
   it("keeps a field's own status message under its disabled reason", async () => {
     render(

@@ -28,6 +28,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   isCoveredByTooltipReason,
   setTooltipReason,
+  watchTooltipReason,
 } from '../privateAttributes/tooltipReason.stylex';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
@@ -354,9 +355,9 @@ export function useTooltipInternal(
 
   // A disabled reason is the only tooltip its control shows. While a reason
   // tooltip covers this tooltip's trigger, this one renders no layer, so it
-  // neither shows nor adds to the control's accessible description. Read when
-  // the tooltip would show and after each render, which a reason that turns
-  // on or off causes.
+  // neither shows nor adds to the control's accessible description. Coverage
+  // is read when the tooltip would show and when the owner module tells it a
+  // mark changed.
   const [isCovered, setIsCovered] = useState(false);
   const isCoveredRef = useRef(false);
 
@@ -426,9 +427,26 @@ export function useTooltipInternal(
   const latestRef = useRef({isOpen, isLayerOpen, onShow, onHide});
   latestRef.current = {isOpen, isLayerOpen, onShow, onHide};
 
+  // Records whether a reason covers this tooltip now. An uncontrolled open
+  // tooltip that a reason comes to cover closes; a controlled one keeps the
+  // caller's `isOpen` and renders no layer until the reason ends.
+  const syncCoverage = useCallback(() => {
+    const next = isCoveredNow();
+    if (next === isCoveredRef.current) {
+      return;
+    }
+    isCoveredRef.current = next;
+    const latest = latestRef.current;
+    if (next && latest.isLayerOpen && latest.isOpen === undefined) {
+      hideLayer();
+    }
+    setIsCovered(next);
+  }, [isCoveredNow, hideLayer]);
+
   const [isHeldState, setIsHeldState] = useState(false);
   const setHeld = useCallback((next: boolean) => {
     isHeldRef.current = next;
+    syncCoverage();
     setIsHeldState(next);
   }, []);
 
@@ -766,6 +784,7 @@ export function useTooltipInternal(
     presentInterest,
     answerTap,
     isReason,
+    syncCoverage,
   });
   handlersRef.current = {
     handleMouseEnter,
@@ -784,6 +803,7 @@ export function useTooltipInternal(
     presentInterest,
     answerTap,
     isReason,
+    syncCoverage,
   };
 
   // Removes the attached trigger's listeners (the trigger ref callback's
@@ -840,6 +860,10 @@ export function useTooltipInternal(
     if (latest().isReason) {
       setTooltipReason(el, isEnabledRef.current);
     }
+    const stopWatchingReasons = latest().isReason
+      ? null
+      : watchTooltipReason(() => latest().syncCoverage());
+    latest().syncCoverage();
 
     // A trigger that attaches again after its wiring was removed
     // (DropdownMenu's Button as its menu closes) missed the focus that
@@ -903,6 +927,7 @@ export function useTooltipInternal(
       if (latest().isReason) {
         setTooltipReason(el, false);
       }
+      stopWatchingReasons?.();
       if (triggerRef.current === el) {
         triggerRef.current = null;
       }
@@ -944,24 +969,6 @@ export function useTooltipInternal(
       setTooltipReason(trigger, isEnabled);
     }
   }, [isReason, isEnabled]);
-
-  // Syncs whether a reason tooltip covers this tooltip's trigger, read from
-  // the DOM after each render. State changes only when coverage changes. An
-  // uncontrolled open tooltip that a reason now covers closes; a controlled
-  // one keeps the caller's `isOpen` and renders no layer until the reason ends.
-  // eslint-disable-next-line @eslint-react/exhaustive-deps -- runs after every render, because the reason mark lives only in the DOM
-  useEffect(() => {
-    const next = isCoveredNow();
-    if (next === isCoveredRef.current) {
-      return;
-    }
-    isCoveredRef.current = next;
-    if (next && isLayerOpen && isOpen === undefined) {
-      hideLayer();
-    }
-    // eslint-disable-next-line @eslint-react/set-state-in-effect -- reads the reason mark, which only the DOM holds
-    setIsCovered(next);
-  });
 
   // Cleanup on unmount
   useEffect(() => {
