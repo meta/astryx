@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/theme-y2k",
-  "version": "0.7.14",
+  "version": "0.7.15",
   "displayName": "Y2K Theme",
   "private": false,
   "description": "Hot pinks, lime greens, and Poppins. Bubbly, playful, and unmistakably retro.",
@@ -81,11 +81,11 @@
     "lucide-react": "^1.66.0"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.14",
+    "@astryxdesign/core": "0.7.15",
     "react": ">=19"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "0.7.14"
+    "@astryxdesign/cli": "0.7.15"
   },
   "module": "./dist/source.mjs"
 }

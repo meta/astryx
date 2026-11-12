@@ -2180,7 +2180,8 @@ async function runComputerChecks(cwd) {
 
 /**
  * Where `search` and `build` keep their gathered catalog between runs, and
- * how much it holds. Left out of a checkout, which keeps none.
+ * how much it holds; and, in a run under Yarn Plug'n'Play's loader, that the
+ * run keeps none (runsUnderPnp). Left out of a checkout, which keeps none.
  * @returns {DoctorCheck | null}
  */
 export function checkGatherCache() {
@@ -2189,9 +2190,9 @@ export function checkGatherCache() {
   const size = `${(summary.bytes / (1024 * 1024)).toFixed(1)} MB`;
   return {
     id: 'gather-cache',
-    label: 'Search catalog cache',
+    label: 'Kept catalog cache',
     status: 'info',
-    message: `search and build keep the catalogs they gather in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size}); a catalog is used only while nothing it read has changed, and deleting the folder clears it.`,
+    message: `search, build, component, template, theme and discover keep what they gather (search's catalogs and each integration's check results) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it.`,
   };
 }
 
