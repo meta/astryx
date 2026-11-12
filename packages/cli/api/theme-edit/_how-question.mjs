@@ -1501,42 +1501,232 @@ export function draftAnswer(ctx, env, question) {
       '',
     )
     .replace(/\bno (?:less|fewer) than\s+(?=\d)/gi, '');
-  // "dark page #0b0b0f": the mode word scopes the color.
-  question = question.replace(
-    /\b(dark|light) (page|background|body)( colou?r)? (#[0-9a-f]{3,8})\b/gi,
-    '$2 $4 in $1 mode',
-  );
+  // "dark page #0b0b0f", "dark.page=#…", "dark page: #…": the mode word
+  // scopes the color. "dark mode only: accent #…" is that mode, not a
+  // dark-only theme. Vocabulary that names a direction: nuke/kill/zap =
+  // remove, sharpen = sharper, zero out = 0, flatten = flat, X++ / X-- =
+  // more / less X, "X: off|none" = no X.
+  question = question
+    .replace(
+      /\b(dark|light)[. ](page|background|body)( colou?r)?\s*[:=]?\s*(#[0-9a-f]{3,8})\b/gi,
+      '$2 $4 in $1 mode',
+    )
+    .replace(/^\s*(dark|light) mode only\s*:\s*/i, 'in $1 mode: ')
+    .replace(/\b(dark|light)mode\b/gi, '$1 mode')
+    .replace(/\b(?:nuke|kill|zap|axe)\b/gi, 'remove')
+    .replace(
+      /\bsharpen (?:the |all the |every |all )?([a-z]+)/gi,
+      'make the $1 sharper',
+    )
+    .replace(/\bzero out (?:the )?([a-z ]+?)(?=$|[,;.])/gi, '$1 0')
+    .replace(/\bflatten (?:the )?([a-z]+)/gi, 'make the $1 flat')
+    .replace(/\b([a-z][a-z -]*?)\s*\+\+/gi, 'more $1')
+    .replace(/\b([a-z][a-z -]*?)\s*--(?![a-z])/gi, 'less $1')
+    .replace(/\b([a-z][a-z -]*?)\s*[:=]\s*(?:off|none|no)\b/gi, 'no $1');
   const segments = question
     .split(
-      /\s*(?:[,;\n]|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|(?<=\S)\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
+      /\s*(?:,(?![^(]*\))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
     )
     .map(x => x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, ''))
     .filter(x => x.trim());
+  // "drop shadow: x 0, y 4, …", "card shadow: 0 1px …, 0 2px …": a label
+  // with its value is one clause, commas and all.
+  if (
+    /^\s*[a-z][\w -]{0,30}:\s*[^?]*$/i.test(question) &&
+    !/\n/.test(question) &&
+    !/;/.test(question)
+  )
+    segments.splice(0, segments.length, question);
   // A clause writes only when it reads as a direct ask: an imperative, a
   // request, or a thing with a value or a direction; a condition, an
   // indirect question, a double negative or a statement of fact gets the
   // lookup instead. A wrong write is worse than no command.
   const CONDITION =
-    /^\s*(?:if|unless|in case|provided|providing|only if|assuming|suppose|supposing|as long as)\b/i;
+    /^\s*(?:if|unless|in case|provided|providing|only if|assuming|suppose|supposing|as long as|whenever|as soon as|once|given|in the event|should (?:the|it|they)|were (?:the|it|they)|otherwise|on condition)\b|\b(?:except if|on condition that|in the event)\b/i;
   const NOT_ASK =
     /\b(i wonder|wondering|curious|would like to know|let me see|help me understand|any idea|just checking|just asking|check if|check whether|can you check|look at|double check|idk|quick q|do you think)\b|\b(don'?t not|not without|not un-?(?:bold|round|rounded|flat|square|styled)\w*|never no|no lighter|no darker|not at all|isn'?t it time|weren'?t)\b|^\s*(?!(?:can|could|would|will) (?:you|i|we)\b|can (?:the|my|our|all) [\w -]+ be\b|is it possible\b|is there a way\b)(?:do|does|did|will|would|can(?!'t|not)|could|should|is|are)\b(?!n'?t)|^\s*checking\b|\bno less (?!than)|^\s*(would|could|should|does|do|is|are|will)\b[^.]*\b(work|look|be (?:a )?(?:good|better|too much|ok|okay)|good|better|accessible|clash|too much)\b[^.]*\??$|\bor\b[^.]*\?\s*$|^\s*how (?:would|round|big|dark|light|thick)\b|\b(right now|rn)\b(?!.*\b(make|set|change)\b)/i;
   const ASK_START =
     /^\s*(?:please |pls |ok,? |okay,? |also |and |now |so |anyway,? )*(?:make|set|change|use|give|turn|add|remove|increase|decrease|lighten|darken|round|square|put|switch|swap|replace|drop|ditch|kill|hide|bump|reduce|raise|lower|tighten|loosen|shrink|grow|enlarge|boost|soften|sharpen|undo|revert|reset|restore|bring|go|keep|let'?s|try|apply|get rid|take|knock|cut|paint|colou?r|fill|flatten|thicken|widen|narrow|underline|bold|unbold|uppercase|lowercase|no|without|stop|don'?t|never|avoid|less|more|bigger|smaller|rounder|sharper|darker|lighter|softer|bolder|thinner|thicker|wider|tighter|looser)\b|^\s*(?:can|could|would|will) (?:you|i|we)\b|^\s*can (?:the|my|our|all) [\w -]+ be\b|^\s*(?:i|we) (?:want|need|'d like|would like)\b|^\s*(?:i'd|id) like\b|^\s*please\b/i;
+  // Strict: a clause writes only when it positively reads as an ask:
+  // (a) an imperative from a closed verb list, after an optional politeness
+  // prefix; (b) an assignment of a known thing ("<thing> <value>",
+  // "<thing>: <value>"); (c) a bare comparative or style word with a part
+  // ("rounder buttons", "serif headings"). Anything else is held back.
+  const VETO =
+    /^(?:don'?t|doesn'?t|isn'?t|aren'?t|won'?t|wouldn'?t|can'?t|shouldn'?t)\s+(?:the |my |our )?[a-z]+\s+(?:get|have|use|look|be|need|seem)\b|\b(no idea|who knows|not sure|no reason not|can'?t not|isn'?t wrong|not unlike|not never|wouldn'?t say no|can'?t say|it'?s not that|nobody said|hardly|imagine|picture|pretend|hypothetically|in theory|one day|might|toying|consider|someday|maybe|perhaps)\b|\b(?:don'?t|never|no)\b[^,;.]*\bnot\b|\bnever without\b/i;
+  const POLITE =
+    /^\s*(?:(?:please|pls|kindly|ok(?:ay)?|also|and|now|so|anyway|alright|hey|hi|then)[,\s]+|(?:can|could|would|will) (?:you|we|i) (?:please )?|i'?d like (?:you )?to |i'?d like |i (?:want|need|prefer) (?:you )?(?:to )?|we'?d (?:like|prefer) |we (?:want|need|prefer) |hoping for |my request is |let'?s (?:go with )?|lets (?:go with )?|how (?:about|'bout) |what about |why not |why don'?t we (?:go with )?|go ahead and |mind making |you'?d better |you can |you forgot to |only |just |everything |lol |umm+ |ugh,? |quick one:? |(?:way|much|much much|slightly|a bit|a little|a smidge|just slightly|even|super|really|very) |when (?:hovering|hovered|pressed|clicked|focused|i hover|i click|i tab to)(?: (?:on|over|a|an|the) [a-z]+)? |(?:the |our |my )?(?:designer|pm|client|boss|users?|marketing|legal|design spec|style guide|mockup|brand) (?:wants?|needs?|requires?|prefers?|asked for|said:?|says:?) |please and thank you:? |thank you:? |thanks:? |in (?:dark|light) mode[:,]?\s*|(?:dark|light) mode[:,]\s*)+/i;
+  const VERB =
+    /^(?:crank up|fix|make|set|change|use|give|turn|add|remove|drop|kill|increase|decrease|raise|lower|lighten|darken|round|sharpen|square|flatten|soften|tighten|loosen|beef up|bump|boost|tone down|thicken|thin|bold|unbold|underline|hide|show|put|switch|swap|replace|ditch|reduce|shrink|grow|enlarge|widen|narrow|paint|colou?r|fill|undo|revert|reset|restore|bring|go back|keep|apply|try|get rid|take|knock|cut|stop|don'?t|do not|never|avoid|no|without|scale|move|space|pad|center|align|uppercase|lowercase|italicize|enable|disable|switch)\b/i;
+  const THING =
+    /^(?:the |my |our |all |every |all the )?(?:--[a-z][\w-]*|accent|brand|primary|secondary|danger|success|warning|info|corners?|radius|border-radius|spacing|padding|gap|margin|density|headings?|titles?|text(?:-size)?|font(?:s|-size|-family|-weight)?|body|page|background|bg|vibrancy|shadows?|borders?|outlines?|underlines?|links?|mode|leading|line[- ]height|letter[- ]spacing|tracking|weight|focus(?: ring| outline)?|colou?rs?)\b/i;
+  const STYLE =
+    /^(?:muted|pastel|subdued|duller|vivid|saturated|desaturated|vibrant|\d+(?:\.\d+)?(?:px|rem|em|%)?|underlined?|more|less|extra|rounder|sharper|squarer|square|round(?:ed)?|pill|flat|serif|sans(?:-serif)?|mono(?:space)?|bold(?:er)?|italic|uppercase|lowercase|compact|roomy|dense|airy|tight(?:er)?|loose(?:r)?|wide(?:r)?|thin(?:ner)?|thick(?:er)?|big(?:ger)?|small(?:er)?|large(?:r)?|tiny|huge|dark(?:er)?|light(?:er)?|bright(?:er)?|soft(?:er)?|heav(?:y|ier)|no|without|#[0-9a-f]{3,8}|red|orange|yellow|green|teal|cyan|blue|indigo|purple|violet|pink|rose|gray|grey|black|white|navy|crimson|maroon)\b/i;
+  const COPULA =
+    /\b(is|are|was|were|has|have|had|isn'?t|aren'?t|doesn'?t|did|does|truly)\b|\?/i;
+  // Clauses that only scope or give a value ("in dark mode", "on hover",
+  // "4px", "at least 44px") join the ask next to them.
+  const NEUTRAL =
+    /^\s*(?:below|above|under|over)\s+\d+(?:px|em|rem)\s*$|^\s*(?:on|for) (?:mobile|phones?|tablets?|desktops?|print)\s*$|^\s*when printing\s*$|^\s*(?:(?:in|on) (?:the )?(?:dark|light) mode )?#[0-9a-f]{3,8}(?: in (?:dark|light)(?: mode)?)?\s*$|^\s*(?:leave|keep) (?:the )?(?:dark|light) mode (?:alone|as is|as it is|untouched)\s*$|^\s*(?:only |just )?(?:(?:in|on|for|when|while) )?(?:(?:the )?(?:dark|light) mode|hover(?:ed|ing)?|focus(?:ed)?|press(?:ed)?|click(?:ed)?|selected|checked|disabled)(?: only)?\s*$|^\s*(?:at (?:least|most) |about |around |roughly |maybe )?(?:-?\d*\.?\d+(?:px|rem|em|%|ms|s)?|#[0-9a-f]{3,8})\s*$/i;
   const isAsk = (/** @type {string} */ x) => {
-    const t = x.toLowerCase();
-    return !CONDITION.test(t) && !NOT_ASK.test(t);
+    if (NEUTRAL.test(x)) return true;
+    // A bare CSS value ("0 8px 10px -6px rgb(0 0 0 / 0.1)") continues the
+    // clause before it.
+    const bare = x.replace(
+      /^\s*(?:like|e\.?g\.?|say|maybe|about|around|roughly)\s+/i,
+      '',
+    );
+    if (
+      /\d/.test(bare) &&
+      !/[a-z]{3,}/i.test(
+        bare.replace(
+          /\b(?:px|rem|em|rgba?|hsla?|oklch|oklab|var|calc|inset)\b|\([^)]*\)/gi,
+          '',
+        ),
+      )
+    )
+      return true;
+    const low = x.toLowerCase().trim();
+    // "card shadow: 0 1px 3px …", "Airbnb: accent #ff385c": a label and its
+    // value; "setRadius(4)"; "shouldn't links be underlined?"; a question in
+    // another language the editor translates.
+    if (
+      /^([a-z][\w -]{0,30}):\s*\S/.test(low) &&
+      !/^(?:just )?(?:checking|question|quick q|q|fyi|todo|note|changes)\s*:|:\s*(?:are|is|do|does|what|which|how|why)\b/.test(
+        low,
+      ) &&
+      !NOT_ASK.test(low) &&
+      !CONDITION.test(low) &&
+      !VETO.test(low) &&
+      !/\?\s*$/.test(low)
+    )
+      return true;
+    if (/^set[a-z]*\(|^shouldn'?t\b[^?]*\?\s*$/.test(low)) return true;
+    // "I set the accent to red by mistake", "does nothing visible".
+    if (
+      /\b(by mistake|by accident|accidentally|does nothing|do nothing)\b/.test(
+        low,
+      )
+    )
+      return true;
+    if (
+      /\b(schatten|karten|ecken|knöpfe|entfernen|pulsanti|arrotondat\w*|ombra|ombre|bordure|cartes|esquinas|redond\w*|botones|sombra|couleur|tarjetas|espacio|angoli|cantos|botões)\b/.test(
+        low,
+      )
+    )
+      return true;
+    // "I hate the shadows", "I can barely see the borders", "the client
+    // wants …": a wish or a complaint about a named thing.
+    if (
+      /^(?:i|we|they|the client|the designer|stakeholders?|users?|the night shift)\b[^?]*\b(hate|want|wants|need|needs|like|prefer|barely see|can'?t see|think|wish)\b(?! to know)/.test(
+        low,
+      ) &&
+      !VETO.test(low) &&
+      !CONDITION.test(low) &&
+      (aspectsOf(low).length > 0 ||
+        lex.parts.some(([re]) => re.test(low)) ||
+        /#[0-9a-f]{3,8}|\b(accent|colou?r|brand|grays?|font|purple|blue|red|green|orange|teal|pink|navy|black|white|yellow|violet)\b/.test(
+          low,
+        ))
+    )
+      return true;
+    // Typos are read as the words they are near ("accnet" is accent).
+    const t0 = x
+      .toLowerCase()
+      .trim()
+      .replace(/[a-z]+/g, w => corrected(w, lex.vocab));
+    // "our brand color is #0055ff": a value given for the brand; pasted CSS
+    // ("html.dark .card { … }"); "X should be/look Y".
+    if (
+      /^(?:our|my|the) brand colou?r is #[0-9a-f]{3,8}\b|\{[^}]*:|\bshould (?:be|look|have|get)\b(?![^?]*\?)/.test(
+        t0,
+      ) &&
+      !CONDITION.test(t0) &&
+      !VETO.test(t0)
+    )
+      return true;
+    const raw = x.toLowerCase();
+    if (
+      [t0, raw].some(v => CONDITION.test(v) || NOT_ASK.test(v) || VETO.test(v))
+    )
+      return false;
+    // Questions in a script how cannot read word by word keep their ask.
+    if (/[^ -~]/.test(t0.replace(/[\u{1F000}-\u{1FFFF}\u2000-\u2BFF]/gu, '')))
+      return true;
+    if (
+      VERB.test(
+        raw
+          .replace(POLITE, '')
+          .replace(/^(?:the|my|our|all|every|a|an)\s+/, '')
+          .trim(),
+      )
+    )
+      return true;
+    const t = t0
+      .replace(POLITE, '')
+      .replace(/^(?:the|my|our|all|every|all the|a|an)\s+/, '')
+      .trim();
+    // "could the buttons be rounder", "can I get a serif font".
+    if (
+      /^(?:can|could) (?:the|my|our|all) [\w -]+ be\b|^(?:can|could) i (?:get|have)\b/.test(
+        t0,
+      )
+    )
+      return true;
+    if (VERB.test(t)) return true;
+    const short = t.split(/\s+/).length <= 7;
+    const part = lex.parts.some(([re]) => re.exec(t)?.index === 0);
+    if ((THING.test(t) || part) && short && !COPULA.test(t)) return true;
+    if (
+      STYLE.test(t) &&
+      short &&
+      !COPULA.test(t) &&
+      (THING.test(t.replace(STYLE, '').trim()) ||
+        lex.parts.some(([re]) => re.test(t)) ||
+        /\b(corners?|spacing|padding|shadows?|borders?|accent|headings?|text|font|page|background|colou?rs?|colou?rful|pastel|muted|subdued|vivid|saturated|washed out)\b/.test(
+          t,
+        ))
+    )
+      return true;
+    // A description of the look wanted ("stronger shadow on dialogs",
+    // "headings are 600 weight") names a thing and asks nothing back.
+    if (
+      !/\?|\b(isn'?t|aren'?t|doesn'?t|don'?t|won'?t|wouldn'?t|did|does|was|were|could|might|should)\b/.test(
+        t,
+      ) &&
+      !/^(?:i|we|you|it|this|that|there|they)\b/.test(t) &&
+      (aspectsOf(t).length > 0 ||
+        lex.parts.some(([re]) => re.test(t)) ||
+        /\b(accent|contrast|neutrals?|grays?|greys?|colou?rs?|font|fonts|everywhere|purple|blue|red|green|orange|teal|pink|navy|black|white)\b/.test(
+          t,
+        ))
+    )
+      return true;
+    return false;
   };
   const blocked = (/** @type {string} */ x) =>
-    GATE.test(x) ||
-    (QUESTION_CLAUSE.test(x) && !ASK_START.test(x.toLowerCase())) ||
-    !isAsk(x);
+    !/^\s*(?:please )?(?:can|could) (?:the|my|our|all) [\w -]+ be\b|^\s*(?:can|could) i (?:get|have)\b/i.test(
+      x,
+    ) &&
+    (GATE.test(x) ||
+      (QUESTION_CLAUSE.test(x) && !ASK_START.test(x.toLowerCase())) ||
+      !isAsk(x));
   const gated = segments.filter(blocked);
   // A condition holds back the whole question: the ask depends on it.
   // Sarcasm makes every clause unsure, not only the one with the marker.
   const SARCASM =
-    /^\s*(yeah|oh sure|sure|great|wow)\b|\bjust what i wanted\b|,\s*nice[.!]*\s*$|\bis a great\b/i;
+    /^\s*(yeah|oh sure|sure|great|wow|oh great|brilliant|perfect|cool cool|amazing|thrilled|nothing says)\b|\bjust what i wanted\b|,\s*nice[.!]*\s*$|\bis a great\b|\bsaid no one\b|\btruly\b|🙃/iu;
+  // A hypothetical anywhere makes every clause one.
+  const HYPOTHETICAL =
+    /\b(imagine|picture|pretend|hypothetically|in theory|toying with)\b/i;
+  // A tag question ("corners are 10px, eh", "cards have a shadow, right?")
+  // asks back about the whole line.
+  const TAG =
+    /^(?:eh|right|correct|yeah|huh|no|isn'?t it|aren'?t they|are they|is it|are we|do they|does it|ok|okay)\s*[?!.]*$/i;
   const gateAll =
+    segments.some(x => TAG.test(x.trim())) ||
     SARCASM.test(question) ||
+    HYPOTHETICAL.test(question) ||
     (gated.length > 0 && gated.length === segments.length) ||
     segments.some(x => CONDITION.test(x.replace(/^[^:]*:\s*/, '')));
   if (gated.length && !gateAll) {

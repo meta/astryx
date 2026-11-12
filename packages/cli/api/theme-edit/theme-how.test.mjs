@@ -3104,10 +3104,7 @@ const QUESTIONS_J = [
     'after I check a checkbox it should be green',
     {top: /^set q background '#16a34a' --on checks --state checked$/},
   ],
-  [
-    'once a tab is picked make it bold',
-    {top: /^set q font-weight 700 --on tab --state selected$/},
-  ],
+  ['once a tab is picked make it bold', {top: null}],
   [
     'when I tab to a link, show a thick outline',
     {top: /--on link --state focus-visible$/},
@@ -4016,6 +4013,58 @@ describe('how reads muted, "less X" and sarcasm', () => {
       );
       if (want === null) expect(changes).toEqual([]);
       else expect(bare(changes[0].commands[0])).toMatch(want);
+    });
+});
+
+/**
+ * Final-13 questions: a write only for a clause that reads as an ask.
+ * @type {Array<[string, RegExp | null]>}
+ */
+const QUESTIONS_X = [
+  ["isn't the page too gray", null],
+  ['what if the corners were square', null],
+  ['brilliant idea, borders on every input', null],
+  ["there's no reason not to underline links", null],
+  ['whenever the accent is blue, switch it to red', null],
+  ["don't make the corners not square", null],
+  ['cards have a shadow, right?', null],
+  ['corners are 10px, eh', null],
+  ['hypothetically, pill buttons', null],
+  ['consider 8px corners', null],
+  ['no idea what the radius is but set it to 8px', /^set q corners 8px$/],
+  [
+    'dark mode only: accent #60a5fa',
+    /^set q --color-accent '#60a5fa' --mode dark$/,
+  ],
+  [
+    'dark.page=#09090b',
+    /^set q --color-background-body '#09090b' --mode dark$/,
+  ],
+  ['shadow: off', /^set q --shadow-low none/],
+  ['spacing--', /^set q spacing less$/],
+  ['nuke the border on inputs', /^set q border none --on inputs$/],
+  ['sharpen every corner', /^set q corners less$/],
+  ['could the buttons be rounder', /^set q corners more --on button$/],
+  ['I hate the purple, make it orange', /^set q accent '#f97316'$/],
+  ['card padding 16px 24px', /^set q padding '16px 24px' --on card$/],
+];
+
+describe('how writes only for a clause that reads as an ask', () => {
+  for (const [question, want] of QUESTIONS_X)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
     });
 });
 
