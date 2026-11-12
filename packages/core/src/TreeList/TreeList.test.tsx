@@ -1794,12 +1794,12 @@ describe('TreeList', () => {
       expect(screen.getByTestId('folder-open')).toBeInTheDocument();
     });
 
-    it('falls back to the default chevron when the render prop returns null for a parent', () => {
+    it('keeps the default chevron when the render prop returns undefined for a parent', () => {
       render(
         <TreeList
           items={nestedItems}
           renderExpandIcon={({hasChildren}) =>
-            hasChildren ? null : <span data-testid="file-icon">•</span>
+            hasChildren ? undefined : <span data-testid="file-icon">•</span>
           }
         />,
       );
@@ -1807,7 +1807,21 @@ describe('TreeList', () => {
       expect(toggle.querySelector('svg')).toBeInTheDocument();
     });
 
-    it('renders no leaf indicator when the render prop returns null for leaves', () => {
+    it('renders an empty box that keeps the column width when the render prop returns null', () => {
+      render(<TreeList items={nestedItems} renderExpandIcon={() => null} />);
+      const toggle = screen.getByRole('button', {name: 'Toggle children'});
+      expect(toggle.querySelector('svg')).toBeNull();
+      const box = toggle.firstElementChild!;
+      expect(box).toBeEmptyDOMElement();
+      expect(declarationsOf(box)).toContain('var(--spacing-4');
+      // The leaf gets the same empty box, so it lines up with its parent.
+      expect(
+        rowOf('Sibling').querySelector('span[aria-hidden="true"][inert]'),
+      ).not.toBeNull();
+      expect(indentOf('Sibling')).toBe(indentOf('Parent'));
+    });
+
+    it('renders no leaf indicator when the render prop returns undefined for leaves', () => {
       render(
         <TreeList
           items={nestedItems}
@@ -1816,7 +1830,7 @@ describe('TreeList', () => {
               <span data-testid={isExpanded ? 'folder-open' : 'folder-closed'}>
                 ▶
               </span>
-            ) : null
+            ) : undefined
           }
         />,
       );
@@ -1825,7 +1839,7 @@ describe('TreeList', () => {
       expect(sibling.querySelector('[data-testid]')).toBeNull();
     });
 
-    it('treats a boolean return as no icon, not renderable content', () => {
+    it('treats a boolean return as an empty box, like null', () => {
       render(
         <TreeList
           items={nestedItems}
@@ -1835,11 +1849,12 @@ describe('TreeList', () => {
         />,
       );
       expect(screen.getByTestId('custom-caret')).toBeInTheDocument();
-      // The leaf Sibling gets `false` → not renderable → no indicator slot at
-      // all (not an empty icon box), so it keeps the chevron-column offset.
-      expect(rowOf('Sibling').children).toHaveLength(1);
-      expect(indentOf('Sibling')).toContain('+');
-      expect(indentOf('Sibling')).not.toBe(indentOf('Parent'));
+      // The leaf Sibling gets `false`: an empty indicator box that fills the
+      // chevron column, so it takes no extra offset.
+      expect(
+        rowOf('Sibling').querySelector('span[aria-hidden="true"][inert]'),
+      ).not.toBeNull();
+      expect(indentOf('Sibling')).toBe(indentOf('Parent'));
     });
 
     it('aligns a leaf with an icon to the indicator column of its siblings', () => {
@@ -1972,14 +1987,14 @@ describe('TreeList', () => {
       expect(screen.getByText('·')).toBeInTheDocument();
     });
 
-    it('treats an empty-string return as no icon on both paths', () => {
+    it('treats an empty-string return as an empty box on both paths', () => {
       render(<TreeList items={nestedItems} renderExpandIcon={() => ''} />);
-      // Parent falls back to the default chevron…
       const toggle = screen.getByRole('button', {name: 'Toggle children'});
-      expect(toggle.querySelector('svg')).toBeInTheDocument();
-      // …and the leaf keeps its alignment offset instead of an empty box.
-      expect(rowOf('Sibling').children).toHaveLength(1);
-      expect(indentOf('Sibling')).toContain('+');
+      expect(toggle.querySelector('svg')).toBeNull();
+      expect(
+        rowOf('Sibling').querySelector('span[aria-hidden="true"][inert]'),
+      ).not.toBeNull();
+      expect(indentOf('Sibling')).toBe(indentOf('Parent'));
     });
 
     it('renders the indicator slot separately from startContent', () => {
@@ -2072,7 +2087,7 @@ describe('TreeList', () => {
       expect(declarationsOf(toggle)).toContain('width: var(--spacing-4)');
     });
 
-    it("renders a custom icon as the toggle's direct child, with no rotation or RTL mirror", () => {
+    it('renders a custom icon in one box inside the toggle, with no rotation or RTL mirror', () => {
       render(
         <TreeList
           items={nestedItemsExpanded}
@@ -2081,9 +2096,11 @@ describe('TreeList', () => {
       );
       const toggle = screen.getByRole('button', {name: 'Toggle children'});
       const icon = screen.getByTestId('folder-open');
-      // No styling wrapper between the toggle and the consumer's node.
-      expect(icon.parentElement).toBe(toggle);
+      // One decorative box between the toggle and the consumer's node, with
+      // no transform on either.
+      expect(icon.parentElement?.parentElement).toBe(toggle);
       expect(declarationsOf(toggle)).not.toContain('transform');
+      expect(declarationsOf(icon.parentElement!)).not.toContain('transform');
 
       // The default chevron, by contrast, does rotate when expanded.
       const {container} = render(<TreeList items={nestedItemsExpanded} />);
@@ -2123,6 +2140,67 @@ describe('TreeList', () => {
         hasChildren: false,
         isDisabled: false,
       });
+    });
+
+    it('hides the custom glyph and the leaf icon from assistive technology, and keeps them out of focus', () => {
+      render(
+        <TreeList
+          items={nestedItems}
+          renderExpandIcon={({hasChildren}) =>
+            hasChildren ? (
+              <span role="img" aria-label="Folder" data-testid="folder" />
+            ) : (
+              <span role="img" aria-label="File" data-testid="file" />
+            )
+          }
+        />,
+      );
+      for (const id of ['folder', 'file']) {
+        const box = screen.getByTestId(id).parentElement!;
+        expect(box).toHaveAttribute('aria-hidden', 'true');
+        expect(box).toHaveAttribute('inert');
+      }
+      // The toggle and the rows keep their own names and state.
+      const toggle = screen.getByRole('button', {name: 'Toggle children'});
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(
+        screen.getByRole('treeitem', {name: 'Sibling'}),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('treeitem', {name: 'Parent'}),
+      ).toBeInTheDocument();
+    });
+
+    it('renders the glyph as given in right-to-left, with no mirror', () => {
+      render(
+        <div dir="rtl">
+          <TreeList
+            items={nestedItems}
+            renderExpandIcon={() => <span data-testid="caret">▶</span>}
+          />
+        </div>,
+      );
+      const caret = screen.getAllByTestId('caret')[0];
+      expect(declarationsOf(caret.parentElement!)).not.toContain('scaleX');
+      expect(declarationsOf(caret.parentElement!)).not.toContain('transform');
+    });
+
+    it('keeps the default chevron mirrored in right-to-left when the prop is unset', () => {
+      const {container} = render(<TreeList items={nestedItems} />);
+      const chevron = container.querySelector(
+        'button[data-tree-toggle]',
+      )!.firstElementChild!;
+      expect(declarationsOf(chevron)).toContain('scaleX(-1)');
+    });
+
+    it('renders exactly as without the prop when the render prop returns undefined', () => {
+      const {container: unset} = render(<TreeList items={nestedItems} />);
+      const {container: kept} = render(
+        <TreeList items={nestedItems} renderExpandIcon={() => undefined} />,
+      );
+      // The rows' generated ids differ between renders; everything else matches.
+      const withoutIds = (html: string) => html.replace(/_r_\w+_/g, 'id');
+      expect(withoutIds(kept.innerHTML)).toBe(withoutIds(unset.innerHTML));
     });
   });
 

@@ -257,6 +257,15 @@ const styles = stylex.create({
     color: colorVars['--color-icon-secondary'],
     borderRadius: radiusVars['--radius-inner'],
   },
+  // A caller's glyph inside the toggle, centred in the chevron column.
+  customGlyph: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: spacingVars['--spacing-4'],
+    height: spacingVars['--spacing-4'],
+    fontSize: spacingVars['--spacing-4'],
+  },
   // A leaf's indicator slot (a file icon from `renderExpandIcon`): the toggle's
   // box, so leaves line up with parents, without its button behavior.
   leafIndicator: {
@@ -549,8 +558,10 @@ export function TreeListItem({
           hasChildren,
           isDisabled,
         })
-      : null;
-  const hasCustomIcon = isRenderable(customIcon);
+      : undefined;
+  // `undefined` keeps the default; any other result, `null` included, fills
+  // the indicator box, which keeps the column's width when it renders nothing.
+  const hasCustomIcon = customIcon !== undefined;
 
   // Per-level indent distance. The per-level step is the public, themeable
   // `--tree-list-indent` lever (default `--spacing-4`, set on the tree-list
@@ -621,10 +632,18 @@ export function TreeListItem({
     />
   );
 
-  // A custom icon is the column's child as handed over: no rotation (an open
-  // folder must not also turn 90°) and no RTL mirror; the caller swaps per
-  // state instead.
-  const indicatorIcon = hasCustomIcon ? customIcon : chevronIcon;
+  // A custom icon renders as handed over: no rotation (an open folder must not
+  // also turn 90°) and no RTL mirror, since a folder is not directional; the
+  // caller swaps per state, and owns any direction-bearing artwork. It is
+  // decorative: hidden from the accessibility tree and never focusable, so the
+  // toggle's own name and state stay the row's.
+  const indicatorIcon = hasCustomIcon ? (
+    <span aria-hidden="true" inert {...stylex.props(styles.customGlyph)}>
+      {customIcon}
+    </span>
+  ) : (
+    chevronIcon
+  );
 
   const indicator = hasChildren ? (
     handleToggle != null ? (
@@ -676,7 +695,9 @@ export function TreeListItem({
   ) : hasCustomIcon ? (
     // A leaf's indicator slot (a file icon in a folder tree): the toggle's
     // box so leaves align, never a toggle, since a leaf has nothing to expand.
-    <span {...stylex.props(styles.leafIndicator)}>{customIcon}</span>
+    <span aria-hidden="true" inert {...stylex.props(styles.leafIndicator)}>
+      {customIcon}
+    </span>
   ) : null;
 
   const innerContent = (

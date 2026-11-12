@@ -29,13 +29,13 @@ export type TreeListVariant = keyof TreeListVariantMap;
 /** State passed to TreeList's `renderExpandIcon` render prop. */
 export interface TreeListExpandIconState {
   /** Whether the item is currently expanded. Always false for leaf items. */
-  isExpanded: boolean;
+  readonly isExpanded: boolean;
 
   /** Whether the item has nested children (i.e. renders a toggle). */
-  hasChildren: boolean;
+  readonly hasChildren: boolean;
 
   /** Whether the item is disabled. */
-  isDisabled: boolean;
+  readonly isDisabled: boolean;
 }
 
 /** Recursive item configuration for TreeList. */

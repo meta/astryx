@@ -152,22 +152,22 @@ export interface TreeListProps extends BaseProps<HTMLDivElement> {
   header?: ReactNode;
 
   /**
-   * Custom expand/collapse indicator icon, replacing the default rotating
-   * chevron. Called per item with its current state so collapsed and expanded
-   * icons can differ (e.g. closed/open folder). Also called for leaf items
-   * (`hasChildren: false`) so a file tree can render a file icon in the
-   * indicator slot; return null to keep leaves icon-free.
+   * Custom expand/collapse indicator, in place of the default rotating
+   * chevron. Called per item with its state, so collapsed and expanded rows
+   * can differ (a closed and an open folder). Also called for leaves
+   * (`hasChildren: false`), so a file tree can show a file icon in the same
+   * column.
    *
-   * The default chevron's rotation animation is not applied to custom icons —
-   * a state-aware icon swap replaces it. Returning null for an expandable item
-   * falls back to the default chevron. The toggle keeps its accessibility
-   * wiring (aria-expanded, aria-label, roving tabindex) regardless of the
-   * icon rendered inside it.
+   * Return `undefined` to keep the default: the chevron on a parent, and no
+   * indicator on a leaf. Any other result, `null` included, fills the
+   * indicator box, which keeps the column's width when it renders nothing.
    *
-   * The indicator column is the default chevron's box (`--spacing-4`, 16px
-   * by default), so it follows a theme that retunes spacing. Size custom
-   * icons `sm`: they fill the column at the default spacing, and sit centred
-   * in a larger one; a larger icon overflows it.
+   * The result is decorative: it is hidden from assistive technology and is
+   * never focusable, and the row keeps its name, `aria-expanded` state and
+   * keys. TreeList does not rotate or mirror it; a glyph that points (a caret,
+   * an arrow) reads `useDirection()` from `@astryxdesign/core/i18n` to face the
+   * right way. The column is the default chevron's
+   * box (`--spacing-4`, 16px by default), so size icons `sm`.
    *
    * @example
    * ```

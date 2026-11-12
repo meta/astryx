@@ -141,7 +141,7 @@ export const docs = {
           name: 'renderExpandIcon',
           type: '(state: TreeListExpandIconState) => ReactNode',
           description:
-            'Custom expand/collapse indicator replacing the default rotating chevron. Called per item with {isExpanded, hasChildren, isDisabled} so collapsed, expanded, and leaf icons can differ (e.g. closed/open folder, file). Custom icons swap per state instead of rotating. Return null to fall back: default chevron for parents, no indicator for leaves. Toggle a11y wiring is preserved regardless of the icon. Size icons `sm`: the indicator column is the default chevron\'s box (`--spacing-4`, 16px by default), which `sm` fills at the default spacing.',
+            'Custom expand/collapse indicator in place of the default rotating chevron. Called per item with {isExpanded, hasChildren, isDisabled}, so collapsed, expanded and leaf icons can differ (a closed or open folder, a file). Return undefined to keep the default: the chevron on a parent, no indicator on a leaf. Any other result, null included, fills the indicator box, which keeps the column width when it renders nothing. The result is decorative (hidden from assistive technology, never focusable); the row keeps its name, aria-expanded state and keys. TreeList does not rotate or mirror it; a glyph that points reads `useDirection()` from `@astryxdesign/core/i18n`. Size icons `sm`: the column is the default chevron\'s box (`--spacing-4`, 16px by default).',
         },
         {
           name: 'xstyle',
@@ -234,7 +234,7 @@ export const docsZh = {
           name: 'renderExpandIcon',
           type: '(state: TreeListExpandIconState) => ReactNode',
           description:
-            '自定义展开/折叠指示图标，替代默认的旋转箭头。按项调用并传入 {isExpanded, hasChildren, isDisabled}，可为折叠、展开和叶子节点渲染不同图标（如打开/关闭的文件夹、文件）。自定义图标按状态切换而非旋转。返回 null 时回退：父节点使用默认箭头，叶子节点不渲染指示器。切换按钮的无障碍连接不受图标影响。图标请使用 `sm` 尺寸：指示器列与默认箭头同为 `--spacing-4` 的盒子（默认 16px），默认间距下 `sm` 图标正好填满。',
+            '自定义展开/折叠指示图标，替代默认的旋转箭头。按项调用并传入 {isExpanded, hasChildren, isDisabled}，可为折叠、展开和叶子节点渲染不同图标（如打开/关闭的文件夹、文件）。返回 undefined 时保留默认：父节点使用默认箭头，叶子节点不渲染指示器。其他返回值（包括 null）填入指示器盒子，渲染为空时仍保留列宽。返回内容仅作装饰（对辅助技术隐藏，不可聚焦）；行保留其名称、aria-expanded 状态和按键。TreeList 不旋转也不镜像它；有方向的图标请通过 `@astryxdesign/core/i18n` 的 `useDirection()` 获取方向。图标请使用 `sm` 尺寸：该列与默认箭头同为 `--spacing-4` 的盒子（默认 16px）。',
         },
         {
           name: 'xstyle',
@@ -283,7 +283,7 @@ export const docsDense = {
     variant: 'Guide-line treatment: lineGuides shows connectors, noGuides hides them (indent kept). Orthogonal to density.',
     animatedLayout: 'handle from useAnimatedLayout({containerRef}); expand/collapse glides the content after the row inside that container on one shared motion role. Omit: content after the row snaps.',
     header: 'Header content, linked to tree via aria-labelledby.',
-    renderExpandIcon: 'Custom indicator per item state {isExpanded, hasChildren, isDisabled}; state-swap not rotation; null → default chevron (parents) / no indicator (leaves); size icons sm (column = default chevron box, --spacing-4).',
+    renderExpandIcon: 'Custom indicator per item state {isExpanded, hasChildren, isDisabled}; no rotation or mirror; undefined → default chevron (parents) / no indicator (leaves); null → empty box that keeps the width; decorative (aria-hidden, inert); size icons sm (column = default chevron box, --spacing-4).',
     xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
   },
   components: [
@@ -296,7 +296,7 @@ export const docsDense = {
         density: 'Spacing density for items.',
         variant: 'Guide-line treatment: lineGuides shows connectors, noGuides hides them (indent kept). Orthogonal to density.',
         header: 'Header content, linked to tree via aria-labelledby.',
-        renderExpandIcon: 'Custom indicator per item state {isExpanded, hasChildren, isDisabled}; state-swap not rotation; null → default chevron (parents) / no indicator (leaves); size icons sm (column = default chevron box, --spacing-4).',
+        renderExpandIcon: 'Custom indicator per item state {isExpanded, hasChildren, isDisabled}; no rotation or mirror; undefined → default chevron (parents) / no indicator (leaves); null → empty box that keeps the width; decorative (aria-hidden, inert); size icons sm (column = default chevron box, --spacing-4).',
         xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
       },
     },
