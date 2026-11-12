@@ -20,13 +20,14 @@ import {
   HOW,
   OPEN_FONTS,
   COMMON_STATES,
+  COLOR_PROPS,
+  GROUPS,
+  isSystemFamily,
 } from './_tables.mjs';
 import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
 import {focusStateOf} from './_settings.mjs';
-import {COLOR_PROPS, GROUPS} from './_tables.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {SYSTEM_FAMILIES} from '../theme/build/font-warning.mjs';
-import {cssProperties, matchValue} from './_css.mjs';
+import {cssProperties, keywordsOf, matchValue} from './_css.mjs';
 
 /** @typedef {import('./_how-commands.mjs').Step} Step */
 
@@ -3914,14 +3915,39 @@ const OS_FONT =
  * @param {string} question
  */
 function systemFamilyIn(c, question) {
-  for (const name of [...SYSTEM_FAMILIES].sort((x, y) => y.length - x.length)) {
-    if (!/^[a-z]/.test(name) || !new RegExp(`\\b${name}\\b`).test(c)) continue;
-    const typed = new RegExp(`\\b${name.replace(/ /g, '\\s+')}\\b`, 'i').exec(
-      question,
-    )?.[0];
-    if (typed && /^[A-Z]/.test(typed)) return typed;
+  const generic = new Set(keywordsOf('font-family'));
+  const words = [...question.matchAll(/[A-Za-z][\w-]*/g)];
+  /** @type {string | null} */
+  let best = null;
+  // The longest run of words, starting with a capital, that names one.
+  for (let i = 0; i < words.length; i++) {
+    if (!/^[A-Z]/.test(words[i][0])) continue;
+    for (let n = Math.min(4, words.length - i); n >= 1; n--) {
+      const run = words.slice(i, i + n);
+      const gap = run.every(
+        (w, k) =>
+          k === 0 ||
+          /^\s+$/.test(
+            question.slice(
+              /** @type {number} */ (run[k - 1].index) + run[k - 1][0].length,
+              w.index,
+            ),
+          ),
+      );
+      if (!gap) continue;
+      const name = run.map(w => w[0]).join(' ');
+      const low = name.toLowerCase();
+      if (
+        generic.has(low) ||
+        !new RegExp(`\\b${low}\\b`).test(c) ||
+        !isSystemFamily(name)
+      )
+        continue;
+      if (!best || name.length > best.length) best = name;
+      break;
+    }
   }
-  return null;
+  return best;
 }
 
 /**

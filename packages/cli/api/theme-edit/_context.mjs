@@ -8,7 +8,6 @@
  * @position api/theme-edit — imported only by the adapter's operation helpers
  */
 
-import {isDesktopFamily} from '../theme/build/font-warning.mjs';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
@@ -18,6 +17,8 @@ import {
   CLOSEST_OPEN_FONT,
   FONT_ROLES,
   OPEN_FONTS,
+  isDesktopFamily,
+  oneSystemOf,
   P,
   SYSTEM_FONTS,
 } from './_tables.mjs';
@@ -221,6 +222,20 @@ export function fontNotes(ctx, data) {
       continue;
     const family = fontOf(s.value).family.replace(/["']/g, '').toLowerCase();
     const near = CLOSEST_OPEN_FONT[family];
+    const named = fontOf(s.value).family.replace(/^["']|["']$/g, '');
+    const system = oneSystemOf(named);
+    const on = s.on ? ` --on ${s.on}` : '';
+    if (system) {
+      // A system font, on one system: the others show the next font.
+      const next =
+        fontOf(s.value).fallbacks.split(',')[0]?.trim() || 'system-ui';
+      notes.push(
+        /^(-apple-system|blinkmacsystemfont)$/.test(family)
+          ? `"${named}" names the macOS interface font, which only macOS has: other systems show the next font in the stack (${next}). The system preset gives each system its own interface font: ${P} set ${data.name} font system${on}`
+          : `"${named}" ships only on ${system}: other systems show the next font in the stack (${next}).${near ? ` The closest open font, which loads everywhere, is ${near}: ${P} set ${data.name} font ${near}${on}` : ''}`,
+      );
+      continue;
+    }
     notes.push(
       `"${fontOf(s.value).family.replace(/^["']|["']$/g, '')}" is not a system font and no package loads it: the app must load it, or it falls back.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
     );

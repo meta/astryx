@@ -1588,7 +1588,7 @@ describe('fonts some systems ship, and part properties by their grammar', () => 
     expect(roboto.data.notes.join(' ')).toContain('@fontsource/roboto');
     const gill = await themeEditSet('p', 'font', 'Gill Sans', {cwd});
     expect(gill.data.notes.join(' ')).toContain(
-      '"Gill Sans" is not a system font',
+      '"Gill Sans" ships only on macOS',
     );
     const pkgDir = path.join(cwd, 'node_modules', '@fontsource', 'gill-sans');
     fs.mkdirSync(pkgDir, {recursive: true});
@@ -1899,9 +1899,13 @@ describe('colors final-3', () => {
   });
 
   it('warns for a font one system ships, refuses var() in the font dial, and reads a preset by its package name', async () => {
-    for (const family of ['Ubuntu', 'Segoe UI', 'Menlo']) {
+    for (const [family, note] of [
+      ['Ubuntu', 'is not a system font'],
+      ['Segoe UI', 'ships only on Windows'],
+      ['Menlo', 'ships only on macOS'],
+    ]) {
       const r = await themeEditSet('p', 'font', family, {cwd});
-      expect(r.data.notes.join(' '), family).toContain('is not a system font');
+      expect(r.data.notes.join(' '), family).toContain(note);
     }
     const preset = await themeEditSet('p', 'font', 'segoe', {cwd});
     expect(preset.data.notes.join(' ')).not.toContain('is not a system font');
@@ -1942,6 +1946,136 @@ describe('colors final-3', () => {
         .replace('palette.accent.light[85]', 'palette.accent.light[5]'),
     );
     await themeEditSet('g4', 'corners', 'pill', {cwd});
+    expect(/--color-accent-muted:\s*([^;]+);/.exec(css())?.[1]).toBe(muted);
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+});
+
+describe('colors10', () => {
+  it('reads CSS math functions by their types', async () => {
+    for (const [prop, value] of [
+      ['opacity', 'pow(0.5, 2)'],
+      ['width', 'hypot(3px, 4px)'],
+      ['transform', 'rotate(atan2(1, 1))'],
+      ['width', 'calc(10px * cos(0deg))'],
+      ['width', 'mod(10px, 3px)'],
+      ['width', 'round(up, 10.5px, 2px)'],
+      ['opacity', 'log(8, 2)'],
+    ]) {
+      await themeEditSet('p', prop, value, {cwd, on: 'card'});
+      await themeEditUndo('p', {cwd, thing: prop, on: 'card'});
+    }
+    for (const [prop, value] of [
+      ['width', 'sqrt(4px)'],
+      ['width', 'pow(2px, 2)'],
+      ['width', 'mod(10px, 3s)'],
+      ['opacity', 'sin(1px)'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', prop, value, {cwd, on: 'card'})))
+          .code,
+        `${prop} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+  });
+
+  it('leaves the theme build its own font list, and names commands for a font step', async () => {
+    const {collectUnloadedFonts} =
+      await import('../theme/build/font-warning.mjs');
+    // As the build has always read it: Ubuntu warns, Roboto does not.
+    expect(
+      collectUnloadedFonts({
+        tokens: {'--font-family-body': 'Ubuntu, Roboto, sans-serif'},
+      }),
+    ).toEqual(['Ubuntu']);
+    const step = await refusal(() => themeEditSet('p', 'font', 'more', {cwd}));
+    expect(step.code).toBe('ERR_THEME_BAD_VALUE');
+    expect(step.run.length).toBeGreaterThan(0);
+  });
+});
+
+describe('colors10, final-4', () => {
+  it('types the math inside colors, and refuses a mix of nothing', async () => {
+    for (const [thing, value, on] of [
+      ['--color-accent', 'rgb(calc(1px banana) 0 0)'],
+      ['--color-accent', 'rgb(calc(1px) 0 0)'],
+      ['--color-accent', 'color-mix(in oklch, red 0%, white 0%)'],
+      ['color', 'hsl(calc(1px) 50% 50%)', 'button'],
+    ])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', thing, value, {cwd, ...(on ? {on} : {})}),
+          )
+        ).code,
+        `${thing} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    for (const value of [
+      'rgb(calc(100) 0 0)',
+      'rgb(var(--r, 0) 0 0)',
+      'oklch(from var(--color-accent) l c h / 0.5)',
+    ]) {
+      await themeEditSet('p', '--color-text-primary', value, {cwd});
+      await themeEditUndo('p', {cwd, thing: '--color-text-primary'});
+    }
+  });
+
+  it('refuses a percentage on a token only widths and offsets read, and takes the math CSS takes', async () => {
+    for (const [thing, value] of [
+      ['--border-width', '10%'],
+      ['--focus-outline-width', '10%'],
+      ['--focus-outline-offset', 'calc(2px + 5%)'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', thing, value, {cwd}))).code,
+        `${thing} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    for (const [thing, value] of [
+      ['--radius-element', '10%'],
+      ['--radius-element', 'abs(-4px)'],
+      ['--radius-element', 'clamp(none, 4px, 8px)'],
+      ['--radius-element', 'calc(sin(30deg) * 10px)'],
+      ['--radius-element', 'round(up, 5.4px, 2px)'],
+      ['--text-body-weight', 'calc(400 + 100)'],
+    ]) {
+      await themeEditSet('p', thing, value, {cwd});
+      await themeEditUndo('p', {cwd, thing});
+    }
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('p', 'grid-template-columns', 'repeat(2, calc(1fr))', {
+            cwd,
+            on: 'card',
+          }),
+        )
+      ).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+  });
+
+  it('says on which system a one-system font ships', async () => {
+    const segoe = await themeEditSet('p', 'font', 'Segoe UI', {cwd});
+    expect(segoe.data.notes.join(' ')).toContain('ships only on Windows');
+    expect(segoe.data.notes.join(' ')).not.toContain('must load');
+    const apple = await themeEditSet('p', 'font', '-apple-system', {cwd});
+    expect(apple.data.notes.join(' ')).toContain('font system');
+    await themeEditUndo('p', {cwd, thing: 'font'});
+  });
+
+  it('reads the hand-edit seal through CRLF line endings', async () => {
+    await themeEditNew('crlf', {cwd});
+    await themeEditSet('crlf', 'accent', '#7c3aed', {cwd});
+    const dir = path.join(cwd, 'themes', 'crlf');
+    const ts = path.join(dir, 'crlf.settings.ts');
+    const css = () => fs.readFileSync(path.join(dir, 'crlf.css'), 'utf8');
+    const muted = /--color-accent-muted:\s*([^;]+);/.exec(css())?.[1];
+    fs.writeFileSync(
+      ts,
+      fs
+        .readFileSync(ts, 'utf8')
+        .replace(/\n/g, '\r\n')
+        .replace('palette.accent.light[85]', 'palette.accent.light[5]'),
+    );
+    await themeEditSet('crlf', 'corners', 'pill', {cwd});
     expect(/--color-accent-muted:\s*([^;]+);/.exec(css())?.[1]).toBe(muted);
     fs.rmSync(dir, {recursive: true, force: true});
   });

@@ -140,7 +140,8 @@ function matchWith(value, match) {
   const tryOne = v => {
     try {
       const ast = parse(v, {context: 'value'});
-      if (match(lexer, ast).error) return null;
+      // Each math function is matched as a plain value of its type, so
+      // math css-tree's grammar does not know (pow(), sqrt()) is read too.
       const plain = mathAsValues(ast);
       return plain?.every(
         x => !match(lexer, parse(x, {context: 'value'})).error,
@@ -221,6 +222,18 @@ const MATH = new Set([
   'rem',
   'abs',
   'sign',
+  'pow',
+  'sqrt',
+  'hypot',
+  'log',
+  'exp',
+  'sin',
+  'cos',
+  'tan',
+  'asin',
+  'acos',
+  'atan',
+  'atan2',
 ]);
 
 /** The CSS type of each unit a math function may hold. */
@@ -282,7 +295,6 @@ const UNIT_TYPES = /** @type {Record<string, string>} */ (
       angle: ['deg', 'grad', 'rad', 'turn'],
       frequency: ['hz', 'khz'],
       resolution: ['dpi', 'dpcm', 'dppx', 'x'],
-      flex: ['fr'],
     }).flatMap(([type, units]) => units.map(u => [u, type])),
   )
 );
@@ -295,7 +307,6 @@ const TYPE_SAMPLES = /** @type {Record<string, string>} */ ({
   angle: '1deg',
   frequency: '1hz',
   resolution: '1dppx',
-  flex: '1fr',
 });
 
 /**
@@ -336,6 +347,8 @@ function mathType(fn) {
       const w = node.name.toLowerCase();
       if (['e', 'pi', 'infinity', '-infinity', 'nan'].includes(w))
         return 'number';
+      // clamp() takes none for a bound it does not set.
+      if (w === 'none' && fn.name.toLowerCase() === 'clamp') return 'any';
       return null;
     }
     if (node.type === 'Function') {
@@ -405,8 +418,46 @@ function mathType(fn) {
     args.shift();
   const types = args.map(expression);
   if (types.some(t => t == null)) return null;
-  const joined = types.reduce((a, b) => addTypes(a, b));
-  return name === 'sign' ? (joined ? 'number' : null) : joined;
+  /** @param {string | null} t */
+  const isNumber = t => t === 'number' || t === 'any';
+  // What each function takes and gives, as CSS Values 4 types them.
+  switch (name) {
+    case 'pow':
+      return types.length === 2 && types.every(isNumber) ? 'number' : null;
+    case 'sqrt':
+    case 'exp':
+      return types.length === 1 && isNumber(types[0]) ? 'number' : null;
+    case 'log':
+      return types.length <= 2 && types.every(isNumber) ? 'number' : null;
+    case 'sin':
+    case 'cos':
+    case 'tan':
+      return types.length === 1 && (isNumber(types[0]) || types[0] === 'angle')
+        ? 'number'
+        : null;
+    case 'asin':
+    case 'acos':
+    case 'atan':
+      return types.length === 1 && isNumber(types[0]) ? 'angle' : null;
+    case 'atan2':
+      return types.length === 2 && addTypes(types[0], types[1])
+        ? 'angle'
+        : null;
+    case 'sign':
+      return types.length === 1 ? 'number' : null;
+    case 'abs':
+    case 'calc':
+      return types.length === 1 ? types[0] : null;
+    case 'mod':
+    case 'rem':
+      return types.length === 2 ? addTypes(types[0], types[1]) : null;
+    case 'round':
+      return types.length <= 2 ? types.reduce((a, b) => addTypes(a, b)) : null;
+    default:
+      // min(), max(), clamp() and hypot(): arguments of one type.
+      if (name === 'clamp' && types.length !== 3) return null;
+      return types.reduce((a, b) => addTypes(a, b));
+  }
 }
 
 /**
@@ -442,8 +493,9 @@ function mathAsValues(ast) {
   if (!sound || found.some(f => f.samples.some(x => !x))) return null;
   /** @type {string[]} */
   let out = [t.generate(ast)];
+  // Spaced, so a value that follows with no space stays its own token.
   for (const f of found)
-    out = out.flatMap(v => f.samples.map(x => v.replace(f.text, x)));
+    out = out.flatMap(v => f.samples.map(x => v.replace(f.text, ` ${x} `)));
   return out.slice(0, 16);
 }
 
@@ -531,4 +583,42 @@ export function grammarText(syntax) {
   const text = csstree().definitionSyntax.generate(syntax);
   if (text.length <= 120) return text;
   return `${text.slice(0, 120).replace(/\s*\|[^|]*$/, '')} | …`;
+}
+
+/** The math functions, by name, for a check of whether a value holds one. */
+export const MATH_FUNCTION = new RegExp(`\\b(${[...MATH].join('|')})\\(`, 'i');
+
+/** @type {Map<string, boolean>} */
+const percentCache = new Map();
+/**
+ * Whether a property's grammar takes a percentage anywhere, through the
+ * types it names (padding does; border-width and outline-offset do not).
+ * @param {string} prop
+ */
+export function takesPercentage(prop) {
+  const known = percentCache.get(prop);
+  if (known != null) return known;
+  const t = csstree();
+  const seen = new Set();
+  let found = false;
+  /** @param {any} syntax */
+  const walk = syntax => {
+    if (!syntax || found) return;
+    t.definitionSyntax.walk(syntax, (/** @type {any} */ n) => {
+      if (found) return;
+      if (n.type === 'Type') {
+        if (/percentage/.test(n.name)) found = true;
+        else if (!seen.has(n.name)) {
+          seen.add(n.name);
+          walk(t.lexer.types[n.name]?.syntax);
+        }
+      } else if (n.type === 'Property' && !seen.has(`'${n.name}'`)) {
+        seen.add(`'${n.name}'`);
+        walk(t.lexer.properties[n.name]?.syntax);
+      }
+    });
+  };
+  walk(propertyGrammar(prop));
+  percentCache.set(prop, found);
+  return found;
 }

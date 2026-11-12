@@ -14,6 +14,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {baseThemeFile} from './_project.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
+  MATH_FUNCTION,
   belowRange,
   cssProperties,
   grammarText,
@@ -23,6 +24,7 @@ import {
   matchValue,
   numbersIn,
   propertyGrammar,
+  takesPercentage,
 } from './_css.mjs';
 import {
   AUTO_SPREAD,
@@ -40,6 +42,7 @@ import {
   LIKE,
   HOW,
   OPEN_FONTS,
+  CSS_WIDE,
   CSS_WIDE_KEYWORDS,
   P,
   SPACING,
@@ -244,6 +247,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
         TOKENS,
         ctx.C.typeOf,
         slug,
+        ctx.C.propsReading(s.thing),
       );
       checkCycle(s.thing, s.value, TOKENS, data);
     } catch (e) {
@@ -296,8 +300,17 @@ function groupOfPropType(prop) {
  * @param {Record<string, unknown>} TOKENS
  * @param {(token: string) => string} typeOf
  * @param {string} slug
+ * @param {string[]} [readers] the CSS properties that read the token
  */
-function checkTypedValue(type, value, name, TOKENS, typeOf, slug) {
+function checkTypedValue(
+  type,
+  value,
+  name,
+  TOKENS,
+  typeOf,
+  slug,
+  readers = [],
+) {
   /** @param {string} what @param {string} example */
   const bad = (what, example) =>
     refuse(
@@ -321,7 +334,7 @@ function checkTypedValue(type, value, name, TOKENS, typeOf, slug) {
   const keyword = value
     .split(',')
     .map(x => x.trim().toLowerCase())
-    .find(x => CSS_WIDE_KEYWORDS.includes(x));
+    .find(x => CSS_WIDE.includes(x));
   if (keyword)
     refuse(
       E.ERR_THEME_BAD_VALUE,
@@ -351,6 +364,16 @@ function checkTypedValue(type, value, name, TOKENS, typeOf, slug) {
   }
   if (type === 'color' && !isFixedColor(value)) bad('a color', '#1f2937');
   if (type === 'size' && !isSize(value, name)) bad('a size', '6px');
+  // A percentage reaches every property that reads the token; one that
+  // takes none (a border or outline width, an outline offset) drops it.
+  if (type === 'size' && /%/.test(value.replace(/var\([^)]*\)/g, ''))) {
+    const strict = readers.filter(p => !takesPercentage(p));
+    if (strict.length)
+      bad(
+        `a length with no percentage (${strict.slice(0, 3).join(', ')} read${strict.length === 1 ? 's' : ''} it, and take${strict.length === 1 ? 's' : ''} none)`,
+        '1px',
+      );
+  }
   if (type === 'number' && !isNumber(value, name))
     bad('a number', /weight/.test(name) ? '600' : '1.4');
   if (type === 'time' && !isTime(value)) bad('a time up to 60s', '150ms');
@@ -377,10 +400,14 @@ function checkTypedValue(type, value, name, TOKENS, typeOf, slug) {
  */
 function isFixedColor(value) {
   const v = value.trim().toLowerCase();
-  if (['inherit', 'initial', 'unset', 'revert', 'revert-layer'].includes(v))
-    return false;
+  if (CSS_WIDE.includes(v)) return false;
   if (/^var\(/.test(v)) return true;
   if (SYSTEM_COLORS.includes(v)) return true;
+  // Percentages that add up to 0 leave color-mix() no color.
+  const zeroMix = (/** @type {string[]} */ colors) => {
+    const pcts = colors.map(c => /\s(\d*\.?\d+)%$/.exec(c)?.[1]);
+    return pcts.every(p => p != null) && pcts.every(p => Number(p) === 0);
+  };
   const inner = (/** @type {string} */ fn) =>
     splitTop(v.slice(fn.length + 1, -1), ',').map(x => x.trim());
   // Each mode's value, and each mixed color, must be a color itself.
@@ -393,12 +420,17 @@ function isFixedColor(value) {
     return (
       /^in\s+[a-z-]+/.test(space ?? '') &&
       colors.length === 2 &&
+      !zeroMix(colors) &&
       colors.every(c => isFixedColor(c.replace(/\s+\d*\.?\d+%$/, '')))
     );
   }
   if (!isColorValue(v)) return false;
-  // A relative color or channels from variables are read by the browser.
-  if (/\bfrom\b|var\(|calc\(/.test(v)) return true;
+  // A relative color is read by the browser (the grammar the editor reads
+  // does not know it); channels with math or variables must still read as
+  // a color, typed as the browser types them.
+  if (/\bfrom\b/.test(v)) return true;
+  if (MATH_FUNCTION.test(v) || /\b(var|env)\(/.test(v))
+    return matchType('color', v) != null;
   if (/^(rgb|rgba|hsl|hsla|hwb|lab|lch|oklab|oklch)\(/.test(v))
     return parseColor(v) != null;
   if (/^color\(/.test(v))
@@ -1481,7 +1513,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         refuse(
           E.ERR_THEME_BAD_VALUE,
           'font takes a preset or a family name, not a step.',
-          {fix: `the values are ${DIALS.font.values}`},
+          {
+            fix: `the values are ${DIALS.font.values}`,
+            run: [`${P} set ${slug} font inter`, `${HOW} font`],
+          },
         );
       // A family list: names, quoted or not, split by commas; nothing that
       // could end the CSS declaration or the preview's style block. A
@@ -1655,7 +1690,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         `"more"/"less" work only on dials (${Object.keys(DIALS).join(', ')}). Give ${thing} a ${type} value.`,
         {run: [setLine(slug, thing, exampleOf(type, thing), s)]},
       );
-    checkTypedValue(type, v, thing, TOKENS, C.typeOf, slug);
+    checkTypedValue(
+      type,
+      v,
+      thing,
+      TOKENS,
+      C.typeOf,
+      slug,
+      C.propsReading(thing),
+    );
     checkCycle(thing, v, TOKENS, data);
     // With no part data, what reads the token is unknown: save, unchecked.
     if (ctx.unchecked) return s;
@@ -1880,7 +1923,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             : [`${HOW} ${prop}`],
         },
       );
-    if (COLOR_PROPS.test(prop) && !isColorValue(v)) {
+    if (
+      COLOR_PROPS.test(prop) &&
+      !CSS_WIDE.includes(v.trim().toLowerCase()) &&
+      (!isColorValue(v) || !isFixedColor(v))
+    ) {
       refuse(
         E.ERR_THEME_BAD_VALUE,
         `${prop} takes a color; "${v}" is not one.${/gradient/.test(v) ? ' Gradients go in background.' : ''}`,

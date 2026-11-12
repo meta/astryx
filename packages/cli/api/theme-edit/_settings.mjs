@@ -811,6 +811,8 @@ function sealModule(text) {
  * @returns {boolean | null}
  */
 export function moduleUnedited(text) {
+  // A checkout that writes CRLF line endings changes no line.
+  text = text.replace(/\r\n/g, '\n');
   const seal = SEAL.exec(text);
   if (!seal) return null;
   return (

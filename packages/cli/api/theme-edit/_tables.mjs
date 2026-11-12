@@ -10,10 +10,7 @@
  */
 
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
-import {
-  CSS_WIDE_KEYWORDS as CSS_WIDE,
-  isDesktopFamily,
-} from '../theme/build/font-warning.mjs';
+import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
 
 /** The command prefix every suggested command starts with. */
 export const P = 'astryx experimental theme editor';
@@ -129,8 +126,94 @@ export const FONTS = {
   rounded: ['Nunito', '"Varela Round", system-ui, sans-serif'],
   comic: ['Comic Sans MS', '"Comic Neue", cursive'],
 };
+/** The CSS-wide keywords: valid in any declaration, never a value of their own. */
+export const CSS_WIDE = [
+  'inherit',
+  'initial',
+  'unset',
+  'revert',
+  'revert-layer',
+];
+
 /** CSS-wide keywords, and `default`, which font-family reserves: never a family, and invalid inside a list. */
 export const CSS_WIDE_KEYWORDS = [...CSS_WIDE, 'default'];
+
+/**
+ * Whether a family needs no font file somewhere: a CSS generic family, or a
+ * family on the theme build's own list of system fonts (the one list; the
+ * build's font warning reads it).
+ * @param {string} family without quotes
+ */
+export const isSystemFamily = family =>
+  family.trim() !== '' &&
+  collectUnloadedFonts({
+    tokens: {'--font-family-body': JSON.stringify(family.trim())},
+  }).length === 0;
+
+/**
+ * The families on that list that only one system ships, with that system:
+ * fallback stacks name them on purpose, but as a theme's own font they do
+ * not load everywhere.
+ */
+const ONE_SYSTEM_FAMILIES = new Map(
+  Object.entries({
+    macOS: [
+      '-apple-system',
+      'blinkmacsystemfont',
+      'helvetica neue',
+      'sf mono',
+      'sf pro',
+      'sf pro text',
+      'sf pro display',
+      'monaco',
+      'menlo',
+      'palatino',
+      'lucida grande',
+      'gill sans',
+      'snell roundhand',
+    ],
+    Windows: [
+      'segoe ui',
+      'segoe ui emoji',
+      'segoe ui symbol',
+      'consolas',
+      'cambria',
+      'calibri',
+      'lucida console',
+      'brush script mt',
+      'old english text mt',
+    ],
+    'Android and ChromeOS': ['roboto'],
+    Linux: [
+      'liberation mono',
+      'liberation sans',
+      'liberation serif',
+      'dejavu sans',
+      'dejavu sans mono',
+    ],
+  }).flatMap(([system, names]) => names.map(n => [n, system])),
+);
+
+/** @param {string} family */
+const familyKey = family => family.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
+ * The one system that ships a family on the theme build's list, or null for
+ * a family every desktop has (or none does).
+ * @param {string} family without quotes
+ */
+export const oneSystemOf = family =>
+  isSystemFamily(family)
+    ? (ONE_SYSTEM_FAMILIES.get(familyKey(family)) ?? null)
+    : null;
+
+/**
+ * Whether a family loads with no font file on every usual desktop: a CSS
+ * generic, or a system family macOS and Windows both ship.
+ * @param {string} family without quotes
+ */
+export const isDesktopFamily = family =>
+  isSystemFamily(family) && !ONE_SYSTEM_FAMILIES.has(familyKey(family));
 
 /**
  * Presets that show a font every desktop has, so no font file is needed:

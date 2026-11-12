@@ -8,8 +8,8 @@
  * @position api/theme-edit — pure helpers
  */
 
-import {CSS_WIDE_KEYWORDS} from '../theme/build/font-warning.mjs';
-import {matchType} from './_css.mjs';
+import {CSS_WIDE} from './_tables.mjs';
+import {MATH_FUNCTION, matchType} from './_css.mjs';
 import {luminance, oklabToLinearRgb} from '../theme/palette/generate/color.mjs';
 
 /** @typedef {[number, number, number]} Rgb */
@@ -170,7 +170,7 @@ const NAMED = /** @type {Record<string, string>} */ ({
 export const COLOR_NAMES = Object.keys(NAMED);
 
 /** Color keywords that are valid colors but have no fixed value. */
-const KEYWORDS = ['transparent', 'currentcolor', ...CSS_WIDE_KEYWORDS];
+const KEYWORDS = ['transparent', 'currentcolor', ...CSS_WIDE];
 
 /** CSS system colors: valid, but they follow the user's device. */
 const SYSTEM = [
@@ -649,10 +649,7 @@ export const isSize = (v, name = '') => {
     );
   if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
   if (/^env\([a-z-]+(,.*)?\)$/i.test(s)) return true;
-  return (
-    /^(calc|min|max|clamp)\(/i.test(s) &&
-    matchType('length-percentage', s) != null
-  );
+  return MATH_FUNCTION.test(s) && matchType('length-percentage', s) != null;
 };
 
 /**
@@ -668,14 +665,15 @@ export const isNumber = (v, name = '') => {
   if (/weight/.test(name))
     return (
       /^(normal|bold|bolder|lighter)$/.test(s) ||
-      (/^\d+(\.\d+)?$/.test(s) && Number(s) >= 1 && Number(s) <= 1000)
+      (/^\d+(\.\d+)?$/.test(s) && Number(s) >= 1 && Number(s) <= 1000) ||
+      (MATH_FUNCTION.test(s) && matchType('number', s) != null)
     );
   if (/leading|line-height/.test(name))
     return (
       s === 'normal' ||
       (/^\d*\.?\d+(px|rem|em|%)?$/.test(s) && Number.parseFloat(s) >= 0) ||
-      (/^calc\(/i.test(s) && matchType('length-percentage', s) != null) ||
-      (/^calc\(/i.test(s) && matchType('number', s) != null)
+      (MATH_FUNCTION.test(s) && matchType('length-percentage', s) != null) ||
+      (MATH_FUNCTION.test(s) && matchType('number', s) != null)
     );
   return /^-?\d*\.?\d+$/.test(s);
 };

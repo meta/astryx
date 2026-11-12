@@ -27,18 +27,9 @@
  */
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
-// CSS-wide keywords: valid in any declaration, never a family name.
-export const CSS_WIDE_KEYWORDS = new Set([
-  'inherit',
-  'initial',
-  'unset',
-  'revert',
-  'revert-layer',
-]);
-
 // font-family values that never need loading: CSS generic families, the ui-*
 // system keywords, and CSS-wide keywords that can appear in a token value.
-export const GENERIC_KEYWORDS = new Set([
+const GENERIC_KEYWORDS = new Set([
   'serif',
   'sans-serif',
   'monospace',
@@ -52,16 +43,35 @@ export const GENERIC_KEYWORDS = new Set([
   'ui-sans-serif',
   'ui-monospace',
   'ui-rounded',
-  ...CSS_WIDE_KEYWORDS,
+  'inherit',
+  'initial',
+  'unset',
+  'revert',
+  'revert-layer',
 ]);
 
-// Families macOS and Windows both ship (and Linux maps to a metric twin),
-// so a theme may name one as its font with no font file: the classic
-// web-safe set.
-const DESKTOP_FAMILIES = new Set([
+// Families a clean machine already has: the members of core's own default
+// stacks (tokens.stylex.ts typographyDefaults) plus the classic web-safe
+// macOS/Windows set. Deliberately short — an unknown family warns, and for a
+// preinstalled rarity that is a one-line false alarm, not a broken theme.
+const SYSTEM_FAMILIES = new Set([
+  '-apple-system',
+  'blinkmacsystemfont',
+  'segoe ui',
+  'segoe ui emoji',
+  'segoe ui symbol',
+  'roboto',
   'helvetica',
+  'helvetica neue',
   'arial',
   'arial black',
+  'sf mono',
+  'sf pro',
+  'sf pro text',
+  'sf pro display',
+  'monaco',
+  'consolas',
+  'menlo',
   'courier',
   'courier new',
   'georgia',
@@ -71,81 +81,23 @@ const DESKTOP_FAMILIES = new Set([
   'tahoma',
   'trebuchet ms',
   'impact',
-  'comic sans ms',
-]);
-
-// Families only some systems ship (one desktop OS, Office, Android, Linux),
-// which fallback stacks name on purpose: core's own default stacks
-// (tokens.stylex.ts typographyDefaults name -apple-system, Segoe UI and
-// Roboto) and the shipped themes' (neutral's code stack ends in Liberation
-// Mono). In a stack they need no warning; as a theme's own font they do not
-// load everywhere.
-const SOME_SYSTEMS_FAMILIES = new Set([
-  // macOS
-  '-apple-system',
-  'blinkmacsystemfont',
-  'helvetica neue',
-  'sf mono',
-  'sf pro',
-  'sf pro text',
-  'sf pro display',
-  'monaco',
-  'menlo',
   'palatino',
-  'lucida grande',
-  'gill sans',
-  'snell roundhand',
-  // Windows and Office
-  'segoe ui',
-  'segoe ui emoji',
-  'segoe ui symbol',
-  'consolas',
-  'garamond',
   'cambria',
   'calibri',
+  'lucida grande',
   'lucida console',
+  'gill sans',
   'brush script mt',
+  'snell roundhand',
   'old english text mt',
-  // Linux and Android
-  'liberation sans',
-  'dejavu sans',
-  'noto sans',
-  'ubuntu',
-  'cantarell',
-  'roboto',
+  // Linux staples — the shipped themes' fallback stacks name these on
+  // purpose (e.g. neutral's code stack ends in Liberation Mono).
   'liberation mono',
+  'liberation sans',
   'liberation serif',
+  'dejavu sans',
   'dejavu sans mono',
 ]);
-
-// Families a clean machine may already have. Deliberately short — an
-// unknown family warns, and for a preinstalled rarity that is a one-line
-// false alarm, not a broken theme.
-export const SYSTEM_FAMILIES = new Set([
-  ...DESKTOP_FAMILIES,
-  ...SOME_SYSTEMS_FAMILIES,
-]);
-
-/** @param {string} family */
-const familyKey = family => family.trim().replace(/\s+/g, ' ').toLowerCase();
-
-/**
- * Whether a family needs no font file somewhere: a CSS generic or keyword,
- * or a family some clean machine already has. Case does not matter.
- * @param {string} family without quotes
- */
-export const isSystemFamily = family =>
-  GENERIC_KEYWORDS.has(familyKey(family)) ||
-  SYSTEM_FAMILIES.has(familyKey(family));
-
-/**
- * Whether a family loads with no font file on every usual desktop: a CSS
- * generic or keyword, or a family macOS, Windows and common Linux ship.
- * @param {string} family without quotes
- */
-export const isDesktopFamily = family =>
-  GENERIC_KEYWORDS.has(familyKey(family)) ||
-  DESKTOP_FAMILIES.has(familyKey(family));
 
 /**
  * Split a CSS font-family value into clean family names. Complete `var()`
