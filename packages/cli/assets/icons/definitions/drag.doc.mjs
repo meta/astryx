@@ -6,4 +6,5 @@ export default {
   name: 'drag',
   description: 'A handle to drag an item and reorder it.',
   words: ['grip', 'handle', 'reorder', 'move'],
+  builtIn: true,
 };
