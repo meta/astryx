@@ -11,6 +11,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
 import {
   AUTO_SPREAD,
@@ -18,6 +19,8 @@ import {
   DIALS,
   FAMILIES,
   FONT_ROLES,
+  HEADING_TRACKING,
+  HEADING_WEIGHTS,
   KEY_TOKENS,
   LIKE,
   P,
@@ -199,6 +202,11 @@ export async function themeEditNew(name, options = {}) {
   // A --like in another case is the built-in theme it names.
   // A --like that names no built-in theme is the nearest one, or none: a
   // corrected command never repeats a --like that is refused below.
+  // A guess (the nearest base to a word that names none) is only a base the
+  // project has installed: another would be refused in turn. A base named
+  // in other letters is the one meant, installed or not (its refusal then
+  // offers the install, or the same new on no base).
+  const have = LIKE.filter(b => baseInstalledHere(cwd, b));
   const likeFixed =
     like == null
       ? options.like === 'none'
@@ -206,7 +214,7 @@ export async function themeEditNew(name, options = {}) {
         : undefined
       : LIKE.includes(String(like).toLowerCase())
         ? String(like).toLowerCase()
-        : (nearest(String(like).toLowerCase(), LIKE)[0] ?? null);
+        : (nearest(String(like).toLowerCase(), have)[0] ?? null);
   const again = (
     /** @type {string} */ newName,
     /** @type {string | null | undefined} */ likeValue = likeFixed,
@@ -233,8 +241,8 @@ export async function themeEditNew(name, options = {}) {
             fs.existsSync(themeFiles(cwd, `my-${name}`).dir)
               ? freeThemeName(cwd, `my-${name}`)
               : `my-${name}`,
-            // Built on the theme named, unless another base (or none) was
-            // given.
+            // Built on the theme named when it is installed, unless another
+            // base (or none) was given.
             likeFixed ?? name,
           ),
         ],
@@ -295,27 +303,28 @@ export async function themeEditNew(name, options = {}) {
         didYouMean: nearest(String(like).toLowerCase(), LIKE),
         // The built-in theme it names in another case, or the nearest one,
         // else none.
-        run: [
-          again(
-            name,
-            LIKE.includes(String(like).toLowerCase())
-              ? String(like).toLowerCase()
-              : (nearest(String(like).toLowerCase(), LIKE)[0] ?? null),
-          ),
-        ],
+        run: [again(name, likeFixed ?? null)],
       },
     );
   const ctx = await context(cwd);
   /** @type {import('./_settings.mjs').ThemeData} */
   const data = {name, ...(like ? {like} : {}), mode: 'both', settings: []};
-  /** @type {import('./_settings.mjs').Ctx} */ (ctx).base = await baseResolved(
-    ctx.project,
-    data.like,
-  );
+  try {
+    /** @type {import('./_settings.mjs').Ctx} */ (ctx).base =
+      await baseResolved(ctx.project, data.like);
+  } catch (e) {
+    // A base that is not installed: install it, or the same new on no base.
+    if (e instanceof AstryxError && e.code === E.ERR_UNKNOWN_THEME)
+      e.suggestions = [
+        ...(e.suggestions ?? []),
+        {name: again(name, null), reason: 'build on no theme'},
+      ];
+    throw e;
+  }
   // Every check comes before the first change to the folder: the settings,
   // and a source of the user's own kept from before (it must still extend
   // the settings, or the build fails after the folder was cleared).
-  applyNewSettings(ctx, name, data, settings, png);
+  applyNewSettings(ctx, name, data, settings, png, likeFixed ?? undefined);
   if (left?.keep.some(p => path.basename(p) === `${name}.theme.ts`))
     refuseThemeSource(cwd, name);
   /** @type {string[]} */
@@ -462,8 +471,16 @@ export async function themeEditNew(name, options = {}) {
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {Record<string, string | string[] | undefined>} settings
  * @param {boolean} [png] kept in a corrected `new` a refusal suggests
+ * @param {string} [likeFlag] the --like a corrected `new` keeps (`none` too)
  */
-function applyNewSettings(ctx, slug, data, settings, png = false) {
+function applyNewSettings(
+  ctx,
+  slug,
+  data,
+  settings,
+  png = false,
+  likeFlag = data.like,
+) {
   const given = Object.entries(settings).filter(([, v]) => v != null);
   for (const [thing] of given)
     if (!DIALS[thing] || thing === 'base')
@@ -493,7 +510,7 @@ function applyNewSettings(ctx, slug, data, settings, png = false) {
       try {
         s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
       } catch (e) {
-        throw asNewRefusal(e, slug, settings, data.like, png);
+        throw asNewRefusal(e, slug, settings, likeFlag, png, {thing, index});
       }
       if (thing === 'mode')
         data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (
@@ -506,12 +523,12 @@ function applyNewSettings(ctx, slug, data, settings, png = false) {
             E.ERR_INVALID_ARGUMENT,
             `--${thing} was given two values for the same thing (${data.settings[same].value}, ${s.value}); give one.`,
             {
-              // Every other option given stays, and every other value of
-              // this one: only the later value for the same thing goes.
+              // Every other option given stays, and the first value on each
+              // axis: every later value for an axis already given goes.
               run: [
                 `${P} new ${slug}${newFlags(
-                  data.like,
-                  {...settings, [thing]: values.filter((_, i) => i !== index)},
+                  likeFlag,
+                  {...settings, [thing]: firstPerAxis(values)},
                   png,
                 )}`,
               ],
@@ -561,29 +578,77 @@ function newFlags(like, settings, png) {
  * @param {Record<string, string | string[] | undefined>} settings
  * @param {string} [like] the --like given, kept in a corrected command
  * @param {boolean} [png] --png, kept in a corrected command
+ * @param {{thing: string, index: number} | null} [at] the value refused
  */
-function asNewRefusal(e, slug, settings, like, png = false) {
+function asNewRefusal(e, slug, settings, like, png = false, at = null) {
   if (!(e instanceof AstryxError)) return e;
-  // --png goes last, after the corrected setting.
-  const flags = newFlagList(like, settings);
   const setPrefix = `${P} set ${slug} `;
   e.suggestions = (e.suggestions ?? []).map(s => {
     if (s.name === `${P} set --help`) return {...s, name: `${P} new --help`};
     if (!s.name.startsWith(setPrefix)) return s;
     const [thing, ...rest] = s.name.slice(setPrefix.length).split(' ');
     if (thing.startsWith('--') || !DIALS[thing]) return s;
-    const keep = flags.filter(f => !f.startsWith(`--${thing} `));
+    const fixed = unquoteWord(rest.join(' '));
+    // Only the refused value changes: a dial given several values
+    // (--headings tight --headings BOLD) keeps the others, in order.
+    const given = settings[thing];
+    const values = Array.isArray(given) ? [...given] : null;
+    const next =
+      values && at && at.thing === thing
+        ? firstPerAxis(values.map((v, i) => (i === at.index ? fixed : v)))
+        : fixed;
     return {
       ...s,
-      name: [
-        `${P} new ${slug}`,
-        ...keep,
-        `--${thing} ${rest.join(' ')}`,
-        ...(png ? ['--png'] : []),
-      ].join(' '),
+      name: `${P} new ${slug}${newFlags(like, {...settings, [thing]: next}, png)}`,
     };
   });
+  // A refused value with nothing to put in its place: the same new
+  // without it, every other option kept.
+  if (at && !e.suggestions.some(x => x.name.startsWith(`${P} new `))) {
+    const given = settings[at.thing];
+    const rest = Array.isArray(given)
+      ? given.filter((_, i) => i !== at.index)
+      : undefined;
+    e.suggestions.push({
+      name: `${P} new ${slug}${newFlags(like, {...settings, [at.thing]: rest?.length ? rest : undefined}, png)}`,
+      reason: `without --${at.thing} ${quoteCommandArgument(String(Array.isArray(given) ? given[at.index] : given))}`,
+    });
+  }
   return e;
+}
+
+/**
+ * Headings values with every later value for an axis already given left
+ * out (the first weight and the first tracking stay); a word of neither
+ * axis stays, for its own refusal.
+ * @param {string[]} values
+ * @returns {string[]}
+ */
+function firstPerAxis(values) {
+  const seen = new Set();
+  return values.filter(v => {
+    const w = String(v).trim().toLowerCase();
+    const axis =
+      HEADING_WEIGHTS[w] !== undefined
+        ? 'weight'
+        : HEADING_TRACKING[w] !== undefined
+          ? 'tracking'
+          : null;
+    if (!axis) return true;
+    if (seen.has(axis)) return false;
+    seen.add(axis);
+    return true;
+  });
+}
+
+/**
+ * A word as a suggested command writes it, without the quotes
+ * quoteCommandArgument adds.
+ * @param {string} word
+ */
+function unquoteWord(word) {
+  const m = /^'(.*)'$/s.exec(word);
+  return m ? m[1].replace(/'\\''/g, "'") : word;
 }
 
 /**
@@ -2118,4 +2183,20 @@ export async function themeEditUndo(theme, options = {}) {
 export async function editorStale(cwd, slug) {
   const data = loadTheme(cwd, slug);
   return staleBuild(cwd, slug, data) || null;
+}
+
+/**
+ * Whether the built-in theme package for a base resolves from the project.
+ * @param {string} cwd
+ * @param {string} like
+ */
+function baseInstalledHere(cwd, like) {
+  try {
+    createRequire(path.join(cwd, 'package.json')).resolve(
+      `@astryxdesign/theme-${like}/built`,
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }

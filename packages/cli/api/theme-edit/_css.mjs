@@ -691,7 +691,9 @@ const FONT_TYPE_LONGHAND = /** @type {Record<string, string>} */ ({
 export function fontShorthandParts(value) {
   const {lexer, parse, generate} = csstree();
   // Words that are each one longhand's keyword, size or weight (`bold`,
-  // `italic bold`, `1rem bold`) are those longhands, whatever their order.
+  // `italic bold`, `bold 1rem`) are those longhands, in any order before the
+  // size; after the size the rest is the family (`1rem bold` names a family
+  // called bold), as CSS reads it.
   const LONGHANDS = [
     'font-weight',
     'font-style',

@@ -191,11 +191,12 @@ describe('corrected new commands keep every option', () => {
         '--mode',
         'dark-only',
       ],
-      / new y --like neutral /,
+      // The nearest base is guessed only among installed ones (none here).
+      / new y (?!.*--like)/,
     ],
     [
       ['new', 'z', '--accent', '#ggg', '--mode', 'light-only', '--png'],
-      / new z .*--accent '#7c3aed' --png$/,
+      / new z .*--accent '#7c3aed'.* --png$/,
     ],
   ])(
     '%j',
@@ -237,6 +238,34 @@ describe('how changes by an amount from the theme it reads', () => {
 
 describe('corrected new commands keep every option (r78e)', () => {
   it.each([
+    [
+      [
+        'new',
+        'h4',
+        '--headings',
+        'bold',
+        '--headings',
+        'heavy',
+        '--headings',
+        'medium',
+        '--accent',
+        'red',
+      ],
+      / new h4 --accent red --headings bold$/,
+    ],
+    [
+      [
+        'new',
+        'h5',
+        '--headings',
+        'tight',
+        '--headings',
+        'BOLD',
+        '--accent',
+        'red',
+      ],
+      / new h5 --accent red --headings tight --headings bold$/,
+    ],
     [
       ['new', 'q', '--like', 'banana', '--accent', 'red'],
       / new q --accent red$/,

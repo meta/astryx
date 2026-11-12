@@ -2425,6 +2425,11 @@ describe('colors15', () => {
       themeEditSet('p', 'font', '1rem bold', {cwd, on: 'card'}),
     );
     expect(sized.run.some(x => /font-size 1rem --on card$/.test(x))).toBe(true);
+    // A keyword after the size is the family, as CSS reads it.
+    expect(sized.run.some(x => /font-family bold --on card$/.test(x))).toBe(
+      true,
+    );
+    expect(sized.run.join(' ')).not.toContain('font-weight bold');
   });
 });
 

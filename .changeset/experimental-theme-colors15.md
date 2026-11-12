@@ -11,6 +11,6 @@
 - A whole-theme font under fonts set for body and headings says which role fonts it sits under and how to clear them.
 - A font one of the editor's own presets leads with (Comic Sans MS) gets no "must load" note.
 - `text-size more` or `less` at the end of the dial's range suggests the base font size token, never a size the dial refuses.
-- A CSS font value on a part made of keywords (`italic bold`, `1rem bold`) is split into its longhands, never a family.
+- A CSS font value on a part made of keywords (`italic bold`, `bold 1rem`) is split into its longhands, never a family; after the size, the rest is the family, as CSS reads it (`1rem bold` is size 1rem with the family bold).
 
 @josephfarina
