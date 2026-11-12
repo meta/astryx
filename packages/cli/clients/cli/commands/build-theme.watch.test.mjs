@@ -399,4 +399,78 @@ describe('theme build --watch', () => {
       child.kill('SIGINT');
     }
   }, 30_000);
+
+  it('prints the --out editor-folder warning once per session, not on every rebuild', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const editor = path.join(tmpDir, 'themes', 'g');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(
+      path.join(editor, 'g.settings.json'),
+      JSON.stringify({like: 'neutral', settings: []}),
+    );
+    const source = path.join(tmpDir, 'other.mjs');
+    const version = (/** @type {string} */ color) =>
+      `export default { name: 'other', tokens: { '--color-bg': '${color}' } };\n`;
+    fs.writeFileSync(source, version('#ffffff'));
+
+    const child = spawn(
+      process.execPath,
+      [
+        CLI_BIN,
+        'theme',
+        'build',
+        'other.mjs',
+        '--out',
+        'themes/g/a.css',
+        '--watch',
+      ],
+      {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
+    );
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
+    let out = '';
+    let stderr = '';
+    child.stdout.on('data', d => (out += d.toString()));
+    child.stderr.on('data', d => {
+      stderr += d.toString();
+      out += d.toString();
+    });
+
+    try {
+      await waitForOutput(child, () => out, 'Watching other\\.mjs');
+      // Two rebuilds, each writing into the editor folder again.
+      for (const [n, color] of /** @type {const} */ ([
+        [2, '#010203'],
+        [3, '#040506'],
+      ])) {
+        const changed = version(color);
+        fs.writeFileSync(source, changed);
+        await waitForOutput(child, () => out, 'Watching other\\.mjs', {
+          count: n,
+          onPoll: () => {
+            try {
+              if (
+                !fs
+                  .readFileSync(path.join(editor, 'a.css'), 'utf-8')
+                  .includes(color)
+              )
+                fs.writeFileSync(source, changed);
+            } catch {
+              // The temporary folder is gone at teardown.
+            }
+          },
+        });
+      }
+      expect(fs.readFileSync(path.join(editor, 'a.css'), 'utf-8')).toContain(
+        '#040506',
+      );
+      expect(
+        out.match(/rebuilding other\.mjs/g)?.length,
+      ).toBeGreaterThanOrEqual(2);
+      expect(stderr.match(/theme editor made/g)).toHaveLength(1);
+    } finally {
+      child.kill('SIGINT');
+    }
+  }, 60_000);
 });
