@@ -3237,6 +3237,65 @@ describe('how answers final-6 questions', () => {
     });
 });
 
+/**
+ * Final-6 lows: an except that names the body, parts listed before the
+ * ask, undo wording, and a typed number beside a direction word.
+ * @type {Array<[string, RegExp | null]>}
+ */
+const QUESTIONS_L = [
+  ['every part bold except body text', /^set q headings bold$/],
+  [
+    'cards and dialogs with no shadow',
+    /^set q box-shadow none --on card && set q box-shadow none --on dialog$/,
+  ],
+  [
+    'tooltips and toasts black',
+    /^set q background '#000000' --on tooltip && set q background '#000000' --on toast$/,
+  ],
+  [
+    'less padding on cards but more on buttons',
+    /^set q spacing less --on card && set q spacing more --on button$/,
+  ],
+  ['thicker focus outline, 4px', /^set q --focus-outline-width 4px$/],
+  [
+    'bigger tap targets for buttons, at least 44px',
+    /^set q min-height 44px --on button$/,
+  ],
+  ['gap of 8 or so px in cards', /^set q gap 8px --on card$/],
+];
+
+describe('how answers final-6 lows', () => {
+  for (const [question, want] of QUESTIONS_L)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      const changes = (data.results ?? []).filter((/** @type {any} */ r) =>
+        r.commands.some((/** @type {string} */ c) =>
+          / editor (set|undo) /.test(c),
+        ),
+      );
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(
+        /** @type {RegExp} */ (want),
+      );
+    });
+
+  it('undo wording takes back what the theme sets', async () => {
+    await themeEditNew('uw', {cwd, like: 'neutral'});
+    await themeEditSet('uw', 'box-shadow', 'none', {cwd, on: 'card'});
+    await themeEditSet('uw', 'accent', '#dc2626', {cwd});
+    for (const [q, want] of /** @type {Array<[string, string]>} */ ([
+      ['remove my accent override', 'undo uw accent'],
+      ['revert the cards to default', 'undo uw box-shadow --on card'],
+      ['I set the accent to red by mistake', 'undo uw accent'],
+      ['put the card shadows back', 'undo uw box-shadow --on card'],
+    ])) {
+      const {data} = await themeEditHow(q, {cwd, theme: 'uw'});
+      expect(data.results[0].commands.map(bare)[0], q).toBe(want);
+    }
+  }, 120_000);
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;

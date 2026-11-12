@@ -709,7 +709,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
     'selected',
   ],
   [
-    /\b(press(ed|es)?|click(ed|s)?|tap(ped|s)?|on press|on click|when i click)\b/,
+    /\b(press(ed|es)?|click(ed|s)?|tap(ped|s)?(?! targets?)|on press|on click|when i click)\b/,
     'active',
   ],
   [/\b(typing|type in|tab to|tabbing|keyboard focus)\b/, 'focus'],
@@ -1470,6 +1470,8 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\b(?:no|not) more than\s+|\bat most\s+|\bmax(?:imum)? of\s+/g, '')
     // Numbers written as words are numbers.
     .replace(NUMBER_WORDS_RE, m => numberWord(m))
+    // "8 or so px", "about 8 px": the number.
+    .replace(/\b(\d+(?:\.\d+)?)\s+or so\s+(?=px|rem|em|pixels?)/g, '$1 ')
     // "0.5 rem", "14 px": a number and its unit are one length.
     .replace(/\b(\d+(?:\.\d+)?)\s+(px|rem|em|pt|vh|vw|ch)\b/gi, '$1$2')
     // Typography words for the properties they name.
@@ -1654,6 +1656,101 @@ export function draftAnswer(ctx, env, question) {
         }
       }
     }
+  // "cards and dialogs with no shadow", "tooltips and toasts black": parts
+  // listed before the ask all take it.
+  for (let i = 0; i < clauses.length - 1; i++) {
+    const c = clauses[i];
+    const onlyParts = (/** @type {Clause} */ x) =>
+      x.parts.length &&
+      !x.aspects.length &&
+      !x.colors.length &&
+      !x.lengths.length &&
+      !x.except &&
+      !x.dir &&
+      !lex.parts
+        .reduce((t, [re]) => t.replace(re, ' '), ` ${x.text} `)
+        .replace(/\b(the|a|an|all|every|both|my|our)\b/g, ' ')
+        .trim();
+    if (!onlyParts(c)) continue;
+    let j = i + 1;
+    while (j < clauses.length && onlyParts(clauses[j])) j++;
+    const ask = clauses[j];
+    if (
+      !ask ||
+      ask.except ||
+      !(
+        ask.aspects.length ||
+        ask.colors.length ||
+        ask.lengths.length ||
+        ask.dir
+      )
+    )
+      continue;
+    const listed = clauses.slice(i, j).flatMap(x => x.parts);
+    ask.parts = [...listed.map(p => ({...p})), ...ask.parts];
+    for (const x of clauses.slice(i, j)) {
+      x.parts = [];
+      x.text = '';
+    }
+    i = j;
+  }
+  // "less padding on cards but more on buttons": a part with only a
+  // direction takes the aspect of the clause before it.
+  for (let i = 1; i < clauses.length; i++) {
+    const c = clauses[i];
+    const prev = clauses[i - 1];
+    if (
+      c.parts.length &&
+      c.dir &&
+      !c.aspects.length &&
+      !c.colors.length &&
+      prev.aspects.length
+    )
+      c.aspects = [...prev.aspects];
+  }
+  // "thicker focus outline, 4px": a clause that is only a length is the
+  // value of the clause before it, and the typed value wins over the
+  // direction word.
+  for (let i = 1; i < clauses.length; i++) {
+    const c = clauses[i];
+    const prev = clauses[i - 1];
+    if (
+      c.lengths.length &&
+      !c.parts.length &&
+      !c.aspects.length &&
+      !c.colors.length &&
+      prev.aspects.length &&
+      c.text
+        .replace(
+          /\b(at least|at most|about|around|roughly|or so|min(imum)?|max(imum)?)\b/g,
+          '',
+        )
+        .replace(/-?\d*\.?\d+(px|rem|em)/g, '')
+        .trim() === ''
+    ) {
+      prev.lengths = [...c.lengths, ...prev.lengths];
+      prev.dir = null;
+      prev.text = `${prev.text} ${c.lengths.join(' ')}`;
+      c.lengths = [];
+      c.text = '';
+    }
+  }
+  // "every part bold except body text": the body is left as it is, so the
+  // bold goes to the headings, not the body's weight.
+  for (let i = 0; i < clauses.length - 1; i++) {
+    const c = clauses[i];
+    const next = clauses[i + 1];
+    if (
+      !c.parts.length &&
+      c.aspects.includes('weight') &&
+      next.except &&
+      next.parts.some(p => p.on === 'body')
+    ) {
+      c.parts = [{on: 'heading'}];
+      next.parts = [];
+      next.text = '';
+    }
+  }
   // "no shadows on cards and dialogs": a clause that only names a part
   // takes the ask of the clause before it.
   for (let i = 1; i < clauses.length; i++) {
@@ -2467,11 +2564,12 @@ export function draftAnswer(ctx, env, question) {
           };
     }
     if (
-      !/\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override)\b/.test(
+      !/\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|by accident|accidentally|put .* back|.* back to normal)\b/.test(
         c.text,
       ) ||
       /\bby default\b|\bthe last change\b|\beverything\b/.test(c.text) ||
-      c.colors.length > 0 ||
+      (c.colors.length > 0 &&
+        !/\b(by mistake|by accident|accidentally)\b/.test(c.text)) ||
       OS_FONT.test(c.text)
     )
       return null;
@@ -2480,17 +2578,19 @@ export function draftAnswer(ctx, env, question) {
       ...c.aspects.flatMap(a => RESET_THINGS[a] ?? []),
       ...(role ? [role[1], role[2]] : []),
     ];
-    if (!things.length) return null;
     const on = c.parts[0]?.on;
+    // "revert the cards to default": every setting on that part.
+    if (!things.length && !on) return null;
     const matches = env.data.settings.filter(
       st =>
-        (things.includes(st.thing) ||
+        (!things.length ||
+          things.includes(st.thing) ||
           things.some(
             t => t.endsWith('*') && st.thing.startsWith(t.slice(0, -1)),
           )) &&
         (st.on ?? '') === (on ?? ''),
     );
-    const what = role ? role[1] : c.aspects[0];
+    const what = role ? role[1] : (c.aspects[0] ?? 'everything');
     if (!matches.length)
       return {
         text: `${env.slug} sets nothing for ${what}${on ? ` on ${on}` : ''}, so it already uses the base value`,
@@ -3558,7 +3658,11 @@ export function draftAnswer(ctx, env, question) {
           return answerFor(c, p, 'fontsize');
         const tall =
           tallIn(c.text) ??
-          (/\b(taller|shorter|height)\b/.test(c.text) ? c.lengths[0] : null);
+          (/\b(taller|shorter|height|bigger|larger|tap targets?|touch targets?)\b/.test(
+            c.text,
+          ) && !/\b(wider|narrower|width)\b/.test(c.text)
+            ? c.lengths[0]
+            : null);
         if (tall)
           return {
             text: `the height${where}: min-height ${tall}`,
