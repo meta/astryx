@@ -579,6 +579,28 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     }
   }, 120_000);
 
+  it("is listed by doctor, with the runs under Plug'n'Play that keep none", () => {
+    const tmp = keptTmp('doctor');
+    /** @param {Record<string, string>} [env] */
+    const row = env => {
+      const {stdout} = run(['doctor'], {tmp, env});
+      return JSON.parse(stdout).data.checks.find(
+        (/** @type {{id: string}} */ check) => check.id === 'gather-cache',
+      );
+    };
+    const plain = row().message;
+    expect(plain).toContain(path.join(tmp, CACHE_NAME));
+    expect(plain).not.toContain("Plug'n'Play");
+    const pnp = path.join(work, 'as-pnp.cjs');
+    fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
+    const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;
+    // The folder and its size, and that this run keeps none.
+    expect(underPnp).toContain(path.join(tmp, CACHE_NAME));
+    expect(underPnp).toContain(
+      "but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`",
+    );
+  }, 120_000);
+
   it('is never kept by a checkout, even one a pack left a build id in', () => {
     // A checkout: the packed files outside any node_modules folder, build id
     // included, as a local `pnpm pack` without its cleanup would leave them.
