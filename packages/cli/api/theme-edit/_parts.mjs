@@ -188,15 +188,22 @@ export function isItemOf(project, name) {
  */
 export function catalogVariants(project, name, cap, opts = {}) {
   const info = project.components[name];
-  const demo = demoProps(project, name);
-  if (!demo) return [];
-  // An overlay shown open never takes focus: on a page of many, each would
-  // pull the page to itself as it opens.
+  const own = demoProps(project, name);
+  if (!own) return [];
+  // No demo takes focus as it mounts: on a page of many, each would pull
+  // the page to itself.
+  /** @type {Record<string, unknown>} */
+  const demo = {
+    ...own,
+    ...(info.props?.hasAutoFocus ? {hasAutoFocus: false} : {}),
+    ...(info.props?.autoFocus && own.autoFocus ? {autoFocus: false} : {}),
+  };
+  // An overlay shown open, named, as a dialog must be.
   /** @param {Record<string, unknown>} d @returns {Record<string, unknown>} */
   const opened = d => ({
     ...d,
     ...('isOpen' in d ? {} : {isOpen: true}),
-    ...(info.props?.hasAutoFocus ? {hasAutoFocus: false} : {}),
+    ...(info.props?.label && d.label == null ? {label: `${name} example`} : {}),
   });
   if (info.opens && opts.shown) return [{label: '', props: opened(demo)}];
   const base = info.opens ? opened(demo) : demo;

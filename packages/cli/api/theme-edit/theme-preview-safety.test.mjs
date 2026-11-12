@@ -318,11 +318,17 @@ describe('preview remove', () => {
     fs.rmSync(path.join(cwd, 'themes/gone'), {recursive: true});
     const r = await themeEditPreviewRemove('overview', {cwd});
     expect(r.data.notes.join(' ')).toContain('wore gone, which is gone');
-    expect(r.data.pages).toEqual(['components', 'colors']);
+    // The Colors page showed the gone theme's colors, so it goes too.
+    expect(r.data.pages).toEqual(['components']);
+    expect(r.data.notes.join(' ')).toContain(
+      'removed the Colors page: it showed the colors of gone, which is gone',
+    );
     const route = read(`${ROUTE}/page.tsx`);
     expect(route).not.toContain('themes/gone');
-    expect(route).toContain('"./_pages/colors"');
-    expect(read(`${ROUTE}/_pages/colors.tsx`)).not.toContain('themes/gone');
+    expect(route).not.toContain('"./_pages/colors"');
+    expect(fs.existsSync(path.join(cwd, ROUTE, '_pages/colors.tsx'))).toBe(
+      false,
+    );
     expect(r.data.rewritten).toContain(`${ROUTE}/page.tsx`);
   }, 120_000);
 
@@ -441,7 +447,9 @@ describe('preview add', () => {
     expect(typo.run[0]).toBe(
       'astryx experimental theme preview add --template dashboard',
     );
-    expect(typo.run.at(-1)).toBe('astryx template --list --type page');
+    // The way this app runs the CLI, as JSON shows it too.
+    expect(typo.run.at(-1)).toMatch(/ template --list --type page$/);
+    expect(typo.run.at(-1)).not.toBe('astryx template --list --type page');
   }, 60_000);
 
   it('never replaces a page changed by hand, and adopts an identical page it did not record', async () => {
@@ -570,7 +578,9 @@ describe('preview add', () => {
     // $ ( ) ' make a folder Next serves; nothing in it reaches a shell
     // unquoted.
     expect(r.code).toBe('ERR_NOT_FOUND');
-    expect(r.run.at(-1)).toBe('astryx template --list --type page');
+    // The way this app runs the CLI, as JSON shows it too.
+    expect(r.run.at(-1)).toMatch(/ template --list --type page$/);
+    expect(r.run.at(-1)).not.toBe('astryx template --list --type page');
     for (const cmd of r.run.slice(0, -1))
       expect(cmd).toContain(`--path 'src/app/$(id)'\\''x'`);
     expect(r.run.join(' ')).not.toContain('shell-top-nav');
@@ -2571,7 +2581,7 @@ describe('final pass 5', () => {
       const overview = read('src/app/w/_pages/overview.tsx');
       expect(overview).toContain('hasAutoFocus={false}');
       expect(read('src/app/w/_pages/components.tsx')).toMatch(
-        /<C\.Popover [\s\S]*?isOpen hasAutoFocus=\{false\}>/,
+        /<C\.Popover [\s\S]*?hasAutoFocus=\{false\}/,
       );
       expect(overview).toContain('MutationObserver');
       expect(overview).toContain("'loadingdone'");
@@ -2613,4 +2623,95 @@ describe('final pass 5', () => {
       rm('src/app/kept');
     }
   }, 240_000);
+
+  it("shows a dialog part inside an inline dialog, names an open popover, and drops a gone theme's Colors page", async () => {
+    await themeEditNew('gt', {
+      cwd,
+      like: 'neutral',
+      settings: {accent: 'teal'},
+    });
+    try {
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'gt',
+        path: 'src/app/x1',
+      });
+      const components = read('src/app/x1/_pages/components.tsx');
+      expect(components).toMatch(
+        /<C\.Dialog [^>]*isOpen[^>]*isInline[^>]*>\s*<C\.DialogHeader/,
+      );
+      expect(components).toMatch(/<C\.Popover [\s\S]*?label="Popover example"/);
+      expect(exists('src/app/x1/_pages/colors.tsx')).toBe(true);
+      rm('themes/gt');
+      const r = await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/x1'});
+      expect(r.data.notes.join(' ')).toContain(
+        'removed the Colors page: it showed the colors of gt, which is gone',
+      );
+      expect(exists('src/app/x1/_pages/colors.tsx')).toBe(false);
+      expect(read('src/app/x1/page.tsx')).not.toContain('_pages/colors');
+    } finally {
+      rm('src/app/x1');
+      rm('themes/gt');
+    }
+  }, 240_000);
+
+  it('remove refuses while a file of yours imports the pages, list names a folder add refuses, and made parents go anywhere', async () => {
+    await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/x3'});
+    try {
+      write('src/app/x3/page.tsx', `${read('src/app/x3/page.tsx')}\n// mine\n`);
+      const edited = await refusal(() =>
+        themeEditPreviewRemove(undefined, {cwd, path: 'src/app/x3'}),
+      );
+      expect(edited.message + JSON.stringify(edited)).toContain(
+        'move src/app/x3/page.tsx out of src/app/x3/',
+      );
+      fs.renameSync(
+        path.join(cwd, 'src/app/x3/page.tsx'),
+        path.join(cwd, 'src/app/x3/copy.tsx'),
+      );
+      const r = await refusal(() =>
+        themeEditPreviewRemove(undefined, {cwd, path: 'src/app/x3'}),
+      );
+      expect(r.message).toContain(
+        'src/app/x3/copy.tsx imports the preview pages',
+      );
+      expect(exists('src/app/x3/_pages/overview.tsx')).toBe(true);
+    } finally {
+      rm('src/app/x3');
+    }
+    const list = await themeEditPreviewList({cwd, path: 'src/app/_hidden/tp'});
+    expect(list.data.notes.join(' ')).toContain(
+      'preview add --path src/app/_hidden/tp refuses this folder',
+    );
+    await themeEditPreviewAdd(undefined, {cwd, path: 'design/deep/tp'});
+    await themeEditPreviewRemove(undefined, {cwd, path: 'design/deep/tp'});
+    expect(exists('design')).toBe(false);
+  }, 240_000);
+
+  it('names the page template list the way this app runs the CLI, in JSON as in text', async () => {
+    const {formatCliCommand} =
+      await import('../../foundation/env/package-manager.mjs');
+    const want = formatCliCommand('template --list --type page', cwd);
+    const r = await runCli(
+      [
+        '--json',
+        'experimental',
+        'theme',
+        'preview',
+        'add',
+        '--template',
+        'nope',
+      ],
+      {cwd},
+    );
+    const out = JSON.parse(r.stdout);
+    const names = (out.suggestions ?? out.error?.suggestions ?? []).map(
+      (/** @type {any} */ x) => x.name,
+    );
+    const list = names.find((/** @type {string} */ n) =>
+      n.endsWith('template --list --type page'),
+    );
+    expect(list).toBe(want);
+    expect(list).not.toBe('astryx template --list --type page');
+  }, 120_000);
 });

@@ -1109,7 +1109,12 @@ export function registerExperimentalTheme(group, program) {
                 )
               : [
                   ...project(/** @type {any} */ (r.data)),
-                  `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
+                  // A folder add refuses has a note that says why instead.
+                  ...(r.data.notes.some(n => n.includes(' refuses this folder'))
+                    ? []
+                    : [
+                        `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
+                      ]),
                 ],
           r =>
             resultSet({

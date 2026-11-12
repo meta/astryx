@@ -548,7 +548,8 @@ describe('preview options and errors', () => {
         theme: null,
         themeMissing: false,
         pages: [],
-        notes: [],
+        // No preview, and add would refuse here: the note says why.
+        notes: [expect.stringContaining('preview add refuses this folder')],
       });
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});

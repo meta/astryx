@@ -64,7 +64,10 @@ import {
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {requireProject, context} from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {
+  formatCliCommand,
+  quoteCommandArgument,
+} from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 
@@ -2119,7 +2122,7 @@ function checkWrite(cwd, dir, data, w, elsewhere) {
       page
         ? {
             fix: `give ${name} another name if you want to keep it, then run the command again; or add another page`,
-            run: ['astryx template --list --type page'],
+            run: [formatCliCommand('template --list --type page', cwd)],
           }
         : {
             fix: `move ${name} out of the folder, then run the command again; or put the preview in another folder`,
@@ -2330,6 +2333,52 @@ function alive(pid) {
 /** @param {string} step */
 function commitStep(step) {
   if (stopAt?.(step)) throw STOPPED;
+}
+
+/**
+ * Files in a preview folder the preview did not write that import its
+ * pages (`./_pages/...` or `./pages/...`), as paths in the folder.
+ * @param {string} dir
+ * @param {PreviewData} data
+ * @returns {string[]}
+ */
+function pageImporters(dir, data) {
+  /** @type {string[]} */
+  const out = [];
+  /** @param {string} sub */
+  const walk = sub => {
+    /** @type {fs.Dirent[]} */
+    let entries;
+    try {
+      entries = fs.readdirSync(path.join(dir, sub), {withFileTypes: true});
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const rel = sub ? `${sub}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        if (!sub && e.name !== 'node_modules') walk(rel);
+        continue;
+      }
+      if (!/\.(tsx|ts|jsx|js|mjs)$/.test(e.name) || data.files.includes(rel))
+        continue;
+      try {
+        const text = fs.readFileSync(path.join(dir, rel), 'utf8');
+        if (
+          data.pages.some(p =>
+            new RegExp(
+              `from\\s*['"][./]*(?:\\.\\./)*${p.file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`,
+            ).test(text),
+          )
+        )
+          out.push(rel);
+      } catch {
+        // Unreadable: not one that imports the pages, as far as can be told.
+      }
+    }
+  };
+  walk('');
+  return out.sort();
 }
 
 /**
@@ -2798,6 +2847,38 @@ async function colorsPage(cwd, dir, slug) {
 }
 
 /**
+ * When the theme a preview wore is gone, its Colors page goes too: it shows
+ * that theme's colors and tells you to set them. The file is deleted when it
+ * is as the preview wrote it; a page changed by hand is kept, out of the nav.
+ * @param {string} cwd
+ * @param {string} dir
+ * @param {PreviewData} data
+ * @param {{writes: Array<{rel: string}>, deletes: string[]}} move
+ * @param {string} gone
+ * @param {string[]} notes
+ */
+function dropGoneColors(cwd, dir, data, move, gone, notes) {
+  const page = data.pages.find(p => p.id === COLORS_PAGE.id);
+  if (!page) return;
+  const rel = `${page.file}.tsx`;
+  const ids = new Set(data.pages.map(p => p.id));
+  const owned =
+    fs.existsSync(path.join(dir, rel)) &&
+    ownedUnchanged(dir, data, rel, ids) === 'delete';
+  data.pages = data.pages.filter(p => p !== page);
+  data.files = data.files.filter(f => f !== rel);
+  move.writes = move.writes.filter(
+    w => w.rel !== rel && w.rel !== `${PAGES_DIR}/${COLORS_PAGE.id}.tsx`,
+  );
+  if (owned) move.deletes.push(rel);
+  notes.push(
+    owned
+      ? `removed the Colors page: it showed the colors of ${gone}, which is gone`
+      : `left the Colors page out of the nav: it showed the colors of ${gone}, which is gone, and was changed by hand, so ${shown(cwd, path.join(dir, rel))} is kept`,
+  );
+}
+
+/**
  * The route file and, when the preview has one, the Colors page as the
  * page list and the theme say now. With `gone`, the theme the preview wore
  * was deleted: its Colors page says the preview has no theme colors.
@@ -3150,7 +3231,7 @@ async function rankedPages(words, cwd, notes, flags) {
         listed.some(t => t.id === id),
       ),
     ),
-    'astryx template --list --type page',
+    formatCliCommand('template --list --type page', cwd),
   ];
   // No page relates when the ranking fell back to a frame with no direct
   // match, and no page the search found matches three words of the request
@@ -3182,7 +3263,10 @@ async function rankedPages(words, cwd, notes, flags) {
       `No page template relates to "${words}". Name a page to add it anyway.`,
       {
         run: pages.length
-          ? [...suggest(pages), 'astryx template --list --type page']
+          ? [
+              ...suggest(pages),
+              formatCliCommand('template --list --type page', cwd),
+            ]
           : fallback,
       },
     );
@@ -3515,7 +3599,7 @@ async function namedTemplate(cwd, id, flags) {
     {
       run: [
         ...near.map(n => `${PREVIEW} add --template ${n}${flags}`),
-        'astryx template --list --type page',
+        formatCliCommand('template --list --type page', cwd),
       ],
     },
   );
@@ -3644,7 +3728,7 @@ async function addPreview(description, options, box) {
     refuse(E.ERR_INVALID_ARGUMENT, '--template needs a page template id.', {
       run: [
         `${PREVIEW} add --template dashboard${tf}${pf}`,
-        'astryx template --list --type page',
+        formatCliCommand('template --list --type page', cwd),
       ],
     });
   if (said && named != null)
@@ -3881,6 +3965,7 @@ async function addPreview(description, options, box) {
   })();
   const elsewhere = retry(free);
   const move = movedPages(cwd, at.dir, data);
+  if (gone) dropGoneColors(cwd, at.dir, data, move, gone, notes);
   /** @type {Map<string, {rel: string, text: string, keepHash?: boolean}>} */
   const writes = new Map(move.writes.map(w => [w.rel, w]));
   /** @type {string[]} */
@@ -4339,6 +4424,23 @@ export async function themeEditPreviewList(options = {}) {
     notes.push(
       `${[...missing].join(', ')} ${missing.size > 1 ? 'are' : 'is'} listed, but ${missing.size > 1 ? 'their files are' : 'its file is'} gone, so the route does not build; ${PREVIEW} add${pf} writes ${missing.size > 1 ? 'them' : 'it'} again`,
     );
+  // No preview yet: say so when `add` would refuse the folder, with its
+  // reason and the way on, rather than suggest it.
+  if (!data) {
+    try {
+      previewDir(cwd, options.path, {
+        write: true,
+        retry: p =>
+          `${PREVIEW} add${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`,
+      });
+    } catch (e) {
+      if (typeof (/** @type {any} */ (e)?.code) !== 'string') throw e;
+      const way = /** @type {any} */ (e).suggestions?.[0]?.name;
+      notes.push(
+        `${PREVIEW} add${pf} refuses this folder: ${String(/** @type {any} */ (e).message).replace(/ Nothing was (written|changed)\.$/, '')}${way ? ` Instead: ${way}` : ''}`,
+      );
+    }
+  }
   if (data?.theme && themeMissing) {
     const themes = editedThemes(cwd);
     notes.push(
@@ -4535,6 +4637,7 @@ async function removePreview(page, options, box) {
       );
     }
     const move = movedPages(cwd, at.dir, data);
+    if (gone) dropGoneColors(cwd, at.dir, data, move, gone, notes);
     // A page whose file is gone leaves the nav, so the route never imports
     // a missing file.
     const moving = new Set(move.writes.map(w => w.rel));
@@ -4629,7 +4732,18 @@ async function removePreview(page, options, box) {
       E.ERR_FILE_EXISTS,
       `${shown(cwd, path.join(at.dir, 'page.tsx'))} was changed by hand after the preview wrote it. It imports the preview pages, so removing them would leave a route that does not build.`,
       {
-        fix: `copy your changes out of ${shown(cwd, path.join(at.dir, 'page.tsx'))}, give it another name, then run ${PREVIEW} remove${pf} again`,
+        fix: `move ${shown(cwd, path.join(at.dir, 'page.tsx'))} out of ${folder}/ (copy what you changed somewhere else in the app), then run ${PREVIEW} remove${pf} again`,
+      },
+    );
+  // A file of yours in the folder (a copy of the route under another name)
+  // that imports the preview pages would break once they are deleted.
+  const importer = pageImporters(at.dir, data)[0];
+  if (importer)
+    refuse(
+      E.ERR_FILE_EXISTS,
+      `${shown(cwd, path.join(at.dir, importer))} imports the preview pages and the preview did not write it, so removing them would leave it broken.`,
+      {
+        fix: `move ${shown(cwd, path.join(at.dir, importer))} out of ${folder}/ and stop it importing the preview pages, then run ${PREVIEW} remove${pf} again`,
       },
     );
   const ids = new Set(data.pages.map(p => p.id));
@@ -4725,9 +4839,8 @@ async function removePreview(page, options, box) {
     let made = data.parents ?? 0;
     for (
       let up = path.dirname(at.dir);
-      (made > 0 || /^\(.+\)$/.test(path.basename(up))) &&
-      at.app &&
-      up.startsWith(at.app + path.sep);
+      (made > 0 || (at.app != null && /^\(.+\)$/.test(path.basename(up)))) &&
+      up.startsWith((at.app ?? cwd) + path.sep);
       up = path.dirname(up), made--
     )
       fs.rmdirSync(up);
