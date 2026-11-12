@@ -116,12 +116,9 @@ pnpm review:pre                       # the working tree against origin/main
 pnpm review:pre --base upstream/main  # a fork whose main remote is upstream
 pnpm review:pre --head HEAD           # committed work only
 pnpm review:pre --json                # the same report as JSON
-pnpm review:pre --body-file body.md   # also read the description for item h
-pnpm review:pre --pr 1234             # read the description with gh
 ```
 
-The report reads only the local repository, and the description when you pass
-one. It prints:
+The report reads only the local repository. It prints:
 
 - each changed file and its class: record, owner-gated record, published
   package code, other package file, Lab, or repository;
@@ -129,8 +126,9 @@ one. It prints:
   cite or that the added lines route;
 - the global baseline claims that the linked components' review triggers route,
   read at the merge base;
-- the authored line count, and whether the change merges into the base;
-- the findings for items h to l, each with its file and line, the rule, and
+- the authored line count, with advice when it is over the size guideline, and
+  whether the change merges into the base;
+- the findings for items i to l, each with its file and line, the rule, and
   the fix;
 - the checklist items that apply to this change, each with its reason.
 
@@ -151,7 +149,7 @@ finding is a lead to check, not a verdict.
 
 First apply the protocol above: one primary intent, no tagalongs, and
 specifications last. Then check each item that the report lists. Item d applies
-to every pull request. The report checks items h to l automatically and lists
+to every pull request. The report checks items i to l automatically and lists
 each finding at its file and line.
 
 - **a. API delta.** A current record decides each added or changed row of the
@@ -214,12 +212,13 @@ each finding at its file and line.
   ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#dec-14--one-owner-approval-binds-a-pull-requests-spec-content)
   DEC-14). The description also reports `## Writing rubric results`
   ([Writing specification records](spec-writing.md)).
-- **h. Size (automatic).** More than 2,000 authored lines, without lockfiles,
-  snapshots, or generated files, is a finding. A description line that declares
-  a behavior-module pull request and names the module (`Behavior module: <name>`)
-  removes the limit. A `Batch:` row raises it to 8,000. For a stacked pull
-  request, pass `--base` the branch below it, so the count covers only its own
-  lines.
+- **h. Size (guideline).** Prefer pull requests under about 2,000 authored
+  lines, without lockfiles, snapshots, or generated files. A reviewer may
+  suggest a split when a smaller change would be easier to review. Size alone
+  is never a blocking finding. Templates under `packages/cli/assets/templates/`
+  may exceed this guideline, because each one is a complete example. For a
+  stacked pull request, pass `--base` the branch below it, so the count covers
+  only its own lines.
 - **i. Shared owners (automatic).** In Core source, an added resize observer,
   document or window listener, module-level warn-once set, or parent walk
   across shadow roots is a finding: call `observeResize`,

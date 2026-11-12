@@ -89,7 +89,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'a build or validation error, or --check finds stale or missing outputs',
+      when: 'a build or validation error (an error envelope), or --check finds stale or missing outputs (the check result, with upToDate false and the stale files, is still printed: it is a result, not an error)',
     },
   ],
   related: ['experimental theme add', 'experimental theme list'],
