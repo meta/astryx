@@ -15,9 +15,7 @@ name: Codemod Verify
 
 on:
   pull_request:
-    # labeled/unlabeled: a maintainer's allow-manual-edit label re-runs the
-    # check; the job skips every other label event.
-    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: ["main"]
     paths:
       - "packages/cli/assets/codemods/**"
@@ -25,14 +23,12 @@ on:
 permissions: {}
 
 concurrency:
-  # Another label's event gets a group of its own, so the run it starts (whose
-  # job skips) never cancels a check in progress.
-  group: "codemod-verify-${{ github.event.pull_request.number }}${{ (github.event.action == 'labeled' || github.event.action == 'unlabeled') && github.event.label.name != 'allow-manual-edit' && format('-other-label-{0}', github.run_id) || '' }}"
+  group: "codemod-verify-${{ github.event.pull_request.number }}"
   cancel-in-progress: true
 
 jobs:
   verify-codemods:
-    if: ((github.event.action != 'labeled' && github.event.action != 'unlabeled') || github.event.label.name == 'allow-manual-edit') && (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -49,5 +45,7 @@ jobs:
         id: verify
         env:
           # An owner exception: a maintainer applies the label (triage rights).
+          # A label starts no run by itself, so it takes effect on the next
+          # push or a draft-and-ready toggle.
           ALLOW_MANUAL_EDIT: ${{ contains(github.event.pull_request.labels.*.name, 'allow-manual-edit') }}
         run: node .github/scripts/codemod-verify.mjs

@@ -55,10 +55,6 @@ function evaluate(
     },
   });
 }
-const interpolate = (text, options) =>
-  text.replace(/\$\{\{\s*(.*?)\s*\}\}/g, (_, expression) =>
-    String(evaluate(expression, options)),
-  );
 
 describe('the allow-manual-edit owner exception', () => {
   const mismatchDetails = [
@@ -101,30 +97,16 @@ describe('the allow-manual-edit owner exception', () => {
     ).toBe(0);
   });
 
-  it('runs again when a maintainer adds or removes the label', () => {
-    expect(workflow.on.pull_request.types).toEqual(
-      expect.arrayContaining(['labeled', 'unlabeled']),
+  it('starts no run on a label: the label takes effect on the next push or a draft-and-ready toggle', () => {
+    expect(workflow.on.pull_request.types).toEqual([
+      'opened',
+      'synchronize',
+      'reopened',
+      'ready_for_review',
+    ]);
+    expect(workflow.concurrency.group).toBe(
+      'codemod-verify-${{ github.event.pull_request.number }}',
     );
-    for (const action of ['labeled', 'unlabeled'])
-      expect(evaluate(job.if, {action, label: ALLOW_LABEL}), action).toBe(true);
-    expect(evaluate(job.if)).toBe(true);
-  });
-
-  it('skips the job for any other label, ci:run included, and never cancels a check in progress', () => {
-    for (const label of ['ci:run', 'ci:run-visual', 'needs-design']) {
-      expect(evaluate(job.if, {action: 'labeled', label}), label).toBe(false);
-      expect(
-        interpolate(workflow.concurrency.group, {action: 'labeled', label}),
-      ).toBe('codemod-verify-8690-other-label-42');
-    }
-    // The label's own events and pushes share the pull request's group.
-    expect(interpolate(workflow.concurrency.group)).toBe('codemod-verify-8690');
-    expect(
-      interpolate(workflow.concurrency.group, {
-        action: 'labeled',
-        label: ALLOW_LABEL,
-      }),
-    ).toBe('codemod-verify-8690');
   });
 
   it("keeps a fork's and a draft's runs as before", () => {
@@ -137,9 +119,7 @@ describe('the allow-manual-edit owner exception', () => {
     const allow = verify.env.ALLOW_MANUAL_EDIT;
     expect(evaluate(allow, {labels: [ALLOW_LABEL]})).toBe(true);
     expect(evaluate(allow, {labels: ['ci:run']})).toBe(false);
-    // Removing the label re-runs the check without it, so it fails again.
-    expect(evaluate(allow, {action: 'unlabeled', label: ALLOW_LABEL})).toBe(
-      false,
-    );
+    // Without the label, the next run fails again.
+    expect(evaluate(allow, {labels: []})).toBe(false);
   });
 });

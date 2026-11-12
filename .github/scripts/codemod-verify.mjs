@@ -375,7 +375,7 @@ export function report({matches, mismatchDetails, allowed, log = console.log}) {
     log('  1. Callsites were hand-edited instead of using the codemod');
     log('  2. The codemod is incomplete (add missing transforms)');
     log(
-      `  3. Changes are intentionally beyond codemod scope (a maintainer adds the ${ALLOW_LABEL} label)`,
+      `  3. Changes are intentionally beyond codemod scope (a maintainer adds the ${ALLOW_LABEL} label; it takes effect on the next push or a draft-and-ready toggle)`,
     );
     if (allowed) {
       log(`\n✅ Mismatches allowed by ${ALLOW_LABEL} (owner exception).`);
