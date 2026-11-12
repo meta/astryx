@@ -57,8 +57,7 @@ import {
   observeResize,
   observeResizeAfterLayout,
 } from '../utils/sharedResizeObserver';
-import {MIN_TOUCH_TARGET} from '../utils/hitArea';
-import {useTouchHitArea, type TouchHitAreaOptions} from '../utils/touchHitArea';
+import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {usePressTracker} from '../gestures/usePressTracker';
 import {mergeProps, rtlStyles} from '../utils';
@@ -192,24 +191,6 @@ const OVER_PHOTO_ATTRIBUTE = 'data-lightbox-over-photo';
 // The caption's backing: the controls' backing colour, darker, so the caption
 // keeps 4.5:1 over any photo or backdrop behind it (WCAG 2.2 1.4.3).
 const CAPTION_BACKING = `color-mix(in srgb, ${colorVars['--color-on-light']} 90%, transparent)`;
-
-/**
- * The caption toggle's touch target grows toward 44 px down and to each
- * side, never up: the line above is the caption's own text.
- */
-const CAPTION_TOGGLE_HIT_AREA: TouchHitAreaOptions = {
-  growth: target => {
-    const x = Math.max(
-      0,
-      (MIN_TOUCH_TARGET - (target.right - target.left)) / 2,
-    );
-    const y = Math.max(
-      0,
-      (MIN_TOUCH_TARGET - (target.bottom - target.top)) / 2,
-    );
-    return {top: 0, right: x, bottom: y, left: x};
-  },
-};
 
 const styles = stylex.create({
   dialog: {
@@ -1141,10 +1122,7 @@ export function Lightbox({
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   // The current caption's toggle shows while two lines clamp it, or open.
   const hasCaptionToggle = isCaptionClamped || isCaptionOpen;
-  const captionToggleHitAreaRef = useTouchHitArea(
-    hasCaptionToggle,
-    CAPTION_TOGGLE_HIT_AREA,
-  );
+  const captionToggleHitAreaRef = useTouchHitArea(hasCaptionToggle);
   const captionToggleRefs = useMergedRefs(
     captionToggleRef,
     captionToggleHitAreaRef,
