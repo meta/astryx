@@ -74,5 +74,7 @@ describe('useOutlineFromDOM example', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
     });
     expect(labels().at(-1)).toBe('New section');
+    const last = container.querySelector('nav a[href="#new-section-1"]');
+    expect(last?.textContent).toBe('New section');
   });
 });
