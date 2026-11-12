@@ -34,6 +34,7 @@ verified_by:
   "paths": [
     "packages/core/src/Layer/holdEntranceInput.ts",
     "packages/core/src/Layer/inputHold.ts",
+    "packages/core/src/gestures/contextRequest.ts",
     "packages/core/src/gestures/nativeScroll.ts",
     "packages/core/src/gestures/tapWobble.ts",
     "packages/core/src/hooks/usePager.ts",
@@ -884,8 +885,13 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   Every followed trackpad pan runs one shared path (the splitter, the pan, the
   snap-point drag and the animator), and a component declares only its detents
   and actions, a row's being `spec:AST-057`'s. One shared
-  context request answers a finger's or a pen's long press, a right click, and
-  Shift+F10; the
+  context request module, `gestures/contextRequest.ts`, answers a finger's or
+  a pen's long press, a right click, and Shift+F10 or the context-menu key. It
+  makes one request per gesture, names the input that made it, and keeps the
+  browser's own menu closed. A hold loses to a claim another recognizer made
+  first. The headless context menu (`spec:AST-107` FR8) makes its request
+  through it, and ContextMenu through that menu (`component:ContextMenu`
+  FR10). One module keeps these rules the same in every menu. The
   press model has a fine-pointer profile with no delay (FR11); and with a
   mouse, a trackpad, or a pen where the primary pointer is fine a reorder
   starts on a drag from its handle without a hold, while a pen where the

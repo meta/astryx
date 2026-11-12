@@ -162,6 +162,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   clamped heading, and that interaction opens it as it would once
   mounted, by Tooltip's own rules (Tooltip FR3–FR5); until then the heading
   carries no tooltip description, since its full text is already in its DOM.
+  Only a keyboard focus counts as focus interest for mounting the tooltip
+  (`:focus-visible`, not a touch or pen press's own focus); a tap counts and
+  opens it, including a tap that focuses a focusable child, except a tap on a
+  text-entry control, which only focuses it (Tooltip FR5).
 
 ## Design relationships
 
