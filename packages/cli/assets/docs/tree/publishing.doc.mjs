@@ -76,9 +76,9 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'Manifests hold only paths and settings: `integration add` writes `astryx.integration.mjs`, typed through a `@type` comment ({@link generic:quick-start}).',
+            "A manifest's default export holds only paths and settings, and named exports such as `debug` and `gapReport` are plain JavaScript, so `astryx.integration.mjs` needs no TypeScript. `integration add` writes it; for editor types, add a `@type` comment above its default export ({@link generic:quick-start}).",
             'Ship exactly one manifest. Packages holding both `astryx.integration.ts` and `astryx.integration.mjs` fail to load.',
-            'Write doc topics as `.doc.mjs`, codemods as `.mjs`.',
+            'Write doc topics, component docs and template docs as `.doc.mjs`, codemods as `.mjs`.',
           ],
         },
       ],
