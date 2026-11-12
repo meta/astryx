@@ -355,4 +355,21 @@ describe('clampTime', () => {
     expect(clampTime(t('08:00'), t('09:00:30'))).toBe('09:01');
     expect(clampTime(t('18:00'), undefined, t('17:00:30'))).toBe('17:00');
   });
+
+  it('without a whole minute inside the range, keeps the bound itself', () => {
+    // A minimum inside the last minute of the day has no whole minute after it,
+    // and a range narrower than a minute has none at all. Rounding either one
+    // answers below the minimum the caller set, so the bound is the only time
+    // the range holds, seconds and all.
+    expect(clampTime(t('12:00'), t('23:59:30'))).toBe('23:59:30');
+    expect(clampTime(t('12:00'), t('23:59:01'))).toBe('23:59:01');
+    expect(clampTime(t('09:00'), t('10:30:45'), t('10:30:59'))).toBe(
+      '10:30:45',
+    );
+    // The maximum side reaches the same shape when a minimum blocks the whole
+    // minute below it.
+    expect(clampTime(t('23:59:59'), t('23:59:45'), t('23:59:50'))).toBe(
+      '23:59:50',
+    );
+  });
 });

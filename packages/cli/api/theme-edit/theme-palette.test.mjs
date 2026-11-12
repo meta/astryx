@@ -14,7 +14,7 @@ import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -24,12 +24,11 @@ import {
 } from './theme-edit.mjs';
 import {
   PALETTE_TOKENS,
-  officialCitation,
   paletteConfig,
   paletteMapping,
   paletteNotes,
 } from './_palette.mjs';
-import {parseColor, ratio} from './_color.mjs';
+import {compositeOver, hex as hexOf, parseColor, ratio} from './_color.mjs';
 import {
   generateTonalPalette,
   normalizeGenerationRequest,
@@ -39,24 +38,18 @@ import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
 
 /** @param {string} rel */
 const file = rel => path.join(cwd, 'themes', 'p', rel);
@@ -335,14 +328,14 @@ describe('color dials through the palette generator', () => {
       themeEditSet('p', 'accent', '#7c3aed', {cwd, mode: 'dark'}),
     );
     expect(mode.run[0]).toBe(
-      'astryx experimental theme editor set p --color-accent "#7c3aed" --mode dark',
+      "astryx experimental theme editor set p --color-accent '#7c3aed' --mode dark",
     );
     const on = await refusal(() =>
       themeEditSet('p', 'info', '#0284c7', {cwd, on: 'button'}),
     );
     // The button reads no --color-info, so the part's own route leads.
     expect(on.run[0]).toBe(
-      'astryx experimental theme editor set p background-color "#0284c7" --on button',
+      "astryx experimental theme editor set p background-color '#0284c7' --on button",
     );
     expect(read('p.settings.json')).toBe(before);
     expect(fs.existsSync(file('palette.config.json'))).toBe(false);
@@ -455,7 +448,7 @@ describe('color dials through the palette generator', () => {
     expect(brand.commands).toContain('how accent');
     expect(brand.commands).not.toMatch(/ set |<theme>|set my /);
     expect((await ask('brand color #7c3aed')).commands).toContain(
-      `set ${theme} accent "#7c3aed"`,
+      `set ${theme} accent '#7c3aed'`,
     );
     const more = await ask('make it more colorful');
     expect(more.commands).toContain(`set ${theme} vibrancy more`);
@@ -902,7 +895,7 @@ describe('every color decision is generator config', () => {
     expect(notes).not.toContain('shade 50 (');
   });
 
-  it('finds the passing shade on either side, and steps the accent tint until citation text reads', () => {
+  it('finds the passing shade on either side, keeps the tint at its official stop, and lifts secondary text on it', () => {
     const dark = {
       '--color-background-surface': '#101314',
       '--color-background-body': '#101314',
@@ -924,54 +917,141 @@ describe('every color decision is generator config', () => {
     const pal = /** @type {import('./_palette.mjs').PaletteMapping} */ (
       paletteMapping(dir, 'x', data, gothic, tokenDefaults)
     );
-    for (const bg of Object.values(dark))
-      expect(
-        contrast(pal.tokens['--color-text-accent'].light.color, bg),
-      ).toBeGreaterThanOrEqual(4.5);
+    // On a dark light-mode page the light side takes the dark-page shades
+    // (the tint at 30, not 85), so accent text reads on the page and the
+    // tint; it is found on either side of its start.
+    const ramp = /** @type {any} */ (
+      generateTonalPalette(paletteConfig(dir, 'x', data, gothic)).palette.accent
+    ).light;
+    const onAll = (/** @type {string} */ c) =>
+      Math.min(
+        ...[
+          ...Object.values(dark),
+          pal.tokens['--color-accent-muted'].light.color,
+        ].map(bg => contrast(c, bg)),
+      );
+    const best = Math.max(...Object.values(ramp).map(c => onAll(String(c))));
+    const chosen = onAll(pal.tokens['--color-text-accent'].light.color);
+    expect(pal.tokens['--color-accent-muted'].light.stop).toBe(30);
+    expect(best).toBeGreaterThanOrEqual(4.5);
+    expect(chosen).toBeGreaterThanOrEqual(4.5);
     expect(paletteNotes(pal, 'accent', 'x').join(' ')).not.toContain(
       'the most contrasting one',
     );
-    // The official neutral pair: dark text-secondary on the dark accent tint.
+    // The tint stays at the official stop for every accent.
     const withText = {
       light: {...base.light, '--color-text-secondary': '#474747'},
       dark: {...base.dark, '--color-text-secondary': '#9e9e9e'},
     };
-    /** @param {string} seed */
-    const tint = seed => {
+    /** @param {Array<Record<string, string>>} settings */
+    const map = settings => {
       const d = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-palette-cite-'));
       dirs.push(d);
       return /** @type {import('./_palette.mjs').PaletteMapping} */ (
         paletteMapping(
           d,
           'x',
-          {...data, settings: [{thing: 'accent', value: seed, source: 'dial'}]},
+          {...data, settings: settings.map(x => ({source: 'dial', ...x}))},
           withText,
           tokenDefaults,
         )
-      ).tokens['--color-accent-muted'];
+      );
     };
-    // The official stop stays wherever citation text reads as well as in
-    // the official theme.
-    for (const seed of ['#7c3aed', '#2563eb']) {
-      expect(tint(seed).dark.stop, seed).toBe(30);
-      expect(tint(seed).light.stop, seed).toBe(85);
+    for (const seed of ['#7c3aed', '#2563eb', '#00704a', '#1db954']) {
+      const t = map([{thing: 'accent', value: seed}]).tokens;
+      expect(t['--color-accent-muted'].dark.stop, seed).toBe(30);
+      expect(t['--color-accent-muted'].light.stop, seed).toBe(85);
     }
-    // Where it would read worse, the tint steps until it reads as well.
-    for (const seed of ['#00704a', '#1db954', '#aec6cf', '#ccff00'])
+    // A fill at 85 moves the light tint off it, to the lighter neighbor.
+    const lime = map([{thing: 'accent', value: '#ccff00'}]).tokens;
+    expect(lime['--color-accent'].light.stop).toBe(85);
+    expect(lime['--color-accent-muted'].light.stop).toBe(90);
+    // Without a neutral color the lift comes from grays grown from the
+    // base theme's own secondary text, so every accent gets one.
+    for (const seed of ['#00704a', '#7c3aed']) {
+      const pal = map([{thing: 'accent', value: seed}]);
+      const tint = /** @type {any} */ (pal.lift)['--color-accent-muted'];
+      for (const mode of /** @type {const} */ (['light', 'dark'])) {
+        expect(tint[mode].family, seed).toBe('literal');
+        expect(
+          contrast(
+            tint[mode].color,
+            pal.tokens['--color-accent-muted'][mode].color,
+          ),
+          `${seed} ${mode}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    // With one, secondary text on the tinted parts is lifted until it reads
+    // at 4.5:1 on the tint and under a hover, as the official theme lifts
+    // it: Neutral's own gray lands on its dark 80.
+    for (const seed of ['#2563eb', '#00704a', '#1db954', '#aec6cf']) {
+      const pal = map([
+        {thing: 'neutral', value: '#808080'},
+        {thing: 'accent', value: seed},
+      ]);
+      const lift = /** @type {any} */ (pal.lift)['--color-accent-muted'];
       for (const mode of /** @type {const} */ (['light', 'dark']))
         expect(
           contrast(
-            withText[mode]['--color-text-secondary'],
-            tint(seed)[mode].color,
+            lift[mode].color,
+            pal.tokens['--color-accent-muted'][mode].color,
           ),
           `${seed} ${mode}`,
-        ).toBeGreaterThanOrEqual(
-          Math.min(4.5, /** @type {number} */ (officialCitation(mode))) - 0.005,
-        );
-    expect(officialCitation('dark')).toBeCloseTo(
-      contrast('#9e9e9e', '#474747'),
-      2,
+        ).toBeGreaterThanOrEqual(4.5);
+      expect(lift.light.stop, seed).toBe(
+        pal.tokens['--color-text-secondary'].light.stop,
+      );
+    }
+    const gray = /** @type {any} */ (
+      map([
+        {thing: 'neutral', value: '#808080'},
+        {thing: 'accent', value: '#808080'},
+      ]).lift
     );
+    expect(gray['--color-accent-muted'].dark.stop).toBe(80);
+    // Segmented-control labels sit on the neutral track, not the tint:
+    // their lift is picked against the track (here the base has no track
+    // color, so only the tint is lifted).
+    expect(Object.keys(gray)).toEqual(['--color-accent-muted']);
+    const track = {
+      light: {...withText.light, '--color-neutral': '#0000000f'},
+      dark: {...withText.dark, '--color-neutral': '#ffffff1a'},
+    };
+    const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-palette-track-'));
+    dirs.push(d2);
+    const onTrack = /** @type {any} */ (
+      paletteMapping(
+        d2,
+        'x',
+        {
+          ...data,
+          settings: [
+            {thing: 'neutral', value: '#64748b', source: 'dial'},
+            {thing: 'accent', value: '#2563eb', source: 'dial'},
+          ],
+        },
+        track,
+        tokenDefaults,
+      )
+    );
+    for (const mode of /** @type {const} */ (['light', 'dark'])) {
+      const seen = hexOf(
+        compositeOver(
+          /** @type {[number, number, number]} */ (
+            parseColor(track[mode]['--color-neutral'].slice(0, 7))
+          ),
+          mode === 'light' ? 0x0f / 255 : 0x1a / 255,
+          /** @type {[number, number, number]} */ (
+            parseColor(onTrack.tokens['--color-background-surface'][mode].color)
+          ),
+        ),
+      );
+      expect(
+        contrast(onTrack.lift['--color-neutral'][mode].color, seen),
+        mode,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('refuses a layout without black and white, with non-numbers, or with a wide gap', () => {
@@ -1100,13 +1180,13 @@ describe('color settings, refused well', () => {
     /** @param {string} v */
     const why = v => refusal(() => themeEditSet('p', 'accent', v, {cwd}));
     expect((await why('7c3aed')).run[0]).toBe(
-      'astryx experimental theme editor set p accent "#7c3aed"',
+      "astryx experimental theme editor set p accent '#7c3aed'",
     );
     expect((await why('"#16a34a"')).run[0]).toBe(
-      'astryx experimental theme editor set p accent "#16a34a"',
+      "astryx experimental theme editor set p accent '#16a34a'",
     );
     expect((await why('#16a34a;')).run[0]).toBe(
-      'astryx experimental theme editor set p accent "#16a34a"',
+      "astryx experimental theme editor set p accent '#16a34a'",
     );
     expect((await why('purpel')).run[0]).toBe(
       'astryx experimental theme editor set p accent purple',
@@ -1121,7 +1201,7 @@ describe('color settings, refused well', () => {
     const clear = await why('rgba(255, 0, 0, 0.5)');
     expect(clear.message).toContain('see-through');
     expect(clear.run[0]).toBe(
-      'astryx experimental theme editor set p accent "#ff0000"',
+      "astryx experimental theme editor set p accent '#ff0000'",
     );
     expect((await why('#0000')).message).toContain('see-through');
     expect(read('p.settings.json')).toBe(before);
@@ -1130,11 +1210,11 @@ describe('color settings, refused well', () => {
   it('suggests the dial for another name, a part route for a part, and the nearest vibrancy', async () => {
     // The value carries over only to a dial that takes it.
     for (const [thing, rest] of [
-      ['Accent', 'accent "#64748b"'],
-      ['gray', 'neutral "#64748b"'],
+      ['Accent', "accent '#64748b'"],
+      ['gray', "neutral '#64748b'"],
       ['saturation', 'vibrancy 60'],
-      ['destructive', 'danger "#64748b"'],
-      ['brand', 'accent "#64748b"'],
+      ['destructive', "danger '#64748b'"],
+      ['brand', "accent '#64748b'"],
     ]) {
       const r = await refusal(() => themeEditSet('p', thing, '#64748b', {cwd}));
       expect(r.code, thing).toBe('ERR_THEME_UNKNOWN_THING');
@@ -1145,7 +1225,7 @@ describe('color settings, refused well', () => {
     expect(
       (await refusal(() => themeEditSet('p', 'accent', '#ff000', {cwd})))
         .run[0],
-    ).toBe('astryx experimental theme editor set p accent "#ff0000"');
+    ).toBe("astryx experimental theme editor set p accent '#ff0000'");
     const inputs = await refusal(() =>
       themeEditSet('p', 'info', 'blue', {cwd, on: 'inputs'}),
     );
@@ -1356,6 +1436,10 @@ describe('color settings, refused well', () => {
       'tokens/p.palette.ts was edited by hand, so it stays',
     );
     expect(fs.existsSync(file('palette.config.json'))).toBe(false);
+    // The selected-stops file is generated, so it always goes, even when
+    // the palette was edited at a shade the theme ships.
+    expect(fs.existsSync(file('tokens/p.palette-refs.ts'))).toBe(false);
+    expect(r.data.notes.join(' ')).not.toContain('palette-refs');
     // The next color change asks again, until the file is moved out.
     expect(
       (await refusal(() => themeEditSet('p', 'accent', '#16a34a', {cwd}))).code,
@@ -1416,6 +1500,64 @@ describe('color settings, refused well', () => {
   });
 });
 
+describe('lifted text and see-through colors', () => {
+  it('lifts every accent, lets an exact secondary text win per mode and on a part, and measures see-through colors as they show', async () => {
+    await themeEditSet('p', 'accent', '#7c3aed', {cwd});
+    // Without a neutral color the five parts still get a lift, written as
+    // colors into the blocks the base lifts them in.
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)"/,
+    );
+    await themeEditSet('p', 'neutral', '#64748b', {cwd});
+    // An exact secondary text for light only replaces the lift in light,
+    // and keeps it in dark.
+    await themeEditSet('p', '--color-text-secondary', '#5a5a5a', {
+      cwd,
+      mode: 'light',
+    });
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": `light-dark\(#5a5a5a, \$\{palette\.neutral\.dark\[\d+\]\}\)`/,
+    );
+    // On the part, it covers numbered citations too.
+    await themeEditSet('p', '--color-text-secondary', '#123456', {
+      cwd,
+      on: 'citation',
+    });
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#123456, #123456\)"/,
+    );
+    // A see-through hover is measured as it shows.
+    const r = await themeEditSet('p', '--color-overlay-hover', '#ffffff33', {
+      cwd,
+    });
+    expect(r.data.notes.join(' ')).toMatch(/under a hover/);
+    // A see-through exact fill is described as it is, and measured as it
+    // shows over the surface.
+    const fill = await themeEditSet('p', '--color-accent', '#2563eb80', {cwd});
+    expect(fill.data.notes.join(' ')).toContain(
+      'your exact setting (#2563eb80',
+    );
+    expect(fill.data.notes.join(' ')).toContain('as it shows: #');
+    for (const [thing, opts] of /** @type {const} */ ([
+      ['--color-accent', {}],
+      ['--color-overlay-hover', {}],
+      ['--color-text-secondary', {on: 'citation'}],
+      ['--color-text-secondary', {mode: 'light'}],
+      ['neutral', {}],
+      ['accent', {}],
+    ]))
+      await themeEditUndo('p', {cwd, thing, ...opts});
+  });
+
+  it('quotes a family that is not a plain CSS name, and reads a font package as its preset', async () => {
+    await themeEditSet('p', 'font', '3Dumb', {cwd});
+    expect(read('p.settings.ts')).toContain('"family": "\\"3Dumb\\""');
+    const pkg = await themeEditSet('p', 'font', '@fontsource/inter', {cwd});
+    expect(pkg.data.setting.value).toBe('inter');
+    await themeEditUndo('p', {cwd, thing: 'font'});
+  });
+});
+
 describe('font words', () => {
   it('refuses CSS keywords and long names, and knows system families', async () => {
     for (const v of ['inherit', 'initial', 'Inter, unset']) {
@@ -1427,12 +1569,982 @@ describe('font words', () => {
       (await refusal(() => themeEditSet('p', 'font', 'x'.repeat(300), {cwd})))
         .code,
     ).toBe('ERR_THEME_BAD_VALUE');
-    for (const v of ['system-ui', 'Arial', '"Segoe UI"', 'serif, sans-serif']) {
+    for (const v of ['system-ui', 'Arial', 'Tahoma', 'serif, sans-serif']) {
       const r = await themeEditSet('p', 'font', v, {cwd});
       expect(r.data.notes.join(' '), v).not.toContain('is not a system font');
     }
     const source = read('p.settings.ts');
     expect(source).not.toMatch(/system-ui, system-ui/);
     await themeEditUndo('p', {cwd, thing: 'font'});
+  });
+});
+
+describe('fonts some systems ship, and part properties by their grammar', () => {
+  it('warns or offers a package for a font not every desktop has, and loads an installed @fontsource package of any family', async () => {
+    const roboto = await themeEditSet('p', 'font', 'roboto', {cwd});
+    expect(roboto.data.notes.join(' ')).toContain(
+      'Roboto is not installed, so it does not load',
+    );
+    expect(roboto.data.notes.join(' ')).toContain('@fontsource/roboto');
+    const gill = await themeEditSet('p', 'font', 'Gill Sans', {cwd});
+    expect(gill.data.notes.join(' ')).toContain(
+      '"Gill Sans" ships only on macOS',
+    );
+    const pkgDir = path.join(cwd, 'node_modules', '@fontsource', 'gill-sans');
+    fs.mkdirSync(pkgDir, {recursive: true});
+    fs.writeFileSync(
+      path.join(pkgDir, 'package.json'),
+      JSON.stringify({name: '@fontsource/gill-sans', version: '1.0.0'}),
+    );
+    try {
+      const own = await themeEditSet('p', 'font', 'Gill Sans, serif', {cwd});
+      expect(own.data.notes.join(' ')).toContain(
+        'Gill Sans is installed (@fontsource/gill-sans)',
+      );
+      expect(own.data.notes.join(' ')).not.toContain('is not a system font');
+    } finally {
+      fs.rmSync(path.join(cwd, 'node_modules', '@fontsource'), {
+        recursive: true,
+        force: true,
+      });
+    }
+    // The theme build still counts both as preinstalled inside a stack.
+    const {collectUnloadedFonts} =
+      await import('../theme/build/font-warning.mjs');
+    expect(
+      collectUnloadedFonts({
+        tokens: {'--font-family-body': 'Roboto, "Gill Sans", sans-serif'},
+      }),
+    ).toEqual([]);
+    await themeEditUndo('p', {cwd, thing: 'font'});
+  });
+
+  it('checks every part property against its CSS grammar, and keeps CSS-wide keywords out of color tokens', async () => {
+    for (const [prop, value] of [
+      ['background', 'banana'],
+      ['box-shadow', 'banana'],
+      ['border', '1px solid banana'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', prop, value, {cwd, on: 'card'}),
+      );
+      expect(r.code, `${prop} ${value}`).toBe('ERR_THEME_BAD_VALUE');
+      expect(r.message, `${prop} ${value}`).toContain('its CSS grammar');
+    }
+    for (const [prop, value] of [
+      ['border', '1px solid var(--color-border)'],
+      ['background', 'linear-gradient(red, blue)'],
+      ['color', 'revert-layer'],
+    ]) {
+      await themeEditSet('p', prop, value, {cwd, on: 'card'});
+      await themeEditUndo('p', {cwd, thing: prop, on: 'card'});
+    }
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('p', '--color-text-primary', 'revert-layer', {cwd}),
+        )
+      ).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+  });
+});
+
+describe('colors and type, final checks', () => {
+  it('takes one time or easing per token, sound math only, and a leading of 0', async () => {
+    for (const [token, value] of [
+      ['--duration-slow-min', '200ms, 300ms'],
+      ['--ease-standard', 'ease-in, ease-out'],
+      ['--radius-element', 'calc(1px banana)'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', token, value, {cwd}))).code,
+        `${token} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    for (const [token, value] of [
+      ['--duration-slow-min', '300ms'],
+      ['--ease-standard', 'ease-in'],
+      ['--radius-element', 'calc(2px + 1px)'],
+      ['--text-body-leading', '0'],
+    ]) {
+      await themeEditSet('p', token, value, {cwd});
+      await themeEditUndo('p', {cwd, thing: token});
+    }
+  });
+
+  it('gives an exact secondary text to the lifted parts with no color dial', async () => {
+    await themeEditSet('p', '--color-text-secondary', '#5a5a5a', {
+      cwd,
+      mode: 'light',
+    });
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#5a5a5a, [^"]+\)"/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: '--color-text-secondary',
+      mode: 'light',
+    });
+  });
+
+  it('keeps headings for a body font, steps no further than the last rung, and names an exact token a dial cannot change', async () => {
+    await themeEditSet('p', 'font', 'serif', {cwd, on: 'body'});
+    const settings = read('p.settings.ts');
+    expect(settings).toMatch(/"body": \{[^}]*Georgia/);
+    expect(settings).not.toMatch(/"heading": \{[^}]*Georgia/);
+    // A later command still loads the theme with the body font saved.
+    await themeEditSet('p', 'text-size', '20', {cwd});
+    const more = await refusal(() =>
+      themeEditSet('p', 'text-size', 'more', {cwd}),
+    );
+    expect(more.code).toBe('ERR_THEME_BAD_VALUE');
+    expect(more.message).toContain('nowhere to go');
+    await themeEditSet('p', '--font-family-heading', 'Georgia, serif', {cwd});
+    const mono = await themeEditSet('p', 'font', 'mono', {cwd});
+    expect(mono.data.notes.join(' ')).toContain(
+      'keeps your exact --font-family-heading = Georgia, serif',
+    );
+    for (const [thing, on] of [
+      ['font', undefined],
+      ['--font-family-heading', undefined],
+      ['text-size', undefined],
+      ['font', 'body'],
+    ])
+      await themeEditUndo('p', {cwd, thing, ...(on ? {on} : {})});
+  });
+});
+
+describe('chaos round 4', () => {
+  it('refuses a font the loader would refuse, so a saved font never blocks the theme', async () => {
+    for (const v of ['serif !important', 'Foo /* x */']) {
+      const r = await refusal(() => themeEditSet('p', 'font', v, {cwd}));
+      expect(r.code, v).toBe('ERR_THEME_BAD_VALUE');
+    }
+    // The theme still takes commands.
+    await themeEditSet('p', 'corners', 'small', {cwd});
+    await themeEditUndo('p', {cwd, thing: 'corners'});
+  });
+
+  it('refuses part values the browser drops: a bad word, a negative width or duration, a broken url', async () => {
+    for (const [prop, value] of [
+      ['line-height', 'banana'],
+      ['border-width', '-1px'],
+      ['transition-duration', '-1s'],
+      ['background', 'url(photo(1).png)'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', prop, value, {cwd, on: 'card'})))
+          .code,
+        `${prop} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+  });
+
+  it('lists what the dropped mode loses when a theme becomes one-mode', async () => {
+    await themeEditNew('m', {cwd});
+    await themeEditSet('m', 'accent', '#0d9488', {cwd});
+    const dark = await themeEditSet('m', 'mode', 'dark-only', {cwd});
+    expect(dark.data.changedTokens.some(x => /\(light\): /.test(x))).toBe(true);
+    await themeEditUndo('m', {cwd, thing: 'mode'});
+    const light = await themeEditSet('m', 'mode', 'light-only', {cwd});
+    expect(light.data.changedTokens.some(x => /\(dark\): /.test(x))).toBe(true);
+    fs.rmSync(path.join(cwd, 'themes', 'm'), {recursive: true, force: true});
+  });
+
+  it('keeps the shades a theme shows until a color changes', async () => {
+    await themeEditNew('o', {cwd});
+    await themeEditSet('o', 'accent', '#7c3aed', {cwd});
+    const ts = path.join(cwd, 'themes', 'o', 'o.settings.ts');
+    // As an earlier editor mapped the tint: dark 25, not 30.
+    const older = fs
+      .readFileSync(ts, 'utf8')
+      .replace(
+        /("--color-accent-muted": \[\s*palette\.accent\.light\[85\],\s*palette\.accent\.dark\[)30(\])/,
+        '$125$2',
+      );
+    expect(older).toContain('palette.accent.dark[25]');
+    fs.writeFileSync(ts, older.replace(/^\/\/ Module [0-9a-f]{16}\.\n/m, ''));
+    await themeEditSet('o', 'corners', 'pill', {cwd});
+    expect(fs.readFileSync(ts, 'utf8')).toContain('palette.accent.dark[25]');
+    // The next change reports no color change either.
+    const corners = await themeEditSet('o', 'corners', 'small', {cwd});
+    expect(
+      corners.data.changedTokens.some(x =>
+        x.startsWith('--color-accent-muted'),
+      ),
+    ).toBe(false);
+    await themeEditUndo('o', {cwd, thing: 'corners'});
+    expect(fs.readFileSync(ts, 'utf8')).toContain('palette.accent.dark[25]');
+    // A color change maps the colors with this editor's rules.
+    await themeEditSet('o', 'accent', '#6d28d9', {cwd});
+    expect(fs.readFileSync(ts, 'utf8')).toMatch(
+      /"--color-accent-muted": \[\s*palette\.accent\.light\[85\],\s*palette\.accent\.dark\[30\]/,
+    );
+    fs.rmSync(path.join(cwd, 'themes', 'o'), {recursive: true, force: true});
+  });
+});
+
+describe('a palette an earlier editor wrote', () => {
+  it('is brought up to date before the build reads it, so a font change keeps the accent and the next change does too', async () => {
+    await themeEditNew('w', {cwd});
+    await themeEditSet('w', 'mode', 'dark-only', {cwd});
+    await themeEditSet('w', 'accent', '#5e6ad2', {cwd});
+    await themeEditSet('w', 'neutral', '#26272e', {cwd});
+    await themeEditSet('w', 'vibrancy', '40', {cwd});
+    const dir = path.join(cwd, 'themes', 'w');
+    const accent = () =>
+      /--color-accent:\s*([^;]+);/.exec(
+        fs.readFileSync(path.join(dir, 'w.css'), 'utf8'),
+      )?.[1];
+    const settled = accent();
+    // The config, palette and receipt as an earlier editor wrote them for
+    // this dark-only theme: both modes, and only a light accent anchor.
+    const config = {
+      vibrancy: 40,
+      modeStrategy: 'light-and-dark',
+      neutralProfile: 'custom',
+      families: [
+        {
+          id: 'accent',
+          name: 'Accent',
+          seed: '#5e6ad2',
+          anchors: [
+            {mode: 'light', stop: 50, color: '#5e6ad2', policy: 'exact'},
+          ],
+        },
+        {id: 'neutral', name: 'Neutral', seed: '#26272e', kind: 'neutral'},
+      ],
+    };
+    fs.writeFileSync(
+      path.join(dir, 'palette.config.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+    themePaletteGenerate(
+      'themes/w/palette.config.json',
+      {out: 'themes/w/tokens/w.palette.ts', overwrite: true},
+      {cwd},
+    );
+    // An earlier editor wrote both modes' stops for a one-mode theme.
+    const ts = path.join(dir, 'w.settings.ts');
+    fs.writeFileSync(
+      ts,
+      fs
+        .readFileSync(ts, 'utf8')
+        .replace(
+          /"--color-accent": palette\.accent\.dark\[[\d.]+\],/,
+          '"--color-accent": [palette.accent.light[50], palette.accent.dark[70]],',
+        )
+        .replace(/^\/\/ Module [0-9a-f]{16}\.\n/m, ''),
+    );
+    expect(fs.readFileSync(ts, 'utf8')).toContain('palette.accent.dark[70]');
+    // An earlier editor kept no palette hash in the settings.
+    const settingsFile = path.join(dir, 'w.settings.json');
+    const saved = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    delete saved.palette;
+    fs.writeFileSync(settingsFile, `${JSON.stringify(saved, null, 2)}\n`);
+    await themeEditSet('w', 'font', 'system', {cwd});
+    expect(accent()).toBe(settled);
+    await themeEditSet('w', 'corners', 'large', {cwd});
+    expect(accent()).toBe(settled);
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+});
+
+describe('legacy grammar and code fonts', () => {
+  it('refuses a filter word the browser drops, and gives a code font monospace fallbacks', async () => {
+    for (const prop of ['filter', 'backdrop-filter'])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', prop, 'banana', {cwd, on: 'card'}),
+          )
+        ).code,
+        prop,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    await themeEditSet('p', 'filter', 'blur(4px)', {cwd, on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'filter', on: 'card'});
+    await themeEditSet('p', 'font', 'Fira Code', {cwd, on: 'code'});
+    expect(read('p.settings.ts')).toMatch(
+      /"code": \{\s*"family": "Fira Code",\s*"fallbacks": "ui-monospace, monospace"/,
+    );
+    await themeEditUndo('p', {cwd, thing: 'font', on: 'code'});
+  });
+});
+
+describe('colors final-3', () => {
+  it('types the math in calc(), and refuses CSS-wide keywords on tokens', async () => {
+    for (const [thing, value, on] of [
+      ['--radius-element', 'calc(4px + 2)'],
+      ['--text-body-size', 'calc(10px / 2px)'],
+      ['--duration-fast', 'calc(100ms + 1px)'],
+      ['padding', 'calc(1s)', 'button'],
+      ['font-size', 'calc(1rem * 1rem)', 'heading'],
+      ['--font-family-body', 'inherit'],
+      ['--font-family-heading', 'initial'],
+    ])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', thing, value, {cwd, ...(on ? {on} : {})}),
+          )
+        ).code,
+        `${thing} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    for (const [thing, value] of [
+      ['--radius-element', 'calc(4px + 2px)'],
+      ['--duration-fast', 'calc(var(--duration-medium) / 2)'],
+      ['--text-body-leading', 'calc(1.2 * 1)'],
+    ]) {
+      await themeEditSet('p', thing, value, {cwd});
+      await themeEditUndo('p', {cwd, thing});
+    }
+  });
+
+  it('warns for a font one system ships, refuses var() in the font dial, and reads a preset by its package name', async () => {
+    for (const [family, note] of [
+      ['Ubuntu', 'is not a system font'],
+      ['Segoe UI', 'ships only on Windows'],
+      ['Menlo', 'ships only on macOS'],
+    ]) {
+      const r = await themeEditSet('p', 'font', family, {cwd});
+      expect(r.data.notes.join(' '), family).toContain(note);
+    }
+    const preset = await themeEditSet('p', 'font', 'segoe', {cwd});
+    expect(preset.data.notes.join(' ')).not.toContain('is not a system font');
+    const v = await refusal(() =>
+      themeEditSet('p', 'font', 'var(--font-family-code)', {cwd, on: 'body'}),
+    );
+    expect(v.code).toBe('ERR_THEME_BAD_VALUE');
+    expect(v.run?.[0] ?? JSON.stringify(v)).toContain('--font-family-body');
+    const geist = await themeEditSet('p', 'font', 'geist-sans', {cwd});
+    expect(geist.data.setting.value).toBe('geist');
+    const medium = await refusal(() =>
+      themeEditSet('p', 'text-size', 'Medium', {cwd}),
+    );
+    expect(JSON.stringify(medium)).toContain('text-size medium');
+    await themeEditUndo('p', {cwd, thing: 'font'});
+  });
+
+  it('does not say a body font moves the headings, since it does not', async () => {
+    await themeEditNew('g1', {cwd, like: 'neutral'}).catch(() =>
+      themeEditNew('g1', {cwd}),
+    );
+    const r = await themeEditHow('font', {cwd, theme: 'g1'});
+    expect(JSON.stringify(r.data)).not.toContain('also sets the heading font');
+    fs.rmSync(path.join(cwd, 'themes', 'g1'), {recursive: true, force: true});
+  });
+
+  it('builds a hand edit of the generated module over from the settings', async () => {
+    await themeEditNew('g4', {cwd});
+    await themeEditSet('g4', 'accent', '#7c3aed', {cwd});
+    const dir = path.join(cwd, 'themes', 'g4');
+    const ts = path.join(dir, 'g4.settings.ts');
+    const css = () => fs.readFileSync(path.join(dir, 'g4.css'), 'utf8');
+    const muted = /--color-accent-muted:\s*([^;]+);/.exec(css())?.[1];
+    fs.writeFileSync(
+      ts,
+      fs
+        .readFileSync(ts, 'utf8')
+        .replace('palette.accent.light[85]', 'palette.accent.light[5]'),
+    );
+    await themeEditSet('g4', 'corners', 'pill', {cwd});
+    expect(/--color-accent-muted:\s*([^;]+);/.exec(css())?.[1]).toBe(muted);
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+});
+
+describe('colors10', () => {
+  it('reads CSS math functions by their types', async () => {
+    for (const [prop, value] of [
+      ['opacity', 'pow(0.5, 2)'],
+      ['width', 'hypot(3px, 4px)'],
+      ['transform', 'rotate(atan2(1, 1))'],
+      ['width', 'calc(10px * cos(0deg))'],
+      ['width', 'mod(10px, 3px)'],
+      ['width', 'round(up, 10.5px, 2px)'],
+      ['opacity', 'log(8, 2)'],
+    ]) {
+      await themeEditSet('p', prop, value, {cwd, on: 'card'});
+      await themeEditUndo('p', {cwd, thing: prop, on: 'card'});
+    }
+    for (const [prop, value] of [
+      ['width', 'sqrt(4px)'],
+      ['width', 'pow(2px, 2)'],
+      ['width', 'mod(10px, 3s)'],
+      ['opacity', 'sin(1px)'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', prop, value, {cwd, on: 'card'})))
+          .code,
+        `${prop} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+  });
+
+  it('leaves the theme build its own font list, and names commands for a font step', async () => {
+    const {collectUnloadedFonts} =
+      await import('../theme/build/font-warning.mjs');
+    // As the build has always read it: Ubuntu warns, Roboto does not.
+    expect(
+      collectUnloadedFonts({
+        tokens: {'--font-family-body': 'Ubuntu, Roboto, sans-serif'},
+      }),
+    ).toEqual(['Ubuntu']);
+    const step = await refusal(() => themeEditSet('p', 'font', 'more', {cwd}));
+    expect(step.code).toBe('ERR_THEME_BAD_VALUE');
+    expect(step.run.length).toBeGreaterThan(0);
+  });
+});
+
+describe('colors10, final-4', () => {
+  it('types the math inside colors, and refuses a mix of nothing', async () => {
+    for (const [thing, value, on] of [
+      ['--color-accent', 'rgb(calc(1px banana) 0 0)'],
+      ['--color-accent', 'rgb(calc(1px) 0 0)'],
+      ['--color-accent', 'color-mix(in oklch, red 0%, white 0%)'],
+      ['color', 'hsl(calc(1px) 50% 50%)', 'button'],
+    ])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', thing, value, {cwd, ...(on ? {on} : {})}),
+          )
+        ).code,
+        `${thing} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    for (const value of [
+      'rgb(calc(100) 0 0)',
+      'rgb(var(--r, 0) 0 0)',
+      'oklch(from var(--color-accent) l c h / 0.5)',
+    ]) {
+      await themeEditSet('p', '--color-text-primary', value, {cwd});
+      await themeEditUndo('p', {cwd, thing: '--color-text-primary'});
+    }
+  });
+
+  it('refuses a percentage on a token only widths and offsets read, and takes the math CSS takes', async () => {
+    for (const [thing, value] of [
+      ['--border-width', '10%'],
+      ['--focus-outline-width', '10%'],
+      ['--focus-outline-offset', 'calc(2px + 5%)'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', thing, value, {cwd}))).code,
+        `${thing} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    for (const [thing, value] of [
+      ['--radius-element', '10%'],
+      ['--radius-element', 'abs(-4px)'],
+      ['--radius-element', 'clamp(none, 4px, 8px)'],
+      ['--radius-element', 'calc(sin(30deg) * 10px)'],
+      ['--radius-element', 'round(up, 5.4px, 2px)'],
+      ['--text-body-weight', 'calc(400 + 100)'],
+    ]) {
+      await themeEditSet('p', thing, value, {cwd});
+      await themeEditUndo('p', {cwd, thing});
+    }
+    expect(
+      (
+        await refusal(() =>
+          themeEditSet('p', 'grid-template-columns', 'repeat(2, calc(1fr))', {
+            cwd,
+            on: 'card',
+          }),
+        )
+      ).code,
+    ).toBe('ERR_THEME_BAD_VALUE');
+  });
+
+  it('says on which system a one-system font ships', async () => {
+    const segoe = await themeEditSet('p', 'font', 'Segoe UI', {cwd});
+    expect(segoe.data.notes.join(' ')).toContain('ships only on Windows');
+    expect(segoe.data.notes.join(' ')).not.toContain('must load');
+    const apple = await themeEditSet('p', 'font', '-apple-system', {cwd});
+    expect(apple.data.notes.join(' ')).toContain('font system');
+    await themeEditUndo('p', {cwd, thing: 'font'});
+  });
+
+  it('reads the hand-edit seal through CRLF line endings', async () => {
+    await themeEditNew('crlf', {cwd});
+    await themeEditSet('crlf', 'accent', '#7c3aed', {cwd});
+    const dir = path.join(cwd, 'themes', 'crlf');
+    const ts = path.join(dir, 'crlf.settings.ts');
+    const css = () => fs.readFileSync(path.join(dir, 'crlf.css'), 'utf8');
+    const muted = /--color-accent-muted:\s*([^;]+);/.exec(css())?.[1];
+    fs.writeFileSync(
+      ts,
+      fs
+        .readFileSync(ts, 'utf8')
+        .replace(/\n/g, '\r\n')
+        .replace('palette.accent.light[85]', 'palette.accent.light[5]'),
+    );
+    await themeEditSet('crlf', 'corners', 'pill', {cwd});
+    expect(/--color-accent-muted:\s*([^;]+);/.exec(css())?.[1]).toBe(muted);
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+});
+
+describe('colors11: refusals name a command that works', () => {
+  it('reads a dial typed in other letters as the dial', async () => {
+    const r = await refusal(() => themeEditSet('p', 'Font', 'inter', {cwd}));
+    expect(r.message).toContain('The dial for that is font');
+    expect(r.run).toContain(
+      r.run.find(x => / set p font inter$/.test(x)) ?? 'missing',
+    );
+  });
+
+  it('splits a font shorthand on a part into commands that work', async () => {
+    const r = await refusal(() =>
+      themeEditSet('p', 'font', 'bold 16px/1.5 Georgia, serif', {
+        cwd,
+        on: 'card',
+      }),
+    );
+    expect(
+      r.run.some(x => /font-family 'Georgia, serif' --on card$/.test(x)),
+    ).toBe(true);
+    expect(r.run.some(x => /font-size 16px --on card$/.test(x))).toBe(true);
+    for (const [prop, value] of [
+      ['font-family', 'Georgia, serif'],
+      ['font-size', '16px'],
+    ]) {
+      await themeEditSet('p', prop, value, {cwd, on: 'card'});
+      await themeEditUndo('p', {cwd, thing: prop, on: 'card'});
+    }
+  });
+
+  it('never suggests an MDN note as a value, and names a color that works', async () => {
+    const family = await refusal(() =>
+      themeEditSet('p', 'font-family', '16px inter', {cwd, on: 'card'}),
+    );
+    expect(family.run.join(' ')).not.toContain('dependsOnUserAgent');
+    expect(family.run.join(' ')).toContain('font-family');
+    for (const prop of ['color', 'background-color', 'border-color']) {
+      const r = await refusal(() =>
+        themeEditSet('p', prop, 'banana', {cwd, on: 'card'}),
+      );
+      expect(r.run.length, prop).toBeGreaterThan(0);
+      expect(r.run[0], prop).toMatch(
+        new RegExp(` set p ${prop} \\S+ --on card$`),
+      );
+    }
+  });
+});
+
+describe('colors12', () => {
+  it('splits a per-mode part color at its own comma, in either order', async () => {
+    for (const [first, second] of [
+      [
+        ['dark', 'rgb(0, 0, 255)'],
+        ['light', 'red'],
+      ],
+      [
+        ['light', 'hsl(0, 100%, 50%)'],
+        ['dark', 'color-mix(in oklch, red 20%, white)'],
+      ],
+    ]) {
+      await themeEditSet('p', 'background-color', first[1], {
+        cwd,
+        on: 'card',
+        when: 'variant:default',
+        mode: first[0],
+      });
+      await themeEditSet('p', 'background-color', second[1], {
+        cwd,
+        on: 'card',
+        when: 'variant:default',
+        mode: second[0],
+      });
+      const [light, dark] =
+        first[0] === 'light' ? [first[1], second[1]] : [second[1], first[1]];
+      expect(read('p.settings.ts')).toContain(
+        JSON.stringify(`light-dark(${light}, ${dark})`),
+      );
+      for (const m of ['light', 'dark'])
+        await themeEditUndo('p', {
+          cwd,
+          thing: 'background-color',
+          on: 'card',
+          when: 'variant:default',
+          mode: m,
+        });
+    }
+  });
+
+  it('refuses --mode on a value that gives both modes, and reads every color() space', async () => {
+    for (const [thing, on] of [
+      ['--color-accent'],
+      ['background-color', 'card'],
+    ])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', thing, 'light-dark(#fff, #000)', {
+              cwd,
+              mode: 'light',
+              ...(on ? {on} : {}),
+            }),
+          )
+        ).code,
+        thing,
+      ).toBe('ERR_THEME_NO_MODE');
+    for (const space of [
+      'rec2020',
+      'a98-rgb',
+      'prophoto-rgb',
+      'xyz',
+      'xyz-d50',
+      'xyz-d65',
+    ]) {
+      await themeEditSet('p', 'accent', `color(${space} 0.3 0.4 0.8)`, {cwd});
+      await themeEditUndo('p', {cwd, thing: 'accent'});
+    }
+  });
+});
+
+describe('colors13', () => {
+  it('maps every part of a font shorthand on a part to its longhand, and never a keyword to a family', async () => {
+    /** @param {string} v */
+    const runs = async v =>
+      (await refusal(() => themeEditSet('p', 'font', v, {cwd, on: 'card'})))
+        .run;
+    const caps = await runs('italic small-caps 700 1rem/1 Arial');
+    for (const want of [
+      /font-style italic --on card$/,
+      /font-variant-caps small-caps --on card$/,
+      /font-weight 700 --on card$/,
+      /font-size 1rem --on card$/,
+      /line-height 1 --on card$/,
+      /font-family Arial --on card$/,
+    ])
+      expect(
+        caps.some(x => want.test(x)),
+        String(want),
+      ).toBe(true);
+    expect(
+      (await runs('oblique 10deg 200 condensed 2em sans-serif')).some(x =>
+        /font-stretch condensed --on card$/.test(x),
+      ),
+    ).toBe(true);
+    const bold = await runs('bold');
+    expect(bold.some(x => /font-weight bold --on card$/.test(x))).toBe(true);
+    expect(bold.join(' ')).not.toMatch(/font-family bold/);
+    expect((await runs('caption')).join(' ')).not.toMatch(
+      /font-family caption/,
+    );
+    for (const run of caps) {
+      const [, prop, value] = / set p (\S+) (.+) --on card$/.exec(run) ?? [];
+      await themeEditSet('p', prop, value.replace(/^'(.*)'$/, '$1'), {
+        cwd,
+        on: 'card',
+      });
+      await themeEditUndo('p', {cwd, thing: prop, on: 'card'});
+    }
+  });
+
+  it('works out a color-mix() of two fixed colors', async () => {
+    const {parseColor, hex} = await import('./_color.mjs');
+    expect(
+      hex(/** @type {any} */ (parseColor('color-mix(in srgb, red, blue)'))),
+    ).toBe('#800080');
+    await themeEditSet('p', 'accent', 'color-mix(in srgb, red, blue)', {cwd});
+    await themeEditSet(
+      'p',
+      'accent',
+      'color-mix(in oklch, #e11d48 60%, white)',
+      {
+        cwd,
+      },
+    );
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+    const odd = await refusal(() =>
+      themeEditSet('p', 'accent', 'color-mix(in hsl, red, blue)', {cwd}),
+    );
+    expect(odd.message).toContain('give the mixed color itself');
+  });
+});
+
+describe('colors14', () => {
+  it('suggests longhands set takes, and refuses negatives the current grammar does', async () => {
+    const r = await refusal(() =>
+      themeEditSet('p', 'font', 'condensed', {cwd, on: 'card'}),
+    );
+    const run = r.run.find(x => /font-stretch condensed --on card$/.test(x));
+    expect(run).toBeTruthy();
+    await themeEditSet('p', 'font-stretch', 'condensed', {cwd, on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'font-stretch', on: 'card'});
+    for (const [prop, value] of [
+      ['line-height', '-1'],
+      ['line-height', '-10px'],
+      ['gap', '-2px'],
+    ]) {
+      const bad = await refusal(() =>
+        themeEditSet('p', prop, value, {cwd, on: 'card'}),
+      );
+      expect(bad.code, `${prop} ${value}`).toBe('ERR_THEME_BAD_VALUE');
+      expect(bad.run[0], prop).toMatch(new RegExp(` set p ${prop} \\d`));
+    }
+    await themeEditSet('p', 'margin', '-4px', {cwd, on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'margin', on: 'card'});
+    for (const [value, prop] of [
+      ['small', 'font-size'],
+      ['x-large', 'font-size'],
+      ['larger', 'font-size'],
+      ['1rem', 'font-size'],
+      ['700', 'font-weight'],
+    ]) {
+      const runs = (
+        await refusal(() => themeEditSet('p', 'font', value, {cwd, on: 'card'}))
+      ).run;
+      expect(
+        runs.some(x => x.includes(` ${prop} ${value} --on card`)),
+        value,
+      ).toBe(true);
+      expect(runs.join(' '), value).not.toContain(`font-family ${value}`);
+    }
+  });
+
+  it('refuses a color-mix() share past 100%, and reads mixes, relative colors and equal halves', async () => {
+    for (const [thing, on] of [
+      ['--color-accent'],
+      ['background-color', 'card'],
+    ])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', thing, 'color-mix(in srgb, red 150%, blue)', {
+              cwd,
+              ...(on ? {on} : {}),
+            }),
+          )
+        ).code,
+        thing,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    const dial = await refusal(() =>
+      themeEditSet('p', 'accent', 'color-mix(in srgb, red 150%, blue)', {cwd}),
+    );
+    expect(dial.run[0]).toContain('#ff0000');
+    for (const value of ['rgb(from red r g b)', 'light-dark(red, red)']) {
+      await themeEditSet('p', 'accent', value, {cwd});
+      await themeEditUndo('p', {cwd, thing: 'accent'});
+    }
+    const lab = await refusal(() =>
+      themeEditSet('p', 'accent', 'color-mix(in lab, red, blue)', {cwd}),
+    );
+    expect(lab.run[0]).not.toContain('#7c3aed');
+    expect(lab.message).toContain('give the mixed color itself');
+  });
+});
+
+describe('colors15', () => {
+  it('refuses negative percentages, and reads any CSS percentage as a mix share', async () => {
+    for (const [prop, value] of [
+      ['line-height', '-50%'],
+      ['gap', '-10%'],
+      ['font-stretch', '-10%'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', prop, value, {cwd, on: 'card'})))
+          .code,
+        `${prop} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    for (const share of ['5e1%', '+50%', 'calc(50%)']) {
+      await themeEditSet(
+        'p',
+        '--color-accent',
+        `color-mix(in srgb, red ${share}, blue)`,
+        {cwd},
+      );
+      await themeEditUndo('p', {cwd, thing: '--color-accent'});
+    }
+    await themeEditSet('p', 'accent', 'color-mix(in srgb, red 1e2%, blue)', {
+      cwd,
+    });
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
+  it('takes a line height token as a number only, as Core multiplies it', async () => {
+    for (const [value, unitless] of [
+      ['1.5em', '1.5'],
+      ['150%', '1.5'],
+      ['normal', null],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', '--text-body-leading', value, {cwd}),
+      );
+      expect(r.code, value).toBe('ERR_THEME_BAD_VALUE');
+      if (unitless)
+        expect(r.run[0], value).toMatch(
+          new RegExp(`--text-body-leading ${unitless}$`),
+        );
+    }
+    await themeEditSet('p', '--text-body-leading', '1.5', {cwd});
+    await themeEditUndo('p', {cwd, thing: '--text-body-leading'});
+  });
+
+  it('suggests the headings word meant, the font a role keeps, and text sizes the dial takes', async () => {
+    for (const [value, word] of [
+      ['BOLD', 'bold'],
+      ['Tight', 'tight'],
+      ['700', 'bold'],
+      ['800', 'heavy'],
+      ['900', 'heavy'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'headings', value, {cwd}),
+      );
+      expect(r.run[0], value).toMatch(new RegExp(` headings ${word}$`));
+    }
+    await themeEditSet('p', 'font', 'georgia', {cwd, on: 'body'});
+    await themeEditSet('p', 'font', 'georgia', {cwd, on: 'heading'});
+    const masked = await themeEditSet('p', 'font', 'verdana', {cwd});
+    const said = masked.data.notes.join(' ');
+    expect(said).not.toContain('already shows');
+    expect(said).toContain('undo p font --on body');
+    for (const thing of ['font', 'font', 'font'])
+      await themeEditUndo('p', {cwd, thing}).catch(() => {});
+    const comic = await themeEditSet('p', 'font', 'Comic Sans MS', {cwd});
+    expect(comic.data.notes.join(' ')).not.toContain('not a system font');
+    await themeEditSet('p', 'text-size', '32', {cwd});
+    const more = await refusal(() =>
+      themeEditSet('p', 'text-size', 'more', {cwd}),
+    );
+    expect(more.run[0]).toContain('--font-size-base');
+    await themeEditSet('p', 'text-size', '31', {cwd});
+    const more31 = await refusal(() =>
+      themeEditSet('p', 'text-size', 'more', {cwd}),
+    );
+    expect(more31.run[0]).toMatch(/ text-size 32$/);
+  });
+
+  it('maps every keyword of a font value on a part to its longhand', async () => {
+    const r = await refusal(() =>
+      themeEditSet('p', 'font', 'italic bold', {cwd, on: 'card'}),
+    );
+    expect(r.run.some(x => /font-style italic --on card$/.test(x))).toBe(true);
+    expect(r.run.some(x => /font-weight bold --on card$/.test(x))).toBe(true);
+    expect(r.run.join(' ')).not.toContain('font-family');
+    const sized = await refusal(() =>
+      themeEditSet('p', 'font', '1rem bold', {cwd, on: 'card'}),
+    );
+    expect(sized.run.some(x => /font-size 1rem --on card$/.test(x))).toBe(true);
+    // A keyword after the size is the family, as CSS reads it.
+    expect(sized.run.some(x => /font-family bold --on card$/.test(x))).toBe(
+      true,
+    );
+    expect(sized.run.join(' ')).not.toContain('font-weight bold');
+  });
+});
+
+describe('colors16', () => {
+  it('keeps weight keywords on weight tokens, and a theme saved with one editable', async () => {
+    await themeEditSet('p', '--font-weight-bold', 'bold', {cwd});
+    await themeEditSet('p', 'corners', 'pill', {cwd});
+    await themeEditUndo('p', {cwd, thing: 'corners'});
+    for (const v of ['normal', 'bolder', 'lighter', '7e2', '+700'])
+      await themeEditSet('p', '--font-weight-bold', v, {cwd});
+    await themeEditUndo('p', {cwd, thing: '--font-weight-bold'});
+  });
+
+  it('reads CSS numbers as the browser does, and only multiplied tokens refuse units', async () => {
+    for (const v of ['1.5e0', '+1.5', '15E-1']) {
+      await themeEditSet('p', '--text-body-leading', v, {cwd});
+      await themeEditUndo('p', {cwd, thing: '--text-body-leading'});
+    }
+    const em = await refusal(() =>
+      themeEditSet('p', '--text-body-leading', '1.5EM', {cwd}),
+    );
+    expect(em.run[0]).toMatch(/--text-body-leading 1\.5$/);
+    for (const share of ['50.%', '5.e1%'])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet(
+              'p',
+              '--color-accent',
+              `color-mix(in srgb, red ${share}, blue)`,
+              {cwd},
+            ),
+          )
+        ).code,
+        share,
+      ).toBe('ERR_THEME_BAD_VALUE');
+  });
+
+  it('splits size with line height and math, and refuses a part named twice', async () => {
+    for (const [value, want] of [
+      [
+        '1rem/1.5',
+        [/font-size 1rem --on card$/, /line-height 1\.5 --on card$/],
+      ],
+      [
+        'italic 1rem/1.5',
+        [/font-style italic --on card$/, /line-height 1\.5 --on card$/],
+      ],
+      ['calc(1rem + 2px)', [/font-size 'calc\(1rem \+ 2px\)' --on card$/]],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'font', value, {cwd, on: 'card'}),
+      );
+      for (const w of want)
+        expect(
+          r.run.some(x => w.test(x)),
+          `${value} ${w}`,
+        ).toBe(true);
+      expect(r.run.join(' '), value).not.toContain('font-family');
+    }
+    const twice = await refusal(() =>
+      themeEditSet('p', 'font', 'bold bold', {cwd, on: 'card'}),
+    );
+    expect(twice.message).toContain('twice');
+    // After the size, the rest is the family; more normals than parts that
+    // take it are named as such.
+    const familyAfter = await refusal(() =>
+      themeEditSet('p', 'font', '16px bold', {cwd, on: 'card'}),
+    );
+    expect(familyAfter.run.join('\n')).toMatch(/ font-family bold --on card/);
+    const five = await refusal(() =>
+      themeEditSet('p', 'font', 'normal normal normal normal normal', {
+        cwd,
+        on: 'card',
+      }),
+    );
+    expect(five.message).toContain(
+      'gives normal more times than the parts that take it (font-weight, font-style, font-variant-caps, font-stretch)',
+    );
+    // Another word for a part already given is the same part twice.
+    for (const value of ['bold lighter', 'italic oblique']) {
+      const again = await refusal(() =>
+        themeEditSet('p', 'font', value, {cwd, on: 'card'}),
+      );
+      expect(again.message, value).toContain('twice');
+      expect(again.run.join(' '), value).not.toContain(
+        `font-family '${value}'`,
+      );
+    }
+    expect(twice.run.join(' ')).not.toContain("font-family 'bold bold'");
+    // normal is a keyword of several parts: each is the next of them, never
+    // the same part twice.
+    const normal = await refusal(() =>
+      themeEditSet('p', 'font', 'normal normal 16px serif', {cwd, on: 'card'}),
+    );
+    expect(normal.message).not.toContain('twice');
+    // Every other word is placed first: normal takes what is left.
+    const normalBold = await refusal(() =>
+      themeEditSet('p', 'font', 'normal bold', {cwd, on: 'card'}),
+    );
+    expect(normalBold.run.join(' ')).not.toContain('font-family');
+    expect(
+      normalBold.run.some((/** @type {string} */ x) =>
+        / font-weight bold --on card$/.test(x),
+      ),
+    ).toBe(true);
+    expect(
+      normal.run.some((/** @type {string} */ x) =>
+        / font-size 16px --on card$/.test(x),
+      ),
+    ).toBe(true);
+    expect(
+      normal.run.some((/** @type {string} */ x) =>
+        / font-family serif --on card$/.test(x),
+      ),
+    ).toBe(true);
   });
 });

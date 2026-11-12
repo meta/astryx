@@ -26,6 +26,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {gatherCacheSummary} from '../../foundation/fs/gather-cache.mjs';
 
 import {
   MIN_NODE_VERSION,
@@ -99,6 +100,7 @@ import {
   COMPUTER_INSTALL_STEP,
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {
+  keptFileCheck,
   alignCommand,
   addCliCommandFor,
   computerAgentTextState,
@@ -2178,6 +2180,24 @@ async function runComputerChecks(cwd) {
 }
 
 /**
+ * Where `search` and `build` keep their gathered catalog between runs, and
+ * how much it holds; and, in a run under Yarn Plug'n'Play's loader, that the
+ * run keeps none (runsUnderPnp). Left out of a checkout, which keeps none.
+ * @returns {DoctorCheck | null}
+ */
+export function checkGatherCache() {
+  const summary = gatherCacheSummary();
+  if (summary == null) return null;
+  const size = `${(summary.bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return {
+    id: 'gather-cache',
+    label: 'Kept catalog cache',
+    status: 'info',
+    message: `search, build, component, template, theme, discover and doctor keep what they gather (search's catalogs, each integration's check results, and doctor's docs checks) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it.`,
+  };
+}
+
+/**
  * Ordered list of synchronous check functions. Append here to add a check.
  * (checkConfig is async and is awaited separately by {@link runChecks}.)
  * A check that returns null does not apply to the project and is left out.
@@ -2197,6 +2217,7 @@ export const SYNC_CHECKS = [
   checkPeerDeps,
   checkPackageManager,
   checkCliCommand,
+  checkGatherCache,
 ];
 
 /**
@@ -2445,9 +2466,22 @@ export async function runChecks(options = {}) {
     );
   }
   checks.push(await checkAuthoringDocs(ctx));
-  checks.push(await checkCliDocs(ctx));
-  checks.push(await checkDocsTree(ctx));
-  checks.push(await checkDocsProgressiveDisclosure(ctx));
+  // The checks that read only files, each kept while every file it read is
+  // unchanged; the Core the project loads is part of what they read.
+  const where = {cwd, coreDir: coreDir ?? null};
+  checks.push(
+    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
+  );
+  checks.push(
+    await keptFileCheck({name: 'docs-tree', ...where}, () =>
+      checkDocsTree(ctx),
+    ),
+  );
+  checks.push(
+    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
+      checkDocsProgressiveDisclosure(ctx),
+    ),
+  );
 
   const summary = {pass: 0, warn: 0, fail: 0, info: 0};
   for (const c of checks) summary[c.status] += 1;

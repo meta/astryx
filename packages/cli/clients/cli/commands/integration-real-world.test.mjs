@@ -510,8 +510,8 @@ export const oceanTheme = defineTheme({
         package: '@acme/brand-integration',
         outputDir: target,
         files: expect.arrayContaining([
-          'oceanTheme.ts',
-          'oceanTheme.doc.mjs',
+          'acmeOceanTheme.ts',
+          'acmeOceanTheme.doc.mjs',
           'tokens/ocean.palette.receipt.json',
           'tokens/ocean.palette.ts',
         ]),
@@ -537,16 +537,17 @@ export const oceanTheme = defineTheme({
       ).recipe,
     ).toBe('astryx-oklch-v1');
 
-    const copiedEntry = path.join(target, 'oceanTheme.ts');
+    const copiedEntry = path.join(target, 'acmeOceanTheme.ts');
     const built = await runCli(
       ['theme', 'build', copiedEntry, '--json'],
       consumerDir,
     );
     expect(built.status, `${built.stdout}\n${built.stderr}`).toBe(0);
     const buildReceipt = parseEnvelope(built.stdout);
+    // The fork takes the name of its folder in the local themes root.
     expect(buildReceipt).toMatchObject({
       type: 'theme.build',
-      data: {name: 'ocean'},
+      data: {name: 'acme-ocean'},
     });
     for (const output of Object.values(buildReceipt.data.outputs)) {
       expect(fs.existsSync(path.join(consumerDir, output))).toBe(true);
