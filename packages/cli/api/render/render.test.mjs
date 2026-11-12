@@ -1488,6 +1488,23 @@ describe('render(): a crash of Node itself', () => {
   }, 60_000);
 });
 
+describe('render(): a page that ends without an answer', () => {
+  // The message says why, so a failure in a list of renders says why too.
+  it('says where it ended, how long it ran and the memory left', async () => {
+    put('ends.tsx', 'process.exit(0);\nexport default () => <p>Hi</p>;\n');
+    /** @type {any} */
+    let error;
+    try {
+      await render('ends.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_FAILED');
+    expect(error.message).toMatch(/without an answer \(exit 0\) while importing the page, after \d+ seconds, with \d+ MB of memory free\./);
+    expect(fs.existsSync(path.join(dir, 'ends.html'))).toBe(false);
+  }, 60_000);
+});
+
 describe('render(): Avatar initials without Intl.Segmenter', () => {
   // A render on a Node build that crashes in Intl.Segmenter removes it before
   // the page loads. A local module imported first does the same here.
