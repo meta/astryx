@@ -467,7 +467,7 @@ describe('rollback and recovery', () => {
     fs.mkdirSync(path.join(cwd, 'themes/w1/w1.history.json'));
     expect(
       (await refusal(() => themeEditSet('w1', 'corners', 'pill', {cwd}))).code,
-    ).toBe('ERR_WRITE_FAILED');
+    ).toBe('ERR_THEME_INVALID'); // a folder in the history's place is refused before any write (hunt25)
     expect(read('themes/w1/w1.css')).toBe(css);
     expect(read('themes/w1/w1.settings.json')).toBe(settings);
     fs.rmSync(path.join(cwd, 'themes/w1'), {recursive: true, force: true});
