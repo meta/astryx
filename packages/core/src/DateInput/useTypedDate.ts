@@ -533,7 +533,9 @@ export function useTypedDateField({
     }
     if (!isSameEntryError(entryError, reportedEntryErrorRef.current)) {
       reportedEntryErrorRef.current = entryError;
-      onEntryErrorChange(entryError);
+      // Called through the ref: the set-state-in-effect rule takes a call to a
+      // hook parameter for the whole hook's body.
+      latestEntryErrorCallbackRef.current?.(entryError);
     }
     if (!isSameEntryError(entryError, heardEntryError)) {
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- shows the field's own message once the caller has the rejection
