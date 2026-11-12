@@ -703,10 +703,10 @@ const forcedColorsEdge = stylex.create({
   },
 });
 
-// The color of a grouped button's forced-colors edge. `destructive` takes
-// `CanvasText` (architecture:theme-tokens INV11), the others `ButtonText`.
-// These are the same longhands the edge sets, so the color holds whichever
-// order a build puts shorthands and longhands in.
+// The color of a grouped button's forced-colors edge: `destructive` takes
+// `CanvasText`, the others `ButtonText`. These are the same longhands the
+// edge sets, so the color holds whichever order a build puts shorthands and
+// longhands in.
 const forcedColorsEdgeColor = stylex.create({
   horizontal: {
     borderBlockStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
