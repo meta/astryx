@@ -22,6 +22,7 @@ import {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
@@ -353,9 +354,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideLayer();
   }, [clearTimeouts, hideLayer]);
 
-  // DOM listeners read the latest controlled state through a ref.
-  const latestRef = useRef({isOpen, isLayerOpen, onShow, onHide});
-  latestRef.current = {isOpen, isLayerOpen, onShow, onHide};
+  // DOM listeners read the committed controlled state through a ref.
+  const latestRef = useCommittedRef({isOpen, isLayerOpen, onShow, onHide});
 
   // The app's show() holds the tooltip open until hide(), Escape, a press or
   // scroll outside, or focus leaving the trigger and the tooltip.
@@ -391,7 +391,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
     }
     hideNow();
-  }, [setHeld, hideNow]);
+  }, [setHeld, hideNow, latestRef]);
 
   const {
     isTouchPointerRef,
@@ -418,7 +418,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const isHeldOpen = useCallback(() => {
     const latest = latestRef.current;
     return isHeldRef.current && latest.isLayerOpen && latest.isOpen !== false;
-  }, []);
+  }, [latestRef]);
 
   const releaseHold = useCallback(() => {
     clearTapOpen();
@@ -429,7 +429,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       return;
     }
     hideNow();
-  }, [clearTapOpen, setHeld, hideNow]);
+  }, [clearTapOpen, setHeld, hideNow, latestRef]);
 
   const dropHold = useCallback(() => {
     if (isHeldRef.current) {
@@ -591,6 +591,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       opensOnFocus,
       clearTimeouts,
       showLayer,
+      latestRef,
     ],
   );
 
@@ -681,9 +682,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     ],
   );
 
-  // The trigger's listeners call the latest handlers through this ref, so the
-  // trigger ref callback keeps one identity.
-  const handlersRef = useRef({
+  // The trigger's listeners call the committed handlers through this ref, so
+  // the trigger ref callback keeps one identity.
+  const handlersRef = useCommittedRef({
     handleMouseEnter,
     handleMouseLeave,
     handleFocusIn,
@@ -700,23 +701,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     presentInterest,
     answerTap,
   });
-  handlersRef.current = {
-    handleMouseEnter,
-    handleMouseLeave,
-    handleFocusIn,
-    handleFocusOut,
-    handleHeldFocusOut,
-    handlePointerEnter,
-    handlePointerDown,
-    focusTrigger,
-    isOpen,
-    dropHold,
-    hideNow,
-    showNow,
-    opensOnFocus,
-    presentInterest,
-    answerTap,
-  };
 
   // Removes the attached trigger's listeners (the trigger ref callback's
   // cleanup).
@@ -728,86 +712,65 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   // The trigger's ref callback owns every trigger listener, and reads the
   // trigger's state when it attaches and detaches.
-  const interactionRef = useCallback((el: HTMLElement | null) => {
-    // A caller that reports `null` by hand detaches the trigger, as the
-    // returned cleanup does.
-    if (el == null) {
+  const interactionRef = useCallback(
+    (el: HTMLElement | null) => {
+      // A caller that reports `null` by hand detaches the trigger, as the
+      // returned cleanup does.
+      if (el == null) {
+        detachTriggerRef.current?.();
+        return;
+      }
+      if (el === triggerRef.current) {
+        return;
+      }
       detachTriggerRef.current?.();
-      return;
-    }
-    if (el === triggerRef.current) {
-      return;
-    }
-    detachTriggerRef.current?.();
-    const latest = () => handlersRef.current;
-    // `pointerenter` runs before the synthesized `mouseenter` a tap produces,
-    // which is what lets the hover path know it is looking at a finger.
-    const onPointerEnter = (e: PointerEvent) => latest().handlePointerEnter(e);
-    const onMouseEnter = () => latest().handleMouseEnter();
-    const onMouseLeave = (e: Event) => latest().handleMouseLeave(e);
-    // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
-    const onPointerDown = (e: PointerEvent) => latest().handlePointerDown(e);
-    // Focus counts unless focus never opens the tooltip; `auto` decides per
-    // event (isFocusForTrigger).
-    const onFocusIn = (e: Event) => {
-      if (latest().focusTrigger !== 'never') {
-        latest().handleFocusIn(e);
-      }
-    };
-    const onFocusOut = (e: Event) => {
-      if (latest().focusTrigger !== 'never') {
-        latest().handleFocusOut(e);
-      }
-    };
-    // A held tooltip's own focus-leave close, whatever `focusTrigger` is.
-    const onHeldFocusOut = (e: FocusEvent) => latest().handleHeldFocusOut(e);
-    el.addEventListener('pointerenter', onPointerEnter);
-    el.addEventListener('mouseenter', onMouseEnter);
-    el.addEventListener('mouseleave', onMouseLeave);
-    el.addEventListener('pointerdown', onPointerDown);
-    el.addEventListener('focusin', onFocusIn);
-    el.addEventListener('focusout', onFocusOut);
-    el.addEventListener('focusout', onHeldFocusOut);
-    triggerRef.current = el;
+      const latest = () => handlersRef.current;
+      // `pointerenter` runs before the synthesized `mouseenter` a tap produces,
+      // which is what lets the hover path know it is looking at a finger.
+      const onPointerEnter = (e: PointerEvent) =>
+        latest().handlePointerEnter(e);
+      const onMouseEnter = () => latest().handleMouseEnter();
+      const onMouseLeave = (e: Event) => latest().handleMouseLeave(e);
+      // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
+      const onPointerDown = (e: PointerEvent) => latest().handlePointerDown(e);
+      // Focus counts unless focus never opens the tooltip; `auto` decides per
+      // event (isFocusForTrigger).
+      const onFocusIn = (e: Event) => {
+        if (latest().focusTrigger !== 'never') {
+          latest().handleFocusIn(e);
+        }
+      };
+      const onFocusOut = (e: Event) => {
+        if (latest().focusTrigger !== 'never') {
+          latest().handleFocusOut(e);
+        }
+      };
+      // A held tooltip's own focus-leave close, whatever `focusTrigger` is.
+      const onHeldFocusOut = (e: FocusEvent) => latest().handleHeldFocusOut(e);
+      el.addEventListener('pointerenter', onPointerEnter);
+      el.addEventListener('mouseenter', onMouseEnter);
+      el.addEventListener('mouseleave', onMouseLeave);
+      el.addEventListener('pointerdown', onPointerDown);
+      el.addEventListener('focusin', onFocusIn);
+      el.addEventListener('focusout', onFocusOut);
+      el.addEventListener('focusout', onHeldFocusOut);
+      triggerRef.current = el;
 
-    // A trigger that attaches again after its wiring was removed
-    // (DropdownMenu's Button as its menu closes) missed the focus that
-    // arrived meanwhile. Show for it only if it would open the tooltip:
-    // returned keyboard focus does, focus returned after a pointer pick does
-    // not. Any other attach leaves the tooltip as it is, so a tooltip
-    // dismissed with Escape stays closed.
-    const focused = el.ownerDocument.activeElement;
-    const wasSuppressed = wasSuppressedRef.current;
-    if (isEnabledRef.current) {
-      wasSuppressedRef.current = false;
-    }
-    if (
-      wasSuppressed &&
-      isEnabledRef.current &&
-      latest().isOpen === undefined &&
-      latest().focusTrigger !== 'never' &&
-      focused instanceof HTMLElement &&
-      el.contains(focused) &&
-      latest().opensOnFocus(focused, el)
-    ) {
-      latest().showNow();
-    }
-
-    // This tooltip mounted after the interaction that wants it. It answers
-    // that interaction once, by the same rules as its listeners.
-    const state = latest().presentInterest?.current;
-    const interest = state == null || state.isRead ? null : state.interest;
-    const tapEvent = state?.tapEvent ?? null;
-    if (state != null) {
-      state.isRead = true;
-    }
-    if (isEnabledRef.current && latest().isOpen === undefined) {
-      if (interest === 'hover') {
-        latest().handleMouseEnter();
-      } else if (interest === 'tap') {
-        latest().answerTap(tapEvent);
-      } else if (
-        interest === 'focus' &&
+      // A trigger that attaches again after its wiring was removed
+      // (DropdownMenu's Button as its menu closes) missed the focus that
+      // arrived meanwhile. Show for it only if it would open the tooltip.
+      // Returned keyboard focus does; focus returned after a pointer pick does
+      // not. Any other attach leaves the tooltip as it is, so a tooltip
+      // dismissed with Escape stays closed.
+      const focused = el.ownerDocument.activeElement;
+      const wasSuppressed = wasSuppressedRef.current;
+      if (isEnabledRef.current) {
+        wasSuppressedRef.current = false;
+      }
+      if (
+        wasSuppressed &&
+        isEnabledRef.current &&
+        latest().isOpen === undefined &&
         latest().focusTrigger !== 'never' &&
         focused instanceof HTMLElement &&
         el.contains(focused) &&
@@ -815,36 +778,61 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       ) {
         latest().showNow();
       }
-    }
 
-    const detach = () => {
-      if (detachTriggerRef.current === detach) {
-        detachTriggerRef.current = null;
+      // This tooltip mounted after the interaction that wants it. It answers
+      // that interaction once, by the same rules as its listeners.
+      const state = latest().presentInterest?.current;
+      const interest = state == null || state.isRead ? null : state.interest;
+      const tapEvent = state?.tapEvent ?? null;
+      if (state != null) {
+        state.isRead = true;
       }
-      el.removeEventListener('pointerenter', onPointerEnter);
-      el.removeEventListener('mouseenter', onMouseEnter);
-      el.removeEventListener('mouseleave', onMouseLeave);
-      el.removeEventListener('pointerdown', onPointerDown);
-      el.removeEventListener('focusin', onFocusIn);
-      el.removeEventListener('focusout', onFocusOut);
-      el.removeEventListener('focusout', onHeldFocusOut);
-      stopPressTrackingRef.current?.();
-      if (triggerRef.current === el) {
-        triggerRef.current = null;
+      if (isEnabledRef.current && latest().isOpen === undefined) {
+        if (interest === 'hover') {
+          latest().handleMouseEnter();
+        } else if (interest === 'tap') {
+          latest().answerTap(tapEvent);
+        } else if (
+          interest === 'focus' &&
+          latest().focusTrigger !== 'never' &&
+          focused instanceof HTMLElement &&
+          el.contains(focused) &&
+          latest().opensOnFocus(focused, el)
+        ) {
+          latest().showNow();
+        }
       }
-      // A caller removes the wiring as it disables the tooltip. Close an
-      // uncontrolled tooltip then, or the next attach shows a stale tooltip.
-      // A detach while enabled, such as a merged ref that changes identity
-      // on a re-render, keeps a hovered or held tooltip open.
-      if (!isEnabledRef.current && latest().isOpen === undefined) {
-        wasSuppressedRef.current = true;
-        latest().dropHold();
-        latest().hideNow();
-      }
-    };
-    detachTriggerRef.current = detach;
-    return detach;
-  }, []);
+
+      const detach = () => {
+        if (detachTriggerRef.current === detach) {
+          detachTriggerRef.current = null;
+        }
+        el.removeEventListener('pointerenter', onPointerEnter);
+        el.removeEventListener('mouseenter', onMouseEnter);
+        el.removeEventListener('mouseleave', onMouseLeave);
+        el.removeEventListener('pointerdown', onPointerDown);
+        el.removeEventListener('focusin', onFocusIn);
+        el.removeEventListener('focusout', onFocusOut);
+        el.removeEventListener('focusout', onHeldFocusOut);
+        stopPressTrackingRef.current?.();
+        if (triggerRef.current === el) {
+          triggerRef.current = null;
+        }
+        // A caller removes the wiring as it disables the tooltip. Close an
+        // uncontrolled tooltip then, or the next attach shows a stale tooltip.
+        // A detach while enabled, such as a merged ref that changes identity
+        // on a re-render, keeps a hovered or held tooltip open.
+        if (!isEnabledRef.current && latest().isOpen === undefined) {
+          wasSuppressedRef.current = true;
+          latest().dropHold();
+          latest().hideNow();
+        }
+      };
+      detachTriggerRef.current = detach;
+      return detach;
+    },
+    [handlersRef],
+  );
 
   // Combined ref - shorthand for calling both positionRef and interactionRef
   const ref = useCallback(
@@ -1005,7 +993,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       return;
     }
     showLayer();
-  }, [clearTimeouts, isEnabled, setHeld, armOutsideDismiss, showLayer]);
+  }, [
+    clearTimeouts,
+    isEnabled,
+    setHeld,
+    armOutsideDismiss,
+    showLayer,
+    latestRef,
+  ]);
 
   const hide = useCallback(() => {
     clearTimeouts();

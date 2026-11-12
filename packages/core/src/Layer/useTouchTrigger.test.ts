@@ -3,10 +3,11 @@
 /**
  * @file useTouchTrigger.test.ts
  * @input Uses vitest, Testing Library, isActionTrigger,
- *   tapLandsOnDisabledControl, useTapStop
- * @output Unit tests for the action rules behind touchTrigger="auto" (the
- *   trigger's own action, and a tap that lands in a disabled control) and for
- *   the tap stop a reveal-only trigger uses
+ *   tapLandsOnDisabledControl, useTapStop, useTouchTrigger
+ * @output Unit tests for touchTrigger="auto"'s action rules: the trigger's own
+ *   action, and a tap that lands in a disabled control. Tests for the tap stop
+ *   of a reveal-only trigger, and for the touch trigger after a render React
+ *   discards
  * @position Testing; validates useTouchTrigger.ts implementation
  *
  * SYNC: When useTouchTrigger.ts changes, update tests to match new behavior

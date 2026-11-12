@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Tooltip's and HoverCard's touch trigger syncs its callback refs at commit. A tap after a render React discards, as a suspended transition does, now answers with the committed props.
+[fix] Tooltip's and HoverCard's touch trigger, and Tooltip's handlers and controlled state, sync at commit. After a render React discards, as a suspended transition does, a tap answers with the committed props, and a press outside still closes a shown tooltip.
 
 @vjeux

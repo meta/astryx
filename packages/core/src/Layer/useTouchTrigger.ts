@@ -434,10 +434,6 @@ export function useTouchTriggerInternal(
   } = options;
 
   const isTouchPointerRef = useRef(false);
-  // The committed `isOpen`, for synchronous reads inside the pointer handler,
-  // which runs outside React's render and would otherwise close over a stale
-  // value.
-  const isOpenRef = useCommittedRef(isOpen);
 
   // The committed values for the document listener, which outlives the render
   // that armed it.
@@ -547,8 +543,8 @@ export function useTouchTriggerInternal(
     isTouchPointerRef.current = event.pointerType === 'touch';
   }, []);
 
-  // What a tap on the trigger does. It runs from the tap's `click`, after the
-  // render that armed it, so it reads the latest props through this ref.
+  // A tap's `click` runs this after a commit. It reads that commit's props
+  // through `answerTapRef`.
   const respondToTap = (tapEvent: Event | null) => {
     const trigger = triggerRef.current;
     // A tap that landed in a disabled control is that control's: its reason
@@ -572,7 +568,7 @@ export function useTouchTriggerInternal(
 
     // A lazily mounted layer reports `isOpen` a tick after `show()`, so the
     // tap's own bookkeeping is what makes the second tap a close.
-    if (isOpenRef.current || isTapOpenRef.current) {
+    if (isOpen || isTapOpenRef.current) {
       disarmOutsideDismiss();
       hide();
       return;
@@ -581,7 +577,6 @@ export function useTouchTriggerInternal(
     armOutsideDismiss();
     show();
   };
-  // The committed answer to a tap.
   const answerTapRef = useCommittedRef(respondToTap);
 
   const handlePointerDown = useCallback(
