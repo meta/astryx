@@ -2034,6 +2034,25 @@ describe('RichTextEditorAutoLinkPlugin', () => {
     expect(emailMatch?.attributes).toEqual(NEW_TAB_LINK_ATTRIBUTES);
   });
 
+  it.each([
+    ['first.last+tag@sub.example.co.uk', 'first.last+tag@sub.example.co.uk'],
+    ['"john doe"@example.com', '"john doe"@example.com'],
+    ['user@[192.168.0.1]', 'user@[192.168.0.1]'],
+    ['(a@b.com)', 'a@b.com'],
+  ])('matches the email in %s', (text, email) => {
+    expect(DEFAULT_LINK_MATCHERS[1](text)?.text).toBe(email);
+  });
+
+  it.each([
+    ['a long word', 'a'.repeat(100_000)],
+    ['a run of quotes', '"'.repeat(100_000)],
+    ['dotted atoms', 'a.'.repeat(50_000)],
+  ])('scans %s without an email in linear time', (_, text) => {
+    const start = performance.now();
+    expect(DEFAULT_LINK_MATCHERS[1](text)).toBeNull();
+    expect(performance.now() - start).toBeLessThan(500);
+  });
+
   it('auto-links a typed URL as an AutoLinkNode', async () => {
     let editor!: LexicalEditor;
     render(

@@ -172,4 +172,39 @@ describe('theme build with several files', () => {
       /#ffffff/,
     );
   }, 120_000);
+
+  it('suggests the theme source when given a bare theme name', async () => {
+    const dir = themeDir();
+    fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app"}\n');
+    fs.mkdirSync(path.join(dir, 'themes', 'brand'), {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'themes', 'brand', 'brand.theme.ts'),
+      THEMES['alpha.mjs'],
+    );
+    const r = await runCli(['--json', 'theme', 'build', 'brand'], dir);
+    expect(r.status).toBe(1);
+    const parsed = JSON.parse(r.stdout);
+    expect(parsed.code).toBe('ERR_FILE_NOT_FOUND');
+    expect(parsed.suggestions).toEqual([
+      {
+        name: expect.stringMatching(
+          / theme build themes\/brand\/brand\.theme\.ts$/,
+        ),
+        reason: 'a theme source that exists',
+      },
+    ]);
+  }, 120_000);
+
+  it('suggests the path with / when given one with backslashes', async () => {
+    const dir = themeDir();
+    fs.mkdirSync(path.join(dir, 'hand'));
+    fs.writeFileSync(path.join(dir, 'hand', 'ocean.mjs'), THEMES['alpha.mjs']);
+    const r = await runCli(
+      ['--json', 'theme', 'build', 'hand\\ocean.mjs'],
+      dir,
+    );
+    expect(JSON.parse(r.stdout).suggestions[0].name).toMatch(
+      / theme build hand\/ocean\.mjs$/,
+    );
+  }, 120_000);
 });

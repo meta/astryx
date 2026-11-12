@@ -193,7 +193,8 @@ describe('formatReport', () => {
       ],
       checklist: 'docs/contributing/pull-requests.md#pre-review-checklist',
     });
-    expect(text).toContain('Authored lines: 12 (limit 2000;');
+    expect(text).toContain('Authored lines: 12 (guideline 2000;');
+    expect(text).not.toContain('consider splitting');
     expect(text).toContain('Merge into origin/main: clean');
     expect(text).toContain(
       '  [i] packages/core/src/A/A.tsx:12  A new ResizeObserver; Core owns this concern\n      fix: Call `observeResize`.',
@@ -203,6 +204,27 @@ describe('formatReport', () => {
     expect(text).toContain(
       'Checklist: docs/contributing/pull-requests.md#pre-review-checklist',
     );
+  });
+  it('reports a large change as advice, not as a finding', () => {
+    const text = formatReport({
+      base: 'origin/main',
+      head: 'working tree',
+      mergeBase: 'a'.repeat(40),
+      scope: 'changes include another surface',
+      files: [{file: 'packages/cli/assets/templates/pages/a.tsx', class: 'x'}],
+      records: [],
+      claims: [],
+      baselines: {command: null, claims: []},
+      authoredLines: 9000,
+      merge: {conflicts: []},
+      findings: [],
+      checks: [],
+      checklist: 'docs/contributing/pull-requests.md#pre-review-checklist',
+    });
+    expect(text).toContain(
+      'Authored lines: 9000 (guideline 2000; lockfiles, snapshots, and generated files excluded)\n  Over 2,000 authored lines: consider splitting if a smaller change would review more easily.',
+    );
+    expect(text).toContain('Findings in this change (0):\n  none');
   });
 });
 
