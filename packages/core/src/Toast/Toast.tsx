@@ -398,9 +398,8 @@ export function ToastSurface({
   cardRootRef.current = rootRef;
 
   // The viewport announces a plain-text body when it dispatches the toast.
-  // Text a component renders, and a custom layout, are read here after
-  // commit: one read of the body, or of the card for a custom layout, minus
-  // its controls.
+  // This reads a component body or a custom layout after commit. A body is
+  // read whole, links included. A custom layout leaves out its controls.
   useAnnounceRenderedText(
     renderContent != null ? rootRef : bodyRef,
     !isLiveRegion && (renderContent != null || isRenderedBodyAnnouncement),
@@ -408,7 +407,10 @@ export function ToastSurface({
     {
       politeness: isError ? 'assertive' : 'polite',
       announce,
-      exclude: TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR,
+      exclude:
+        renderContent != null
+          ? TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR
+          : undefined,
     },
   );
 

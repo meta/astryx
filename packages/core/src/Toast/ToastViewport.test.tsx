@@ -2983,6 +2983,31 @@ describe('toast announcements via singleton live regions', () => {
     expect(assertiveRegion()).toHaveTextContent('');
   });
 
+  it('announces a component body in full, its link included', async () => {
+    function SavedToDrafts() {
+      return (
+        <span>
+          Saved to <a href="/drafts">Drafts</a>
+        </span>
+      );
+    }
+    renderViewport(
+      <ShowToastButton
+        options={{body: <SavedToDrafts />}}
+        triggerLabel="Show"
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent('Saved to Drafts');
+    });
+    expect(announceSpy).toHaveBeenCalledTimes(1);
+    expect(announceSpy).toHaveBeenCalledWith('Saved to Drafts', 'polite');
+  });
+
   it('announces rendered custom content without its controls under StrictMode', async () => {
     render(
       <React.StrictMode>
