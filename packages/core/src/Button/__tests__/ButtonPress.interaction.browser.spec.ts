@@ -24,11 +24,13 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  armHold,
   flick,
   freezeTimers,
   holdThenDrag,
   installTimerGate,
   openStory,
+  releaseAnimations,
   tap,
   thawTimers,
   touchDriver,
@@ -66,7 +68,13 @@ interface Opened {
   log: () => Promise<LogEntry[]>;
 }
 
-type LogEntry = [kind: string, t: number, value: string | null];
+/** A pointer entry also carries the event's own time (its `timeStamp`). */
+type LogEntry = [
+  kind: string,
+  t: number,
+  value: string | null,
+  eventTime?: number,
+];
 
 async function openSurface(
   page: Page,
@@ -87,7 +95,7 @@ async function openSurface(
     for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'click']) {
       document.addEventListener(
         type,
-        () => entries.push([type, performance.now(), null]),
+        event => entries.push([type, performance.now(), null, event.timeStamp]),
         true,
       );
     }
@@ -167,8 +175,11 @@ test('inside a scroller, a held press waits UIScrollView’s content-touch delay
   if (!down || !on) {
     return;
   }
-  expect(on[1] - down[1]).toBeGreaterThanOrEqual(CONTENT_TOUCH_DELAY_MS - 5);
-  expect(on[1] - down[1]).toBeLessThan(CONTENT_TOUCH_DELAY_MS + 60);
+  // The delay counts from the touch's own time, not from the moment a busy
+  // page runs its listener.
+  const touchedAt = down[3] ?? down[1];
+  expect(on[1] - touchedAt).toBeGreaterThanOrEqual(CONTENT_TOUCH_DELAY_MS - 5);
+  expect(on[1] - touchedAt).toBeLessThan(CONTENT_TOUCH_DELAY_MS + 60);
   // WebKit synthesises a click only from its own tap path, not from a raw
   // touch sequence (harness README, engine limits); Chromium does from both.
   if (opened.driver.engine === 'chromium') {
@@ -287,6 +298,19 @@ test(
       width: box.width + 32,
       height: box.height + 32,
     };
+    // The release ends when its animation does, and on a busy machine it can
+    // end before the lift's photo. So the page holds the release itself as
+    // soon as it runs. The press runs one animation (the scale) and the
+    // release runs two (the scale back and the layer's fade), so the hold
+    // waits for two.
+    const hold = await armHold(page, opened.surface, {
+      count: 2,
+      judges: {
+        target: opened.surface,
+        property: 'opacity',
+        pseudoElement: '::before',
+      },
+    });
     const storyboard = await touchStoryboard(
       page,
       opened.driver,
@@ -300,8 +324,10 @@ test(
         columns: 3,
       },
     );
+    await hold.held();
     await freezeTimers(page);
     await storyboard.write(testInfo);
+    await releaseAnimations(page, {finish: true});
     await thawTimers(page);
     const states = storyboard.frames.map(f => f.data.state as string | null);
     // Before the touch, the touch itself (already highlighted), the lift.

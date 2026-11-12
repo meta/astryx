@@ -15,6 +15,7 @@
 
 import {
   getKeyboardHeight,
+  hasVirtualKeyboard,
   isTextEntryControl,
   subscribeKeyboardHeight,
   type KeyboardHeightEvent,
@@ -34,7 +35,7 @@ import {
  * measured timing.
  */
 export function keyboardProfileOf(win: Window): KeyboardProfile | null {
-  return 'virtualKeyboard' in win.navigator ? 'chromium' : null;
+  return hasVirtualKeyboard(win) ? 'chromium' : null;
 }
 
 /** A window's keyboard layout guide. */

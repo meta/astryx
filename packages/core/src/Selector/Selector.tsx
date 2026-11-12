@@ -73,7 +73,7 @@ import {
 import type {SelectorOptionType, SelectorOptionData} from './types';
 import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
 import {getSelectableOptionEntries} from './selectableOptionEntries';
-import {useCombobox, useSelectedItemOffset} from './hooks';
+import {useCombobox, useSelectedItemOverlayMargin} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
@@ -126,6 +126,9 @@ registerEnglishFallback(english);
  * taller bottom sheet) costs only the measure's correction.
  */
 const MOST_ROWS_THAT_FIT = 12;
+
+// Private runtime state. No app or theme sets it.
+const OVERLAY_MARGIN_PROPERTY = '--_selector-overlay-margin';
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -1093,6 +1096,58 @@ function filterOptionsByQuery(
 }
 
 /**
+ * New option objects with the same values and enabled states give the same
+ * signature, so they do not move the highlight.
+ */
+function optionSignature(
+  items: ReadonlyArray<{value: string; disabled?: boolean}>,
+): string {
+  return items
+    .map(item => `${item.disabled === true ? '-' : '+'}${item.value}`)
+    .join('\u0000');
+}
+
+/**
+ * The index in `next` of the option highlighted at `index` in `previous`.
+ * When that option is gone or disabled, the highlight moves to the next
+ * remaining enabled option. With none after it, it moves to the previous
+ * one. -1 means none remains.
+ */
+function followHighlight(
+  previous: ReadonlyArray<{value: string; disabled?: boolean}>,
+  next: ReadonlyArray<{value: string; disabled?: boolean}>,
+  index: number,
+): number {
+  const enabledIndexOf = (value: string | undefined) =>
+    value == null
+      ? -1
+      : next.findIndex(item => item.value === value && item.disabled !== true);
+  const stayed = enabledIndexOf(previous[index]?.value);
+  if (stayed >= 0) {
+    return stayed;
+  }
+  for (let after = index + 1; after < previous.length; after++) {
+    const found = enabledIndexOf(previous[after]?.value);
+    if (found >= 0) {
+      return found;
+    }
+  }
+  // The highlight can sit past the end of the list it was set in: a hover
+  // applied after the list shrank. Start from the list's own last option.
+  for (
+    let before = Math.min(index, previous.length) - 1;
+    before >= 0;
+    before--
+  ) {
+    const found = enabledIndexOf(previous[before]?.value);
+    if (found >= 0) {
+      return found;
+    }
+  }
+  return -1;
+}
+
+/**
  * A selector/dropdown component for choosing from a list of options.
  *
  * @example
@@ -1367,6 +1422,9 @@ export function Selector<T extends SelectorOptionType>(
       // The theme target belongs on the SURFACE that paints the popup, which
       // `usePopover` owns — not on the scrolling list inside it.
       surfaceTarget: 'selector-popup',
+      // The entrance runs on the surface: an anchored layer lays out again on
+      // each frame its own style animates.
+      xstyle: layerAnimations[placement ?? 'below'],
     },
   });
   const {popover} = surface;
@@ -1453,8 +1511,8 @@ export function Selector<T extends SelectorOptionType>(
   // placement opts out of the selector-specific overlay behavior and uses the
   // standard layer positioning API instead.
   const shouldOverlaySelectedItem = placement == null && !hasSearch;
-  const {offset: rawOffset, isPositioned: rawIsPositioned} =
-    useSelectedItemOffset({
+  const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
+    useSelectedItemOverlayMargin({
       isOpen: popover.isOpen && shouldOverlaySelectedItem,
       selectedItemIndex,
       listboxId,
@@ -1462,13 +1520,21 @@ export function Selector<T extends SelectorOptionType>(
       anchorRef,
     });
 
-  const selectedItemOffset = shouldOverlaySelectedItem ? rawOffset : 0;
   const isPositioned = shouldOverlaySelectedItem ? rawIsPositioned : true;
   const popoverPlacement = placement ?? 'below';
+  const overlayMargin =
+    shouldOverlaySelectedItem && rawMarginBlockStart != null
+      ? rawMarginBlockStart
+      : null;
+  const overlayMarginProperty: Record<string, string> =
+    overlayMargin == null ? {} : {[OVERLAY_MARGIN_PROPERTY]: overlayMargin};
   const popoverOffsetStyle: React.CSSProperties | undefined =
-    selectedItemOffset > 0
-      ? {marginBlockStart: `-${selectedItemOffset}px`}
-      : undefined;
+    overlayMargin == null
+      ? undefined
+      : {
+          ...overlayMarginProperty,
+          marginBlockStart: `var(${OVERLAY_MARGIN_PROPERTY})`,
+        };
 
   // Clear the current value. Shared by the clear button and the keyboard
   // Delete/Backspace path so clearing is reachable without a mouse.
@@ -1588,6 +1654,50 @@ export function Selector<T extends SelectorOptionType>(
     comboboxTriggerClick();
     noteHighlightMove();
   }, [comboboxTriggerClick, noteHighlightMove]);
+
+  // A new query is a new list: the old highlight's index would name another
+  // option, or one past the end. Adjusted during render rather than in an
+  // effect.
+  const [highlightedQuery, setHighlightedQuery] = useState(searchQuery);
+  if (highlightedQuery !== searchQuery) {
+    setHighlightedQuery(searchQuery);
+    setHighlightedIndex(-1);
+  }
+
+  // The highlight follows its option by value when the options move or
+  // reload, so it never names whatever option now sits at its old index.
+  // Adjusted during render, as the query reset above.
+  const highlightSignature = optionSignature(filteredItems);
+  const [highlightedList, setHighlightedList] = useState({
+    signature: highlightSignature,
+    items: filteredItems,
+  });
+  if (highlightedList.signature !== highlightSignature) {
+    setHighlightedList({signature: highlightSignature, items: filteredItems});
+    if (highlightedQuery === searchQuery && highlightedIndex >= 0) {
+      const followed = followHighlight(
+        highlightedList.items,
+        filteredItems,
+        highlightedIndex,
+      );
+      setHighlightedIndex(followed);
+      // The hovered row moves with its option too, so the ring keeps showing
+      // only a highlight that keyboard input set.
+      if (hoveredIndex != null) {
+        if (hoveredIndex === highlightedIndex) {
+          setHoveredIndex(followed >= 0 ? followed : null);
+        } else {
+          const hoveredValue = highlightedList.items[hoveredIndex]?.value;
+          const moved = filteredItems.findIndex(
+            item => item.value === hoveredValue,
+          );
+          // A follow that lands the keyboard highlight on the hovered option
+          // keeps it a keyboard highlight.
+          setHoveredIndex(moved >= 0 && moved !== followed ? moved : null);
+        }
+      }
+    }
+  }
 
   // Type-to-select, shared with the other collections (menus, listboxes).
   // Open, it walks the highlight — aria-activedescendant announces each match.
@@ -2100,7 +2210,7 @@ export function Selector<T extends SelectorOptionType>(
       offset: shouldOverlaySelectedItem
         ? undefined
         : spacingVars['--spacing-1'],
-      xstyle: [styles.popover, layerAnimations[popoverPlacement]],
+      xstyle: styles.popover,
       style: popoverOffsetStyle,
     });
   }

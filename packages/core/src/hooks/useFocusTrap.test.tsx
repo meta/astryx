@@ -845,3 +845,171 @@ describe('useFocusTrap in a second document', () => {
     expect(prev).toHaveFocus();
   });
 });
+
+// A same-name native radio group is one Tab stop: its checked radio, or its
+// first when none is checked. Medium is checked and is neither first nor last.
+function SizeRadios({name}: {name: string}) {
+  return (
+    <fieldset>
+      <legend>Size</legend>
+      <input type="radio" name={name} value="s" aria-label="Small" />
+      <input
+        type="radio"
+        name={name}
+        value="m"
+        aria-label="Medium"
+        defaultChecked
+      />
+      <input type="radio" name={name} value="l" aria-label="Large" />
+    </fieldset>
+  );
+}
+
+function expectRadioGroupEndsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const first = screen.getByRole('button', {name: 'First', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+function expectRadioGroupStartsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const last = screen.getByRole('button', {name: 'Last', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+describe('useFocusTrap radio-group Tab stops', () => {
+  it("ends the cycle at a trailing group's checked radio", () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <SizeRadios name="size" />
+      </Trap>,
+    );
+    expectRadioGroupEndsTheCycle();
+  });
+
+  it("starts the cycle at a leading group's checked radio", () => {
+    render(
+      <Trap>
+        <SizeRadios name="size" />
+        <button type="button">Last</button>
+      </Trap>,
+    );
+    expectRadioGroupStartsTheCycle();
+  });
+
+  it("uses a group's first radio when none is checked", () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <fieldset>
+          <legend>Plan</legend>
+          <input type="radio" name="plan" value="a" aria-label="Basic" />
+          <input type="radio" name="plan" value="b" aria-label="Pro" />
+        </fieldset>
+      </Trap>,
+    );
+    const basic = screen.getByRole('radio', {name: 'Basic'});
+    basic.focus();
+    expect(fireEvent.keyDown(basic, {key: 'Tab'})).toBe(false);
+    expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
+  });
+
+  it("wraps Shift+Tab onto an unchecked trailing group's last radio", () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <fieldset>
+          <legend>Plan</legend>
+          <input type="radio" name="plan" value="a" aria-label="Basic" />
+          <input type="radio" name="plan" value="b" aria-label="Pro" />
+        </fieldset>
+      </Trap>,
+    );
+    const first = screen.getByRole('button', {name: 'First'});
+    first.focus();
+    // Entering a group with nothing checked backward lands on its last radio,
+    // as the browser does.
+    expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+    expect(screen.getByRole('radio', {name: 'Pro'})).toHaveFocus();
+  });
+
+  it('keeps a checked radio at its own place when a control sits between the radios', () => {
+    // A RadioList whose first option's description holds a link builds this
+    // shape: the checked radio, not the link, is the region's last stop.
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <input type="radio" name="tier" aria-label="Basic" />
+        <button type="button">Basic details</button>
+        <input type="radio" name="tier" aria-label="Pro" defaultChecked />
+      </Trap>,
+    );
+    const pro = screen.getByRole('radio', {name: 'Pro'});
+    const details = screen.getByRole('button', {name: 'Basic details'});
+    pro.focus();
+    expect(fireEvent.keyDown(pro, {key: 'Tab'})).toBe(false);
+    expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
+    // From the control between the radios, Tab goes on to the checked radio.
+    details.focus();
+    expect(fireEvent.keyDown(details, {key: 'Tab'})).toBe(true);
+  });
+
+  it('keeps every radio of an unchecked group split by a control a stop', () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <input type="radio" name="tier" aria-label="Basic" />
+        <button type="button">Basic details</button>
+        <input type="radio" name="tier" aria-label="Pro" />
+      </Trap>,
+    );
+    const details = screen.getByRole('button', {name: 'Basic details'});
+    details.focus();
+    // Pro is still ahead of the control, so Tab is left to the browser.
+    expect(fireEvent.keyDown(details, {key: 'Tab'})).toBe(true);
+    const pro = screen.getByRole('radio', {name: 'Pro'});
+    pro.focus();
+    expect(fireEvent.keyDown(pro, {key: 'Tab'})).toBe(false);
+    expect(screen.getByRole('button', {name: 'First'})).toHaveFocus();
+  });
+
+  it('keeps each unnamed radio its own Tab stop', () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <input type="radio" aria-label="One" defaultChecked />
+        <input type="radio" aria-label="Two" />
+      </Trap>,
+    );
+    const one = screen.getByRole('radio', {name: 'One'});
+    one.focus();
+    // "Two" is still ahead, so Tab is left to the browser.
+    expect(fireEvent.keyDown(one, {key: 'Tab'})).toBe(true);
+  });
+
+  it('treats same-name radios in different forms as different groups', () => {
+    render(
+      <Trap>
+        <button type="button">First</button>
+        <form aria-label="A">
+          <input type="radio" name="x" aria-label="A1" defaultChecked />
+        </form>
+        <form aria-label="B">
+          <input type="radio" name="x" aria-label="B1" defaultChecked />
+        </form>
+      </Trap>,
+    );
+    const a1 = screen.getByRole('radio', {name: 'A1'});
+    a1.focus();
+    expect(fireEvent.keyDown(a1, {key: 'Tab'})).toBe(true);
+  });
+});

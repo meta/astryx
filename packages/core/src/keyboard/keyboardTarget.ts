@@ -5,7 +5,8 @@
  * @input The keyboard module's reports and focus claim, the layout guide,
  *   rideKeyboard and the shared animator
  * @output The keyboard targets: their registry, followKeyboard for a docked
- *   or scrolling target, and keepFieldAboveKeyboard, a covered field's path
+ *   or scrolling target, and keepFieldAboveKeyboard, a covered field's path.
+ *   Also followsKeyboard, the touch gate, and deliverTap, a tap's delivery
  * @position Keyboard module, internal to core. useMobileKeyboard calls it.
  *
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
@@ -14,14 +15,14 @@
 import {animatorFor, type Animator} from '../motion/animator';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
-import {layoutViewportHeight} from '../utils/layoutViewport';
-import {scrollingAncestor} from '../utils/scrollingAncestor';
+import {nearestScroller, scrollingAncestor} from '../utils/scrollingAncestor';
 import {
   KEYBOARD_EPSILON,
   claimTapFocus,
   findTextEntryControl,
   focusAtPoint,
   getKeyboardHeight,
+  getKeyboardViewportHeight,
   isKeyboardMeasurable,
   isTextEntryControl,
   refuseFocusReveal,
@@ -57,6 +58,8 @@ export function registerKeyboardTarget(element: Element): () => void {
   };
 }
 
+export {nearestScroller};
+
 /** Whether a registered target holds `element`. */
 export function isInsideKeyboardTarget(element: Element): boolean {
   for (
@@ -69,20 +72,6 @@ export function isInsideKeyboardTarget(element: Element): boolean {
     }
   }
   return false;
-}
-
-/**
- * The element that scrolls `element` into view: its nearest ancestor that
- * scrolls on the block axis, or else the document's scroller.
- */
-export function nearestScroller(element: Element): Element {
-  const doc = element.ownerDocument;
-  const scroller = scrollingAncestor(element);
-  return scroller == null ||
-    scroller === doc.body ||
-    scroller === doc.documentElement
-    ? (doc.scrollingElement ?? doc.documentElement)
-    : scroller;
 }
 
 // The element's bottom edge where layout puts it, without the ride's move.
@@ -120,7 +109,6 @@ export function fixedContainerOf(element: Element): FixedContainer {
   return dock === 'docked' ? {docked: node} : dock;
 }
 
-// The nearest fixed-position ancestor of `element`, or null.
 function nearestFixedAncestor(element: Element): HTMLElement | null {
   const view = element.ownerDocument.defaultView;
   if (view == null) {
@@ -157,7 +145,7 @@ function dockOf(
   node: HTMLElement,
   view: Window,
 ): 'docked' | 'fills-viewport' | 'floating' {
-  const viewportBottom = layoutViewportHeight(view);
+  const viewportBottom = getKeyboardViewportHeight(view);
   const box = node.getBoundingClientRect();
   if (box.height >= viewportBottom - KEYBOARD_EPSILON) {
     return 'fills-viewport';
@@ -184,7 +172,6 @@ function hasOwnTranslate(node: HTMLElement, view: Window): boolean {
   return ride == null || ride.get('y') === 0;
 }
 
-// The properties that move a bar on the page.
 const POSITION_PROPERTIES = new Set([
   'transform',
   'translate',
@@ -254,7 +241,6 @@ function isMovedByApp(node: HTMLElement): boolean {
   });
 }
 
-// Whether `node` is a fixed container docked to the viewport's bottom edge.
 function isDockedContainer(node: HTMLElement): boolean {
   const view = node.ownerDocument.defaultView;
   return (
@@ -287,7 +273,7 @@ export function coveredBy(
   offset: number,
   win: Window,
 ): number {
-  const covered = bottom + offset - (layoutViewportHeight(win) - height);
+  const covered = bottom + offset - (getKeyboardViewportHeight(win) - height);
   return height > 0 && covered > KEYBOARD_EPSILON ? covered : 0;
 }
 
@@ -361,7 +347,7 @@ function revealDistance(
   shift = 0,
 ): number {
   const doc = field.ownerDocument;
-  const keyboardTop = layoutViewportHeight(win) - height;
+  const keyboardTop = getKeyboardViewportHeight(win) - height;
   let safeTop = 0;
   let safeBottom =
     height > KEYBOARD_EPSILON ? keyboardTop - offset : keyboardTop;
@@ -400,7 +386,7 @@ function reveal(
 // caller's `onClick` still runs once. The click is synthetic: its `isTrusted`
 // is false. Like a real tap's click in Chrome and Safari, it is a touch
 // `PointerEvent`, or a `MouseEvent` where no `PointerEvent` exists.
-function deliverTap(
+export function deliverTap(
   control: HTMLElement,
   x: number,
   y: number,
@@ -432,11 +418,17 @@ function deliverTap(
   control.dispatchEvent(click);
 }
 
-// Puts back a pan the browser makes on its own after a keyboard report. This
-// happens, for example, after a focus no claim saw: a script's `focus()` while
-// nothing has focus. The field sits in place already, so the pan only displaces
-// the page.
-function watchPans(win: Window, owns: (focused: Element) => boolean) {
+/**
+ * Puts back a pan the browser makes on its own after a keyboard report. This
+ * happens, for example, after a focus no claim saw: a script's `focus()` while
+ * nothing has focus. The field sits in place already, so the pan only displaces
+ * the page. Feed `report` each keyboard height the module reports; `owns`
+ * says whether a focused element is one this watch keeps in place.
+ */
+export function watchPans(
+  win: Window,
+  owns: (focused: Element) => boolean,
+): {report(height: number): void; stop(): void} {
   const watch = watchRevealPan(win, {owns});
   let lastHeight = getKeyboardHeight(win);
   return {
@@ -462,9 +454,12 @@ function focusedFieldIn(target: Element): HTMLElement | null {
     : null;
 }
 
-// Whether this window keeps fields above a keyboard at all: a top-level
-// document whose visual viewport shrinks for the keyboard, under a finger.
-function followsKeyboard(win: Window | null): win is Window {
+/**
+ * Whether `win` keeps fields above a keyboard at all: a top-level document
+ * whose visual viewport shrinks for the keyboard, under a coarse primary
+ * pointer.
+ */
+export function followsKeyboard(win: Window | null): win is Window {
   return win != null && isKeyboardMeasurable(win) && isCoarsePointer(win);
 }
 
@@ -583,7 +578,7 @@ function exceedsRoom(
   return (
     height > KEYBOARD_EPSILON &&
     container.getBoundingClientRect().height >
-      layoutViewportHeight(win) - height + KEYBOARD_EPSILON
+      getKeyboardViewportHeight(win) - height + KEYBOARD_EPSILON
   );
 }
 
