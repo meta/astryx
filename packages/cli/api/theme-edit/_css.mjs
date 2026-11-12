@@ -80,7 +80,39 @@ const VAR_STANDS_FOR = ['0', '1px', '1ms', 'red', 'ease', 'serif', '0 0 red'];
  * @returns {any | null}
  */
 export function matchValue(property, value) {
-  return matchWith(value, (lexer, ast) => lexer.matchProperty(property, ast));
+  const standard = standardSyntax(property);
+  return matchWith(value, (lexer, ast) =>
+    standard ? lexer.match(standard, ast) : lexer.matchProperty(property, ast),
+  );
+}
+
+/** @type {Map<string, string | null>} */
+const standardCache = new Map();
+/**
+ * A property's grammar without its legacy Internet Explorer alternatives
+ * (`filter`'s `<-ms-filter-function-list>` takes any word), or null when it
+ * has none.
+ * @param {string} property
+ * @returns {string | null}
+ */
+function standardSyntax(property) {
+  if (standardCache.has(property))
+    return /** @type {string | null} */ (standardCache.get(property));
+  const {definitionSyntax} = csstree();
+  const syntax = propertyGrammar(property);
+  /** @type {string | null} */
+  let out = null;
+  if (syntax?.type === 'Group' && syntax.combinator === '|') {
+    const kept = syntax.terms.filter(
+      (/** @type {any} */ t) => !(t.type === 'Type' && /^-ms-/.test(t.name)),
+    );
+    if (kept.length && kept.length < syntax.terms.length)
+      out = kept
+        .map((/** @type {any} */ t) => definitionSyntax.generate(t))
+        .join(' | ');
+  }
+  standardCache.set(property, out);
+  return out;
 }
 
 /**

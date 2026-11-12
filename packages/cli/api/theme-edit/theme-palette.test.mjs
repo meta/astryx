@@ -1781,3 +1781,89 @@ describe('chaos round 4', () => {
     fs.rmSync(path.join(cwd, 'themes', 'o'), {recursive: true, force: true});
   });
 });
+
+describe('a palette an earlier editor wrote', () => {
+  it('is brought up to date before the build reads it, so a font change keeps the accent and the next change does too', async () => {
+    await themeEditNew('w', {cwd});
+    await themeEditSet('w', 'mode', 'dark-only', {cwd});
+    await themeEditSet('w', 'accent', '#5e6ad2', {cwd});
+    await themeEditSet('w', 'neutral', '#26272e', {cwd});
+    await themeEditSet('w', 'vibrancy', '40', {cwd});
+    const dir = path.join(cwd, 'themes', 'w');
+    const accent = () =>
+      /--color-accent:\s*([^;]+);/.exec(
+        fs.readFileSync(path.join(dir, 'w.css'), 'utf8'),
+      )?.[1];
+    const settled = accent();
+    // The config, palette and receipt as an earlier editor wrote them for
+    // this dark-only theme: both modes, and only a light accent anchor.
+    const config = {
+      vibrancy: 40,
+      modeStrategy: 'light-and-dark',
+      neutralProfile: 'custom',
+      families: [
+        {
+          id: 'accent',
+          name: 'Accent',
+          seed: '#5e6ad2',
+          anchors: [
+            {mode: 'light', stop: 50, color: '#5e6ad2', policy: 'exact'},
+          ],
+        },
+        {id: 'neutral', name: 'Neutral', seed: '#26272e', kind: 'neutral'},
+      ],
+    };
+    fs.writeFileSync(
+      path.join(dir, 'palette.config.json'),
+      `${JSON.stringify(config, null, 2)}\n`,
+    );
+    themePaletteGenerate(
+      'themes/w/palette.config.json',
+      {out: 'themes/w/tokens/w.palette.ts', overwrite: true},
+      {cwd},
+    );
+    // An earlier editor wrote both modes' stops for a one-mode theme.
+    const ts = path.join(dir, 'w.settings.ts');
+    fs.writeFileSync(
+      ts,
+      fs
+        .readFileSync(ts, 'utf8')
+        .replace(
+          /"--color-accent": palette\.accent\.dark\[[\d.]+\],/,
+          '"--color-accent": [palette.accent.light[50], palette.accent.dark[70]],',
+        ),
+    );
+    expect(fs.readFileSync(ts, 'utf8')).toContain('palette.accent.dark[70]');
+    // An earlier editor kept no palette hash in the settings.
+    const settingsFile = path.join(dir, 'w.settings.json');
+    const saved = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    delete saved.palette;
+    fs.writeFileSync(settingsFile, `${JSON.stringify(saved, null, 2)}\n`);
+    await themeEditSet('w', 'font', 'system', {cwd});
+    expect(accent()).toBe(settled);
+    await themeEditSet('w', 'corners', 'large', {cwd});
+    expect(accent()).toBe(settled);
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+});
+
+describe('legacy grammar and code fonts', () => {
+  it('refuses a filter word the browser drops, and gives a code font monospace fallbacks', async () => {
+    for (const prop of ['filter', 'backdrop-filter'])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', prop, 'banana', {cwd, on: 'card'}),
+          )
+        ).code,
+        prop,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    await themeEditSet('p', 'filter', 'blur(4px)', {cwd, on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'filter', on: 'card'});
+    await themeEditSet('p', 'font', 'Fira Code', {cwd, on: 'code'});
+    expect(read('p.settings.ts')).toMatch(
+      /"code": \{\s*"family": "Fira Code",\s*"fallbacks": "ui-monospace, monospace"/,
+    );
+    await themeEditUndo('p', {cwd, thing: 'font', on: 'code'});
+  });
+});

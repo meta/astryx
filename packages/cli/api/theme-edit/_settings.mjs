@@ -1073,7 +1073,14 @@ export function compileTheme(ctx, data, base) {
           theme.typography[r] = {
             ...(theme.typography[r] ?? {}),
             family: f.family,
-            fallbacks: f.fallbacks,
+            // Code falls back to a monospace font unless the value names
+            // its own fallbacks.
+            fallbacks:
+              r === 'code' &&
+              !s.value.includes(',') &&
+              !/monospace/.test(f.fallbacks)
+                ? 'ui-monospace, monospace'
+                : f.fallbacks,
           };
       } else if (s.thing === 'surfaces') {
         for (const t of SURFACE_PARTS.filter(x => ctx.project.target.has(x)))
@@ -1600,19 +1607,36 @@ export async function buildTheme(ctx, slug, data) {
   refuseThemeSource(cwd, slug);
   if (data.like) baseThemeFile(ctx.project, data.like);
   const base = await baseResolved(ctx.project, data.like);
-  const theme = compileTheme(ctx, data, base);
-  const pal = keepShades(
-    paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults),
-    ctx.keepStops,
-  );
   fs.mkdirSync(f.dir, {recursive: true});
   // Each write is recorded for a rollback; the time between them is not.
   /** @type {<T>(fn: () => T) => Promise<Awaited<T>>} */
   const step = fn => track(f.dir, ctx.wrote ?? new Map(), fn);
   /** @type {string[]} */
   let notes = [];
+  // The palette files are written first, and the theme is built from them
+  // as written: a config an earlier editor wrote is brought up to date
+  // before any color is read from it.
+  const paletteFile = path.join(cwd, paletteFiles(slug).palette);
+  const paletteBefore = fs.existsSync(paletteFile)
+    ? fs.readFileSync(paletteFile, 'utf8')
+    : null;
   await step(() => {
     notes = syncPalette(cwd, slug, data, base);
+  });
+  // Shades a theme already shows are kept only while its palette stays the
+  // same: a palette made again moves every shade.
+  if (
+    (fs.existsSync(paletteFile)
+      ? fs.readFileSync(paletteFile, 'utf8')
+      : null) !== paletteBefore
+  )
+    ctx.keepStops = null;
+  const theme = compileTheme(ctx, data, base);
+  const pal = keepShades(
+    paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults),
+    ctx.keepStops,
+  );
+  await step(() => {
     writeWhole(f.settingsTs, settingsSource(slug, data, theme, pal, cwd));
     syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
     if (!fs.existsSync(f.ts)) writeWhole(f.ts, themeModuleSource(slug));
