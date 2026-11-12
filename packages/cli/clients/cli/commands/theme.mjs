@@ -77,6 +77,8 @@ import {
 import {
   printBatchTrailer,
   printCompactTrailer,
+  setEditorFolderListener,
+  setPrivateVarErrorListener,
   themeBuild,
   themeBuildFamily,
   themeBuildForReport,
@@ -1131,11 +1133,20 @@ function registerThemeCommands(theme, program, docs, words) {
       const watchChild =
         typeof process.send === 'function' &&
         process.argv0 === WATCH_CHILD_ARGV0;
-      if (watchChild) process.channel?.unref();
+      if (watchChild) {
+        process.channel?.unref();
+        setEditorFolderListener(warning => {
+          // Held open until the message is out, then let go again.
+          process.channel?.ref();
+          process.send?.({type: WATCH_WARNING, text: warning}, () =>
+            process.channel?.unref(),
+          );
+        });
+      }
       let privateVarError = false;
-      const onPrivateVarError = () => {
+      setPrivateVarErrorListener(() => {
         privateVarError = true;
-      };
+      });
 
       const refused = await words.preflight?.(files, {
         cwd: process.cwd(),
@@ -1152,7 +1163,6 @@ function registerThemeCommands(theme, program, docs, words) {
               familyKey: /** @type {string} */ (options.familyKey),
               check: options.check,
               iconsSpecifier: options.iconsSpecifier,
-              __onPrivateVarError: onPrivateVarError,
               __commandWords: words,
             },
             {cwd: process.cwd()},
@@ -1236,19 +1246,9 @@ function registerThemeCommands(theme, program, docs, words) {
             out: options.out,
             check: options.check,
             iconsSpecifier: options.iconsSpecifier,
-            __onPrivateVarError: onPrivateVarError,
             __claimedOutputs: claimedOutputs,
             __deferredWrites: deferred ? writes : undefined,
             __commandWords: words,
-            __onEditorFolder: watchChild
-              ? (/** @type {string} */ warning) => {
-                  // Held open until the message is out, then let go again.
-                  process.channel?.ref();
-                  process.send?.({type: WATCH_WARNING, text: warning}, () =>
-                    process.channel?.unref(),
-                  );
-                }
-              : undefined,
           };
           let result;
           if (report) {
