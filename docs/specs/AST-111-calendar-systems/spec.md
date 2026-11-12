@@ -424,8 +424,6 @@ These requirements apply to the text fields of `DateInput` and
 | FR20         | Hook tests                                                                                                   | `useCalendarDays` without `calendar` matches released output; `persian` and a Hebrew leap year (month 13) with `calendar`; `useCalendarNavigation` steps and labels calendar months; a provider calendar does not change either hook | A hook reads the provider's calendar, changes released Gregorian output, or assumes 12 months when given a calendar                                                              |
 | AR1–AR3      | Accessibility-tree and announcement assertions                                                               | Day buttons and announcements in `persian`; each rejection kind                                                                                                                                                                      | A spoken date uses another calendar than the grid, or two rejection kinds share a message                                                                                        |
 
-Known verification gap: none of these suites exist on `main`.
-
 ## Decision log
 
 ### DEC-1 — Values stay Gregorian ISO
