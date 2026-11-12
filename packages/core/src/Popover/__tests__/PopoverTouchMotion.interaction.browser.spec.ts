@@ -67,6 +67,7 @@ import {
 
 const storybook = withStorybook(test);
 
+// This file runs on WebKit in CI.
 // The layer runtime's input hold puts its shield inside the layer. It is a
 // manual popover hidden from assistive technology, and not the exit copy.
 const SHIELD = '[popover][aria-hidden="true"]:not([data-astryx-popover-exit])';
