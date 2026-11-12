@@ -1019,8 +1019,19 @@ export function compileTheme(ctx, data, base) {
           : null) ??
         partDefault(ctx, target, prop, s.when) ??
         (/^background/.test(kebab(prop)) ? 'transparent' : 'currentcolor');
-      const split = (/** @type {string} */ x, /** @type {1 | 2} */ side) =>
-        x.replace(/^light-dark\((.*),\s*(.*)\)$/, `$${side}`);
+      // At the top-level comma: a mode's color may hold commas itself.
+      const split = (/** @type {string} */ x, /** @type {1 | 2} */ side) => {
+        const inner = /^light-dark\((.*)\)$/s.exec(x.trim())?.[1];
+        if (inner == null) return x;
+        let depth = 0;
+        for (let i = 0; i < inner.length; i++) {
+          if (inner[i] === '(') depth++;
+          else if (inner[i] === ')') depth--;
+          else if (inner[i] === ',' && depth === 0)
+            return (side === 1 ? inner.slice(0, i) : inner.slice(i + 1)).trim();
+        }
+        return x;
+      };
       b[prop] =
         s.mode === 'light'
           ? `light-dark(${v}, ${prev ? split(prev, 2) : other})`

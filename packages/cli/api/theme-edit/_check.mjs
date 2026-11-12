@@ -853,6 +853,17 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     s.mode = mode;
   }
   const onFlag = s.on ? ` --on ${s.on}` : '';
+  // A value that already gives both modes takes no --mode.
+  if (s.mode && !unset && /^\s*light-dark\(/i.test(v ?? ''))
+    refuse(
+      E.ERR_THEME_NO_MODE,
+      `"${v}" already gives both modes, so it takes no --mode; drop --mode, or give the ${s.mode} color alone.`,
+      {
+        run: [
+          `${P} set ${slug} ${thing} ${quoteCommandArgument(String(v))}${s.on ? ` --on ${s.on}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
+        ],
+      },
+    );
   // A setting saved for a mode the theme no longer has can still be removed.
   if (s.mode && data.mode !== 'both' && !unset)
     refuse(

@@ -85,7 +85,9 @@ describe('parseColor', () => {
     }
     expect(colorProblem('Canvas')?.kind).toBe('system');
     expect(isColorValue('ButtonText')).toBe(true);
-    expect(colorProblem('color(rec2020 1 0 0)')?.kind).toBe('space');
+    // Every color() space CSS has is read; an unknown one is not.
+    expect(colorProblem('color(rec2020 1 0 0)')).toBeNull();
+    expect(colorProblem('color(banana 1 0 0)')).not.toBeNull();
     expect(colorProblem('transparent')?.kind).toBe('unfixed');
     expect(colorProblem('var(--x)')?.kind).toBe('unfixed');
     expect(colorProblem('banana')?.kind).toBe('unknown');

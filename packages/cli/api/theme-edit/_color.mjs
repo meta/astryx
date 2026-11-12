@@ -203,7 +203,72 @@ const FUNCTIONS =
 const FIXED = /^(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)$/i;
 
 /** The `color()` spaces this reader converts to sRGB. */
-const COLOR_SPACES = ['srgb', 'srgb-linear', 'display-p3'];
+const COLOR_SPACES = [
+  'srgb',
+  'srgb-linear',
+  'display-p3',
+  'a98-rgb',
+  'prophoto-rgb',
+  'rec2020',
+  'xyz',
+  'xyz-d50',
+  'xyz-d65',
+];
+
+/** Each RGB space's transfer to linear light, and its matrix to XYZ D65 (D50 for ProPhoto). */
+const RGB_SPACES =
+  /** @type {Record<string, {lin: (v: number) => number, m: number[][], d50?: boolean}>} */ ({
+    'display-p3': {
+      lin: v =>
+        Math.abs(v) <= 0.04045
+          ? v / 12.92
+          : Math.sign(v) * ((Math.abs(v) + 0.055) / 1.055) ** 2.4,
+      m: [
+        [0.4865709486482162, 0.26566769316909306, 0.1982172852343625],
+        [0.2289745640697488, 0.6917385218365064, 0.079286914093745],
+        [0, 0.04511338185890264, 1.043944368900976],
+      ],
+    },
+    'a98-rgb': {
+      lin: v => Math.sign(v) * Math.abs(v) ** (563 / 256),
+      m: [
+        [0.5766690429101305, 0.1855582379065463, 0.1882286462349947],
+        [0.29734497525053605, 0.6273635662554661, 0.0752914584939979],
+        [0.02703136138641234, 0.07068885253582723, 0.9913375368376388],
+      ],
+    },
+    rec2020: {
+      lin: v => {
+        const a = 1.09929682680944;
+        const b = 0.018053968510807;
+        return Math.abs(v) < b * 4.5
+          ? v / 4.5
+          : Math.sign(v) * ((Math.abs(v) + a - 1) / a) ** (1 / 0.45);
+      },
+      m: [
+        [0.6369580483012914, 0.14461690358620832, 0.1688809751641721],
+        [0.2627002120112671, 0.6779980715188708, 0.05930171646986196],
+        [0, 0.028072693049087428, 1.060985057710791],
+      ],
+    },
+    'prophoto-rgb': {
+      lin: v =>
+        Math.abs(v) <= 16 / 512 ? v / 16 : Math.sign(v) * Math.abs(v) ** 1.8,
+      m: [
+        [0.7977604896723027, 0.13518583717574031, 0.0313493495815248],
+        [0.2880711282292934, 0.7118432178101014, 0.00008565396060525902],
+        [0, 0, 0.8251046025104601],
+      ],
+      d50: true,
+    },
+  });
+
+/** XYZ D50 to XYZ D65 (Bradford). @param {number[]} c */
+const d50ToD65 = ([x, y, z]) => [
+  0.955473421488075 * x - 0.02309845494876471 * y + 0.06325924320057072 * z,
+  -0.0283697093338637 * x + 1.0099953980813041 * y + 0.021041441191917323 * z,
+  0.012314014864481998 * x - 0.020507649298898964 * y + 1.330365926242124 * z,
+];
 
 /** @typedef {{n: number, unit: string}} Num */
 
@@ -333,8 +398,8 @@ function oklabToRgb(l, a, b) {
 }
 
 /**
- * A `color()` value in sRGB: srgb as it is, srgb-linear and display-p3
- * through linear light, clipped to the sRGB gamut.
+ * A `color()` value in sRGB: srgb as it is, the other RGB spaces and
+ * XYZ through linear light and XYZ D65, clipped to the sRGB gamut.
  * @param {string} space @param {number[]} c 0..1
  * @returns {Rgb}
  */
@@ -342,20 +407,17 @@ function colorSpaceToRgb(space, c) {
   if (space === 'srgb')
     return /** @type {Rgb} */ (c.map(v => clamp(v, 0, 1) * 255));
   if (space === 'srgb-linear') return fromLinear(c);
-  const lin = c.map(v =>
-    Math.abs(v) <= 0.04045
-      ? v / 12.92
-      : Math.sign(v) * ((Math.abs(v) + 0.055) / 1.055) ** 2.4,
-  );
-  const x =
-    0.4865709486482162 * lin[0] +
-    0.26566769316909306 * lin[1] +
-    0.1982172852343625 * lin[2];
-  const y =
-    0.2289745640697488 * lin[0] +
-    0.6917385218365064 * lin[1] +
-    0.079286914093745 * lin[2];
-  const z = 0.04511338185890264 * lin[1] + 1.043944368900976 * lin[2];
+  /** @type {number[]} */
+  let xyz;
+  if (space === 'xyz' || space === 'xyz-d65') xyz = c;
+  else if (space === 'xyz-d50') xyz = d50ToD65(c);
+  else {
+    const rgb = RGB_SPACES[space];
+    const lin = c.map(rgb.lin);
+    const t = rgb.m.map(r => r[0] * lin[0] + r[1] * lin[1] + r[2] * lin[2]);
+    xyz = rgb.d50 ? d50ToD65(t) : t;
+  }
+  const [x, y, z] = xyz;
   return fromLinear([
     3.2409699419045226 * x - 1.537383177570094 * y - 0.4986107602930034 * z,
     -0.9692436362808796 * x + 1.8759675015077202 * y + 0.04155505740717559 * z,

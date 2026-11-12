@@ -2127,3 +2127,74 @@ describe('colors11: refusals name a command that works', () => {
     }
   });
 });
+
+describe('colors12', () => {
+  it('splits a per-mode part color at its own comma, in either order', async () => {
+    for (const [first, second] of [
+      [
+        ['dark', 'rgb(0, 0, 255)'],
+        ['light', 'red'],
+      ],
+      [
+        ['light', 'hsl(0, 100%, 50%)'],
+        ['dark', 'color-mix(in oklch, red 20%, white)'],
+      ],
+    ]) {
+      await themeEditSet('p', 'background-color', first[1], {
+        cwd,
+        on: 'card',
+        when: 'variant:default',
+        mode: first[0],
+      });
+      await themeEditSet('p', 'background-color', second[1], {
+        cwd,
+        on: 'card',
+        when: 'variant:default',
+        mode: second[0],
+      });
+      const [light, dark] =
+        first[0] === 'light' ? [first[1], second[1]] : [second[1], first[1]];
+      expect(read('p.settings.ts')).toContain(
+        JSON.stringify(`light-dark(${light}, ${dark})`),
+      );
+      for (const m of ['light', 'dark'])
+        await themeEditUndo('p', {
+          cwd,
+          thing: 'background-color',
+          on: 'card',
+          when: 'variant:default',
+          mode: m,
+        });
+    }
+  });
+
+  it('refuses --mode on a value that gives both modes, and reads every color() space', async () => {
+    for (const [thing, on] of [
+      ['--color-accent'],
+      ['background-color', 'card'],
+    ])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', thing, 'light-dark(#fff, #000)', {
+              cwd,
+              mode: 'light',
+              ...(on ? {on} : {}),
+            }),
+          )
+        ).code,
+        thing,
+      ).toBe('ERR_THEME_NO_MODE');
+    for (const space of [
+      'rec2020',
+      'a98-rgb',
+      'prophoto-rgb',
+      'xyz',
+      'xyz-d50',
+      'xyz-d65',
+    ]) {
+      await themeEditSet('p', 'accent', `color(${space} 0.3 0.4 0.8)`, {cwd});
+      await themeEditUndo('p', {cwd, thing: 'accent'});
+    }
+  });
+});
