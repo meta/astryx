@@ -13,6 +13,7 @@ import {
   findingChecks,
   formatReport,
   mergeConflicts,
+  reviewSizeAdvice,
 } from './pre-review.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -216,6 +217,8 @@ describe('formatReport', () => {
       claims: [],
       baselines: {command: null, claims: []},
       authoredLines: 9000,
+      sizeAdvice:
+        'Over 2,000 authored lines: consider splitting if a smaller change would review more easily.',
       merge: {conflicts: []},
       findings: [],
       checks: [],
@@ -225,6 +228,71 @@ describe('formatReport', () => {
       'Authored lines: 9000 (guideline 2000; lockfiles, snapshots, and generated files excluded)\n  Over 2,000 authored lines: consider splitting if a smaller change would review more easily.',
     );
     expect(text).toContain('Findings in this change (0):\n  none');
+  });
+  it('prints the advice the report holds, not one from the total line count', () => {
+    const text = formatReport({
+      base: 'origin/main',
+      head: 'working tree',
+      mergeBase: 'a'.repeat(40),
+      scope: 'changes include another surface',
+      files: [{file: 'packages/cli/assets/templates/pages/a.tsx', class: 'x'}],
+      records: [],
+      claims: [],
+      baselines: {command: null, claims: []},
+      authoredLines: 9000,
+      sizeAdvice: null,
+      merge: {conflicts: []},
+      findings: [],
+      checks: [],
+      checklist: 'docs/contributing/pull-requests.md#pre-review-checklist',
+    });
+    expect(text).toContain('Authored lines: 9000 (guideline 2000;');
+    expect(text).not.toContain('consider splitting');
+  });
+});
+
+describe('reviewSizeAdvice', () => {
+  const advice =
+    'Over 2,000 authored lines: consider splitting if a smaller change would review more easily.';
+  const notGenerated = () => false;
+
+  it('gives no advice for a large change to templates only', () => {
+    expect(
+      reviewSizeAdvice(
+        {
+          'packages/cli/assets/templates/pages/a/a.tsx': 6000,
+          'packages/cli/assets/templates/blocks/b/b.tsx': 3000,
+        },
+        notGenerated,
+      ),
+    ).toBeNull();
+  });
+
+  it('counts only the lines outside templates', () => {
+    expect(
+      reviewSizeAdvice(
+        {
+          'packages/cli/assets/templates/pages/a/a.tsx': 6000,
+          'packages/core/src/A/A.tsx': 1500,
+        },
+        notGenerated,
+      ),
+    ).toBeNull();
+    expect(
+      reviewSizeAdvice(
+        {
+          'packages/cli/assets/templates/pages/a/a.tsx': 6000,
+          'packages/core/src/A/A.tsx': 2500,
+        },
+        notGenerated,
+      ),
+    ).toBe(advice);
+  });
+
+  it('leaves out generated files', () => {
+    expect(
+      reviewSizeAdvice({'packages/core/src/data.ts': 5000}, () => true),
+    ).toBeNull();
   });
 });
 

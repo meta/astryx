@@ -26,6 +26,7 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -38,21 +39,6 @@ let cwd;
 
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-hunt5b-', FIXTURE_PACKAGES);
@@ -109,12 +95,11 @@ describe('corner steps, as the part shows them', () => {
       on: 'text-input',
       only: true,
     });
-    const r = await themeEditSet('t', 'corners', 'more', {
-      cwd,
-      on: 'text-input',
-    });
-    expect(r.data.setting.value).toBe('pill');
-    // The step changed nothing, so one undo removes the first setting.
+    // At pill the step writes nothing.
+    const r = await refusal(() =>
+      themeEditSet('t', 'corners', 'more', {cwd, on: 'text-input'}),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
     await themeEditUndo('t', {cwd});
   }, 240_000);
 

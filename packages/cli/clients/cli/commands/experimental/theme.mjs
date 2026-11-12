@@ -542,7 +542,7 @@ function strayOption(command, rest) {
         {
           suggestions: [
             {
-              name: `${EDITOR} ${command} --help`,
+              name: cmd(`${EDITOR} ${command} --help`),
               reason: 'every option it takes',
             },
           ],
@@ -556,7 +556,10 @@ function strayOption(command, rest) {
     `unknown option '${word}': only the thing a change names may start with -- (a design token such as --color-accent).`,
     {
       suggestions: [
-        {name: `${EDITOR} ${command} --help`, reason: 'every option it takes'},
+        {
+          name: cmd(`${EDITOR} ${command} --help`),
+          reason: 'every option it takes',
+        },
       ],
       code: ERROR_CODES.ERR_INVALID_OPTION,
     },
@@ -573,7 +576,7 @@ function extraWords(command, extra) {
   if (!extra.length) return null;
   return cliError(`${command} does not take "${extra.join(' ')}".`, {
     suggestions: [
-      {name: `${EDITOR} ${command} --help`, reason: 'what it takes'},
+      {name: cmd(`${EDITOR} ${command} --help`), reason: 'what it takes'},
     ],
     code: ERROR_CODES.ERR_INVALID_ARGUMENT,
   });
@@ -788,6 +791,22 @@ export function registerExperimentalTheme(group, program) {
         /** @type {any} */ c,
       ) =>
         extraWords('show', (c?.args ?? []).slice(1)) ??
+        // The sheet is limited to one section (the docs say so): a second
+        // --section is refused, never kept over the first in silence.
+        (new Set(flagValues('section')).size > 1
+          ? cliError(
+              `--section limits the sheet to one section, and was given ${flagValues('section').length} (${flagValues('section').join(', ')}); give one, or none for the whole sheet.`,
+              {
+                suggestions: [
+                  {
+                    name: `${EDITOR} show ${name} --section ${flagValues('section')[0]}`,
+                    reason: 'do this instead',
+                  },
+                ],
+                code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+              },
+            )
+          : null) ??
         run(
           program,
           () =>
