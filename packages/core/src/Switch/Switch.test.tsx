@@ -1699,6 +1699,18 @@ describe('hit area under a coarse pointer (Switch FR10)', () => {
   });
 
   it('toggles for a tap on its grown input, and not for one that lies on a link beside it', () => {
+    // The press check runs while the primary pointer is coarse.
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      media =>
+        ({
+          media,
+          matches: media.includes('pointer: coarse'),
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
     const onChange = vi.fn();
     const {container} = render(
       <div>

@@ -113,6 +113,7 @@ export type {
   InputStatus as DateRangeInputStatus,
   InputStatusType as DateRangeInputStatusType,
 } from '../Field';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 const styles = stylex.create({
   trigger: {
@@ -775,6 +776,7 @@ export function DateRangeInput({
       labelTooltip={labelTooltip}
       width={width}>
       <div
+        {...fieldFrameProps}
         ref={el => {
           popover.triggerRef(el);
           // Anchor + hover/focus listeners for the disabled-message tooltip.

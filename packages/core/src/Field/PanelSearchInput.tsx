@@ -59,6 +59,7 @@ import {
 import type {BaseProps} from '../BaseProps';
 import {textEntryTraitAttributes} from './textEntryTraits';
 import {inputWrapperStyles} from './inputStyles.stylex';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 const styles = stylex.create({
   // Gutter only. Matches the option list's own padding so the field below
@@ -274,6 +275,7 @@ export function PanelSearchInput({
       onKeyDown={onContainerKeyDown}
       {...mergeProps(stylex.props(styles.wrapper, xstyle), className, style)}>
       <div
+        {...(hasInputBox ? fieldFrameProps : undefined)}
         data-keyboard-focus={isKeyboardFocus ? 'true' : undefined}
         {...stylex.props(
           styles.field,

@@ -23,6 +23,7 @@ import {Button} from '../Button/Button';
 import {ButtonGroup} from '../ButtonGroup/ButtonGroup';
 import {InfoTip} from '../InfoTip/InfoTip';
 import {List} from '../List/List';
+import {Typeahead} from '../Typeahead/Typeahead';
 import {ListItem} from '../List/ListItem';
 
 function Host({id, onClick}: {id: string; onClick?: () => void}) {
@@ -131,6 +132,8 @@ describe('at a tap', () => {
   let elementsAtPoint: Element[];
 
   beforeEach(() => {
+    // The band, and so the check, exists while the primary pointer is coarse.
+    vi.spyOn(window, 'matchMedia').mockImplementation(coarse);
     elementsAtPoint = [];
     Object.defineProperty(document, 'elementsFromPoint', {
       configurable: true,
@@ -452,6 +455,66 @@ describe('at a tap', () => {
     expect(document.activeElement).toBe(entry);
   });
 
+  it('checks a pen tap and a mouse click on the band too, while the primary pointer is coarse', () => {
+    const {a, b, container, onA, onB} = setUp();
+    // 6 px past the control, 2 px inside the link: the link's box wins.
+    elementsAtPoint = [a, b, container, document.body];
+    expect(tap(a, 130, 'pen')).toBe(true);
+    expect(tap(a, 130, 'mouse')).toBe(true);
+    expect(onA).not.toHaveBeenCalled();
+    expect(onB).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives a tap on a Typeahead’s frame to its entry, which takes the focus', () => {
+    const onA = vi.fn();
+    render(
+      <div data-testid="container">
+        <Host id="a" onClick={onA} />
+        <Typeahead
+          label="Fruit"
+          isLabelHidden
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={null}
+          onChange={() => {}}
+        />
+      </div>,
+    );
+    const a = document.getElementById('a') as HTMLElement;
+    const entry = screen.getByRole('combobox', {name: 'Fruit'});
+    const frame = entry.closest('[data-astryx-field-frame]') as HTMLElement;
+    expect(frame).not.toBeNull();
+    const container = screen.getByTestId('container');
+    a.getBoundingClientRect = () => rect(100, 100, 24, 24);
+    frame.getBoundingClientRect = () => rect(128, 100, 160, 32);
+    entry.getBoundingClientRect = () => rect(140, 104, 136, 24);
+    elementsAtPoint = [a, frame, container, document.body];
+    expect(tap(a, 130)).toBe(true);
+    expect(onA).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(entry);
+  });
+
+  it('gives a tap on a marked box that holds no entry, such as a field’s description, to that box’s own click', () => {
+    const onA = vi.fn();
+    const onDescription = vi.fn();
+    render(
+      <div data-testid="container">
+        <Host id="a" onClick={onA} />
+        <span id="description" onClick={onDescription} {...fieldFrameProps}>
+          As on your passport
+        </span>
+      </div>,
+    );
+    const a = document.getElementById('a') as HTMLElement;
+    const description = document.getElementById('description') as HTMLElement;
+    const container = screen.getByTestId('container');
+    a.getBoundingClientRect = () => rect(100, 100, 24, 24);
+    description.getBoundingClientRect = () => rect(128, 100, 140, 16);
+    elementsAtPoint = [a, description, container, document.body];
+    expect(tap(a, 130)).toBe(true);
+    expect(onA).not.toHaveBeenCalled();
+    expect(onDescription).toHaveBeenCalledTimes(1);
+  });
+
   it('stops at the control’s own container: what paints below it, such as the page under a layer, is not beside it', () => {
     const {a, b, container, onA} = setUp();
     elementsAtPoint = [a, container, b, document.body];
@@ -459,17 +522,25 @@ describe('at a tap', () => {
     expect(onA).toHaveBeenCalledTimes(1);
   });
 
-  it('leaves a mouse click, and a keyboard click after a touch, alone', () => {
+  it('leaves a finger, a pen and a mouse under a fine pointer, and a keyboard click after a touch, alone', () => {
     const {a, b, container, onA} = setUp();
     elementsAtPoint = [a, b, container, document.body];
+    vi.mocked(window.matchMedia).mockImplementation(media => ({
+      ...coarse(media),
+      matches: false,
+    }));
+    expect(tap(a, 130, 'touch')).toBe(false);
+    expect(tap(a, 130, 'pen')).toBe(false);
     expect(tap(a, 130, 'mouse')).toBe(false);
+    expect(onA).toHaveBeenCalledTimes(3);
+    vi.mocked(window.matchMedia).mockImplementation(coarse);
     const press = new Event('pointerdown', {bubbles: true});
     Object.assign(press, {pointerType: 'touch', clientX: 130, clientY: 112});
     a.dispatchEvent(press);
     const key = new MouseEvent('click', {bubbles: true, cancelable: true});
     a.dispatchEvent(key);
     expect(key.defaultPrevented).toBe(false);
-    expect(onA).toHaveBeenCalledTimes(2);
+    expect(onA).toHaveBeenCalledTimes(4);
   });
 });
 

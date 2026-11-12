@@ -37,6 +37,7 @@ function rect(top: number) {
 describe('ListItem touch hit area', () => {
   afterEach(() => {
     delete (document as {elementsFromPoint?: unknown}).elementsFromPoint;
+    vi.restoreAllMocks();
   });
 
   const row = (text: string) => screen.getByText(text).closest('li')!;
@@ -65,6 +66,18 @@ describe('ListItem touch hit area', () => {
   });
 
   it('gives a tap on a row’s band that lies on the next row to the next row, after a re-render too', () => {
+    // The press check runs while the primary pointer is coarse.
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      media =>
+        ({
+          media,
+          matches: media.includes('pointer: coarse'),
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
     const onFirst = vi.fn();
     const onSecond = vi.fn();
     const rowRef = (tick: number) => (node: HTMLLIElement | null) => {

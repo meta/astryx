@@ -64,6 +64,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   and disabled states.
 - Converting a selected Calendar range or preset into `onChange` and
   `changeAction` output.
+- Marking its frame for the touch press check. DateRangeInput writes the private
+  attribute `data-astryx-field-frame` only through its owner module,
+  `packages/core/src/privateAttributes/fieldFrame.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and gives a tap on the frame to the entry nearest the finger (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 

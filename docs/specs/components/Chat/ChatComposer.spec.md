@@ -97,6 +97,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Laying out the drawer, header, input, footer, send, and status regions.
 - Applying composer density, elevation, disabled presentation, and keyboard-only editor focus indication.
 - Publishing the composition context used by custom inputs and send controls.
+- Marking its body, which focuses its input on a click for the touch press check. ChatComposer writes the private
+  attribute `data-astryx-field-frame` only through its owner module,
+  `packages/core/src/privateAttributes/fieldFrame.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and gives a tap on the body to the input (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 

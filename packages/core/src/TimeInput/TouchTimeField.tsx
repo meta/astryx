@@ -84,6 +84,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TimeInput/TouchTimeField.generated';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 registerEnglishFallback(english);
 
@@ -370,6 +371,7 @@ export function TouchTimeField({
 
   const inputWrapper = (
     <div
+      {...fieldFrameProps}
       ref={el => {
         disabledMessageTooltip.ref(el);
       }}

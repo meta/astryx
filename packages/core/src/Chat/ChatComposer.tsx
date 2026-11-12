@@ -66,6 +66,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Chat/ChatComposer.generated';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 registerEnglishFallback(english);
 
@@ -568,6 +569,7 @@ export function ChatComposer(props: ChatComposerProps) {
 
         <div
           ref={bodyComposedRef}
+          {...fieldFrameProps}
           onClick={handleBodyClick}
           onPointerDownCapture={() => setHasKeyboardEditorFocus(false)}
           onFocusCapture={handleBodyFocusCapture}

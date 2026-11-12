@@ -18,6 +18,7 @@ import {useCallback, type RefCallback} from 'react';
 import {distanceTo, INTERACTIVE_SELECTOR} from './hitArea';
 import {subscribeInput} from './inputStream';
 import {isElement} from './nodeType';
+import {isCoarsePointer} from './coarsePointer';
 import {isGrownHitInput} from '../privateAttributes/grownHitInput.stylex';
 import {closestFieldFrame} from '../privateAttributes/fieldFrame.stylex';
 
@@ -65,6 +66,24 @@ const ENTRY = `:is(textarea, select, [contenteditable="true"], input:not([type])
   .join()})`;
 
 /**
+ * The entry a tap on a marked field box gives the tap to: its entry nearest
+ * the finger, or the box itself when it holds none, as a field's description
+ * or a file input's drop zone, whose own click forwards the tap.
+ */
+function entryOf(frame: Element, x: number, y: number): Element {
+  let entry = frame;
+  let nearest = Infinity;
+  for (const candidate of frame.querySelectorAll(ENTRY)) {
+    const distance = distanceTo(candidate.getBoundingClientRect(), x, y);
+    if (distance < nearest) {
+      entry = candidate;
+      nearest = distance;
+    }
+  }
+  return entry;
+}
+
+/**
  * Where a tap on `host`'s band at (x, y) goes, or null for the host: a visible
  * box under the finger, else the nearest box in empty space. It reads boxes
  * only when the finger is outside the host's, up to the host's own container
@@ -92,7 +111,7 @@ function targetUnderFinger(
     // the finger. A field's marked frame is its entry's visible box.
     const control = element.closest(INTERACTIVE_SELECTOR);
     const frame = control == null ? closestFieldFrame(element) : null;
-    const target = control ?? frame?.querySelector(ENTRY);
+    const target = control ?? (frame && entryOf(frame, x, y));
     if (target == null || isOwn(host, target) || frame?.contains(host)) {
       continue;
     }
@@ -148,8 +167,10 @@ function checkTaps(host: Element, ownsDescendantTouches: boolean): () => void {
   let endPress: (() => void) | null = null;
   const stopPresses = subscribeInput(view, 'pointerdown', press => {
     const {target, clientX, clientY} = press;
+    // The band, and so the check, exists while the primary pointer is coarse,
+    // for a finger, a pen and a mouse alike.
     if (
-      press.pointerType !== 'touch' ||
+      !isCoarsePointer(view) ||
       !isElement(target) ||
       !host.contains(target) ||
       (ownsDescendantTouches && target !== host)

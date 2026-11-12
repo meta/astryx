@@ -806,17 +806,22 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   row takes the taps above and below the control. Nothing reads layout for
   hit areas before a press. A visible box under the finger wins; the band
   only claims empty space. A target marked as a grown hit input, such as a
-  switch's, shows its parent's box. At a tap's click, a press-time check reads the
-  pressed control's box, and only when the finger landed on its band outside
+  switch's, shows its parent's box. While the primary pointer is coarse, at
+  the click of a finger's, a pen's or a mouse's tap, a press-time check reads
+  the pressed control's box, and only when the finger landed on its band outside
   that box, the elements under the finger within the control's container, in
   one read. Where the finger is on another target's visible box, that target
   takes the tap, as it does without the band. In empty space where bands
   overlap, the target whose box is nearest the finger takes the tap. A target
   that takes a tap this way takes it as a native tap does: it takes the
   focus, so a text field raises the keyboard, and a picker opens. A field's
-  marked frame shows its entry's box, where the entry renders as a field: a
-  text, date, time or colour entry, or a select. A field's label, its status
-  message and the space beside its frame are empty space (owner
+  marked box is the field's: the frame around its entry, where the entry
+  renders as a field (a text, date, time or colour entry, or a select), takes
+  the tap for its entry, and a box whose own click forwards to the field,
+  such as its description or a file input's drop zone, takes the tap itself.
+  A label tied to the field is a target and focuses the field, as it does
+  without the band. A field's status message and the space beside its frame
+  are empty space (owner
   decision, 2026-11-10; DEC-32). A hit area a component or module
   record sets on purpose, such as `component:Thumbnail` AR4's, is unaffected.
   Mobile size increases belong to theme adaptations (DEC-20). Implementation
