@@ -684,6 +684,40 @@ export function keywordsOf(prop) {
   return [...words];
 }
 
+/** @type {string[] | null} */
+let generics = null;
+
+/**
+ * The CSS generic font families (serif, math, ui-rounded …), as the
+ * grammar's `<generic-family>` type lists them; non-standard ones left out.
+ * @returns {string[]}
+ */
+export function genericFamilies() {
+  if (generics) return generics;
+  const t = csstree();
+  const seen = new Set();
+  /** @type {Set<string>} */
+  const words = new Set();
+  /** @param {any} syntax */
+  const walk = syntax => {
+    if (!syntax) return;
+    t.definitionSyntax.walk(syntax, (/** @type {any} */ n) => {
+      if (n.type === 'Keyword') {
+        if (!n.name.startsWith('-')) words.add(n.name);
+      } else if (
+        n.type === 'Type' &&
+        !n.name.startsWith('-') &&
+        !seen.has(n.name)
+      ) {
+        seen.add(n.name);
+        walk(currentLexer().types[n.name]?.syntax);
+      }
+    });
+  };
+  walk(currentLexer().types['generic-family']?.syntax);
+  return (generics = [...words]);
+}
+
 /**
  * A value the property takes, to put in a suggestion: its initial value
  * from MDN's data (a shorthand's first longhand's).
@@ -781,6 +815,10 @@ export function fontShorthandParts(value) {
     'font-stretch',
     'font-size',
   ];
+  // A lone generic family (math, fangsong) is a family, though a longhand
+  // may share the word (font-size: math).
+  if (genericFamilies().includes(value.trim().toLowerCase()))
+    return {'font-family': value.trim()};
   if (!value.includes(',')) {
     /** @type {Record<string, string>} */
     const each = {};

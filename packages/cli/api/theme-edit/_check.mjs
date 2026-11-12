@@ -90,6 +90,7 @@ import {
   valueProblem,
   partComponentDocs,
   themeFiles,
+  ownSourceTokenValues,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
@@ -225,8 +226,8 @@ function matchingParen(text, open) {
  */
 function textSizePx(v) {
   const m = /^\+?(\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em|%)?$/i.exec(
-    v
-      .trim()
+    typedPlain(v)
+      .replace(/(\d)\.(?=[a-z%]*$)/i, '$1')
       .replace(/\s+/g, '')
       .replace(/^(\d+),(\d+)/, '$1.$2'),
   );
@@ -236,6 +237,20 @@ function textSizePx(v) {
     Number(m[1]) * (/r?em/.test(unit) ? 16 : unit === '%' ? 16 / 100 : 1);
   const px = Math.round(n * 100) / 100;
   return Math.max(10, Math.min(32, px));
+}
+
+/**
+ * A value as it reads once what an input method or a stylesheet adds is
+ * taken off: full-width digits, letters and signs (`１８`, `＃`) as their
+ * plain forms, and CSS comments.
+ * @param {string} v
+ */
+function typedPlain(v) {
+  return v
+    .normalize('NFKC')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** The size units a typo is read against. */
@@ -250,7 +265,10 @@ const SIZE_UNITS = ['px', 'rem', 'em', '%', 'vh', 'vw', 'ch'];
  */
 function sizeMeant(v, ok) {
   const t = v.trim();
+  const n = typedPlain(t);
   const tries = [
+    n,
+    n.replace(/(\d)\.(?=[a-z%]|$)/gi, '$1'),
     t.replace(/(\d)\.(?=[a-z%]|$)/gi, '$1'),
     t.replace(/\s+/g, ''),
     t.replace(/^([+-]?\d+),(\d+)/, '$1.$2').replace(/\s+/g, ''),
@@ -290,9 +308,12 @@ function mathSpaced(v) {
  */
 function numberMeant(v, name, ok) {
   const t = v.trim();
-  const comma = t.replace(/^([+-]?\d+),(\d+)/, '$1.$2');
+  const plain = typedPlain(t).replace(/(\d)\.$/, '$1');
+  const comma = plain.replace(/^([+-]?\d+),(\d+)/, '$1.$2');
   const tries = [
-    /^[\doO.]+$/.test(t) && /\d/.test(t) ? t.replace(/[oO]/g, '0') : t,
+    /^[\doO.]+$/.test(plain) && /\d/.test(plain)
+      ? plain.replace(/[oO]/g, '0')
+      : plain,
     comma.replace(/^([+-]?\d*\.?\d+)\s*[a-z]+$/i, '$1'),
     comma,
     mathSpaced(t),
@@ -479,7 +500,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
         ctx.C.propsReading(s.thing),
         multipliedTokens(ctx.project).has(s.thing),
       );
-      checkCycle(s.thing, s.value, TOKENS, data);
+      checkCycle(s.thing, s.value, TOKENS, data, ctx.project.cwd);
     } catch (e) {
       found.push({
         setting: s,
@@ -863,14 +884,18 @@ function isShadow(value) {
  * @param {string} value
  * @param {Record<string, unknown>} TOKENS
  * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} [cwd] the project, whose `<slug>.theme.ts` tokens win
+ *   over the settings and are read too
  */
-function checkCycle(thing, value, TOKENS, data) {
+function checkCycle(thing, value, TOKENS, data, cwd) {
+  const own = cwd ? ownSourceTokenValues(cwd, data.name) : {};
   /** @param {string} t */
   const valueOf = t =>
     String(
-      [...data.settings]
-        .reverse()
-        .find(s => s.source === 'token' && s.thing === t && !s.on)?.value ??
+      (t !== thing && Object.hasOwn(own, t) ? own[t] : null) ??
+        [...data.settings]
+          .reverse()
+          .find(s => s.source === 'token' && s.thing === t && !s.on)?.value ??
         TOKENS[t] ??
         '',
     );
@@ -884,7 +909,9 @@ function checkCycle(thing, value, TOKENS, data) {
     if (t === thing) return true;
     if (seen.has(t)) return false;
     seen.add(t);
-    path.push(t);
+    path.push(
+      Object.hasOwn(own, t) ? `${t} (set in ${data.name}.theme.ts)` : t,
+    );
     if (refs(valueOf(t)).some(reaches)) return true;
     path.pop();
     return false;
@@ -2188,7 +2215,17 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
                   run: [`${P} set ${slug} text-size ${near}`],
                 }
               : {
-                  run: [`${P} set ${slug} text-size ${textSizePx(v) ?? 16}`],
+                  run: [
+                    `${P} set ${slug} text-size ${
+                      // A size typed full-width or with a trailing dot
+                      // (１８, 18.) is that size.
+                      /^\d+(\.\d+)?\.?$/.test(typedPlain(v)) &&
+                      Number(typedPlain(v).replace(/\.$/, '')) >= 10 &&
+                      Number(typedPlain(v).replace(/\.$/, '')) <= 32
+                        ? String(Number(typedPlain(v).replace(/\.$/, '')))
+                        : (textSizePx(v) ?? 16)
+                    }`,
+                  ],
                 };
           })(),
         );
@@ -2204,7 +2241,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         // What the value most likely meant: without quotes, a trailing `;`
         // or `!important`, a bare hex with its #, the opaque color, or the
         // nearest color name.
-        const cleaned = v
+        const cleaned = typedPlain(v)
           .replace(/^(["'])(.*)\1$/, '$2')
           .replace(/\s*!important\s*$/i, '')
           .replace(/;+\s*$/, '')
@@ -2602,7 +2639,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       C.propsReading(thing),
       multipliedTokens(ctx.project).has(thing),
     );
-    checkCycle(thing, v, TOKENS, data);
+    checkCycle(thing, v, TOKENS, data, ctx.project.cwd);
     // With no part data, what reads the token is unknown: save, unchecked.
     if (ctx.unchecked) return s;
     const parts = partsOf(ctx, s);

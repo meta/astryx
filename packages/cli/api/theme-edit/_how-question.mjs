@@ -4408,6 +4408,49 @@ export function draftAnswer(ctx, env, question) {
         const px = c.lengths[0];
         const f2 = /\bmuch\b/.test(c.text) ? 1.5 : 1.25;
         const factor = c.dir === 'less' ? 1 / f2 : f2;
+        // An exact --font-size-base wins over the text-size dial, so the
+        // dial would change nothing there: step that token instead.
+        const pinned = on
+          ? null
+          : ([...env.data.settings]
+              .reverse()
+              .find(
+                st =>
+                  st.source === 'token' &&
+                  st.thing === '--font-size-base' &&
+                  !st.on &&
+                  !st.when &&
+                  !st.state &&
+                  !st.mode,
+              )?.value ?? null);
+        if (pinned != null) {
+          const m = /^(\d*\.?\d+)(px|rem|em)$/i.exec(pinned.trim());
+          const next = px
+            ? px
+            : m
+              ? `${Math.round(parseFloat(m[1]) * factor * 100) / 100}${m[2].toLowerCase()}`
+              : null;
+          return next
+            ? {
+                text: `the base text size: --font-size-base, set exactly to ${pinned} (it wins over the text-size dial)`,
+                options: [[set('--font-size-base', next)]],
+              }
+            : {
+                text: `the base text size: --font-size-base is set exactly to ${pinned}, which wins over the text-size dial; remove it, then text-size changes the size`,
+                options: [
+                  [
+                    /** @type {Step} */ ({
+                      verb: 'undo',
+                      thing: '--font-size-base',
+                    }),
+                    set(
+                      'text-size',
+                      textSizeStep(c.dir === 'less' ? 'less' : 'more'),
+                    ),
+                  ],
+                ],
+              };
+        }
         if (!on)
           return {
             text: 'the base text size: text-size (every heading scales from it)',

@@ -70,6 +70,7 @@ import {
   themeSource,
   themeSourceProblem,
   refuseThemeParse,
+  ownSourceTokens,
 } from './_settings.mjs';
 import {checkSetting, exampleOf, storedProblems} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
@@ -1230,36 +1231,12 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
   const parts = partsOf(ctx, s);
   // Exact whole-theme tokens that win over what this dial writes: the dial
   // changes them only in a theme without them.
-  /** @param {import('./_settings.mjs').Setting[]} list */
-  const dialsOnly = list => ({
-    ...data,
-    settings: list.filter(x => x.source === 'dial'),
-  });
   /** @type {import('./_settings.mjs').Setting[]} */
   let exactWins = [];
   /** Tokens this whole-theme dial changes. */
   let dialTokens = new Set();
   if (sub === 'set' && s.source === 'dial' && !s.on) {
-    const withDial = compileTheme(ctx, dialsOnly(data.settings), base);
-    const without = compileTheme(
-      ctx,
-      dialsOnly(data.settings.filter(x => x !== s)),
-      base,
-    );
-    const differs = (/** @type {unknown} */ a, /** @type {unknown} */ b) =>
-      JSON.stringify(a) !== JSON.stringify(b);
-    const touched = new Set(
-      [
-        ...Object.keys(withDial.tokens ?? {}),
-        ...Object.keys(without.tokens ?? {}),
-      ].filter(k => differs(withDial.tokens?.[k], without.tokens?.[k])),
-    );
-    for (const r of FONT_ROLES)
-      if (differs(withDial.typography?.[r], without.typography?.[r]))
-        touched.add(`--font-family-${r}`);
-    if (differs(withDial.typography?.scale, without.typography?.scale))
-      for (const k of Object.keys(ctx.project.core.tokenDefaults ?? {}))
-        if (/^--font-size-/.test(k)) touched.add(k);
+    const touched = dialTouched(ctx, data, s, base);
     exactWins = data.settings.filter(
       x => x.source === 'token' && !x.on && !x.when && touched.has(x.thing),
     );
@@ -1827,6 +1804,13 @@ export async function themeEditShow(theme, options = {}) {
           : []),
         ...checked.filter(x => x.startsWith('not checked')),
         ...fontNotes(ctx, data),
+        ...ownSourceMaskNotes(
+          ctx,
+          cwd,
+          theme,
+          data,
+          await baseResolved(ctx.project, data.like),
+        ),
       ],
       // A size, number or font is the same in both modes: one value.
       resolved: Object.fromEntries(
@@ -2033,6 +2017,72 @@ function otherModeNotes(data) {
       .map(describe)
       .join(', ')}${off.length > 4 ? `, and ${off.length - 4} more` : ''}`,
   ];
+}
+
+/**
+ * The tokens a whole-theme dial setting writes: those that differ between
+ * the theme's dials with it and without it (a font role's family, and every
+ * text size when the scale moves).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {import('./_settings.mjs').Setting} s
+ * @param {any} base
+ * @returns {Set<string>}
+ */
+function dialTouched(ctx, data, s, base) {
+  /** @param {import('./_settings.mjs').Setting[]} list */
+  const dialsOnly = list => ({
+    ...data,
+    settings: list.filter(x => x.source === 'dial'),
+  });
+  const withDial = compileTheme(ctx, dialsOnly(data.settings), base);
+  const without = compileTheme(
+    ctx,
+    dialsOnly(data.settings.filter(x => x !== s)),
+    base,
+  );
+  const differs = (/** @type {unknown} */ a, /** @type {unknown} */ b) =>
+    JSON.stringify(a) !== JSON.stringify(b);
+  const touched = new Set(
+    [
+      ...Object.keys(withDial.tokens ?? {}),
+      ...Object.keys(without.tokens ?? {}),
+    ].filter(k => differs(withDial.tokens?.[k], without.tokens?.[k])),
+  );
+  for (const r of FONT_ROLES)
+    if (differs(withDial.typography?.[r], without.typography?.[r]))
+      touched.add(`--font-family-${r}`);
+  if (differs(withDial.typography?.scale, without.typography?.scale))
+    for (const k of Object.keys(ctx.project.core.tokenDefaults ?? {}))
+      if (/^--font-size-/.test(k)) touched.add(k);
+  return touched;
+}
+
+/**
+ * Notes for the tokens the theme's own source sets that a whole-theme dial
+ * also writes: the source wins, so the dial does not change them.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {any} base
+ * @returns {string[]}
+ */
+function ownSourceMaskNotes(ctx, cwd, slug, data, base) {
+  const own = ownSourceTokens(cwd, slug);
+  if (!own.length) return [];
+  /** @type {string[]} */
+  const notes = [];
+  for (const s of data.settings) {
+    if (s.source !== 'dial' || s.on || s.when || s.state) continue;
+    const touched = dialTouched(ctx, data, s, base);
+    const wins = own.filter(k => touched.has(k));
+    if (wins.length)
+      notes.push(
+        `${slug}.theme.ts sets ${wins.slice(0, 4).join(', ')}${wins.length > 4 ? ` and ${wins.length - 4} more` : ''} itself, and your own source wins over the settings, so ${s.thing} = ${s.value} does not change ${wins.length > 1 ? 'them' : 'it'}; take ${wins.length > 1 ? 'them' : 'it'} out of ${slug}.theme.ts to let ${s.thing} set ${wins.length > 1 ? 'them' : 'it'}`,
+      );
+  }
+  return notes;
 }
 
 /**
@@ -2492,28 +2542,4 @@ export async function themeEditUndo(theme, options = {}) {
 export async function editorStale(cwd, slug) {
   const data = loadTheme(cwd, slug);
   return staleBuild(cwd, slug, data) || null;
-}
-
-/**
- * The tokens a theme's own source names itself (`'--radius-button': …` in
- * `<slug>.theme.ts`, comments aside): they win over the settings it extends.
- * @param {string} cwd
- * @param {string} slug
- * @returns {string[]}
- */
-function ownSourceTokens(cwd, slug) {
-  let code;
-  try {
-    code = fs
-      .readFileSync(themeFiles(cwd, slug).ts, 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/(^|[^:])\/\/.*$/gm, '$1');
-  } catch {
-    return [];
-  }
-  return [
-    ...new Set(
-      [...code.matchAll(/['"`](--[a-z0-9-]+)['"`]\s*:/gi)].map(m => m[1]),
-    ),
-  ];
 }

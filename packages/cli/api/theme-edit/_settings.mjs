@@ -45,6 +45,7 @@ import {
 } from './_tables.mjs';
 import {
   alphaOf,
+  colorProblem,
   compositeOver,
   isColorValue,
   isSafeValue,
@@ -866,6 +867,12 @@ export function valueProblem(s) {
     if (s.source !== 'dial') return null;
     const d = DIALS[s.thing];
     if (!d) return `${s.thing} is not a dial`;
+    // A color dial needs a fixed opaque seed, as `set` checks it: a
+    // see-through, system or variable color generates no shades.
+    if (PALETTE_DIALS.includes(s.thing) && isColorValue(s.value)) {
+      const seed = colorProblem(s.value);
+      if (seed) return `${bad} ${seed.message}`;
+    }
     const words = d.values.split('|').filter(w => !w.startsWith('<'));
     const ok =
       s.thing === 'corners'
@@ -886,6 +893,60 @@ export function valueProblem(s) {
       return `${bad} is not a value ${s.thing} takes (${d.values.replace('|more|less', '')})`;
   }
   return null;
+}
+
+/**
+ * A theme's own source (`<slug>.theme.ts`) with its comments taken out, or
+ * null when it cannot be read.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+function ownSourceCode(cwd, slug) {
+  try {
+    return fs
+      .readFileSync(themeFiles(cwd, slug).ts, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The tokens a theme's own source names itself (`'--radius-button': …` in
+ * `<slug>.theme.ts`, comments aside): they win over the settings it extends.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string[]}
+ */
+export function ownSourceTokens(cwd, slug) {
+  const code = ownSourceCode(cwd, slug);
+  if (code == null) return [];
+  return [
+    ...new Set(
+      [...code.matchAll(/['"`](--[a-z0-9-]+)['"`]\s*:/gi)].map(m => m[1]),
+    ),
+  ];
+}
+
+/**
+ * The values a theme's own source gives tokens as plain text
+ * (`'--radius-page': 'var(--radius-element)'`), by token.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Record<string, string>}
+ */
+export function ownSourceTokenValues(cwd, slug) {
+  const code = ownSourceCode(cwd, slug);
+  /** @type {Record<string, string>} */
+  const out = {};
+  if (code == null) return out;
+  for (const m of code.matchAll(
+    /['"`](--[a-z0-9-]+)['"`]\s*:\s*(['"`])((?:(?!\2)[^\\])*)\2/gi,
+  ))
+    out[m[1]] = m[3];
+  return out;
 }
 
 /**
