@@ -164,9 +164,10 @@ type EntryErrorBehavior = 'complete' | 'blur-or-enter';
   disabled or busy, it reveals no rejection of its own, as its record states
   (`spec:AST-085` FR2). Once it is editable, its entry error behavior applies
   again.
-- **FR7 — Compositions keep the default.** `PowerSearch`'s value editors and
-  Table's filter editors render members with `'complete'` and expose no
-  entry error behavior prop. A `FormLayout` around them does not change it.
+- **FR7 — Compositions keep the default.** `PowerSearch`'s value editors,
+  Table's filter editors, and `Pagination`'s page input render members with
+  `'complete'` and expose no entry error behavior prop. A `FormLayout` around
+  them does not change it.
 
 ### Accessibility contract
 
@@ -295,7 +296,7 @@ Rejected:
 ### DEC-4 — Under `'blur-or-enter'`, a dropped entry is announced at its commit
 
 **Reference:** `spec:AST-117/DEC-4`
-**Decider:** pending
+**Decider:** `nynexman4464`, `2026-11-11`
 
 Some members drop a rejected entry at blur, and by default they announce the
 rejection while the person types. Under `'blur-or-enter'` that announcement waits, so
@@ -305,30 +306,23 @@ with no word (FR4).
 ### DEC-5 — Compositions keep the default
 
 **Reference:** `spec:AST-117/DEC-5`
-**Decider:** pending
+**Decider:** `nynexman4464`, `2026-11-11`
 
-`PowerSearch` and Table filtering compose members as filter editors, not as
-fields of a form, so a form's convention does not apply to them. Their editors
-keep `'complete'` and take no prop (FR7).
+`PowerSearch` and Table filtering compose members as filter editors, and
+`Pagination` composes one as its page input, not as fields of a form, so a
+form's convention does not apply to them. They keep `'complete'` and take no
+prop (FR7). `DateRangeInput` has no typed entry to reject.
+
+### DEC-6 — A revealed entry error stays while the entry stays wrong
+
+**Reference:** `spec:AST-117/DEC-6`
+**Decider:** `nynexman4464`, `2026-11-11`
+
+Under `'blur-or-enter'`, once an entry error shows, an edit that leaves the
+entry wrong keeps it, without a new announcement, until the entry is valid or
+empty or the next commit reveals its current error (FR5). Hiding it on every
+edit would make the error flicker while the person corrects it.
 
 ## Open questions
 
-- **OQ1 — Under `'blur-or-enter'`, what happens to a rejected entry that a member
-  drops at commit?** (`human-api`) FR4 states option (a).
-  - (a) The member announces the rejection once at that commit, then drops the
-    entry as its record states.
-  - (b) Under `'blur-or-enter'` the member keeps the entry with its rejection instead
-    of dropping it.
-- **OQ2 — Do `PowerSearch`'s editors, Table's filter editors, and
-  `DateRangeInput` take the option?** (`human-api`) FR7 and Members state
-  option (a).
-  - (a) No. The editors keep `'complete'`, and `DateRangeInput` has no typed
-    entry to reject.
-  - (b) `PowerSearch` and Table filtering take a entry error behavior prop and
-    pass it to their editors.
-  - (c) The editors follow a `FormLayout` around the composition.
-- **OQ4 — Under `'blur-or-enter'`, does a revealed rejection stay while an edit leaves
-  the entry rejected?** (`human-design`) FR5 states option (a).
-  - (a) It stays, without a new announcement, until the entry is valid or
-    empty, or the next commit reveals the entry's current rejection.
-  - (b) Any edit hides it until the next commit.
+None.
