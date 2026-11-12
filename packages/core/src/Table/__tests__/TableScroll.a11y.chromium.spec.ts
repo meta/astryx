@@ -142,7 +142,7 @@ test('a fitting table passes horizontal wheel input to its outer scroller', asyn
     .toBeGreaterThan(0);
 });
 
-test('stickyHeader keeps column labels pinned while the block scroller moves', async ({
+test('hasStickyHeader keeps column labels pinned through inline and block overflow', async ({
   page,
 }) => {
   await page.goto(
@@ -150,9 +150,12 @@ test('stickyHeader keeps column labels pinned while the block scroller moves', a
   );
 
   const table = page.locator('table');
-  const scrollRegion = table.locator('..').locator('..').locator('..');
+  const tableViewport = table.locator('..').locator('..');
+  const scrollRegion = tableViewport.locator('..');
   const header = table.locator('thead th').first();
   await expect(scrollRegion).toHaveCSS('overflow-y', 'auto');
+  await expect(tableViewport).toHaveAttribute('data-scrollable-inline', 'true');
+  await expect(tableViewport).toHaveCSS('overflow-y', 'clip');
   await expect(header).toHaveCSS('position', 'sticky');
 
   const initialHeaderTop = await header.evaluate(
