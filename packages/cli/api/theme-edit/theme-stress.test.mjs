@@ -248,12 +248,12 @@ describe('how', () => {
       .flatMap((/** @type {any} */ x) => x.commands)
       .join('\n');
     expect(commands).toContain(
-      'color "var(--color-text-accent)" --on button --when variant:secondary',
+      "color 'var(--color-text-accent)' --on button --when variant:secondary",
     );
     expect(commands).toContain(
-      'background "#ffffff" --on button --when variant:secondary',
+      "background '#ffffff' --on button --when variant:secondary",
     );
-    expect(commands).not.toContain('color "#ffffff"');
+    expect(commands).not.toContain("color '#ffffff'");
   });
 });
 
@@ -383,7 +383,7 @@ describe('round 3', () => {
     const note = r.data.notes.join(' ');
     expect(note).toContain('keep the base theme');
     expect(note).toContain('colored cards');
-    expect(note).toMatch(/set s info "#[0-9a-fA-F]{6}"/);
+    expect(note).toMatch(/set s info '#[0-9a-fA-F]{6}'/);
     await themeEditUndo('s', {cwd, thing: 'vibrancy'});
     await themeEditUndo('s', {cwd, thing: 'accent'});
   }, 120_000);
@@ -414,7 +414,7 @@ describe('round 3', () => {
     expect(b.join('\n')).toContain(
       'set s border-width 1px --on button --when variant:secondary',
     );
-    expect(b.join('\n')).toContain('color "var(--color-text-accent)"');
+    expect(b.join('\n')).toContain("color 'var(--color-text-accent)'");
     const fill = /** @type {any} */ (
       (
         await themeEditHow(
@@ -427,8 +427,8 @@ describe('round 3', () => {
     );
     expect([...fill.understood.aspects].sort()).toEqual(['background', 'text']);
     const f = fill.results.map((/** @type {any} */ x) => x.commands).flat();
-    expect(f.join('\n')).toContain('background "#e5e7eb" --on button');
-    expect(f.join('\n')).toContain('color "#111827" --on button');
+    expect(f.join('\n')).toContain("background '#e5e7eb' --on button");
+    expect(f.join('\n')).toContain("color '#111827' --on button");
   });
 
   it('gives every controlled sample a change handler, so a click never throws', () => {
@@ -529,7 +529,7 @@ describe('round 4', () => {
       await themeEditUndo('s', {cwd, thing});
     const n = await themeEditSet('s', 'neutral', '#64748b', {cwd});
     expect(n.data.notes.join(' ')).toMatch(
-      /the page background stays the base theme's \(#[0-9a-fA-F]{6} in light.*--color-background-body "#ffffff" --mode light/,
+      /the page background stays the base theme's \(#[0-9a-fA-F]{6} in light.*--color-background-body '#ffffff' --mode light/,
     );
     await themeEditUndo('s', {cwd, thing: 'neutral'});
   }, 240_000);
@@ -565,7 +565,7 @@ describe('round 4 follow-ups', () => {
     // The width and the color the question names, with no comment or
     // placeholder in the command.
     expect(lines.join('\n')).toContain(
-      'set s border "1px solid #9ca3af" --on inputs',
+      "set s border '1px solid #9ca3af' --on inputs",
     );
     expect(lines.join('\n')).not.toMatch(/#\s|<color>/);
   });

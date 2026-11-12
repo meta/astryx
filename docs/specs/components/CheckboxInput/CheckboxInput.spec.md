@@ -83,6 +83,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Native checkbox role, checked/mixed state, label, description/status relationships, focus, activation, availability, read-only state, required/invalid/busy state, and form participation.
 - Composition of the resolved checkbox indicator, owner-painted focus ring and pressed overlay (except where a first-party indicator paints its own press; AV1), disabled-reason tooltip, field label, description, and detached status.
 - Ordering between `onChange`, `preventDefault`, optimistic pending state, and `changeAction`.
+- The press-box marks' owner module is `privateAttributes/pressBox.stylex.ts` (public-component-api INV23); its reader `pressBoxesIn` finds the press boxes inside a row, for click-delegating rows (CheckboxListItem, RadioListItem).
 
 **Does not own / non-goals**
 

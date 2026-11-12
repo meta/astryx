@@ -26,7 +26,7 @@
 
 import * as fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
-import {createJiti} from 'jiti';
+import {createRequire} from 'node:module';
 import {importUrl} from '../fs/import-url.mjs';
 import {
   importUserModule,
@@ -34,12 +34,15 @@ import {
   readInTurn,
 } from '../fs/module-loader.mjs';
 import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
-import {
-  readStore,
-  storedKey,
-  SHIPPED_ASSETS,
-  STORED_DOCS_FILE,
-} from './stored-docs.mjs';
+import {readStore, storedKey, STORED_DOCS_FILE} from './stored-docs.mjs';
+
+const requireFromHere = createRequire(import.meta.url);
+
+/**
+ * jiti, loaded on first use: only TypeScript doc files need it.
+ * @type {typeof import('jiti').createJiti}
+ */
+const createJiti = (...args) => requireFromHere('jiti').createJiti(...args);
 
 /** @type {ReturnType<typeof createJiti> | undefined} */
 let jsxJiti;
@@ -101,16 +104,14 @@ function loadFirst(file, load) {
 const storedModules = new Map();
 
 /**
- * The module of a shipped doc file whose text has stored exports: an object
+ * The module of a doc file whose text has stored exports: an object
  * shaped as its namespace (no prototype, the export names in order, tagged
  * `Module`, closed to new names). Null for any other file.
  * @param {string} file
  * @returns {Record<string, unknown> | null}
  */
 function storedModule(file) {
-  if (!file.startsWith(SHIPPED_ASSETS) || !file.endsWith('.doc.mjs')) {
-    return null;
-  }
+  if (!file.endsWith('.doc.mjs')) return null;
   let text;
   try {
     text = fs.readFileSync(file, 'utf-8');
