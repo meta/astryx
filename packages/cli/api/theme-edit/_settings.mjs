@@ -1664,6 +1664,20 @@ export function compileTheme(ctx, data, base) {
     )?.vars?.[0];
     return name ? {[name]: String(s.value).trim()} : null;
   };
+  /**
+   * Where a per-direction rule goes for a setting, one level deep, as the
+   * block and its key: in the setting's own block, or under a state Core
+   * writes as a pseudo-class, beside that state with the direction after it.
+   * @param {Setting} s @param {string} target @param {string} dir `:dir(ltr)`
+   * @returns {[Record<string, any>, string]}
+   */
+  const dirBlock = (s, target, dir) => {
+    const tg = ctx.project.target.get(target);
+    if (!s.state || tg?.states.includes(s.state))
+      return [block(s, target), dir];
+    const parent = block({...s, state: undefined}, target);
+    return [parent, `${stateKey(s.state, wrapsOneControl(ctx, target))}${dir}`];
+  };
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
     const b = block(s, target);
@@ -1924,22 +1938,58 @@ export function compileTheme(ctx, data, base) {
           boxSides(t, s);
         if (sides)
           for (const [k, v] of Object.entries(sides)) {
-            // A per-direction block joins what that direction already has.
+            // A per-direction block joins what that direction already has,
+            // one level deep: under a state it is the state's own key with
+            // the direction after it (`:hover:dir(ltr)`), which Core writes
+            // as one rule.
             if (k.startsWith(':') && typeof v === 'object') {
-              const b = block(s, t);
-              b[k] = {...(b[k] ?? {}), ...v};
+              const [b, key] = dirBlock(s, t, k);
+              b[key] = {...(b[key] ?? {}), ...v};
             } else putComp(s, t, k, /** @type {string} */ (v));
           }
         else putComp(s, t, camel(s.thing), s.value);
-        // A padding that covers a physical side written as it is takes it
-        // out of the part's block (a group's left under a later part
-        // padding), so the later setting wins as written.
-        if (sides && /^padding(-inline)?$/.test(kebab(s.thing))) {
-          const b = block(s, t);
-          if (b.paddingLeft != null && !('paddingLeft' in sides))
-            delete b.paddingLeft;
-          if (b.paddingRight != null && !('paddingRight' in sides))
-            delete b.paddingRight;
+        // A later padding takes out what it covers that would beat it: a
+        // physical side written as it is (a group's left under a later part
+        // padding; left-to-right, inline-start is the left), and a side
+        // written per direction, whose :dir() rule is more specific.
+        {
+          const prop = kebab(s.thing);
+          /** @type {Record<string, Array<'paddingLeft' | 'paddingRight'>>} */
+          const COVERS = {
+            padding: ['paddingLeft', 'paddingRight'],
+            'padding-inline': ['paddingLeft', 'paddingRight'],
+            'padding-inline-start': ['paddingLeft'],
+            'padding-inline-end': ['paddingRight'],
+            'padding-left': [],
+            'padding-right': [],
+          };
+          const plain = COVERS[prop];
+          if (plain) {
+            const b = block(s, t);
+            for (const k of plain)
+              if (b[k] != null && !(sides && k in sides)) delete b[k];
+            // Per direction: a whole padding or inline padding covers both
+            // sides in both directions; a physical side, that side in both.
+            const dirSides =
+              prop === 'padding' || prop === 'padding-inline'
+                ? ['paddingLeft', 'paddingRight']
+                : prop === 'padding-left'
+                  ? ['paddingLeft']
+                  : prop === 'padding-right'
+                    ? ['paddingRight']
+                    : [];
+            if (
+              dirSides.length &&
+              !(sides && Object.keys(sides).some(x => x.startsWith(':')))
+            )
+              for (const d of [':dir(ltr)', ':dir(rtl)']) {
+                const [db, key] = dirBlock(s, t, d);
+                const rule = db[key];
+                if (!rule) continue;
+                for (const x of dirSides) delete rule[x];
+                if (!Object.keys(rule).length) delete db[key];
+              }
+          }
         }
         // A part's own corner radii replace a single radius a group or an
         // earlier setting left in the same block, which Core would copy into

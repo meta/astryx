@@ -3155,3 +3155,73 @@ describe('r19b (1): a card physical side beside other sides', () => {
     }
   });
 });
+
+describe('r19d: per-direction sides under a state, and later paddings that cover them', () => {
+  /** @param {string} selector */
+  const blockOf = selector => {
+    const css = read('p.css');
+    const at = css.indexOf(`${selector} {`);
+    return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  };
+
+  it('writes a logical side under a state as one rule per direction', async () => {
+    const r = await themeEditSet('p', 'padding-inline-start', '5px', {
+      cwd,
+      on: 'dropdown-menu',
+      state: 'hover',
+    });
+    expect(JSON.stringify(r.data)).not.toContain('[object Object]');
+    const css = read('p.css');
+    expect(css).toMatch(
+      /\.astryx-dropdown-menu:hover:dir\(ltr\)[^{]*\{[^}]*padding-left:\s*5px/,
+    );
+    expect(css).toMatch(
+      /\.astryx-dropdown-menu:hover:dir\(rtl\)[^{]*\{[^}]*padding-right:\s*5px/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding-inline-start',
+      on: 'dropdown-menu',
+      state: 'hover',
+    });
+  });
+
+  it('lets a later padding or physical side replace an earlier per-direction side', async () => {
+    for (const [later, value] of [
+      ['padding', '8px'],
+      ['padding-left', '9px'],
+    ]) {
+      await themeEditSet('p', 'padding-inline-start', '5px', {
+        cwd,
+        on: 'dropdown-menu',
+      });
+      await themeEditSet('p', later, value, {cwd, on: 'dropdown-menu'});
+      expect(blockOf('.astryx-dropdown-menu:dir(ltr)'), later).not.toMatch(
+        /padding-left:\s*5px/,
+      );
+      await themeEditUndo('p', {cwd, thing: later, on: 'dropdown-menu'});
+      await themeEditUndo('p', {
+        cwd,
+        thing: 'padding-inline-start',
+        on: 'dropdown-menu',
+      }).catch(() => {});
+    }
+  });
+
+  it('on a card, a later logical side replaces an earlier physical one, and the latest physical side stays', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding-inline-start', '6px', {cwd, on: 'card'});
+    let card = blockOf('.astryx-card');
+    expect(card).not.toMatch(/(^|[;{\s])padding-left:\s*20px/);
+    await themeEditUndo('p', {cwd, thing: 'padding-inline-start', on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'}).catch(
+      () => {},
+    );
+    await themeEditSet('p', 'padding-inline-start', '6px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    card = blockOf('.astryx-card');
+    expect(card).toMatch(/(^|[;{\s])padding-left:\s*20px/);
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'padding-inline-start', on: 'card'});
+  });
+});
