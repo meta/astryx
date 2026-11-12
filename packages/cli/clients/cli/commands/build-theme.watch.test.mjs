@@ -196,6 +196,48 @@ describe('theme build --watch', () => {
     expect(stdout).toMatch(/Stopped watching/);
   }, 30_000);
 
+  it('rebuilds when a local file the theme imports changes, in another folder too', async () => {
+    fs.mkdirSync(path.join(tmpDir, 'parts'));
+    const colors = path.join(tmpDir, 'parts', 'colors.mjs');
+    fs.writeFileSync(colors, `export const BG = '#ffffff';\n`);
+    fs.writeFileSync(
+      path.join(tmpDir, 'wi.mjs'),
+      `import {BG} from './parts/colors.mjs';\nexport default { name: 'wi', tokens: { '--color-bg': BG } };\n`,
+    );
+    const child = spawn(
+      process.execPath,
+      [CLI_BIN, 'theme', 'build', 'wi.mjs', '--watch'],
+      {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
+    );
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
+    let stdout = '';
+    child.stdout.on('data', d => (stdout += d.toString()));
+    child.stderr.on('data', d => (stdout += d.toString()));
+    const read = () => stdout;
+    try {
+      await waitForOutput(child, read, 'Watching');
+      const changed = `export const BG = '#010203';\n`;
+      await waitForOutput(child, read, 'rebuilding wi\\.mjs', {
+        onPoll: () => {
+          try {
+            fs.writeFileSync(colors, changed);
+          } catch {
+            // The temporary folder is gone at teardown.
+          }
+        },
+      });
+      await waitForOutput(child, read, 'Watching', {count: 2});
+      expect(fs.readFileSync(path.join(tmpDir, 'wi.css'), 'utf-8')).toContain(
+        '#010203',
+      );
+    } finally {
+      child.kill('SIGINT');
+    }
+    await waitForExit(child);
+  }, 30_000);
+
   it('stops at once when interrupted mid-rebuild, and drops a queued change', async () => {
     const themeFile = path.join(tmpDir, 'ws.mjs');
     fs.writeFileSync(
