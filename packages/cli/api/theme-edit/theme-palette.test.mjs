@@ -1569,7 +1569,7 @@ describe('font words', () => {
       (await refusal(() => themeEditSet('p', 'font', 'x'.repeat(300), {cwd})))
         .code,
     ).toBe('ERR_THEME_BAD_VALUE');
-    for (const v of ['system-ui', 'Arial', '"Segoe UI"', 'serif, sans-serif']) {
+    for (const v of ['system-ui', 'Arial', 'Tahoma', 'serif, sans-serif']) {
       const r = await themeEditSet('p', 'font', v, {cwd});
       expect(r.data.notes.join(' '), v).not.toContain('is not a system font');
     }
@@ -1761,7 +1761,7 @@ describe('chaos round 4', () => {
         '$125$2',
       );
     expect(older).toContain('palette.accent.dark[25]');
-    fs.writeFileSync(ts, older);
+    fs.writeFileSync(ts, older.replace(/^\/\/ Module [0-9a-f]{16}\.\n/m, ''));
     await themeEditSet('o', 'corners', 'pill', {cwd});
     expect(fs.readFileSync(ts, 'utf8')).toContain('palette.accent.dark[25]');
     // The next change reports no color change either.
@@ -1831,7 +1831,8 @@ describe('a palette an earlier editor wrote', () => {
         .replace(
           /"--color-accent": palette\.accent\.dark\[[\d.]+\],/,
           '"--color-accent": [palette.accent.light[50], palette.accent.dark[70]],',
-        ),
+        )
+        .replace(/^\/\/ Module [0-9a-f]{16}\.\n/m, ''),
     );
     expect(fs.readFileSync(ts, 'utf8')).toContain('palette.accent.dark[70]');
     // An earlier editor kept no palette hash in the settings.
@@ -1865,5 +1866,83 @@ describe('legacy grammar and code fonts', () => {
       /"code": \{\s*"family": "Fira Code",\s*"fallbacks": "ui-monospace, monospace"/,
     );
     await themeEditUndo('p', {cwd, thing: 'font', on: 'code'});
+  });
+});
+
+describe('colors final-3', () => {
+  it('types the math in calc(), and refuses CSS-wide keywords on tokens', async () => {
+    for (const [thing, value, on] of [
+      ['--radius-element', 'calc(4px + 2)'],
+      ['--text-body-size', 'calc(10px / 2px)'],
+      ['--duration-fast', 'calc(100ms + 1px)'],
+      ['padding', 'calc(1s)', 'button'],
+      ['font-size', 'calc(1rem * 1rem)', 'heading'],
+      ['--font-family-body', 'inherit'],
+      ['--font-family-heading', 'initial'],
+    ])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', thing, value, {cwd, ...(on ? {on} : {})}),
+          )
+        ).code,
+        `${thing} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    for (const [thing, value] of [
+      ['--radius-element', 'calc(4px + 2px)'],
+      ['--duration-fast', 'calc(var(--duration-medium) / 2)'],
+      ['--text-body-leading', 'calc(1.2 * 1)'],
+    ]) {
+      await themeEditSet('p', thing, value, {cwd});
+      await themeEditUndo('p', {cwd, thing});
+    }
+  });
+
+  it('warns for a font one system ships, refuses var() in the font dial, and reads a preset by its package name', async () => {
+    for (const family of ['Ubuntu', 'Segoe UI', 'Menlo']) {
+      const r = await themeEditSet('p', 'font', family, {cwd});
+      expect(r.data.notes.join(' '), family).toContain('is not a system font');
+    }
+    const preset = await themeEditSet('p', 'font', 'segoe', {cwd});
+    expect(preset.data.notes.join(' ')).not.toContain('is not a system font');
+    const v = await refusal(() =>
+      themeEditSet('p', 'font', 'var(--font-family-code)', {cwd, on: 'body'}),
+    );
+    expect(v.code).toBe('ERR_THEME_BAD_VALUE');
+    expect(v.run?.[0] ?? JSON.stringify(v)).toContain('--font-family-body');
+    const geist = await themeEditSet('p', 'font', 'geist-sans', {cwd});
+    expect(geist.data.setting.value).toBe('geist');
+    const medium = await refusal(() =>
+      themeEditSet('p', 'text-size', 'Medium', {cwd}),
+    );
+    expect(JSON.stringify(medium)).toContain('text-size medium');
+    await themeEditUndo('p', {cwd, thing: 'font'});
+  });
+
+  it('does not say a body font moves the headings, since it does not', async () => {
+    await themeEditNew('g1', {cwd, like: 'neutral'}).catch(() =>
+      themeEditNew('g1', {cwd}),
+    );
+    const r = await themeEditHow('font', {cwd, theme: 'g1'});
+    expect(JSON.stringify(r.data)).not.toContain('also sets the heading font');
+    fs.rmSync(path.join(cwd, 'themes', 'g1'), {recursive: true, force: true});
+  });
+
+  it('builds a hand edit of the generated module over from the settings', async () => {
+    await themeEditNew('g4', {cwd});
+    await themeEditSet('g4', 'accent', '#7c3aed', {cwd});
+    const dir = path.join(cwd, 'themes', 'g4');
+    const ts = path.join(dir, 'g4.settings.ts');
+    const css = () => fs.readFileSync(path.join(dir, 'g4.css'), 'utf8');
+    const muted = /--color-accent-muted:\s*([^;]+);/.exec(css())?.[1];
+    fs.writeFileSync(
+      ts,
+      fs
+        .readFileSync(ts, 'utf8')
+        .replace('palette.accent.light[85]', 'palette.accent.light[5]'),
+    );
+    await themeEditSet('g4', 'corners', 'pill', {cwd});
+    expect(/--color-accent-muted:\s*([^;]+);/.exec(css())?.[1]).toBe(muted);
+    fs.rmSync(dir, {recursive: true, force: true});
   });
 });

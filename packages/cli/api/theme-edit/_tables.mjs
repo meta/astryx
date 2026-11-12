@@ -132,9 +132,15 @@ export const FONTS = {
 /** CSS-wide keywords, and `default`, which font-family reserves: never a family, and invalid inside a list. */
 export const CSS_WIDE_KEYWORDS = [...CSS_WIDE, 'default'];
 
-/** Presets every desktop system already has, so no font file is needed. */
+/**
+ * Presets that show a font every desktop has, so no font file is needed:
+ * the family itself, or (for one that ships on one system, such as Segoe
+ * UI) the first fallback.
+ */
 export const SYSTEM_FONTS = Object.keys(FONTS).filter(k =>
-  isDesktopFamily(FONTS[k][0]),
+  [FONTS[k][0], FONTS[k][1].split(',')[0].replace(/["']/g, '')].some(
+    isDesktopFamily,
+  ),
 );
 
 /**

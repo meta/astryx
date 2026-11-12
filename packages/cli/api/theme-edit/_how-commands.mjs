@@ -120,21 +120,23 @@ export async function howTheme(ctx, cwd, name) {
       x => x.thing !== 'font' || x.on === 'heading',
     ),
   };
+  const withBody = compileTheme(
+    ctx,
+    {
+      ...fontless,
+      settings: [
+        ...fontless.settings,
+        {thing: 'font', value: 'courier', on: 'body', source: 'dial'},
+      ],
+    },
+    base,
+  ).typography;
+  // The editor writes the base theme's heading font beside a body font of
+  // its own; only a build that writes none leaves headings to Core.
   const bodyFontReachesHeadings =
+    !withBody?.heading &&
     headingOf(compileTheme(ctx, fontless, base).typography) !==
-    headingOf(
-      compileTheme(
-        ctx,
-        {
-          ...fontless,
-          settings: [
-            ...fontless.settings,
-            {thing: 'font', value: 'courier', on: 'body', source: 'dial'},
-          ],
-        },
-        base,
-      ).typography,
-    );
+      headingOf(withBody);
   // A damaged preview record refuses every preview command, so an answer
   // names its fix instead of a preview command.
   const {previewRecordProblem} = await import('./_preview-app.mjs');

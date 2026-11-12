@@ -315,6 +315,24 @@ function checkTypedValue(type, value, name, TOKENS, typeOf, slug) {
         ],
       },
     );
+  // A CSS-wide keyword on a token is no value: whatever reads the token
+  // gets none, and drops its declaration (a font list falls back to the
+  // browser's default font). On a part property it keeps its meaning.
+  const keyword = value
+    .split(',')
+    .map(x => x.trim().toLowerCase())
+    .find(x => CSS_WIDE_KEYWORDS.includes(x));
+  if (keyword)
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `"${keyword}" is a CSS keyword, not a value: on ${name} it leaves the token empty, so what reads it drops its style. Give a value such as ${exampleOf(type, name)}, or undo ${name} to go back to the base theme's.`,
+      {
+        run: [
+          `${P} set ${slug} ${name} ${quoteCommandArgument(exampleOf(type, name))}`,
+          `${P} undo ${slug} ${name}`,
+        ],
+      },
+    );
   // A var() naming a design token must name one of the same kind; the
   // app's own variables are its business.
   const ref = /^var\(\s*(--[a-z0-9-]+)\s*(,.*)?\)$/i.exec(value.trim());
@@ -1328,7 +1346,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `text-size takes ${DIALS['text-size'].values} (a number is the body size in pixels, 10 to 32), not "${v}".`,
-          {run: [`${P} set ${slug} text-size 16`]},
+          (() => {
+            // A rung in other letter case (Medium) or with px is that rung.
+            const near =
+              TEXT_SIZE.find(([n]) => n === v.trim().toLowerCase())?.[0] ??
+              nearest(
+                v.trim().toLowerCase(),
+                TEXT_SIZE.map(([n]) => n),
+              )[0];
+            return near
+              ? {
+                  didYouMean: [near],
+                  run: [`${P} set ${slug} text-size ${near}`],
+                }
+              : {run: [`${P} set ${slug} text-size 16`]};
+          })(),
         );
       else if (!TEXT_SIZE.some(([n]) => n === v))
         s.value = String(Number(v.trim()));
@@ -1455,12 +1487,33 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       // could end the CSS declaration or the preview's style block. A
       // preset typed in another case or spacing is the preset.
       s.value = v.trim();
+      // A function (var(), env()) is no family name: the dial would quote
+      // it as one. The role's token takes it as written.
+      if (/[a-z-]+\(/i.test(s.value)) {
+        const role = s.on && FONT_ROLES.includes(s.on) ? s.on : 'body';
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `font takes a preset or family names, not "${s.value}". To make ${s.on ? `the ${role} font` : 'a font'} read another token, set the token itself.`,
+          {
+            run: [
+              `${P} set ${slug} --font-family-${role} ${quoteCommandArgument(s.value)}`,
+            ],
+          },
+        );
+      }
       // A font package names its preset: @fontsource/inter is inter.
       const fromPackage = /^@fontsource(?:-variable)?\/([a-z0-9-]+)$/i.exec(
         s.value,
       )?.[1];
       if (fromPackage && OPEN_FONTS[fromPackage.toLowerCase()])
         s.value = fromPackage.toLowerCase();
+      // A preset's package name (geist-sans for geist) is that preset.
+      const byPackage = Object.keys(OPEN_FONTS).find(
+        k =>
+          OPEN_FONTS[k].pkg.split('/')[1] ===
+          (fromPackage ?? s.value).toLowerCase(),
+      );
+      if (byPackage) s.value = byPackage;
       const key = s.value.toLowerCase().replace(/[\s_-]+/g, '');
       const preset = [...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)].find(
         k => k.toLowerCase().replace(/[\s_-]+/g, '') === key,

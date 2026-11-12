@@ -50,7 +50,9 @@ beforeAll(async () => {
     fs
       .readFileSync(ts, 'utf8')
       .replace(/("--radius-container": )"[^"]+"/, '$1"20px"')
-      .replace(/("--radius-page": )"[^"]+"/, '$1"40px"'),
+      .replace(/("--radius-page": )"[^"]+"/, '$1"40px"')
+      // An earlier editor wrote no module hash.
+      .replace(/^\/\/ Module [0-9a-f]{16}\.\n/m, ''),
   );
   // Rebuilt from that module (an unrelated change keeps its radii).
   await themeEditSet('o', 'font', 'georgia', {cwd});

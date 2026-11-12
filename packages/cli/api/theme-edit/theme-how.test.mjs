@@ -1702,7 +1702,7 @@ const QUESTIONS_3 = [
   [
     'headings use "Playfair Display", body uses "Source Sans 3"',
     {
-      top: /^set q font 'Playfair Display' --on heading && set q --font-family-body /,
+      top: /^set q font 'Playfair Display' --on heading && set q (font 'Source Sans 3' --on body|--font-family-body )/,
     },
   ],
   [

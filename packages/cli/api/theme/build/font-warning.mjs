@@ -55,24 +55,13 @@ export const GENERIC_KEYWORDS = new Set([
   ...CSS_WIDE_KEYWORDS,
 ]);
 
-// Families the usual desktops ship, so a theme may name one as its font
-// with no font file: the classic web-safe macOS/Windows set, the system UI
-// names, and the common Linux sans faces.
+// Families macOS and Windows both ship (and Linux maps to a metric twin),
+// so a theme may name one as its font with no font file: the classic
+// web-safe set.
 const DESKTOP_FAMILIES = new Set([
-  '-apple-system',
-  'blinkmacsystemfont',
-  'segoe ui',
   'helvetica',
-  'helvetica neue',
   'arial',
   'arial black',
-  'sf mono',
-  'sf pro',
-  'sf pro text',
-  'sf pro display',
-  'monaco',
-  'consolas',
-  'menlo',
   'courier',
   'courier new',
   'georgia',
@@ -82,33 +71,48 @@ const DESKTOP_FAMILIES = new Set([
   'tahoma',
   'trebuchet ms',
   'impact',
-  'palatino',
-  'garamond',
   'comic sans ms',
+]);
+
+// Families only some systems ship (one desktop OS, Office, Android, Linux),
+// which fallback stacks name on purpose: core's own default stacks
+// (tokens.stylex.ts typographyDefaults name -apple-system, Segoe UI and
+// Roboto) and the shipped themes' (neutral's code stack ends in Liberation
+// Mono). In a stack they need no warning; as a theme's own font they do not
+// load everywhere.
+const SOME_SYSTEMS_FAMILIES = new Set([
+  // macOS
+  '-apple-system',
+  'blinkmacsystemfont',
+  'helvetica neue',
+  'sf mono',
+  'sf pro',
+  'sf pro text',
+  'sf pro display',
+  'monaco',
+  'menlo',
+  'palatino',
+  'lucida grande',
+  'gill sans',
+  'snell roundhand',
+  // Windows and Office
+  'segoe ui',
+  'segoe ui emoji',
+  'segoe ui symbol',
+  'consolas',
+  'garamond',
+  'cambria',
+  'calibri',
+  'lucida console',
+  'brush script mt',
+  'old english text mt',
+  // Linux and Android
   'liberation sans',
   'dejavu sans',
   'noto sans',
   'ubuntu',
   'cantarell',
-]);
-
-// Families only some systems ship (one desktop OS, Office, Android, Linux),
-// which fallback stacks name on purpose: core's own default stacks
-// (tokens.stylex.ts typographyDefaults name Roboto) and the shipped themes'
-// (neutral's code stack ends in Liberation Mono). In a stack they need no
-// warning; as a theme's own font they do not load everywhere.
-const SOME_SYSTEMS_FAMILIES = new Set([
-  'segoe ui emoji',
-  'segoe ui symbol',
   'roboto',
-  'cambria',
-  'calibri',
-  'lucida grande',
-  'lucida console',
-  'gill sans',
-  'brush script mt',
-  'snell roundhand',
-  'old english text mt',
   'liberation mono',
   'liberation serif',
   'dejavu sans mono',

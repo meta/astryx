@@ -140,7 +140,13 @@ function matchWith(value, match) {
   const tryOne = v => {
     try {
       const ast = parse(v, {context: 'value'});
-      return match(lexer, ast).error || !mathIsSound(ast) ? null : ast;
+      if (match(lexer, ast).error) return null;
+      const plain = mathAsValues(ast);
+      return plain?.every(
+        x => !match(lexer, parse(x, {context: 'value'})).error,
+      )
+        ? ast
+        : null;
     } catch {
       return null;
     }
@@ -216,63 +222,229 @@ const MATH = new Set([
   'abs',
   'sign',
 ]);
-/** Words a math function may hold: constants and rounding strategies. */
-const MATH_WORDS = new Set([
-  'e',
-  'pi',
-  'infinity',
-  '-infinity',
-  'nan',
-  'nearest',
-  'up',
-  'down',
-  'to-zero',
-]);
+
+/** The CSS type of each unit a math function may hold. */
+const UNIT_TYPES = /** @type {Record<string, string>} */ (
+  Object.fromEntries(
+    Object.entries({
+      length: [
+        'px',
+        'em',
+        'rem',
+        'ex',
+        'rex',
+        'ch',
+        'rch',
+        'cap',
+        'rcap',
+        'ic',
+        'ric',
+        'lh',
+        'rlh',
+        'vw',
+        'vh',
+        'vi',
+        'vb',
+        'vmin',
+        'vmax',
+        'svw',
+        'svh',
+        'svi',
+        'svb',
+        'svmin',
+        'svmax',
+        'lvw',
+        'lvh',
+        'lvi',
+        'lvb',
+        'lvmin',
+        'lvmax',
+        'dvw',
+        'dvh',
+        'dvi',
+        'dvb',
+        'dvmin',
+        'dvmax',
+        'cqw',
+        'cqh',
+        'cqi',
+        'cqb',
+        'cqmin',
+        'cqmax',
+        'cm',
+        'mm',
+        'q',
+        'in',
+        'pt',
+        'pc',
+      ],
+      time: ['s', 'ms'],
+      angle: ['deg', 'grad', 'rad', 'turn'],
+      frequency: ['hz', 'khz'],
+      resolution: ['dpi', 'dpcm', 'dppx', 'x'],
+      flex: ['fr'],
+    }).flatMap(([type, units]) => units.map(u => [u, type])),
+  )
+);
+/** A value of each type, to match where a math function stands. */
+const TYPE_SAMPLES = /** @type {Record<string, string>} */ ({
+  number: '1',
+  percent: '1%',
+  length: '1px',
+  time: '1s',
+  angle: '1deg',
+  frequency: '1hz',
+  resolution: '1dppx',
+  flex: '1fr',
+});
 
 /**
- * Whether every math function in a value holds a sound expression: numbers,
- * lengths and percentages joined by operators, nested math, var() or env(),
- * never a stray word (`calc(1px banana)`) or two values with no operator
- * between them. css-tree accepts any insides.
- * @param {any} ast
+ * The type of a sum (or of the arguments of min(), max(), clamp()):
+ * both sides of one type, a percentage beside a length or another type
+ * (`length%`: it resolves against that type), or null when they do not mix.
+ * `any` is a var() or env(), which can be anything.
+ * @param {string | null} a
+ * @param {string | null} b
  */
-function mathIsSound(ast) {
+function addTypes(a, b) {
+  if (a == null || b == null) return null;
+  if (a === 'any') return b;
+  if (b === 'any') return a;
+  if (a === b) return a;
+  const bare = (/** @type {string} */ t) => t.replace(/%$/, '');
+  if (a === 'number' || b === 'number') return null;
+  if (a === 'percent') return `${bare(b)}%`;
+  if (b === 'percent') return `${bare(a)}%`;
+  return bare(a) === bare(b) ? `${bare(a)}%` : null;
+}
+
+/**
+ * The CSS type of a math function (`calc(4px + 2)` has none): a sum needs
+ * one type on both sides; a product needs a number on one side; a quotient
+ * needs a number on the right. null when the math is unsound.
+ * @param {any} fn a Function node
+ * @returns {string | null}
+ */
+function mathType(fn) {
+  /** @param {any} node @returns {string | null} */
+  const leaf = node => {
+    if (node.type === 'Number') return 'number';
+    if (node.type === 'Percentage') return 'percent';
+    if (node.type === 'Dimension')
+      return UNIT_TYPES[node.unit.toLowerCase()] ?? null;
+    if (node.type === 'Identifier') {
+      const w = node.name.toLowerCase();
+      if (['e', 'pi', 'infinity', '-infinity', 'nan'].includes(w))
+        return 'number';
+      return null;
+    }
+    if (node.type === 'Function') {
+      const name = node.name.toLowerCase();
+      if (name === 'var' || name === 'env') return 'any';
+      return MATH.has(name) ? mathType(node) : null;
+    }
+    if (node.type === 'Parentheses') return expression(node.children.toArray());
+    return null;
+  };
+  /** @param {any[]} nodes @returns {string | null} */
+  const expression = nodes => {
+    const items = nodes.filter(n => n.type !== 'WhiteSpace');
+    if (!items.length) return null;
+    // Products first, then sums.
+    /** @type {Array<string | null>} */
+    const terms = [];
+    let current = /** @type {string | null | undefined} */ (undefined);
+    let op = '';
+    for (const node of items) {
+      if (node.type === 'Operator') {
+        const o = String(node.value).trim();
+        if (current === undefined) return null;
+        if (o === '+' || o === '-') {
+          terms.push(current);
+          current = undefined;
+        } else op = o;
+        continue;
+      }
+      const t = leaf(node);
+      if (current === undefined) current = t;
+      else if (op === '*')
+        current =
+          current === 'number'
+            ? t
+            : t === 'number'
+              ? current
+              : current === 'any' || t === 'any'
+                ? 'any'
+                : null;
+      else if (op === '/')
+        current = t === 'number' || t === 'any' ? current : null;
+      else return null;
+      op = '';
+      if (current == null) return null;
+    }
+    if (current === undefined || op) return null;
+    terms.push(current);
+    return terms.reduce((a, b) => addTypes(a, b));
+  };
+  const children = fn.children.toArray();
+  const name = fn.name.toLowerCase();
+  // Arguments split at commas; round() may open with a strategy word.
+  /** @type {any[][]} */
+  const args = [[]];
+  for (const n of children)
+    if (n.type === 'Operator' && String(n.value).trim() === ',') args.push([]);
+    else args[args.length - 1].push(n);
+  if (
+    name === 'round' &&
+    args.length > 1 &&
+    args[0].filter(n => n.type !== 'WhiteSpace').length === 1 &&
+    ['nearest', 'up', 'down', 'to-zero'].includes(
+      String(args[0].find(n => n.type === 'Identifier')?.name).toLowerCase(),
+    )
+  )
+    args.shift();
+  const types = args.map(expression);
+  if (types.some(t => t == null)) return null;
+  const joined = types.reduce((a, b) => addTypes(a, b));
+  return name === 'sign' ? (joined ? 'number' : null) : joined;
+}
+
+/**
+ * The value with each outermost math function put as plain values of its
+ * type (`calc(1px + 2px)` as `1px`), so the property's grammar decides
+ * whether that type may stand there; a percentage beside a length is tried
+ * as both. Null when a math function is unsound. A value with no math
+ * function gives itself.
+ * @param {any} ast
+ * @returns {string[] | null}
+ */
+function mathAsValues(ast) {
+  const t = csstree();
+  /** @type {Array<{text: string, samples: string[]}>} */
+  const found = [];
   let sound = true;
-  csstree().walk(ast, {
-    visit: 'Function',
-    enter(/** @type {any} */ fn) {
-      if (!MATH.has(fn.name.toLowerCase())) return;
-      /** @param {any} list */
-      const expression = list => {
-        let lastWasValue = false;
-        for (const node of list) {
-          if (node.type === 'WhiteSpace') continue;
-          if (node.type === 'Operator') {
-            if (node.value === ',') {
-              lastWasValue = false;
-              continue;
-            }
-            if (!lastWasValue) return false;
-            lastWasValue = false;
-            continue;
-          }
-          const value =
-            ['Number', 'Dimension', 'Percentage'].includes(node.type) ||
-            (node.type === 'Identifier' &&
-              MATH_WORDS.has(node.name.toLowerCase())) ||
-            (node.type === 'Function' &&
-              (MATH.has(node.name.toLowerCase()) ||
-                ['var', 'env'].includes(node.name.toLowerCase()))) ||
-            (node.type === 'Parentheses' && expression(node.children));
-          if (!value || lastWasValue) return false;
-          lastWasValue = true;
-        }
-        return lastWasValue;
-      };
-      if (!expression(fn.children)) sound = false;
+  t.walk(ast, {
+    enter(/** @type {any} */ node) {
+      if (node.type !== 'Function' || !MATH.has(node.name.toLowerCase()))
+        return undefined;
+      const type = mathType(node);
+      if (type == null) sound = false;
+      else if (type !== 'any')
+        found.push({
+          text: t.generate(node),
+          samples: type.endsWith('%')
+            ? [TYPE_SAMPLES[type.slice(0, -1)], '1%']
+            : [TYPE_SAMPLES[type] ?? ''],
+        });
+      return t.walk.skip;
     },
   });
-  return sound;
+  if (!sound || found.some(f => f.samples.some(x => !x))) return null;
+  /** @type {string[]} */
+  let out = [t.generate(ast)];
+  for (const f of found)
+    out = out.flatMap(v => f.samples.map(x => v.replace(f.text, x)));
+  return out.slice(0, 16);
 }
 
 /**
