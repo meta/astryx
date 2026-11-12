@@ -303,7 +303,8 @@ a measured, sourced difference exists.
   platform: a menu shrinks into its trigger, and an alert fades. In a component
   whose main interaction is a tap, an exit that a tap, a key, an outside press
   or the program starts plays the theme's exit duration and easing,
-  `--duration-exit` and `--ease-exit` (`spec:AST-090` FR14, FR45). A component
+  `--duration-exit` and `--ease-exit` (`spec:AST-090` FR14, FR45). Toast's exit
+  under a finger is FR45's exception (`component:Toast` DEC-2). A component
   whose main interaction is a gesture, such as a sheet or the Lightbox, plays
   every exit on its spring: a close that a tap, a key, an outside press or the
   program starts plays the same settle as a swipe close, from rest, and an exit
