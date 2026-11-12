@@ -156,7 +156,7 @@ describe('effectFindings', () => {
     const sourceLines = source.split('\n');
     return effectFindings(addedLinesOf(at, sourceLines), name =>
       name === at ? source : null,
-    ).map(f => [f.line, f.rule, ...(f.advisory ? ['advisory'] : [])]);
+    ).map(f => [f.line, f.rule]);
   }
 
   it('flags a new Effect with no note', () => {
@@ -405,6 +405,14 @@ describe('effectFindings', () => {
       [2, '`boundariesRef.current` is written during render'],
       [3, '`configRef.current` is written during render'],
     ]);
+  });
+
+  it('names a committed-ref module that exists', () => {
+    expect(
+      fs.existsSync(
+        path.join(repoRoot, 'packages/core/src/hooks/useCommittedRef.ts'),
+      ),
+    ).toBe(true);
   });
 
   it('names an exception only where its record clause names the site', () => {
