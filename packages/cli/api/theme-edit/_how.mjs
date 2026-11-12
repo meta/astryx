@@ -23,11 +23,13 @@ import {
   FAMILIES,
   GROUPS,
   HOW,
+  LIKE,
   P,
   familyOf,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
-import {loadTheme, nearest, refuse} from './_settings.mjs';
+import {baseThemeFile, installLine} from './_project.mjs';
+import {loadTheme, nearest, refuse, themeSourceProblem} from './_settings.mjs';
 import {ASPECTS} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
@@ -185,7 +187,17 @@ async function answer(subject, options, cwd) {
     refuse(E.ERR_INVALID_ARGUMENT, '--theme was given no name.', {
       run: [`${HOW} ${t ? JSON.stringify(t) : 'card'}`],
     });
-  if (options.theme != null) loadTheme(cwd, options.theme);
+  if (options.theme != null) {
+    loadTheme(cwd, options.theme);
+    // A theme whose source no longer extends its settings takes no setting:
+    // an answer would suggest commands that cannot run.
+    const broken = themeSourceProblem(cwd, options.theme);
+    if (broken)
+      refuse(
+        E.ERR_THEME_INVALID,
+        `${broken}, so settings cannot take effect and no command here would change the theme. Put back the import, extends and name lines in themes/${options.theme}/${options.theme}.theme.ts, then ask again.`,
+      );
+  }
   if (list != null) {
     if (at.length)
       refuse(
@@ -314,12 +326,33 @@ async function answer(subject, options, cwd) {
   }
   if (Object.hasOwn(DIALS, key)) {
     const d = DIALS[key];
+    // A base is named only when it is installed here; the others are
+    // listed with the line that installs them.
+    const installed = (/** @type {string} */ b) => {
+      try {
+        baseThemeFile(ctx.project, b);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const missing = key === 'base' ? LIKE.filter(b => !installed(b)) : [];
     return {
       kind: 'setting',
       subject: t,
       source: 'dial',
-      values: d.values,
-      help: dialHelp(key, env),
+      values:
+        key === 'base'
+          ? [...LIKE.filter(installed), 'none'].join('|')
+          : d.values,
+      help:
+        dialHelp(key, env) +
+        (missing.length
+          ? ` Not installed here: ${missing.join(', ')} (${installLine(
+              ctx.project.cwd,
+              missing.map(b => `@astryxdesign/theme-${b}`),
+            )}).`
+          : ''),
       ...(PALETTE_DIALS.includes(key) ? {shades: mappingRows(key)} : {}),
       ...themeFields,
       examples: dialCommands(key),
