@@ -24,7 +24,6 @@
  * the dismissal", no matter how long the main thread was blocked in between.
  */
 
-import {willCancelTouchEnd} from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
 import {sharedState} from '../utils/sharedRealm';
 
@@ -41,6 +40,8 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
   isDispatchingRelease: false,
   // The pointer type of the release in flight.
   releasingPointerType: '',
+  // The gesture whose touchend the click guard will cancel.
+  touchEndCancelledGesture: null as number | null,
   claimedPress: null as {
     layer: HTMLElement;
     pointerId: number;
@@ -63,6 +64,9 @@ function ensureFields(): void {
   }
   if (state.releasingPointerType === undefined) {
     state.releasingPointerType = '';
+  }
+  if (state.touchEndCancelledGesture === undefined) {
+    state.touchEndCancelledGesture = null;
   }
 }
 
@@ -190,9 +194,18 @@ export function isReleaseInFlight(): boolean {
   }
   return !(
     state.releasingPointerType === 'touch' &&
-    typeof document !== 'undefined' &&
-    willCancelTouchEnd(document)
+    state.touchEndCancelledGesture === state.releasingGesture
   );
+}
+
+/**
+ * Notes that the click guard will cancel the touchend of the gesture in
+ * flight. A cancelled touchend brings no light dismiss, so that gesture's
+ * release is not held.
+ */
+export function markTouchEndCancelled(): void {
+  ensureFields();
+  state.touchEndCancelledGesture = state.gesture;
 }
 
 /**
