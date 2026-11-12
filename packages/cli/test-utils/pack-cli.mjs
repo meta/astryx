@@ -153,6 +153,17 @@ export function packCli(dir) {
     // The generators run in their prepack order's stages, each stage's
     // scripts side by side: the stores, then the two that read them, then
     // the build id, which hashes everything before it.
+    // Every generator runs in exactly one stage: a new one left out of the
+    // stages would be skipped without a word.
+    const staged = PREPACK_STAGES.flat();
+    for (const {script} of PREPACK_FILES) {
+      if (staged.filter(s => s === script).length !== 1) {
+        throw new Error(`${script} is not in exactly one PREPACK_STAGES stage`);
+      }
+    }
+    if (staged.length !== PREPACK_FILES.length) {
+      throw new Error('PREPACK_STAGES names a script PREPACK_FILES does not');
+    }
     for (const stage of PREPACK_STAGES) {
       runSideBySide(
         PREPACK_FILES.filter(({script}) => stage.includes(script)),
