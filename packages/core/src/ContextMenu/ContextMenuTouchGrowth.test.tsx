@@ -337,6 +337,48 @@ describe('ContextMenu’s growth under a finger', () => {
     expectGrowthFromOnsetFrame(trigger, landedAt);
   });
 
+  it('grows a pen that drifts past the press machine’s 10 px inside a scroll view, which the recognizer’s 11.5 px tolerance still follows, at its onset', async () => {
+    render(
+      <div data-testid="scroller" style={{overflowY: 'auto', height: 200}}>
+        <ContextMenu items={[{label: 'Item 1'}]} data-testid="ctx">
+          <div>Hold me</div>
+        </ContextMenu>
+      </div>,
+    );
+    // A scroller with content past its height: the press machine waits
+    // 150 ms before it marks a press here, and a travel past 10 px ends it.
+    const scroller = screen.getByTestId('scroller');
+    Object.defineProperty(scroller, 'scrollHeight', {value: 400});
+    Object.defineProperty(scroller, 'clientHeight', {value: 200});
+    const trigger = screen.getByTestId('ctx');
+    const pen = (type: string, x: number) => {
+      const event = new Event(type, {bubbles: true, cancelable: true});
+      Object.assign(event, {
+        pointerId: 7,
+        pointerType: 'pen',
+        isPrimary: true,
+        button: type === 'pointerdown' ? 0 : -1,
+        buttons: 1,
+        clientX: x,
+        clientY: 20,
+      });
+      Object.defineProperty(event, 'timeStamp', {value: performance.now()});
+      trigger.dispatchEvent(event);
+    };
+    const landedAt = performance.now();
+    pen('pointerdown', 20);
+    await act(async () => {});
+    advance(60);
+    // An 11 px drift, before the machine's 150 ms: it never marks the press.
+    pen('pointermove', 31);
+    await act(async () => {});
+    expect(trigger.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    advance(89);
+    expect(growths(trigger)).toHaveLength(0);
+    advance(1 + FRAME_MS);
+    expectGrowthFromOnsetFrame(trigger, landedAt);
+  });
+
   it('builds the motion engine in the first frame after the finger lands, not in its touchstart handler', async () => {
     const trigger = renderMenu();
     const contact = {id: 1, x: 20, y: 20};
