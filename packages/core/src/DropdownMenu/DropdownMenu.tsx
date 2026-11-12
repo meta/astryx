@@ -49,7 +49,6 @@ import {readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
 import {usePopoverInternal} from '../Popover/usePopover';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
-import {reducedMotionFade} from '../motion/reducedMotion';
 import {usePopoverSurfaceMotion} from '../Popover/usePopoverSurfaceMotion';
 import {
   claimPress,
@@ -1163,14 +1162,13 @@ function DropdownMenuPopover({
   useCommittedRefInto(presentSurfaceRef, () => {
     const surface = popover.contentRef.current;
     // A finger's or a pen's open grows the menu. Under Reduce Motion the
-    // layer's own entrance plays.
+    // surface motion fades it in and out at its size instead.
     surfaceMotion.present(
       surface,
       buttonRef.current,
       null,
       pressTouchModel === 'uikit' &&
-        touchOpenRef.current?.gesture === currentGesture() &&
-        reducedMotionFade(surface) == null,
+        touchOpenRef.current?.gesture === currentGesture(),
     );
   });
 

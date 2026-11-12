@@ -4,7 +4,8 @@
  * @file DropdownMenuTouchGrow.test.tsx
  * @input DropdownMenu, with the grow replaced by a recorder
  * @output Which opens grow the menu out of its trigger. A finger's or a
- *   pen's open grows it, a tap's open at its lift included. A mouse's open,
+ *   pen's open grows it, a tap's open at its lift included, and under Reduce
+ *   Motion its open and close still play the surface motion. A mouse's open,
  *   the keyboard's and a menu pinned to the pointer presentation do not.
  * @position Unit coverage of DropdownMenu's touch grow decision
  *   (Popover/usePopoverSurfaceMotion.ts). The browser spec
@@ -15,7 +16,6 @@ import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import type * as InputHold from '../Layer/inputHold';
-import type * as ReducedMotion from '../motion/reducedMotion';
 import type * as PopoverSurfaceMotion from '../Popover/popoverSurfaceMotion';
 import {scroll} from '../motion/uikit/scroll';
 import {DropdownMenu, type DropdownMenuOption} from './DropdownMenu';
@@ -55,21 +55,6 @@ vi.mock('../Layer/inputHold', async importOriginal => ({
     return end;
   },
 }));
-// The one Reduce Motion policy, which a case can turn on by itself, as a new
-// theme setting would.
-const preference = vi.hoisted(() => ({reduces: false}));
-vi.mock('../motion/reducedMotion', async importOriginal => {
-  const actual = await importOriginal<typeof ReducedMotion>();
-  return {
-    ...actual,
-    reducedMotionFade: (
-      ...args: Parameters<typeof actual.reducedMotionFade>
-    ) =>
-      preference.reduces
-        ? {duration: 200, easing: 'linear'}
-        : actual.reducedMotionFade(...args),
-  };
-});
 
 const ITEMS: DropdownMenuOption[] = [{label: 'Edit'}, {label: 'Duplicate'}];
 
@@ -176,7 +161,6 @@ function stubFrames(): () => Promise<void> {
 beforeEach(() => {
   __resetMenuPressForTest();
   vi.clearAllMocks();
-  preference.reduces = false;
   inputHolds.up = 0;
   vi.stubGlobal(
     'matchMedia',
@@ -447,7 +431,7 @@ describe('DropdownMenu touch grow', () => {
     expect(motion.enter).not.toHaveBeenCalled();
   });
 
-  it("under Reduce Motion a finger's open keeps the layer's own entrance", async () => {
+  it("under Reduce Motion a finger's open and close still play the surface motion, which fades the menu in and out at its size", async () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((query: string) => ({
@@ -464,11 +448,15 @@ describe('DropdownMenu touch grow', () => {
     render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
     fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
     await settle();
-    expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
-    expect(motion.enter).not.toHaveBeenCalled();
+    expect(motion.enter).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
+      key: 'Escape',
+    });
+    await settle();
+    expect(motion.exit).toHaveBeenCalledTimes(1);
   });
 
-  it("under a theme that reduces motion, a finger's open keeps the layer's own entrance", async () => {
+  it("under a theme that reduces motion, a finger's close plays the surface motion's exit too", async () => {
     render(
       <div {...reducedMotionMarkProps(true)}>
         <DropdownMenu button={{label: 'Actions'}} items={ITEMS} />
@@ -476,17 +464,12 @@ describe('DropdownMenu touch grow', () => {
     );
     fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
     await settle();
-    expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
-    expect(motion.enter).not.toHaveBeenCalled();
-  });
-
-  it("reads Reduce Motion from reducedMotionFade, the one policy: when it fades, a finger's open keeps the layer's own entrance", async () => {
-    preference.reduces = true;
-    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
-    fireEvent.pointerDown(screen.getByRole('button', {name: 'Actions'}), touch);
+    expect(motion.enter).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
+      key: 'Escape',
+    });
     await settle();
-    expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
-    expect(motion.enter).not.toHaveBeenCalled();
+    expect(motion.exit).toHaveBeenCalledTimes(1);
   });
 
   it('presentation="popover" keeps the layer\'s own entrance under a finger', async () => {

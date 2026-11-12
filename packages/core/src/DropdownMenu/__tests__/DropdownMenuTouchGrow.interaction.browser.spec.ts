@@ -10,7 +10,8 @@
  *   painted frame is the grow's collapsed start. A tap in scrolling
  *   page content, which opens the menu at its lift, grows it too, and so does
  *   a held finger. The grow follows Popover's path and timing, frame by
- *   frame. A mouse keeps the layer's own entrance. On a phone the menu opens
+ *   frame. Under Reduce Motion a finger's close fades the menu out where it
+ *   stands. A mouse keeps the layer's own entrance. On a phone the menu opens
  *   beside its trigger.
  * @position Evidence for DropdownMenu's touch grow (Popover's surface
  *   motion); which opens grow is unit-tested in
@@ -39,6 +40,8 @@ import {popover} from '../../motion/uikit/popover';
 const storybook = withStorybook(test);
 
 const MENU_SURFACE = '[popover]:has([role="menu"]) > *';
+// The inert copy a touch presentation's close plays on.
+const EXIT_COPY = '[data-astryx-popover-exit]';
 const POPOVER_SURFACE = '[popover]:not(:has([role="menu"])) > *';
 
 interface Frame {
@@ -302,6 +305,65 @@ test("under Reduce Motion, a finger's open lands the menu at its full size and f
     expect(frame.scaleY).toBeCloseTo(1, 3);
   }
   expect(faded.at(-1)?.opacity).toBeCloseTo(1, 2);
+});
+
+test("under Reduce Motion, a finger's close fades the menu out where it stands, within 200 ms", async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const story = await openOnPhone(
+    page,
+    'core-dropdownmenu--default',
+    'Actions',
+  );
+  await story.driver.tap(story.center);
+  const surface = page.locator(MENU_SURFACE).first();
+  await expect
+    .poll(async () => (await readFrame(surface)).opacity)
+    .toBeCloseTo(1, 2);
+  await frames(page, 4);
+  const rest = await surface.boundingBox();
+  const viewport = page.viewportSize();
+  if (rest == null || viewport == null) {
+    throw new Error('the open menu has no box');
+  }
+
+  // The copy is the menu's surface, cloned where the menu stood.
+  const copy = page.locator(EXIT_COPY);
+  const hold = await armHold(page, undefined, {
+    judges: {target: copy, property: 'opacity'},
+    newOnly: true,
+  });
+  await story.driver.tap({x: 8, y: viewport.height - 8});
+  await hold.held();
+  const faded: {opacity: number; box: number[]}[] = [];
+  for (const t of timeline(260)) {
+    await seekAnimations(page, t);
+    faded.push(
+      await copy.evaluate(element => {
+        const r = element.getBoundingClientRect();
+        return {
+          opacity: Number(getComputedStyle(element).opacity),
+          box: [r.x, r.y, r.width, r.height],
+        };
+      }),
+    );
+  }
+  await releaseAnimations(page, {finish: true});
+
+  expect(faded[0].opacity).toBeGreaterThan(0.9);
+  // design:reduced-motion DR2: opacity only, 200 ms or less.
+  expect(faded[12].opacity).toBeLessThanOrEqual(0.01);
+  for (const [index, frame] of faded.entries()) {
+    if (index > 0) {
+      expect(frame.opacity).toBeLessThanOrEqual(faded[index - 1].opacity);
+    }
+    if (frame.opacity > 0.01) {
+      [rest.x, rest.y, rest.width, rest.height].forEach((value, i) => {
+        expect(Math.abs(frame.box[i] - value)).toBeLessThan(0.5);
+      });
+    }
+  }
 });
 
 test("a mouse keeps the layer's own entrance", async ({page}) => {
