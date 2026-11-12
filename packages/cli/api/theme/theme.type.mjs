@@ -124,7 +124,11 @@
  * re-run, and an edited template is the consumer's file to keep.
  * @typedef {object} ThemeTemplateResponse
  * @property {'theme.template'} type
- * @property {{path: string, written: boolean, reason: 'exists' | null}} data
+ * When the file was left as is, `overwritable` says whether `--overwrite`
+ * would replace it (a copy of the template or a theme source, outside a theme
+ * the editor made), and `alternative` is a free path for the template when it
+ * would not.
+ * @property {{path: string, written: boolean, reason: 'exists' | null, overwritable?: boolean, alternative?: string | null}} data
  */
 
 /**

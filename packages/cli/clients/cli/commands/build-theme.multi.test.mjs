@@ -157,20 +157,23 @@ describe('theme build with several files', () => {
     expect(fs.existsSync(path.join(dir, 'alpha.css'))).toBe(false);
   }, 120_000);
 
-  it('refuses a second theme with the same name instead of replacing the first', async () => {
+  it('refuses two themes with the same name before writing either', async () => {
     const dir = themeDir();
     fs.writeFileSync(
       path.join(dir, 'alpha2.mjs'),
       `export default { name: 'alpha', tokens: { '--color-bg': '#000000' } };\n`,
     );
-    const r = await runCli(['theme', 'build', 'alpha.mjs', 'alpha2.mjs'], dir);
+    const r = await runCli(
+      ['--json', 'theme', 'build', 'alpha.mjs', 'alpha2.mjs'],
+      dir,
+    );
     expect(r.status).toBe(1);
-    expect(r.stderr).toMatch(
-      /alpha2\.mjs: alpha\.mjs already wrote alpha\.css in this run/,
-    );
-    expect(fs.readFileSync(path.join(dir, 'alpha.css'), 'utf-8')).toMatch(
-      /#ffffff/,
-    );
+    expect(JSON.parse(r.stdout)).toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      error:
+        'alpha.mjs and alpha2.mjs both build alpha.css. Give each theme its own name; nothing was written.',
+    });
+    expect(fs.existsSync(path.join(dir, 'alpha.css'))).toBe(false);
   }, 120_000);
 
   it('suggests the theme source when given a bare theme name', async () => {

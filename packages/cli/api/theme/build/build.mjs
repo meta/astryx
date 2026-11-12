@@ -930,9 +930,10 @@ function assertThemeSourceFile(filePath, cwd) {
 /**
  * Refuse a build that would replace a file it does not own. A build never
  * writes over its input, two of its own outputs at one path, or an output
- * another theme in the same run already wrote. With `refuseUnmarked`, it also
- * replaces only its own earlier outputs (they carry the `@generated` header)
- * and empty files, never another file such as `package.json` or app source.
+ * another theme in the same run already wrote. With `refuseUnmarked` (a path
+ * --out names), it also replaces only its own earlier outputs (their header
+ * names this source, or a source that is gone) and empty files, never another
+ * source's output or another file such as `package.json` or app source.
  * @param {Array<{dest: string}>} writes
  * @param {string} filePath the theme source
  * @param {string} cwd
@@ -977,11 +978,13 @@ function assertOutputsReplaceable(
     seen.add(key);
     const earlier = claimed?.get(key);
     if (earlier !== undefined) {
-      throw new AstryxError(
-        `${earlier} already wrote ${rel(write.dest)} in this run. Two themes build the same outputs; give each theme its own name.`,
+      const collision = new AstryxError(
+        `${earlier} and ${rel(filePath)} both build ${rel(write.dest)}. Give each theme its own name; nothing was written.`,
         undefined,
         ERROR_CODES.ERR_THEME_INVALID,
       );
+      /** @type {any} */ (collision).outputCollision = true;
+      throw collision;
     }
     let stat;
     try {
@@ -994,6 +997,26 @@ function assertOutputsReplaceable(
         `The output ${rel(write.dest)} is a folder. Move the folder, or pick another ${elsewhere}.`,
         undefined,
         ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+    // Only a path --out names is checked: at the default paths beside the
+    // source, a build replaces what is there, as it always has.
+    const otherSource = refuseUnmarked
+      ? builtFromOtherSource(write.dest, filePath, cwd)
+      : null;
+    if (otherSource) {
+      throw new AstryxError(
+        `${rel(write.dest)} is the build output of another theme source, ${otherSource}, so this build does not replace it. Pick another ${elsewhere}.`,
+        [
+          {
+            name: formatCliCommand(
+              `theme build ${shellWord(rel(filePath))}`,
+              cwd,
+            ),
+            reason: 'write the outputs beside this source',
+          },
+        ],
+        ERROR_CODES.ERR_FILE_EXISTS,
       );
     }
     // Outputs from CLIs before 0.6.7 have no header, so they read as files
@@ -1017,6 +1040,48 @@ function assertOutputsReplaceable(
       );
     }
   }
+}
+
+/**
+ * The other theme source a build output names in its `Source:` header, when
+ * that source still exists and is not `source`. An output names its source
+ * relative to the folder its build ran from, so the name is matched against
+ * the end of the source's path. A family output names every member, and is
+ * this source's when any of them is. Null when the output is this source's,
+ * names no source, or names one that is gone (an orphan a build may replace).
+ * @param {string} dest
+ * @param {string} source absolute theme source
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+function builtFromOtherSource(dest, source, cwd) {
+  const head = fileHead(dest);
+  if (!head.includes(GENERATED_MARKER)) return null;
+  const line = /Source: (.+)/.exec(head)?.[1]?.trim();
+  if (!line) return null;
+  const names = line.split(', ').map(name => name.trim());
+  const own = path.resolve(source);
+  /** @param {string} name */
+  const tail = name =>
+    path
+      .normalize(name)
+      .split(path.sep)
+      .filter(part => part !== '..' && part !== '.' && part !== '')
+      .join(path.sep);
+  /** @param {string} name */
+  const isOwn = name =>
+    path.resolve(cwd, name) === own ||
+    own.endsWith(path.sep + tail(name)) ||
+    own === tail(name);
+  if (names.some(isOwn)) return null;
+  const existing = names.find(name => {
+    try {
+      return fs.statSync(path.resolve(cwd, name)).isFile();
+    } catch {
+      return false;
+    }
+  });
+  return existing ?? null;
 }
 
 /** @param {Array<{dest: string, content: string}>} writes */
@@ -3300,10 +3365,11 @@ function validateHeadingTypeAugmentationSupport(themeDef) {
  * `logger` (silent by default).
  *
  * @param {string} file - Theme file path, resolved against `cwd`.
- * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __commandWords?: {group: string, build: string}}} [options] -
+ * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __planOnly?: boolean, __commandWords?: {group: string, build: string}}} [options] -
  *   `out` overrides the output CSS path, or names the folder for it; `check` compares against on-disk outputs
  *   instead of writing. `__claimedOutputs` records the outputs earlier builds
- *   in one run wrote, so a later theme cannot replace them. `__writeRoot` replaces `cwd` as the directory every
+ *   in one run wrote, so a later theme cannot replace them; with `__planOnly`
+ *   the build claims its outputs and returns null without writing. `__writeRoot` replaces `cwd` as the directory every
  *   output must stay inside, for a CLI-internal scratch build. `iconsSpecifier` overrides the icon registry import
  *   specifier in the generated module (e.g. `./icons.mjs`); when omitted, the
  *   direct registry specifiers from the theme source are emitted unchanged.
@@ -3442,9 +3508,15 @@ async function themeBuildInternal(
     interception && hasCoverageGap ? interception.unobservedIn(themeDef) : [];
   if (interception) interception.strip(themeDef);
   if (!ancestryObserved) {
+    const shown = path.relative(cwd, filePath);
     throw new AstryxError(
-      `Theme "${themeDef.name ?? path.basename(filePath)}" exact family ancestry could not be observed during CLI loading.`,
-      undefined,
+      `Theme "${themeDef.name ?? path.basename(filePath)}" in ${shown} is a plain object, so a family build cannot see which theme it extends. A family member is made with defineTheme(...) from @astryxdesign/core/theme; build a plain-object theme on its own.`,
+      [
+        {
+          name: formatCliCommand(`theme build ${shellWord(shown)}`, cwd),
+          reason: 'build this theme on its own',
+        },
+      ],
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
@@ -3873,6 +3945,34 @@ async function themeBuildInternal(
     if (/[\\/]$/.test(options.out) || isDirectorySync(outPath)) {
       outPath = path.join(outPath, `${baseName}.css`);
     }
+    // The module imports `<stem>.css` beside it, so any other extension would
+    // leave that import pointing at a file the build never writes.
+    // An existing file there is the source itself or a file this build does
+    // not own, and the checks before writing name that instead.
+    const leaveToOwnershipCheck =
+      fs.existsSync(outPath) &&
+      (outputKey(outPath) === outputKey(filePath) ||
+        !fileHead(outPath).includes(GENERATED_MARKER));
+    if (
+      path.extname(outPath).toLowerCase() !== '.css' &&
+      !leaveToOwnershipCheck
+    ) {
+      const stem = path.basename(outPath).replace(/(?:\.d)?\.[^.]+$/, '');
+      const fixed = path.join(path.dirname(options.out), `${stem}.css`);
+      throw new AstryxError(
+        `--out names the stylesheet, so it ends in .css; ${options.out} does not.`,
+        [
+          {
+            name: formatCliCommand(
+              `theme build ${shellWord(path.relative(cwd, filePath))} --out ${shellWord(fixed.split(path.sep).join('/'))}`,
+              cwd,
+            ),
+            reason: 'the same build with a .css output',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
     // A build keeps the explicit output inside the write root, relative or
     // absolute. Check mode writes nothing, so it refuses only a relative path
     // that escapes cwd.
@@ -3994,6 +4094,14 @@ async function themeBuildInternal(
       rerun,
       refuseUnmarked: Boolean(options.out),
     });
+    // A planning pass over a batch claims the outputs and writes nothing, so
+    // two themes that build the same files are refused before either writes.
+    if (options.__planOnly) {
+      for (const write of writes) {
+        options.__claimedOutputs?.set(outputKey(write.dest), sourceRelative);
+      }
+      return null;
+    }
   }
 
   // Check mode: compare generated content against what's on disk instead of

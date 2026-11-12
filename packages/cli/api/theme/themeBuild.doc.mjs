@@ -58,7 +58,7 @@ export const doc = {
       name: 'options.out',
       type: 'string',
       description:
-        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. An existing folder, or a path that ends in a separator, names the folder: the CSS is written there as <name>.css.',
+        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. An existing folder, or a path that ends in a separator, names the folder: the CSS is written there as <name>.css. A file path ends in .css (ERR_INVALID_ARGUMENT otherwise), because the module imports `<stem>.css` beside it.',
     },
     {
       name: 'options.check',
@@ -104,15 +104,15 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the resolved theme is invalid, for example it has no name, a custom Heading type has no standalone rule with a declaration the compiler can emit, or its icon registry cannot be preserved through an import (also rejected in check mode); or an output would replace the theme source, two outputs share one path, or the file is itself an output of a build, whatever its extension (refused before loading, naming the source it was built from)',
+      when: 'the resolved theme is invalid, for example it has no name, a custom Heading type has no standalone rule with a declaration the compiler can emit, or its icon registry cannot be preserved through an import (also rejected in check mode); or an output would replace the theme source, two outputs share one path, or the file is itself an output of a build, whatever its extension (refused before loading, naming the source it was built from); in a batch, two themes that build the same outputs are refused before either writes',
     },
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'a path that out names holds a non-empty file without the generated header, such as package.json, app source, or an output from a CLI before 0.6.7; nothing is written. Delete the file and run the same build again (the suggestion), or pick another out path. At the default paths beside the source, and at family output paths, a header-less file is an output of a CLI before 0.6.7 and is replaced',
+      when: 'a path that out names holds the build output of another theme source that still exists (its header names that source), or a non-empty file without the generated header, such as package.json, app source, or an output from a CLI before 0.6.7; nothing is written. Delete the file and run the same build again (the suggestion), or pick another out path. At the default paths beside the source, and at family output paths, a header-less file is an output of a CLI before 0.6.7 and is replaced',
     },
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the theme file is a folder',
+      when: 'the theme file is a folder, or a file out names does not end in .css',
     },
     {
       code: 'ERR_PATH_TRAVERSAL',

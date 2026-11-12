@@ -606,7 +606,7 @@ function printThemeEject(result, words = THEME_WORDS) {
         ]
       : []),
     text(
-      `This is a local fork. Build it with ${getCliInvocation()} ${words.group} ${words.build} ${path.join(data.outputDir, data.entry)}.`,
+      `This is a local fork. Build it with ${getCliInvocation()} ${words.group} ${words.build} ${quoteCommandArgument(path.join(data.outputDir, data.entry).split(path.sep).join('/'))}.`,
     ),
   );
 }
@@ -1082,6 +1082,47 @@ function registerThemeCommands(theme, program, docs, words) {
       /** @type {Array<{file: string, receipt: import('../../../api/theme/theme.type.mjs').ThemeBuildResponse | import('../../../api/theme/theme.type.mjs').ThemeBuildCheckResponse | null}>} */
       const results = [];
       let stale = false;
+      // Several themes that would build the same files are refused before any
+      // of them writes. Other failures surface in the build below, which stops
+      // at the first one as a shell loop under `set -e` does.
+      if (!options.check && entries.length > 1) {
+        /** @type {Map<string, string>} */
+        const planned = new Map();
+        const wasSilent = logger.silent;
+        logger.setSilent(true);
+        try {
+          for (const entry of entries) {
+            try {
+              await themeBuild(
+                entry.file,
+                /** @type {any} */ ({
+                  out: options.out,
+                  iconsSpecifier: options.iconsSpecifier,
+                  __claimedOutputs: planned,
+                  __planOnly: true,
+                  __commandWords: words,
+                }),
+                {cwd: process.cwd()},
+              );
+            } catch (e) {
+              const err =
+                /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
+              if (/** @type {any} */ (err).outputCollision) {
+                return themeError(err, words, [
+                  buildWithout([], 'build the first theme on its own', [
+                    entry.file === entries[0].file
+                      ? entries[1].file
+                      : entries[0].file,
+                  ]),
+                ]);
+              }
+            }
+          }
+        } finally {
+          logger.setSilent(wasSilent);
+        }
+      }
+
       /** @type {Map<string, string>} */
       const claimedOutputs = new Map();
       for (const entry of entries) {
@@ -1408,9 +1449,19 @@ function registerThemeCommands(theme, program, docs, words) {
 
       const invocation = getCliInvocation(process.cwd());
       if (!result.data.written) {
+        const {overwritable, alternative} = result.data;
         emit(
           text(`[skip] ${result.data.path} already exists — left as is.`),
-          text(`Pass --overwrite to replace it with a fresh copy.`),
+          ...(overwritable === false && alternative
+            ? [
+                text(
+                  'It is not a theme template that --overwrite may replace. Write the template to a new file:',
+                ),
+                code(
+                  `${invocation} ${words.group} template ${quoteCommandArgument(alternative)}`,
+                ),
+              ]
+            : [text(`Pass --overwrite to replace it with a fresh copy.`)]),
         );
         return NO_RESULT_SET;
       }
@@ -1420,7 +1471,9 @@ function registerThemeCommands(theme, program, docs, words) {
           'It documents every defineTheme field, the token families, and the component override syntax. ' +
             'Copy what you need into your own theme file, then delete it.',
         ),
-        code(`${invocation} ${words.group} ${words.build} ${result.data.path}`),
+        code(
+          `${invocation} ${words.group} ${words.build} ${quoteCommandArgument(result.data.path)}`,
+        ),
       );
       return NO_RESULT_SET;
     },

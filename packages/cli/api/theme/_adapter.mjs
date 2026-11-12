@@ -680,7 +680,9 @@ function asThemeError(error) {
     message.startsWith('Refusing to replace')
       ? ERROR_CODES.ERR_FILE_EXISTS
       : ERROR_CODES.ERR_THEME_INVALID;
-  return new AstryxError(message, undefined, code);
+  const suggestions =
+    error instanceof ThemeStateError ? error.suggestions : undefined;
+  return new AstryxError(message, suggestions, code);
 }
 
 /**
