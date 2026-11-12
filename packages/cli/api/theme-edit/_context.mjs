@@ -49,7 +49,10 @@ const E = ERROR_CODES;
  * @param {string} cwd
  */
 export function requireProject(cwd) {
-  if (!isOutsideProject(cwd)) return;
+  if (!isOutsideProject(cwd)) {
+    refuseWorkspaceRoot(cwd);
+    return;
+  }
   const pkg = path.join(cwd, 'package.json');
   // Yarn Plug'n'Play has no node_modules for the editor to read Core from.
   if (fs.existsSync(path.join(cwd, '.pnp.cjs')))
@@ -147,12 +150,115 @@ const isRenderFailure = e =>
     e.code === E.ERR_RENDER_MISSING_DEPENDENCY);
 
 /**
+ * Refuse a workspace root, or a folder under it with no package.json of its
+ * own (apps/), that does not use Core itself: Core hoisted to the root's
+ * node_modules resolves there too, but the theme belongs in an app. The
+ * workspace's apps that use Core are named, each with the `cd` to run from.
+ * @param {string} cwd
+ */
+function refuseWorkspaceRoot(cwd) {
+  const start = path.resolve(cwd);
+  let dir = start;
+  // The nearest package.json at or above cwd.
+  while (!fs.existsSync(path.join(dir, 'package.json'))) {
+    const up = path.dirname(dir);
+    if (up === dir) return;
+    dir = up;
+  }
+  const json = readJson(path.join(dir, 'package.json'));
+  const patterns = workspacePatterns(dir, json);
+  if (!patterns.length || usesCore(json)) return;
+  const apps = workspaceApps(dir, patterns)
+    .map(a => path.relative(start, a) || '.')
+    .sort();
+  throw new AstryxError(
+    `${path.relative(start, dir) || 'This folder'} is a workspace root${dir === start ? '' : ` (${path.relative(dir, start)} has no package.json of its own)`}, not an app: a theme belongs in an app that uses @astryxdesign/core.${apps.length ? ` The workspace's apps that use it: ${apps.join(', ')}.` : ' None of its packages lists @astryxdesign/core.'} Run the command from the app. Nothing was written.`,
+    apps.length
+      ? apps.slice(0, 4).map(a => ({
+          name: `cd ${a}`,
+          reason: 'run the command from this app',
+        }))
+      : [{name: 'npm install @astryxdesign/core', reason: 'in the app'}],
+    E.ERR_PROJECT_REQUIRED,
+  );
+}
+
+/** @param {string} file */
+function readJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a package.json lists @astryxdesign/core itself. */
+function usesCore(/** @type {any} */ json) {
+  return ['dependencies', 'devDependencies', 'peerDependencies'].some(
+    k => json?.[k] && '@astryxdesign/core' in json[k],
+  );
+}
+
+/**
+ * The workspace patterns of a package (npm and yarn `workspaces`, pnpm's
+ * pnpm-workspace.yaml), or none.
+ * @param {string} dir
+ * @param {any} json
+ * @returns {string[]}
+ */
+function workspacePatterns(dir, json) {
+  const ws = Array.isArray(json?.workspaces)
+    ? json.workspaces
+    : Array.isArray(json?.workspaces?.packages)
+      ? json.workspaces.packages
+      : [];
+  const yaml = path.join(dir, 'pnpm-workspace.yaml');
+  const pnpm = fs.existsSync(yaml)
+    ? [
+        ...fs
+          .readFileSync(yaml, 'utf8')
+          .matchAll(/^\s*-\s*['"]?([^'"\n#]+?)['"]?\s*$/gm),
+      ].map(m => m[1])
+    : [];
+  return [...ws, ...pnpm].filter(
+    p => typeof p === 'string' && !p.startsWith('!'),
+  );
+}
+
+/**
+ * The folders a workspace's patterns name (`apps/*`, `packages/web`) whose
+ * package.json lists Core.
+ * @param {string} root
+ * @param {string[]} patterns
+ * @returns {string[]}
+ */
+function workspaceApps(root, patterns) {
+  /** @type {string[]} */
+  const out = [];
+  for (const p of patterns) {
+    const clean = p.replace(/\/\*\*?$/, '');
+    const base = path.join(root, clean);
+    const dirs = /\*$/.test(p)
+      ? fs.existsSync(base)
+        ? fs
+            .readdirSync(base, {withFileTypes: true})
+            .filter(d => d.isDirectory())
+            .map(d => path.join(base, d.name))
+        : []
+      : [base];
+    for (const d of dirs)
+      if (usesCore(readJson(path.join(d, 'package.json')))) out.push(d);
+  }
+  return [...new Set(out)];
+}
+
+/**
  * Why the components did not render, with the likely cause: two copies of
  * React (the app's and the one Core resolves) break every hook.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string} message
  */
-function renderCause(project, message) {
+export function renderCause(project, message) {
   /** @param {(id: string) => string} resolve */
   const reactOf = resolve => {
     try {
@@ -164,10 +270,15 @@ function renderCause(project, message) {
   const app = reactOf(project.req.resolve);
   let core = null;
   try {
-    core = reactOf(
-      createRequire(project.req.resolve('@astryxdesign/core/package.json'))
-        .resolve,
-    );
+    // Core's exports keep its package.json private: its folder is found by
+    // walking up from the entry the app resolves.
+    let dir = path.dirname(project.req.resolve('@astryxdesign/core'));
+    while (!fs.existsSync(path.join(dir, 'package.json'))) {
+      const up = path.dirname(dir);
+      if (up === dir) throw new Error('no package.json');
+      dir = up;
+    }
+    core = reactOf(createRequire(path.join(dir, 'package.json')).resolve);
   } catch {
     // No Core package file: nothing to compare.
   }

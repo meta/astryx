@@ -90,6 +90,7 @@ import {refreshPreviewRoute} from './_preview-app.mjs';
 import {baseInstalled, baseResolved, installLine} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
+  renderCause,
   requireProject,
   context,
   pictures,
@@ -954,8 +955,11 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
         // Setting names are matched in any case, and a near name of a
         // setting the theme has counts: `undo t Corners`, `undo t corner`.
         const typed = String(thing).toLowerCase();
+        // A token named without its dashes (radius-element) is the token.
+        const dashed = typed.startsWith('--') ? typed : `--${typed}`;
         const named = new Set([
           typed,
+          dashed,
           ...(e.suggestions ?? [])
             .filter(x => x.reason === 'did you mean')
             .map(x => x.name.toLowerCase()),
@@ -975,8 +979,19 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
         // A word that is near a setting name (a typo, another case) is never
         // answered with a bare step back, which would undo another change;
         // any other word (`all`) may mean the last step.
+        // A token or a property named (radius-element, padding) is a named
+        // thing too: never answered with a step back.
+        const namesThing =
+          ctx.C.isToken(dashed) ||
+          data.settings.some(
+            x => x.source === 'property' && x.thing.toLowerCase() === typed,
+          ) ||
+          /^[a-z]+(-[a-z]+)+$|^(padding|margin|color|background|border|gap|width|height|opacity)$/.test(
+            typed,
+          );
         const nearSetting =
-          named.size > 1 ||
+          namesThing ||
+          named.size > (dashed === typed ? 1 : 2) ||
           nearest(typed, [
             ...Object.keys(DIALS),
             ...data.settings.map(x => x.thing.toLowerCase()),
@@ -1717,13 +1732,32 @@ export async function themeEditShow(theme, options = {}) {
     await baseResolved(ctx.project, data.like),
     ctx.project.core.tokenDefaults,
   );
+  // A render that fails here (two copies of React, a component that
+  // throws) is refused as the one above: what this show built goes back,
+  // and the result says so.
+  const rendering = async (/** @type {() => Promise<any>} */ run) => {
+    try {
+      return await run();
+    } catch (e) {
+      if (!(e instanceof Error)) throw e;
+      if (e instanceof AstryxError && e.code !== E.ERR_RENDER_FAILED) throw e;
+      for (const [file, bytes] of kept) writeWhole(file, bytes);
+      return refuse(
+        E.ERR_RENDER_FAILED,
+        `${theme} cannot be shown: ${renderCause(ctx.project, e.message)} ${kept.size ? 'The build this show made again was put back as it was. ' : ''}Nothing was written.`,
+        {run: [`${getCliInvocation(cwd)} doctor`]},
+      );
+    }
+  };
   const preview = noPages
     ? shown(cwd, f.preview)
-    : await renderPreview(ctx, theme, data);
-  const previewStale = noPages ? [] : await keepPreviewRoute(ctx, theme);
+    : await rendering(() => renderPreview(ctx, theme, data));
+  const previewStale = noPages
+    ? []
+    : await rendering(() => keepPreviewRoute(ctx, theme));
   const sheet = noPages
     ? {file: shown(cwd, f.sheet), components: 0, skipped: []}
-    : await renderSheet(ctx, theme, data, {group: section});
+    : await rendering(() => renderSheet(ctx, theme, data, {group: section}));
   // The full sheet records the build it shows, so a later change tells a
   // sheet that still matches (after an undo) from one that does not.
   if (!noPages && !section) stampSheet(f.sheet, theme, cwd);
