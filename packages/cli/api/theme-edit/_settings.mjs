@@ -896,56 +896,98 @@ export function valueProblem(s) {
 }
 
 /**
- * A theme's own source (`<slug>.theme.ts`) with its comments taken out, or
- * null when it cannot be read.
+ * The page-wide tokens a theme's own source sets: the keys of the top-level
+ * `tokens` map in its `defineTheme({...})`, read from the syntax tree, each
+ * with its value when that is plain text (else null). A token set only in a
+ * scope (`onDark`, `components`) is not one: it does not apply page-wide.
  * @param {string} cwd
  * @param {string} slug
- * @returns {string | null}
+ * @returns {Map<string, string | null>}
  */
-function ownSourceCode(cwd, slug) {
+function ownPageTokens(cwd, slug) {
+  /** @type {Map<string, string | null>} */
+  const out = new Map();
+  /** @type {string} */
+  let code;
   try {
-    return fs
-      .readFileSync(themeFiles(cwd, slug).ts, 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    code = fs.readFileSync(themeFiles(cwd, slug).ts, 'utf8');
   } catch {
-    return null;
+    return out;
   }
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parseModule(code, {sourceType: 'module', plugins: ['typescript']});
+  } catch {
+    return out;
+  }
+  /** @param {any} node @returns {string | null} */
+  const keyOf = node =>
+    node?.type === 'StringLiteral'
+      ? node.value
+      : node?.type === 'Identifier'
+        ? node.name
+        : null;
+  /** @param {any} node @returns {string | null} */
+  const textOf = node =>
+    node?.type === 'StringLiteral'
+      ? node.value
+      : node?.type === 'TemplateLiteral' && node.expressions.length === 0
+        ? node.quasis.map((/** @type {any} */ q) => q.value.cooked).join('')
+        : null;
+  /** @param {any} node */
+  const visit = node => {
+    if (!node || typeof node !== 'object') return;
+    if (
+      node.type === 'CallExpression' &&
+      node.callee?.type === 'Identifier' &&
+      node.callee.name === 'defineTheme' &&
+      node.arguments?.[0]?.type === 'ObjectExpression'
+    ) {
+      const tokens = node.arguments[0].properties.find(
+        (/** @type {any} */ p) =>
+          p.type === 'ObjectProperty' &&
+          !p.computed &&
+          keyOf(p.key) === 'tokens' &&
+          p.value.type === 'ObjectExpression',
+      );
+      for (const p of tokens?.value.properties ?? []) {
+        const k =
+          p.type === 'ObjectProperty' && !p.computed ? keyOf(p.key) : null;
+        if (k?.startsWith('--')) out.set(k, textOf(p.value));
+      }
+      return;
+    }
+    for (const v of Object.values(node))
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v === 'object' && v.type) visit(v);
+  };
+  visit(ast.program);
+  return out;
 }
 
 /**
- * The tokens a theme's own source names itself (`'--radius-button': …` in
- * `<slug>.theme.ts`, comments aside): they win over the settings it extends.
+ * The page-wide tokens a theme's own source sets itself (the top-level
+ * `tokens` of its `defineTheme`): they win over the settings it extends.
  * @param {string} cwd
  * @param {string} slug
  * @returns {string[]}
  */
 export function ownSourceTokens(cwd, slug) {
-  const code = ownSourceCode(cwd, slug);
-  if (code == null) return [];
-  return [
-    ...new Set(
-      [...code.matchAll(/['"`](--[a-z0-9-]+)['"`]\s*:/gi)].map(m => m[1]),
-    ),
-  ];
+  return [...ownPageTokens(cwd, slug).keys()];
 }
 
 /**
- * The values a theme's own source gives tokens as plain text
+ * The values a theme's own source gives page-wide tokens as plain text
  * (`'--radius-page': 'var(--radius-element)'`), by token.
  * @param {string} cwd
  * @param {string} slug
  * @returns {Record<string, string>}
  */
 export function ownSourceTokenValues(cwd, slug) {
-  const code = ownSourceCode(cwd, slug);
   /** @type {Record<string, string>} */
   const out = {};
-  if (code == null) return out;
-  for (const m of code.matchAll(
-    /['"`](--[a-z0-9-]+)['"`]\s*:\s*(['"`])((?:(?!\2)[^\\])*)\2/gi,
-  ))
-    out[m[1]] = m[3];
+  for (const [k, v] of ownPageTokens(cwd, slug)) if (v != null) out[k] = v;
   return out;
 }
 

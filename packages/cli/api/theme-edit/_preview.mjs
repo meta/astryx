@@ -417,9 +417,17 @@ function renderedFrom(out, key) {
     const m = RENDER_STAMP.exec(text);
     // The page above the comment is the one rendered: an edit by hand, or
     // a comment pasted under another page, is rendered again.
+    // Nothing may follow the comment but the sheet's own build stamp
+    // (written after it by show): text added after it is rendered over.
+    const after = m
+      ? text
+          .slice(m.index + m[0].length)
+          .replace(/<!-- astryx: sheet of build [0-9a-f]{16} -->/, '')
+      : '';
     return (
       m != null &&
       m[1] === key &&
+      after.trim() === '' &&
       m[2] === bodyHash(text.slice(0, m.index).trimEnd())
     );
   } catch {
