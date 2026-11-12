@@ -41,7 +41,7 @@ import {fileURLToPath} from 'node:url';
 import {satisfiesRange} from '../env/semver.mjs';
 import {readJson} from './project.mjs';
 import {userCacheDir as userCacheDirFor} from '../env/user-dirs.mjs';
-import {foreignLockIsSilent} from './lock-lease.mjs';
+import {foreignLockIsSilent, LEASE_RENEW_MS} from './lock-lease.mjs';
 import {relativeWithin} from '../fs/path-compare.mjs';
 
 /**
@@ -650,6 +650,19 @@ const FOREIGN_LOCK_MS = 20 * 60_000;
 const UNOWNED_LOCK_MS = 10_000;
 
 /**
+ * This process's process-id space (Linux: the pid namespace), or null where
+ * process ids are one space for the whole computer.
+ * @returns {string | null}
+ */
+export function pidSpace() {
+  try {
+    return fs.readlinkSync('/proc/self/ns/pid');
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Is process `pid` on this computer still running?
  * @param {number} pid
  * @returns {boolean}
@@ -674,7 +687,7 @@ export function isAlive(pid) {
  * @param {number} now
  * @returns {boolean}
  */
-function lockIsStale(lockDir, now) {
+function lockIsStale(lockDir, now, leased = false) {
   let age;
   try {
     age = now - fs.statSync(lockDir).mtimeMs;
@@ -688,7 +701,24 @@ function lockIsStale(lockDir, now) {
     return age > FOREIGN_LOCK_MS || foreignLockIsSilent(lockDir, now);
   }
   // A live holder on this computer is installing, however slowly.
-  return !isAlive(owner.pid);
+  if (isAlive(owner.pid)) return false;
+  // A leased lock's holder renews its record while it runs. A process id
+  // that looks gone may only be out of sight (a container that shares this
+  // computer's name, in its own process space): the record must also have
+  // stood unrenewed for three renewals.
+  if (!leased) return true;
+  // Recorded from this process space (or by a version that records none):
+  // the process id is judged right.
+  const ns = pidSpace();
+  if (ns === null || !owner.ns || owner.ns === ns) return true;
+  try {
+    return (
+      now - fs.statSync(path.join(lockDir, 'owner.json')).mtimeMs >
+      3 * LEASE_RENEW_MS
+    );
+  } catch {
+    return true;
+  }
 }
 
 /**
@@ -709,10 +739,14 @@ function ownerText(lockDir) {
  * over at once, and one from another computer once its holder has stopped
  * renewing it. Throws when the cache folder cannot be written.
  * @param {string} lockDir
- * @param {{now?: number}} [options] the clock, for tests
+ * @param {{now?: number, leased?: boolean}} [options] the clock, for tests;
+ *   `leased` for a lock whose holder renews it (lock-lease.mjs): its record
+ *   names its process space, and a holder on this computer that looks gone
+ *   from another space (a container with the same computer name) is taken
+ *   over only once its record has stood unrenewed for three renewals.
  * @returns {boolean}
  */
-export function tryLock(lockDir, {now = Date.now()} = {}) {
+export function tryLock(lockDir, {now = Date.now(), leased = false} = {}) {
   fs.mkdirSync(path.dirname(lockDir), {recursive: true});
   try {
     fs.mkdirSync(lockDir);
@@ -725,7 +759,7 @@ export function tryLock(lockDir, {now = Date.now()} = {}) {
     // record, which a new lock lacks for a moment), or another run took the
     // lock in between.
     const judged = lockIdentity(lockDir);
-    if (!judged || !lockIsStale(lockDir, now)) return false;
+    if (!judged || !lockIsStale(lockDir, now, leased)) return false;
     const aside = `${lockDir}.stale-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
     try {
       fs.renameSync(lockDir, aside);
@@ -761,7 +795,13 @@ export function tryLock(lockDir, {now = Date.now()} = {}) {
   try {
     fs.writeFileSync(
       path.join(lockDir, 'owner.json'),
-      JSON.stringify({pid: process.pid, host: os.hostname(), at: Date.now()}),
+      JSON.stringify({
+        pid: process.pid,
+        host: os.hostname(),
+        at: Date.now(),
+        // A leased lock names the process space its id belongs to.
+        ...(leased && pidSpace() ? {ns: pidSpace()} : {}),
+      }),
     );
   } catch {
     // Without a record the lock still expires on its own.
@@ -776,7 +816,7 @@ export function tryLock(lockDir, {now = Date.now()} = {}) {
  * @param {string} lockDir
  * @returns {string | null}
  */
-function lockIdentity(lockDir) {
+export function lockIdentity(lockDir) {
   try {
     const st = fs.statSync(lockDir, {bigint: true});
     return `${st.dev}:${st.ino}:${st.birthtimeNs}:${ownerText(lockDir)}`;

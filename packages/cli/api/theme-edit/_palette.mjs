@@ -15,18 +15,24 @@
  * @position api/theme-edit — imported by _settings.mjs, _check.mjs, _how.mjs
  */
 
-import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {isAlive} from '../../foundation/release/cache.mjs';
+import {stillHolds} from '../../foundation/release/folder-lock.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {parse} from '@babel/parser';
+import {THEMES_DIR} from '../../foundation/discovery/theme-discovery.mjs';
 import {
+  ANCHOR_INPUT_KEYS,
   DEFAULT_21_STOPS,
+  FAMILY_INPUT_KEYS,
+  GENERATION_INPUT_KEYS,
   PALETTE_BLACK,
   PALETTE_GENERATOR_VERSION,
   PALETTE_WHITE,
   generateTonalPalette,
+  modesForStrategy,
   perceptualDelta,
 } from '../theme/palette/generate/generator.mjs';
 import {themePaletteGenerate} from '../theme/palette/generate/generate.mjs';
@@ -40,6 +46,8 @@ import {
   ratio,
 } from './_color.mjs';
 import {P} from './_tables.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {sha256} from '../../foundation/render/source-block.mjs';
 
 /**
  * Write a file whole: a temp file beside it, renamed into place, so a link
@@ -54,10 +62,17 @@ export function writeWhole(file, text) {
   if (fs.lstatSync(file, {throwIfNoEntry: false})?.isDirectory())
     throw new AstryxError(
       `${[path.dirname(path.dirname(file)), path.dirname(file), file].map(p => path.basename(p)).join('/')} is a folder, so the editor cannot write that file there. Rename or move the folder, then run the command again.`,
-      [],
+      [
+        {
+          name: `ls -la ${quoteCommandArgument(file)}`,
+          reason:
+            'see what is in the folder; move or rename it, then run the same command again',
+        },
+      ],
       ERROR_CODES.ERR_WRITE_FAILED,
     );
   sweepTemps(path.dirname(file));
+  refuseIfLockLost();
   const tmp = tempFor(file);
   try {
     fs.writeFileSync(tmp, text);
@@ -67,19 +82,43 @@ export function writeWhole(file, text) {
   }
 }
 
-/** Folders swept of left temp files in this run. */
-const swept = new Set();
+/**
+ * A command stopped long enough for another to take its lock (Ctrl-Z, a
+ * sleeping computer, a debugger) writes nothing more: refuse. Called right
+ * before each write.
+ */
+export function refuseIfLockLost() {
+  if (lockHeld()) return;
+  const error = new AstryxError(
+    `Another command took over the theme's lock while this one was stopped (Ctrl-Z, a sleeping computer, a debugger). This command's change was not applied, and it touched nothing more: the files stay as the other command left them. Run it again if you still want it.`,
+    [{name: `${P} how --list dials`, reason: 'what you can set'}],
+    ERROR_CODES.ERR_THEME_BUSY,
+  );
+  /** @type {any} */ (error).lockLost = true;
+  throw error;
+}
+
+/** Whether this command still holds its lock (true outside a lock). */
+export function lockHeld() {
+  try {
+    stillHolds();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** When this process started, for telling its own temp files from an earlier one's with the same id. */
+const STARTED_AT = Date.now() - process.uptime() * 1000;
 
 /**
  * Remove the editor's own temp files a stopped command left in a folder:
- * only names the editor makes (`.<name>.astryx-<pid>-<random>.tmp`), whose
- * process is gone and that are more than ten minutes old. Links are never
- * followed. Once per folder per run.
+ * only names the editor makes (`.<name>.astryx-<pid>-<random>.tmp`) whose
+ * process is gone, or that are older than ten minutes. Links are never
+ * followed. A theme folder holds a few files, so every write looks.
  * @param {string} dir
  */
 function sweepTemps(dir) {
-  if (swept.has(dir)) return;
-  swept.add(dir);
   let names;
   try {
     names = fs.readdirSync(dir);
@@ -88,16 +127,47 @@ function sweepTemps(dir) {
   }
   for (const n of names) {
     const m = /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(n);
-    if (!m || Number(m[1]) === process.pid) continue;
+    if (!m) continue;
     const p = path.join(dir, n);
     try {
       const st = fs.lstatSync(p);
-      if (!st.isFile() || Date.now() - st.mtimeMs < 10 * 60_000) continue;
-      if (isAlive(Number(m[1]))) continue;
+      // Writes into a theme folder run under its lock, so a temp file
+      // whose process is gone is never one a live command still renames.
+      if (!st.isFile()) continue;
+      // A process id from another process space (pid 1 in a container)
+      // may look alive here: past ten minutes, an editor temp file is a
+      // leftover whatever its id says (a live writer renames it in
+      // moments, and holds the lock this write holds now).
+      // A temp named with this process's own id but older than this process
+      // is another one's (pid 1 in each container start).
+      const own = Number(m[1]) === process.pid;
+      const young = Date.now() - st.mtimeMs < 10 * 60_000;
+      if (
+        own ? st.mtimeMs >= STARTED_AT && young : isAlive(Number(m[1])) && young
+      )
+        continue;
       fs.rmSync(p, {force: true});
     } catch {
       // Gone already, or not ours to judge.
     }
+  }
+}
+
+/**
+ * Remove `dir` when it is empty; with `deep`, the empty folders under it
+ * first. A folder with a file in it stays.
+ * @param {string} dir
+ * @param {{deep?: boolean}} [opts]
+ */
+export function removeEmptyFolder(dir, opts = {}) {
+  if (!fs.existsSync(dir)) return;
+  if (opts.deep)
+    for (const e of fs.readdirSync(dir, {withFileTypes: true}))
+      if (e.isDirectory()) removeEmptyFolder(path.join(dir, e.name), opts);
+  try {
+    fs.rmdirSync(dir);
+  } catch {
+    // Not empty, or gone already.
   }
 }
 
@@ -209,64 +279,134 @@ const TEXT = 4.5;
 const NON_TEXT = 3;
 
 /**
- * The stop each token starts from, `[light, dark]`, as the official neutral
- * theme maps them. The page background, `--color-background-body`, stays
- * the base theme's, so a tinted gray never tints the page. A layout without
- * one of these stops uses the nearest one it has.
+ * The official neutral theme's color mapping, read from the theme the CLI
+ * ships rather than copied: each token's stops, `[light, dark]`, written
+ * there as `<family>.<mode>[N]` or `withAlpha(<family>.<mode>[N], 'aa')`,
+ * and the parts whose secondary text it lifts (`[part, block]`).
+ * @returns {{stops: Record<string, Array<{stop: number, alpha?: string}>>, lifted: Array<[string, string]>}}
  */
-const NEUTRAL_STOPS = /** @type {Record<string, [number, number]>} */ ({
-  '--color-background-surface': [100, 15],
-  '--color-background-card': [100, 10],
-  '--color-background-popover': [100, 10],
-  '--color-background-muted': [95, 10],
-  '--color-text-primary': [0, 100],
-  '--color-text-secondary': [30, 65],
-  '--color-text-disabled': [60, 35],
-  '--color-icon-primary': [0, 100],
-  '--color-icon-secondary': [45, 65],
-  '--color-icon-disabled': [60, 35],
-  '--color-border-emphasized': [85, 35],
-  '--color-skeleton': [95, 35],
-});
+function readOfficialNeutral() {
+  const ast = parse(
+    fs.readFileSync(
+      path.join(THEMES_DIR, 'neutral', 'neutralTheme.ts'),
+      'utf8',
+    ),
+    {sourceType: 'module', plugins: ['typescript']},
+  );
+  /** @param {any} n @returns {{stop: number, alpha?: string} | null} */
+  const stopOf = n => {
+    if (n?.type === 'CallExpression' && n.callee?.name === 'withAlpha') {
+      const inner = stopOf(n.arguments[0]);
+      const alpha = n.arguments[1]?.value;
+      return inner && typeof alpha === 'string'
+        ? {...inner, alpha: alpha.toLowerCase()}
+        : null;
+    }
+    return n?.type === 'MemberExpression' &&
+      n.computed &&
+      n.property.type === 'NumericLiteral' &&
+      ['light', 'dark'].includes(n.object?.property?.name)
+      ? {stop: n.property.value}
+      : null;
+  };
+  /** @type {Record<string, Array<{stop: number, alpha?: string}>>} */
+  const stops = {};
+  /** @type {Array<[string, string]>} */
+  const lifted = [];
+  /** @param {any} node @param {string[]} keys */
+  const visit = (node, keys) => {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'ObjectProperty') {
+      const key = node.key.name ?? node.key.value;
+      const at = [...keys, String(key)];
+      if (keys.at(-1) === 'tokens' && node.value.type === 'ArrayExpression') {
+        const pair = node.value.elements.map(stopOf);
+        if (pair.length === 2 && pair.every(Boolean)) stops[key] = pair;
+      }
+      if (keys.at(-3) === 'components' && key === '--color-text-secondary')
+        lifted.push([keys.at(-2) ?? '', keys.at(-1) ?? '']);
+      visit(node.value, at);
+      return;
+    }
+    for (const [k, v] of Object.entries(node))
+      if (k !== 'loc' && k !== 'start' && k !== 'end')
+        for (const x of Array.isArray(v) ? v : [v]) visit(x, keys);
+  };
+  visit(ast.program, []);
+  return {stops, lifted};
+}
+const OFFICIAL = readOfficialNeutral();
+/** A token's official `[light, dark]` stops. @param {string} token */
+const officialStops = token =>
+  /** @type {[number, number]} */ (
+    (OFFICIAL.stops[token] ?? []).map(x => x.stop)
+  );
+
+/**
+ * The tokens the neutral color sets at the official theme's stops. The page
+ * background, `--color-background-body`, stays the base theme's, so a
+ * tinted gray never tints the page. A layout without one of these stops
+ * uses the nearest one it has.
+ */
+const NEUTRAL_STOPS = Object.fromEntries(
+  [
+    '--color-background-surface',
+    '--color-background-card',
+    '--color-background-popover',
+    '--color-background-muted',
+    '--color-text-primary',
+    '--color-text-secondary',
+    '--color-text-disabled',
+    '--color-icon-primary',
+    '--color-icon-secondary',
+    '--color-icon-disabled',
+    '--color-border-emphasized',
+    '--color-skeleton',
+  ].map(t => [t, officialStops(t)]),
+);
 /** Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`. */
-const NEUTRAL_TINTS =
-  /** @type {Record<string, [[number, string], [number, string]]>} */ ({
-    '--color-border': [
-      [0, '14'],
-      [100, '1a'],
+const NEUTRAL_TINTS = Object.fromEntries(
+  ['--color-border', '--color-overlay-hover', '--color-overlay-pressed'].map(
+    t => [
+      t,
+      /** @type {[[number, string], [number, string]]} */ (
+        OFFICIAL.stops[t].map(x => [x.stop, String(x.alpha)])
+      ),
     ],
-    '--color-overlay-hover': [
-      [0, '0d'],
-      [100, '0d'],
-    ],
-    '--color-overlay-pressed': [
-      [0, '1a'],
-      [100, '1a'],
-    ],
-  });
+  ),
+);
 /**
  * Accent and status stops, `[light, dark]`, as the official neutral theme
- * maps its accent tint and its status families. The dark fill starts at 70,
- * where the theme authoring guide puts it, when the exact color does not
- * read in dark. A status tint is translucent in dark (`[stop, alpha]`).
+ * maps its accent tint and its status families (info stands for them). The
+ * dark fill starts at 70, where the theme authoring guide puts it, when the
+ * exact color does not read in dark. A status tint is translucent in dark
+ * (`[stop, alpha]`).
  */
 const DARK_FILL = 70;
-const TEXT_STOP = /** @type {[number, number]} */ ([45, 80]);
-const ACCENT_MUTED = /** @type {[number, number]} */ ([85, 30]);
+const TEXT_STOP = officialStops('--color-text-info');
+const ACCENT_MUTED = officialStops('--color-accent-muted');
+const STATUS_MUTED = /** @type {[number, [number, string]]} */ (
+  OFFICIAL.stops['--color-info-muted'].map((x, i) =>
+    i === 0 ? x.stop : [x.stop, String(x.alpha)],
+  )
+);
+const ON_MUTED = officialStops('--color-on-info-muted');
 /**
  * The parts whose secondary text the official neutral theme lifts, with
- * the block it lifts it in and what the text sits on: the accent tint
- * under selected items and tree rows, a dropzone and numbered citations;
- * the translucent neutral track (`--color-neutral`) under segmented-control
- * labels.
+ * the block it lifts it in and what the text sits on: the accent tint,
+ * except under segmented-control labels, which sit on the translucent
+ * neutral track (`--color-neutral`).
  */
-export const LIFT_PARTS = /** @type {Array<[string, string, string]>} */ ([
-  ['item', 'selected', '--color-accent-muted'],
-  ['tree-list-item', 'selected', '--color-accent-muted'],
-  ['file-input', 'mode:dropzone', '--color-accent-muted'],
-  ['citation', 'variant:number', '--color-accent-muted'],
-  ['segmented-control-item', 'base', '--color-neutral'],
-]);
+export const LIFT_PARTS = OFFICIAL.lifted.map(
+  ([part, block]) =>
+    /** @type {[string, string, string]} */ ([
+      part,
+      block,
+      part === 'segmented-control-item'
+        ? '--color-neutral'
+        : '--color-accent-muted',
+    ]),
+);
 /** What each lifted background is, and the parts on it, for notes. */
 const LIFT_GROUNDS =
   /** @type {Record<string, {what: string, parts: string}>} */ ({
@@ -279,20 +419,16 @@ const LIFT_GROUNDS =
       parts: 'segmented-control labels',
     },
   });
-const STATUS_MUTED = /** @type {[number, [number, string]]} */ ([
-  85,
-  [75, '3d'],
-]);
-const ON_MUTED = /** @type {[number, number]} */ ([25, 80]);
 const BORDER = /** @type {[number, number]} */ ([80, 65]);
 /**
  * Text on a fill, from the neutral family as the official themes take it:
  * white (100) first in light, near-black (5) first in dark, and near-black
  * first in both modes on warning. Without a neutral color, black and white.
  */
+const [ON_LIGHT, ON_DARK] = officialStops('--color-on-accent');
 const ON_FILL = /** @type {Record<Mode, [number, number]>} */ ({
-  light: [100, 5],
-  dark: [5, 100],
+  light: [ON_LIGHT, ON_DARK],
+  dark: [ON_DARK, ON_LIGHT],
 });
 /** A layout needs this many stops between black and white to map every token. */
 const MIN_INNER_STOPS = 5;
@@ -365,11 +501,11 @@ function sameColor(a, b) {
  * @returns {Mode[]}
  */
 export function modesOf(data) {
-  return data.mode === 'light-only'
-    ? ['light']
-    : data.mode === 'dark-only'
-      ? ['dark']
-      : ['light', 'dark'];
+  return modesForStrategy(
+    data.mode === 'light-only' || data.mode === 'dark-only'
+      ? data.mode
+      : 'light-and-dark',
+  );
 }
 
 /**
@@ -463,17 +599,6 @@ function savedSettings(cwd, slug) {
 const strategyOf = modes =>
   modes.length > 1 ? 'light-and-dark' : `${modes[0]}-only`;
 
-/** The config fields the generator reads; anything else changes nothing. */
-const CONFIG_KEYS = [
-  'vibrancy',
-  'neutralProfile',
-  'modeStrategy',
-  'stops',
-  'families',
-];
-const FAMILY_KEYS = ['id', 'name', 'seed', 'kind', 'anchors'];
-const ANCHOR_KEYS = ['mode', 'stop', 'color', 'policy', 'maxDeltaE'];
-
 /**
  * The fields of a config the generator never reads (such as
  * `darkChromaTaper`), by path.
@@ -482,17 +607,19 @@ const ANCHOR_KEYS = ['mode', 'stop', 'color', 'policy', 'maxDeltaE'];
  */
 function deadKeys(config) {
   /** @type {string[]} */
-  const out = Object.keys(config).filter(k => !CONFIG_KEYS.includes(k));
+  const out = Object.keys(config).filter(
+    k => !GENERATION_INPUT_KEYS.includes(k),
+  );
   (Array.isArray(config.families) ? config.families : []).forEach(
     (/** @type {any} */ f, /** @type {number} */ i) => {
       if (!f || typeof f !== 'object') return;
       for (const k of Object.keys(f))
-        if (!FAMILY_KEYS.includes(k)) out.push(`families[${i}].${k}`);
+        if (!FAMILY_INPUT_KEYS.includes(k)) out.push(`families[${i}].${k}`);
       (Array.isArray(f.anchors) ? f.anchors : []).forEach(
         (/** @type {any} */ a, /** @type {number} */ j) => {
           if (a && typeof a === 'object')
             for (const k of Object.keys(a))
-              if (!ANCHOR_KEYS.includes(k))
+              if (!ANCHOR_INPUT_KEYS.includes(k))
                 out.push(`families[${i}].anchors[${j}].${k}`);
         },
       );
@@ -562,7 +689,7 @@ function usableStops(stops, slug) {
   const refuse = why => {
     throw new AstryxError(
       `themes/${slug}/palette.config.json: its stops (${shown}) ${why}. ${fix}`,
-      [],
+      [{name: `${P} how colors`, reason: 'how the shades are made'}],
       ERROR_CODES.ERR_THEME_INVALID,
     );
   };
@@ -970,7 +1097,7 @@ function planPalette(cwd, slug, data, base) {
     // same bytes.
     /** @type {Record<string, unknown>} */
     const ordered = {};
-    for (const k of FAMILY_KEYS) if (k in out) ordered[k] = out[k];
+    for (const k of FAMILY_INPUT_KEYS) if (k in out) ordered[k] = out[k];
     for (const k of Object.keys(out)) if (!(k in ordered)) ordered[k] = out[k];
     return {family: /** @type {typeof out} */ (ordered), stop};
   };
@@ -1084,9 +1211,6 @@ export function paletteConfig(cwd, slug, data, base) {
   return planPalette(cwd, slug, data, base)?.config ?? null;
 }
 
-/** @param {string} text */
-const sha256 = text => createHash('sha256').update(text).digest('hex');
-
 /**
  * Write the palette config, palette and receipt the settings ask for, with
  * the same generator as `theme palette generate --out`; remove them all
@@ -1140,7 +1264,7 @@ function syncPaletteFiles(cwd, slug, data, base) {
       saved = undefined;
     }
     const hash = fs.existsSync(abs(f.config))
-      ? sha256(fs.readFileSync(abs(f.config), 'utf8'))
+      ? sha256(fs.readFileSync(abs(f.config)))
       : null;
     const mine = hash != null && (data.palette === hash || saved === hash);
     delete data.palette;
@@ -1181,7 +1305,7 @@ function syncPaletteFiles(cwd, slug, data, base) {
   // Nothing to rewrite: no notes either, so a kept hand edit is named once,
   // when a color change touches the config.
   if (same) {
-    data.palette = sha256(text);
+    data.palette = sha256(Buffer.from(text));
     // The theme reads only the selected shades, which come from the
     // generator, so a hand edit to the palette file never shows: say so.
     return paletteEdited(cwd, slug)
@@ -1204,7 +1328,7 @@ function syncPaletteFiles(cwd, slug, data, base) {
   }
   fs.mkdirSync(path.dirname(abs(f.config)), {recursive: true});
   writeWhole(abs(f.config), text);
-  data.palette = sha256(text);
+  data.palette = sha256(Buffer.from(text));
   themePaletteGenerate(f.config, {out: f.palette, overwrite: true}, {cwd});
   return plan.notes;
 }
@@ -1320,6 +1444,14 @@ function samePalette(a, b) {
 }
 
 /**
+ * The first line of the empty palette module the preview writes for a
+ * Colors page it keeps (changed by hand) once the theme has no colors, so
+ * the app still builds. The editor replaces it freely.
+ */
+export const PALETTE_STAND_IN =
+  '// A stand-in for a preview page that imports this file: the theme has no generated colors.';
+
+/**
  * Whether a theme's palette file was edited by hand. Its bytes match its
  * receipt, or its colors (read as data, so formatting, a BOM or semicolons
  * never count) are the ones the generator gives for the request it came
@@ -1335,6 +1467,8 @@ export function paletteEdited(cwd, slug) {
   const file = path.join(cwd, f.palette);
   if (!fs.existsSync(file)) return false;
   const text = fs.readFileSync(file, 'utf8');
+  // The empty stand-in a kept preview page imports is the editor's own.
+  if (text.startsWith(PALETTE_STAND_IN)) return false;
   /** @type {any} */
   let receipt;
   try {
@@ -1342,7 +1476,7 @@ export function paletteEdited(cwd, slug) {
   } catch {
     receipt = null;
   }
-  if (receipt?.candidateSha256 === sha256(text)) return false;
+  if (receipt?.candidateSha256 === sha256(Buffer.from(text))) return false;
   const data = paletteData(text);
   if (!data) return true;
   /** @type {any} */
@@ -1357,7 +1491,7 @@ export function paletteEdited(cwd, slug) {
           'utf8',
         ),
       )?.palette;
-      configMine = saved == null || saved === sha256(configText);
+      configMine = saved == null || saved === sha256(Buffer.from(configText));
       request = JSON.parse(configText.replace(/^\uFEFF/, ''));
     } catch {
       request = null;
@@ -1525,7 +1659,7 @@ function generate(config, file = 'palette.config.json') {
   } catch (e) {
     throw new AstryxError(
       `${file}: the colors could not be generated: ${(e instanceof Error ? e.message : String(e)).replace(/\.$/, '')}. Fix that part of the file by hand, or remove it. Nothing was changed.`,
-      [],
+      [{name: `${P} how colors`, reason: 'how the colors are made'}],
       ERROR_CODES.ERR_PALETTE_GENERATION,
     );
   }
