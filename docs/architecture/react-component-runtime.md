@@ -327,7 +327,11 @@ those contracts.
   (`design:reduced-motion` DR1–DR3); the touch hit-area expansion; and List's
   reorder session, for a collection that adapts the reorderable object to its
   own values or whose rows are not `ListItem`s (`createReorderable`'s
-  plain-element `attach`, `spec:AST-103` FR4b, is not built).
+  plain-element `attach`, `spec:AST-103` FR4b, is not built). One chosen
+  start, `start: 'next-frame'`, exists for motion an interaction starts in an
+  input event's own task. On a busy page such motion then starts on the first
+  frame after that task, so it does not skip ahead. It is internal:
+  `createAnimator`'s options do not have it, and no public entry exports it.
   Components import
   them statically, and the bundler
   keeps one copy per page however many components use them. A surface
@@ -420,7 +424,7 @@ those contracts.
   refs. ToastViewport renders ToastRefSync, which writes through
   `useCommittedRefInto`, before a fragment that holds its children, so a child's
   layout cleanup, an unmount's included, reads the committed list. INV17 gap:
-  ToastViewport writes its toast list during render.
+  ToastViewport writes `toastsRef` and `maxVisibleRef` during render.
 - **INV18 — Layout is read as little as possible.** Placement uses CSS
   (anchor positioning, container queries, logical properties) instead of
   measuring in JS, as `architecture:component-style-authoring` INV2 prefers. A
