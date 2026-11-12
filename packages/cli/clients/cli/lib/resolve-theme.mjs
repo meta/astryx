@@ -20,7 +20,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
-import {resolveRecordedTheme} from '../../../api/theme/theme.mjs';
 
 const legacyRequire = createRequire(import.meta.url);
 
@@ -108,6 +107,8 @@ function resolvedThemeData(mod, specifier) {
  * @returns {Promise<{variants?: Record<string, string[]>|null, fonts?: Record<string, string>|null, name?: string|null}|null>}
  */
 export async function resolveTheme(cwd = process.cwd()) {
+  // The theme API loads on first use: a command's JSON output never needs it.
+  const {resolveRecordedTheme} = await import('../../../api/theme/theme.mjs');
   const loaded = await resolveRecordedTheme(cwd);
   if (loaded.configured) {
     if (!loaded.module) {

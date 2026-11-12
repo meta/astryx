@@ -743,6 +743,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-weighted-svg-icon",
+      "path": "components/lab/weighted-svg-icon",
+      "aliases": []
+    },
+    {
       "name": "component-layer-provider",
       "path": "components/layer-provider",
       "aliases": []
@@ -3967,6 +3972,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-infinite-scroll-load-more-products",
+      "path": "examples/use-table-infinite-scroll/load-more-products",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-row-expansion-tree-table",
       "path": "examples/use-table-row-expansion/tree-table",
       "aliases": []
@@ -4014,6 +4024,11 @@
     {
       "name": "example-use-table-tree-data-tree-table",
       "path": "examples/use-table-tree-data/tree-table",
+      "aliases": []
+    },
+    {
+      "name": "example-use-theme-name-active-theme",
+      "path": "examples/use-theme-name/active-theme",
       "aliases": []
     },
     {
@@ -4387,6 +4402,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-infinite-scroll",
+      "path": "hooks/use-table-infinite-scroll",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-pagination",
       "path": "hooks/use-table-pagination",
       "aliases": []
@@ -4449,6 +4469,11 @@
     {
       "name": "hook-use-theme",
       "path": "hooks/use-theme",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-theme-name",
+      "path": "hooks/use-theme-name",
       "aliases": []
     },
     {

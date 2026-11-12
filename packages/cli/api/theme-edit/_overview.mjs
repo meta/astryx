@@ -14,14 +14,9 @@
  * @position api/theme-edit — imported by _preview.mjs
  */
 
-/** @typedef {import('./_catalog.mjs').Tree} Tree */
+import {h} from './_catalog.mjs';
 
-/** @param {string} name @param {Record<string, unknown>} [props] @param {...unknown} children @returns {Tree} */
-const h = (name, props = {}, ...children) => ({
-  __element: name,
-  props,
-  ...(children.length ? {children} : {}),
-});
+/** @typedef {import('./_catalog.mjs').Tree} Tree */
 
 const noop = {__code: '() => {}'};
 const STATUSES = ['info', 'success', 'warning', 'error'];
@@ -60,16 +55,17 @@ export const OVERVIEW_SECTIONS = [
   {
     title: 'Open layers',
     // First on the page, so the layers open below their anchors on load,
-    // into space kept free for them: nothing on the page sits under them.
+    // into space kept free for them: each anchor's cell keeps room for its
+    // layer, so nothing sits under one, side by side or stacked.
     tree: h(
       'Card',
-      {variant: 'transparent', minHeight: 180},
+      {variant: 'transparent'},
       h(
         'Grid',
         {columns: {minWidth: 280, repeat: 'fit'}, gap: 4},
         h(
-          'HStack',
-          {},
+          'Card',
+          {variant: 'transparent', minHeight: 150},
           h(
             'Popover',
             {
@@ -88,8 +84,8 @@ export const OVERVIEW_SECTIONS = [
           ),
         ),
         h(
-          'HStack',
-          {},
+          'Card',
+          {variant: 'transparent', minHeight: 150},
           h(
             'Tooltip',
             {isOpen: true, placement: 'below', content: 'A tooltip shown open'},
