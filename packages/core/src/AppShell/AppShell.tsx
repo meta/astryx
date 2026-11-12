@@ -724,10 +724,9 @@ export function AppShell({
   const [uncontrolledMobileOpen, setUncontrolledMobileOpen] = useState(false);
   const isMobileNavOpenRequested =
     mobileNavConfig?.isOpen ?? uncontrolledMobileOpen;
-  // A region that hides while the drawer is open closes the drawer, and the
-  // drawer stays shut until the app opens it again, so revealing the region
-  // never reopens it. The app's own open state is not written. The hold is
-  // adjusted during render from what this render sees.
+  // A region that hides while the drawer is open closes the drawer.
+  // The drawer stays shut until the app opens it again. Revealing the
+  // region does not reopen it. Hiding never writes the app's open state.
   const [isDrawerHeldShut, setIsDrawerHeldShut] = useState(false);
   const hiddenKey = `${isTopNavHidden ? 'topNav' : ''}|${isSideNavHidden ? 'sideNav' : ''}`;
   const [seenHiddenKey, setSeenHiddenKey] = useState(hiddenKey);
