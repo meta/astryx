@@ -637,6 +637,23 @@ const OVERRIDES = [
 ];
 
 /**
+ * The part or group a plain word names, as how reads it (`checkboxes` is
+ * the checks group, `panels` the containers), or null.
+ * @param {string} word
+ * @returns {string | null}
+ */
+export function partForWord(word) {
+  const w = String(word ?? '')
+    .trim()
+    .toLowerCase();
+  if (!w) return null;
+  for (const [re, hit] of OVERRIDES)
+    if (/** @type {RegExp} */ (re).test(w))
+      return /** @type {{on: string}} */ (hit).on;
+  return null;
+}
+
+/**
  * Target names in Core's catalog that are plain words a question uses for
  * something else ("more padding", "align the text").
  */

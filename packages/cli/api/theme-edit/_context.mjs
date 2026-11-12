@@ -36,6 +36,7 @@ import {
   nearest,
   refuse,
   themeFiles,
+  refuseThemesNotFolder,
 } from './_settings.mjs';
 import {SHOWCASE_GROUPS, renderPreview, screenshot} from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -89,6 +90,7 @@ export function requireProject(cwd) {
  */
 export async function context(cwd) {
   requireProject(cwd);
+  refuseThemesNotFolder(cwd);
   const project = await openProject(cwd);
   /** @type {import('./_parts.mjs').PartData} */
   let parts;

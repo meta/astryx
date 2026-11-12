@@ -11,6 +11,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {partForWord} from './_how-question.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {baseInstalled, baseThemeFile} from './_project.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
@@ -681,16 +682,41 @@ function propertyProblem(prop, value) {
   const initial = initialOf(prop);
   // A bare number on a length property means px (`padding 4` → `4px`, each
   // number in a list too), when the property takes that.
-  const withPx = /^[\d.\s-]+$/.test(v)
-    ? v.replace(/(^|\s)(-?\d*\.?\d+)(?=\s|$)/g, '$1$2px')
+  // Each bare number token gets px (a mixed list `4 8px`, `8 / 4`, an
+  // exponent `1e1`), a unit split off by a space (`4 px`) joins its number.
+  const joined = v.replace(/(\d)\s+(px|rem|em|%)\b/gi, '$1$2');
+  const withPx = /\d/.test(joined)
+    ? joined.replace(
+        /(^|[\s/(,])([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(?=$|[\s/),])/gi,
+        (_, pre, num) =>
+          Number(num) === 0 ? `${pre}${num}` : `${pre}${num}px`,
+      )
     : null;
+  // A suggestion is offered only when the property takes it, in range too.
+  const takes = (/** @type {string | null} */ x) =>
+    x != null && matchValue(prop, x) != null && !belowRange(prop, x);
   return {
     takes: `a value its CSS grammar takes (${grammarText(known)})`,
     near:
-      (withPx && matchValue(prop, withPx) ? withPx : null) ??
-      near ??
-      (initial && matchValue(prop, initial) ? initial : null) ??
-      (matchValue(prop, example) ? example : null),
+      (takes(withPx) ? withPx : null) ??
+      // Below the property's range (a negative width): the same, 0 or more.
+      (withPx && takes(withPx.replace(/(^|[\s/(,])-(?=\.?\d)/g, '$1'))
+        ? withPx.replace(/(^|[\s/(,])-(?=\.?\d)/g, '$1')
+        : null) ??
+      (takes(joined) && joined !== v ? joined : null) ??
+      // Several values on a property that takes one (padding-top with four):
+      // the first of them, when it is one the property takes.
+      (() => {
+        const first = splitTop((withPx ?? joined).trim(), ' ')[0];
+        return first && first !== v && takes(first) ? first : null;
+      })() ??
+      (near && takes(near) ? near : null) ??
+      // A value with numbers never falls back to the property's reset
+      // (padding 0 would remove what was asked for).
+      (/\d/.test(v)
+        ? null
+        : ((takes(initial) ? initial : null) ??
+          (takes(example) ? example : null))),
   };
 }
 
@@ -897,7 +923,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       });
   if (flags.on) s.on = flags.on.trim();
   if (flags.when) s.when = flags.when.trim();
-  if (flags.state) s.state = flags.state.trim();
+  // A state in any case or spelling of its words (focusVisible,
+  // focus_visible, 'focus visible') is the state, written as CSS writes it.
+  if (flags.state)
+    s.state = flags.state
+      .trim()
+      .replace(/^:+/, '')
+      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+      .replace(/[\s_]+/g, '-')
+      .toLowerCase();
   if (flags.only) s.only = true;
   if (flags.mode) {
     const mode = flags.mode.toLowerCase();
@@ -972,13 +1006,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         .replace(/^astryx-/, '')
         .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
         .toLowerCase();
-      if (TARGET.has(lower) || FAMILIES[lower])
+      // A plain word how reads as a part or group (checkboxes: checks).
+      const byWord = partForWord(lower);
+      const named =
+        TARGET.has(lower) || FAMILIES[lower]
+          ? lower
+          : byWord && (TARGET.has(byWord) || FAMILIES[byWord])
+            ? byWord
+            : null;
+      if (named)
         refuse(
           E.ERR_THEME_UNKNOWN_PART,
-          `"${s.on}" is not a part name; the part is ${lower}.`,
+          `"${s.on}" is not a part name; the part is ${named}.`,
           {
-            didYouMean: [lower],
-            run: [setLine(slug, thing, v, {...s, on: lower}, unset)],
+            didYouMean: [named],
+            run: [setLine(slug, thing, v, {...s, on: named}, unset)],
           },
         );
       refuse(
@@ -1247,6 +1289,23 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         `"${s.state}" is not a state of any member of the ${s.on} group.`,
         {run: [`${HOW} ${s.on}`]},
       );
+  }
+  // A comparative is a step from the value now (never a rung picked by
+  // spelling, which can go the other way).
+  if (!unset && (thing === 'corners' || thing === 'spacing')) {
+    const w = v.toLowerCase();
+    const MORE =
+      thing === 'corners'
+        ? /^(rounder|softer|bigger|larger|curvier|more rounded)$/
+        : /^(roomier|looser|bigger|larger|wider|airier|more spacious)$/;
+    const LESS =
+      thing === 'corners'
+        ? /^(sharper|squarer|smaller|tighter|harder|less rounded)$/
+        : /^(tighter|denser|smaller|narrower|more compact|closer)$/;
+    if (MORE.test(w))
+      return checkOne(ctx, slug, data, thing, 'more', flags, unset);
+    if (LESS.test(w))
+      return checkOne(ctx, slug, data, thing, 'less', flags, unset);
   }
   const step = v === 'more' || v === 'less';
   // more/less step a dial with a scale; on a dial of named looks, they name

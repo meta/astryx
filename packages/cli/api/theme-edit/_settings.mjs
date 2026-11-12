@@ -178,6 +178,28 @@ export function themeFiles(cwd, slug) {
 }
 
 /**
+ * Refuse when the app's themes/ is a file or a link to something other
+ * than a folder: every editor theme lives in themes/<name>/. The run lists
+ * what is there; the message says to rename or move it.
+ * @param {string} cwd
+ */
+export function refuseThemesNotFolder(cwd) {
+  const root = path.join(cwd, 'themes');
+  const st = fs.lstatSync(root, {throwIfNoEntry: false});
+  if (!st) return;
+  const isDir =
+    st.isDirectory() ||
+    (st.isSymbolicLink() &&
+      fs.statSync(root, {throwIfNoEntry: false})?.isDirectory());
+  if (isDir) return;
+  refuse(
+    ERROR_CODES.ERR_FILE_EXISTS,
+    `themes in this app is ${st.isSymbolicLink() ? 'a link that does not lead to a folder' : 'a file, not a folder'}, so no editor theme can be read or made: every theme goes in themes/<name>/. Rename or move it, then run the command again.`,
+    {run: ['ls -la themes']},
+  );
+}
+
+/**
  * The themes the editor made in the app (a settings file of its own), by
  * name, or with `changed` the one an editor command changed last first: the
  * undo history is written only by an editor command, so its time is the
@@ -189,6 +211,7 @@ export function themeFiles(cwd, slug) {
 export function editedThemes(cwd, order = 'name') {
   const root = path.join(cwd, 'themes');
   if (!fs.existsSync(root)) return [];
+  refuseThemesNotFolder(cwd);
   const names = fs
     .readdirSync(root)
     .filter(d => fs.existsSync(themeFiles(cwd, d).settings))
@@ -298,6 +321,7 @@ export function loadTheme(
   slug,
   skip = /** @type {string | Partial<Setting>} */ (''),
 ) {
+  refuseThemesNotFolder(cwd);
   if (!slugOk(slug)) {
     // A path or a capital letter typed for a theme that exists names it.
     // A file name typed for the theme (t.theme.ts, Brand.settings.json)
@@ -1760,7 +1784,7 @@ function themeSourceHash(cwd, slug) {
     /** @type {string[]} */
     let specifiers = [];
     try {
-      specifiers = themeFileImports(file);
+      specifiers = themeFileImports(file, {withRequire: true});
     } catch {
       // A file that does not parse is hashed as it is; the build names it.
     }
@@ -2144,11 +2168,11 @@ function nonTextToken(t, typeOf = (/** @type {string} */ _k) => 'other') {
     // source may have quoted, and is wrong only for a size, which needs a
     // unit.
     const pair =
-      typeof raw === 'string'
-        ? /^light-dark\(\s*([^,]*?)\s*,\s*([^,]*?)\s*\)$/.exec(raw)
-        : null;
-    if (pair) {
-      const halves = [pair[1], pair[2]];
+      typeof raw === 'string' ? /^light-dark\((.*)\)$/s.exec(raw.trim()) : null;
+    // Split at the top-level comma: a half may hold commas (rgb(0, 0, 0)).
+    const parts = pair ? splitTop(pair[1], ',').map(x => x.trim()) : [];
+    if (pair && parts.length === 2) {
+      const halves = parts;
       const missing = halves.some(x =>
         /^(|null|undefined|true|false)$/.test(x),
       );
@@ -2164,7 +2188,7 @@ function nonTextToken(t, typeOf = (/** @type {string} */ _k) => 'other') {
               : x === 'true' || x === 'false'
                 ? x === 'true'
                 : x;
-        return [k, [half(pair[1]), half(pair[2])], missing ? 'pair' : 'unit'];
+        return [k, [half(parts[0]), half(parts[1])], missing ? 'pair' : 'unit'];
       }
       continue;
     }
@@ -2919,6 +2943,17 @@ export function staleBuild(cwd, slug, data) {
     })
   )
     return 'the last build did not finish (a command stopped while building)';
+  // Outputs another theme's build wrote over (`compile other.theme.ts --out
+  // themes/g/g.css`): their header names another source.
+  const builtFrom = (/** @type {string} */ file) =>
+    /^ \* Source: (.+)$/m
+      .exec(fs.readFileSync(file, 'utf8').slice(0, 600))?.[1]
+      ?.trim() ?? null;
+  for (const file of [f.css, f.js]) {
+    const from = builtFrom(file);
+    if (from != null && path.basename(from) !== path.basename(f.ts))
+      return `${path.basename(file)} was built from ${from}, not ${slug}.theme.ts`;
+  }
   // A built stylesheet cut short (a crash, a bad merge) is built again, as
   // an unreadable built module is.
   try {
