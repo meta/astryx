@@ -3602,6 +3602,51 @@ describe('how answers final-9 questions', () => {
     });
 });
 
+describe('how reads rem and em amounts and more comparatives as a change', () => {
+  it('moves the theme corners by a rem amount from their radius now', async () => {
+    const px = async (/** @type {string} */ q) => {
+      const {data} = await themeEditHow(q, {cwd, theme: 'q'});
+      const m = /^set q corners (\d+(?:\.\d+)?)px$/.exec(
+        bare(data.results[0].commands[0]),
+      );
+      expect(m, q).not.toBeNull();
+      return Number(m?.[1]);
+    };
+    const up = await px('make the corners 0.5rem rounder');
+    const down = await px('make the corners 0.25em sharper');
+    expect(up - down).toBe(12);
+  });
+
+  for (const [
+    question,
+    want,
+    text,
+  ] of /** @type {Array<[string, RegExp | null, RegExp?]>} */ ([
+    [
+      'make buttons 0.5rem rounder',
+      /^set q border-radius 'max\(0px, calc\(var\(--radius-element\) \+ 8px\)\)' --on button$/,
+    ],
+    ['card padding 8px roomier', null, /not a change by 8px; .* plus 8px/],
+    ['card padding 4px tighter', null, /not a change by 4px; .* minus 4px/],
+    ['card padding 0.5rem roomier', null, /not a change by 8px/],
+    ['headings 100 bolder', null, /new weight, not a change by 100/],
+  ]))
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      if (text) expect(results.map(r => r.text).join('\n')).toMatch(text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      expect(bare(changes[0].commands[0])).toMatch(want);
+    });
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;

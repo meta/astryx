@@ -2639,9 +2639,24 @@ export function draftAnswer(ctx, env, question) {
     }
     // "2px rounder", "8px larger", "4px wider": a change too.
     const COMPARATIVE =
-      'more|less|bigger|smaller|rounder|sharper|squarer|larger|wider|narrower|taller|shorter|thicker|thinner|higher|lower';
+      'more|less|bigger|smaller|rounder|sharper|squarer|larger|wider|narrower|taller|shorter|thicker|thinner|higher|lower|tighter|looser|roomier|airier|denser|bolder|heavier|lighter';
+    // A weight moved by a number ("100 bolder"): set takes the new weight.
+    const weightDelta = /\b(\d{2,3}) (bolder|heavier|lighter|thinner)\b/.exec(
+      c.text,
+    );
+    if (weightDelta) {
+      push({
+        text: `set takes the new weight, not a change by ${weightDelta[1]}; look up the weight now, then set it ${/lighter|thinner/.test(weightDelta[2]) ? 'minus' : 'plus'} ${weightDelta[1]}`,
+        options: [],
+        lookup: c.parts[0]
+          ? `${HOW} ${c.parts[0].on}`
+          : `${P} show ${env.slug}`,
+      });
+      continue;
+    }
+    // Amounts in rem or em count at a 16px root.
     const delta = new RegExp(
-      `\\b(?:by|add(?:ing)?|plus|minus|subtract(?:ing)?)\\s+(\\d*\\.?\\d+)px\\b|\\b(\\d*\\.?\\d+)px (?:${COMPARATIVE})\\b`,
+      `\\b(?:by|add(?:ing)?|plus|minus|subtract(?:ing)?)\\s+(\\d*\\.?\\d+)(px|rem|em)\\b|\\b(\\d*\\.?\\d+)(px|rem|em) (?:${COMPARATIVE})\\b`,
     ).exec(c.text);
     if (
       delta &&
@@ -2649,9 +2664,13 @@ export function draftAnswer(ctx, env, question) {
         `\\b(by|add|adding|plus|minus|subtract|subtracting|increase|decrease|reduce|${COMPARATIVE})\\b`,
       ).test(c.text)
     ) {
-      const n = Number(delta[1] ?? delta[2]);
+      const unit = delta[2] ?? delta[4];
+      const n =
+        Math.round(
+          Number(delta[1] ?? delta[3]) * (unit === 'px' ? 1 : 16) * 100,
+        ) / 100;
       const down =
-        /\b(decrease|reduce|less|smaller|minus|subtract|subtracting|lower|shrink|sharper|squarer|narrower|shorter|thinner)\b/.test(
+        /\b(decrease|reduce|less|smaller|minus|subtract|subtracting|lower|shrink|sharper|squarer|narrower|shorter|thinner|tighter|denser|lighter)\b/.test(
           c.text,
         );
       const cornerAsk =
@@ -2695,7 +2714,7 @@ export function draftAnswer(ctx, env, question) {
         continue;
       }
       push({
-        text: `set takes the new value, not a change by ${n}px; look up what it is now, then set the sum`,
+        text: `set takes the new value, not a change by ${n}px; look up what it is now, then set it ${down ? 'minus' : 'plus'} ${n}px`,
         options: [],
         lookup: c.parts[0]
           ? `${HOW} ${c.parts[0].on}`
