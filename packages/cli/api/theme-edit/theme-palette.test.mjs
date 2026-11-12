@@ -2496,6 +2496,16 @@ describe('colors16', () => {
       themeEditSet('p', 'font', 'normal normal 16px serif', {cwd, on: 'card'}),
     );
     expect(normal.message).not.toContain('twice');
+    // Every other word is placed first: normal takes what is left.
+    const normalBold = await refusal(() =>
+      themeEditSet('p', 'font', 'normal bold', {cwd, on: 'card'}),
+    );
+    expect(normalBold.run.join(' ')).not.toContain('font-family');
+    expect(
+      normalBold.run.some((/** @type {string} */ x) =>
+        / font-weight bold --on card$/.test(x),
+      ),
+    ).toBe(true);
     expect(
       normal.run.some((/** @type {string} */ x) =>
         / font-size 16px --on card$/.test(x),

@@ -261,6 +261,25 @@ export function refuse(code, message, extra = {}) {
 }
 
 /**
+ * A theme name as typed, read the way the editor reads it: a path to its
+ * folder or a file in it (t.theme.ts, Brand.settings.json), in any case,
+ * names the theme. The result may still need slugFor.
+ * @param {unknown} s
+ * @returns {string}
+ */
+export function typedThemeName(s) {
+  return String(s ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^.*themes[\\/]/, '')
+    .replace(/[\\/].*$/, '')
+    .replace(
+      /\.(theme\.ts|settings\.(json|ts)|history\.json|css\.d\.ts|d\.ts|css|js|ts)$/,
+      '',
+    );
+}
+
+/**
  * The settings of a theme, or a refusal naming the command that makes it.
  * @param {string} cwd
  * @param {string} slug
@@ -278,15 +297,7 @@ export function loadTheme(
     // A path or a capital letter typed for a theme that exists names it.
     // A file name typed for the theme (t.theme.ts, Brand.settings.json)
     // names the theme.
-    const plain = String(slug ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/^.*themes[\\/]/, '')
-      .replace(/[\\/].*$/, '')
-      .replace(
-        /\.(theme\.ts|settings\.(json|ts)|history\.json|css\.d\.ts|d\.ts|css|js|ts)$/,
-        '',
-      );
+    const plain = typedThemeName(slug);
     const fixed = slugFor(plain);
     const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
     // A list where one theme goes (t,u or "t;u"): one theme at a time,

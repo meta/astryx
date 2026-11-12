@@ -296,7 +296,7 @@ export async function themeEditNew(name, options = {}) {
   // Every check comes before the first change to the folder: the settings,
   // and a source of the user's own kept from before (it must still extend
   // the settings, or the build fails after the folder was cleared).
-  applyNewSettings(ctx, name, data, settings);
+  applyNewSettings(ctx, name, data, settings, png);
   if (left?.keep.some(p => path.basename(p) === `${name}.theme.ts`))
     refuseThemeSource(cwd, name);
   /** @type {string[]} */
@@ -442,8 +442,9 @@ export async function themeEditNew(name, options = {}) {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {Record<string, string | string[] | undefined>} settings
+ * @param {boolean} [png] kept in a corrected `new` a refusal suggests
  */
-function applyNewSettings(ctx, slug, data, settings) {
+function applyNewSettings(ctx, slug, data, settings, png = false) {
   const given = Object.entries(settings).filter(([, v]) => v != null);
   for (const [thing] of given)
     if (!DIALS[thing] || thing === 'base')
@@ -472,7 +473,7 @@ function applyNewSettings(ctx, slug, data, settings) {
       try {
         s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
       } catch (e) {
-        throw asNewRefusal(e, slug, settings, data.like);
+        throw asNewRefusal(e, slug, settings, data.like, png);
       }
       if (thing === 'mode')
         data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (
@@ -533,9 +534,11 @@ function newFlags(like, settings, png) {
  * @param {string} slug
  * @param {Record<string, string | string[] | undefined>} settings
  * @param {string} [like] the --like given, kept in a corrected command
+ * @param {boolean} [png] --png, kept in a corrected command
  */
-function asNewRefusal(e, slug, settings, like) {
+function asNewRefusal(e, slug, settings, like, png = false) {
   if (!(e instanceof AstryxError)) return e;
+  // --png goes last, after the corrected setting.
   const flags = newFlagList(like, settings);
   const setPrefix = `${P} set ${slug} `;
   e.suggestions = (e.suggestions ?? []).map(s => {
@@ -546,9 +549,12 @@ function asNewRefusal(e, slug, settings, like) {
     const keep = flags.filter(f => !f.startsWith(`--${thing} `));
     return {
       ...s,
-      name: [`${P} new ${slug}`, ...keep, `--${thing} ${rest.join(' ')}`].join(
-        ' ',
-      ),
+      name: [
+        `${P} new ${slug}`,
+        ...keep,
+        `--${thing} ${rest.join(' ')}`,
+        ...(png ? ['--png'] : []),
+      ].join(' '),
     };
   });
   return e;

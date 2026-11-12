@@ -52,7 +52,7 @@ import {
 import {DIALS, LIKE, P} from './_tables.mjs';
 import {colorProblem} from './_color.mjs';
 import {SHOWCASE_GROUPS} from './_preview.mjs';
-import {camel} from './_settings.mjs';
+import {camel, typedThemeName} from './_settings.mjs';
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
 export {parsePoints} from './_how.mjs';
@@ -612,14 +612,7 @@ export function editorThemeRefusal(err, cwd) {
   // The name as typed, read the way the editor reads a theme name: a path
   // to its folder or a file in it, in any case, names the theme.
   const named = /"([^"]+)"|'([^']+)'/.exec(err.message);
-  const word = named
-    ? String(named[1] ?? named[2])
-        .trim()
-        .toLowerCase()
-        .replace(/^.*themes[\\/]/, '')
-        .replace(/[\\/].*$/, '')
-        .replace(/\.(theme\.ts|settings\.(json|ts)|css|js|ts)$/, '')
-    : '';
+  const word = named ? typedThemeName(named[1] ?? named[2]) : '';
   const slug = word ? editorThemeOf(root, word) : null;
   if (!slug) return null;
   // A local theme of that name (a fork in the app's own themes folder) is

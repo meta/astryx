@@ -704,7 +704,10 @@ export function fontShorthandParts(value) {
     const each = {};
     const words = splitTop(value.trim(), ' ');
     let all = true;
-    for (const w of words) {
+    // `normal` fits several longhands: every other word is placed first,
+    // then each `normal` takes the first longhand still free.
+    const normals = words.filter(w => w.toLowerCase() === 'normal').length;
+    for (const w of words.filter(x => x.toLowerCase() !== 'normal')) {
       const lower = w.toLowerCase();
       // A size with its line height (1rem/1.5).
       const slash = /^([^/]+)\/([^/]+)$/.exec(w);
@@ -718,10 +721,9 @@ export function fontShorthandParts(value) {
         each['line-height'] = slash[2];
         continue;
       }
-      // A keyword several longhands take (normal) is the next of them not
-      // given yet; the same part twice (bold bold) is no font value.
       const takers = LONGHANDS.filter(p => keywordsOf(p).includes(lower));
       const keyword = takers.find(p => !(p in each));
+      // The same part twice (bold bold) is no font value.
       if (takers.length && !keyword && takers.some(p => each[p] === lower))
         return {repeat: lower};
       const prop =
@@ -734,6 +736,13 @@ export function fontShorthandParts(value) {
         break;
       }
       each[prop] = /^[a-z-]+$/i.test(w) ? lower : w;
+    }
+    for (let n = 0; all && n < normals; n += 1) {
+      const free = LONGHANDS.find(
+        p => !(p in each) && keywordsOf(p).includes('normal'),
+      );
+      if (!free) return {repeat: 'normal'};
+      each[free] = 'normal';
     }
     if (all && words.length) return each;
   }
