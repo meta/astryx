@@ -64,6 +64,7 @@ import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {
   cancelNestedPress,
+  hasInteractiveAncestor,
   PRESSABLE_CONTAINER_ATTRIBUTE,
   useClickableContainerProxy,
 } from '../hooks/useClickableContainer';
@@ -841,7 +842,16 @@ export function Item({
       return;
     }
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, select, textarea')) {
+    if (
+      // React bubbles a click through a portal the caller renders from the
+      // row (its own `createPortal`), but its target is not in the row.
+      !e.currentTarget.contains(target) ||
+      // A native control owns the click, as it always has (this also keeps a
+      // read-only input and a row inside a link or button inert).
+      target.closest('button, a, input, select, textarea') ||
+      // So does a nested role-based control (role="tab", role="switch").
+      hasInteractiveAncestor(target, e.currentTarget)
+    ) {
       return;
     }
     if (isLinkRow) {
