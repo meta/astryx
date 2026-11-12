@@ -169,3 +169,39 @@ for (const surface of SURFACES) {
     });
   }
 }
+
+for (const direction of ['rtl', 'ltr'] as const) {
+  test(`a wrapped Field label aligns its lines to the page's start under ${direction.toUpperCase()}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 390, height: 800});
+    await open(page, 'core-field--mixed-direction', direction);
+    const edges = await page.evaluate(() => {
+      const label = document.querySelector('label[for="mixed-wrap"]');
+      const text = label?.querySelector('[dir="ltr"]');
+      if (!label || !text) {
+        return null;
+      }
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const box = label.getBoundingClientRect();
+      return {
+        left: box.left,
+        right: box.right,
+        lines: [...range.getClientRects()].map(line => ({
+          left: line.left,
+          right: line.right,
+        })),
+      };
+    });
+    expect(edges).not.toBeNull();
+    expect(edges!.lines.length).toBeGreaterThan(1);
+    for (const line of edges!.lines) {
+      if (direction === 'rtl') {
+        expect(Math.abs(line.right - edges!.right)).toBeLessThanOrEqual(1);
+      } else {
+        expect(Math.abs(line.left - edges!.left)).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+}

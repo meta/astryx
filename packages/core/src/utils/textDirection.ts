@@ -34,9 +34,15 @@ export function textDirectionProps(content: ReactNode): {dir?: 'ltr'} {
 
 // A flex parent, such as Field's label, makes the span a block. Its own `ltr`
 // direction would then align wrapped lines to the left on a right-to-left
-// page. `match-parent` keeps the alignment of the parent's direction.
+// page. Under a right-to-left parent the span aligns to its end, which is the
+// parent's start. Chromium does not support `text-align: match-parent`.
 const styles = stylex.create({
-  span: {textAlign: 'match-parent'},
+  span: {
+    textAlign: {
+      default: null,
+      ':is(:dir(rtl) > *)': 'end',
+    },
+  },
 });
 
 /**

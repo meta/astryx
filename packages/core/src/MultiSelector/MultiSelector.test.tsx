@@ -216,6 +216,36 @@ describe('MultiSelector', () => {
     expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])(
+    'names a bottom-sheet listbox from label (hasSearch=%s)',
+    async hasSearch => {
+      const user = userEvent.setup();
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          hasSearch={hasSearch}
+          presentation="bottom-sheet"
+        />,
+      );
+
+      // With search, the trigger is a button and the search input is the
+      // combobox.
+      await user.click(
+        hasSearch
+          ? screen.getByRole('button', {name: 'Fruit'})
+          : screen.getByRole('combobox'),
+      );
+      await screen.findByRole('dialog', {name: 'Fruit'});
+      expect(screen.getByRole('listbox', h)).toHaveAttribute(
+        'aria-label',
+        'Fruit',
+      );
+    },
+  );
+
   it('moves keyboard focus into a bottom-sheet listbox', async () => {
     const user = userEvent.setup();
     render(

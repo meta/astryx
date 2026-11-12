@@ -2435,6 +2435,14 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // the listbox itself owns the keyboard.
   const listboxOwnsKeyboard =
     surface.activePresentation === 'bottom-sheet' || hasExternalTrigger;
+  // A bottom sheet is a modal layer, so Chromium cannot reliably compute the
+  // listbox's name from the trigger outside that layer. A sheet names the
+  // listbox directly from `label`, with or without search; a popover keeps
+  // its trigger relationship.
+  const panelListboxLabelProps =
+    surface.activePresentation === 'bottom-sheet'
+      ? {'aria-label': label}
+      : listboxLabelProps;
 
   const panelContent = hasSearch ? (
     <div {...stylex.props(styles.searchPanel)}>
@@ -2446,7 +2454,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           id={listboxId}
           role={isGrid ? 'grid' : 'listbox'}
           aria-multiselectable="true"
-          {...listboxLabelProps}
+          {...panelListboxLabelProps}
           {...stylex.props(styles.listbox)}>
           {renderOptions()}
         </div>
@@ -2459,14 +2467,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         id={listboxId}
         role={isGrid ? 'grid' : 'listbox'}
         aria-multiselectable="true"
-        // The bottom sheet is rendered in a modal layer, so Chromium cannot
-        // reliably compute this listbox's name from the trigger outside that
-        // layer. Name only this no-search sheet directly from the component's
-        // existing label; searchable sheets and popovers retain their current
-        // trigger relationship.
-        {...(surface.activePresentation === 'bottom-sheet'
-          ? {'aria-label': label}
-          : listboxLabelProps)}
+        {...panelListboxLabelProps}
         aria-activedescendant={activeDescendantId}
         tabIndex={listboxOwnsKeyboard ? 0 : undefined}
         onKeyDown={listboxOwnsKeyboard ? onKeyDown : undefined}
