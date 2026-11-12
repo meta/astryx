@@ -19,10 +19,14 @@ import {
 import {
   animationStoryboard,
   blockMainThread,
+  CONTROL_SIDE,
   frameStats,
   parseTransform,
+  requireFrames,
+  startBusyControl,
   startScreencast,
   timeline,
+  trackControl,
   traceRendering,
   type CastFrame,
 } from '@astryxdesign/interaction-harness';
@@ -221,35 +225,62 @@ test('the ring keeps turning while a script holds the main thread', async ({
     }
     boxes.push(box);
   }
+  // The control must not cover any part of a ring.
+  for (const box of boxes) {
+    expect(box.y).toBeGreaterThan(CONTROL_SIDE);
+  }
+  await startBusyControl(page);
   const cast = await startScreencast(page);
   await page.waitForTimeout(300);
   const busy = await blockMainThread(page, BLOCK_MS);
   await page.waitForTimeout(200);
   const frames = await cast.stop();
   const sums = await checksums(page, frames, boxes);
+  const control = await trackControl(page, frames);
 
   // Judge the block's inside, a frame clear of each edge.
   const from = busy.from + 20;
   const to = busy.to - 20;
   const inside = frames
-    .map((frame, i) => ({t: frame.t, sums: sums[i]}))
+    .map((frame, i) => ({
+      t: frame.t,
+      sums: sums[i],
+      control: control[i].box?.x ?? null,
+    }))
     .filter(f => f.t >= from && f.t <= to);
-  const expected = Math.floor((to - from) / (1000 / 60));
-  // The compositor keeps presenting frames at display rate…
-  expect(inside.length).toBeGreaterThanOrEqual(Math.floor(expected * 0.85));
-  // …and every ring moves in nearly every one of them.
+  expect(inside.every(f => f.control != null), 'control is visible').toBe(true);
+  const pairs = inside.slice(1).map((frame, i) => ({
+    ...frame,
+    previous: inside[i],
+  }));
+  // A slow cast changes the sample rate, not the motion each frame must show.
+  const moving = requireFrames(pairs, {
+    min: 4,
+    during: 'the compositor control moves inside the main-thread block',
+    where: f =>
+      f.control != null &&
+      f.previous.control != null &&
+      Math.abs(f.control - f.previous.control) > 0.25,
+  });
+  const controlStats = frameStats(
+    inside.map(f => ({t: f.t, value: f.control})),
+    {from, to},
+  );
   for (let ring = 0; ring < 4; ring += 1) {
+    const movedWith = moving.filter(
+      f => f.sums[ring] !== f.previous.sums[ring],
+    ).length;
+    expect(movedWith, `ring ${ring} frames changed with control`).toBe(
+      moving.length,
+    );
     const stats = frameStats(
       inside.map(f => ({t: f.t, value: f.sums[ring]})),
       {from, to},
     );
-    expect(stats.changed, `ring ${ring} frames changed`).toBeGreaterThanOrEqual(
-      Math.floor((inside.length - 1) * 0.9),
-    );
     expect(
       stats.longestStallMs,
       `ring ${ring} longest stall`,
-    ).toBeLessThanOrEqual(50);
+    ).toBeLessThanOrEqual(controlStats.longestStallMs);
   }
 });
 
