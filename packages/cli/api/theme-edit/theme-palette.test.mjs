@@ -2989,3 +2989,34 @@ describe('parts30', () => {
     }
   });
 });
+
+describe('colors32', () => {
+  it('suggests the token value meant, not a stock one', async () => {
+    for (const [thing, value, want] of [
+      ['--font-size-base', '18px;', /--font-size-base 18px$/],
+      ['--color-accent', '＃7c3aed', /--color-accent '#7c3aed'$/],
+      ['--font-weight-bold', '"700"', /--font-weight-bold 700$/],
+      [
+        '--font-family-body',
+        'Font Awesome 6 Free',
+        /--font-family-body '"Font Awesome 6 Free"'$/,
+      ],
+    ]) {
+      const r = await refusal(() => themeEditSet('p', thing, value, {cwd}));
+      expect(r.run[0], `${thing} ${value}`).toMatch(want);
+    }
+    const part = await refusal(() =>
+      themeEditSet('p', 'font-family', 'Font Awesome 6 Free', {
+        cwd,
+        on: 'card',
+      }),
+    );
+    expect(part.run[0]).toContain('"Font Awesome 6 Free"');
+  });
+
+  it('saves a fractional text size as the whole pixel it builds, and says so', async () => {
+    const r = await themeEditSet('p', 'text-size', '15.5', {cwd});
+    expect(r.data.notes.join(' ')).toContain('saved as 16');
+    await themeEditUndo('p', {cwd, thing: 'text-size'});
+  });
+});

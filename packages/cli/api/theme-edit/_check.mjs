@@ -91,6 +91,7 @@ import {
   partComponentDocs,
   themeFiles,
   ownSourceTokenValues,
+  cssFamily,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
@@ -251,6 +252,32 @@ function typedPlain(v) {
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * The values a value may have meant, when what is wrong is how it was
+ * typed: plain (full-width characters, comments and a trailing `;` gone,
+ * quotes around a whole non-font value dropped), and for a font list each
+ * family quoted as CSS needs it (`Font Awesome 6 Free`). Only values that
+ * differ from the one typed.
+ * @param {string} type
+ * @param {string} value
+ */
+function valueMeant(type, value) {
+  let p = typedPlain(value)
+    .replace(/;+\s*$/, '')
+    .trim();
+  const q = /^(["'])(.*)\1$/.exec(p);
+  if (q && type !== 'font') p = q[2].trim();
+  const out = [p];
+  if (type === 'font' || type === 'font-family')
+    out.push(
+      p
+        .split(',')
+        .map(f => cssFamily(f.trim().replace(/^["']|["']$/g, ''), true))
+        .join(', '),
+    );
+  return [...new Set(out)].filter(x => x && x !== value.trim());
 }
 
 /** The size units a typo is read against. */
@@ -564,12 +591,38 @@ function checkTypedValue(
   readers = [],
   multiplied = false,
 ) {
+  // The value meant, when what is wrong is how it was typed (a trailing
+  // `;`, a comment, quotes around it, full-width characters, a font name
+  // that needs quotes): the same value, if the token takes it.
+  const meant = () => {
+    for (const c of valueMeant(type, value))
+      try {
+        checkTypedValue(
+          type,
+          c,
+          name,
+          TOKENS,
+          typeOf,
+          slug,
+          readers,
+          multiplied,
+        );
+        return c;
+      } catch {
+        // Not this one.
+      }
+    return null;
+  };
   /** @param {string} what @param {string} example */
   const bad = (what, example) =>
     refuse(
       E.ERR_THEME_BAD_VALUE,
       `${name} is ${what}; "${value}" is not one.`,
-      {run: [`${P} set ${slug} ${name} ${quoteCommandArgument(example)}`]},
+      {
+        run: [
+          `${P} set ${slug} ${name} ${quoteCommandArgument(meant() ?? example)}`,
+        ],
+      },
     );
   if (!isSafeValue(value))
     refuse(
@@ -577,7 +630,7 @@ function checkTypedValue(
       `"${value}" cannot be a CSS value: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote.`,
       {
         run: [
-          `${P} set ${slug} ${name} ${quoteCommandArgument(exampleOf(type, name))}`,
+          `${P} set ${slug} ${name} ${quoteCommandArgument(meant() ?? exampleOf(type, name))}`,
         ],
       },
     );
@@ -966,6 +1019,16 @@ function propertyProblem(prop, value) {
           near: v.replace(/(^|[\s(,/])-(?=\.?\d)/g, '$1'),
         }
       : null;
+  // The same value as it was meant to be typed (a font name quoted, a
+  // trailing `;` gone), when the property takes that.
+  const fixed = valueMeant(prop === 'font-family' ? 'font' : 'other', v).find(
+    c => matchValue(prop, c),
+  );
+  if (fixed)
+    return {
+      takes: `a value its CSS grammar takes (${grammarText(known)})`,
+      near: fixed,
+    };
   // Only keywords the property takes on their own are offered; the same
   // word without its dashes or a trailing -ed/-s comes first (no-wrap is
   // nowrap, underlined is underline), then the nearest in spelling.
@@ -2195,6 +2258,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         );
       if (step) s.value = ladder(TEXT_SIZE, 'medium');
       else if (
+        /^\d+\.\d+$/.test(v.trim()) &&
+        Number(v) >= 10 &&
+        Number(v) <= 32 &&
+        Math.round(Number(v)) !== Number(v)
+      ) {
+        // Core builds the type scale in whole pixels: the size is saved as
+        // the whole pixel it builds, and the result says so.
+        s.value = String(Math.round(Number(v)));
+        s.note = `text-size ${v.trim()} is saved as ${s.value}: the type scale is built in whole pixels`;
+      } else if (
         !TEXT_SIZE.some(([n]) => n === v) &&
         !(/^\d+(\.\d+)?$/.test(v.trim()) && Number(v) >= 10 && Number(v) <= 32)
       )
